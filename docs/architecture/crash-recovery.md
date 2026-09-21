@@ -1,52 +1,50 @@
-# Phục Hồi Sự Cố & Tính Bền Bỉ (Crash Recovery & Resilience)
+# Crash Recovery & Resilience Architecture
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần X (§30-31) & Phần VI (§32) Canonical Specification
+> **Source:** Part X (§30-31) & Part VI (§32) Canonical Specification
 
-Hệ thống Custos được thiết kế để **sống sót qua mọi sự cố bất ngờ**: tắt nguồn máy tính đột ngột, crash daemon (`SIGKILL`), sập kết nối mạng, hoặc AI provider trả về lỗi 500.
+Custos is architected to **survive unexpected interruptions**: abrupt power loss, daemon termination (`kill -9` / `SIGKILL`), network dropouts, or upstream provider outages (HTTP 429/500).
 
 ---
 
-## 1. Ma Trận Xử Lý Sự Cố (Crash Recovery Matrix)
+## 1. Crash Recovery Matrix
 
-| Tình huống sự cố | Tác động ngay lập tức | Quy trình tự động khôi phục |
+| Fault Scenario | Immediate System Impact | Automated Recovery Procedure |
 |---|---|---|
-| **Daemon bị crash (`kill -9`)** | Tiến trình Rust dừng; DB SQLite giữ nguyên trạng thái atomic. | Khi khởi động lại, `Reconciliation Loop` quét các Task có trạng thái `Running`, đối soát Git worktree, đưa về trạng thái `Suspended` an toàn và thông báo cho người dùng. |
-| **Worker tiến trình con bị crash** | Subtask bị ngắt quãng giữa chừng. | Kernel thu hồi `lease`, hủy bỏ các thay đổi dở dang chưa commit trong worktree, cấp phát worker mới thử lại từ step trước. |
-| **Provider sập / Rate limit 429** | Luồng streaming bị đứt đoạn. | Exponential backoff với jitter; nếu quá 3 lần thất bại, tự động chuyển sang mô hình dự phòng (*Fallback Provider*) hoặc dừng chờ người dùng. |
-| **Máy trạm mất điện / Tắt nguồn** | Toàn bộ tiến trình dừng đột ngột. | SQLite WAL rollback các giao dịch dở dang; trạng thái commit cuối cùng nguyên vẹn; `custos resume` tiếp tục phiên làm việc bình thường. |
-| **Ổ đĩa đầy (Disk Full)** | Không thể ghi tiếp SQLite hoặc CAS. | Runtime từ chối nhận task mới, tạm dừng khẩn cấp các task đang chạy, phát cảnh báo dọn dẹp dung lượng. |
-| **Mất kết nối Internet** | Không thể gọi Cloud AI Providers. | Nếu có cấu hình Local SLM, tự động chuyển hướng các task phán đoán sang local; task cần Cloud chuyển sang `Suspended`. |
-| **Xung đột Git Worktree** | File bị sửa đổi ngoài tầm kiểm soát. | Phát hiện sai lệch mã băm; yêu cầu người dùng giải quyết xung đột thủ công trước khi cho phép tiếp tục. |
+| **Daemon Killed (`kill -9`)** | Rust process halts; SQLite database preserves atomic state via WAL. | On restart, the `Reconciliation Loop` scans for tasks in `Running` state, verifies Git worktrees, marks tasks safely as `Suspended`, and notifies the user. |
+| **Worker Subprocess Crash** | Active subtask interrupts mid-flight. | Kernel revokes the worker's lease, cleanses uncommitted worktree changes, and respawns a clean worker to retry from the last committed step. |
+| **Provider 429 / Outage** | Streaming response terminates prematurely. | Exponential backoff with jitter; after 3 retries, automatically transitions to a configured Fallback Provider or pauses for human review. |
+| **Workstation Power Loss** | Abrupt OS shutdown. | SQLite WAL rolls back uncommitted transactions; committed events remain intact; `custos resume` resumes the task session deterministically. |
+| **Workstation Disk Full** | Inability to append SQLite or CAS blocks. | Runtime halts new task ingestion, transitions active tasks to emergency `Suspended` state, and emits a low-disk warning. |
+| **Network Loss** | Inability to access cloud AI providers. | Routes judgment subtasks to local SLMs if configured; cloud-dependent tasks transition cleanly to `Suspended`. |
+| **Git Worktree Conflict** | External process mutates worktree files. | Hash verification detects external modification; prompts user to reconcile Git state before allowing resumption. |
 
 ---
 
-## 2. Hợp Đồng Tiếp Tục (Continuation Contract)
+## 2. Continuation Contract
 
-Để một Task có thể được tiếp tục (*resumed*) an toàn, runtime bắt buộc phải xác minh **Hợp Đồng Tiếp Tục (Continuation Contract)** thỏa mãn 4 điều kiện:
+Before an interrupted task can be safely resumed, the runtime must verify that the **Continuation Contract** satisfies 4 formal predicates:
 
-```text
-resume(task) ≡ StateValid ∧ AuthorityValid ∧ PreconditionsValid ∧ PriorEffectsResolved
-```
+$$\text{resume}(task) \equiv \text{StateValid} \land \text{AuthorityValid} \land \text{PreconditionsValid} \land \text{PriorEffectsResolved}$$
 
-1. **StateValid:** Lịch sử sự kiện trong `task_events` không bị lỗi tính toàn vẹn (hash sequence hợp lệ).
-2. **AuthorityValid:** Người thực hiện lệnh resume có thẩm quyền hợp lệ và các giấy phép cũ đã được vô hiệu hóa.
-3. **PreconditionsValid:** Các tệp tin, commit snapshot và tài nguyên yêu cầu vẫn còn tồn tại trên máy trạm.
-4. **PriorEffectsResolved:** Toàn bộ side effect của bước trước đó đã được ghi nhận hoặc rollback sạch sẽ; không để lại trạng thái "lửng lơ".
+1. **StateValid:** Event sequence integrity in `task_events` is intact (hash chains match).
+2. **AuthorityValid:** Resuming principal has authenticated credentials, and prior single-use permits are invalidated.
+3. **PreconditionsValid:** Target files, commit snapshots, and required OS tools remain present on the host.
+4. **PriorEffectsResolved:** All side effects from the interrupted step are either fully committed or rolled back cleanly; zero orphaned state.
 
 ---
 
-## 3. Vòng Lặp Đối Soát (Reconciliation Loop)
+## 3. Reconciliation Loop
 
-Mỗi khi `custosd` khởi động:
+Upon daemon initialization (`custosd` startup):
 
 ```mermaid
 flowchart TD
-    Start["custosd Startup"] --> Scan["Quét tasks có status IN ('RUNNING', 'READY')"]
-    Scan --> CheckWT{"Kiểm tra Git Worktree"}
-    CheckWT -->|"Worktree nguyên vẹn"| CheckEvents["Kiểm tra Event Store"]
-    CheckWT -->|"Worktree hư hại"| ResetWT["Reset Worktree về Commit gần nhất"]
+    Start["custosd Startup"] --> Scan["Scan tasks WHERE status IN ('RUNNING', 'READY')"]
+    Scan --> CheckWT{"Verify Git Worktree State"}
+    CheckWT -->|"Worktree Intact"| CheckEvents["Validate Event Store Integrity"]
+    CheckWT -->|"Worktree Damaged"| ResetWT["Reset Worktree to Last Committed Snapshot"]
     ResetWT --> CheckEvents
-    CheckEvents --> SetSuspended["Chuyển trạng thái sang SUSPENDED"]
-    SetSuspended --> Ready["Sẵn sàng nhận lệnh 'custos resume'"]
+    CheckEvents --> SetSuspended["Transition Task Status to SUSPENDED"]
+    SetSuspended --> Ready["Ready for user 'custos resume' command"]
 ```

@@ -17,7 +17,6 @@
 <br />
 
 > **"Custos turns human intent into controlled, resumable, cross-provider and evidence-backed work."**  
-> *Custos biến ý định của con người thành công việc được kiểm soát, có khả năng phục hồi, độc lập nhà cung cấp và được bảo đảm bằng chứng cứ.*
 
 </div>
 
@@ -277,7 +276,7 @@ sequenceDiagram
 | **ContinuationPacket** | Provider-neutral state snapshot enabling seamless switching between AI models mid-task. | [provider-interop.md](docs/architecture/provider-interop.md) |
 | **Verifiable Outcome Bundle** | Tamper-evident deliverable containing diffs, execution traces, test receipts, and costs. | [evidence-verification.md](docs/architecture/evidence-verification.md) |
 | **System One** | Sub-second judgment fabric for fast classification, invariant checking, and risk triage. | [cognitive-fabric.md](docs/architecture/cognitive-fabric.md) |
-| **RDC Protocol** | Request-Decision-Challenge protocol structuring communication between cognitive tiers. | [cognitive-fabric.md](docs/architecture/cognitive-fabric.md#3-giao-thức-rdc) |
+| **RDC Protocol** | Request-Decision-Challenge protocol structuring communication between cognitive tiers. | [cognitive-fabric.md](docs/architecture/cognitive-fabric.md#3-rdc-protocol-request-decision-challenge) |
 | **Decision Ledger** | Immutable audit log recording every choice, rationale, confidence score, and human override. | [persistence.md](docs/architecture/persistence.md) |
 | **Attention Budget** | Quantitative limit on human interruptions, clustering non-critical approvals for review. | [personal.md](docs/domains/personal.md) |
 
@@ -434,7 +433,7 @@ cargo test --workspace
 Custos is open-source software licensed under the **MIT License**.  
 See the [LICENSE](LICENSE) file for complete details.
 
-Copyright (c) 2026 Vĩ. All rights reserved.
+Copyright (c) 2026 Vi. All rights reserved.
 
 ---
 

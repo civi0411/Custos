@@ -1,61 +1,57 @@
-# Gói Nghiệp Vụ Nghiên Cứu (Research Domain Pack)
+# Research Domain Pack
 
-> **Status:** Canonical Baseline v4.0 (Horizon 2)  
-> **Source:** Phần VI (§19) & Phần VII (§55) Canonical Specification
+> **Status:** Canonical Baseline v4.0  
+> **Source:** Part VI (§19) & Part VII (§55) Canonical Specification
 
-Research Domain Pack hướng tới việc biến ý định nghiên cứu khoa học và tổng hợp tài liệu chuyên sâu thành các báo cáo có căn cứ vững chắc, loại bỏ hoàn toàn hiện tượng trích dẫn ảo (*hallucinated citations*).
+The Research Domain Pack transforms open-ended academic inquiries and technical document synthesis into structured, verifiable evidence reports, eliminating hallucinated citations.
 
 ---
 
-## 1. Pipeline Nghiên Cứu Chuyên Sâu (Research Pipeline)
+## 1. Research Execution Pipeline
 
 ```text
-[ 1. Câu hỏi & Phạm vi ]
-         │
-[ 2. Khám phá nguồn    ] ───> (arXiv, Semantic Scholar, Web API, Zotero)
-         │
-[ 3. Nạp & Băm nội dung] ───> (Chuẩn hóa PDF/HTML, băm CAS lưu trữ)
-         │
-[ 4. Trích xuất Claim  ] ───> (Mô hình hóa Khẳng định - Chứng cứ theo schema)
-         │
-[ 5. Phản biện & Đối chiếu] ─> (Phát hiện mâu thuẫn chéo giữa các nguồn)
-         │
-[ 6. Xuất Báo Cáo      ] ───> (Markdown Report, Obsidian Vault, BibTeX)
+[ 1. Inquiry & Scope  ] ---> (Define hypothesis, scope parameters, target questions)
+        |
+[ 2. Source Discovery ] ---> (arXiv, Semantic Scholar, Web API, Zotero integrations)
+        |
+[ 3. Ingest & Hash    ] ---> (Parse and normalize PDF/HTML, store in content-addressed CAS)
+        |
+[ 4. Claim Extraction ] ---> (Model structured Claim-Evidence tuples)
+        |
+[ 5. Cross-Examination] ---> (Detect contradictions and unsupported assertions across sources)
+        |
+[ 6. Report Export    ] ---> (Emit Markdown report, Obsidian Vault with WikiLinks, BibTeX)
 ```
 
 ---
 
-## 2. Mô Hình Khẳng Định - Chứng Cứ (Claim-Evidence Schema)
+## 2. Claim-Evidence Schema
 
-Mỗi luận điểm nghiên cứu được số hóa bằng cấu trúc dữ liệu tường minh:
+Every extracted research assertion is structured as an explicit typed schema:
 
 ```yaml
-schema: "custos.claim.v1"
-claim_id: "clm_01J8N8X1Y2Z3"
-claim_text: "Fast local judgment models reduce multi-turn agent latency by up to 70%."
-claim_type: "empirical"
-epistemic_grade: "STRONG_SUPPORT"
+claim_id: "clm_01J8N89X..."
+hypothesis_ref: "hyp_01"
+statement: "Rust zero-cost abstractions provide memory safety with zero runtime GC overhead."
+confidence: 0.98
 
 evidence:
-  - source_id: "src_arxiv_2406_18665"
-    title: "RouteLLM: Learning to Route LLMs with Preference Data"
-    locator:
-      section: "Section 4: Empirical Results"
-      page: 7
-      char_span: [1240, 1580]
-    excerpt_content: "...demonstrating a 70% latency drop when fast heuristics filter straightforward queries..."
-    extraction_confidence: 0.94
+  - source_id: "src_arxiv_2402_12345"
+    citation: "Matsakis et al., 2024"
+    cas_hash: "sha256:7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069"
+    exact_quote: "The ownership type system statically enforces single-writer or multiple-reader access."
+    page_number: 4
+    evidence_tier: "PEER_REVIEWED_PAPER"
 
-cross_validation:
-  contradictions_found: 0
-  independent_sources_count: 3
+counter_evidence: []
+verification_status: "VERIFIED"
 ```
 
 ---
 
-## 3. Tích Hợp Markdown & Obsidian Vault
+## 3. Obsidian Vault & Markdown Export
 
-Toàn bộ kết quả nghiên cứu có thể được xuất trực tiếp thành một **Obsidian Vault** cục bộ:
-- Các khái niệm được liên kết hai chiều qua cú pháp `[[WikiLinks]]`.
-- Mỗi khẳng định liên kết trực tiếp tới file trích dẫn gốc trong thư mục CAS.
-- Tương thích hoàn toàn với các phần mềm quản lý trích dẫn như Zotero.
+All completed research artifacts can be exported directly into a local **Obsidian Vault**:
+- Concepts are bidirectionally linked via standard `[[WikiLinks]]`.
+- Claims contain clickable references to local immutable PDF/text files stored in the CAS directory.
+- Fully compatible with citation tools such as Zotero and BibTeX managers.

@@ -1,60 +1,60 @@
-# 🛡️ CUSTOS — AI VIBECODING RULES (SSOT)
+# CUSTOS — AI VIBECODING RULES (SSOT)
 
-> **Single Source of Truth (SSOT)** dành cho mọi AI Assistants (Cursor, Claude Code, Antigravity, Codex, Windsurf, Copilot).  
-> **Nguyên tắc:** Ngăn chặn tuyệt đối ảo giác (hallucination), code sai kiến trúc hoặc phá vỡ ranh giới an toàn.  
-> Chi tiết mô hình cộng tác: xem [dev_docs/README.md](dev_docs/README.md) | Tiến độ: xem [dev_docs/SPRINT_STATUS.md](dev_docs/SPRINT_STATUS.md).
+> **Single Source of Truth (SSOT)** for all AI Assistants (Cursor, Claude Code, Antigravity, Codex, Windsurf, Copilot).  
+> **Core Mandate:** Prevent hallucinations, architectural boundary violations, and security policy breaches.  
+> Detailed team collaboration model: see [dev_docs/README.md](dev_docs/README.md) | Progress tracking: see [dev_docs/SPRINT_STATUS.md](dev_docs/SPRINT_STATUS.md).
 
 ---
 
-## 🗺️ Bảng Ranh Giới & Phân Quyền Nhanh
+## 1. Boundary & Ownership Matrix
 
-| Thư mục / Crate | Ngôn ngữ | Người phụ trách | Quy tắc tối thượng cho AI |
+| Directory / Crate | Language | Primary Owner | Mandatory Invariant for AI |
 |---|---|---|---|
-| `crates/core-domain` | **Rust** | **Vĩ** (AI Engineer) | **Zero I/O, zero crate nội bộ.** Không network, không filesystem. |
-| `crates/task-kernel`, `workflow-runtime` | **Rust** | **Vĩ & Trường** | State machine & orchestration. Không query trực tiếp DB. |
-| `crates/persistence-sqlite` | **Rust + SQL** | **Trường** (SE) | Cư xử như Backend SE thuần túy. Lưu trữ & query DB. Không LLM fluff. |
-| `apps/custos-cli`, `crates/local-api` | **Rust** | **Trường** (SE) | CLI / Axum HTTP API. Nhận input, validate JSON. |
-| `crates/capability-gateway` | **Rust** | **Trường** (SE) | Sandbox, Worktree, permission gates, human approval. |
-| `sidecars/ts-claude-agent` | **TypeScript** | **Vĩ** (AI Engineer) | Claude CLI adapter / VS Code connector. Giao tiếp qua JSON-RPC. |
-| `sidecars/python-judgment` | **Python** | **Vĩ** (AI Engineer) | Fast ML / System 1 heuristic. Giao tiếp qua JSON-RPC. Không LangChain! |
-
+| `crates/core-domain` | **Rust** | **Vi** (AI Engineer) | **Zero I/O, zero internal workspace dependencies.** No network, no filesystem. |
+| `crates/task-kernel`, `workflow-runtime` | **Rust** | **Vi & Truong** | State machine & orchestration. No direct database access. |
+| `crates/persistence-sqlite` | **Rust + SQL** | **Truong** (SE) | Pure systems backend engineering. Persist and query SQLite. Zero LLM fluff. |
+| `apps/custos-cli`, `crates/local-api` | **Rust** | **Truong** (SE) | CLI / Axum HTTP API. Parse, validate, and dispatch typed requests. |
+| `crates/capability-gateway` | **Rust** | **Truong** (SE) | Sandboxing, worktree isolation, permission gates, human approvals. |
+| `sidecars/ts-claude-agent` | **TypeScript** | **Vi** (AI Engineer) | Claude CLI adapter / VS Code connector. Communicates strictly over JSON-RPC. |
+| `sidecars/python-judgment` | **Python** | **Vi** (AI Engineer) | Fast ML / System 1 heuristic evaluation. Communicates strictly over JSON-RPC. No LangChain! |
 
 ---
 
-## ⛔ 6 Luật Bất Khả Xâm Phạm
+## 2. Six Non-Negotiable Invariants
 
-### 1. Ranh Giới Ngôn Ngữ (Rust-First Polyglot)
-- **Rust là lõi:** `crates/`, `apps/`, `adapters/` (ngoại trừ sidecars) **100% Rust**. Tuyệt đối không thêm Python hay JS vào các thư mục này.
-- **Sidecars cô lập:** Python và TypeScript **chỉ** sống trong `sidecars/`.
-- **Giao tiếp:** Sidecars gọi Rust Core qua JSON-RPC (stdio/HTTP). Không sidecar nào được query trực tiếp file SQLite.
+### 1. Language Boundary (Rust-First Polyglot)
+- **Rust Core:** `crates/`, `apps/`, and `adapters/` (excluding sidecars) are **strictly 100% Rust**. Never place Python or JavaScript files inside these directories.
+- **Isolated Sidecars:** Python and TypeScript runtimes reside exclusively in `sidecars/`.
+- **IPC Protocol:** Sidecars communicate with the Rust Core via JSON-RPC (stdio or local HTTP). Sidecars MUST NOT access or query the SQLite database directly.
 
-### 2. Dependency Flow (Luồng Phụ Thuộc 1 Chiều)
+### 2. One-Way Dependency Flow
 ```text
-apps (custos-cli) 
-  ──> adapters / persistence (persistence-sqlite) 
-        ──> workflow-runtime 
-              ──> task-kernel 
-                    ──> core-domain (Tâm điểm - Không phụ thuộc bất kỳ ai)
+apps (custos-cli, custosd) 
+  --> adapters / persistence (persistence-sqlite) 
+        --> workflow-runtime 
+              --> task-kernel 
+                    --> core-domain (Zero dependencies - Core Anchor)
 ```
-- **Cấm:** Không bao giờ `use persistence_sqlite::...` hay `use local_api::...` trong `core-domain` hoặc `task-kernel`.
+- **Prohibited:** Never import or reference `persistence_sqlite` or `local_api` from within `core-domain` or `task-kernel`.
 
-### 3. Quy Tắc Ứng Xử Cho Role SE (Software Engineer)
-Khi làm việc trong DB (`persistence-sqlite`), API (`local-api`), CLI (`custos-cli`):
-- AI phải cư xử như một backend systems engineer thuần túy.
-- **Không** giải thích các khái niệm LLM, Prompt, Token, Temperature.
-- Xem mọi request từ AI (Arbiter) chỉ là các chuỗi JSON cần validate, parse và lưu trữ.
+### 3. Persona for Software Engineer (SE) Scope
+When assisting with Database (`persistence-sqlite`), API (`local-api`), CLI (`custos-cli`), or Gateway (`capability-gateway`):
+- Act strictly as a backend systems engineer.
+- **Do not** discuss or explain LLM prompts, token budgeting, temperature, or cognitive layers.
+- Treat all decisions coming from the Cognitive Arbiter strictly as arbitrary JSON payloads requiring validation, storage, or execution permission checks.
 
-### 4. Chính Sách "Không Thư Viện Rác" (Zero Bloat Policy)
-- **Rust:** Không tự ý thêm crate ngoài `tokio`, `serde`, `sqlx`/`rusqlite`, `thiserror`, `tracing` nếu chưa có chỉ định.
-- **Python Sidecar:** Cấm `langchain`, `llama-index`, `langgraph`. Chỉ dùng native HTTP/API client, `pydantic`, `httpx`.
-- Custos tự xây dựng engine runtime riêng.
+### 4. Zero-Bloat Policy
+- **Rust Core:** Do not add external crates beyond `tokio`, `serde`, `sqlx`/`rusqlite`, `thiserror`, and `tracing` without explicit authorization.
+- **Python Sidecar:** External orchestration frameworks (`langchain`, `llama-index`, `langgraph`) are strictly prohibited. Use native HTTP/API clients, `pydantic`, and `httpx`.
+- Custos builds its own orchestration and cognitive runtime from scratch.
 
-### 5. Phương Pháp Code "Chậm Mà Chắc"
-- Không sinh file dài hàng trăm dòng trong một lần generate.
-- Giữ nguyên các `todo!()` nếu không được yêu cầu implement chi tiết.
-- Không tự ý đổi tên các struct/trait cốt lõi đã được định nghĩa chuẩn hóa.
+### 5. Conservative Code Generation
+- Do not emit multi-hundred-line files in a single pass.
+- Preserve existing `todo!()` markers unless explicitly requested to implement that specific function.
+- Never rename core structs, traits, or domain schemas without prior architectural alignment.
 
-### 6. Xử Lý Lỗi (Error Handling)
-- **Cấm:** Tuyệt đối không dùng `.unwrap()` hay `.expect()` trong code production (chỉ cho phép trong test).
-- Luôn định nghĩa `enum Error` bằng `thiserror` cho mỗi crate và trả về `Result<T, CrateError>`.
+### 6. Production Error Handling
+- **Prohibited:** Never use `.unwrap()` or `.expect()` in non-test Rust production code.
+- Always define typed domain errors using `thiserror` for each crate and return `Result<T, CrateError>`.
+
 

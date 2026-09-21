@@ -1,33 +1,33 @@
-# Kiến Trúc Tổng Thể (System Architecture Overview)
+# System Architecture Overview
 
 > **Status:** Canonical Baseline v4.0  
 > **Standards:** C4 Model (Level 1 & 2) · arc42 (§5-8, §47)
 
-Tài liệu này mô tả toàn cảnh kiến trúc hệ thống của Custos: phân rã hệ thống theo các ranh giới thực thi, mô hình phân tầng 7 lớp, 7 mặt phẳng chức năng (*Planes*), 3 màng ngăn bảo vệ (*Membranes*), và cấu trúc container C4.
+This document describes the end-to-end architecture of Custos: system decomposition along execution boundaries, the 7-layer hierarchy, the 7 functional planes, the 3 security membranes, and C4 container topology.
 
 ---
 
 ## 1. System Context — C4 Level 1
 
-Custos vận hành như một runtime cục bộ đóng vai trò trung gian có thẩm quyền giữa người dùng, môi trường mã nguồn cục bộ, các AI provider bên ngoài và các công cụ thực thi.
+Custos operates as an authoritative local runtime mediating between the user, local code repositories, external AI providers, and execution tooling.
 
 ```mermaid
 flowchart TB
-    User["👤 Human Principal
+    User["Human Principal
 (Goal, Approvals, Preferences)"]
     
     subgraph Host["Local Workstation / Host Machine"]
-        Custos["🛡️ Custos Runtime
+        Custos["Custos Runtime
 (Local Daemon & Governance)"]
-        Workspace["📁 Local Workspaces
+        Workspace["Local Workspaces
 (Git Repos, Code, Artifacts)"]
-        OS["🔒 OS Security Services
+        OS["OS Security Services
 (Keychain, Seatbelt Sandbox)"]
     end
     
-    Providers["☁️ External AI Providers
+    Providers["External AI Providers
 (OpenAI Codex, Anthropic Claude)"]
-    Tools["⚙️ Tools & MCP Services
+    Tools["Tools & MCP Services
 (Linters, Test Runners, APIs)"]
 
     User <-->|"Plans, Evidence, Prompts, Approvals"| Custos
@@ -37,48 +37,48 @@ flowchart TB
     Custos <-->|"ExecutionPermit / Tool Results"| Tools
 ```
 
-### Bảng Ranh Giới Tin Cậy (Trust Boundaries)
+### Trust Boundaries
 
-| Ranh giới | Custos nhận | Custos gửi | Mức độ tin cậy |
+| Boundary | Custos Ingests | Custos Dispatches | Trust Level |
 |---|---|---|---|
-| **Human Principal** | Mục tiêu, ràng buộc, quyết định phê duyệt | Kế hoạch, bằng chứng kiểm tra, kết quả | Định danh xác thực tối cao (*Authenticated Principal*) |
-| **Local Workspace** | Mã nguồn, tệp tài liệu, lịch sử Git | Bản vá (*patches*), artifacts, metadata | **Nội dung không tin cậy (Untrusted data)** — có thể chứa mã độc |
-| **AI Providers** | Các sự kiện suy luận (*reasoning events*), đề xuất | ContextPack đã lọc nhạy cảm, chỉ thị | Bộ xử lý suy luận ngoài (*External Untrusted Processor*) |
-| **Tools / MCP** | Tài nguyên, kết quả kiểm tra, logs | Hành động có phạm vi trong `ExecutionPermit`| Tin cậy theo từng adapter đã cấu hình |
-| **OS Keychain** | Bí mật xác thực (API keys, tokens) | Truy vấn có ủy quyền | Dịch vụ hệ điều hành tin cậy (*Trusted Local Service*) |
+| **Human Principal** | Goals, constraints, approval decisions | Plans, verified evidence, outcome bundles | Authenticated Principal (Supreme authority) |
+| **Local Workspace** | Source code, documents, Git commit history | Patches, artifacts, metadata | **Untrusted Data** (may contain prompt injection or malicious code) |
+| **AI Providers** | Reasoning events, action suggestions | Redacted ContextPacks, directives | External Untrusted Processor |
+| **Tools / MCP** | Tool manifests, execution results, logs | Scoped actions bounded by `ExecutionPermit` | Configured per-adapter trust |
+| **OS Keychain** | Auth secrets (API keys, tokens) | Authorized secret retrieval queries | Trusted Local OS Service |
 
 > [!WARNING]
-> Repository, trang web, issue, tệp PDF và kết quả trả về của công cụ đều có khả năng chứa **Prompt Injection**. Trong Custos, không có bất kỳ nguồn dữ liệu ngoại cảnh nào tự thân mang quyền hạn (*Authority*).
+> Repositories, web pages, issues, PDFs, and tool outputs may contain **Prompt Injections**. In Custos, zero external data sources possess intrinsic authority.
 
 ---
 
-## 2. Mô Hình Phân Tầng (7-Layer Architecture)
+## 2. Seven-Layer Architecture (7-Layer Model)
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ L7: INTERFACE LAYER — CLI · VS Code Extension · Local Web UI                │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ L6: ORCHESTRATION LAYER — Task Supervisor · Domain Pack Runtime · Leases    │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ L5: JUDGMENT PLANE (System One) — Fast Evaluation · Risk Screening · Rules  │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ L4: DELIBERATION PLANE (System Two) — Role-based Ephemeral Workers (LLMs)   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ L3: PROTOCOL & BOUNDARY MESH — Typed Internal Contracts · MCP Client        │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ L2: KERNEL LAYER — State Machine · Capability Gateway · Evidence Verifier   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ L1: INTEGRATION LAYER — Provider Adapters · Tiered Sandboxes · OS Connectors │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ L0: PERSISTENCE LAYER — SQLite + WAL · CAS Store · FTS5 · OS Keychain       │
-└─────────────────────────────────────────────────────────────────────────────┘
++-----------------------------------------------------------------------------+
+| L7: INTERFACE LAYER — CLI · VS Code Extension · Local Web UI                |
++-----------------------------------------------------------------------------+
+| L6: ORCHESTRATION LAYER — Task Supervisor · Domain Pack Runtime · Leases    |
++-----------------------------------------------------------------------------+
+| L5: JUDGMENT PLANE (System One) — Fast Evaluation · Risk Screening · Rules  |
++-----------------------------------------------------------------------------+
+| L4: DELIBERATION PLANE (System Two) — Role-based Ephemeral Workers (LLMs)   |
++-----------------------------------------------------------------------------+
+| L3: PROTOCOL & BOUNDARY MESH — Typed Internal Contracts · MCP Client        |
++-----------------------------------------------------------------------------+
+| L2: KERNEL LAYER — State Machine · Capability Gateway · Evidence Verifier   |
++-----------------------------------------------------------------------------+
+| L1: INTEGRATION LAYER — Provider Adapters · Tiered Sandboxes · OS Connectors |
++-----------------------------------------------------------------------------+
+| L0: PERSISTENCE LAYER — SQLite + WAL · CAS Store · FTS5 · OS Keychain       |
++-----------------------------------------------------------------------------+
 ```
 
 ---
 
-## 3. Kiến Trúc 7 Mặt Phẳng Chức Năng (The 7 Planes)
+## 3. The Seven Functional Planes
 
-Custos sử dụng khái niệm **Planes** để mô tả các khối trách nhiệm độc lập, tránh ép buộc các yêu cầu phải đi qua một chuỗi tuyến tính cứng nhắc:
+Custos decouples system responsibilities into **Planes** rather than enforcing rigid linear execution pipelines:
 
 ```mermaid
 flowchart TB
@@ -109,42 +109,42 @@ flowchart TB
     CP -->|"Inference Calls"| IP
 ```
 
-1. **Experience Plane:** Các giao diện tương tác người dùng (CLI, VS Code extension, notification inbox). Chỉ hiển thị dữ liệu chiếu (*projection*) và gửi lệnh (*commands*); không sở hữu trạng thái bền vững.
-2. **Task Control Plane (Kernel):** Trung tâm điều hành tối cao của hệ thống: quản lý Task State Machine, cấp phát tài nguyên, điều phối phê duyệt, thực thi phục hồi thảm họa.
-3. **Cognitive Plane:** Kết hợp phản xạ nhanh của System One (kiểm tra bất biến, phân loại rủi ro) và suy luận sâu của System Two (lập kế hoạch, sinh code).
-4. **Execution Plane:** Chịu trách nhiệm thực thi các hành vi ngoại cảnh qua Capability Gateway, kiểm soát worktree Git, sandbox lệnh shell và thực thi công cụ MCP.
-5. **Knowledge & Evidence Plane:** Quản lý chỉ mục ngữ cảnh, 5 tầng bộ nhớ, kho lưu trữ chứng cứ nghiệm thu và sổ cái quyết định (*Decision Ledger*).
-6. **Integration Plane:** Chứa các adapters kết nối với AI providers (Codex, Claude, Antigravity, local models), và OS Keychain.
-7. **Governance & Cross-Cutting:** Quản lý hạn mức ngân sách, chính sách bảo mật, và hệ thống đo lường từ xa xuyên suốt mọi mặt phẳng.
+1. **Experience Plane:** Client presentation surfaces (CLI, VS Code extension, notification inbox). Projects read models and dispatches commands; holds zero durable state.
+2. **Task Control Plane (Kernel):** Authoritative system core: governs the Task State Machine, allocates resources, coordinates human approvals, and executes crash recovery.
+3. **Cognitive Plane:** Combines fast reflexive System One evaluation (invariant checks, risk triage) with deep System Two deliberation (planning, patch generation).
+4. **Execution Plane:** Manages side-effecting external operations via the Capability Gateway: Git worktree management, shell sandboxing, and MCP tool execution.
+5. **Knowledge & Evidence Plane:** Maintains context indexing, 5-tier memory, verification evidence store, and the append-only Decision Ledger.
+6. **Integration Plane:** Implements driver adapters for AI model providers (Codex, Claude, Antigravity, local models), OS services, and Keychain storage.
+7. **Governance & Cross-Cutting:** Enforces budget ceilings, security policies, and structured telemetry across all planes.
 
 ---
 
-## 4. Ba Màng Ngăn Bảo Vệ (The 3 Membranes)
+## 4. The Three Membranes
 
-Mọi luồng dữ liệu và hành động trong Custos bắt buộc phải đi qua 3 màng ngăn không thể phá vỡ:
+All data flows and actions in Custos must traverse 3 impenetrable security membranes:
 
 ```text
        [ External / Untrusted ]
-                 │
-  ═══════════════▼═══════════════  1. PRIVACY MEMBRANE
+                 |
+  ===============v===============  1. PRIVACY MEMBRANE
      (Egress Gate & Redaction)
-  ═══════════════╤═══════════════
-                 │
-  ═══════════════▼═══════════════  2. AUTHORITY MEMBRANE
+  ===============|===============
+                 |
+  ===============v===============  2. AUTHORITY MEMBRANE
     (Exact-Payload Approval &
         ExecutionPermit)
-  ═══════════════╤═══════════════
-                 │
-  ═══════════════▼═══════════════  3. RESOURCE MEMBRANE
+  ===============|===============
+                 |
+  ===============v===============  3. RESOURCE MEMBRANE
      (Token, Time & Memory Budget)
-  ═══════════════╤═══════════════
-                 │
+  ===============|===============
+                 |
        [ Protected Execution ]
 ```
 
-- **Màng Quyền Hạn (Authority Membrane):** Không một hành động nào được phát động nếu thiếu sự ủy quyền hợp lệ từ con người hoặc vượt quá phạm vi của Task Contract.
-- **Màng Riêng Tư (Privacy Membrane):** Dữ liệu mã nguồn và ngữ cảnh không bao giờ rời khỏi máy trạm nếu chưa thỏa mãn chính sách kiểm duyệt xuất dữ liệu (*egress policy*).
-- **Màng Tài Nguyên (Resource Membrane):** Mọi tác vụ đều có hạn mức trần về token, số lần gọi API, thời gian chạy và dung lượng bộ nhớ.
+- **Authority Membrane:** No action executes without valid authorization from the human principal or explicit bounds in the Task Contract.
+- **Privacy Membrane:** Workspace source code and context never egress the workstation without passing the automated redaction and egress policy gate.
+- **Resource Membrane:** Hard ceilings on token consumption, API calls, clock duration, and memory allocation.
 
 ---
 
@@ -196,8 +196,8 @@ flowchart TB
 
 ---
 
-## 6. Mục Tiêu Triển Khai Thực Tế (Target Implementation Topology)
+## 6. Target Implementation Topology
 
-1. **Local Daemon (`custosd`):** Viết hoàn toàn bằng **Rust** để đạt hiệu năng tối đa, không phụ thuộc garbage collection, tiêu tốn ít RAM (< 50MB khi nhàn rỗi) và khởi động tức thì.
-2. **Cơ sở dữ liệu cục bộ:** Sử dụng **SQLite** nhúng ở chế độ Write-Ahead Logging (`WAL`), kết hợp cơ chế kiểm tra tính toàn vẹn và outbox pattern đảm bảo độ bền dữ liệu 100%.
-3. **Môi trường cách ly:** Tận dụng công nghệ sandboxing native của hệ điều hành: `sandbox-exec` trên macOS (Seatbelt profiles) và `bubblewrap` / namespaces trên Linux.
+1. **Local Daemon (`custosd`):** Implemented 100% in **Rust** for maximum performance, predictable zero-GC latency, minimal memory footprint (< 50MB idle), and instant startup.
+2. **Local Persistence:** Embedded **SQLite** operating in Write-Ahead Logging (`WAL`) mode with integrity verification and an outbox pattern for durable transaction processing.
+3. **OS Sandboxing:** Leverages native OS isolation: `sandbox-exec` on macOS (Seatbelt profiles) and `bubblewrap` / namespaces on Linux.

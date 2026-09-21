@@ -1,13 +1,13 @@
-# Vòng Đời Task & Mô Hình Vận Hành (Task Lifecycle & Domain Model)
+# Task Lifecycle & Domain Model
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần III (§9), Phần VIII (§24-26) & Phần VI (§32) Canonical Specification
+> **Source:** Part III (§9), Part VIII (§24-26) & Part VI (§32) Canonical Specification
 
-Đơn vị vận hành trung tâm của Custos là **Task**. Tài liệu này mô tả chi tiết mô hình thực thể miền (*Domain Model*), máy trạng thái hữu hạn (*Finite State Machine*), mô hình giao dịch và các kịch bản vận hành thực tế.
+The fundamental operational unit of Custos is the **Task**. This document details the Canonical Domain Model, the Finite State Machine, transaction patterns, persistence schemas, and real-world runtime execution scenarios.
 
 ---
 
-## 1. Mô Hình Miền Chuẩn Tắc (Canonical Domain Model)
+## 1. Canonical Domain Model
 
 ```mermaid
 classDiagram
@@ -60,9 +60,9 @@ classDiagram
 
 ---
 
-## 2. Máy Trạng Thái Của Task (Task State Machine)
+## 2. Task State Machine
 
-Trạng thái của một Task di chuyển qua các bước nghiêm ngặt được kiểm soát bởi Kernel:
+Task transitions follow a strictly verified state machine enforced by the Task Kernel:
 
 ```mermaid
 stateDiagram-v2
@@ -97,40 +97,40 @@ stateDiagram-v2
     Cancelled --> [*]
 ```
 
-### Bảng Chuyển Dịch Trạng Thái
+### State Transition Matrix
 
-| Từ trạng thái | Sang trạng thái | Điều kiện kích hoạt (Trigger & Guard) |
+| From State | To State | Trigger & Guard Conditions |
 |---|---|---|
-| `Draft` | `Ready` | Task Contract hợp lệ, scope tồn tại, budget > 0. |
-| `Ready` | `Running` | Kernel cấp phát worker và khởi tạo Git worktree riêng. |
-| `Running` | `WaitingApproval` | Đề xuất hành động có rủi ro cao (sửa file ngoài scope, chạy lệnh shell có side effect). |
-| `WaitingApproval` | `Running` | Con người ký duyệt `ExecutionPermit` cho đúng payload đó. |
-| `Running` | `Suspended` | Chạm hạn mức budget, crash hệ thống, hoặc người dùng yêu cầu tạm dừng (`custos pause`). |
-| `Suspended` | `Running` | Người dùng tiếp tục (`custos resume`), trạng thái và worktree được đối soát thành công. |
-| `Running` | `Completed` | Vượt qua cổng kiểm tra chứng cứ (*Completion Gate*): toàn bộ test và linters quy định đều pass. |
-| `Running` | `Failed` | Lỗi không thể khắc phục sau tối đa số lần retry, hoặc vi phạm nghiêm trọng System Invariant. |
+| `Draft` | `Ready` | Valid Task Contract committed, scope exists, budget > 0. |
+| `Ready` | `Running` | Kernel assigns worker role and provisions isolated Git worktree. |
+| `Running` | `WaitingApproval` | High-risk action proposed (out-of-scope mutation, side-effecting shell command). |
+| `WaitingApproval` | `Running` | Human signs off on the `ExecutionPermit` for the exact payload hash. |
+| `Running` | `Suspended` | Budget limit reached, process termination, or user pause command (`custos pause`). |
+| `Suspended` | `Running` | User resumes task (`custos resume`), state and worktree reconciled successfully. |
+| `Running` | `Completed` | Completion Gate passed: all required tests, linters, and verification checks succeed. |
+| `Running` | `Failed` | Max retries exceeded without recovery, or critical System Invariant breached. |
 
 ---
 
-## 3. Mô Hình Giao Dịch & Sự Kiện (Transaction Pattern)
+## 3. Six-Phase Transaction Pattern
 
-Mỗi bước thực thi (`Step`) trong Custos tuân theo quy trình giao dịch 6 giai đoạn đảm bảo tính nguyên tử:
+Every operational step (`Step`) in Custos executes through a 6-phase atomic transaction:
 
 ```text
-1. PROPOSE  ───> Worker đề xuất hành động kèm lý do và chi phí dự kiến.
-2. VALIDATE ───> System One kiểm tra bất biến; Kernel kiểm tra ngân sách trần.
-3. AUTHORIZE───> Cấp ExecutionPermit (hoặc dừng chờ Human Approval nếu rủi ro).
-4. EXECUTE  ───> Thực thi trong Sandbox; lưu trữ artifacts vào CAS.
-5. VERIFY   ───> Bộ kiểm tra độc lập (Verifier) chạy test và sinh ra Receipt.
-6. COMMIT   ───> Ghi Event vào SQLite Event Store và quyết toán ngân sách thực tế.
+1. PROPOSE  ---> Worker proposes action with rationale and projected cost.
+2. VALIDATE ---> System One verifies invariants; Kernel checks remaining budget ceiling.
+3. AUTHORIZE---> Issue ExecutionPermit (or pause for Human Approval if high-risk).
+4. EXECUTE  ---> Execute action inside Sandbox; persist output artifacts to CAS.
+5. VERIFY   ---> Independent Verifier runs tests and produces cryptographic Receipt.
+6. COMMIT   ---> Append event to SQLite Event Store and reconcile actual token budget.
 ```
 
 ---
 
-## 4. Lược Đồ Cơ Sở Dữ Liệu SQLite (Persistence DDL)
+## 4. SQLite Persistence Schema (DDL)
 
 ```sql
--- Bảng quản lý Task
+-- Tasks table
 CREATE TABLE tasks (
     task_id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -146,7 +146,7 @@ CREATE TABLE tasks (
     updated_at TEXT NOT NULL
 );
 
--- Bảng sổ cái sự kiện bất biến (Event Store)
+-- Immutable Event Store
 CREATE TABLE task_events (
     event_id INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id TEXT NOT NULL REFERENCES tasks(task_id),
@@ -157,13 +157,13 @@ CREATE TABLE task_events (
     UNIQUE(task_id, sequence_number)
 );
 
--- Bảng lưu trữ giấy phép thực thi
+-- Execution Permits table
 CREATE TABLE execution_permits (
     permit_id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL REFERENCES tasks(task_id),
     action_type TEXT NOT NULL,
     payload_hash TEXT NOT NULL,
-    granted_by TEXT NOT NULL, -- 'system_policy' hoặc 'human_exact_approval'
+    granted_by TEXT NOT NULL, -- 'system_policy' or 'human_exact_approval'
     expires_at TEXT NOT NULL,
     consumed_at TEXT
 );
@@ -171,9 +171,9 @@ CREATE TABLE execution_permits (
 
 ---
 
-## 5. Các Kịch Bản Vận Hành Thực Tế (Runtime Scenarios)
+## 5. Runtime Execution Scenarios
 
-### Kịch bản 1: Sửa Lỗi Mã Nguồn Tự Động (Standard Bug-Fix)
+### Scenario 1: Automated Bug-Fix Workflow
 ```mermaid
 sequenceDiagram
     autonumber
@@ -201,10 +201,10 @@ sequenceDiagram
     Kernel-->>User: Verifiable Outcome Bundle ready
 ```
 
-### Kịch bản 2: Dừng Chờ Phê Duyệt Khi Gặp Rủi Ro Cao
-Khi worker đề xuất sửa đổi tệp cấu hình hệ thống hoặc file ngoài scope đã cam kết:
-1. `Capability Gateway` phát hiện payload tác động vượt scope.
-2. Chuyển Task sang `WaitingApproval`.
-3. Gửi thông báo tới `CLI/VS Code` kèm diff chính xác (`Exact Payload`).
-4. Con người kiểm tra diff, bấm `Approve`.
-5. Kernel phát hành `ExecutionPermit` dùng 1 lần, task tiếp tục chạy an toàn.
+### Scenario 2: High-Risk Human Approval Escalation
+When a worker proposes mutating system configuration or modifying files outside the committed scope:
+1. `Capability Gateway` detects payload scope violation or high-risk classification.
+2. Kernel transitions Task to `WaitingApproval`.
+3. Dispatches notification to `CLI / VS Code` containing the exact payload diff.
+4. Human principal reviews the diff and approves via CLI command or IDE action.
+5. Kernel issues a one-time `ExecutionPermit` bound to the payload hash; execution resumes safely.

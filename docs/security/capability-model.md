@@ -1,28 +1,30 @@
-# Mô Hình Thẩm Quyền & Phê Duyệt (Capability Model & Approvals)
+# Capability Model & Approvals
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần V (§25.3-25.4) Canonical Specification
+> **Source:** Part V (§25.3-25.4) Canonical Specification
 
-Custos xây dựng kiến trúc an ninh dựa trên nền tảng **Bảo Mật Hướng Thẩm Quyền (Capability-Based Security)**: một thành phần không thể hành động nếu không nắm giữ một tấm vé ủy quyền hợp lệ (*Capability Token*).
-
----
-
-## 1. Nguyên Tắc Phê Duyệt Nội Dung Chính Xác (Exact-Payload Approval)
-
-Một trong những lỗ hổng nguy hiểm nhất của các công cụ AI hiện nay là yêu cầu người dùng phê duyệt chung chung (ví dụ: *"Bạn có cho phép Agent chạy lệnh shell không?"*).
-
-Custos áp dụng nguyên tắc **Exact-Payload Approval**:
-- Người dùng **chỉ phê duyệt một lệnh duy nhất với nội dung hash chính xác**:
-  $$	ext{PayloadHash} = 	ext{SHA-256}(	ext{command} + 	ext{args} + 	ext{target\_path})$$
-- Nếu model tự ý thay đổi dù chỉ một ký tự hoặc tham số cờ lệnh, mã băm sẽ thay đổi, và `ExecutionPermit` đã cấp sẽ bị vô hiệu hóa ngay lập tức.
-- Tuyệt đối không hỗ trợ tùy chọn *"Cho phép tất cả các lệnh từ giờ trở đi"* đối với các hành động có rủi ro cao.
+Custos security is built on **Capability-Based Security**: a component cannot perform any external action unless it presents a cryptographically signed, unforgeable `ExecutionPermit`.
 
 ---
 
-## 2. Quản Lý Bí Mật Tuyệt Đối (Zero Secrets In Database/Logs)
+## 1. Exact-Payload Approval Principle
 
-- **Không lưu plain-text keys:** API keys của các nhà cung cấp AI (OpenAI, Anthropic) và các dịch vụ bên ngoài không bao giờ được lưu vào cơ sở dữ liệu SQLite hay tệp cấu hình phẳng.
-- **Tận dụng OS Keychain:** Custos sử dụng trực tiếp dịch vụ lưu trữ an toàn của hệ điều hành:
-  - macOS Keychain Services qua thư viện Security Framework.
-  - Linux Secret Service API qua D-Bus / SecretStorage.
-- **Xóa sạch trong bộ nhớ (Memory Scrubbing):** Các biến chứa khóa bí mật được gói trong struct tự động ghi đè bộ nhớ về số 0 khi biến ra khỏi phạm vi sử dụng (`zeroize` crate trong Rust).
+One of the most dangerous vulnerabilities in existing AI agent tools is asking for broad, generic approvals (e.g., *"Do you allow the agent to run terminal commands?"*).
+
+Custos enforces the strict principle of **Exact-Payload Approval**:
+- The human principal **approves only a specific action bound to its exact payload hash**:
+  ```text
+  PermitHash = SHA256(ToolName + NormalizedParameters + TargetFileDiff + Timestamp)
+  ```
+- If an LLM mutates even a single character or flag in the command, the SHA-256 digest changes, and the issued `ExecutionPermit` is immediately invalidated.
+- Custos never supports an option to *"Allow all commands from now on"* for high-risk operations.
+
+---
+
+## 2. Zero Secrets in Persistence & Telemetry
+
+- **No Plain-text Credentials:** API keys for AI providers (OpenAI, Anthropic) and third-party services are never persisted to SQLite tables or flat configuration files.
+- **Native OS Keychain Integration:** Custos interacts directly with the operating system's secure credential store:
+  - macOS Keychain Services via the Security Framework.
+  - Linux Secret Service via FreeDesktop DBus secret store.
+- **Memory Scrubbing:** Variables holding secrets are wrapped in self-zeroizing memory wrappers (`zeroize` crate in Rust) ensuring heap and stack buffers are overwritten with zeros immediately upon drop.

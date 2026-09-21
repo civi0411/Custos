@@ -1,42 +1,42 @@
-# Giao Tiếp Nội Bộ & Điều Phối (Internal Communication & Protocols)
+# Internal Communication & Protocols
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần VII (§21-23) & Phần IV (§16-18, §20) Canonical Specification
+> **Source:** Part VII (§21-23) & Part IV (§16-18, §20) Canonical Specification
 
-Hệ thống giao tiếp nội bộ của Custos được thiết kế dựa trên 3 nguyên tắc: **Định kiểu tĩnh (Strongly-typed)**, **Bất đồng bộ không chặn (Non-blocking Asynchronous)**, và **Cấu trúc hình sao (Star Topology)**.
+Custos's internal communication architecture is governed by 3 principles: **Strongly-typed contracts**, **Non-blocking asynchronous messaging**, and a **Strict Star Topology**.
 
 ---
 
-## 1. Mô Hình Liên Lạc Hình Sao (Star Topology)
+## 1. Star Topology Communication Model
 
-Custos kiên quyết loại bỏ mô hình hội thoại tự do giữa các agent (Peer-to-Peer Agent Chat) để ngăn chặn vòng lặp ảo giác (*hallucination loops*) và mất kiểm soát chi phí.
+Custos explicitly rejects free-form peer-to-peer agent chat loops (P2P Agent Chat) to prevent cascading hallucination loops and unconstrained token expenditures.
 
 ```mermaid
 flowchart TD
-    Kernel(("🛡️ Task Kernel\n(Coordinator & Bus)"))
+    Kernel(("Task Kernel\n(Coordinator & Bus)"))
     
-    W_Exp["🔍 Explorer Worker\n(Repo Scout)"]
-    W_Pat["✏️ Patcher Worker\n(Code Author)"]
-    W_Ver["🧪 Verifier Worker\n(Test Runner)"]
-    S1["⚡ System One\n(Judgment Fabric)"]
+    W_Exp["Explorer Worker\n(Repo Scout)"]
+    W_Pat["Patcher Worker\n(Code Author)"]
+    W_Ver["Verifier Worker\n(Test Runner)"]
+    S1["System One\n(Judgment Fabric)"]
 
     Kernel <-->|"Typed CP Message"| W_Exp
     Kernel <-->|"Typed CP Message"| W_Pat
     Kernel <-->|"Typed CP Message"| W_Ver
     Kernel <-->|"RDC Protocol"| S1
 
-    W_Exp -.->|"❌ NO P2P CHAT"| W_Pat
-    W_Pat -.->|"❌ NO P2P CHAT"| W_Ver
+    W_Exp -.->|"NO P2P CHAT"| W_Pat
+    W_Pat -.->|"NO P2P CHAT"| W_Ver
 ```
 
 > [!NOTE]
-> Mọi sự phối hợp giữa các worker đều diễn ra gián tiếp thông qua **Event Store** và **Artifacts** do Kernel điều phối. Worker A kết thúc subtask và xuất artifact; Kernel tiếp nhận, kiểm định và mới chuyển giao artifact đó cho Worker B.
+> All inter-worker coordination occurs indirectly through the **Event Store** and verified **Artifacts** managed by the Kernel. Worker A completes a subtask and outputs an artifact; the Kernel receives, validates, and routes the artifact to Worker B.
 
 ---
 
-## 2. Định Dạng Thông Điệp Chuẩn Custos Protocol (CP Envelope)
+## 2. Custos Protocol Envelope (CP Envelope)
 
-Mọi thông điệp giao tiếp giữa Kernel và các thành phần đều được bao bọc trong một **CP Envelope** chuẩn hóa bằng định dạng typed JSON hoặc YAML:
+All inter-module communication is wrapped inside a standardized typed **CP Envelope** formatted in JSON or YAML:
 
 ```yaml
 envelope_version: "custos.cp.v1"
@@ -67,14 +67,14 @@ payload:
 
 ---
 
-## 3. Ma Trận Ranh Giới Giao Thức (Protocol Boundary Matrix)
+## 3. Protocol Boundary Matrix
 
-Custos phân định rõ ràng công nghệ áp dụng cho từng ranh giới tương tác:
+Custos applies tailored protocols across distinct architectural boundaries:
 
-| Ranh giới giao tiếp | Giao thức áp dụng | Định dạng dữ liệu | Lý do lựa chọn |
+| Boundary | Applied Protocol | Wire Format | Design Rationale |
 |---|---|---|---|
-| **Nội bộ Kernel & Workers** | IPC / In-process Rust channels | Typed Rust Structs / CBOR | Hiệu năng cực cao, an toàn kiểu tại thời điểm biên dịch (*compile-time safety*). |
-| **CLI / VS Code sang Daemon** | Unix Domain Socket (UDS) / Named Pipe | JSON-RPC 2.0 | Chuẩn công nghiệp, dễ tích hợp với client TypeScript/Rust. |
-| **Runtime sang AI Providers** | HTTPS / SSE (Server-Sent Events) | Provider REST / Streaming API | Tương thích giao thức chính thức của từng nhà cung cấp. |
-| **Runtime sang Công Cụ Ngoài**| Official MCP (Model Context Protocol) | JSON-RPC qua stdio / HTTP | Chuẩn mở cho hệ sinh thái công cụ đa nền tảng. |
-| **Lưu trữ Cục Bộ** | SQLite C-API & Direct Filesystem | SQL tables + Raw BLOB CAS | Bền vững, hỗ trợ giao dịch ACID, không phụ thuộc network stack. |
+| **Kernel & Local Workers** | In-process Rust channels / IPC | Typed Rust Structs / CBOR | Maximum throughput, zero serialization overhead, compile-time type safety. |
+| **CLI / VS Code to Daemon** | Unix Domain Socket (UDS) / Named Pipe | JSON-RPC 2.0 | Standardized, cross-language interop with TypeScript and Rust clients. |
+| **Runtime to AI Providers** | HTTPS / Server-Sent Events (SSE) | Provider REST / Streaming API | Conforms to official provider specifications and streaming protocols. |
+| **Runtime to External Tools** | Official Model Context Protocol (MCP) | JSON-RPC over stdio / HTTP | Open standard for polyglot ecosystem tools. |
+| **Local Persistence** | SQLite C-API & Local Filesystem | SQL tables + Raw BLOB CAS | Durable ACID transactions, zero network dependencies. |

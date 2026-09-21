@@ -1,32 +1,32 @@
-# 🚀 Sprint Status & Sync (Vĩ & Trường)
+# Sprint Status & Sync (Vi & Truong)
 
-> File này được dùng để 2 thành viên cập nhật nhanh trạng thái công việc và ghi nhận blocker.  
-> Cứ hoàn thành việc nào thì tick `[x]` vào ô tương ứng.
-
----
-
-## 📍 Sprint 1: Local Kernel & SQLite (Tuần Hiện Tại)
-**Mục tiêu chung:** Xây dựng xong bộ khung lưu trữ dữ liệu (Task) xuống SQLite và có thể dùng CLI để tạo/xem task trên máy local. Chưa cần gọi AI bên ngoài.
-
-### 🧑‍🔧 Nhiệm Vụ Của Trường (Software Engineer)
-- [ ] Thiết lập kết nối `rusqlite` hoặc `sqlx` trong `crates/persistence-sqlite`.
-- [ ] Viết hàm tạo bảng (Schema Migration) cho: `tasks`, `spans`, `events`.
-- [ ] Viết API `insert_task(task: &Task) -> Result<(), PersistenceError>` và `get_task(id: &TaskId) -> Result<Option<Task>, PersistenceError>`.
-- [ ] Dùng `clap` trong `apps/custos-cli` để nhận lệnh `custos run "mô tả công việc"`.
-- [ ] Gọi hàm `insert_task` từ CLI xuống SQLite để test thử luồng chạy thực tế.
-
-### 🧑‍💻 Nhiệm Vụ Của Vĩ (AI Engineer)
-- [ ] Bổ sung các trường dữ liệu cần thiết cho struct `Task` và enum `TaskStatus` trong `crates/core-domain`.
-- [ ] Chốt chuẩn giao tiếp (JSON Schema / Action Payload) giữa Kernel và Cognitive Arbiter.
-- [ ] Khởi tạo khung thư mục `sidecars/python-judgment` (thiết lập pyproject.toml / uv).
-- [ ] Khởi tạo khung thư mục `sidecars/ts-claude-agent` (thiết lập package.json / pnpm).
+> This document is used by both team members to track active work items and record blockers.  
+> Mark completed tasks with `[x]`.
 
 ---
 
-## 📍 Ghi Chú & Blocker (Trở Ngại Cần Họp Thảo Luận)
+## Sprint 1: Local Kernel & SQLite (Active Sprint)
+**Primary Goal:** Build the foundation for durable task persistence in SQLite and support local CLI task creation and inspection. No external AI model calls required.
 
-### Trường (SE)
-- *Ghi chú / Blocker:* (Chưa có)
+### Truong's Deliverables (Software Engineer)
+- [ ] Initialize `rusqlite` or `sqlx` connection pool in `crates/persistence-sqlite`.
+- [ ] Implement schema migrations for: `tasks`, `spans`, `events`.
+- [ ] Implement CRUD APIs: `insert_task(task: &Task) -> Result<(), PersistenceError>` and `get_task(id: &TaskId) -> Result<Option<Task>, PersistenceError>`.
+- [ ] Use `clap` in `apps/custos-cli` to handle `custos run "<task description>"`.
+- [ ] Connect CLI command to SQLite persistence to verify the end-to-end local flow.
 
-### Vĩ (AI Engineer)
-- *Ghi chú / Blocker:* (Chưa có)
+### Vi's Deliverables (AI Engineer)
+- [ ] Complete core fields for `Task` struct and `TaskStatus` enum in `crates/core-domain`.
+- [ ] Define the communication schema (JSON schema / Action payload) between Task Kernel and Cognitive Arbiter.
+- [ ] Initialize directory scaffold for `sidecars/python-judgment` (configured with `pyproject.toml` / `uv`).
+- [ ] Initialize directory scaffold for `sidecars/ts-claude-agent` (configured with `package.json` / `pnpm`).
+
+---
+
+## Notes & Blockers
+
+### Truong (SE)
+- *Notes / Blockers:* None currently.
+
+### Vi (AI Engineer)
+- *Notes / Blockers:* None currently.

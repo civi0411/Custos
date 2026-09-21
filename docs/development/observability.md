@@ -1,15 +1,15 @@
-# Giám Sát & Đo Lường Hệ Thống (Observability & Metrics)
+# Observability and Metrics
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần VI (§34) Canonical Specification
+> **Source:** Part VI (§34) Canonical Specification
 
-Hệ thống giám sát của Custos được thiết kế dựa trên tiêu chuẩn mở **OpenTelemetry**, cung cấp khả năng quan sát toàn diện mọi khía cạnh vận hành cục bộ mà vẫn bảo vệ quyền riêng tư của người dùng.
+The Custos observability system is engineered on top of the **OpenTelemetry** standard, providing comprehensive visibility into local operational internals while strictly preserving user privacy.
 
 ---
 
-## 1. Mô Hình Phân Cấp Dấu Vết (Trace Span Hierarchy)
+## 1. Trace Span Hierarchy
 
-Mọi hoạt động trong một Task được cấu trúc theo cây span rõ ràng:
+All operations within a Task are structured as an explicit span tree:
 
 ```text
 Workspace
@@ -26,19 +26,19 @@ Workspace
 
 ---
 
-## 2. Các Chỉ Số Đo Lường Chính (Core Metrics)
+## 2. Core Metrics
 
-- **`custos_task_total`:** Tổng số task phân loại theo trạng thái (Success, Failed, Cancelled).
-- **`custos_step_duration_seconds`:** Thời gian thực thi của từng bước theo từng vai trò worker.
-- **`custos_tokens_consumed_total`:** Số token input/output tiêu tốn phân loại theo model provider.
-- **`custos_judgment_cost_ratio`:** Tỉ lệ chi phí giữa System One (phán đoán nhanh) và System Two (LLM suy luận sâu).
-- **`custos_human_interruptions_total`:** Số lần phải dừng lại xin ý kiến hoặc phê duyệt từ con người.
-- **`custos_verifier_pass_ratio`:** Tỉ lệ vượt qua bài kiểm tra tự động ngay trong lần thử đầu tiên.
+- **`custos_task_total`:** Total number of tasks categorized by terminal state (`Success`, `Failed`, `Cancelled`).
+- **`custos_step_duration_seconds`:** Execution latency per step broken down by worker role.
+- **`custos_tokens_consumed_total`:** Input and output token consumption categorized by model provider.
+- **`custos_judgment_cost_ratio`:** Ratio of execution cost between System One (heuristic judgment) and System Two (deep LLM reasoning).
+- **`custos_human_interruptions_total`:** Count of human interventions and approval interruptions required.
+- **`custos_verifier_pass_ratio`:** Percentage of task attempts passing automated verification on the first attempt.
 
 ---
 
-## 3. Ghi Nhật Ký Có Cấu Trúc (Structured Logging & Redaction)
+## 3. Structured Logging and Redaction
 
-- Sử dụng thư viện `tracing` chuẩn của Rust, xuất dữ liệu dạng JSON Lines (`.jsonl`).
-- **Khử nhạy cảm trước khi ghi log:** Tự động lọc sạch token bí mật và dữ liệu nhạy cảm trước khi lưu xuống đĩa.
-- Raw prompts mặc định bị tắt; người dùng chỉ bật khi cần debug chuyên sâu (`CUSTOS_LOG_PROMPTS=1`).
+- Standard Rust `tracing` infrastructure exporting to JSON Lines (`.jsonl`).
+- **Pre-Log Redaction:** Automated redacting of secrets, auth tokens, and sensitive credentials prior to disk persistence.
+- Raw prompts are disabled by default; developers can enable them for local debugging using `CUSTOS_LOG_PROMPTS=1`.

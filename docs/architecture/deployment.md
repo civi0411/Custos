@@ -1,59 +1,59 @@
-# Triển Khai Cục Bộ & Môi Trường (Local-First Deployment Architecture)
+# Local-First Deployment Architecture
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần VI (§28, §34) & Phần VII (§47) Canonical Specification
+> **Source:** Part VI (§28, §34) & Part VII (§47) Canonical Specification
 
-Custos được thiết kế hoàn toàn theo tư duy **Local-First**: bảo đảm dữ liệu của người dùng nằm trọn vẹn trên máy trạm của họ, không đòi hỏi phụ thuộc vào bất kỳ hạ tầng đám mây tập trung nào.
+Custos is designed entirely around the **Local-First** paradigm: guaranteeing that user data, code repositories, and execution artifacts remain exclusively on the local workstation, with zero dependencies on centralized cloud services.
 
 ---
 
-## 1. Kiến Trúc Tiến Trình Cục Bộ
+## 1. Local Process Architecture
 
-Hệ thống bao gồm một daemon nền duy nhất và các ứng dụng client mỏng kết nối qua Unix Domain Socket:
+The system consists of a single authoritative background daemon and thin client interfaces communicating over Unix Domain Sockets:
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│                      LOCAL WORKSTATION                      │
-│                                                             │
-│   [ custos CLI ]               [ VS Code Extension ]        │
-│          │                              │                   │
-│          └──────────────┬───────────────┘                   │
-│                         │ JSON-RPC (Unix Socket)            │
-│                         ▼                                   │
-│            ┌─────────────────────────┐                      │
-│            │  custosd (Rust Daemon)  │                      │
-│            └────────────┬────────────┘                      │
-│                         │                                   │
-│       ┌─────────────────┼─────────────────┐                 │
-│       ▼                 ▼                 ▼                 │
-│  [ SQLite DB ]    [ Git Worktrees ]  [ Tiered Sandbox ]     │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|                      LOCAL WORKSTATION                      |
+|                                                             |
+|   [ custos CLI ]               [ VS Code Extension ]        |
+|          |                              |                   |
+|          +--------------+---------------+                   |
+|                         | JSON-RPC (Unix Socket)            |
+|                         v                                   |
+|            +-------------------------+                      |
+|            |  custosd (Rust Daemon)  |                      |
+|            +------------+------------+                      |
+|                         |                                   |
+|       +-----------------+-----------------+                 |
+|       v                 v                 v                 |
+|  [ SQLite DB ]    [ Git Worktrees ]  [ Tiered Sandbox ]     |
++-------------------------------------------------------------+
 ```
 
 ---
 
-## 2. Các Tầng Sandbox (Tiered Sandboxing Backends)
+## 2. Tiered Sandboxing Backends
 
-Custos phân tầng sandbox dựa trên hệ điều hành của máy trạm:
+Custos applies native operating system isolation mechanisms depending on the host OS:
 
 ### Tier 1: macOS Native Sandbox (`sandbox-exec`)
-Trên macOS, mọi lệnh shell và công cụ được thực thi dưới cấu hình **Seatbelt** nghiêm ngặt:
-- Chỉ cho phép đọc/ghi vào thư mục Git worktree được chỉ định.
-- Cấm đọc các thư mục cá nhân nhạy cảm (`~/.ssh`, `~/.aws`, `~/Library/Keychains`).
-- Khóa toàn bộ kết nối mạng ngoại trừ các domain đã được cấp phép trong task contract.
+On macOS, all shell operations and tool invocations execute under strict **Seatbelt** profile configurations:
+- Read/write access is restricted exclusively to the designated Git worktree directory.
+- Sensitive user directories (`~/.ssh`, `~/.aws`, `~/Library/Keychains`) are blocked from read/write.
+- All outbound network access is blocked except for domains explicitly authorized in the Task Contract.
 
 ### Tier 2: Linux Native Sandbox (`bubblewrap` / Namespaces)
-Trên Linux, Custos tận dụng `bwrap` (công nghệ đứng sau Flatpak):
-- Tạo unshare mount/network/PID namespaces riêng rẽ.
-- Môi trường root ảo hóa chỉ chứa các thư viện tối thiểu cần thiết để build/test code.
+On Linux, Custos utilizes `bwrap` (the underlying sandboxing engine behind Flatpak):
+- Establishes isolated mount, network, and PID namespaces.
+- Constructs a minimal virtualized root filesystem exposing only the compiler/interpreter toolchains required for building and testing.
 
-### Tier 3: OCI / Docker Container (Fallback & Polyglot)
-Dành cho các tác vụ đòi hỏi môi trường dịch vụ phức tạp (ví dụ: cần khởi động PostgreSQL hoặc Redis cục bộ để chạy integration test).
+### Tier 3: OCI / Docker Container (Fallback & Integration)
+Reserved for tasks requiring isolated external services (e.g., spinning up a local PostgreSQL or Redis instance for integration test suites).
 
 ---
 
-## 3. Định Mức Tài Nguyên & Giám Sát Cục Bộ
+## 3. Resource Governance & Local Footprint
 
-Daemon `custosd` tự áp đặt giới hạn tài nguyên nghiêm ngặt:
-- **Dung lượng RAM tối đa:** `< 60MB` khi nhàn rỗi, `< 250MB` khi điều phối tác vụ nặng.
-- **CPU:** Tự động điều chỉnh độ ưu tiên (`nice` level) để không làm đơ giao diện người dùng máy trạm khi chạy các bài test dài.
+The `custosd` daemon enforces strict local resource bounds:
+- **Resident Memory:** `< 60MB` idle, `< 250MB` under intensive multi-worker orchestration.
+- **CPU Scheduling:** Automatically adjusts process scheduling priority (`nice` level) to prevent workstation UI degradation during long-running builds.

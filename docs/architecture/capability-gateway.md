@@ -1,33 +1,33 @@
-# Cổng Kiểm Soát Năng Lực (Capability Gateway & Sandboxing)
+# Capability Gateway & Sandboxing
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần IX (§27-29) & Phần VII (§58) Canonical Specification
+> **Source:** Part IX (§27-29) & Part VII (§58) Canonical Specification
 
-Capability Gateway là ranh giới bảo mật tối cao của Custos, thực hiện nguyên lý: **Tuyệt đối không thực thi trực tiếp (Zero Direct Execution)**. Mọi thao tác đọc/ghi tệp tin, chạy lệnh shell hoặc gọi mạng đều phải đi qua cổng này.
+The Capability Gateway enforces Custos's supreme security invariant: **Zero Direct Execution**. All file system operations, shell executions, and network egress calls must traverse this gateway.
 
 ---
 
-## 1. Cơ Chế Giấy Phép Thực Thi (ExecutionPermit)
+## 1. ExecutionPermit Mechanism
 
-Mỗi hành động có tác động ngoại cảnh (*side effect*) đều bắt buộc phải sở hữu một giấy phép `ExecutionPermit` hợp lệ trước khi được đưa vào sandbox.
+Every action with external side effects must hold a valid `ExecutionPermit` prior to execution inside a sandboxed environment.
 
 ```rust
 pub struct ExecutionPermit {
     pub permit_id: Uuid,
     pub task_id: TaskId,
     pub tool_name: String,
-    pub payload_hash: Sha256Hash,  // Mã băm SHA-256 của toàn bộ tham số lệnh
+    pub payload_hash: Sha256Hash,  // SHA-256 digest of complete execution payload
     pub granted_authority: AuthorityLevel,
     pub valid_from: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>,  // Hạn sử dụng nghiêm ngặt (TTL)
-    pub single_use: bool,          // Sử dụng một lần duy nhất
-    pub signature: Vec<u8>,        // Chữ ký mật mã của Task Kernel
+    pub expires_at: DateTime<Utc>,  // Strict TTL expiry
+    pub single_use: bool,          // Enforces single-use execution
+    pub signature: Vec<u8>,        // Cryptographic signature from Task Kernel
 }
 ```
 
 ---
 
-## 2. Quy Trình Gọi Công Cụ Chuẩn Xác (Tool Execution Sequence)
+## 2. Tool Execution Sequence
 
 ```mermaid
 sequenceDiagram
@@ -60,19 +60,19 @@ sequenceDiagram
 
 ---
 
-## 3. Tích Hợp Chính Sách Cedar (Cedar Policy Integration)
+## 3. Cedar Policy Integration
 
-Custos sử dụng ngôn ngữ chính sách bảo mật **Cedar** (từ AWS/Linux Foundation) để xác thực phân quyền nhanh gọn và an toàn:
+Custos adopts the **Cedar** policy language (AWS / Linux Foundation) for deterministic, sub-millisecond authorization:
 
 ```cedar
-// Cho phép đọc mã nguồn trong thư mục workspace được chỉ định
+// Permit source read access within designated active worktree
 permit(
     principal == Custos::Worker::"engineering.explorer",
     action == Custos::Action::"ReadFile",
     resource in Custos::Workspace::"active_task_worktree"
 );
 
-// Cấm tuyệt đối can thiệp vào thư mục .git gốc hoặc tệp cấu hình hệ thống
+// Strictly forbid direct mutations to the root .git directory or system config
 forbid(
     principal,
     action in [Custos::Action::"WriteFile", Custos::Action::"DeleteFile"],
@@ -82,8 +82,8 @@ forbid(
 
 ---
 
-## 4. Tích Hợp Giao Thức Công Cụ MCP (Model Context Protocol)
+## 4. Model Context Protocol (MCP) Integration
 
-Custos tích hợp thư viện chính thức **`modelcontextprotocol/rust-sdk`** tại tầng Capability Gateway:
-- **MCP chỉ nằm ở ranh giới ngoài:** Chỉ dùng để kết nối với các công cụ bên ngoài (PostgreSQL, GitHub API, Web search).
-- **Không dùng MCP nội bộ:** Giao tiếp nội bộ giữa các module của Custos sử dụng Rust typed contracts trực tiếp để đảm bảo hiệu năng và tính toàn vẹn kiểu dữ liệu.
+Custos integrates the official **`modelcontextprotocol/rust-sdk`** strictly at the Capability Gateway boundary:
+- **MCP at the Outer Boundary:** Used exclusively to bridge external tools and servers (PostgreSQL, GitHub API, Web search).
+- **Zero Internal MCP:** Internal inter-module communication uses native Rust typed contracts to maximize throughput and guarantee type safety.

@@ -1,90 +1,89 @@
-# Bản Sắc Sản Phẩm & Định Vị (Product Identity & Thesis)
+# Product Identity & Thesis
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần I (§0-1) Canonical Specification
+> **Source:** Part I (§0-1) Canonical Specification
 
 ---
 
-## 1. Custos Là Gì?
+## 1. What is Custos?
 
-**Custos là một Human-Centered Agentic Work Runtime — local-first, model-agnostic — biến ý định con người thành công việc có trạng thái bền vững, có bằng chứng, có thể resume và đổi provider.**
+**Custos is a Human-Centered Agentic Work Runtime — local-first and model-agnostic — that turns human intent into durable, resumable, cross-provider, and evidence-backed work.**
 
-Custos **không phải** là:
-- Không phải "siêu agent" tự xưng toàn năng.
-- Không phải chat wrapper gom nhiều API model.
-- Không phải một thư viện framework trừu tượng hóa cồng kềnh.
+Custos is **not**:
+- Not a self-proclaimed "super-agent".
+- Not an API model chat aggregator or wrapper.
+- Not a bloated generic framework.
 
-Custos là **lớp runtime chuyên biệt** đứng giữa:
-- **Con người (Human Operator):** Người nắm giữ ý định, giá trị và quyền phê duyệt.
-- **AI Providers:** OpenAI Codex, Anthropic Claude, Google Antigravity, Local SLM/LLM.
-- **Không gian tri thức & Mã nguồn:** Git repositories, workspace, tài liệu cá nhân.
-- **Công cụ & Môi trường thực thi:** Shell, linters, test runners, API dịch vụ.
-- **Judgment Fabric (System One):** Hệ thống phản xạ phán đoán nhanh, kiểm soát rủi ro.
+Custos is a **specialized runtime layer** positioned between:
+- **The Human Principal:** Holding intent, ethics, constraints, and ultimate approval sovereignty.
+- **AI Reasoning Providers:** OpenAI Codex, Anthropic Claude, Google Antigravity, and local SLMs/LLMs.
+- **Workspace Knowledge:** Git repositories, AST indexes, notes, and local files.
+- **Execution Tools & OS:** Shell environments, linters, compilers, test runners, and external MCP tools.
+- **Judgment Fabric (System One):** Fast, deterministic reflection, invariant checks, and risk triage.
 
 ---
 
-## 2. Product Thesis & Công Thức Hệ Thống
+## 2. Product Thesis & System Formula
 
-> ### 🎯 Tuyên ngôn giá trị (Product Thesis)
-> **Custos turns human intent into controlled, resumable, cross-provider and evidence-backed work.**  
-> *(Custos biến ý định của con người thành công việc được kiểm soát, có khả năng phục hồi, độc lập nhà cung cấp và được bảo đảm bằng chứng cứ).*
+> ### Product Thesis
+> **Custos turns human intent into controlled, resumable, cross-provider and evidence-backed work.**
 
-### Đơn vị trung tâm: Task
-Đơn vị trung tâm là **Task**, không phải là phiên chat, agent, model hay tool call.
+### The Core Operational Unit: Task
+The fundamental operational unit is the **Durable Task** — never an ephemeral chat session, model context window, or isolated tool call.
 
 ```text
 Human intent
-→ Task contract
-→ Decision cases and workflow
-→ Workers + tools + models
-→ Artifacts + evidence
-→ Human-governed outcome
+--> Task contract
+--> Decision cases and workflow
+--> Ephemeral workers + tiered sandboxes + model providers
+--> Content-addressed artifacts + independent evidence
+--> Human-governed verified outcome bundle
 ```
 
-### Công thức hệ thống
-$$	ext{Custos} = 	ext{Durable Task Control} + 	ext{Cognitive Control Fabric} + 	ext{Capability-Governed Execution} + 	ext{Knowledge/Evidence Fabric} + 	ext{Human Sovereignty}$$
+### System Formula
+$$\text{Custos} = \text{Durable Task Control} + \text{Cognitive Control Fabric} + \text{Capability-Governed Execution} + \text{Knowledge/Evidence Fabric} + \text{Human Sovereignty}$$
 
 ---
 
-## 3. Ba Trụ Cột Nền Tảng (Three Pillars)
+## 3. The Three Pillars
 
-| Trụ cột | Bản chất kỹ thuật | Giá trị mang lại cho người dùng |
+| Pillar | Technical Mechanism | User Value |
 |---|---|---|
-| **Model-Agnostic** | Thay não mà không mất hồn (*Task memory & state isolation*) | Đổi từ Claude sang Codex hoặc mô hình Local mà không làm đứt gãy tiến trình hay mất lịch sử ngữ cảnh. |
-| **Evidence-Carrying** | Mọi hành động mang theo bằng chứng (*Evidence-Carrying Action*) | Không tin vào lời khẳng định vô căn cứ của AI; chỉ chấp nhận kết quả khi có test pass, diff clean và receipt. |
-| **Judgment Infrastructure** | Phán đoán là hạ tầng hạng nhất (*Pluggable System One*) | Tách riêng việc phán đoán nhanh (kiểm tra rủi ro, phân loại) khỏi suy luận sâu của LLM, giảm 60-80% chi phí và độ trễ. |
+| **Model-Agnostic** | Task memory & state isolation | Switch seamlessly between Claude, Codex, or local models without breaking execution progress or losing context history. |
+| **Evidence-Carrying** | Evidence-carrying actions & outcome bundles | Eliminates reliance on ungrounded AI assertions; outcomes require verifiable test receipts, clean git diffs, and proof artifacts. |
+| **Judgment Infrastructure** | First-class pluggable System One | Isolates fast deterministic reflection (risk triage, classifier checks) from deep LLM deliberation, slashing 60-80% of token latency and cost. |
 
 ---
 
-## 4. Sáu Câu Tóm Tắt Kiến Trúc (Architecture in Six Sentences)
+## 4. Architecture in Six Sentences
 
-1. **Kernel sở hữu sự thật:** Kernel sở hữu state, authority, budget và commit; model chỉ là bộ tính toán suy luận tạm thời.
-2. **Workers sinh diệt linh hoạt:** Workers theo vai trò được sinh ra theo nhu cầu của subtask và kết thúc ngay khi hoàn thành scope, không giữ state vĩnh viễn.
-3. **Phán đoán kiểm soát suy luận:** System One (Judgment Fabric) bao quanh và kiểm soát System Two (Deliberation LLMs) bằng các hợp đồng quyết định tường minh.
-4. **Không có quyền hạn ngầm định:** Không một dòng lệnh shell hay API call nào được thực thi nếu không có giấy phép `ExecutionPermit` hợp lệ qua Capability Gateway.
-5. **Nghiệm thu bằng chứng cứ:** Một Task chỉ chuyển sang `Completed` khi vượt qua cổng kiểm tra chứng cứ khách quan (*Completion Gate*) quy định trong Task Contract.
-6. **Chủ quyền tuyệt đối của con người:** Con người nắm giữ ngân sách chú ý (*Human Attention Budget*), phê duyệt các quyết định có rủi ro cao thông qua diff và payload cụ thể (*Exact-Payload Approval*).
+1. **The Kernel owns the truth:** The Task Kernel owns state, authority, budget, and commits; models are merely ephemeral reasoning compute.
+2. **Workers are disposable:** Role-based workers are instantiated on demand for specific subtasks and terminated immediately upon completion, holding no persistent state.
+3. **Judgment governs reasoning:** System One (Judgment Fabric) envelopes and constrains System Two (Deliberation LLMs) through explicit decision contracts.
+4. **No implicit capabilities:** No shell command or API request executes without an explicit `ExecutionPermit` validated by the Capability Gateway.
+5. **Acceptance is evidence-backed:** A task only transitions to `Completed` when it satisfies the objective completion gates defined in the Task Contract.
+6. **Human sovereignty is absolute:** Humans hold attention budgets and approve high-risk actions through cryptographically bound exact-payload diffs.
 
 ---
 
-## 5. Đối Tượng Người Dùng & Jobs-To-Be-Done (JTBD)
+## 5. Target Personas & Jobs-To-Be-Done (JTBD)
 
-### Đối tượng mục tiêu (Target Personas)
-- **Staff+ Software Engineer / Tech Lead:** Cần giải quyết các refactoring phức tạp kéo dài nhiều giờ trên repo lớn, đòi hỏi cô lập worktree, test kỹ lưỡng và không làm hỏng branch đang làm việc.
-- **Deep Researcher / Phân tích viên:** Cần tổng hợp hàng chục tài liệu kỹ thuật, xây dựng bảng đối chiếu claim-evidence có nguồn gốc rõ ràng, không chấp nhận ảo giác.
-- **Technical Operator / Power User:** Cần tự động hóa các quy trình hàng ngày (lọc email, tổng hợp lịch, cập nhật ticket) với sự an tâm rằng AI không tự ý gửi thư hoặc xóa dữ liệu ngoài ý muốn.
+### Target Personas
+- **Staff+ Software Engineers / Tech Leads:** Need multi-hour complex refactorings on large repos with worktree isolation, strict test verification, and zero risk to active branches.
+- **Deep Researchers / Analysts:** Need to synthesize dozens of technical documents into verifiable claim-evidence matrices with strict provenance and zero hallucination.
+- **Technical Operators / Power Users:** Need deterministic daily workflow automation (email triage, schedule synthesis, ticket updates) with absolute guarantees against unauthorized data mutation or egress.
 
 ### Jobs-To-Be-Done (JTBD)
-- Khi tôi bắt đầu một tác vụ kỹ thuật phức tạp kéo dài qua đêm, tôi muốn runtime tự động chạy, gặp lỗi thì thử lại hoặc tạm dừng chờ tôi mà không bị mất dấu hay biến mất tiến trình.
-- Khi tôi giao việc sửa lỗi mã nguồn cho AI, tôi muốn nhận lại một bản vá (*patch*) sạch kèm báo cáo test pass và lint pass, chứ không phải một đoạn giải thích suông trong khung chat.
-- Khi chi phí API tăng cao, tôi muốn chuyển tác vụ sang model rẻ hơn hoặc local SLM cho các bước cơ bản mà không phải thiết lập lại từ đầu.
+- When I start an overnight complex technical task, I want the runtime to execute autonomously, retry recoverable errors, or pause safely for approval without losing context or state.
+- When I delegate a bug fix to AI, I want a clean patch accompanied by verified test and lint receipts, rather than unverified assertions in a chat window.
+- When API costs spike, I want to route routine subtasks to smaller models or local SLMs without rebuilding my pipeline.
 
 ---
 
-## 6. Những Gì Custos Không Hướng Tới (Non-Goals)
+## 6. Non-Goals
 
-Để tập trung nguồn lực xuất sắc vào giá trị cốt lõi, Custos tuyên bố rõ ràng các Non-goals:
-- **Không làm Chatbot giải trí:** Custos không thiết kế cho hội thoại vu vơ, tâm sự hay tìm kiếm thông tin chung chung không dẫn đến hành động có kết quả.
-- **Không làm No-Code Drag-and-Drop builder cho người không chuyên:** Custos hướng tới người làm kỹ thuật, lập trình viên và chuyên gia tri thức.
-- **Không trao quyền tự trị không giới hạn (No Unconstrained Autonomy):** Custos kiên quyết từ chối triết lý "thả rông" cho agent tự do gọi thẻ tín dụng hay tự ý deploy lên production mà không có sự kiểm soát của con người.
-- **Không phụ thuộc đám mây kín:** Custos không phải SaaS độc quyền ép buộc gửi toàn bộ mã nguồn về máy chủ trung tâm.
+To maintain uncompromising discipline, Custos explicitly defines the following non-goals:
+- **No Conversational Chatbots:** Custos is not designed for open-ended conversation, entertainment, or casual search.
+- **No Non-Technical Drag-and-Drop Builders:** Custos targets software engineers, technical operators, and knowledge professionals.
+- **No Unconstrained Autonomy:** Custos rejects unrestricted agents that operate without human approval gates or financial budgets.
+- **No Proprietary Cloud Lock-In:** Custos is not a centralized SaaS requiring source code egress to external cloud storage.

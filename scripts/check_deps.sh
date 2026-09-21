@@ -14,7 +14,7 @@ if grep -q "path = \"\.\." "$CORE_DOMAIN_CARGO"; then
     exit 1
 fi
 
-echo "✓ core-domain is isolated from internal crates."
+echo "[OK] core-domain is isolated from internal crates."
 
 # Rule 2: adapters must not depend on apps
 if grep -rn 'path = "\.\./\.\./apps/' adapters/; then
@@ -22,7 +22,7 @@ if grep -rn 'path = "\.\./\.\./apps/' adapters/; then
     exit 1
 fi
 
-echo "✓ adapters do not depend on apps."
+echo "[OK] adapters do not depend on apps."
 
 # Rule 3: crates must not depend on apps
 if grep -rn 'path = "\.\./apps/' crates/; then
@@ -30,6 +30,6 @@ if grep -rn 'path = "\.\./apps/' crates/; then
     exit 1
 fi
 
-echo "✓ crates do not depend on apps."
+echo "[OK] crates do not depend on apps."
 
 echo "=== All Dependency Rules Passed! ==="

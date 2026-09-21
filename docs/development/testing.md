@@ -1,13 +1,13 @@
-# Kiến Trúc Kiểm Thử & Ma Trận Độ Bền (Testing Architecture)
+# Testing Architecture and Durability Matrix
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần VI (§36) Canonical Specification
+> **Source:** Part VI (§36) Canonical Specification
 
-Hệ thống kiểm thử của Custos được xây dựng nhằm bảo đảm tính đúng đắn tuyệt đối của một runtime quản lý công việc và tự động sửa đổi mã nguồn.
+The Custos testing system is engineered to guarantee the absolute correctness of an autonomous task runtime managing and modifying codebase repositories.
 
 ---
 
-## 1. Kim Tự Tháp Kiểm Thử (Test Pyramid)
+## 1. Test Pyramid
 
 ```text
               ▲
@@ -19,24 +19,24 @@ Hệ thống kiểm thử của Custos được xây dựng nhằm bảo đảm 
         ─────────────
 ```
 
-1. **Pure Unit & Property Tests:** Kiểm tra logic chuyển đổi trạng thái của Task, chuẩn hóa đường dẫn, tính toán ngân sách bằng thư viện `proptest`.
-2. **Contract & Integration Tests:** Kiểm tra tính tương thích ngược của schema, di chuyển dữ liệu (migrations), và các adapter với mock server.
-3. **Chaos & Crash Matrix:** Giả lập tắt nguồn đột ngột, ngắt socket, và disk full để kiểm tra khả năng phục hồi của SQLite WAL và Git worktree.
-4. **E2E Repo Fixture Tests:** Chạy các bài toán sửa lỗi mã nguồn trọn vẹn trên các repository mẫu ngoại tuyến.
-5. **Live Provider Canaries:** Các bài kiểm tra định kỳ có giới hạn với API OpenAI/Anthropic thật để phát hiện sớm các thay đổi giao thức từ nhà cung cấp.
+1. **Pure Unit & Property Tests:** Verify task state machine transitions, path normalization invariants, and budget accounting algorithms using the `proptest` framework.
+2. **Contract & Integration Tests:** Validate backward schema compatibility, SQLite migrations, and capability adapters against deterministic mock servers.
+3. **Chaos & Crash Matrix:** Simulate abrupt power loss, socket termination, and full-disk conditions to test the recovery of the SQLite WAL and Git worktrees.
+4. **E2E Repo Fixture Tests:** Execute full repository bug-fixing workflows on offline canonical repositories.
+5. **Live Provider Canaries:** Periodic, budget-capped tests with real OpenAI/Anthropic APIs to detect provider protocol changes early.
 
 ---
 
-## 2. Các Ma Trận Kiểm Thử Quan Trọng (Critical Test Matrices)
+## 2. Critical Test Matrices
 
-### Ma Trận Xử Lý Sự Cố (Crash Matrix)
-Mọi điểm chuyển dịch trạng thái đều được kiểm thử với kịch bản tiến trình bị ngắt đột ngột:
-- Ngay trước khi commit SQLite transaction.
-- Ngay sau khi lệnh trong sandbox chạy xong nhưng trước khi ghi receipt.
-- Khi provider ngắt kết nối giữa chừng lúc đang stream token.
-- Khi dung lượng ổ đĩa chạm ngưỡng 100%.
+### Crash Matrix
+Every state transition point is tested against abrupt process termination scenarios:
+- Immediately prior to committing an SQLite transaction.
+- Immediately after sandbox execution finishes, but before persisting the receipt.
+- When a provider aborts the network connection during mid-stream token generation.
+- When disk storage utilization reaches 100%.
 
-### Ma Trận Đường Dẫn Tệp Tin (Path Normalization Matrix)
-Kiểm tra khả năng chống tấn công leo thư mục (*Path Traversal*):
-- Kiểm tra các đường dẫn chứa symlink trỏ ra ngoài workspace.
-- Kiểm tra chuỗi chứa `../`, Unicode normalization lệch chuẩn, hoặc tệp tin bị xóa trong lúc worker đang đọc.
+### Path Normalization Matrix
+Validates immunity against path traversal attacks:
+- Validates symlinks pointing outside the workspace boundary.
+- Tests traversal sequences (`../`), non-canonical Unicode representations, and race conditions where target files are deleted while worker processes are reading them.
