@@ -1,0 +1,13 @@
+[package]
+name = "custos-cognitive-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "RDC protocol coordinator: Resolve-Delegate-Check with System One/Two"
+
+[dependencies]
+custos-core-domain = { workspace = true }
+custos-provider-sdk = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }

@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Custos Continuation Packet v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "packet_id",
+    "project_id",
+    "task_id",
+    "from",
+    "to",
+    "state_version",
+    "objective",
+    "phase",
+    "accepted_decisions",
+    "constraints",
+    "artifacts",
+    "evidence",
+    "completed_steps",
+    "open_questions",
+    "next_actions",
+    "budget_remaining",
+    "integrity",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "packet_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "project_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "task_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "from": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "provider"],
+      "properties": {
+        "capability": { "type": "string" },
+        "provider": { "type": "string" },
+        "session_ref": { "type": ["string", "null"] }
+      }
+    },
+    "to": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_capability"],
+      "properties": {
+        "required_capability": { "type": "string" }
+      }
+    },
+    "state_version": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "objective": {
+      "type": "string"
+    },
+    "phase": {
+      "type": "string"
+    },
+    "accepted_decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["decision_id", "statement", "rationale_ref"],
+        "properties": {
+          "decision_id": { "type": "string" },
+          "statement": { "type": "string" },
+          "rationale_ref": { "type": "string" }
+        }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["privacy_class", "writable_paths"],
+      "properties": {
+        "privacy_class": { "enum": ["P0", "P1", "P2", "P3"] },
+        "writable_paths": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ref", "relation", "media_type"],
+        "properties": {
+          "ref": { "type": "string" },
+          "relation": { "type": "string" },
+          "media_type": { "type": "string" }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ref", "verification_state"],
+        "properties": {
+          "ref": { "type": "string" },
+          "verification_state": { "enum": ["verified", "unverified", "disputed"] }
+        }
+      }
+    },
+    "completed_steps": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "open_questions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action", "acceptance"],
+        "properties": {
+          "action": { "type": "string" },
+          "acceptance": { "type": "string" }
+        }
+      }
+    },
+    "budget_remaining": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_tokens", "output_tokens", "tool_calls", "cost_usd"],
+      "properties": {
+        "input_tokens": { "type": "integer", "minimum": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0 },
+        "tool_calls": { "type": "integer", "minimum": 0 },
+        "cost_usd": { "type": "number", "minimum": 0 }
+      }
+    },
+    "integrity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packet_digest", "previous_packet_digest"],
+      "properties": {
+        "packet_digest": { "type": "string" },
+        "previous_packet_digest": { "type": ["string", "null"] }
+      }
+    },
+    "created_at": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,16 @@
+[package]
+name = "custosd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Custos trusted local background daemon"
+
+[dependencies]
+custos-core-domain = { workspace = true }
+custos-task-kernel = { workspace = true }
+custos-persistence-sqlite = { workspace = true }
+custos-policy-engine = { workspace = true }
+custos-capability-gateway = { workspace = true }
+custos-observability = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }

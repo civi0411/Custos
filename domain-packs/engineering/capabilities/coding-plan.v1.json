@@ -1,0 +1,19 @@
+{
+  "schema_version": "1",
+  "id": "coding.plan",
+  "version": "0.1.0",
+  "enabled": false,
+  "runtime": "model",
+  "tools": [
+    "repo.read"
+  ],
+  "effects": [
+    "read"
+  ],
+  "verifier": "coding.plan.schema.v1",
+  "limits": {
+    "iterations": 4,
+    "tool_calls": 10
+  },
+  "status": "design-only"
+}

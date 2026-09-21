@@ -1,0 +1,15 @@
+# DESIGN TARGET ONLY: current CLI reads --data-dir / AGENTHUB_DATA_DIR.
+# This file is not loaded by the starter runtime.
+schema_version = "1"
+[runtime]
+owner_mode = "single"
+local_inference_concurrency = 1
+[policy]
+external_mutation = "deny"
+secret_to_model = "deny"
+cloud_fallback = false
+[limits]
+max_iterations = 8
+max_model_calls = 6
+max_tool_calls = 20
+repair_attempts = 2

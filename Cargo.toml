@@ -1,0 +1,82 @@
+[workspace]
+resolver = "2"
+members = [
+    "apps/custosd",
+    "apps/custos-cli",
+    "crates/core-domain",
+    "crates/task-kernel",
+    "crates/workflow-runtime",
+    "crates/policy-engine",
+    "crates/capability-gateway",
+    "crates/cognitive-runtime",
+    "crates/judgment-contracts",
+    "crates/deliberation-contracts",
+    "crates/context-compiler",
+    "crates/evidence-engine",
+    "crates/memory-service",
+    "crates/repo-intelligence",
+    "crates/artifact-store",
+    "crates/persistence-sqlite",
+    "crates/local-api",
+    "crates/provider-sdk",
+    "crates/domain-pack-sdk",
+    "crates/observability",
+    "adapters/providers/codex",
+    "adapters/providers/claude",
+    "adapters/providers/antigravity",
+    "adapters/providers/local-model",
+    "adapters/judgments/rules",
+    "adapters/judgments/onnx",
+    "adapters/judgments/jev",
+    "adapters/sandboxes/macos-seatbelt",
+    "adapters/sandboxes/linux-bubblewrap",
+    "adapters/tools",
+    "domain-packs/engineering",
+    "domain-packs/research",
+    "domain-packs/personal",
+    "tests/contract",
+]
+
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Custos Core Team"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/agent-hub/custos"
+
+[workspace.dependencies]
+# Internal workspace crates
+custos-core-domain = { path = "crates/core-domain" }
+custos-task-kernel = { path = "crates/task-kernel" }
+custos-workflow-runtime = { path = "crates/workflow-runtime" }
+custos-policy-engine = { path = "crates/policy-engine" }
+custos-capability-gateway = { path = "crates/capability-gateway" }
+custos-cognitive-runtime = { path = "crates/cognitive-runtime" }
+custos-judgment-contracts = { path = "crates/judgment-contracts" }
+custos-deliberation-contracts = { path = "crates/deliberation-contracts" }
+custos-context-compiler = { path = "crates/context-compiler" }
+custos-evidence-engine = { path = "crates/evidence-engine" }
+custos-memory-service = { path = "crates/memory-service" }
+custos-repo-intelligence = { path = "crates/repo-intelligence" }
+custos-artifact-store = { path = "crates/artifact-store" }
+custos-persistence-sqlite = { path = "crates/persistence-sqlite" }
+custos-local-api = { path = "crates/local-api" }
+custos-provider-sdk = { path = "crates/provider-sdk" }
+custos-domain-pack-sdk = { path = "crates/domain-pack-sdk" }
+custos-observability = { path = "crates/observability" }
+
+# Common third-party dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"
+anyhow = "1.0"
+tokio = { version = "1.38", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+sha2 = "0.10"
+uuid = { version = "1.8", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4.5", features = ["derive"] }
+async-trait = "0.1"
+rusqlite = { version = "0.31", features = ["bundled"] }

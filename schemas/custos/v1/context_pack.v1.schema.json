@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Custos Context Pack v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "task_contract",
+    "instructions",
+    "items",
+    "budgets"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "task_contract": {
+      "type": "string"
+    },
+    "instructions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["system_ref", "capability_ref"],
+      "properties": {
+        "system_ref": { "type": "string" },
+        "capability_ref": { "type": "string" }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ref", "hash", "relevance", "taint", "token_estimate"],
+        "properties": {
+          "ref": { "type": "string" },
+          "hash": { "type": "string" },
+          "relevance": { "type": "number", "minimum": 0, "maximum": 1 },
+          "taint": {
+            "enum": ["trusted_system", "trusted_local_code", "untrusted_input", "untrusted_external"]
+          },
+          "token_estimate": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixed", "retrieved", "observations", "output_reserved"],
+      "properties": {
+        "fixed": { "type": "integer", "minimum": 0 },
+        "retrieved": { "type": "integer", "minimum": 0 },
+        "observations": { "type": "integer", "minimum": 0 },
+        "output_reserved": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
