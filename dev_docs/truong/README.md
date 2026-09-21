@@ -1,29 +1,67 @@
-# Truong's Workspace (Software Engineer)
+# Truong's Workspace (Platform & Software Engineering Lead)
 
-> **Role:** Backend & Systems Engineer  
-> **Modules Owned:** `crates/persistence-sqlite`, `crates/capability-gateway`, `crates/local-api`, `apps/custos-cli`, `apps/custosd`.
-
----
-
-## Focus Areas
-1. **Persistence (SQLite):**
-   - Design `tasks`, `spans`, and `events` tables with WAL mode and crash resilience.
-   - Implement typed Rust CRUD operations (`rusqlite` or `sqlx`) consuming domain structs defined by Vi in `crates/core-domain`.
-2. **Local API & CLI:**
-   - Develop `custos-cli` binary using `clap` (parsing user commands).
-   - Develop `custosd` daemon and local HTTP service using `axum`.
-3. **Capability Gateway & Sandbox:**
-   - Safe execution: Worktree management, read/write restrictions, and network egress controls via Seatbelt (macOS) and Bubblewrap (Linux).
+> **Role:** Platform & Systems Engineer  
+> **Primary Modules:** `crates/persistence-sqlite`, `crates/capability-gateway`, `crates/task-kernel`, `crates/workflow-runtime`, `crates/local-api`, `crates/evidence-engine`, `apps/custos-cli`, `apps/custosd`.  
+> **Language & Invariants:** 100% Rust & SQL. Zero unwrap/expect in production code. Treat AI reasoning strictly as arbitrary JSON payloads requiring validation, durable persistence, and OS sandbox verification.
 
 ---
 
-## Directory Organization
-- `notes/`: DB migration designs, I/O benchmarks, CLI syntax notes, sandbox configurations.
-- `reports/`: Personal progress reports by day/sprint for peer review on the `report` branch.
+## 1. Core Focus Areas
+
+1. **Durable Persistence (SQLite):**
+   - SQLite WAL mode, single-writer multi-reader discipline, atomic step transactions.
+   - Idempotent schema migrations for `tasks`, `spans`, `domain_events`, and `outbox`.
+   - Typed CRUD operations consuming domain models from `crates/core-domain`.
+2. **Local API & Daemon (`custosd` & `custos-cli`):**
+   - Developer CLI using `clap` (`custos run`, `custos status`, `custos pause`, `custos resume`).
+   - Axum local IPC HTTP daemon server with structured error envelopes.
+3. **Capability Gateway & Sandboxing:**
+   - OS-level process containment: macOS Seatbelt and Linux Bubblewrap (`bwrap`).
+   - Ephemeral Git worktree lifecycle management.
+   - Enforce single-use `ExecutionPermit` validation and receipt generation before/after command execution.
+4. **Crash Recovery & Supervison:**
+   - Outbox pattern dispatcher and lease heartbeat monitoring.
+   - Resilient recovery of uncommitted or pending tasks across daemon restarts.
 
 ---
 
-## Active Checklist
+## 2. Directory Structure
+
+- `notes/`: Technical architecture notes, database schema designs, I/O benchmarks, sandbox configurations.
+- `reports/`: Daily sprint reports and sync logs committed to the `report` branch for peer review.
+
+---
+
+## 3. Standard Daily Report Template (`reports/YYYY-MM-DD.md`)
+
+When committing daily progress to the `report` branch, use this format:
+
+```markdown
+# Truong Progress Report — YYYY-MM-DD
+
+## 1. Accomplished Today
+- [x] Task 1 description (Crate: `persistence-sqlite`)
+- [x] Task 2 description (Crate: `custos-cli`)
+
+## 2. Tests & Verification
+- Unit tests added: `cargo test -p custos_persistence_sqlite`
+- Verification receipt / evidence: All test cases passed.
+
+## 3. In-Flight Work & Next Steps
+- Currently implementing: Outbox dispatcher loop.
+- Tomorrow: Connect CLI task submission to Axum daemon.
+
+## 4. Blockers & Questions for Vi
+- Question regarding `TaskStatus` serialization format in JSON events.
+```
+
+---
+
+## 4. Active Sprint 1 Checklist
+
 - [ ] Initialize SQLite connection pool with WAL mode in `crates/persistence-sqlite`.
-- [ ] Write migrations for `tasks` table.
-- [ ] Implement `insert_task` and `get_task`.
+- [ ] Implement migrations for `tasks`, `spans`, `domain_events`, and `outbox`.
+- [ ] Implement `insert_task`, `get_task`, and `append_event`.
+- [ ] Build CLI commands `custos run "<description>"` and `custos status <id>` in `apps/custos-cli`.
+- [ ] Implement daemon endpoint `POST /v1/tasks` in `crates/local-api`.
+- [ ] Run crash test verifying task persistence across `kill -9` restart.

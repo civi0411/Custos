@@ -14,6 +14,10 @@ This documentation combines standards from **arc42**, the **C4 model**, and **AD
 
 Select your reading path according to your focus within the project:
 
+### Pathway 0: The Master Blueprint (All Contributors)
+Focus: Understanding the complete product direction, canonical architecture, and logic.
+- **Start Here:** Read the [Canonical Specification](./canonical-specification.md) from end to end. This is the single source of truth for the final product vision.
+
 ### Systems & Backend Engineers (Rust / Systems)
 Focus: Kernel, State Machine, Capability Gateway, Sandboxing, Persistence.
 - Start with [System Architecture Overview](./architecture/overview.md) and [Task Lifecycle](./architecture/task-lifecycle.md)
@@ -56,6 +60,7 @@ Focus: Internal collaboration between Vi (AI Engineer) & Truong (Software Engine
 ```text
 docs/
 ├── 00-start-here.md                 # This guide (Overview & Reading Pathways)
+├── canonical-specification.md       # Master Blueprint (Product Direction, Architecture & Logic)
 │
 ├── product/                         # Product Strategy & Definition
 │   ├── identity.md                  # Identity, personas, JTBD, core advantages, non-goals
