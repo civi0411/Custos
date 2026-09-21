@@ -1,0 +1,11 @@
+[package]
+name = "custos-deliberation-contracts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "System Two worker deliberation contracts and roles"
+
+[dependencies]
+custos-core-domain = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }

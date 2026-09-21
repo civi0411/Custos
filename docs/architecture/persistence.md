@@ -1,29 +1,29 @@
-# Lưu Trữ Bền Vững & Dữ Liệu (Persistence Architecture)
+# Persistence Architecture & Storage
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần V (§21) Canonical Specification
+> **Source:** Part V (§21) Canonical Specification
 
-Custos tuân thủ triệt để nguyên lý **Local-First & Durable by Design**: toàn bộ dữ liệu trạng thái, lịch sử sự kiện và sản phẩm tạo ra đều được lưu trữ bền vững tại máy trạm cá nhân, hỗ trợ giao dịch ACID và sẵn sàng khôi phục ngay lập tức sau sự cố.
-
----
-
-## 1. Các Trụ Cột Lưu Trữ
-
-1. **SQLite (Core Metadata & Event Store):** Sử dụng SQLite nhúng với chế độ **Write-Ahead Logging (`WAL`)**, khóa an toàn `busy_timeout = 5000ms`, bảo đảm toàn vẹn giao dịch và hiệu năng đọc ghi song song cao.
-2. **Content-Addressable Storage (CAS):** Các payloads có dung lượng lớn (diff lớn, tệp nhị phân, bundles, logs kiểm thử) không lưu trực tiếp trong bảng SQLite mà được ghi vào thư mục CAS (`.custos/cas/`) với tên tệp là mã băm `SHA-256` của nội dung.
-3. **Outbox Pattern:** Mọi tác động ra bên ngoài (gửi webhook, phát sự kiện ra client) đều được ghi vào bảng `outbox` trong cùng một giao dịch cơ sở dữ liệu với sự kiện chính, bảo đảm nguyên tắc *At-Least-Once Delivery*.
+Custos adheres strictly to the **Local-First & Durable by Design** principle: all state data, event histories, and generated artifacts are durably persisted on the local workstation with ACID transaction guarantees and instant post-crash recovery.
 
 ---
 
-## 2. Cấu Trúc Bảng Chi Tiết (Core Schema DDL)
+## 1. Storage Pillars
+
+1. **SQLite (Core Metadata & Event Store):** Embedded SQLite configured with **Write-Ahead Logging (`WAL`)** mode, safe lock timeouts (`busy_timeout = 5000ms`), and normalized foreign key constraints. Guarantees transactional atomicity and high concurrent read performance.
+2. **Content-Addressable Storage (CAS):** Large payloads (file diffs, binary blobs, outcome bundles, test execution logs) are stored outside SQLite in the dedicated CAS directory (`.custos/cas/`), indexed directly by their `SHA-256` content hash.
+3. **Transactional Outbox Pattern:** External side effects (dispatching webhooks, broadcasting events to client listeners) are staged in the `outbox_events` table within the same atomic database transaction as the domain event, ensuring *At-Least-Once Delivery*.
+
+---
+
+## 2. Core Schema DDL
 
 ```sql
--- Kích hoạt chế độ WAL và ràng buộc khóa ngoại
+-- Enable WAL mode and foreign key constraints
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 PRAGMA synchronous = NORMAL;
 
--- 1. Bảng quản trị Task
+-- 1. Tasks Table
 CREATE TABLE IF NOT EXISTS tasks (
     task_id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     updated_at TEXT NOT NULL
 );
 
--- 2. Sổ cái sự kiện bất biến (Event Store)
+-- 2. Immutable Event Store
 CREATE TABLE IF NOT EXISTS task_events (
     event_id INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id TEXT NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS task_events (
     UNIQUE(task_id, sequence_no)
 );
 
--- 3. Bảng các lần chạy (Runs)
+-- 3. Runs Table
 CREATE TABLE IF NOT EXISTS runs (
     run_id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL REFERENCES tasks(task_id) ON DELETE CASCADE,
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS runs (
     UNIQUE(task_id, run_number)
 );
 
--- 4. Bảng các bước thực thi (Steps)
+-- 4. Execution Steps Table
 CREATE TABLE IF NOT EXISTS steps (
     step_id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL REFERENCES runs(run_id) ON DELETE CASCADE,
@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS steps (
     UNIQUE(run_id, step_number)
 );
 
--- 5. Bảng Sổ cái Quyết định (Decision Ledger)
+-- 5. Decision Ledger Table
 CREATE TABLE IF NOT EXISTS decision_ledger (
     decision_id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL REFERENCES tasks(task_id),
@@ -84,11 +84,11 @@ CREATE TABLE IF NOT EXISTS decision_ledger (
     decision_outcome TEXT NOT NULL,
     confidence_score REAL NOT NULL,
     rationale TEXT NOT NULL,
-    decided_by TEXT NOT NULL, -- 'system_one' hoặc 'human_principal'
+    decided_by TEXT NOT NULL, -- 'system_one' or 'human_principal'
     created_at TEXT NOT NULL
 );
 
--- 6. Bảng Outbox cho thông điệp bất đồng bộ
+-- 6. Outbox Events Table
 CREATE TABLE IF NOT EXISTS outbox_events (
     outbox_id INTEGER PRIMARY KEY AUTOINCREMENT,
     destination TEXT NOT NULL,
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS outbox_events (
 
 ---
 
-## 3. Chiến Lược Sao Lưu & Phục Hồi (Backup & Disaster Recovery)
+## 3. Backup & Disaster Recovery Strategy
 
-- **Hot Backup Trực Tuyến:** Custos sử dụng SQLite Backup API để sao lưu định kỳ cơ sở dữ liệu sang tệp `.custos/backup/custos_snapshot.db` mà không làm gián đoạn các luồng đọc/ghi.
-- **Toàn Vẹn CAS:** Thư mục Content-Addressable Storage có thể được đồng bộ hoặc phục hồi dễ dàng bằng các công cụ tệp tiêu chuẩn (`rsync`, `rclone`).
+- **Online Hot Backups:** Custos utilizes the SQLite Backup API to snapshot the active database periodically into `.custos/backup/custos_snapshot.db` without locking read or write threads.
+- **CAS Integrity:** The Content-Addressable Storage directory is append-only and can be synchronized, archived, or restored using standard file synchronization utilities (`rsync`, `rclone`).

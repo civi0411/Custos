@@ -1,15 +1,15 @@
-# Tương Thích & Chuyển Đổi Nhà Cung Cấp (Provider Interoperability)
+# Provider Interoperability & Portability
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần IV (§19) Canonical Specification
+> **Source:** Part IV (§19) Canonical Specification
 
-Một trong 3 trụ cột của Custos là **Model-Agnostic ("Thay não mà không mất hồn")**: khả năng chuyển đổi liền mạch giữa các nhà cung cấp AI (OpenAI, Anthropic, Google, Local models) mà không làm rách vỡ ngữ cảnh công việc hay mất trạng thái tiến trình.
+One of Custos's three pillars is **Model-Agnostic ("Brain Transplant Without Soul Loss")**: the ability to switch seamlessly across AI providers (OpenAI, Anthropic, Google, local models) without losing work progress, task context, or execution state.
 
 ---
 
-## 1. Trừu Tượng Hóa: `ProviderPort`
+## 1. Abstraction: `ProviderPort`
 
-Mọi AI provider đều được chuẩn hóa qua giao diện trừu tượng `ProviderPort`:
+All AI providers are normalized through the abstract `ProviderPort` trait:
 
 ```rust
 use async_trait::async_trait;
@@ -37,10 +37,10 @@ pub enum ProviderEvent {
 
 #[async_trait]
 pub trait ProviderPort: Send + Sync {
-    /// Thăm dò năng lực của mô hình (Hỗ trợ tool call, streaming, context window)
+    /// Probes model capabilities (tool use, streaming, context window limit)
     async fn probe_capabilities(&self) -> Result<ProviderCapabilities, ProviderError>;
     
-    /// Phát động phiên suy luận dạng dòng (Streaming)
+    /// Initiates a streaming completion session
     async fn stream_completion(
         &self,
         req: ProviderRequest,
@@ -50,20 +50,20 @@ pub trait ProviderPort: Send + Sync {
 
 ---
 
-## 2. Ma Trận Năng Lực Nhà Cung Cấp (Capability Matrix)
+## 2. Provider Capability Matrix
 
-| Nhà cung cấp | Model Adapter | Cửa sổ Context | Điểm mạnh tối ưu | Điểm yếu cần kiểm soát |
+| Provider | Model Adapter | Context Window | Key Strengths | Managed Trade-offs |
 |---|---|---|---|---|
-| **Anthropic** | `claude-3-7-sonnet` | 200k tokens | Suy luận kiến trúc phức tạp, tuân thủ chỉ dẫn khắt khe | Chi phí cao hơn, giới hạn rate limit |
-| **OpenAI** | `codex / o-series` | 128k - 200k | Khả năng sinh mã chuyên sâu, giải quyết logic thuật toán | Xu hướng tạo tool call lồng nhau phức tạp |
-| **Google** | `antigravity-adapter` | 1M+ tokens | Phân tích toàn diện kho tài liệu khổng lồ | Cần lọc kỹ context để tránh loãng thông tin |
-| **Local LLM** | `llama.cpp / Ollama` | 8k - 32k | Hoạt động 100% offline, chi phí bằng $0$, bảo mật tuyệt đối | Năng lực suy luận giới hạn ở các subtask đơn giản |
+| **Anthropic** | `claude-3-7-sonnet` | 200k tokens | Complex architectural reasoning, rigorous instruction following | Higher token cost, stricter rate limits |
+| **OpenAI** | `codex / o-series` | 128k - 200k | Deep code synthesis, algorithmic problem solving | Tendency to emit deeply nested tool calls |
+| **Google** | `antigravity-adapter` | 1M+ tokens | Massive multi-file document ingest & analysis | Requires aggressive context filtering to avoid dilution |
+| **Local LLM** | `llama.cpp / Ollama` | 8k - 32k | 100% offline, zero operational cost, absolute data privacy | Restricted reasoning capacity; best for scoped subtasks |
 
 ---
 
-## 3. Chuyển Đổi Provider Không Mất Trạng Thái: `ContinuationPacket`
+## 3. Lossless Provider Switching: `ContinuationPacket`
 
-Khi người dùng muốn đổi provider (ví dụ: bắt đầu với Claude nhưng muốn chuyển sang Codex do chạm trần chi phí, hoặc chuyển sang model local khi mất mạng):
+When a user switches providers mid-flight (e.g., migrating from Claude to Codex when reaching a budget cap, or falling back to a local model when offline):
 
 ```mermaid
 sequenceDiagram
@@ -80,9 +80,9 @@ sequenceDiagram
     P2-->>Kernel: Resume execution seamlessly
 ```
 
-### Cấu Trúc `ContinuationPacket`
-`ContinuationPacket` là một gói dữ liệu độc lập hoàn toàn với định dạng chat của từng hãng:
-- **Task Contract & Current Goals:** Mục tiêu cốt lõi và các ràng buộc chưa thay đổi.
-- **Completed Steps & Verified Artifacts:** Danh sách các bước đã hoàn thành kèm mã băm chứng cứ.
-- **Current Workspace State:** Snapshot Git worktree hiện tại.
-- **Active Hypothesis & Pending Actions:** Giả thuyết kỹ thuật đang kiểm chứng và các việc tiếp theo cần làm.
+### Structure of `ContinuationPacket`
+A `ContinuationPacket` is completely decoupled from any single vendor's chat completion schema:
+- **Task Contract & Active Goals:** Core objective and active constraints.
+- **Completed Steps & Verified Artifacts:** Chronological record of completed subtasks with verification hashes.
+- **Current Workspace State:** Exact Git commit snapshot and worktree status.
+- **Active Hypothesis & Pending Plan:** Current technical hypothesis under test and remaining planned steps.

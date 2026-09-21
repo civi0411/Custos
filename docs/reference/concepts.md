@@ -1,97 +1,97 @@
-# Thuật Ngữ Cốt Lõi (Core Concepts Glossary)
+# Core Concepts Glossary
 
 > **Status:** Canonical Baseline v4.0  
-> **Scope:** Toàn bộ hệ thống Custos
+> **Scope:** Entire Custos System
 
-Tài liệu này định nghĩa chính xác và nhất quán các khái niệm nền tảng được sử dụng trong mã nguồn, tài liệu và giao thức của Custos.
+This document provides definitive, consistent specifications for foundational concepts used across Custos source code, specifications, protocols, and APIs.
 
 ---
 
-## 1. Các Thực Thể Trung Tâm (Core Entities)
+## 1. Core Entities
 
 ### Task
-Đơn vị công việc trung tâm của Custos. Task mang trạng thái bền vững, được định nghĩa bằng một bản hợp đồng (*Task Contract*), thực thi qua nhiều bước bởi các worker và kết thúc bằng các artifacts kèm bằng chứng kiểm định.
+The central unit of work in Custos. A Task maintains durable state, is defined by a binding Task Contract, executes across multiple steps via specialized workers, and concludes with verified artifacts and empirical evidence.
 
 ### Task Contract
-Thỏa thuận ràng buộc giữa người dùng và runtime về mục tiêu công việc, bao gồm:
-- **Intent:** Mục đích cốt lõi cần đạt được.
-- **Scope:** Phạm vi tệp tin hoặc tài nguyên được phép tác động.
-- **Constraints:** Các giới hạn (ngân sách token, thời gian tối đa, mức độ tự chủ).
-- **Verification Criteria:** Tiêu chí nghiệm thu khách quan cần thỏa mãn.
+A binding specification between the user and the runtime defining work parameters, including:
+- **Intent:** The core objective to be achieved.
+- **Scope:** The explicit boundary of files, directories, or external resources allowed to be mutated.
+- **Constraints:** Resource limitations (token budget, maximum duration, autonomy tier).
+- **Verification Criteria:** Objective acceptance criteria that must be satisfied.
 
 ### Run
-Một phiên thực thi cụ thể của một Task. Một Task có thể trải qua nhiều Run (ví dụ: chạy lần đầu thất bại, người dùng điều chỉnh yêu cầu và chạy Run thứ 2).
+A concrete execution session of a Task. A Task can span multiple Runs (e.g., Run 1 fails verification; the user refines requirements, triggering Run 2).
 
 ### Step
-Một bước thực thi đơn lẻ trong một Run, gắn liền với một hành động suy luận hoặc công cụ cụ thể, kèm theo trạng thái trước/sau và biên nhận kiểm tra.
+A discrete execution step within a Run, associated with a single reasoning action or tool execution, including pre/post state captures and execution receipts.
 
 ### Artifact
-Sản phẩm đầu ra được tạo ra hoặc biến đổi trong quá trình thực thi Task (mã nguồn, tệp tài liệu, bản phân tích, báo cáo kiểm thử). Artifacts lớn được lưu trữ trong hệ thống lưu trữ địa chỉ theo nội dung (CAS).
+Output products generated or mutated during Task execution (source code, documentation files, analysis reports, test receipts). Large artifacts are stored in the Content-Addressable Storage (CAS) system.
 
 ---
 
-## 2. Hạ Tầng Nhận Thức & Phán Đoán (Cognitive & Judgment)
+## 2. Cognitive Fabric and Judgment
 
 ### System One (Judgment Fabric)
-Hạ tầng phán đoán nhanh, cục bộ, chi phí thấp (đáp ứng trong mili-giây). Đóng vai trò phản xạ kiểm tra: phân loại ý định, phát hiện thiếu thông tin, đánh giá rủi ro, kiểm tra bất biến và quyết định khi nào cần leo thang lên con người.
+Fast, local, low-latency (millisecond-scale) judgment infrastructure. Functions as reflex checks: intent classification, ambiguity detection, risk tiering, invariant enforcement, and human escalation gating.
 
 ### System Two (Deliberation Fabric)
-Tầng suy luận sâu, chi phí cao, thực hiện bởi các mô hình ngôn ngữ lớn (OpenAI Codex, Claude, DeepSeek, v.v.). Chịu trách nhiệm lập kế hoạch phức tạp, viết mã nguồn và tổng hợp tri thức.
+Deep, computationally intensive reasoning infrastructure executed by frontier Large Language Models (OpenAI Codex, Claude, DeepSeek, etc.). Responsible for complex multi-step planning, code generation, and knowledge synthesis.
 
 ### RDC Protocol (Request-Decision-Challenge)
-Giao thức trao đổi chuẩn giữa các tầng nhận thức:
-- **Request:** Yêu cầu phán đoán hoặc hành động kèm ngữ cảnh.
-- **Decision:** Quyết định được đưa ra kèm độ tin cậy và lý do.
-- **Challenge:** Cơ chế phản biện ngược lại quyết định khi phát hiện mâu thuẫn hoặc rủi ro tiềm ẩn (*Reflexive Challenge*).
+The standardized exchange protocol across cognitive tiers:
+- **Request:** Context-bearing evaluation or action request.
+- **Decision:** Structured evaluation output including confidence score and rationale.
+- **Challenge:** Reflexive counter-evaluation triggered when contradictions or latent risks are detected.
 
 ### Question Registry
-Kho câu hỏi chuẩn hóa có phiên bản, dùng để truy vấn System One một cách nhất quán nhằm đưa ra các quyết định có cấu trúc thay vì viết prompt tự do.
+A versioned repository of standardized evaluation questions used to query System One consistently for structured decisions instead of ad-hoc prompt formatting.
 
 ---
 
-## 3. Bảo Mật & Thực Thi (Execution & Security)
+## 3. Execution and Security
 
 ### Capability Gateway
-Cổng kiểm soát duy nhất cho mọi hành động tạo ra tác động ngoại cảnh (*side effect*). Không có bất kỳ worker nào được phép gọi trực tiếp lệnh hệ thống hay API ngoài mà không qua Gateway này.
+The single, authoritative gateway controlling all external side-effect operations. No worker or agent process is permitted to execute system commands or external APIs without passing through this gateway.
 
 ### ExecutionPermit
-Giấy phép thực thi được ký số bởi Kernel, xác nhận rằng một hành động cụ thể đã được kiểm tra quyền hạn, thỏa mãn chính sách bảo mật và (nếu cần) đã được con người phê duyệt cụ thể (*Exact-Payload Approval*). Có thời hạn hiệu lực (*TTL*) và phạm vi nghiêm ngặt.
+A cryptographically signed token issued by the Kernel confirming that an action has been validated against permissions, satisfies security policies, and has received required Human Exact-Payload Approval. Features strict TTL and explicit resource scopes.
 
 ### Exact-Payload Approval
-Nguyên tắc phê duyệt minh bạch: con người không bao giờ ký một "tấm séc trắng" (ví dụ: "cho phép chạy lệnh bash bất kỳ"). Người dùng luôn nhìn thấy chính xác nội dung lệnh, diff tệp tin hoặc API payload trước khi bấm duyệt.
+Transparent authorization principle: humans never issue blanket approvals (e.g., "allow arbitrary bash commands"). Users are presented with exact command arguments, file diffs, or API payloads prior to signing off.
 
 ### Worktree Isolation
-Cơ chế cô lập môi trường làm việc bằng cách tạo ra một `git worktree` riêng biệt cho mỗi Task/Run. Worker chỉ được thao tác trong worktree này; nhánh chính (`main`) chỉ được cập nhật sau khi toàn bộ bước kiểm định hoàn tất.
+Environment isolation mechanism provisioning an independent `git worktree` per Task/Run. Workers operate strictly inside this isolated worktree; the repository `main` branch is updated only after all verification gates succeed.
 
 ---
 
-## 4. Chứng Cứ & Nghiệm Thu (Evidence & Verification)
+## 4. Evidence and Verification
 
 ### Evidence-Carrying Action (ECA)
-Hành động mang theo chứng cứ: mọi hành động làm biến đổi hệ thống đều bắt buộc phải tạo ra bằng chứng chứng minh tính đúng đắn và lý do nó được phép diễn ra.
+Every mutating system action must generate verifiable evidence demonstrating correctness and audit justification for why it was permitted.
 
 ### Verifiable Outcome Bundle
-Gói bàn giao kết quả cuối cùng của Task, bao gồm:
-- Toàn bộ artifacts đầu ra.
-- Nhật ký thực thi đầy đủ (*Execution Trace*).
-- Tập hợp chứng cứ nghiệm thu (test passes, linter receipts, build logs).
-- Chữ ký xác thực và hash toàn vẹn.
+The canonical deliverable package produced at task completion, comprising:
+- All generated or modified artifacts.
+- Complete execution trace log.
+- Collected verification receipts (test results, linter receipts, build logs).
+- Cryptographic signatures and content hashes.
 
 ### Completion Gate
-Cổng kiểm tra tự động trước khi đóng Task: đối chiếu kết quả thực tế với tiêu chí nghiệm thu trong Task Contract. Nếu thiếu chứng cứ, Task không thể chuyển sang trạng thái `Completed`.
+An automated verification gate evaluated prior to marking a Task as completed: validates delivered outcomes against acceptance criteria in the Task Contract. Missing or invalid evidence prevents state transition to `Completed`.
 
 ---
 
-## 5. Dữ Liệu & Giao Tiếp (Data & Communication)
+## 5. Data and Communication
 
 ### ContextPack
-Gói ngữ cảnh được biên soạn và tối ưu hóa trước khi gửi cho model, được chọn lọc theo công thức tính điểm liên quan và gắn nhãn nguồn gốc (*provenance*) cho từng đoạn dữ liệu.
+An optimized, compiled context payload prepared before dispatching to an AI model, ranked via relevance scoring and tagged with explicit data provenance.
 
 ### ContinuationPacket
-Gói dữ liệu độc lập với provider, đóng gói toàn bộ trạng thái tiến trình, biến môi trường và hợp đồng công việc để có thể chuyển giao mượt mà sang một AI provider khác (*provider switching*) hoặc tiếp tục sau sự cố.
+A provider-agnostic state payload packaging runtime state, environment variables, and contracts enabling seamless provider switching or crash recovery.
 
 ### Star Topology
-Kiến trúc liên lạc dạng sao: mọi trao đổi giữa các worker đều phải đi qua trung tâm điều phối của Kernel; không cho phép các worker chat trực tiếp tự do với nhau.
+Strict star-shaped communication architecture: all coordination between workers routes through the central Kernel coordinator; direct unmonitored peer-to-peer agent chat is prohibited.
 
 ### Human Attention Budget
-Định mức chú ý của con người: một ngân sách đo lường số lần làm phiền người dùng. Hệ thống tối ưu hóa để giảm thiểu số lần ngắt quãng con người, chỉ yêu cầu can thiệp ở các quyết định rủi ro cao.
+A quantitative limit on user interruptions. The runtime optimizes execution to minimize interruptions, reserving escalation exclusively for high-risk decisions.

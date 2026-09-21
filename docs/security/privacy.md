@@ -1,23 +1,23 @@
-# Quyền Riêng Tư & Kiểm Soát Dữ Liệu (Privacy & Data Retention)
+# Privacy & Data Governance
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần V (§25.5-25.6) Canonical Specification
+> **Source:** Part V (§25.5-25.6) Canonical Specification
 
-Custos được tạo ra nhằm bảo vệ tài sản trí tuệ và sự riêng tư tuyệt đối của người dùng trong kỷ nguyên các nhà cung cấp đám mây liên tục thu thập dữ liệu để huấn luyện mô hình.
-
----
-
-## 1. Chính Sách Không Thoát Dữ Liệu Mặc Định (Zero Egress by Default)
-
-1. **Không gửi Telemetry về máy chủ Custos:** Custos là phần mềm nguồn mở chạy cục bộ; runtime không tự động gửi bất kỳ gói tin thống kê, theo dõi hành vi người dùng hay báo cáo crash nào về máy chủ từ xa.
-2. **Kiểm Soát Xuất Dữ Liệu Ra AI Providers (Egress Gate):**
-   - Trước khi bất kỳ `ContextPack` nào được truyền qua Internet đến OpenAI hay Anthropic, nó phải đi qua bộ lọc **Data Sanitizer**.
-   - Tự động phát hiện và che giấu (*redact*) các mẫu thông tin nhạy cảm: địa chỉ email, số điện thoại, token bí mật (`sk-ant-...`, `ghp_...`, AWS Access Keys).
+Custos protects intellectual property and developer privacy in an era where cloud AI vendors continuously harvest enterprise codebases for model training.
 
 ---
 
-## 2. Chính Sách Lưu Giữ & Dọn Dẹp Dữ Liệu Cục Bộ (Data Retention Policy)
+## 1. Zero Egress by Default
 
-Người dùng có toàn quyền kiểm soát dữ liệu nằm trong thư mục `.custos/`:
-- **Lệnh hủy sạch dấu vết:** `custos purge --task <task_id>` sẽ xóa vĩnh viễn toàn bộ sự kiện, logs và artifacts liên quan đến task đó khỏi máy tính.
-- **Tự động dọn dẹp CAS:** Các artifacts tạm thời (build logs cũ, diff trung gian không được merge) được tự động dọn dẹp định kỳ sau 30 ngày để tiết kiệm dung lượng ổ đĩa.
+1. **Zero Telemetry to Custos Servers:** Custos is an open-source, local-first runtime. It never transmits usage telemetry, behavioral analytics, or crash dumps to any remote server.
+2. **Egress Gate for AI Providers:**
+   - Before any `ContextPack` transmits across the network to OpenAI, Anthropic, or external providers, it must clear the **Data Sanitizer** filter.
+   - Automatically detects and redacts sensitive patterns: email addresses, phone numbers, private key blocks, and API tokens (`sk-ant-...`, `ghp_...`, AWS Access Keys).
+
+---
+
+## 2. Local Data Retention & Purge Policy
+
+The user retains complete sovereignty over all data stored within `.custos/`:
+- **Cryptographic Purge:** Running `custos purge --task <task_id>` permanently removes all database rows, execution logs, and CAS artifacts associated with that task from the workstation.
+- **Automated CAS Eviction:** Ephemeral artifacts (stale build logs, rejected patch attempts) are pruned after 30 days to reclaim workstation disk capacity.

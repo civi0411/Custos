@@ -1,46 +1,46 @@
-# Bằng Chứng & Xác Minh (Evidence & Verification Architecture)
+# Evidence & Verification Architecture
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần IV (§13-14) & Phần V (§24) Canonical Specification
+> **Source:** Part IV (§13-14) & Part V (§24) Canonical Specification
 
-Nguyên tắc cốt lõi của Custos là: **Không chấp nhận lời khẳng định chay của AI; mọi kết quả hoàn thành đều bắt buộc phải mang theo bằng chứng kiểm định khách quan.**
-
----
-
-## 1. Định Nghĩa Hình Thức: Evidence-Carrying Action (ECA)
-
-Một hành động mang theo bằng chứng $ECA$ được định nghĩa bằng bộ 6 thành phần hình thức:
-
-$$ECA = \langle Intent, Proposal, Authority, Execution, Evidence, Verification angle$$
-
-Trong đó:
-- $Intent$: Ý định của con người hoặc mục tiêu của subtask.
-- $Proposal$: Kế hoạch thực thi do worker đề xuất.
-- $Authority$: Thẩm quyền hợp lệ thông qua `ExecutionPermit`.
-- $Execution$: Quá trình chạy trong sandbox sinh ra artifacts và nhật ký.
-- $Evidence$: Tập hợp các chứng cứ khách quan thu được từ môi trường thực tế.
-- $Verification$: Kết quả đánh giá độc lập của bộ kiểm tra (*Verifier*) xác nhận $Evidence \models Intent$.
+Custos operates under the core invariant: **Reject ungrounded AI assertions; all accepted outcomes must carry objective, verifiable evidence.**
 
 ---
 
-## 2. Sáu Tầng Bằng Chứng (The 6 Evidence Classes)
+## 1. Formal Definition: Evidence-Carrying Action (ECA)
 
-Custos phân loại bằng chứng thành 6 cấp độ từ thấp đến cao:
+An Evidence-Carrying Action $ECA$ is defined as a formal 6-tuple:
 
-| Lớp | Tên lớp | Loại bằng chứng | Ví dụ thực tế |
+$$ECA = \langle Intent, Proposal, Authority, Execution, Evidence, Verification \rangle$$
+
+Where:
+- $Intent$: Human principal goal or subtask objective.
+- $Proposal$: Execution plan and projected diff proposed by the worker.
+- $Authority$: Valid authorization granted via `ExecutionPermit`.
+- $Execution$: Sandboxed execution producing artifacts and execution traces.
+- $Evidence$: Objective receipts and observations collected from the environment.
+- $Verification$: Independent evaluation by the Verifier confirming $Evidence \models Intent$.
+
+---
+
+## 2. Six Evidence Classes
+
+Custos categorizes verification evidence into 6 hierarchical classes:
+
+| Class | Name | Evidence Category | Concrete Examples |
 |---|---|---|---|
-| **L0** | **Static Evidence** | Kiểm tra cú pháp, định dạng tĩnh | AST parse sạch, Linter không báo lỗi, Schema JSON hợp lệ. |
-| **L1** | **Execution Evidence** | Biên nhận chạy lệnh hệ thống | Exit code $= 0$, nhật ký stdout/stderr sạch, không timeout. |
-| **L2** | **Deterministic Test** | Kiểm thử tự động độc lập | `cargo test` pass 100%, coverage đạt ngưỡng cam kết. |
-| **L3** | **Environmental Evidence** | Kiểm chứng trạng thái môi trường | File hash trùng khớp, Git worktree sạch, dịch vụ trả về HTTP 200. |
-| **L4** | **Human Attestation** | Xác nhận tường minh của người dùng | Con người xem trước diff và bấm chấp thuận bàn giao. |
-| **L5** | **Cryptographic Proof** | Chứng chỉ số và bất biến mật mã | Chữ ký số Ed25519 của Kernel, Content Hash trên CAS. |
+| **L0** | **Static Evidence** | Syntax & static structure validation | AST parse succeeds, Linter emits 0 warnings, JSON schema valid. |
+| **L1** | **Execution Evidence** | Process execution receipt | Exit code $= 0$, clean stdout/stderr logs, execution completed within timeout. |
+| **L2** | **Deterministic Test** | Independent automated test suites | `cargo test` passes 100%, code coverage meets required threshold. |
+| **L3** | **Environmental Evidence** | Environmental state verification | File hashes match expectation, Git worktree clean, service returns HTTP 200. |
+| **L4** | **Human Attestation** | Explicit human sign-off | Human inspects preview diff and signs approval for handover. |
+| **L5** | **Cryptographic Proof** | Digital signatures & content addressing | Ed25519 signature from Kernel, CAS content hashes verified. |
 
 ---
 
-## 3. Gói Kết Quả Được Kiểm Minh (Verifiable Outcome Bundle)
+## 3. Verifiable Outcome Bundle
 
-Khi một Task hoàn tất, runtime không trả về một đoạn text đơn thuần mà đóng gói thành một **Verifiable Outcome Bundle** có cấu trúc chuẩn YAML/JSON:
+Upon Task completion, the runtime outputs a structured **Verifiable Outcome Bundle** formatted in canonical YAML/JSON:
 
 ```yaml
 bundle_version: "custos.outcome.v1"

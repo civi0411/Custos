@@ -1,0 +1,10 @@
+{
+  "name": "custos-vscode",
+  "displayName": "Custos Runtime",
+  "description": "Human-Centered Agentic Work Runtime extension",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  }
+}

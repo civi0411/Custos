@@ -1,0 +1,10 @@
+[package]
+name = "custos-adapter-sandbox-linux-bubblewrap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Linux bwrap unprivileged namespace containment"
+
+[dependencies]
+custos-core-domain = { workspace = true }
+async-trait = { workspace = true }

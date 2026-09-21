@@ -1,15 +1,15 @@
 # Architecture Decision Records (ADRs)
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần VI (§39.3) & Phần VII (§59) Canonical Specification
+> **Source:** Part VI (§39.3) & Part VII (§59) Canonical Specification
 
-Hệ thống lưu trữ các quyết định kiến trúc của Custos tuân theo định dạng chuẩn [ADR (Architectural Decision Records)](https://adr.github.io/). Mỗi bản ghi phản ánh một quyết định trọng yếu, bối cảnh ra quyết định, các lựa chọn thay thế đã xem xét, và hệ quả kỹ thuật.
+The Custos decision repository adheres to the standardized [ADR (Architectural Decision Records)](https://adr.github.io/) format. Each record captures a significant architectural decision, context, evaluated trade-offs, considered alternatives, and technical consequences.
 
 ---
 
-## Danh Mục Quyết Định Kiến Trúc (ADR Index)
+## ADR Index
 
-| Mã ADR | Tiêu đề quyết định | Trạng thái | Lĩnh vực |
+| ADR ID | Decision Title | Status | Scope / Domain |
 |---|---|---|---|
 | **ADR-0001** | Product category and Task as core unit | Accepted | Product / Core |
 | **ADR-0002** | Local daemon and trust boundary | Accepted | Architecture / Security |
@@ -51,27 +51,27 @@ Hệ thống lưu trữ các quyết định kiến trúc của Custos tuân the
 
 ---
 
-## Mẫu Cấu Trúc Bản Ghi Quyết Định (ADR Template)
+## Architectural Decision Record Template
 
-Mỗi file ADR chi tiết khi được khởi tạo trong thư mục `docs/adr/ADR-xxxx.md` sẽ tuân theo khuôn mẫu:
+Detailed ADR records created in `docs/adr/ADR-xxxx.md` follow this structure:
 
 ```markdown
-# ADR-xxxx: [Tiêu đề quyết định]
+# ADR-xxxx: [Decision Title]
 
-## Bối cảnh & Vấn đề (Context & Problem Statement)
-Mô tả tình huống kỹ thuật và lý do cần đưa ra quyết định này.
+## Context & Problem Statement
+Describe the technical context, motivations, and requirements necessitating this architectural choice.
 
-## Quyết định đã chọn (Decision Outcome)
-Quyết định cụ thể được chấp thuận và phương án kiến trúc được áp dụng.
+## Decision Outcome
+The specific accepted decision and architectural approach adopted.
 
-## Các lựa chọn đã xem xét (Considered Options)
-- Phương án A: [Ưu điểm / Nhược điểm]
-- Phương án B: [Ưu điểm / Nhược điểm]
+## Considered Options
+- Option A: [Pros / Cons]
+- Option B: [Pros / Cons]
 
-## Hệ quả tích cực & Tiêu cực (Consequences)
-- Tích cực: Những lợi ích thu được.
-- Tiêu cực / Rủi ro: Các gánh nặng kỹ thuật hoặc hạn chế phát sinh cần xử lý.
+## Consequences
+- Positive: Expected benefits and architectural advantages.
+- Negative / Risks: Technical trade-offs, added complexity, or operational constraints.
 
-## Bằng chứng xác minh (Verification & References)
-Các bài kiểm tra, PR hoặc benchmark kiểm chứng quyết định này.
+## Verification & References
+Test suites, benchmarks, RFCs, or PRs validating the implementation of this decision.
 ```

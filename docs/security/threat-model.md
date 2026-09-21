@@ -1,29 +1,29 @@
-# Mô Hình Đe Dọa & Phòng Vệ (Threat Model & Security Defenses)
+# Threat Model & Security Defenses
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần V (§25) Canonical Specification  
-> **Framework:** STRIDE Model & Principle of Least Privilege
+> **Source:** Part V (§25) Canonical Specification  
+> **Framework:** STRIDE Threat Model
 
-Tài liệu này xác định các mối đe dọa bảo mật đối với một runtime AI chạy cục bộ trên máy trạm cá nhân và cách thức Custos phòng vệ chủ động.
+This document outlines the security threat model for an autonomous local-first AI runtime operating on developer workstations, and the concrete defenses implemented by Custos.
 
 ---
 
-## 1. Phân Tích Đe Dọa Theo Mô Hình STRIDE
+## 1. STRIDE Threat Analysis
 
-| Danh mục STRIDE | Mối đe dọa thực tế đối với Agentic Runtime | Biện pháp phòng vệ của Custos |
+| STRIDE Category | Concrete Threat to Agentic Runtime | Custos Defense Mechanism |
 |---|---|---|
-| **Spoofing (Giả mạo)** | Lệnh từ mã độc giả mạo là chỉ thị từ người dùng | Định danh phiên làm việc qua Unix Socket có chứng thực UID cục bộ; ký số Ed25519 cho mọi Event và Permit. |
-| **Tampering (Can thiệp trái phép)** | Worker tự ý sửa đổi file mã nguồn ngoài scope hoặc sửa lịch sử event | Cô lập Git Worktree; SQLite WAL chỉ cho phép ghi tuần tự; Event Store có chuỗi băm bất biến (*Hash-chained sequence*). |
-| **Repudiation (Chối bỏ trách nhiệm)** | Không thể xác định model hay công cụ nào đã gây ra lỗi hệ thống | Sổ cái `Decision Ledger` ghi nhận mọi quyết định; biên nhận `Receipt` ghi lại chính xác exit code, diff và thời gian. |
-| **Information Disclosure (Rò rỉ thông tin)** | Prompt injection trích xuất tệp nhạy cảm (`~/.ssh/id_rsa`, `.env`) gửi ra ngoài | Sandbox cấm đọc thư mục cá nhân; Màng bảo vệ riêng tư (*Privacy Membrane*) quét regex và chặn egress các secrets. |
-| **Denial of Service (Từ chối dịch vụ)** | Vòng lặp suy luận vô tận làm cạn kiệt ngân sách hoặc treo CPU máy trạm | Ràng buộc ngân sách trần (*Budget Invariant*); giới hạn thời gian chạy cho từng step; hủy worker khi timeout. |
-| **Elevation of Privilege (Leo thang đặc quyền)**| Model dùng prompt injection lừa hệ thống tự cấp quyền quản trị | **Confidence không bao giờ tạo Capability**; chỉ có con người mới có quyền phê duyệt mở rộng scope ngoài hợp đồng. |
+| **Spoofing** | Malicious local process impersonates user instructions | Authenticates local IPC requests via Unix domain socket peer credentials (UID matching); Ed25519 digital signatures on all Events and Permits. |
+| **Tampering** | Rogue worker mutates files outside task scope or modifies event history | Git worktree isolation; SQLite WAL with append-only access; cryptographic hash-chained event sequences. |
+| **Repudiation** | Model or tool denies generating faulty code | Append-only `Decision Ledger` logs all choices; signed `Receipts` record exit codes, file diff hashes, and timestamps. |
+| **Information Disclosure** | Prompt injection exfiltrates sensitive files (`~/.ssh/id_rsa`, `.env`) | Sandboxing blocks read access to user home directories; Privacy Membrane regex scans and blocks secret egress. |
+| **Denial of Service** | Infinite reasoning loops exhaust token budget or freeze workstation CPU | Hard budget invariant ceilings; strict per-step timeouts; automatic worker lease cancellation upon expiry. |
+| **Elevation of Privilege** | Model uses prompt injection to self-grant root execution capabilities | **Confidence never creates Capability**; only the authenticated human principal can grant scope expansion. |
 
 ---
 
-## 2. Phòng Chống Tấn Công Tiêm Mã Nhắc Lệnh (Prompt Injection Defense)
+## 2. Prompt Injection Defense
 
-Mọi dữ liệu ngoại cảnh (nội dung issue GitHub, tệp mã nguồn lạ, tệp PDF, kết quả tìm kiếm web, đầu ra của lệnh shell) đều được Custos coi là **Dữ Liệu Độc Hại Tiềm Tàng (Untrusted Data)**.
+All external inputs (GitHub issue descriptions, unfamiliar source code, PDFs, web search results, shell stdout/stderr) are classified as **Potentially Malicious Untrusted Data**.
 
-1. **Phân tách rạch ròi Data và Instruction:** Nội dung từ các tệp được đóng gói trong các thẻ dữ liệu phân định rõ ràng (ví dụ: `<untrusted_content>`), ngăn model nhầm lẫn giữa dữ liệu cần xử lý và câu lệnh điều khiển.
-2. **Không thực thi trực tiếp từ output:** Kết quả trả về của model không bao giờ được chuyển thẳng tới `eval()` hay `sh -c`. Nó bắt buộc phải chuyển thành một `ActionProposal` có cấu trúc và đi qua Capability Gateway.
+1. **Data vs. Instruction Segregation:** Untrusted file contents are encapsulated inside explicit XML-like delimiters (e.g., `<untrusted_content>`), preventing LLM tokenizers from confusing user data with system instructions.
+2. **Zero Direct Execution from LLM Outputs:** Raw model text is never piped directly into `eval()` or `sh -c`. It must deserialize into a typed, structured `ActionProposal` evaluated and gated by the Capability Gateway.

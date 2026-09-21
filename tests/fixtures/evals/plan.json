@@ -1,0 +1,20 @@
+{
+  "schema_version": "1",
+  "status": "PLANNED_NOT_RUN",
+  "experiments": [
+    "EXP-01",
+    "EXP-02",
+    "EXP-03",
+    "EXP-04",
+    "EXP-05",
+    "EXP-06"
+  ],
+  "report_template": "templates/experiment-report.md",
+  "required_metrics": [
+    "quality",
+    "latency",
+    "usage",
+    "unauthorized_dispatch",
+    "failure_cases"
+  ]
+}

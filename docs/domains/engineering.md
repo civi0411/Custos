@@ -1,54 +1,54 @@
-# Gói Nghiệp Vụ Kỹ Thuật (Engineering Domain Pack v1)
+# Engineering Domain Pack
 
-> **Status:** Canonical Baseline v4.0 (Core Focus H1)  
-> **Source:** Phần VI (§18) & Phần VII (§54) Canonical Specification
+> **Status:** Canonical Baseline v4.0  
+> **Source:** Part VI (§18) & Part VII (§55) Canonical Specification
 
-Engineering Domain Pack v1 là trọng tâm phát triển hàng đầu của Custos trong Horizon 1 (H1), cung cấp môi trường khép kín, an toàn và có kiểm chứng cho các tác vụ kỹ thuật phần mềm (sửa lỗi, tái cấu trúc, viết tính năng mới).
+The Engineering Domain Pack v1 is Custos's primary focus in Horizon 1 (H1), providing a hermetic, safe, and verifiable runtime environment for software engineering workflows (bug fixing, refactoring, feature slicing).
 
 ---
 
-## 1. Pipeline Thực Thi Kỹ Thuật (Engineering Pipeline)
+## 1. Engineering Execution Pipeline
 
-Mỗi tác vụ kỹ thuật đi qua 8 giai đoạn nghiêm ngặt:
+Every engineering task executes through an 8-stage pipeline:
 
 ```text
-[ 1. Intake & Contract ]
-         │
-[ 2. Repo Intelligence ] ───> (Tree-sitter AST + ripgrep search + Git status)
-         │
-[ 3. Scoped ContextPack] ───> (Xếp hạng liên quan + Giới hạn ngân sách token)
-         │
-[ 4. Change Plan       ] ───> (Phân tích ảnh hưởng + Đề xuất giải pháp)
-         │
-[ 5. Isolated Worktree ] ───> (Tạo git worktree riêng, không chạm vào branch chính)
-         │
-[ 6. Verification Loop ] ───> (Chạy Linters + Typecheckers + Unit Tests)
-         │
-[ 7. Evidence Bundle   ] ───> (Đóng gói diff, receipts kiểm thử, chỉ số chi phí)
-         │
-[ 8. Human Review Gate ] ───> (Người dùng xem trước diff trước khi merge vào main)
+[ 1. Intake & Scope   ] ---> (Parse user prompt + Resolve target paths + Invariant check)
+        |
+[ 2. Repo Exploration ] ---> (AST indexing via Tree-sitter + Fast regex search via ripgrep)
+        |
+[ 3. Scoped ContextPack]---> (Relevance scoring + Token budget enforcement)
+        |
+[ 4. Change Plan       ]---> (Impact analysis + Technical strategy formulation)
+        |
+[ 5. Isolated Worktree ]---> (Dedicated Git worktree creation; zero mutation on base branch)
+        |
+[ 6. Verification Loop ]---> (Linters + Typecheckers + Automated test suites)
+        |
+[ 7. Evidence Bundle   ]---> (Package diffs, test receipts, and token cost metrics)
+        |
+[ 8. Human Review Gate ]---> (Human inspects diff preview prior to committing or merging)
 ```
 
 ---
 
-## 2. Các Vai Trò Worker Ngắn Hạn (Ephemeral Worker Roles)
+## 2. Ephemeral Worker Roles
 
-Trong Custos, không có một "Coding Agent" nguyên khối giữ quyền hạn từ đầu đến cuối. Thay vào đó, Kernel sinh ra các worker theo vai trò cụ thể:
+In Custos, there is no monolithic "Coding Agent" retaining permanent authority. Instead, the Kernel instantiates ephemeral role-bounded workers for specific subtasks:
 
-| Vai trò (Role) | Bản chất | Công cụ được cấp phép | Hiệu ứng (Effect) | Cấp độ rủi ro |
+| Role Name | Operational Mode | Permitted Capabilities | Effect | Risk Tier |
 |---|---|---|---|---|
-| `engineering.explorer` | Deterministic / Fast | `repo.list_files`, `git_status`, `ripgrep` | Chỉ đọc (Read-only) | **R0** (An toàn) |
-| `engineering.planner` | Deliberation (LLM) | `repo.read_symbol`, `search_fts5` | Chỉ đọc (Read-only) | **R0** (An toàn) |
-| `engineering.patcher` | Agent Loop | `repo.read_symbol`, `apply_patch_to_worktree` | Ghi cục bộ (Local write) | **R1** (Có kiểm soát) |
-| `engineering.test_author`| Deliberation (LLM) | `write_test_draft` | Ghi cục bộ (Local write) | **R1** (Có kiểm soát) |
-| `engineering.verifier`| Deterministic runner | `cargo test`, `ruff`, `mypy`, `pytest` | Chạy sandbox | **R0** (Cách ly) |
-| `engineering.reviewer`| Deliberation (LLM) | `git_diff_summary` | Chỉ đọc (Read-only) | **R0** (An toàn) |
+| `engineering.explorer` | Deterministic / Fast | `repo.list_files`, `git_status`, `ripgrep` | Read-only | **R0** (Safe) |
+| `engineering.planner` | Deliberative (LLM) | `repo.read_symbol`, `search_fts5` | Read-only | **R0** (Safe) |
+| `engineering.patcher` | Agentic Loop | `repo.read_symbol`, `apply_patch_to_worktree` | Local mutation | **R1** (Controlled) |
+| `engineering.test_author`| Deliberative (LLM) | `write_test_draft` | Local mutation | **R1** (Controlled) |
+| `engineering.verifier`| Deterministic runner | `cargo test`, `ruff`, `mypy`, `pytest` | Sandboxed run | **R0** (Isolated) |
+| `engineering.reviewer`| Deliberative (LLM) | `git_diff_summary` | Read-only | **R0** (Safe) |
 
 ---
 
-## 3. Trí Tuệ Kho Mã Nguồn (Repository Intelligence)
+## 3. Repository Intelligence
 
-Thay vì gửi mù quáng toàn bộ codebase lên LLM, Custos tích hợp bộ công cụ phân tích tĩnh cực nhanh chạy trực tiếp trên máy trạm:
-- **`BurntSushi/ripgrep`:** Tìm kiếm văn bản và biểu thức chính quy với tốc độ hàng chục GB/giây.
-- **`tree-sitter/tree-sitter` & `ast-grep`:** Phân tích cú pháp cây AST, trích xuất danh sách hàm, structs, classes, và tham chiếu liên tệp tin.
-- **`git worktree`:** Tạo bản sao không gian làm việc cục bộ trong tích tắc mà không tốn dung lượng đĩa nhân bản, bảo đảm nhánh chính của lập trình viên không bao giờ bị xáo trộn.
+Rather than blindly transmitting whole codebases to cloud LLMs, Custos integrates native static analysis utilities executing directly on the host:
+- **`BurntSushi/ripgrep`:** Sub-second regex and text searching across multi-gigabyte repositories.
+- **`tree-sitter/tree-sitter` & `ast-grep`:** AST parsing to extract symbols, functions, struct declarations, and cross-file references.
+- **`git worktree`:** Instantly provisions isolated working trees without duplicate disk overhead, ensuring the developer's working directory is never polluted.

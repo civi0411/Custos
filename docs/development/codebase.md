@@ -1,13 +1,13 @@
-# Kiến Trúc Codebase & Monorepo Blueprint
+# Codebase Architecture & Monorepo Blueprint
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần XI (§32-33) & Phần VII (§49) Canonical Specification
+> **Source:** Part XI (§32-33) & Part VII (§49) Canonical Specification
 
-Custos được tổ chức theo cấu trúc Monorepo thống nhất quản lý bởi Cargo Workspace của Rust, kết hợp các client packages bằng TypeScript và Python khi cần thiết.
+Custos is organized as a unified Monorepo managed primarily by a Rust Cargo Workspace, complemented by TypeScript and Python sidecar packages where specialized runtimes are required.
 
 ---
 
-## 1. Cấu Trúc Thư Mục Monorepo Chi Tiết
+## 1. Monorepo Directory Layout
 
 ```text
 custos/
@@ -61,6 +61,10 @@ custos/
 │   ├── research/                   # Claim-evidence, literature scan, Obsidian
 │   └── personal/                   # Autonomy ladder, calendar/email connectors
 │
+├── sidecars/                       # Isolated auxiliary runtimes (JSON-RPC)
+│   ├── python-judgment/            # Fast ML / heuristic evaluation sidecar
+│   └── ts-claude-agent/            # Claude CLI adapter / VS Code connector
+│
 ├── schemas/                        # Versioned JSON Schemas & Protobufs
 │   └── custos/v1/                  # Canonical schema specifications
 │
@@ -73,30 +77,30 @@ custos/
 
 ---
 
-## 2. Quy Tắc Chiều Phụ Thuộc (Dependency Direction Rules)
+## 2. Dependency Direction Rules
 
-Để tránh hiện tượng phụ thuộc vòng (*circular dependencies*) và duy trì tính mô-đun cao, Custos áp dụng nghiêm ngặt quy tắc phụ thuộc một chiều:
+To prevent circular dependencies and preserve modular encapsulation, Custos enforces a strict one-way dependency flow:
 
 ```text
 [ Apps (custosd, custos-cli) ]
-             │
-             ▼
+             |
+             v
 [ Crates: Runtime & Orchestration ]
-             │
-             ▼
+             |
+             v
 [ Crates: Capability Gateway & Cognitive Runtime ]
-             │
-             ▼
+             |
+             v
 [ Crates: Core Domain & Ports (Zero external dependencies) ]
 ```
 
-- **`core-domain`** không bao giờ được phụ thuộc vào database, network hoặc AI provider SDKs. Nó là thư viện Rust thuần túy chỉ chứa structs, enums và invariants.
-- **`adapters`** phụ thuộc vào các traits được định nghĩa trong `crates/`, không bao giờ được tham chiếu chéo lẫn nhau.
+- **`core-domain`** never depends on databases, networks, or AI provider SDKs. It is a pure Rust domain library consisting solely of structs, enums, and invariant definitions.
+- **`adapters`** depend strictly on traits defined in `crates/`; they never cross-reference sibling adapters directly.
 
 ---
 
-## 3. Lý Do Phân Chia Ngôn Ngữ (Language Split Rationale)
+## 3. Language Split Rationale
 
-- **Rust (90% Codebase):** Sử dụng cho Kernel, Gateway, Sandboxing, Persistence, và CLI. Mang lại tốc độ khởi động tức thì, độ tin cậy bộ nhớ tuyệt đối (*memory safety*), không tốn RAM và kiểm soát tài nguyên hệ điều hành hạt mịn.
-- **TypeScript (Client & Tooling):** Sử dụng độc quyền cho **VS Code Extension** và một số mock tools để tận dụng hệ sinh thái phong phú của trình soạn thảo.
-- **Python (Optional Sidecars):** Chỉ dùng cho các script kiểm thử benchmark học thuật hoặc nghiên cứu data science cục bộ nếu cần.
+- **Rust (Core TCB):** Used for Kernel, Gateway, Sandboxing, Persistence, CLI, and Daemon. Delivers sub-millisecond startup, verified memory safety without GC pauses, low memory overhead (< 50MB idle), and fine-grained OS resource control.
+- **TypeScript (Clients & Connectors):** Used for the **VS Code Extension** and Claude CLI adapters in `sidecars/ts-claude-agent`.
+- **Python (Local ML & Judgment):** Isolated in `sidecars/python-judgment` for fast heuristic scoring, local embeddings, and experimental evaluation.

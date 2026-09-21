@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Target Action v1 (not yet wired)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "action_id",
+    "tool",
+    "tool_version",
+    "arguments",
+    "resource_id",
+    "effects",
+    "privacy",
+    "scope",
+    "preconditions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1"
+    },
+    "action_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tool": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tool_version": {
+      "type": "string"
+    },
+    "arguments": {
+      "type": "object",
+      "description": "Tool-specific schema must validate separately."
+    },
+    "resource_id": {
+      "type": "string"
+    },
+    "effects": {
+      "type": "array",
+      "uniqueItems": true,
+      "minItems": 1,
+      "items": {
+        "enum": [
+          "read",
+          "managed_write",
+          "workspace_write",
+          "code_execution",
+          "external_mutation",
+          "destructive"
+        ]
+      }
+    },
+    "privacy": {
+      "enum": [
+        "P0",
+        "P1",
+        "P2",
+        "P3"
+      ]
+    },
+    "scope": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "preconditions": {
+      "type": "object",
+      "description": "Tool-specific typed preconditions required before dispatch."
+    }
+  }
+}

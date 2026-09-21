@@ -1,27 +1,27 @@
-# Chiến Lược Tiếp Nhận Nguồn Mở (Open Source Adoption Strategy)
+# Open Source Adoption Strategy
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần XIII (§35-36) & Phần VII (§50-53, §57-58) Canonical Specification
+> **Source:** Part XIII (§35-36) & Part VII (§50-53, §57-58) Canonical Specification
 
-Custos áp dụng triết lý nguồn mở thực dụng: **Tự sở hữu lõi ngữ nghĩa cốt lõi (Custos-owned semantic core), không copy mã nguồn bừa bãi, chỉ tích hợp thư viện chất lượng cao qua ranh giới rõ ràng.**
+Custos adopts a pragmatic open source philosophy: **Own the semantic core, avoid indiscriminate copy-pasting, and integrate high-quality libraries exclusively across strict architectural boundaries.**
 
 ---
 
-## 1. Năm Chế Độ Tiếp Nhận Nguồn Mở (5 Adoption Modes)
+## 1. Five Adoption Modes
 
-| Chế độ (Mode) | Định nghĩa | Chính sách áp dụng | Ví dụ dự án |
+| Mode | Definition | Enforcement Policy | Example Projects |
 |---|---|---|---|
-| **Direct Dependency** | Thêm trực tiếp vào `Cargo.toml` | Thư viện chuẩn mực, kiểm toán license khắt khe (MIT/Apache 2.0). | `tokio`, `serde`, `rusqlite`, `tree-sitter`, `cedar-policy` |
-| **Clean Integration** | Tích hợp qua Adapter riêng biệt | Giao tiếp qua trait trừu tượng; có thể thay thế mà không sửa core. | `modelcontextprotocol/rust-sdk`, `opentelemetry` |
-| **Reference / Borrow** | Nghiên cứu kiến trúc, viết lại theo chuẩn Custos | Học hỏi pattern thiết kế; tái hiện bằng unit test của Custos. | Học pattern state machine từ Temporal; outbox từ Restate |
-| **Shadow / Evaluation**| Chạy thử nghiệm đo kiểm song song | Không ảnh hưởng luồng chính; chỉ dùng để thu thập số liệu so sánh. | TypeSafe Jev adapter ở chế độ Advisory |
-| **Reject / No-Adopt** | Từ chối tiếp nhận | Tránh phụ thuộc cồng kềnh, sai lệch mô hình hoặc dính copyleft (GPL). | Các framework agent chat phức tạp (LangChain, CrewAI) |
+| **Direct Dependency** | Added directly into `Cargo.toml` | Standardized libraries with rigorous license auditing (MIT/Apache-2.0). | `tokio`, `serde`, `rusqlite`, `tree-sitter`, `cedar-policy` |
+| **Clean Integration** | Integrated via dedicated Adapter | Interfaces strictly through abstract traits; swappable without modifying core. | `modelcontextprotocol/rust-sdk`, `opentelemetry` |
+| **Reference / Borrow** | Architectural study, re-implemented to Custos specs | Learn structural patterns; reproduce them with Custos-native unit tests. | State machine patterns from Temporal; outbox pattern from Restate |
+| **Shadow / Evaluation**| Run in parallel evaluation mode | Zero impact on main execution paths; used purely for metric comparisons. | TypeSafe Jev adapter in advisory mode |
+| **Reject / No-Adopt** | Explicitly rejected | Avoid bloated dependencies, architectural misalignment, or copyleft licenses (GPL). | Bloated chat agent frameworks (LangChain, CrewAI) |
 
 ---
 
-## 2. Bản Đồ Repository Nguồn Mở Được Chọn Lọc
+## 2. Curated Open Source Repository Map
 
-Custos chọn lọc các thư viện hàng đầu thế giới để gia tốc quá trình phát triển:
+Custos selectively adopts world-class libraries to accelerate development:
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
@@ -44,7 +44,7 @@ Custos chọn lọc các thư viện hàng đầu thế giới để gia tốc q
 
 ---
 
-## 3. Chính Sách Chuỗi Cung Ứng & Giấy Phép (Supply Chain Policy)
+## 3. Supply Chain & Licensing Policy
 
-- **Kiểm soát License:** Tự động kiểm tra qua công cụ `cargo-deny`. Chỉ chấp nhận giấy phép **MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause**. Cấm tuyệt đối mã nguồn có giấy phép GPL / AGPL trong toàn bộ mã nguồn đóng gói nhị phân.
-- **Khóa Phiên Bản (Pinned Dependencies):** File `Cargo.lock` được commit vào Git; cập nhật phiên bản phụ thuộc phải đi kèm PR riêng biệt có kiểm thử hồi quy.
+- **License Compliance:** Automated verification via `cargo-deny`. Only **MIT, Apache-2.0, BSD-2-Clause, and BSD-3-Clause** licenses are permitted. GPL/AGPL licensed code is strictly prohibited in all binary releases.
+- **Pinned Dependencies:** The `Cargo.lock` file is committed to Git; all dependency version bumps must be submitted via separate PRs with full regression test suites.

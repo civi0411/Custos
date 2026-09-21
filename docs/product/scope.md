@@ -1,76 +1,76 @@
-# Phạm Vi Sản Phẩm & Định Nghĩa Hoàn Thành (Scope & MVP DoD)
+# Product Scope & Definition of Done (Scope & MVP DoD)
 
 > **Status:** Canonical Baseline v4.0  
-> **Source:** Phần I (§2) & Phần VI (§38) Canonical Specification
+> **Source:** Part I (§2) & Part VI (§38) Canonical Specification
 
 ---
 
-## 1. Ma Trận Phạm Vi (Scope Matrix)
+## 1. Scope Matrix
 
-| Lĩnh vực | Trong phạm vi (In-Scope) | Ngoài phạm vi (Out-of-Scope) |
+| Domain | In-Scope | Out-of-Scope |
 |---|---|---|
-| **Môi trường vận hành** | Máy trạm cục bộ (macOS, Linux), chạy như local daemon (`custosd`) | Nền tảng SaaS đa người dùng tập trung trên cloud trong giai đoạn đầu. |
-| **Quản lý trạng thái** | Bền vững qua SQLite + WAL, Outbox pattern, hồi phục sau crash | Lưu trữ in-memory phân tán yêu cầu cụm Redis/Kafka phức tạp. |
-| **Tương tác AI** | Tương thích đa nhà cung cấp (Codex, Claude, Local models) qua adapter | Huấn luyện từ đầu (pre-training) mô hình nền tảng riêng. |
-| **Kiểm soát hành động** | Capability Gateway, Worktree cô lập, Exact-payload approvals | Tự động bypass các rào chắn bảo mật hoặc chạy lệnh với quyền root. |
-| **Giao diện người dùng** | CLI mạnh mẽ và tiện ích mở rộng VS Code (*First-class clients*) | Ứng dụng di động (Mobile apps) hoặc giao diện web phức tạp. |
+| **Operational Environment** | Local workstation (macOS, Linux) running as a local daemon (`custosd`) | Centralized cloud multi-tenant SaaS platform in initial phases. |
+| **State Management** | Durable SQLite + WAL, Outbox pattern, crash recovery | Distributed in-memory storage requiring external Redis/Kafka clusters. |
+| **AI Interactions** | Multi-provider interop (Codex, Claude, Local models) via adapters | Pre-training foundation models from scratch. |
+| **Action Governance** | Capability Gateway, Worktree isolation, Exact-payload approvals | Bypassing security boundaries or running commands with root privileges. |
+| **Client Interfaces** | Robust CLI and official VS Code Extension (*First-class clients*) | Mobile applications or complex web dashboards. |
 
 ---
 
-## 2. Các Chân Trời Phát Hành (Release Horizons)
+## 2. Release Horizons
 
 ```text
-┌─────────────────────────────────────────────────────────────┐
-│ Horizon 1 (H1): Local Engineering Core                     │
-│ - Local daemon + SQLite + CLI                               │
-│ - Engineering Domain Pack v1 (Bug-fix & Feature slice)     │
-│ - Worktree isolation + Tree-sitter + Ripgrep                │
-│ - Single ProviderPort (Codex hoặc Claude)                   │
-│ - Capability Gateway + Exact-payload approval               │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-┌──────────────────────────────▼──────────────────────────────┐
-│ Horizon 2 (H2): Local-First Multi-Domain & Portability      │
-│ - Pluggable System One (Deterministic + Local SLM + Jev)    │
-│ - Multi-provider switching (Codex <-> Claude <-> Local)     │
-│ - VS Code Extension chính thức                              │
-│ - Research Domain Pack (Claim-Evidence matrix, Obsidian)    │
-│ - Personal Operations Domain Pack (Attention budget)        │
-└──────────────────────────────┬──────────────────────────────┘
-                               │
-┌──────────────────────────────▼──────────────────────────────┐
-│ Horizon 3 (H3): Workstation Mesh & Team Federation          │
-│ - Peer-to-peer workspace synchronization                    │
-│ - Selective cross-machine artifact sharing                  │
-│ - Remote federation via A2A protocol                        │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+| Horizon 1 (H1): Local Engineering Core                     |
+| - Local daemon + SQLite + CLI                               |
+| - Engineering Domain Pack v1 (Bug-fix & Feature slice)     |
+| - Worktree isolation + Tree-sitter + Ripgrep                |
+| - Single ProviderPort (Codex or Claude)                     |
+| - Capability Gateway + Exact-payload approval               |
++------------------------------+------------------------------+
+                               |
++------------------------------v------------------------------+
+| Horizon 2 (H2): Local-First Multi-Domain & Portability      |
+| - Pluggable System One (Deterministic + Local SLM + Jev)    |
+| - Multi-provider switching (Codex <-> Claude <-> Local)     |
+| - Official VS Code Extension                                |
+| - Research Domain Pack (Claim-Evidence matrix, Obsidian)    |
+| - Personal Operations Domain Pack (Attention budget)        |
++------------------------------+------------------------------+
+                               |
++------------------------------v------------------------------+
+| Horizon 3 (H3): Workstation Mesh & Team Federation          |
+| - Peer-to-peer workspace synchronization                    |
+| - Selective cross-machine artifact sharing                  |
+| - Remote federation via A2A protocol                        |
++-------------------------------------------------------------+
 ```
 
 ---
 
-## 3. Tiêu Chí Hoàn Thành MVP (MVP Definition of Done)
+## 3. MVP Definition of Done (MVP DoD)
 
-Trước khi công bố phiên bản MVP sẵn sàng cho người dùng thực tế, hệ thống bắt buộc phải vượt qua 100% danh sách kiểm tra sau:
+Before releasing an MVP build for operational use, the system must satisfy 100% of the following criteria:
 
-### Core MVP DoD (Bắt buộc cho Alpha)
-- [ ] **Sống sót qua sự cố:** Task sống sót sau khi kill daemon (`kill -9`) ở mọi trạng thái có thể resume, tự động tiếp tục chính xác khi khởi động lại.
-- [ ] **Quy trình hoàn chỉnh:** Một tác vụ sửa lỗi (*bug-fix*) đi trọn vẹn từ mục tiêu ban đầu đến bản vá (*patch*) được kiểm chứng tự động (test pass).
-- [ ] **Kiểm soát 100% tác động:** Không có bất kỳ thay đổi tệp tin, lệnh shell hay kết nối mạng nào diễn ra ngoài Capability Gateway.
-- [ ] **Phê duyệt chính xác:** Cơ chế phê duyệt Exact-payload hoạt động: thay đổi nội dung payload sẽ vô hiệu hóa giấy phép cũ ngay lập tức.
-- [ ] **Cô lập Git tuyệt đối:** Mọi thay đổi mã nguồn diễn ra trên Git worktree độc lập; không bao giờ làm bẩn nhánh làm việc hiện tại của người dùng.
-- [ ] **Truy vết Snapshot:** Trích xuất mã nguồn gắn liền với commit snapshot cụ thể; phát hiện và từ chối nếu snapshot bị cũ (*stale detection*).
-- [ ] **ContextPack chuẩn mực:** Gói ngữ cảnh gửi cho model luôn có nhãn nguồn gốc (*provenance*), kiểm soát độ nhạy cảm và tuân thủ ngân sách token.
-- [ ] **Độc lập lỗi Provider:** Lỗi mạng hoặc provider sập (500/rate limit) không bao giờ làm hỏng hoặc mất trạng thái Task.
-- [ ] **OutcomeBundle đầy đủ:** Gói bàn giao đầu ra chứa toàn bộ diff tệp tin, test receipts, bằng chứng kiểm tra, tổng chi phí và rủi ro còn lại.
-- [ ] **Kiểm thử khôi phục thảm họa:** Kịch bản backup, restore và migration cơ sở dữ liệu SQLite được kiểm thử tự động trong CI.
-- [ ] **Tài liệu minh bạch:** Hoàn thành tài liệu mô hình đe dọa (*threat model*) và cẩm nang xử lý sự cố (*runbook*).
-- [ ] **Trung thực kỹ thuật:** Không có bất kỳ tuyên bố marketing nào vượt quá bằng chứng đo lường thực tế.
+### Core MVP DoD (Mandatory for Alpha)
+- [ ] **Crash Resilience:** Tasks survive daemon termination (`kill -9`) in any resumable state and resume deterministically upon restart.
+- [ ] **End-to-End Task Lifecycle:** A bug-fix workflow executes from goal definition to an automatically verified patch with test pass receipts.
+- [ ] **Complete Action Governance:** Zero file mutations, shell commands, or network connections occur outside the Capability Gateway.
+- [ ] **Exact-Payload Approval:** Approval binds cryptographically to the payload; altering payload content invalidates prior permits immediately.
+- [ ] **Worktree Isolation:** All source mutations occur in isolated Git worktrees, never mutating the user's active branch directly.
+- [ ] **Snapshot Provenance:** Source extraction binds to specific commit snapshots; stale snapshots trigger rejection and re-synchronization.
+- [ ] **Compliant ContextPacks:** Context sent to models includes provenance labels, sensitivity controls, and strictly respects token budgets.
+- [ ] **Provider Fault Independence:** Provider rate limits or 500 errors never corrupt or lose Task state.
+- [ ] **Comprehensive OutcomeBundles:** Output bundles contain complete file diffs, test receipts, audit evidence, total costs, and residual risks.
+- [ ] **Disaster Recovery Validation:** SQLite backup, restore, and schema migration scenarios are automatically tested in CI.
+- [ ] **Transparent Documentation:** Threat models and operational runbooks are fully documented.
+- [ ] **Engineering Honesty:** No marketing or capability claims exceed measured benchmark evidence.
 
-### Cognitive Beta DoD (Bổ sung cho đợt thử nghiệm nhận thức)
-- [ ] Ba Question Packs chuẩn chạy ở chế độ giám sát ngầm (*shadow/advisory*).
-- [ ] Phiên bản model và Question Pack được ghim (*pinned*) và ghi log đầy đủ.
-- [ ] Phân định và cân chuẩn riêng biệt giữa các loại phán đoán (Boolean, Choice, Score).
-- [ ] Dữ liệu ngoài miền phân phối (OOD) hoặc bất đồng phán đoán được leo thang lên con người kịp thời.
-- [ ] Dữ liệu gửi sang Jev hoặc cloud judgment được lọc và khử nhạy cảm (*redaction*) nghiêm ngặt.
-- [ ] Tuyệt đối không có bất kỳ đường dẫn logic nào cho phép System One tự cấp giấy phép hành động (`ExecutionPermit`).
-- [ ] Chi phí và tỉ lệ thành công của Task được so sánh minh bạch với baseline không có System One.
+### Cognitive Beta DoD (Supplementary for Cognitive Evaluation)
+- [ ] Standard Question Packs run in shadow/advisory mode.
+- [ ] Model versions and Question Pack definitions are pinned and fully logged.
+- [ ] Separate calibration and thresholds for judgment types (Boolean, Choice, Score).
+- [ ] Out-of-distribution (OOD) cases and judgment disagreements escalate to human principals promptly.
+- [ ] Data transmitted to external judgment services is strictly redacted.
+- [ ] No logical code path allows System One to grant an `ExecutionPermit` autonomously.
+- [ ] Cost and task success metrics are transparently benchmarked against non-System-One baselines.
