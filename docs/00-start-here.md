@@ -1,7 +1,10 @@
 # Custos Documentation — Start Here
 
 > **Status:** Canonical Baseline v4.0-draft  
-> **Last Updated:** 2026-09-21  
+> **Last Updated:** 2026-09-22  
+> **Authors & Maintainers:**  
+> - **Trần Chí Vĩ** — Systems Architecture & Core Runtime Lead  
+> - **Nguyễn Đinh Nhật Trường** — Lead UX/UI & Client Applications (CLI / Desktop / VS Code)  
 > **Scope:** Architecture, Product, Implementation, Governance
 
 Chào mừng bạn đến với hệ thống tài liệu chính thức của **Custos** — Human-Centered Agentic Work Runtime.
@@ -38,11 +41,19 @@ Trọng tâm: Trust Boundaries, Exact-Payload Approvals, Sandboxing, Secrets.
 
 ### 4. Product Managers, QA & Contributors
 Trọng tâm: Định vị sản phẩm, Invariants, Lộ trình, Kiểm thử, Đóng góp.
-- Đọc [Bản Sắc Sản Phẩm](file:///Users/mac/Project/AgentHub/Custos/docs/product/identity.md) và [Phạm Vi Sản Phẩm (Scope & MVP)](file:///Users/mac/Project/AgentHub/Custos/docs/product/scope.md)
-- Xem [Capability Map](file:///Users/mac/Project/AgentHub/Custos/docs/product/capability-map.md)
-- Xem [Thuật Ngữ Cốt Lõi](file:///Users/mac/Project/AgentHub/Custos/docs/reference/concepts.md) và [Nguyên Tắc & Bất Biến](file:///Users/mac/Project/AgentHub/Custos/docs/reference/invariants.md)
-- Xem [Lộ Trình 16 Tuần](file:///Users/mac/Project/AgentHub/Custos/docs/development/roadmap.md) và [Kiến Trúc Kiểm Thử](file:///Users/mac/Project/AgentHub/Custos/docs/development/testing.md)
-- Tham khảo hướng dẫn đóng góp tại [CONTRIBUTING.md](file:///Users/mac/Project/AgentHub/Custos/CONTRIBUTING.md)
+- Đọc [Bản Sắc Sản Phẩm](file:///d:/Agentic%20Work%20Runtime/Custos/docs/product/identity.md) và [Phạm Vi Sản Phẩm (Scope & MVP)](file:///d:/Agentic%20Work%20Runtime/Custos/docs/product/scope.md)
+- Xem [Capability Map](file:///d:/Agentic%20Work%20Runtime/Custos/docs/product/capability-map.md)
+- Xem [Thuật Ngữ Cốt Lõi](file:///d:/Agentic%20Work%20Runtime/Custos/docs/reference/concepts.md) và [Nguyên Tắc & Bất Biến](file:///d:/Agentic%20Work%20Runtime/Custos/docs/reference/invariants.md)
+- Xem [Lộ Trình 16 Tuần](file:///d:/Agentic%20Work%20Runtime/Custos/docs/development/roadmap.md) và [Kiến Trúc Kiểm Thử](file:///d:/Agentic%20Work%20Runtime/Custos/docs/development/testing.md)
+- Tham khảo hướng dẫn đóng góp tại [CONTRIBUTING.md](file:///d:/Agentic%20Work%20Runtime/Custos/CONTRIBUTING.md)
+
+### 5. Kỹ Sư Giao Diện, UX/UI & Client (CLI / Desktop / VS Code)
+Trọng tâm: Experience Plane, Giao tiếp IPC/JSON-RPC, Exact-Payload Approval UX, Lệnh CLI.
+- Xem tài liệu khởi động nhanh: [UX/UI & CLI Kickoff Guide](file:///d:/Agentic%20Work%20Runtime/Custos/UX_UI_CLI_KICKOFF.md)
+- Nắm vững kiến trúc giao diện tại [Layer 7: Interface Layer & Experience Plane](file:///d:/Agentic%20Work%20Runtime/Custos/docs/architecture/overview.md)
+- Xem hợp đồng giao tiếp IPC tại [Giao Tiếp Nội Bộ & Protocols](file:///d:/Agentic%20Work%20Runtime/Custos/docs/architecture/communication.md)
+- Nắm vững trạng thái Task và quy trình phê duyệt rủi ro tại [Vòng Đời Task](file:///d:/Agentic%20Work%20Runtime/Custos/docs/architecture/task-lifecycle.md) và [Capability Model](file:///d:/Agentic%20Work%20Runtime/Custos/docs/security/capability-model.md)
+- Quy ước đặt tên lệnh CLI tại [Quy Ước Đặt Tên](file:///d:/Agentic%20Work%20Runtime/Custos/docs/reference/naming.md)
 
 ---
 

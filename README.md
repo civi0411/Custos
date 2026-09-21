@@ -438,12 +438,19 @@ cargo test --workspace
 
 ---
 
+## 👥 Core Team & Authors
+
+- **Trần Chí Vĩ** — Systems Architecture, Kernel & Runtime Engineering (`custosd`, State Machine, Gateway, Persistence)
+- **Nguyễn Đinh Nhật Trường** — Lead UX/UI, Human-in-the-Loop Interaction & Client Applications (`custos` CLI, Desktop Shell, VS Code Extension)
+
+---
+
 ## 📄 License
 
 Custos is open-source software licensed under the **MIT License**.  
 See the [LICENSE](LICENSE) file for complete details.
 
-Copyright (c) 2026 Vĩ. All rights reserved.
+Copyright (c) 2026 Nguyễn Đinh Nhật Trường, Trần Chí Vĩ. All rights reserved.
 
 ---
 
