@@ -1,0 +1,10 @@
+# Custos — Cursor AI Rules
+See [AGENTS.md](./AGENTS.md) for full project architecture and vibecoding rules.
+
+## Core Invariants:
+1. **Rust Core:** `crates/`, `apps/`, `adapters/` are 100% Rust. Never add Python/JS here.
+2. **Sidecars Only:** Python and TypeScript belong exclusively in `sidecars/`.
+3. **Core Domain:** `crates/core-domain` has ZERO I/O and zero internal crate dependencies.
+4. **No Bloat:** Do not import LangChain, LlamaIndex, or heavy crates without permission.
+5. **Production Code:** Never use `.unwrap()` or `.expect()`. Always return `Result<T, E>`.
+

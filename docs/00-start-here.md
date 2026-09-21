@@ -16,43 +16,49 @@ Tùy thuộc vào mục đích của bạn trong dự án, hãy chọn lộ trì
 
 ### 1. Kỹ Sư Hệ Thống & Backend (Rust / Systems Engineers)
 Trọng tâm: Kernel, State Machine, Capability Gateway, Sandbox, Storage.
-- Bắt đầu với [Kiến Trúc Tổng Thể](file:///Users/mac/Project/AgentHub/Custos/docs/architecture/overview.md) và [Vòng Đời Task](file:///Users/mac/Project/AgentHub/Custos/docs/architecture/task-lifecycle.md)
-- Tìm hiểu cách thực thi an toàn tại [Capability Gateway](file:///Users/mac/Project/AgentHub/Custos/docs/architecture/capability-gateway.md)
-- Đọc cơ chế lưu trữ bền vững tại [Persistence & Storage](file:///Users/mac/Project/AgentHub/Custos/docs/architecture/persistence.md)
-- Nắm vững xử lý lỗi và hồi phục tại [Crash Recovery](file:///Users/mac/Project/AgentHub/Custos/docs/architecture/crash-recovery.md)
-- Xem kiến trúc monorepo và công nghệ tại [Codebase & Monorepo](file:///Users/mac/Project/AgentHub/Custos/docs/development/codebase.md)
+- Bắt đầu với [Kiến Trúc Tổng Thể](./architecture/overview.md) và [Vòng Đời Task](./architecture/task-lifecycle.md)
+- Tìm hiểu cách thực thi an toàn tại [Capability Gateway](./architecture/capability-gateway.md)
+- Đọc cơ chế lưu trữ bền vững tại [Persistence & Storage](./architecture/persistence.md)
+- Nắm vững xử lý lỗi và hồi phục tại [Crash Recovery](./architecture/crash-recovery.md)
+- Xem kiến trúc monorepo và công nghệ tại [Codebase & Monorepo](./development/codebase.md)
 
 ### 2. Kỹ Sư AI & Cognitive Architects (AI / Prompt / Agent Engineers)
 Trọng tâm: Cognitive Control Fabric, System One, Providers, Context & Memory.
-- Đọc [Cognitive Control Fabric](file:///Users/mac/Project/AgentHub/Custos/docs/architecture/cognitive-fabric.md) (System One vs System Two, RDC protocol)
-- Nắm chuẩn tích hợp model tại [Provider Interoperability](file:///Users/mac/Project/AgentHub/Custos/docs/architecture/provider-interop.md)
-- Quản lý bộ nhớ và context tại [Context & Memory Architecture](file:///Users/mac/Project/AgentHub/Custos/docs/architecture/context-memory.md)
-- Tìm hiểu các Domain Packs chuyên biệt: [Engineering Pack](file:///Users/mac/Project/AgentHub/Custos/docs/domains/engineering.md), [Research Pack](file:///Users/mac/Project/AgentHub/Custos/docs/domains/research.md), [Personal Pack](file:///Users/mac/Project/AgentHub/Custos/docs/domains/personal.md)
+- Đọc [Cognitive Control Fabric](./architecture/cognitive-fabric.md) (System One vs System Two, RDC protocol)
+- Nắm chuẩn tích hợp model tại [Provider Interoperability](./architecture/provider-interop.md)
+- Quản lý bộ nhớ và context tại [Context & Memory Architecture](./architecture/context-memory.md)
+- Tìm hiểu các Domain Packs chuyên biệt: [Engineering Pack](./domains/engineering.md), [Research Pack](./domains/research.md), [Personal Pack](./domains/personal.md)
 
 ### 3. Kỹ Sư An Ninh & Platform (Security & Platform Engineers)
 Trọng tâm: Trust Boundaries, Exact-Payload Approvals, Sandboxing, Secrets.
-- Xem [Mô Hình Đe Dọa (Threat Model)](file:///Users/mac/Project/AgentHub/Custos/docs/security/threat-model.md)
-- Xem [Mô Hình Quyền Hạn (Capability Model)](file:///Users/mac/Project/AgentHub/Custos/docs/security/capability-model.md)
-- Xem [Quyền Riêng Tư & Dữ Liệu (Privacy)](file:///Users/mac/Project/AgentHub/Custos/docs/security/privacy.md)
-- Xem [Triển Khai Local-First & Sandbox](file:///Users/mac/Project/AgentHub/Custos/docs/architecture/deployment.md)
+- Xem [Mô Hình Đe Dọa (Threat Model)](./security/threat-model.md)
+- Xem [Mô Hình Quyền Hạn (Capability Model)](./security/capability-model.md)
+- Xem [Quyền Riêng Tư & Dữ Liệu (Privacy)](./security/privacy.md)
+- Xem [Triển Khai Local-First & Sandbox](./architecture/deployment.md)
 
 ### 4. Product Managers, QA & Contributors
-Trọng tâm: Định vị sản phẩm, Invariants, Lộ trình, Kiểm thử, Đóng góp.
-- Đọc [Bản Sắc Sản Phẩm](file:///Users/mac/Project/AgentHub/Custos/docs/product/identity.md) và [Phạm Vi Sản Phẩm (Scope & MVP)](file:///Users/mac/Project/AgentHub/Custos/docs/product/scope.md)
-- Xem [Capability Map](file:///Users/mac/Project/AgentHub/Custos/docs/product/capability-map.md)
-- Xem [Thuật Ngữ Cốt Lõi](file:///Users/mac/Project/AgentHub/Custos/docs/reference/concepts.md) và [Nguyên Tắc & Bất Biến](file:///Users/mac/Project/AgentHub/Custos/docs/reference/invariants.md)
-- Xem [Lộ Trình 16 Tuần](file:///Users/mac/Project/AgentHub/Custos/docs/development/roadmap.md) và [Kiến Trúc Kiểm Thử](file:///Users/mac/Project/AgentHub/Custos/docs/development/testing.md)
-- Tham khảo hướng dẫn đóng góp tại [CONTRIBUTING.md](file:///Users/mac/Project/AgentHub/Custos/CONTRIBUTING.md)
+Trọng tâm: Định vị sản phẩm, Invariants, Lộ trình, Kiểm thử.
+- Đọc [Bản Sắc Sản Phẩm](./product/identity.md) và [Phạm Vi Sản Phẩm (Scope & MVP)](./product/scope.md)
+- Xem [Capability Map](./product/capability-map.md)
+- Xem [Thuật Ngữ Cốt Lõi](./reference/concepts.md) và [Nguyên Tắc & Bất Biến](./reference/invariants.md)
+- Xem [Lộ Trình 16 Tuần](./development/roadmap.md) và [Kiến Trúc Kiểm Thử](./development/testing.md)
+
+### 5. Đội Ngũ Phát Triển (Internal Dev Docs)
+Trọng tâm: Phối hợp nội bộ giữa Vĩ (AI Engineer) & Trường (Software Engineer), quy trình Git workflow, tiến độ sprint.
+- Xem [Trung Tâm Điều Phối Dev Docs](../dev_docs/README.md)
+- Xem [Tiến Độ Sprint Thực Tế](../dev_docs/SPRINT_STATUS.md)
+- Xem [Quy Định Vibecoding Cho AI Assistants](../AGENTS.md)
 
 ---
 
-## 🗂️ Mục Lục Hệ Thống Tài Liệu (Documentation Directory)
+## 🗂️ Mục Lục Hệ Thống Tài Liệu Kỹ Thuật (Canonical Docs Directory)
 
 ```text
 docs/
 ├── 00-start-here.md                 # Tài liệu này (Bản đồ đọc & định hướng)
 │
 ├── product/                         # Nền tảng và định vị sản phẩm
+
 │   ├── identity.md                  # Bản sắc, persona, JTBD, lợi thế cốt lõi, non-goals
 │   ├── scope.md                     # Phạm vi, release horizons (H1/H2/H3), MVP Definition of Done
 │   └── capability-map.md            # Bản đồ năng lực 6 miền & bảng ưu tiên tính năng

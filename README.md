@@ -13,7 +13,6 @@
 [![Core: Rust](https://img.shields.io/badge/Core-Rust%201.82+-dea584.svg)](docs/development/codebase.md)
 [![Topology: Local-First](https://img.shields.io/badge/Topology-Local--First%20Daemon-success.svg)](docs/architecture/deployment.md)
 [![Status: Early Development](https://img.shields.io/badge/Status-Early%20Development-purple.svg)](docs/development/roadmap.md)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 <br />
 
@@ -47,7 +46,6 @@
 - [16-Week Delivery Roadmap](#-16-week-delivery-roadmap)
 - [Complete Documentation Directory](#-complete-documentation-directory)
 - [Quick Start](#-quick-start)
-- [Contributing & Security](#-contributing--security)
 - [License](#-license)
 
 ---
@@ -428,13 +426,6 @@ cargo check --workspace
 # Run all unit and contract tests
 cargo test --workspace
 ```
-
----
-
-## 🤝 Contributing & Security
-
-- **Contributing:** Please read our [Contribution Guidelines](CONTRIBUTING.md) and [Naming Conventions](docs/reference/naming.md) before opening pull requests.
-- **Security:** To report security issues responsibly, please follow the instructions in [SECURITY.md](SECURITY.md).
 
 ---
 
