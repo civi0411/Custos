@@ -294,9 +294,22 @@ Review [AGENTS.md](AGENTS.md) and [dev_docs/README.md](dev_docs/README.md) befor
 
 ---
 
+## 👥 Core Team & Authors
+
+- **Trần Chí Vĩ** — Systems Architecture, Kernel & Runtime Engineering (`custosd`, State Machine, Gateway, Persistence)
+- **Nguyễn Đinh Nhật Trường** — Lead UX/UI, Human-in-the-Loop Interaction & Client Applications (`custos` CLI, Desktop Shell, VS Code Extension)
+
+---
+
 ## License
 
 Custos is open-source software dual-licensed under the **MIT License** and **Apache License 2.0**.  
 See the [LICENSE](LICENSE) file for complete details.
 
-Copyright (c) 2026 Vi. All rights reserved.
+Copyright (c) 2026 Nguyễn Đinh Nhật Trường, Trần Chí Vĩ. All rights reserved.
+
+---
+
+<div align="center">
+  <sub>Built with uncompromising discipline for human sovereignty, local autonomy, and verifiable software engineering.</sub>
+</div>

@@ -1,7 +1,10 @@
 # Custos Documentation — Start Here
 
 > **Status:** Canonical Baseline v4.0-draft  
-> **Last Updated:** 2026-09-21  
+> **Last Updated:** 2026-09-22  
+> **Authors & Maintainers:**  
+> - **Trần Chí Vĩ** — Systems Architecture & Core Runtime Lead  
+> - **Nguyễn Đinh Nhật Trường** — Lead UX/UI & Client Applications (CLI / Desktop / VS Code)  
 > **Scope:** Architecture, Product, Implementation, Governance
 
 Welcome to the official technical documentation for **Custos** — Human-Centered Agentic Work Runtime.
@@ -40,6 +43,14 @@ Focus: Trust Boundaries, Exact-Payload Approvals, Sandboxing, Secrets.
 - Review [Privacy & Data Governance](./security/privacy.md)
 - Inspect local deployment and isolation at [Deployment Architecture](./architecture/deployment.md)
 
+### UI/UX & Client Applications Engineers (CLI / Desktop / VS Code)
+Focus: Experience Plane, IPC/JSON-RPC communication, Exact-Payload Approval UX, CLI Command architecture.
+- Review Kickoff Guide: [UX/UI & CLI Kickoff Guide](../UX_UI_CLI_KICKOFF.md)
+- Review Interface Architecture at [Layer 7: Interface Layer & Experience Plane](./architecture/overview.md)
+- Review IPC Contracts at [Internal Communication & Protocols](./architecture/communication.md)
+- Review Task Lifecycle and Approval Gates at [Task Lifecycle](./architecture/task-lifecycle.md) and [Capability Model](./security/capability-model.md)
+- Review CLI Command Naming at [Naming Conventions](./reference/naming.md)
+
 ### Product Managers, QA & Contributors
 Focus: Product Identity, Invariants, Roadmap, Testing Architecture.
 - Read [Product Identity](./product/identity.md) and [Product Scope & MVP DoD](./product/scope.md)
@@ -48,7 +59,7 @@ Focus: Product Identity, Invariants, Roadmap, Testing Architecture.
 - Review [16-Week Roadmap](./development/roadmap.md) and [Testing Architecture](./development/testing.md)
 
 ### Development Team & AI Collaboration
-Focus: Internal collaboration between Vi (AI Engineer) & Truong (Software Engineer), Git workflow, sprint deliverables.
+Focus: Internal collaboration between Vi (Core & AI Lead) & Truong (Software & Client Lead), Git workflow, sprint deliverables.
 - Review [Internal Coordination Hub](../dev_docs/README.md)
 - Review [Active Sprint Status](../dev_docs/SPRINT_STATUS.md)
 - Review [AI Assistant Vibecoding Rules](../AGENTS.md)
