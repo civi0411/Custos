@@ -12,4 +12,8 @@ custos-persistence-sqlite = { workspace = true }
 clap = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
+indicatif = "0.17"
+console = "0.15"
+dialoguer = "0.11"
+similar = { version = "2.4", features = ["inline"] }
 
