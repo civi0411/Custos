@@ -479,13 +479,6 @@ Before contributing, review `AGENTS.md`, `CONTRIBUTING.md`, the relevant archite
 
 ---
 
-## 👥 Core Team & Authors
-
-- **Trần Chí Vĩ** — Systems Architecture, Kernel & Runtime Engineering (`custosd`, State Machine, Gateway, Persistence)
-- **Nguyễn Đinh Nhật Trường** — Lead UX/UI, Human-in-the-Loop Interaction & Client Applications (`custos` CLI, Desktop Shell, VS Code Extension)
-
----
-
 ## License
 
 Custos is licensed under the Apache License 2.0.
