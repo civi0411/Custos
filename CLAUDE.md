@@ -13,4 +13,8 @@
 3. **Pure SE Mode:** When working on DB (`persistence-sqlite`), API (`local-api`), or CLI (`custos-cli`), behave strictly as a backend systems engineer. Treat AI responses as arbitrary JSON payloads.
 4. **Zero Bloat:** Do not add third-party orchestrators (LangChain, LangGraph, etc.) or unsolicited Rust dependencies.
 5. **Production Error Handling:** No `.unwrap()` or `.expect()` in non-test Rust code. Use `thiserror` and return `Result<T, E>`.
-
+6. **Workspace Structure:**
+   - `docs/`: Master Architecture. Do not modify without explicit permission.
+   - `dev_docs/`: Task tracking & progress reports (`dev_docs/vi/reports/`, `dev_docs/truong/reports/`).
+7. **Git Flow:** The project strictly uses a 4-branch GitHub Flow (`main`, `dev`, `vi`, `truong`). Never create or reference a `report` branch. Only commit to `vi` or `truong` and open PRs to `dev`.
+8. **Git Operations:** You MUST explicitly ask the user for permission before running mutating git commands like `git add`, `git commit`, or `git push`. Never auto-commit.

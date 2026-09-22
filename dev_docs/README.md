@@ -70,23 +70,28 @@ Vi and Truong meet at the contract and verification boundaries. Neither works in
 
 ---
 
-## 2. Dedicated 5-Branch Git Workflow
+## 2. PR-Driven 4-Branch Git Workflow & Workspace Structure
 
-To prevent merge conflicts, keep commit histories clean, and enable asynchronous reviews, the repository uses a dedicated 5-branch strategy:
+To prevent merge conflicts, keep commit histories clean, and enable asynchronous reviews, the repository uses a dedicated 4-branch strategy and a strict 3-pillar documentation layout:
 
+### Workspace Structure
+1. **`docs/`**: **Master Architecture & Specifications.** The overarching blueprint. Highly stable. Any changes here require discussion and alignment between Vi and Truong.
+2. **`dev_docs/`**: **Task Architecture & Implementation.** Localized workspaces for individual task tracking and engineering specs (e.g., `dev_docs/vi/` and `dev_docs/truong/`). Includes progress reports in `dev_docs/vi/reports/` and `dev_docs/truong/reports/`.
+
+### Branch Strategy
 | Branch | Purpose | Primary Operator | Invariants |
 |---|---|---|---|
-| `main` | **Production Release** | Both | Cleanest branch. Contains only thoroughly tested, production-ready code and finalized documentation. |
-| `dev` | **Integration & System Test** | Both | Integration branch where `vi` and `truong` merge feature code for full workspace testing (`cargo test --workspace`). |
+| `main` | **Production Release** | Both | Cleanest branch. Contains only thoroughly tested, production-ready code. |
+| `dev` | **Integration & System Test** | Both | Integration branch where `vi` and `truong` merge feature code for full workspace testing. |
 | `vi` | **Vi's Feature Branch** | Vi | AI domain traits, prompts, cognitive runtime, and sidecar implementations. |
 | `truong` | **Truong's Feature Branch** | Truong | Backend systems, SQLite storage, CLI commands, and capability gateway sandboxing. |
-| `report` | **Documentation & Status Sync** | Both | Dedicated branch to commit sprint reports, design notes, and reviews in `dev_docs/` **without polluting the `dev` code commit history**. |
 
 ### Daily Operational Workflow:
-1. **Feature Implementation:** Vi develops on `vi`; Truong develops on `truong`.
-2. **Status & Documentation Sync:** Switch to `report`, write updates into `dev_docs/vi/reports/` or `dev_docs/truong/reports/`, commit, and push for peer review.
-3. **Integration Merge:** Once a milestone is ready, open a PR / merge from `vi` or `truong` into `dev`. Run full regression tests on `dev`.
-4. **Production Release:** Once `dev` passes all verification suites and proves stable, merge `dev` into `main`.
+1. **Sync:** Pull the latest `dev` branch to integrate remote changes before working.
+2. **Feature Implementation:** Vi develops strictly on `vi`; Truong develops strictly on `truong`.
+3. **Status & Documentation Sync:** Write daily/weekly updates directly into `dev_docs/vi/reports/` or `dev_docs/truong/reports/`. Commit these reports *alongside your code* on your feature branch (`vi` or `truong`).
+4. **Integration Merge:** Once a milestone or report is ready, open a Pull Request (PR) from your feature branch into `dev`. Peer review happens on the PR.
+5. **Production Release:** Once `dev` passes all verification suites and proves stable, merge `dev` into `main`.
 
 ---
 

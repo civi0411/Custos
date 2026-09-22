@@ -25,16 +25,20 @@
 
 ---
 
-## 2. Directory Structure
+## 2. Workspace Purpose & Directory Structure
+
+This space (`dev_docs/truong/`) serves two distinct purposes:
+1. **Domain Architecture (`notes/`)**: The localized technical specs, database schemas, and architectural notes specific to the Backend and Platform modules.
+2. **Development Reports (`reports/`)**: The chronological record of daily sprint progress, features developed, and syncs.
 
 - `notes/`: Technical architecture notes, database schema designs, I/O benchmarks, sandbox configurations.
-- `reports/`: Daily sprint reports and sync logs committed to the `report` branch for peer review.
+- `reports/`: Daily sprint reports and sync logs committed directly to the feature branch.
 
 ---
 
 ## 3. Standard Daily Report Template (`reports/YYYY-MM-DD.md`)
 
-When committing daily progress to the `report` branch, use this format:
+When committing daily progress, write your report to `reports/YYYY-MM-DD.md` in this directory, commit directly to the `truong` branch alongside your code, and open a Pull Request to `dev`:
 
 ```markdown
 # Truong Progress Report — YYYY-MM-DD

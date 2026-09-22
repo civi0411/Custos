@@ -1,8 +1,8 @@
 # CUSTOS — AI VIBECODING RULES (SSOT)
 
-> **Single Source of Truth (SSOT)** for all AI Assistants (Cursor, Claude Code, Antigravity, Codex, Windsurf, Copilot).  
+> **Single Source of Truth (SSOT)** for all AI Assistants (Cursor, Claude Code, Antigravity, Codex, Copilot, Windsurf).  
 > **Core Mandate:** Prevent hallucinations, architectural boundary violations, and security policy breaches.  
-> Detailed team collaboration model: see [dev_docs/README.md](dev_docs/README.md) | Progress tracking: see [dev_docs/SPRINT_STATUS.md](dev_docs/SPRINT_STATUS.md).
+> Detailed team collaboration model: see [dev_docs/README.md](dev_docs/README.md).
 
 ---
 
@@ -57,4 +57,9 @@ When assisting with Database (`persistence-sqlite`), API (`local-api`), CLI (`cu
 - **Prohibited:** Never use `.unwrap()` or `.expect()` in non-test Rust production code.
 - Always define typed domain errors using `thiserror` for each crate and return `Result<T, CrateError>`.
 
-
+### 7. Workspace & Git Strategy Invariants
+- **2-Pillar Workspace:**
+  - `docs/`: Macro architecture (Immutable, do not edit without explicit human authorization).
+  - `dev_docs/`: Micro architecture, localized task tracking for humans (`dev_docs/vi/` and `dev_docs/truong/`). Includes progress reports at `dev_docs/[user]/reports/`.
+- **Git Flow:** The project strictly uses a 4-branch GitHub Flow (`main`, `dev`, `vi`, `truong`). Never create or reference a `report` branch. Do not commit code directly to `dev` or `main`; always commit to the personal feature branch (`vi` or `truong`) and open a Pull Request.
+- **Git Operations:** **WARNING**: AI Agents MUST explicitly ask for the user's permission before running ANY mutating git commands (`git add`, `git commit`, `git push`, `git rebase`, etc.). NEVER auto-commit without explicit confirmation from the human operator.
