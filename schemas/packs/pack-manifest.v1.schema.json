@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://custos.dev/schemas/packs/pack-manifest.v1.schema.json",
+  "title": "PackManifest",
+  "description": "Manifest declaring a Domain Pack (Engineering, Research, Personal)",
+  "type": "object",
+  "required": ["name", "version", "display_name", "description"],
+  "properties": {
+    "name": { "type": "string" },
+    "version": { "type": "string" },
+    "display_name": { "type": "string" },
+    "description": { "type": "string" },
+    "author": { "type": "string" },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description"],
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "workflows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "path"],
+        "properties": {
+          "id": { "type": "string" },
+          "path": { "type": "string" }
+        }
+      }
+    },
+    "policies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "path"],
+        "properties": {
+          "id": { "type": "string" },
+          "path": { "type": "string" }
+        }
+      }
+    },
+    "verifiers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "path"],
+        "properties": {
+          "id": { "type": "string" },
+          "path": { "type": "string" }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

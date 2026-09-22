@@ -2,10 +2,10 @@
 //!
 //! Wires together the persistence store, policy engine, gateway, and services.
 
+use custos_authority_engine::AuthorityEngine;
 use custos_capability_gateway::DeterministicGate;
 use custos_core_domain::DomainError;
 use custos_persistence_sqlite::SqliteTaskStore;
-use custos_policy_engine::DemoPolicy;
 use custos_task_kernel::{SpanService, TaskService};
 use std::sync::Arc;
 
@@ -13,6 +13,7 @@ use std::sync::Arc;
 pub struct CustosRuntime {
     pub task_service: Arc<TaskService>,
     pub span_service: Arc<SpanService>,
+    pub authority: Arc<AuthorityEngine>,
     pub gateway: Arc<DeterministicGate>,
 }
 
@@ -21,12 +22,13 @@ impl CustosRuntime {
         let store = Arc::new(SqliteTaskStore::new_in_memory()?);
         let task_service = Arc::new(TaskService::new(store.clone()));
         let span_service = Arc::new(SpanService::new(store));
-        let policy = Arc::new(DemoPolicy);
-        let gateway = Arc::new(DeterministicGate::new(policy));
+        let authority = Arc::new(AuthorityEngine::default());
+        let gateway = Arc::new(DeterministicGate::new(authority.clone()));
 
         Ok(Self {
             task_service,
             span_service,
+            authority,
             gateway,
         })
     }

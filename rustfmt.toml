@@ -1,0 +1,7 @@
+edition = "2021"
+newline_style = "Unix"
+use_small_heuristics = "Default"
+reorder_imports = true
+reorder_modules = true
+remove_nested_parens = true
+max_width = 100

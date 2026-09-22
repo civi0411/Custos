@@ -1,0 +1,14 @@
+id: "triage.v1"
+name: "Engineering Triage Context Recipe"
+max_tokens: 16000
+sources:
+  - type: "workspace_files"
+    glob: "Cargo.toml,crates/**/src/*.rs,apps/**/src/*.rs"
+    priority: 100
+  - type: "git_diff"
+    priority: 90
+  - type: "compiler_errors"
+    priority: 80
+ranking:
+  strategy: "relevance_and_recency"
+  deduplicate: true
