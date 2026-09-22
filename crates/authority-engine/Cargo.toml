@@ -1,18 +1,17 @@
 [package]
-name = "custos-capability-gateway"
+name = "custos-authority-engine"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Single point of side-effect execution with deterministic gating"
+description = "Authority, capability grants, human approvals, and execution permits for Custos"
 
 [dependencies]
 custos-core-domain = { workspace = true }
-custos-authority-engine = { workspace = true }
-async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }
 tracing = { workspace = true }
-
-[dev-dependencies]
 tokio = { workspace = true }
