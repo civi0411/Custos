@@ -6,6 +6,8 @@
 
 *Vibe coding, research, and personal workflows across the models you choose — with durable state, controlled execution, cost-aware context, and verifiable outcomes.*
 
+[ English ] | [ Tiếng Việt ](docs/i18n/README.vi.md) | [ Deutsch ](docs/i18n/README.de.md) | [ 简体中文 ](docs/i18n/README.zh.md)
+
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![Canonical Specification](https://img.shields.io/badge/Specification-v4.0--draft-blue.svg)](docs/canonical-specification.md)
 [![Core: Rust](https://img.shields.io/badge/Core-Rust%201.82+-dea584.svg)](docs/architecture/overview.md)
@@ -490,5 +492,6 @@ Custos is licensed under the Apache License 2.0.
 
 *Your work style, encoded as governed agentic workflows.*
 
+<sub>Built with uncompromising discipline for human sovereignty, local autonomy, and verifiable software engineering.</sub>
 
 </div>
