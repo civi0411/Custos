@@ -11,3 +11,5 @@ custos-task-kernel = { workspace = true }
 custos-persistence-sqlite = { workspace = true }
 clap = { workspace = true }
 tokio = { workspace = true }
+serde_json = { workspace = true }
+

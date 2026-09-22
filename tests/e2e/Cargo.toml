@@ -1,0 +1,22 @@
+[package]
+name = "custos-tests-e2e"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+custos-core-domain = { workspace = true }
+custos-task-kernel = { workspace = true }
+custos-persistence-sqlite = { workspace = true }
+custos-artifact-store = { workspace = true }
+custos-context-compiler = { workspace = true }
+custos-repo-intelligence = { workspace = true }
+custos-provider-sdk = { workspace = true }
+custos-evidence-engine = { workspace = true }
+custos-capability-gateway = { workspace = true }
+custos-authority-engine = { workspace = true }
+custos-adapter-provider-fake = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
