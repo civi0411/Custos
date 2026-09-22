@@ -2,9 +2,7 @@
 
 > **Status:** Canonical Baseline v4.0-draft  
 > **Last Updated:** 2026-09-22  
-> **Authors & Maintainers:**  
-> - **Trần Chí Vĩ** — Systems Architecture & Core Runtime Lead  
-> - **Nguyễn Đinh Nhật Trường** — Lead UX/UI & Client Applications (CLI / Desktop / VS Code)  
+> **Maintainer:** Custos Core Team  
 > **Scope:** Architecture, Product, Implementation, Governance
 
 Welcome to the official technical documentation for **Custos** — Human-Centered Agentic Work Runtime.
