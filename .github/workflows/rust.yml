@@ -1,4 +1,4 @@
-name: Custos CI
+name: Rust CI
 
 on:
   push:
@@ -7,8 +7,8 @@ on:
     branches: [ main, dev ]
 
 jobs:
-  check-and-test:
-    name: Check, Lint & Test
+  check-lint-test:
+    name: Lint & Test (Rust)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
