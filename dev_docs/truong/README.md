@@ -1,42 +1,65 @@
-# Truong's Workspace (Platform & Software Engineering Lead)
+# Truong's Workspace — Core Platform & Security Lead
 
-> **Role:** Platform & Systems Engineer  
-> **Primary Modules:** `crates/persistence-sqlite`, `crates/capability-gateway`, `crates/task-kernel`, `crates/workflow-runtime`, `crates/local-api`, `crates/evidence-engine`, `apps/custos-cli`, `apps/custosd`.  
-> **Language & Invariants:** 100% Rust & SQL. Zero unwrap/expect in production code. Treat AI reasoning strictly as arbitrary JSON payloads requiring validation, durable persistence, and OS sandbox verification.
+> **Role:** Core Platform & Security Lead  
+> **Core Direction:** Builds the trusted runtime, durable Task Kernel, persistence, capability security, execution isolation, APIs, recovery, and release infrastructure.  
+> **Language & Invariants:** 100% Rust & SQL. Zero unwrap/expect in production code. Systems & Data First: Treat all decisions from the AI runtime strictly as untrusted JSON payloads requiring validation, durable SQLite persistence, and OS sandbox verification before command execution.
 
 ---
 
 ## 1. Core Focus Areas
 
-1. **Durable Persistence (SQLite):**
+1. **Durable Persistence (SQLite WAL):**
    - SQLite WAL mode, single-writer multi-reader discipline, atomic step transactions.
    - Idempotent schema migrations for `tasks`, `spans`, `domain_events`, and `outbox`.
    - Typed CRUD operations consuming domain models from `crates/core-domain`.
-2. **Local API & Daemon (`custosd` & `custos-cli`):**
+2. **Local API & Daemon Runtime (`custosd` & `custos-cli`):**
    - Developer CLI using `clap` (`custos run`, `custos status`, `custos pause`, `custos resume`).
    - Axum local IPC HTTP daemon server with structured error envelopes.
-3. **Capability Gateway & Sandboxing:**
+3. **Capability Gateway & OS Sandboxing:**
    - OS-level process containment: macOS Seatbelt and Linux Bubblewrap (`bwrap`).
    - Ephemeral Git worktree lifecycle management.
    - Enforce single-use `ExecutionPermit` validation and receipt generation before/after command execution.
-4. **Crash Recovery & Supervison:**
+4. **Authority Engine & Security Policy:**
+   - Evaluates risk tiers (Low/Med allow, High human approval, Critical deny).
+   - Enforces exact-payload cryptographic hashes before granting execution permits.
+5. **Crash Recovery & Supervised Process Execution:**
    - Outbox pattern dispatcher and lease heartbeat monitoring.
    - Resilient recovery of uncommitted or pending tasks across daemon restarts.
 
 ---
 
-## 2. Workspace Purpose & Directory Structure
+## 2. Code Ownership & Repository Layout
 
-This space (`dev_docs/truong/`) serves two distinct purposes:
-1. **Domain Architecture (`notes/`)**: The localized technical specs, database schemas, and architectural notes specific to the Backend and Platform modules.
-2. **Development Reports (`reports/`)**: The chronological record of daily sprint progress, features developed, and syncs.
+```text
+crates/
+├── persistence-sqlite/         # SQLite WAL connection pool, migrations, and repositories
+├── capability-gateway/         # OS-level sandboxing (Seatbelt/bwrap) and permit gates
+├── authority-engine/           # Security policy evaluation and approval workflows
+├── task-kernel/                # Core Task state machine, CQRS engine, and event store
+├── local-api/                  # Axum IPC daemon HTTP endpoints and JSON-RPC
+├── evidence-engine/            # Objective citation, hash, and diff verifiers
+└── artifact-store/             # Content-addressed filesystem artifact storage
 
-- `notes/`: Technical architecture notes, database schema designs, I/O benchmarks, sandbox configurations.
-- `reports/`: Daily sprint reports and sync logs committed directly to the feature branch.
+apps/
+├── custos-cli/                 # Command-line interface binary (`clap`)
+└── custosd/                    # Background daemon supervisor binary
+
+tests/
+├── e2e/                        # End-to-end integration and crash recovery test suites
+└── contract/                   # Schema compatibility and persistence contract tests
+```
 
 ---
 
-## 3. Standard Daily Report Template (`reports/YYYY-MM-DD.md`)
+## 3. Workspace Purpose & Directory Structure
+
+This space (`dev_docs/truong/`) serves two distinct purposes:
+1. **Domain Architecture (`notes/`)**: Localized technical specifications, database schema designs, I/O benchmarks, and sandbox configurations.
+2. **Development Reports (`reports/`)**: Chronological record of daily sprint progress and sync logs committed directly to branch `truong`.
+
+---
+
+## 4. Standard Daily Report Template (`reports/YYYY-MM-DD.md`)
 
 When committing daily progress, write your report to `reports/YYYY-MM-DD.md` in this directory, commit directly to the `truong` branch alongside your code, and open a Pull Request to `dev`:
 
@@ -44,8 +67,8 @@ When committing daily progress, write your report to `reports/YYYY-MM-DD.md` in 
 # Truong Progress Report — YYYY-MM-DD
 
 ## 1. Accomplished Today
-- [x] Task 1 description (Crate: `persistence-sqlite`)
-- [x] Task 2 description (Crate: `custos-cli`)
+- [x] Task description (Crate: `persistence-sqlite`)
+- [x] Task description (Crate: `custos-cli`)
 
 ## 2. Tests & Verification
 - Unit tests added: `cargo test -p custos_persistence_sqlite`
@@ -55,24 +78,7 @@ When committing daily progress, write your report to `reports/YYYY-MM-DD.md` in 
 - Currently implementing: Outbox dispatcher loop.
 - Tomorrow: Connect CLI task submission to Axum daemon.
 
-## 4. Blockers & Questions for Vi
-- Question regarding `TaskStatus` serialization format in JSON events.
+## 4. Blockers & Questions for Vi / Vinh
+- Question for Vi regarding `TaskStatus` serialization format in JSON events.
+- Question for Vinh regarding worker coordination event projection schema.
 ```
-
----
-
-## 4. Core Infrastructure & Runtime Engine (Completed)
-
-- **Database Persistence:** Deployed `crates/persistence-sqlite` featuring a Connection Pool and WAL mode, ensuring atomic transactions. SQL Migrations are finalized.
-- **Local API & CLI:** Developed `apps/custos-cli` integrated with `clap`, supporting the complete task lifecycle commands (`run`, `status`, `advance`, `cancel`). The local API core via `axum` is successfully wired.
-- **Durability & State Machine:** Successfully passed Crash Testing (`kill -9` recovery). All state transitions are durably event-sourced and survive abrupt process termination without data loss.
-- **Capability Gateway:** Established OS-level sandboxing (Seatbelt/bwrap) and strict authorization gates via `ExecutionPermit`.
-
----
-
-## 5. Upcoming Workload (UX & Integrations)
-
-- Integrate `indicatif` to display real-time progress bars and spinners in the CLI.
-- Build an intuitive, Git syntax-highlighted Approval Prompt for safe Exact-Payload diff reviews.
-- Configure and wire the VS Code Extension (TypeScript) to communicate with the Custos Daemon via JSON-RPC.
-- Bootstrap the Desktop Webview to render rich Human Attention Packets.
