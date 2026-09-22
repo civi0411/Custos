@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://custos.dev/schemas/protocol/continuation-packet.v1.schema.json",
+  "title": "ContinuationPacket",
+  "description": "Cross-span and cross-provider continuation state packet with SHA-256 integrity hash",
+  "type": "object",
+  "required": [
+    "task_id",
+    "from_span",
+    "to_span",
+    "provider",
+    "model",
+    "task_summary",
+    "current_state",
+    "integrity_hash",
+    "created_at"
+  ],
+  "properties": {
+    "task_id": { "type": "string" },
+    "from_span": { "type": "integer", "minimum": 0 },
+    "to_span": { "type": "integer", "minimum": 0 },
+    "provider": { "type": "string" },
+    "model": { "type": "string" },
+    "task_summary": { "type": "string" },
+    "current_state": { "type": "object" },
+    "integrity_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

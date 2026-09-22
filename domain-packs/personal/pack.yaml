@@ -1,0 +1,6 @@
+name: personal
+version: "0.1.0"
+display_name: "Personal Assistant Domain Pack"
+description: "Domain pack for personal task automation, daily logging, and calendar integration."
+author: "Custos Team"
+status: "scaffold"

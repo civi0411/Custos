@@ -1,0 +1,20 @@
+id: "task.engineering.bug-fix"
+name: "Autonomous Bug Fix with Verification"
+description: "Diagnose a reproducible failure or bug report, plan an atomic patch, implement change, and verify via test suite."
+default_workflow: "bug-fix.v1"
+required_capabilities:
+  - "repo.read"
+  - "repo.edit"
+  - "compiler.check"
+budget:
+  max_spans: 20
+  max_tokens: 80000
+  max_cost_cents: 300
+risk_level: "medium"
+evidence_requirements:
+  - kind: "test_failure_reproduced"
+    required: true
+  - kind: "compiler_check_passed"
+    required: true
+  - kind: "regression_test_passed"
+    required: true
