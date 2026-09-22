@@ -175,41 +175,7 @@ sequenceDiagram
 
 ---
 
-## Initial Engineering Workflows
 
-Custos proves its core runtime via two foundational workflows before expanding:
-
-1. **`repo_explain` (Read-Only Comprehension):**
-   - Ingests repository structure, symbols, and dependencies without mutations.
-   - Compiles targeted context slices for reasoning providers.
-   - Requires providers to return exact file and line range citations.
-   - Independent citation verifiers validate that cited paths and symbols exist in the repository snapshot.
-2. **`bug_fix` (Controlled Mutation):**
-   - Reproduces or diagnoses failures using isolated diagnostic receipts.
-   - Executes code modifications exclusively inside an ephemeral Git worktree.
-   - Requires human approval for high-risk mutations or package additions.
-   - Executes independent test runners (`cargo test`, `pytest`) to verify the fix.
-   - Transitions to `SUCCEEDED` only when all closure conditions are met.
-
----
-
-## Project Status
-
-Custos is in active early development. The implementation follows a strict vertical slice strategy:
-
-| Subsystem | Status | Description |
-|---|---|---|
-| **Core Domain Models** | Implemented | Pure Rust domain entities, state types, and zero-I/O invariants. |
-| **Task Kernel & State Machine** | In Progress | State transitions, leases, idempotency, event dispatch. |
-| **Durable Persistence** | In Progress | SQLite WAL connection pool, atomic step transactions, outbox schema. |
-| **CLI & Local Daemon** | In Progress | `custos-cli` commands (`run`, `status`) and Axum local IPC daemon. |
-| **Workspace Intelligence** | Designed | Tree-sitter AST parsing, ripgrep integration, ContextPack compiler. |
-| **Capability Gateway & Sandboxing** | Designed | macOS Seatbelt, Linux Bubblewrap (`bwrap`), Git worktree isolation. |
-| **Evidence Engine & Verifiers** | Designed | Independent verifier runners, citation checkers, closure rules. |
-| **Provider & Judgment Adapters** | Designed | `ProviderPort` trait, `FakeProvider` harness, pluggable System One. |
-| **Domain Packs** | Designed | Engineering Pack v1 planned first; Research and Personal planned next. |
-
----
 
 ## Repository Structure
 

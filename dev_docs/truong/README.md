@@ -57,11 +57,18 @@ When committing daily progress to the `report` branch, use this format:
 
 ---
 
-## 4. Active Sprint 1 Checklist
+## 4. Core Infrastructure & Runtime Engine (Completed)
 
-- [ ] Initialize SQLite connection pool with WAL mode in `crates/persistence-sqlite`.
-- [ ] Implement migrations for `tasks`, `spans`, `domain_events`, and `outbox`.
-- [ ] Implement `insert_task`, `get_task`, and `append_event`.
-- [ ] Build CLI commands `custos run "<description>"` and `custos status <id>` in `apps/custos-cli`.
-- [ ] Implement daemon endpoint `POST /v1/tasks` in `crates/local-api`.
-- [ ] Run crash test verifying task persistence across `kill -9` restart.
+- **Database Persistence:** Deployed `crates/persistence-sqlite` featuring a Connection Pool and WAL mode, ensuring atomic transactions. SQL Migrations are finalized.
+- **Local API & CLI:** Developed `apps/custos-cli` integrated with `clap`, supporting the complete task lifecycle commands (`run`, `status`, `advance`, `cancel`). The local API core via `axum` is successfully wired.
+- **Durability & State Machine:** Successfully passed Crash Testing (`kill -9` recovery). All state transitions are durably event-sourced and survive abrupt process termination without data loss.
+- **Capability Gateway:** Established OS-level sandboxing (Seatbelt/bwrap) and strict authorization gates via `ExecutionPermit`.
+
+---
+
+## 5. Upcoming Workload (UX & Integrations)
+
+- Integrate `indicatif` to display real-time progress bars and spinners in the CLI.
+- Build an intuitive, Git syntax-highlighted Approval Prompt for safe Exact-Payload diff reviews.
+- Configure and wire the VS Code Extension (TypeScript) to communicate with the Custos Daemon via JSON-RPC.
+- Bootstrap the Desktop Webview to render rich Human Attention Packets.

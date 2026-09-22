@@ -56,11 +56,9 @@ When committing daily progress to the `report` branch, use this format:
 
 ---
 
-## 4. Active Sprint 1 Checklist
+## 4. Domain & AI Logic Deliverables (Completed)
 
-- [ ] Complete core struct definitions for `Task`, `TaskStatus`, and `DomainEvent` in `crates/core-domain`.
-- [ ] Define `ProviderPort` trait in `crates/provider-sdk`.
-- [ ] Implement deterministic `FakeProvider` for the `repo_explain` vertical slice.
-- [ ] Implement Citation Verifier logic in `crates/evidence-engine`.
-- [ ] Initialize scaffold for `sidecars/python-judgment` (with `pyproject.toml` and `uv`).
-- [ ] Initialize scaffold for `sidecars/ts-claude-agent` (with `package.json` and `pnpm`).
+- **Core Domain Models:** Finalized `crates/core-domain` (Zero I/O), featuring immutable value objects: `Task`, `TaskStatus`, `DomainEvent`, `ActionIntent`, `Receipt`, `ExecutionPermit`.
+- **Evidence Engine (Verification):** Implemented `CitationVerifier` and `ExactMatchVerifier` to objectively validate task completion evidence.
+- **Provider Subsystem:** Completed `ProviderPort` trait and deterministic `FakeProvider` for reliable end-to-end testing.
+- **Sidecar Scaffolding:** Initialized isolated Sidecar structures for Python (`sidecars/python-judgment`) and TypeScript (`sidecars/ts-claude-agent`).
