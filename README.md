@@ -490,19 +490,12 @@ Before contributing, review `AGENTS.md`, `CONTRIBUTING.md`, the relevant archite
 
 Custos is licensed under the Apache License 2.0.
 
-<<<<<<< HEAD
+
 Copyright (c) 2026 Nguyễn Đinh Nhật Trường, Trần Chí Vĩ. All rights reserved.
 
----
+
 
 <div align="center">
   <sub>Built with uncompromising discipline for human sovereignty, local autonomy, and verifiable software engineering.</sub>
-=======
-<div align="center">
 
-**Custos — Guardian of Work**
-
-*Your work style, encoded as governed agentic workflows.*
-
->>>>>>> 1ebaac7d18ec1bb9c5d477daccebd08b270aa10d
 </div>
