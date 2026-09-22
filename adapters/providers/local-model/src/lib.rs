@@ -29,13 +29,13 @@ impl ModelProvider for LocalModelProvider {
     }
 
     async fn generate(&self, req: &ModelRequest) -> Result<ModelResponse, DomainError> {
-        Ok(ModelResponse {
-            content: format!(
+        Ok(ModelResponse::text(
+            format!(
                 "Stub response from {} for: {}",
                 self.provider_id, req.prompt
             ),
-            tokens_used: 42,
-            model_id: self.provider_id.clone(),
-        })
+            self.provider_id.clone(),
+            42,
+        ))
     }
 }
