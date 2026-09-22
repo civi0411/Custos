@@ -83,6 +83,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.104"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
+
+[[package]]
 name = "async-trait"
 version = "0.1.92"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -285,6 +291,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "custos-adapter-provider-fake"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "custos-core-domain",
+ "custos-provider-sdk",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "custos-adapter-provider-local-model"
 version = "0.1.0"
 dependencies = [
@@ -331,15 +350,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "custos-authority-engine"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "custos-core-domain",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "custos-capability-gateway"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "custos-authority-engine",
  "custos-core-domain",
- "custos-policy-engine",
  "serde",
  "serde_json",
  "thiserror",
+ "tokio",
  "tracing",
 ]
 
@@ -351,6 +386,7 @@ dependencies = [
  "custos-core-domain",
  "custos-persistence-sqlite",
  "custos-task-kernel",
+ "serde_json",
  "tokio",
 ]
 
@@ -372,6 +408,7 @@ dependencies = [
  "async-trait",
  "custos-core-domain",
  "serde",
+ "tokio",
 ]
 
 [[package]]
@@ -396,36 +433,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "custos-domain-pack-engineering"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "custos-core-domain",
- "custos-domain-pack-sdk",
- "serde",
-]
-
-[[package]]
-name = "custos-domain-pack-personal"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "custos-core-domain",
- "custos-domain-pack-sdk",
- "serde",
-]
-
-[[package]]
-name = "custos-domain-pack-research"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "custos-core-domain",
- "custos-domain-pack-sdk",
- "serde",
-]
-
-[[package]]
 name = "custos-domain-pack-sdk"
 version = "0.1.0"
 dependencies = [
@@ -442,6 +449,9 @@ dependencies = [
  "async-trait",
  "custos-core-domain",
  "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -498,17 +508,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "custos-policy-engine"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "custos-core-domain",
- "serde",
- "thiserror",
- "tracing",
-]
-
-[[package]]
 name = "custos-provider-sdk"
 version = "0.1.0"
 dependencies = [
@@ -517,6 +516,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -538,6 +538,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "tokio",
  "tracing",
 ]
 
@@ -545,8 +546,31 @@ dependencies = [
 name = "custos-tests-contract"
 version = "0.1.0"
 dependencies = [
+ "custos-adapter-provider-fake",
  "custos-core-domain",
+ "custos-provider-sdk",
  "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "custos-tests-e2e"
+version = "0.1.0"
+dependencies = [
+ "custos-adapter-provider-fake",
+ "custos-artifact-store",
+ "custos-authority-engine",
+ "custos-capability-gateway",
+ "custos-context-compiler",
+ "custos-core-domain",
+ "custos-evidence-engine",
+ "custos-persistence-sqlite",
+ "custos-provider-sdk",
+ "custos-repo-intelligence",
+ "custos-task-kernel",
+ "serde_json",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -566,11 +590,11 @@ dependencies = [
 name = "custosd"
 version = "0.1.0"
 dependencies = [
+ "custos-authority-engine",
  "custos-capability-gateway",
  "custos-core-domain",
  "custos-observability",
  "custos-persistence-sqlite",
- "custos-policy-engine",
  "custos-task-kernel",
  "tokio",
  "tracing",
@@ -1347,6 +1371,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
 dependencies = [
  "windows-link",
+]
+
+[[package]]
+name = "xshell"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e7290c623014758632efe00737145b6867b66292c42167f2ec381eb566a373d"
+dependencies = [
+ "xshell-macros",
+]
+
+[[package]]
+name = "xshell-macros"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32ac00cd3f8ec9c1d33fb3e7958a82df6989c42d747bd326c822b1d625283547"
+
+[[package]]
+name = "xtask"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "xshell",
 ]
 
 [[package]]

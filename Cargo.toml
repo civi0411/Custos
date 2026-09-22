@@ -6,7 +6,6 @@ members = [
     "crates/core-domain",
     "crates/task-kernel",
     "crates/workflow-runtime",
-    "crates/policy-engine",
     "crates/capability-gateway",
     "crates/cognitive-runtime",
     "crates/judgment-contracts",
@@ -21,6 +20,8 @@ members = [
     "crates/provider-sdk",
     "crates/domain-pack-sdk",
     "crates/observability",
+    "crates/authority-engine",
+    "adapters/providers/fake",
     "adapters/providers/codex",
     "adapters/providers/claude",
     "adapters/providers/antigravity",
@@ -31,10 +32,9 @@ members = [
     "adapters/sandboxes/macos-seatbelt",
     "adapters/sandboxes/linux-bubblewrap",
     "adapters/tools",
-    "domain-packs/engineering",
-    "domain-packs/research",
-    "domain-packs/personal",
     "tests/contract",
+    "tests/e2e",
+    "xtask",
 ]
 
 
@@ -50,7 +50,6 @@ repository = "https://github.com/agent-hub/custos"
 custos-core-domain = { path = "crates/core-domain" }
 custos-task-kernel = { path = "crates/task-kernel" }
 custos-workflow-runtime = { path = "crates/workflow-runtime" }
-custos-policy-engine = { path = "crates/policy-engine" }
 custos-capability-gateway = { path = "crates/capability-gateway" }
 custos-cognitive-runtime = { path = "crates/cognitive-runtime" }
 custos-judgment-contracts = { path = "crates/judgment-contracts" }
@@ -65,6 +64,8 @@ custos-local-api = { path = "crates/local-api" }
 custos-provider-sdk = { path = "crates/provider-sdk" }
 custos-domain-pack-sdk = { path = "crates/domain-pack-sdk" }
 custos-observability = { path = "crates/observability" }
+custos-authority-engine = { path = "crates/authority-engine" }
+custos-adapter-provider-fake = { path = "adapters/providers/fake" }
 
 # Common third-party dependencies
 serde = { version = "1.0", features = ["derive"] }
