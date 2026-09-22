@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://custos.dev/schemas/protocol/error.v1.schema.json",
+  "title": "ProtocolError",
+  "description": "Normalized error payload format for protocol errors",
+  "type": "object",
+  "required": ["code", "message", "retryable"],
+  "properties": {
+    "code": {
+      "type": "string",
+      "enum": [
+        "INVALID_REQUEST",
+        "NOT_FOUND",
+        "CONFLICT",
+        "UNAUTHORIZED",
+        "BUDGET_EXCEEDED",
+        "TIMEOUT",
+        "INTERNAL_ERROR"
+      ]
+    },
+    "message": {
+      "type": "string"
+    },
+    "retryable": {
+      "type": "boolean"
+    },
+    "details": {
+      "type": ["object", "null"]
+    }
+  },
+  "additionalProperties": false
+}

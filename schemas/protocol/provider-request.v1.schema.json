@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://custos.dev/schemas/protocol/provider-request.v1.schema.json",
+  "title": "ProviderRequest",
+  "description": "Request sent from Rust core to provider sidecar or model adapter",
+  "type": "object",
+  "required": ["request_id", "task_id", "span_num", "prompt", "model"],
+  "properties": {
+    "request_id": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "span_num": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "temperature": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 2.0
+    },
+    "max_tokens": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    }
+  },
+  "additionalProperties": false
+}

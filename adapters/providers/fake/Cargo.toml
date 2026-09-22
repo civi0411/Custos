@@ -1,0 +1,17 @@
+[package]
+name = "custos-adapter-provider-fake"
+version = "0.1.0"
+edition = "2021"
+authors.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+custos-core-domain.workspace = true
+custos-provider-sdk.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+

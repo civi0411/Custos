@@ -19,6 +19,7 @@ impl ArtifactStore for FsArtifactStore {
         let hash = digest(data);
         let id = new_id("art");
         let path = self.base_dir.join(&hash);
+        let size_bytes = data.len() as u64;
         tokio::fs::create_dir_all(&self.base_dir)
             .await
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -27,8 +28,10 @@ impl ArtifactStore for FsArtifactStore {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(ArtifactRef {
             id,
+            kind: custos_core_domain::ArtifactKind::Other,
             hash,
             path: path.to_string_lossy().to_string(),
+            size_bytes,
             mime,
         })
     }

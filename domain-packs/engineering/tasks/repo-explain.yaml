@@ -1,0 +1,16 @@
+id: "task.engineering.repo-explain"
+name: "Repository Architecture Explanation"
+description: "Analyze the repository, map the module topology, and produce an architectural summary."
+default_workflow: "repo-explain.v1"
+required_capabilities:
+  - "repo.read"
+budget:
+  max_spans: 10
+  max_tokens: 40000
+  max_cost_cents: 100
+risk_level: "low"
+evidence_requirements:
+  - kind: "module_tree_extracted"
+    required: true
+  - kind: "entrypoints_identified"
+    required: true

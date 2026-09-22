@@ -9,7 +9,7 @@ description = "Custos trusted local background daemon"
 custos-core-domain = { workspace = true }
 custos-task-kernel = { workspace = true }
 custos-persistence-sqlite = { workspace = true }
-custos-policy-engine = { workspace = true }
+custos-authority-engine = { workspace = true }
 custos-capability-gateway = { workspace = true }
 custos-observability = { workspace = true }
 tokio = { workspace = true }

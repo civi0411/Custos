@@ -2,7 +2,7 @@
 
 > **Sprint Cadence:** Sprint 1 — The Local Kernel & First Vertical Slice (`repo_explain`)  
 > **Master Reference:** [dev_docs/README.md](./README.md)  
-> **Tracking Branch:** All status updates and daily reports should be committed to the `report` branch.
+> **Tracking:** Daily reports are committed directly to `dev_docs/vi/reports/` or `dev_docs/truong/reports/` on your feature branch, then merged to `dev` via PR.
 
 ---
 

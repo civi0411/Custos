@@ -30,6 +30,15 @@ if grep -rn 'path = "\.\./apps/' crates/; then
     exit 1
 fi
 
-echo "[OK] crates do not depend on apps."
+# Rule 4: core-domain must never depend on storage or async runtime crates
+for banned in "tokio" "rusqlite" "axum" "sqlx" "reqwest"; do
+    if grep -q "^$banned = " "$CORE_DOMAIN_CARGO"; then
+        echo "ERROR: crates/core-domain must never depend on $banned!"
+        exit 1
+    fi
+done
+
+echo "[OK] core-domain is free from async/storage dependencies."
 
 echo "=== All Dependency Rules Passed! ==="
+

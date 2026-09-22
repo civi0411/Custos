@@ -9,3 +9,6 @@ description = "Context slicing, relevance scoring, and prompt budgeting"
 custos-core-domain = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

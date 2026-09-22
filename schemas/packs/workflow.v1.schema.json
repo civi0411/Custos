@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://custos.dev/schemas/packs/workflow.v1.schema.json",
+  "title": "PackWorkflow",
+  "description": "Workflow definition inside a domain pack",
+  "type": "object",
+  "required": ["id", "name", "steps"],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "version": { "type": "string" },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "action"],
+        "properties": {
+          "id": { "type": "string" },
+          "action": { "type": "string" },
+          "prompt": { "type": "string" },
+          "recipe": { "type": "string" },
+          "profile": { "type": "string" }
+        }
+      }
+    },
+    "policy": { "type": "string" },
+    "verifier": { "type": "string" }
+  },
+  "additionalProperties": false
+}

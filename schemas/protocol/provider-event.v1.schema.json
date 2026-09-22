@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://custos.dev/schemas/protocol/provider-event.v1.schema.json",
+  "title": "ProviderEvent",
+  "description": "Stream or completion event emitted from provider sidecar to Rust core",
+  "type": "object",
+  "required": ["request_id", "event_type"],
+  "properties": {
+    "request_id": {
+      "type": "string"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": ["chunk", "tool_call", "completed", "failed"]
+    },
+    "text": {
+      "type": "string"
+    },
+    "tool_calls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["call_id", "name", "arguments"],
+        "properties": {
+          "call_id": { "type": "string" },
+          "name": { "type": "string" },
+          "arguments": { "type": "object" }
+        }
+      }
+    },
+    "usage": {
+      "type": "object",
+      "properties": {
+        "input_tokens": { "type": "integer" },
+        "output_tokens": { "type": "integer" }
+      }
+    },
+    "error": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

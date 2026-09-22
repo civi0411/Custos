@@ -24,16 +24,20 @@
 
 ---
 
-## 2. Directory Structure
+## 2. Workspace Purpose & Directory Structure
+
+This space (`dev_docs/vi/`) serves two distinct purposes:
+1. **Domain Architecture (`notes/`)**: The localized technical specs, designs, and architectural notes specific to the AI/Research modules.
+2. **Development Reports (`reports/`)**: The chronological record of daily sprint progress, features developed, and syncs.
 
 - `notes/`: Technical design notes, prompt schemas, RDC protocol specs, evaluation datasets, research papers.
-- `reports/`: Daily sprint reports and sync logs committed to the `report` branch for peer review.
+- `reports/`: Daily sprint reports and sync logs committed directly to the feature branch.
 
 ---
 
 ## 3. Standard Daily Report Template (`reports/YYYY-MM-DD.md`)
 
-When committing daily progress to the `report` branch, use this format:
+When committing daily progress, write your report to `reports/YYYY-MM-DD.md` in this directory, commit directly to the `vi` branch alongside your code, and open a Pull Request to `dev`:
 
 ```markdown
 # Vi Progress Report — YYYY-MM-DD

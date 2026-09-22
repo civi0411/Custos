@@ -7,9 +7,12 @@ description = "Single point of side-effect execution with deterministic gating"
 
 [dependencies]
 custos-core-domain = { workspace = true }
-custos-policy-engine = { workspace = true }
+custos-authority-engine = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

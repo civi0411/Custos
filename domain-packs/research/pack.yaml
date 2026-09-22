@@ -1,0 +1,6 @@
+name: research
+version: "0.1.0"
+display_name: "Scientific & Literature Research Domain Pack"
+description: "Domain pack for citation exploration, scientific paper synthesis, and hypothesis tracking."
+author: "Custos Team"
+status: "scaffold"

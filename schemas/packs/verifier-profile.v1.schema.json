@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://custos.dev/schemas/packs/verifier-profile.v1.schema.json",
+  "title": "VerifierProfile",
+  "description": "Verifier execution suite configuration",
+  "type": "object",
+  "required": ["id", "name", "commands"],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "timeout_seconds": { "type": "integer", "minimum": 1 },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "cmd", "required"],
+        "properties": {
+          "id": { "type": "string" },
+          "cmd": { "type": "string" },
+          "required": { "type": "boolean" }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}
