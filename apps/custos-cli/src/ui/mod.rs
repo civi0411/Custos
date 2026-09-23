@@ -8,6 +8,51 @@ pub mod spinner;
 use console::style;
 use custos_core_domain::TaskStatus;
 
+pub fn get_terminal_width() -> usize {
+    if let Ok(c_str) = std::env::var("COLUMNS") {
+        if let Ok(c) = c_str.trim().parse::<usize>() {
+            if c >= 20 {
+                return c;
+            }
+        }
+    }
+    let (_, term_cols) = console::Term::stdout().size();
+    if term_cols >= 20 {
+        term_cols as usize
+    } else {
+        100
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResponsiveTier {
+    Compact,
+
+    Standard,
+
+    Wide,
+
+    UltraWide,
+}
+
+impl ResponsiveTier {
+    pub fn current() -> Self {
+        Self::from_width(get_terminal_width())
+    }
+
+    pub fn from_width(width: usize) -> Self {
+        if width < 70 {
+            ResponsiveTier::Compact
+        } else if width < 105 {
+            ResponsiveTier::Standard
+        } else if width < 160 {
+            ResponsiveTier::Wide
+        } else {
+            ResponsiveTier::UltraWide
+        }
+    }
+}
+
 #[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OperationalMode {
     Code,
@@ -28,7 +73,9 @@ impl OperationalMode {
     pub fn description(&self) -> &'static str {
         match self {
             OperationalMode::Code => "Software engineering, refactoring, and code analysis",
-            OperationalMode::Research => "Deep investigation, architecture deliberation, and synthesis",
+            OperationalMode::Research => {
+                "Deep investigation, architecture deliberation, and synthesis"
+            }
             OperationalMode::Assitant => "Autonomous workflow orchestration and task execution",
         }
     }

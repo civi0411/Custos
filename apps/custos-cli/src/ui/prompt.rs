@@ -1,7 +1,7 @@
+use super::OperationalMode;
 use console::style;
 use dialoguer::{Confirm, Input, Select};
 use std::error::Error;
-use super::OperationalMode;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,7 +63,9 @@ pub fn wait_for_mode_prompt() -> Result<(), Box<dyn Error>> {
     print!(
         "  {} {}",
         style("❄ Mode:").bold().cyan(),
-        style("Nhấn [Enter] để vào chọn chế độ hoạt động (Operational Mode)...").bold().white()
+        style("Nhấn [Enter] để vào chọn chế độ hoạt động (Operational Mode)...")
+            .bold()
+            .white()
     );
     let _ = io::stdout().flush();
     let stdin = io::stdin();
@@ -81,7 +83,12 @@ pub fn prompt_mode_selection() -> Result<OperationalMode, Box<dyn Error>> {
     ];
 
     match Select::new()
-        .with_prompt(format!("{}", style("❄ Chọn chế độ Custos (Operational Mode)").bold().cyan()))
+        .with_prompt(format!(
+            "{}",
+            style("❄ Chọn chế độ Custos (Operational Mode)")
+                .bold()
+                .cyan()
+        ))
         .default(0)
         .items(&options)
         .interact()

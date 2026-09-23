@@ -215,7 +215,6 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 None => ui::prompt::prompt_user_input(&prompt_text)?,
             };
 
-            // Inspection & Verification state (custos-owl-inspector.png)
             ui::assets::print_task_lifecycle_card(
                 ui::assets::TaskLifecycleState::InspectionApproval,
                 &format!(
@@ -247,7 +246,10 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 ui::format_task_status(&task.status)
             ));
 
-            println!("\n{}", console::style("Proposed Worktree Modification:").bold());
+            println!(
+                "\n{}",
+                console::style("Proposed Worktree Modification:").bold()
+            );
             let old_code = "fn handle_request() {\n    todo!();\n}\n";
             let new_code = "pub fn handle_request() -> Result<(), DomainError> {\n    tracing::info!(\"Executing verified task payload\");\n    Ok(())\n}\n";
             ui::diff::print_unified_diff("crates/runtime/src/handler.rs", old_code, new_code);
@@ -261,7 +263,9 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
             if approved {
                 println!(
                     "{}",
-                    console::style("✔ Permit granted by operator. Worktree isolated and patched.").cyan().bold()
+                    console::style("✔ Permit granted by operator. Worktree isolated and patched.")
+                        .cyan()
+                        .bold()
                 );
                 let advance_cmd = AdvanceTask {
                     task_id: task.id.clone(),
@@ -289,14 +293,12 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::format_task_status(&running_task.status)
                 );
 
-                // Task Running state: Provider coding & execution (custos-owl-coder.png)
                 ui::assets::print_task_lifecycle_card(
                     ui::assets::TaskLifecycleState::RunningCoding,
                     "Provider actively coding and executing task payload in sandbox worktree...",
                 );
                 tokio::time::sleep(tokio::time::Duration::from_millis(600)).await;
 
-                // Task Succeeded state (custos-owl-steward.png)
                 let complete_cmd = CompleteTask {
                     task_id: running_task.id.clone(),
                     summary: format!("Task '{}' successfully executed and verified", user_goal),
