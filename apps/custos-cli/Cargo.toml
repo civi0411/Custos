@@ -4,6 +4,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Thin command-line interface for Custos"
+default-run = "custos"
+
+[lib]
+name = "custos_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "custos"
+path = "src/main.rs"
 
 [dependencies]
 custos-core-domain = { workspace = true }
@@ -16,4 +25,5 @@ indicatif = "0.17"
 console = "0.15"
 dialoguer = "0.11"
 similar = { version = "2.4", features = ["inline"] }
-
+viuer = "0.11.0"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }

@@ -92,7 +92,7 @@ impl WorkspaceScanner {
                     .strip_prefix(base_dir)
                     .unwrap_or(&path)
                     .to_string_lossy()
-                    .to_string();
+                    .replace('\\', "/");
 
                 let extension = path
                     .extension()

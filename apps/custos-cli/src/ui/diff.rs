@@ -1,6 +1,7 @@
 use console::style;
 use similar::{ChangeTag, TextDiff};
 
+#[allow(dead_code)]
 pub struct DiffSummary {
     pub additions: usize,
     pub deletions: usize,
