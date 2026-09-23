@@ -741,3 +741,4 @@ mod tests {
         let _ = play_bouncing_owl_until_enter("0.1.0");
     }
 }
+
