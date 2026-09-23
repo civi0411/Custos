@@ -1,12 +1,20 @@
 <div align="center">
 
-# Custos
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/banner-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../assets/banner.png">
+  <img alt="Custos" src="../assets/banner.png" width="100%">
+</picture>
 
 **由人类主导的专业化智能体工作空间**
 
 *在您自选的模型之上展开 Vibe Coding、科研探索与个人工作流 — 具备持久化状态、受控执行、成本感知上下文以及可独立验证的确定成果。*
 
-[ English ](../../README.md) | [ Tiếng Việt ](README.vi.md) | [ Deutsch ](README.de.md) | [ 简体中文 ]
+<br />
+
+[ EN ](../../README.md) | [ VI ](README.vi.md) | [ DE ](README.de.md) | [ ZH ]
+
+<br />
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](../../LICENSE)
 [![Canonical Specification](https://img.shields.io/badge/Specification-v4.0--draft-blue.svg)](../canonical-specification.md)

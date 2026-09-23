@@ -1,12 +1,22 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/banner-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../assets/banner.png">
+  <img alt="Custos" src="../assets/banner.png" width="100%">
+</picture>
+
 # Custos
 
 **Không gian làm việc do con người làm chủ cho các luồng công việc agent chuyên biệt**
 
 *Vibe coding, nghiên cứu khoa học và luồng công việc cá nhân trên các mô hình bạn tự chọn — với trạng thái bền vững, thực thi được kiểm soát, ngữ cảnh tối ưu chi phí và kết quả có thể kiểm chứng.*
 
-[ English ](../../README.md) | [ Tiếng Việt ] | [ Deutsch ](README.de.md) | [ 简体中文 ](README.zh.md)
+<br />
+
+[ EN ](../../README.md) | [ VI ] | [ DE ](README.de.md) | [ ZH ](README.zh.md)
+
+<br />
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](../../LICENSE)
 [![Canonical Specification](https://img.shields.io/badge/Specification-v4.0--draft-blue.svg)](../canonical-specification.md)
