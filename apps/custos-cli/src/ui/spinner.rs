@@ -30,14 +30,16 @@ impl CliSpinner {
 
     pub fn finish_success(&self, msg: &str) {
         self.pb.finish_and_clear();
-        println!("{} {}", style("✔").green().bold(), style(msg).white());
+        println!("{} {}", style("✔").cyan().bold(), style(msg).white());
     }
 
+    #[allow(dead_code)]
     pub fn finish_error(&self, msg: &str) {
         self.pb.finish_and_clear();
         println!("{} {}", style("✖").red().bold(), style(msg).red());
     }
 
+    #[allow(dead_code)]
     pub fn finish_and_clear(&self) {
         self.pb.finish_and_clear();
     }
