@@ -24,6 +24,22 @@ pub fn get_terminal_width() -> usize {
     }
 }
 
+pub fn get_terminal_height() -> usize {
+    if let Ok(r_str) = std::env::var("LINES") {
+        if let Ok(r) = r_str.trim().parse::<usize>() {
+            if r >= 10 {
+                return r;
+            }
+        }
+    }
+    let (term_rows, _) = console::Term::stdout().size();
+    if term_rows >= 10 {
+        term_rows as usize
+    } else {
+        30
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResponsiveTier {
     Compact,

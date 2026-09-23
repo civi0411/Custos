@@ -185,130 +185,49 @@ fn autocrop_content(img: &ImageBuffer<Rgba<u8>, Vec<u8>>) -> ImageBuffer<Rgba<u8
     image::imageops::crop_imm(img, crop_x, crop_y, crop_w, crop_h).to_image()
 }
 
-fn downsample_pixel_art_features(
-    cropped: &ImageBuffer<Rgba<u8>, Vec<u8>>,
-    target_w: u32,
-    target_h: u32,
+fn sharpen_and_enhance(
+    img: &ImageBuffer<Rgba<u8>, Vec<u8>>,
+    strength: f32,
 ) -> ImageBuffer<Rgba<u8>, Vec<u8>> {
-    let (src_w, src_h) = cropped.dimensions();
-    let mut out = ImageBuffer::new(target_w, target_h);
-    if src_w == 0 || src_h == 0 || target_w == 0 || target_h == 0 {
-        return out;
+    let (w, h) = img.dimensions();
+    if w < 3 || h < 3 {
+        return img.clone();
     }
 
-    for ty in 0..target_h {
-        let y0 = ((ty as u64 * src_h as u64) / target_h as u64) as u32;
-        let y1 = (((ty as u64 + 1) * src_h as u64) / target_h as u64)
-            .min(src_h as u64)
-            .max((y0 + 1) as u64) as u32;
-
-        for tx in 0..target_w {
-            let x0 = ((tx as u64 * src_w as u64) / target_w as u64) as u32;
-            let x1 = (((tx as u64 + 1) * src_w as u64) / target_w as u64)
-                .min(src_w as u64)
-                .max((x0 + 1) as u64) as u32;
-
-            let total_pixels = (x1 - x0) * (y1 - y0);
-            if total_pixels == 0 {
+    let mut out = img.clone();
+    for y in 0..h {
+        for x in 0..w {
+            let c = img.get_pixel(x, y);
+            if c[3] < 30 {
+                out.put_pixel(x, y, Rgba([0, 0, 0, 0]));
                 continue;
             }
 
-            let mut vis_count = 0u32;
-            let mut dark_count = 0u32;
-            let mut vivid_count = 0u32;
-
-            let mut sum_r = 0.0f32;
-            let mut sum_g = 0.0f32;
-            let mut sum_b = 0.0f32;
-
-            let mut dark_r = 0.0f32;
-            let mut dark_g = 0.0f32;
-            let mut dark_b = 0.0f32;
-
-            let mut vivid_r = 0.0f32;
-            let mut vivid_g = 0.0f32;
-            let mut vivid_b = 0.0f32;
-
-            for y in y0..y1 {
-                for x in x0..x1 {
-                    let p = cropped.get_pixel(x, y);
-                    if p[3] <= 40 {
-                        continue;
-                    }
-                    vis_count += 1;
-                    let r = p[0] as f32;
-                    let g = p[1] as f32;
-                    let b = p[2] as f32;
-
-                    sum_r += r;
-                    sum_g += g;
-                    sum_b += b;
-
-                    let luma = 0.299 * r + 0.587 * g + 0.114 * b;
-                    let max_c = r.max(g).max(b);
-                    let min_c = r.min(g).min(b);
-                    let range = max_c - min_c;
-
-                    if range > 45.0 && luma > 40.0 && luma < 248.0 {
-                        vivid_count += 1;
-                        vivid_r += r;
-                        vivid_g += g;
-                        vivid_b += b;
-                    }
-
-                    if luma < 58.0 {
-                        dark_count += 1;
-                        dark_r += r;
-                        dark_g += g;
-                        dark_b += b;
-                    }
-                }
-            }
-
-            if vis_count * 100 < total_pixels * 35 {
-                out.put_pixel(tx, ty, Rgba([0, 0, 0, 0]));
+            if x == 0 || x == w - 1 || y == 0 || y == h - 1 {
                 continue;
             }
 
-            let vivid_ratio = vivid_count as f32 / vis_count as f32;
-            let dark_ratio = dark_count as f32 / vis_count as f32;
+            let top = img.get_pixel(x, y - 1);
+            let bot = img.get_pixel(x, y + 1);
+            let left = img.get_pixel(x - 1, y);
+            let right = img.get_pixel(x + 1, y);
 
-            if vivid_ratio >= 0.08 {
-                let vr = vivid_r / vivid_count as f32;
-                let vg = vivid_g / vivid_count as f32;
-                let vb = vivid_b / vivid_count as f32;
-                let vluma = 0.299 * vr + 0.587 * vg + 0.114 * vb;
+            let mut new_c = *c;
+            for i in 0..3 {
+                let center_f = c[i] as f32;
+                let top_val = if top[3] > 25 { top[i] as f32 } else { center_f };
+                let bot_val = if bot[3] > 25 { bot[i] as f32 } else { center_f };
+                let left_val = if left[3] > 25 { left[i] as f32 } else { center_f };
+                let right_val = if right[3] > 25 { right[i] as f32 } else { center_f };
 
-                let br = (vluma + (vr - vluma) * 1.40).clamp(0.0, 255.0) as u8;
-                let bg = (vluma + (vg - vluma) * 1.40).clamp(0.0, 255.0) as u8;
-                let bb = (vluma + (vb - vluma) * 1.40).clamp(0.0, 255.0) as u8;
-                out.put_pixel(tx, ty, Rgba([br, bg, bb, 255]));
-            } else if dark_ratio >= 0.12 {
-                let dr = (dark_r / dark_count as f32).clamp(0.0, 255.0) as u8;
-                let dg = (dark_g / dark_count as f32).clamp(0.0, 255.0) as u8;
-                let db = (dark_b / dark_count as f32).clamp(0.0, 255.0) as u8;
-                out.put_pixel(tx, ty, Rgba([dr, dg, db, 255]));
-            } else {
-                let ar = sum_r / vis_count as f32;
-                let ag = sum_g / vis_count as f32;
-                let ab = sum_b / vis_count as f32;
-                let aluma = 0.299 * ar + 0.587 * ag + 0.114 * ab;
-
-                if aluma > 185.0 {
-                    out.put_pixel(tx, ty, Rgba([248, 250, 254, 255]));
-                } else if aluma < 90.0 {
-                    out.put_pixel(
-                        tx,
-                        ty,
-                        Rgba([(ar * 0.85) as u8, (ag * 0.85) as u8, (ab * 0.85) as u8, 255]),
-                    );
-                } else {
-                    out.put_pixel(tx, ty, Rgba([ar as u8, ag as u8, ab as u8, 255]));
-                }
+                let lap = 4.0 * center_f - (top_val + bot_val + left_val + right_val);
+                let sharp = (center_f + strength * lap).clamp(0.0, 255.0);
+                new_c[i] = sharp as u8;
             }
+
+            out.put_pixel(x, y, new_c);
         }
     }
-
     out
 }
 
@@ -323,8 +242,14 @@ pub fn render_pixel_art_to_lines(asset: AssetKind, target_w: u32, target_h: u32)
     };
     let trans_img = make_outer_background_transparent_and_bleed(&img);
     let cropped = autocrop_content(&trans_img);
-    let downsampled = downsample_pixel_art_features(&cropped, target_w, target_h);
-    rasterize_to_half_blocks(&downsampled, target_w, target_h)
+    let resized = image::imageops::resize(
+        &cropped,
+        target_w,
+        target_h,
+        image::imageops::FilterType::Lanczos3,
+    );
+    let enhanced = sharpen_and_enhance(&resized, 0.45);
+    rasterize_to_half_blocks(&enhanced, target_w, target_h)
 }
 
 fn rasterize_to_half_blocks(
