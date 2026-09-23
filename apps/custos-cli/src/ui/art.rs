@@ -59,24 +59,32 @@ fn get_banner_lines(version: &str) -> Vec<String> {
 fn compute_mascot_size(term_w: usize, term_h: usize, tier: ResponsiveTier) -> (u32, u32) {
     match tier {
         ResponsiveTier::UltraWide | ResponsiveTier::Wide => {
-            let max_w_by_width = (term_w.saturating_sub(68) & !1).clamp(24, 28) as u32;
-            let max_lines_by_height = term_h.saturating_sub(6).clamp(14, 18);
-            let max_h_by_height = (max_lines_by_height * 2) as u32;
-            let target_w = (((max_h_by_height as f32 / 1.19) as u32) & !1).min(max_w_by_width);
-            let w = target_w.clamp(24, 26);
-            let h = (((w as f32 * 1.19 + 0.5) as u32) + 1) & !1;
+            let max_w_by_width = (((term_w * 2 / 5) & !1) as u32).clamp(36, 64);
+            let max_w_by_term = (term_w.saturating_sub(66) & !1).clamp(36, 64) as u32;
+            let mut target_w = max_w_by_width.min(max_w_by_term);
+            if term_h > 18 {
+                let max_lines = term_h.saturating_sub(3);
+                let max_w_by_h = (((max_lines * 2) as f32 / 1.22) as u32) & !1;
+                target_w = target_w.min(max_w_by_h);
+            }
+            let w = target_w.clamp(36, 64);
+            let h = (((w as f32 * 1.22 + 0.5) as u32) + 1) & !1;
             (w, h)
         }
         ResponsiveTier::Standard => {
-            let max_lines_by_height = term_h.saturating_sub(14).clamp(12, 16);
-            let max_h_by_height = (max_lines_by_height * 2) as u32;
-            let w = (((max_h_by_height as f32 / 1.19) as u32) & !1).clamp(20, 24);
-            let h = (((w as f32 * 1.19 + 0.5) as u32) + 1) & !1;
+            let mut target_w = (((term_w * 2 / 5) & !1) as u32).clamp(28, 44);
+            if term_h > 24 {
+                let max_lines = term_h.saturating_sub(13);
+                let max_w_by_h = (((max_lines * 2) as f32 / 1.22) as u32) & !1;
+                target_w = target_w.min(max_w_by_h);
+            }
+            let w = target_w.clamp(28, 44);
+            let h = (((w as f32 * 1.22 + 0.5) as u32) + 1) & !1;
             (w, h)
         }
         ResponsiveTier::Compact => {
-            let w = (((term_w * 2 / 5) & !1) as u32).clamp(16, 20);
-            let h = (((w as f32 * 1.19 + 0.5) as u32) + 1) & !1;
+            let w = (((term_w * 2 / 5) & !1) as u32).clamp(20, 32);
+            let h = (((w as f32 * 1.22 + 0.5) as u32) + 1) & !1;
             (w, h)
         }
     }
@@ -280,11 +288,17 @@ pub fn play_bouncing_owl_until_enter(version: &str) -> Result<(), Box<dyn std::e
     let blank_owl = " ".repeat(owl_w);
     let owl_h = mascot_lines.len() + 1;
 
-    let combined_w = owl_w + 3 + 62;
-    let left_pad_n = if term_w > combined_w {
-        ((term_w - combined_w) / 2).min(24)
-    } else {
-        1
+    let left_pad_n = match tier {
+        ResponsiveTier::UltraWide | ResponsiveTier::Wide => {
+            let combined_w = owl_w + 3 + 62;
+            if term_w > combined_w {
+                ((term_w - combined_w) / 2).min(24)
+            } else {
+                1
+            }
+        }
+        ResponsiveTier::Standard => ((term_w.saturating_sub(owl_w)) / 2).min(20),
+        ResponsiveTier::Compact => ((term_w.saturating_sub(owl_w)) / 2).min(10),
     };
 
     let initial_frame = render_banner_frame(
