@@ -1,12 +1,22 @@
 <div align="center">
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/banner-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="../assets/banner.png">
+  <img alt="Custos" src="../assets/banner.png" width="100%">
+</picture>
+
 # Custos
 
 **Ein menschengesteuerter Arbeitsbereich für spezialisierte agentenbasierte Arbeitsabläufe**
 
 *Vibe Coding, wissenschaftliche Forschung und persönliche Workflows mit den Modellen Ihrer Wahl — mit dauerhaftem Zustand, kontrollierter Ausführung, kostenbewusstem Kontext und verifizierbaren Ergebnissen.*
 
-[ English ](../../README.md) | [ Tiếng Việt ](README.vi.md) | [ Deutsch ] | [ 简体中文 ](README.zh.md)
+<br />
+
+[ EN ](../../README.md) | [ VI ](README.vi.md) | [ DE ] | [ ZH ](README.zh.md)
+
+<br />
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](../../LICENSE)
 [![Canonical Specification](https://img.shields.io/badge/Specification-v4.0--draft-blue.svg)](../canonical-specification.md)
