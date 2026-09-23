@@ -1,12 +1,20 @@
 <div align="center">
 
-# Custos
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/banner.png">
+  <img alt="Custos" src="docs/assets/banner.png" width="100%">
+</picture>
 
 **A human-governed workspace for specialized agentic work**
 
 *Vibe coding, research, and personal workflows across the models you choose — with durable state, controlled execution, cost-aware context, and verifiable outcomes.*
 
-[ English ] | [ Tiếng Việt ](docs/i18n/README.vi.md) | [ Deutsch ](docs/i18n/README.de.md) | [ 简体中文 ](docs/i18n/README.zh.md)
+<br />
+
+[ EN ] | [ VI ](docs/i18n/README.vi.md) | [ DE ](docs/i18n/README.de.md) | [ ZH ](docs/i18n/README.zh.md)
+
+<br />
 
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![Canonical Specification](https://img.shields.io/badge/Specification-v4.0--draft-blue.svg)](docs/canonical-specification.md)
