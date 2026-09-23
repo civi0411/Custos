@@ -1,6 +1,3 @@
-//! Custos CLI Library
-//!
-//! Production-grade command-line interface for the Custos Agentic Work Runtime.
 
 pub mod ui;
 
@@ -15,11 +12,9 @@ use std::sync::Arc;
 #[command(name = "custos")]
 #[command(about = "Custos Agentic Work Runtime CLI", version, long_about = None)]
 pub struct Cli {
-    /// SQLite database file path (defaults to $CUSTOS_DB_PATH or .custos/custos.db)
     #[arg(long, global = true)]
     pub db: Option<PathBuf>,
 
-    /// Output results in JSON format
     #[arg(long, global = true)]
     pub json: bool,
 
@@ -54,83 +49,61 @@ impl From<CliTaskStatus> for TaskStatus {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Interactive task vibe session with mode selection
     Vibe {
-        /// Optional prompt describing the task
         #[arg(short, long)]
         prompt: Option<String>,
 
-        /// Operational mode: Code, Research, or Assitant
         #[arg(short, long, value_enum)]
         mode: Option<ui::OperationalMode>,
     },
 
-    /// Create a new task
     Create {
-        /// Human-readable title of the task
         #[arg(short, long)]
         title: String,
 
-        /// Optional metadata JSON string
         #[arg(short, long)]
         metadata: Option<String>,
     },
 
-    /// Inspect detailed status of a task
     Status {
-        /// Task identifier
         #[arg(short, long)]
         id: String,
     },
 
-    /// List all tasks in the store
     List,
 
-    /// Advance a task to the next status
     Advance {
-        /// Task identifier
         #[arg(short, long)]
         id: String,
 
-        /// Target status
         #[arg(short, long, value_enum)]
         status: CliTaskStatus,
 
-        /// Expected epoch for optimistic concurrency control
         #[arg(short, long)]
         epoch: Option<u64>,
 
-        /// Optional rationale for advancement
         #[arg(short, long)]
         rationale: Option<String>,
     },
 
-    /// Cancel an active task
     Cancel {
-        /// Task identifier
         #[arg(short, long)]
         id: String,
 
-        /// Expected epoch for optimistic concurrency control
         #[arg(short, long)]
         epoch: Option<u64>,
 
-        /// Cancellation reason
         #[arg(short, long, default_value = "Cancelled via CLI")]
         reason: String,
     },
 
-    /// Complete a task successfully
     Complete {
-        /// Task identifier
         #[arg(short, long)]
         id: String,
 
-        /// Expected epoch for optimistic concurrency control
         #[arg(short, long)]
         epoch: Option<u64>,
 
-        /// Optional completion summary
         #[arg(short, long, default_value = "Completed via CLI")]
         summary: String,
     },
@@ -193,13 +166,13 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     match command {
         Commands::Vibe { prompt, mode } => {
-            ui::banner::print_banner(env!("CARGO_PKG_VERSION"));
-
             let selected_mode = match mode {
-                Some(m) => m,
+                Some(m) => {
+                    ui::banner::print_banner(env!("CARGO_PKG_VERSION"));
+                    m
+                }
                 None => {
-                    ui::prompt::wait_for_mode_prompt()?;
-                    ui::art::print_modes_showcase();
+                    ui::art::play_bouncing_owl_until_enter(env!("CARGO_PKG_VERSION"))?;
                     ui::prompt::prompt_mode_selection()?
                 }
             };
@@ -328,7 +301,6 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     ui::format_task_status(&cancelled_task.status)
                 );
 
-                // Task Failed / Rejected (Text report only, strictly no image modification)
                 ui::assets::print_task_failure_report(
                     &cancelled_task.id,
                     "Execution rejected by operator. Worktree untouched.",
