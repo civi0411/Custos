@@ -1,4 +1,4 @@
-﻿pub mod art;
+pub mod art;
 pub mod assets;
 pub mod banner;
 pub mod diff;
@@ -8,9 +8,6 @@ pub mod spinner;
 use console::style;
 use custos_core_domain::TaskStatus;
 
-/// Reliably query the current terminal width in character columns.
-/// Evaluates live console screen buffer dimensions on each call,
-/// supporting live window resizing, with fallback to COLUMNS environment variable.
 pub fn get_terminal_width() -> usize {
     if let Ok(c_str) = std::env::var("COLUMNS") {
         if let Ok(c) = c_str.trim().parse::<usize>() {
@@ -27,16 +24,14 @@ pub fn get_terminal_width() -> usize {
     }
 }
 
-/// Responsive layout tier based on active terminal width
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResponsiveTier {
-    /// < 70 cols: Split-screen / Narrow
     Compact,
-    /// 70..104 cols: Standard console window
+
     Standard,
-    /// 105..159 cols: Wide desktop terminal
+
     Wide,
-    /// >= 160 cols: Ultra-wide / Maximized
+
     UltraWide,
 }
 
@@ -78,7 +73,9 @@ impl OperationalMode {
     pub fn description(&self) -> &'static str {
         match self {
             OperationalMode::Code => "Software engineering, refactoring, and code analysis",
-            OperationalMode::Research => "Deep investigation, architecture deliberation, and synthesis",
+            OperationalMode::Research => {
+                "Deep investigation, architecture deliberation, and synthesis"
+            }
             OperationalMode::Assitant => "Autonomous workflow orchestration and task execution",
         }
     }
