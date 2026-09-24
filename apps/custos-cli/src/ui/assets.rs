@@ -4,9 +4,10 @@ use std::fmt::Write as _;
 use std::sync::OnceLock;
 
 pub const ASSET_MASCOT_BYTES: &[u8] = include_bytes!("../frame-ui/owl.png");
-pub const ASSET_CODER_BYTES: &[u8] = include_bytes!("../frame-ui/custos-owl-coder.png");
-pub const ASSET_INSPECTOR_BYTES: &[u8] = include_bytes!("../frame-ui/custos-owl-inspector.png");
-pub const ASSET_STEWARD_BYTES: &[u8] = include_bytes!("../frame-ui/custos-owl-steward.png");
+pub const ASSET_CODER_BYTES: &[u8] = include_bytes!("../frame-ui/custos-owl-coder-1.png");
+pub const ASSET_INSPECTOR_BYTES: &[u8] = include_bytes!("../frame-ui/custos-owl-inspector-1.png");
+pub const ASSET_STEWARD_BYTES: &[u8] = include_bytes!("../frame-ui/custos-owl-steward-1.png");
+
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AssetKind {
@@ -32,9 +33,9 @@ impl AssetKind {
     pub fn filename(&self) -> &'static str {
         match self {
             AssetKind::Mascot => "owl.png",
-            AssetKind::Coder => "custos-owl-coder.png",
-            AssetKind::Inspector => "custos-owl-inspector.png",
-            AssetKind::Steward => "custos-owl-steward.png",
+            AssetKind::Coder => "custos-owl-coder-1.png",
+            AssetKind::Inspector => "custos-owl-inspector-1.png",
+            AssetKind::Steward => "custos-owl-steward-1.png",
         }
     }
 
@@ -217,8 +218,16 @@ fn sharpen_and_enhance(
                 let center_f = c[i] as f32;
                 let top_val = if top[3] > 25 { top[i] as f32 } else { center_f };
                 let bot_val = if bot[3] > 25 { bot[i] as f32 } else { center_f };
-                let left_val = if left[3] > 25 { left[i] as f32 } else { center_f };
-                let right_val = if right[3] > 25 { right[i] as f32 } else { center_f };
+                let left_val = if left[3] > 25 {
+                    left[i] as f32
+                } else {
+                    center_f
+                };
+                let right_val = if right[3] > 25 {
+                    right[i] as f32
+                } else {
+                    center_f
+                };
 
                 let lap = 4.0 * center_f - (top_val + bot_val + left_val + right_val);
                 let sharp = (center_f + strength * lap).clamp(0.0, 255.0);
@@ -231,23 +240,56 @@ fn sharpen_and_enhance(
     out
 }
 
+static MASTER_MASCOT: OnceLock<ImageBuffer<Rgba<u8>, Vec<u8>>> = OnceLock::new();
+static MASTER_CODER: OnceLock<ImageBuffer<Rgba<u8>, Vec<u8>>> = OnceLock::new();
+static MASTER_INSPECTOR: OnceLock<ImageBuffer<Rgba<u8>, Vec<u8>>> = OnceLock::new();
+static MASTER_STEWARD: OnceLock<ImageBuffer<Rgba<u8>, Vec<u8>>> = OnceLock::new();
+
+pub fn get_master_image(asset: AssetKind) -> &'static ImageBuffer<Rgba<u8>, Vec<u8>> {
+    let lock = match asset {
+        AssetKind::Mascot => &MASTER_MASCOT,
+        AssetKind::Coder => &MASTER_CODER,
+        AssetKind::Inspector => &MASTER_INSPECTOR,
+        AssetKind::Steward => &MASTER_STEWARD,
+    };
+    lock.get_or_init(|| {
+        let img = load_asset_image(asset).unwrap_or_else(|_| DynamicImage::new_rgba8(1, 1));
+        let trans = make_outer_background_transparent_and_bleed(&img);
+        autocrop_content(&trans)
+    })
+}
+
 pub fn render_asset_to_lines(asset: AssetKind, target_w: u32, target_h: u32) -> Vec<String> {
     render_pixel_art_to_lines(asset, target_w, target_h)
 }
 
 pub fn render_pixel_art_to_lines(asset: AssetKind, target_w: u32, target_h: u32) -> Vec<String> {
-    let img = match load_asset_image(asset) {
-        Ok(i) => i,
-        Err(_) => return Vec::new(),
+    let master = get_master_image(asset);
+    let resized = if target_w < 50 {
+        let inter_w = 46u32;
+        let inter_h = (((inter_w as f32 * (master.height() as f32 / master.width() as f32)) + 0.5)
+            as u32)
+            .max(1);
+        let inter = image::imageops::resize(
+            master,
+            inter_w,
+            inter_h,
+            image::imageops::FilterType::Triangle,
+        );
+        image::imageops::resize(
+            &inter,
+            target_w,
+            target_h,
+            image::imageops::FilterType::Triangle,
+        )
+    } else {
+        image::imageops::resize(
+            master,
+            target_w,
+            target_h,
+            image::imageops::FilterType::Lanczos3,
+        )
     };
-    let trans_img = make_outer_background_transparent_and_bleed(&img);
-    let cropped = autocrop_content(&trans_img);
-    let resized = image::imageops::resize(
-        &cropped,
-        target_w,
-        target_h,
-        image::imageops::FilterType::Lanczos3,
-    );
     let enhanced = sharpen_and_enhance(&resized, 0.45);
     rasterize_to_half_blocks(&enhanced, target_w, target_h)
 }
@@ -758,5 +800,25 @@ mod tests {
 
         let lifecycle_coder = get_lifecycle_coder_lines();
         assert_eq!(lifecycle_coder.len(), 18);
+    }
+
+    #[test]
+    fn test_print_task_lifecycle_cards() {
+        print_task_lifecycle_card(
+            TaskLifecycleState::Idle,
+            "Task is initialized in idle workspace",
+        );
+        print_task_lifecycle_card(
+            TaskLifecycleState::InspectionApproval,
+            "Verification and static check pending permit approval",
+        );
+        print_task_lifecycle_card(
+            TaskLifecycleState::RunningCoding,
+            "Active sandbox code execution in progress",
+        );
+        print_task_lifecycle_card(
+            TaskLifecycleState::Succeeded,
+            "Task execution finished successfully with valid audit log",
+        );
     }
 }
