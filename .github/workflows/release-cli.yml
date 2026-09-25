@@ -1,0 +1,53 @@
+name: Release Custos CLI
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-release:
+    name: Build, Package & Release CLI
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Build Release Binary
+        run: cargo build --release -p custos-cli
+
+      - name: Stage binary into NPM Package
+        run: |
+          Copy-Item target/release/custos.exe custos-npm-package/bin/custos.exe -Force
+          cd custos-npm-package
+          npm pack
+
+      - name: Publish to GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            target/release/custos.exe
+            custos-npm-package/*.tgz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish to NPM Registry
+        if: env.NODE_AUTH_TOKEN != ''
+        run: |
+          cd custos-npm-package
+          npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
