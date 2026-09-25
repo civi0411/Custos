@@ -2,7 +2,6 @@ use console::style;
 
 pub fn print_banner(version: &str) {
     super::art::print_main_owl_banner(version);
-    check_and_print_update_notification(version);
 }
 
 fn parse_semver(v: &str) -> Option<(u64, u64, u64, Option<&str>)> {
@@ -131,12 +130,21 @@ pub fn print_update_notification(current_version: &str, latest_version: &str) {
         style("→").dim(),
         style(latest_version).green().bold()
     );
-    let pkg_name = std::env::var("CUSTOS_PKG_NAME").unwrap_or_else(|_| "custos-cli".to_string());
+    let (os_name, update_cmd) = if cfg!(target_os = "windows") {
+        ("Windows", "npm i -g custos-cli@latest")
+    } else if cfg!(target_os = "macos") {
+        ("macOS", "npm i -g custos-cli@latest")
+    } else {
+        ("Linux", "npm i -g custos-cli@latest")
+    };
     let line2 = format!(
-        "   Run {} to update to the latest version",
-        style(format!("npm i -g {}", pkg_name)).cyan().bold()
+        "   To upgrade cleanly without keeping old version ({os_name}):"
     );
     let line3 = format!(
+        "   Run {}",
+        style(update_cmd).cyan().bold()
+    );
+    let line4 = format!(
         "   Changelog: {}",
         style("https://github.com/civi0411/Custos/releases").cyan()
     );
@@ -173,8 +181,9 @@ pub fn print_update_notification(current_version: &str, latest_version: &str) {
     println!("{}", empty);
     println!("\x1b[33m│\x1b[0m{}\x1b[33m│\x1b[0m", pad_line(&line1, inner_width));
     println!("\x1b[33m│\x1b[0m{}\x1b[33m│\x1b[0m", pad_line(&line2, inner_width));
-    println!("{}", empty);
     println!("\x1b[33m│\x1b[0m{}\x1b[33m│\x1b[0m", pad_line(&line3, inner_width));
+    println!("{}", empty);
+    println!("\x1b[33m│\x1b[0m{}\x1b[33m│\x1b[0m", pad_line(&line4, inner_width));
     println!("{}", empty);
     println!("{}", bot);
     println!();
