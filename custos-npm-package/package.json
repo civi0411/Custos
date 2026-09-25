@@ -1,0 +1,27 @@
+{
+  "name": "custos-cli",
+  "version": "0.1.0-alpha",
+  "description": "Custos AI Agent with Dual-Cognitive Architecture (System 1 & System 2)",
+  "main": "bin/index.js",
+  "bin": {
+    "custos": "./bin/index.js"
+  },
+  "files": [
+    "bin/"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "cli",
+    "rust",
+    "system1-system2",
+    "mcp"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/civi0411/Custos.git"
+  },
+  "homepage": "https://github.com/civi0411/Custos#readme",
+  "author": "Custos Core Team",
+  "license": "Apache-2.0"
+}

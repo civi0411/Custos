@@ -1,0 +1,4 @@
+bin/*.exe
+bin/custos
+*.tgz
+node_modules/

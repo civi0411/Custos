@@ -177,6 +177,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 }
             };
 
+            ui::banner::check_and_print_update_notification(env!("CARGO_PKG_VERSION"));
             ui::art::print_mode_card(selected_mode);
 
             let prompt_text = format!(
