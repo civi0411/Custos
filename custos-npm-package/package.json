@@ -1,6 +1,6 @@
 {
   "name": "custos-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Custos AI Agent with Dual-Cognitive Architecture (System 1 & System 2)",
   "main": "bin/index.js",
   "bin": {

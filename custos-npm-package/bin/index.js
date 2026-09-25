@@ -7,7 +7,7 @@ const fs = require('fs');
 const https = require('https');
 const http = require('http');
 
-let pkg = { version: '0.1.1', name: 'custos-cli' };
+let pkg = { version: '0.1.2', name: 'custos-cli' };
 try {
   pkg = require('../package.json');
 } catch {}
