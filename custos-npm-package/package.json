@@ -1,10 +1,13 @@
 {
   "name": "custos-cli",
-  "version": "0.1.0-alpha",
+  "version": "0.1.1",
   "description": "Custos AI Agent with Dual-Cognitive Architecture (System 1 & System 2)",
   "main": "bin/index.js",
   "bin": {
-    "custos": "./bin/index.js"
+    "custos": "bin/index.js"
+  },
+  "scripts": {
+    "postinstall": "node bin/index.js --install-only"
   },
   "files": [
     "bin/"
@@ -19,7 +22,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/civi0411/Custos.git"
+    "url": "git+https://github.com/civi0411/Custos.git"
   },
   "homepage": "https://github.com/civi0411/Custos#readme",
   "author": "Custos Core Team",
