@@ -1,0 +1,24 @@
+[package]
+name = "custos-context"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+custos-core-domain = { workspace = true }
+custos-provider-types = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["sync", "macros"] }
+tiktoken-rs = { workspace = true }
+blake3 = { workspace = true }
+lru = { workspace = true }
+rmcp = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+futures = { workspace = true }
+

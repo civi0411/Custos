@@ -1,6 +1,8 @@
 # Capability Model & Approvals
 
-> **Status:** Canonical Baseline v4.0  
+> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
+
+> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
 > **Source:** Part V (§25.3-25.4) Canonical Specification
 
 Custos security is built on **Capability-Based Security**: a component cannot perform any external action unless it presents a cryptographically signed, unforgeable `ExecutionPermit`.

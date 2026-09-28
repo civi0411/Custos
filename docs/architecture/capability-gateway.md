@@ -1,6 +1,8 @@
 # Capability Gateway & Sandboxing
 
-> **Status:** Canonical Baseline v4.0  
+> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
+
+> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
 > **Source:** Part IX (§27-29) & Part VII (§58) Canonical Specification
 
 The Capability Gateway enforces Custos's supreme security invariant: **Zero Direct Execution**. All file system operations, shell executions, and network egress calls must traverse this gateway.

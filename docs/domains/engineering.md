@@ -1,6 +1,8 @@
 # Engineering Domain Pack
 
-> **Status:** Canonical Baseline v4.0  
+> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
+
+> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
 > **Source:** Part VI (§18) & Part VII (§55) Canonical Specification
 
 The Engineering Domain Pack v1 is Custos's primary focus in Horizon 1 (H1), providing a hermetic, safe, and verifiable runtime environment for software engineering workflows (bug fixing, refactoring, feature slicing).

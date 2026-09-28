@@ -1,0 +1,25 @@
+[package]
+name = "custos-daemon"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+async-trait = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+chrono = { workspace = true }
+tracing = { workspace = true }
+custos-core-domain = { workspace = true }
+custos-kernel = { workspace = true }
+custos-persistence = { workspace = true }
+custos-session = { workspace = true }
+custos-bridge = { workspace = true }
+custos-workflow = { workspace = true }
+custos-cognitive = { workspace = true }
+custos-security = { workspace = true }
+custos-local-api = { workspace = true }
+custos-adapters-mcp = { path = "../../adapters/custos-adapters-mcp" }

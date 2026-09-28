@@ -1,6 +1,8 @@
 # Provider Interoperability & Portability
 
-> **Status:** Canonical Baseline v4.0  
+> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
+
+> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
 > **Source:** Part IV (§19) Canonical Specification
 
 One of Custos's three pillars is **Model-Agnostic ("Brain Transplant Without Soul Loss")**: the ability to switch seamlessly across AI providers (OpenAI, Anthropic, Google, local models) without losing work progress, task context, or execution state.

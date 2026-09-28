@@ -1,6 +1,8 @@
 # Codebase Architecture & Monorepo Blueprint
 
-> **Status:** Canonical Baseline v4.0  
+> **Status notice (2026-09-28):** Historical monorepo proposal with obsolete `apps/`, `adapters/`, and `sidecars/` paths. Do not use its tree for navigation, code generation, or ownership. Use the [current repository structure](repository-structure.md) and [source-backed status rules](../status/README.md).
+
+> **Status:** Historical design baseline v4.0
 > **Source:** Part XI (§32-33) & Part VII (§49) Canonical Specification
 
 Custos is organized as a unified Monorepo managed primarily by a Rust Cargo Workspace, complemented by TypeScript and Python sidecar packages where specialized runtimes are required.

@@ -7,13 +7,12 @@
 //! -> Evidence Engine -> Crash Recovery.
 
 use custos_adapter_provider_fake::FakeProvider;
-use custos_artifact_store::{ArtifactStore, FsArtifactStore};
-use custos_context_compiler::{ContextBuilder, SourceDocument, TokenAwareContextCompiler};
+use custos_context::repo_intelligence::WorkspaceScanner;
+use custos_context::{ContextBuilder, SourceDocument, TokenAwareContextCompiler};
 use custos_core_domain::{ContinuationPacket, Span, SpanState, TaskStatus};
-use custos_evidence_engine::{EvidenceBundle, EvidencePipeline};
-use custos_persistence_sqlite::SqliteTaskStore;
+use custos_persistence::{ArtifactStore, FsArtifactStore, SqliteTaskStore};
 use custos_provider_sdk::{ModelProvider, ProviderRequest};
-use custos_repo_intelligence::WorkspaceScanner;
+use custos_security::evidence::{EvidenceBundle, EvidencePipeline};
 use custos_task_kernel::{AdvanceTask, CompleteTask, CreateTask, TaskService, TaskStore};
 use std::sync::Arc;
 
@@ -60,7 +59,8 @@ pub struct Task;
         // -------------------------------------------------------------
         // Step 1: Initialize Task Kernel & Persistence
         // -------------------------------------------------------------
-        let store = Arc::new(SqliteTaskStore::new(db_path_str).expect("Failed to create SQLite store"));
+        let store =
+            Arc::new(SqliteTaskStore::new(db_path_str).expect("Failed to create SQLite store"));
         let service = TaskService::new(store.clone());
 
         // Step 2: Create task via Task Kernel
@@ -73,6 +73,7 @@ pub struct Task;
                     "scenario": "repo_explain",
                     "repo_path": fixture_repo.to_str().unwrap(),
                 })),
+                contract: None,
             })
             .await
             .expect("Task creation must succeed");
@@ -144,13 +145,8 @@ pub struct Task;
             ),
         );
 
-        let request = ProviderRequest::new(
-            "explain-req-1",
-            &task.id,
-            1,
-            &prompt_title,
-            "fake-model-v1",
-        );
+        let request =
+            ProviderRequest::new("explain-req-1", &task.id, 1, &prompt_title, "fake-model-v1");
         let model_resp = provider.generate(&request).await.expect("Model generation");
         assert!(model_resp.content.contains("crates/persistence-sqlite"));
 
@@ -179,7 +175,10 @@ pub struct Task;
             }),
         )
         .expect("ContinuationPacket create");
-        store.save_continuation(&cont).await.expect("Save continuation");
+        store
+            .save_continuation(&cont)
+            .await
+            .expect("Save continuation");
 
         // -------------------------------------------------------------
         // Step 7: Artifact Store saves response deliverable
@@ -229,6 +228,7 @@ pub struct Task;
                 task_id: task.id.clone(),
                 summary: "repo_explain completed with verified citation evidence".into(),
                 expected_epoch: 2,
+                evidence_claims: vec![verification_claim.clone()],
             })
             .await
             .expect("Complete task must succeed");
@@ -270,7 +270,10 @@ pub struct Task;
             .unwrap()
             .expect("Continuation exists");
         assert_eq!(cont.task_id, task_id);
-        assert!(cont.verify().is_ok(), "Continuation hash integrity verified");
+        assert!(
+            cont.verify().is_ok(),
+            "Continuation hash integrity verified"
+        );
 
         // Verify artifact store content-addressing preserved
         let artifact_store2 = FsArtifactStore::new(artifact_dir);

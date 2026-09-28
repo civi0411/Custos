@@ -1,6 +1,8 @@
 # Competitive Analysis and Moat
 
-> **Status:** Canonical Baseline v4.0  
+> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
+
+> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
 > **Source:** Part I (§1.4) & Part VI (§42) Canonical Specification
 
 This document examines the architectural positioning of Custos within the contemporary agent ecosystem, contrasting its approach against alternative solutions and detailing its defensible product moat.

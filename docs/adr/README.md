@@ -1,62 +1,66 @@
 # Architecture Decision Records (ADRs)
 
-> **Status:** Canonical Baseline v4.0  
-> **Source:** Part VI (§39.3) & Part VII (§59) Canonical Specification
+> **Status review required (2026-09-27):** The “Accepted” labels below are historical records. Before using either ADR to approve a shared-contract PR, verify the recorded maintainers, version, current type/schema compatibility and conformance fixtures. New contract proposals are in the [contract register](../contracts/README.md); current ownership is defined by `AGENTS.md` and shared contracts still require cross-owner review.
 
-The Custos decision repository adheres to the standardized [ADR (Architectural Decision Records)](https://adr.github.io/) format. Each record captures a significant architectural decision, context, evaluated trade-offs, considered alternatives, and technical consequences.
+> **Status:** Historical ADR index; current acceptance requires recorded review
+> **Standard:** Semantic Slug ADR Format (`<topic-slug>.md`)
 
----
+The Custos decision repository adheres to the [Architectural Decision Records (ADR)](https://adr.github.io/) standard. Every consequential architectural choice, type contract alignment, and security boundary is captured in a dedicated, semantically named record.
 
-## ADR Index
-
-| ADR ID | Decision Title | Status | Scope / Domain |
-|---|---|---|---|
-| **ADR-0001** | Product category and Task as core unit | Accepted | Product / Core |
-| **ADR-0002** | Local daemon and trust boundary | Accepted | Architecture / Security |
-| **ADR-0003** | SQLite event/outbox persistence | Accepted | Storage / Persistence |
-| **ADR-0004** | Typed internal communication | Accepted | Communication |
-| **ADR-0005** | MCP only at tool/resource boundaries | Accepted | Gateway / Tools |
-| **ADR-0006** | ProviderPort and capability probes | Accepted | Provider / Interop |
-| **ADR-0007** | Domain Packs and ephemeral workers | Accepted | Agent / Execution |
-| **ADR-0008** | Worktree mutation isolation | Accepted | Execution / Git |
-| **ADR-0009** | Exact-payload approvals | Accepted | Security / HITL |
-| **ADR-0010** | ContextPack and provenance | Accepted | Context / Memory |
-| **ADR-0011** | Evidence-based completion | Accepted | Verification |
-| **ADR-0012** | Rust/TypeScript/Python split | Accepted | Codebase / Stack |
-| **ADR-0013** | Cognitive Control Fabric | Accepted | Cognitive / Architecture |
-| **ADR-0014** | RDC protocol (Request-Decision-Challenge) | Accepted | Cognitive / Protocols |
-| **ADR-0015** | JudgmentPort vs DeliberationPort | Accepted | Cognitive / Interfaces |
-| **ADR-0016** | Confidence is not authority | Accepted | Security / Principles |
-| **ADR-0017** | Versioned Question Registry | Accepted | Cognitive / Evaluation |
-| **ADR-0018** | Calibration profiles | Accepted | Cognitive / Tuning |
-| **ADR-0019** | Jev egress/local fallback | Accepted | Cognitive / Adapters |
-| **ADR-0020** | Reflexive challenge | Accepted | Cognitive / Safety |
-| **ADR-0021** | Human Attention Packet | Accepted | UX / HITL |
-| **ADR-0022** | Decision Ledger | Accepted | Audit / Persistence |
-| **ADR-0023** | Memory promotion/invalidation | Accepted | Memory / Knowledge |
-| **ADR-0024** | Artifact-addressed large payloads (CAS) | Accepted | Storage / Performance |
-| **ADR-0025** | A2A deferred to federation horizon | Accepted | Architecture / Scope |
-| **ADR-0026** | System One is a pluggable capability, not a vendor model | Accepted | Cognitive / Extensibility |
-| **ADR-0027** | Custos-owned semantic core | Accepted | Architecture / Core |
-| **ADR-0028** | OSS adoption levels and no-copy default | Accepted | Development / Governance |
-| **ADR-0029** | Minimal SQLite workflow instead of external engine for MVP | Accepted | Storage / MVP |
-| **ADR-0030** | Official MCP SDK without protocol mesh in MVP | Accepted | Gateway / MCP |
-| **ADR-0031** | Provider sessions are not generic model calls | Accepted | Provider / Sessions |
-| **ADR-0032** | Cedar assists authorization but does not own grants | Accepted | Security / Auth |
-| **ADR-0033** | Derived vector/graph indexes are non-canonical | Accepted | Storage / Indexes |
-| **ADR-0034** | Tiered sandbox backends (macOS Seatbelt / Linux bubblewrap) | Accepted | Security / Sandbox |
-| **ADR-0035** | Shadow onboarding for judgment backends | Accepted | Cognitive / Testing |
-| **ADR-0036** | VS Code first, desktop shell later | Accepted | UX / Clients |
-| **ADR-0037** | Research/Personal packs after engineering gate | Accepted | Roadmap / Scope |
+The [document authority ADR](document-authority-and-ownership.md) and [Goose compatibility boundary](goose-compatibility-boundary.md) are lead-directed decisions with team/implementation review still pending.
 
 ---
 
-## Architectural Decision Record Template
+## 1. Active Architecture Decision Records
 
-Detailed ADR records created in `docs/adr/ADR-xxxx.md` follow this structure:
+| Decision Record | Scope / Domain | Status | Key Impact |
+|---|---|:---:|---|
+| **[Task State Machine & Status Taxonomy Alignment](task-state-machine-alignment.md)** | Core / Task | **Retained; conformance review required** | Formalizes `Draft`, `Queued`, `Running`, `Blocked`, `Succeeded`, `Failed`, `Cancelled` lifecycle and aliases |
+| **[ActionIntent, ExecutionPermit, and ExecutionReceipt Contracts](action-intent-and-permit-contracts.md)** | Security / Authority | **Historical acceptance; review required** | Records naming intent; C-03 and current trust-closure fixtures govern new work |
+| **[Goose Compatibility Boundary](goose-compatibility-boundary.md)** | Repository / Interop | **Lead-directed** | Separates Custos product identity from exact upstream and legacy wire/data names |
+
+---
+
+## 2. Canonical Architectural Decisions by Domain
+
+These core principles govern the implementation across all gates (established in the System Blueprint and `AGENTS.md`):
+
+### Core Architecture & State
+- **Task as Core Durable Unit:** The primary entity of work is a Task with state, budgets, workflow, and evidence (not ephemeral chat sessions).
+- **Local Daemon & Trust Boundary:** The trusted computing base runs locally (`custosd`); remote AI models and tools are untrusted external actors.
+- **Custos-Owned Semantic Core:** Rust implements the immutable kernel, type contracts, and invariant reducers; no external framework dictates domain contracts.
+
+### Storage & Persistence
+- **SQLite WAL Event & State Store:** Single-writer multi-reader persistence with transactional task transitions and idempotent schema migrations.
+- **Minimal Workflow Execution:** Lightweight, deterministic task and step persistence without heavy external workflow engines for MVP.
+- **Derived Indexes are Non-Canonical:** Vector, graph, and AST symbol indexes can be rebuilt from source files at any time.
+- **Content-Addressed Storage (CAS):** Large tool outputs, file snapshots, and artifacts are addressed by SHA-256 digest.
+
+### Security, Authority & Sandboxing
+- **Capability Gateway Enforcement:** Every side effect requires an active, unexpired `ExecutionPermit` minted by the `AuthorityEngine`.
+- **Exact-Payload Binding:** Permits are cryptographically bound to action parameter hashes; no wildcard tool execution.
+- **Confidence is Not Authority:** Model self-confidence or verbal assertions never bypass policy gates or evidence verification.
+- **Tiered Sandboxing:** Execution containment isolated via Git worktrees, macOS Seatbelt profiles, and Linux Bubblewrap (`bwrap`).
+
+### Cognitive Runtime & Model Interop
+- **Cognitive Control Fabric (System 1 / System 2):** Fast deterministic rules / local classifiers handle screening; expensive frontier models handle deliberation.
+- **Provider Port Abstraction:** AI model providers implement `ModelProvider` trait; no direct vendor SDK dependencies in core crates.
+- **Request-Decision-Challenge (RDC):** Cognitive decisions are subject to reflexive validation before actions are proposed.
+- **Pluggable System One:** Fast judgment is an extensible capability (rules, ONNX, Jev), not locked to any single vendor.
+
+### Verification & Workflows
+- **Evidence-Based Completion:** Tasks only complete when objective evidence (test passes, build receipts, symbol anchors) satisfies contract requirements.
+- **Ephemeral Workers & Domain Packs:** Domain packs define declarative workflows; workers are spawned ephemerally and bounded by leases.
+- **ContextPack Budgeting & Provenance:** Context compilation strictly enforces token budgets and calculates SHA-256 provenance hashes.
+
+---
+
+## 3. Creating a New ADR
+
+New ADRs are created in `docs/adr/<descriptive-slug>.md` using the following template:
 
 ```markdown
-# ADR-xxxx: [Decision Title]
+# ADR: [Descriptive Decision Title]
 
 ## Context & Problem Statement
 Describe the technical context, motivations, and requirements necessitating this architectural choice.
@@ -73,5 +77,5 @@ The specific accepted decision and architectural approach adopted.
 - Negative / Risks: Technical trade-offs, added complexity, or operational constraints.
 
 ## Verification & References
-Test suites, benchmarks, RFCs, or PRs validating the implementation of this decision.
+Test suites, benchmarks, code paths, or PRs validating the implementation of this decision.
 ```

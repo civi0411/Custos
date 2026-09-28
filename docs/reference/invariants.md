@@ -1,6 +1,8 @@
 # Design Philosophy, Invariants, and Architecture Decisions
 
-> **Status:** Canonical Baseline v4.0  
+> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
+
+> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
 > **Source:** Part II (§6-8) & Part VI (§43) Canonical Specification
 
 This document codifies the **architectural guardrails** of Custos: inviolable system commitments, non-negotiable principles, and vetted strategic design decisions.

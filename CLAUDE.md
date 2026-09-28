@@ -1,20 +1,24 @@
 # Custos — Claude Code Guidelines
 
-> **Master Architecture & Rules:** See [AGENTS.md](./AGENTS.md) for full project rules and invariants.
+Follow [`AGENTS.md`](AGENTS.md) for repository-wide rules. The documentation authority, implementation status, target architecture and current repository map are indexed from [`docs/README.md`](docs/README.md).
 
-## Essential Commands
-- **Check Workspace:** `cargo check --workspace`
-- **Run Tests:** `cargo test --workspace`
-- **Lint Check:** `cargo clippy --workspace --all-targets -- -D warnings`
+## Workspace
 
-## Key Boundaries
-1. **Rust Core:** `crates/`, `apps/`, `adapters/` are strictly Rust. Never place Python or TypeScript in these crates.
-2. **Sidecars Only:** External runtimes live in `sidecars/` (Python for Judgment/ML, TypeScript for Claude/VS Code).
-3. **Pure SE Mode:** When working on DB (`persistence-sqlite`), API (`local-api`), or CLI (`custos-cli`), behave strictly as a backend systems engineer. Treat AI responses as arbitrary JSON payloads.
-4. **Zero Bloat:** Do not add third-party orchestrators (LangChain, LangGraph, etc.) or unsolicited Rust dependencies.
-5. **Production Error Handling:** No `.unwrap()` or `.expect()` in non-test Rust code. Use `thiserror` and return `Result<T, E>`.
-6. **Workspace Structure:**
-   - `docs/`: Master Architecture. Do not modify without explicit permission.
-   - `dev_docs/`: Task tracking & progress reports (`dev_docs/vi/reports/`, `dev_docs/truong/reports/`).
-7. **Git Flow:** The project strictly uses a 4-branch GitHub Flow (`main`, `dev`, `vi`, `truong`). Never create or reference a `report` branch. Only commit to `vi` or `truong` and open PRs to `dev`.
-8. **Git Operations:** You MUST explicitly ask the user for permission before running mutating git commands like `git add`, `git commit`, or `git push`. Never auto-commit.
+- Rust workspace packages live under `crates/`; the actual membership is the Cargo workspace, not every directory containing a manifest.
+- External clients and services live in `ui/`, `services/`, `oidc-proxy/` and `packages/` and communicate through versioned contracts.
+- Schemas, tests, evals, examples and workflow recipes are separate from production runtime code.
+- See [`docs/development/repository-structure.md`](docs/development/repository-structure.md) before moving packages or changing dependency direction.
+
+## Engineering rules
+
+- Preserve existing user changes and keep implementation work scoped; do not claim a target design is already implemented.
+- Keep domain contracts independent of persistence, provider SDKs, network clients and runtime orchestration.
+- Put provider/vendor wire formats and external protocol bindings in adapters; keep clients thin and prevent direct database access outside the daemon composition.
+- Use typed errors and explicit validation at external input boundaries. Follow the crate's established error conventions instead of mechanically imposing new dependencies.
+- Do not add dependencies or third-party orchestrators without explicit approval and an architecture rationale.
+- Update ADRs and the repository map when a structural boundary changes.
+- Never stage, commit, push, merge, or rewrite Git history without the explicit operation-specific authorization required by `AGENTS.md`.
+
+## Verification
+
+Use the smallest relevant checks for the changed scope. `scripts/check_deps.sh` checks hard dependency boundaries against Cargo metadata and reports known transitional edges; `--strict` treats those listed edges as failures. Run workspace checks only when the change and environment warrant them, and report exactly what was or was not verified.

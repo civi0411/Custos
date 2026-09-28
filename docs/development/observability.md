@@ -1,6 +1,8 @@
 # Observability and Metrics
 
-> **Status:** Canonical Baseline v4.0  
+> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
+
+> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
 > **Source:** Part VI (§34) Canonical Specification
 
 The Custos observability system is engineered on top of the **OpenTelemetry** standard, providing comprehensive visibility into local operational internals while strictly preserving user privacy.

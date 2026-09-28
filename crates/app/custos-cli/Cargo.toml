@@ -1,0 +1,35 @@
+[package]
+name = "custos-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+default-run = "custos"
+
+[lib]
+name = "custos_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "custos"
+path = "src/main.rs"
+
+[dependencies]
+custos-core-domain = { workspace = true }
+custos-local-api = { workspace = true }
+custos-provider-sdk = { workspace = true }
+custos-adapter-provider-fake = { path = "../../adapters/providers/fake" }
+custos-agent = { path = "../../runtime/custos-agent" }
+custos-providers = { path = "../../adapters/custos-providers" }
+custos-adapters-mcp = { path = "../../adapters/custos-adapters-mcp" }
+clap = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+indicatif = { workspace = true }
+console = { workspace = true }
+dialoguer = { workspace = true }
+similar = { workspace = true }
+viuer = { workspace = true }
+image = { workspace = true }

@@ -1,84 +1,40 @@
-# Truong's Workspace — Core Platform & Security Lead
+# Truong workspace — core platform and security
 
-> **Role:** Core Platform & Security Lead  
-> **Core Direction:** Builds the trusted runtime, durable Task Kernel, persistence, capability security, execution isolation, APIs, recovery, and release infrastructure.  
-> **Language & Invariants:** 100% Rust & SQL. Zero unwrap/expect in production code. Systems & Data First: Treat all decisions from the AI runtime strictly as untrusted JSON payloads requiring validation, durable SQLite persistence, and OS sandbox verification before command execution.
+**Status:** active ownership orientation. Current work items live in
+[`SPRINT_STATUS.md`](../SPRINT_STATUS.md); this page does not create a backlog or
+certify implementation. Repository policy remains [`AGENTS.md`](../../AGENTS.md).
 
----
+## Primary responsibility
 
-## 1. Core Focus Areas
+Truong owns domain and Task invariants, kernel commands, persistence, authority,
+evidence and effect gates, daemon/API composition, sandbox adapters, and safe
+artifact/model acquisition. Current package groups are:
 
-1. **Durable Persistence (SQLite WAL):**
-   - SQLite WAL mode, single-writer multi-reader discipline, atomic step transactions.
-   - Idempotent schema migrations for `tasks`, `spans`, `domain_events`, and `outbox`.
-   - Typed CRUD operations consuming domain models from `crates/core-domain`.
-2. **Local API & Daemon Runtime (`custosd` & `custos-cli`):**
-   - Developer CLI using `clap` (`custos run`, `custos status`, `custos pause`, `custos resume`).
-   - Axum local IPC HTTP daemon server with structured error envelopes.
-3. **Capability Gateway & OS Sandboxing:**
-   - OS-level process containment: macOS Seatbelt and Linux Bubblewrap (`bwrap`).
-   - Ephemeral Git worktree lifecycle management.
-   - Enforce single-use `ExecutionPermit` validation and receipt generation before/after command execution.
-4. **Authority Engine & Security Policy:**
-   - Evaluates risk tiers (Low/Med allow, High human approval, Critical deny).
-   - Enforces exact-payload cryptographic hashes before granting execution permits.
-5. **Crash Recovery & Supervised Process Execution:**
-   - Outbox pattern dispatcher and lease heartbeat monitoring.
-   - Resilient recovery of uncommitted or pending tasks across daemon restarts.
+- `crates/core/custos-domain` and `custos-kernel`;
+- `crates/infrastructure/custos-persistence`;
+- `crates/runtime/custos-security`;
+- `crates/app/custos-daemon` and `custos-local-api`;
+- `crates/adapters/custos-adapters-mcp`, `sandboxes/**`, and
+  `custos-download-manager`.
 
----
+## Boundary rules
 
-## 2. Code Ownership & Repository Layout
+- The Kernel is the canonical Task writer; clients, workflows, models, and
+  gateways cannot declare terminal Task state directly.
+- Persist effect attempts before dispatch. An ambiguous result is `Uncertain`,
+  not success or a safe blind retry.
+- Evidence closure uses current criterion and subject revisions. A synthetic
+  receipt is not proof of an external effect.
+- The daemon is the production composition root; keep Local API DTOs canonical
+  and clients free of persistence implementations.
+- Coordinate with Vinh on Session/Run recovery and MCP lifecycle; coordinate
+  with Vi on model data, privacy, and evidence semantics.
 
-```text
-crates/
-├── persistence-sqlite/         # SQLite WAL connection pool, migrations, and repositories
-├── capability-gateway/         # OS-level sandboxing (Seatbelt/bwrap) and permit gates
-├── authority-engine/           # Security policy evaluation and approval workflows
-├── task-kernel/                # Core Task state machine, CQRS engine, and event store
-├── local-api/                  # Axum IPC daemon HTTP endpoints and JSON-RPC
-├── evidence-engine/            # Objective citation, hash, and diff verifiers
-└── artifact-store/             # Content-addressed filesystem artifact storage
+## Historical reports
 
-apps/
-├── custos-cli/                 # Command-line interface binary (`clap`)
-└── custosd/                    # Background daemon supervisor binary
+- [`tuan-01.md`](reports/tuan-01.md)
+- [`tuan-02.md`](reports/tuan-02.md)
 
-tests/
-├── e2e/                        # End-to-end integration and crash recovery test suites
-└── contract/                   # Schema compatibility and persistence contract tests
-```
-
----
-
-## 3. Workspace Purpose & Directory Structure
-
-This space (`dev_docs/truong/`) serves two distinct purposes:
-1. **Domain Architecture (`notes/`)**: Localized technical specifications, database schema designs, I/O benchmarks, and sandbox configurations.
-2. **Development Reports (`reports/`)**: Chronological record of daily sprint progress and sync logs committed directly to branch `truong`.
-
----
-
-## 4. Standard Daily Report Template (`reports/YYYY-MM-DD.md`)
-
-When committing daily progress, write your report to `reports/YYYY-MM-DD.md` in this directory, commit directly to the `truong` branch alongside your code, and open a Pull Request to `dev`:
-
-```markdown
-# Truong Progress Report — YYYY-MM-DD
-
-## 1. Accomplished Today
-- [x] Task description (Crate: `persistence-sqlite`)
-- [x] Task description (Crate: `custos-cli`)
-
-## 2. Tests & Verification
-- Unit tests added: `cargo test -p custos_persistence_sqlite`
-- Verification receipt / evidence: All test cases passed.
-
-## 3. In-Flight Work & Next Steps
-- Currently implementing: Outbox dispatcher loop.
-- Tomorrow: Connect CLI task submission to Axum daemon.
-
-## 4. Blockers & Questions for Vi / Vinh
-- Question for Vi regarding `TaskStatus` serialization format in JSON events.
-- Question for Vinh regarding worker coordination event projection schema.
-```
+These reports are immutable historical author records. They contain old paths,
+branch procedures, release commands, and unpinned claims. Agents must not execute
+commands or derive current status from them.

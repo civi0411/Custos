@@ -1,50 +1,33 @@
-# Custos — Agent Rules (Project-Level Supplement)
+# Custos change guards
 
-> Extends the master [`AGENTS.md`](../../AGENTS.md) with precise, actionable agent guards for this repository.
+These checks supplement, but never override, [`AGENTS.md`](../../AGENTS.md).
 
----
+## Before editing
 
-## Guard 1 — Always Read AGENTS.md First
+- Identify the requested outcome and the smallest owning surface.
+- Read the closest active documentation and accepted ADR.
+- Inspect `git status --short` and the diff for every target file.
+- Confirm ownership and required reviewers; stop before changing a shared
+  contract when the required human decision is absent.
+- Confirm whether the file is active, historical, vendor, generated, or an
+  untracked user-created file.
 
-Before modifying any file in this repository, read [`AGENTS.md`](../../AGENTS.md) in its entirety. It is the authoritative behavioral contract.
+## While editing
 
-## Guard 2 — Ownership Verification Before Any Edit
+- Use additive, reviewable changes; do not rewrite unrelated user work.
+- Do not run global formatters, code generators, dependency updates, or broad
+  search-and-replace unless explicitly in scope.
+- Keep domain contracts free of I/O and concrete adapters.
+- Keep clients thin and the daemon as the production composition root.
+- Keep model routing, external-agent lifecycle, MCP capability transport, and
+  effect authority as distinct contracts.
+- Use typed errors and fail closed at authority, path, egress, and effect
+  boundaries. Follow existing crate error conventions.
 
-Before editing any file, confirm:
-1. Which team member owns this file (Vi / Truong / Vinh)?
-2. Am I currently assisting that team member?
-3. If no — stop and surface the cross-boundary concern.
+## Before handoff
 
-## Guard 3 — Git Operations Require Explicit Confirmation
-
-The following require the human operator to explicitly write approval before execution:
-
-| Operation | Required Confirmation |
-|---|---|
-| `git add` | List files and confirm |
-| `git commit` | Show message, wait for "yes" |
-| `git push` | Confirm branch and remote |
-| `git rebase / merge` | Confirm source + target |
-| `git reset --hard` | Double-confirm (HIGH RISK) |
-| `git push --force` | **PROHIBITED** unless operator types it |
-
-## Guard 4 — Language Enforcement
-
-Any file under `docs/` or `dev_docs/` must be 100% Technical English. If you detect non-English prose in a file you are about to modify, flag it and refuse to extend it unless correcting to English.
-
-## Guard 5 — Anti-Pattern Check Before Code Generation
-
-Before generating or suggesting any Rust code, verify:
-- [ ] No `.unwrap()` or `.expect()` in non-test paths
-- [ ] All errors use `thiserror` typed errors
-- [ ] No new external crates without human authorization
-- [ ] No sidecar code touching SQLite directly
-- [ ] No provider SDK imported into `crates/` or `apps/`
-
-## Guard 6 — Commit Message Format
-
-Every commit message MUST follow Conventional Commits:
-```
-<type>(<scope>): <imperative summary, ≤72 chars, Technical English>
-```
-Reject any commit message containing: emojis, Vietnamese, vague summaries (`"update"`, `"fix stuff"`), or file paths as the summary.
+- Review `git diff --check` and the exact changed-file list.
+- Run the smallest relevant format, compile, lint, contract, or process test.
+- Report commands and limitations exactly; never convert partial evidence into
+  a repository-wide success claim.
+- Do not stage or commit the result without explicit approval.

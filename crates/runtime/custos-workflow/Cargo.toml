@@ -1,0 +1,26 @@
+[package]
+name = "custos-workflow"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+async-trait.workspace = true
+custos-core-domain = { workspace = true }
+custos-provider-sdk = { path = "../../core/custos-provider-sdk" }
+custos-kernel = { path = "../../core/custos-kernel" }
+futures.workspace = true
+rmcp = { version = "3.2.0", features = ["server"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+serde_yaml.workspace = true
+serde_path_to_error.workspace = true
+jsonschema.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process", "net", "signal", "io-std", "io-util"] }
+tokio-util = { version = "0.7.19", features = ["compat"] }
+tracing.workspace = true
+uuid = { workspace = true, features = ["v4"] }
+chrono = { workspace = true }

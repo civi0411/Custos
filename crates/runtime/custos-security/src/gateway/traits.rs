@@ -1,0 +1,24 @@
+use async_trait::async_trait;
+use custos_core_domain::{Action, DomainError, ExecutionReceipt};
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ExecutionResult {
+    pub success: bool,
+    pub output: serde_json::Value,
+    pub permit_id: Option<String>,
+    pub evidence: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub receipt: Option<ExecutionReceipt>,
+}
+
+#[async_trait]
+pub trait ToolGate: Send + Sync {
+    async fn dispatch(&self, action: &Action) -> Result<ExecutionResult, DomainError>;
+
+    async fn dispatch_for_task(
+        &self,
+        task_id: &str,
+        action: &Action,
+        actor: &str,
+    ) -> Result<ExecutionResult, DomainError>;
+}

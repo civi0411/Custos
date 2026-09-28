@@ -1,6 +1,8 @@
 # Task Lifecycle & Domain Model
 
-> **Status:** Canonical Baseline v4.0  
+> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
+
+> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
 > **Source:** Part III (§9), Part VIII (§24-26) & Part VI (§32) Canonical Specification
 
 The fundamental operational unit of Custos is the **Task**. This document details the Canonical Domain Model, the Finite State Machine, transaction patterns, persistence schemas, and real-world runtime execution scenarios.

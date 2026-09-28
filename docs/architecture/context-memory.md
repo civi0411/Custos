@@ -1,6 +1,8 @@
 # Context & Memory Architecture
 
-> **Status:** Canonical Baseline v4.0  
+> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
+
+> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
 > **Source:** Part V (§22-23) Canonical Specification
 
 To optimize token expenditures and eliminate context clutter, Custos implements a multi-tier context compilation and memory architecture with strict provenance labeling.

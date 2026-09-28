@@ -1,0 +1,31 @@
+[package]
+name = "custos-agent"
+version = "0.1.0-alpha.10"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "The GDK's Agent Loop"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time", "fs", "process", "net", "signal", "io-std", "io-util"] }
+tokio-util = { workspace = true, features = ["compat"] }
+async-trait = { workspace = true }
+custos-provider-types = { version = "0.1.0-alpha.10", path = "../../core/custos-provider-types", default-features = false }
+rmcp = { workspace = true, features = ["server"] }
+uuid = { workspace = true }
+serde_json = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+tracing-futures = { workspace = true }
+async-stream = { workspace = true }
+tokio-stream = { workspace = true }
+
+[dev-dependencies]
+schemars.workspace = true
+serde = { workspace = true, features = ["derive"] }

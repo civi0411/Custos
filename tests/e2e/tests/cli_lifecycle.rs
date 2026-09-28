@@ -10,7 +10,7 @@
 //! - State invariant rejection on completed tasks
 
 use custos_core_domain::{ContinuationPacket, Span, SpanState, TaskStatus};
-use custos_persistence_sqlite::SqliteTaskStore;
+use custos_persistence::SqliteTaskStore;
 use custos_task_kernel::{AdvanceTask, CompleteTask, CreateTask, TaskService, TaskStore};
 use std::sync::Arc;
 
@@ -31,6 +31,7 @@ async fn test_full_file_backed_lifecycle_and_restart() {
             .execute_create(CreateTask {
                 title: "E2E Automated Task".to_string(),
                 metadata: Some(serde_json::json!({"env": "test", "priority": "high"})),
+                contract: None,
             })
             .await
             .expect("Create must succeed");
@@ -102,6 +103,7 @@ async fn test_full_file_backed_lifecycle_and_restart() {
                 task_id: task.id.clone(),
                 summary: "All steps succeeded".to_string(),
                 expected_epoch: 2,
+                evidence_claims: Vec::new(),
             })
             .await
             .expect("Complete task must succeed");
@@ -171,6 +173,7 @@ async fn test_full_file_backed_lifecycle_and_restart() {
                 task_id: task_id.clone(),
                 summary: "Repeat".to_string(),
                 expected_epoch: 0,
+                evidence_claims: Vec::new(),
             })
             .await;
         assert!(stale_result.is_err(), "Stale epoch must be rejected");

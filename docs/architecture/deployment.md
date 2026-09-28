@@ -1,6 +1,8 @@
 # Local-First Deployment Architecture
 
-> **Status:** Canonical Baseline v4.0  
+> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
+
+> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
 > **Source:** Part VI (§28, §34) & Part VII (§47) Canonical Specification
 
 Custos is designed entirely around the **Local-First** paradigm: guaranteeing that user data, code repositories, and execution artifacts remain exclusively on the local workstation, with zero dependencies on centralized cloud services.

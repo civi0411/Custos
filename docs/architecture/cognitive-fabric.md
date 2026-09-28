@@ -1,6 +1,8 @@
 # Cognitive Control Fabric & Judgment Architecture
 
-> **Status:** Canonical Baseline v4.0  
+> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
+
+> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
 > **Source:** Part III (§15), Part V (§15-17) & Part VII (§48) Canonical Specification
 
 The Cognitive Control Fabric (CCF) is Custos's cognitive control architecture, implementing the foundational principle of **strict bifurcation between Fast Reflection (System One) and Deep Deliberation (System Two)**.

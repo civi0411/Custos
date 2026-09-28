@@ -15,7 +15,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Verify Architecture Boundaries
-        run: ./scripts/check_deps.sh
+        run: |
+          bash scripts/check_deps.sh
+          bash scripts/check_naming.sh
 
       - name: Install cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2

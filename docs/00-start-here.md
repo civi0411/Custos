@@ -1,7 +1,9 @@
 # Custos Documentation — Start Here
 
-> **Status:** Canonical Baseline v4.0-draft  
-> **Last Updated:** 2026-09-22  
+> **Classification:** Legacy V8 reading guide, non-normative. Start with the active [documentation hub](README.md). Current architecture is [ARCH-REF-01](architecture/reference-architecture.md) plus [ARCH-FLOW-01](architecture/runtime-flows.md); current implementation claims live under [status](status/README.md).
+
+> **Status:** Historical design baseline v8.0
+> **Last Updated:** 2026-09-23
 > **Maintainer:** Custos Core Team  
 > **Scope:** Architecture, Product, Implementation, Governance
 
@@ -43,7 +45,7 @@ Focus: Trust Boundaries, Exact-Payload Approvals, Sandboxing, Secrets.
 
 ### UI/UX & Client Applications Engineers (CLI / Desktop / VS Code)
 Focus: Experience Plane, IPC/JSON-RPC communication, Exact-Payload Approval UX, CLI Command architecture.
-- Review Kickoff Guide: [UX/UI & CLI Kickoff Guide](../UX_UI_CLI_KICKOFF.md)
+- The former UX/UI & CLI kickoff guide is not present in this checkout; use the [current implementation blueprint](development/implementation-blueprint.md) and [local API/flow contracts](contracts/README.md) until a reviewed UX guide is restored.
 - Review Interface Architecture at [Layer 7: Interface Layer & Experience Plane](./architecture/overview.md)
 - Review IPC Contracts at [Internal Communication & Protocols](./architecture/communication.md)
 - Review Task Lifecycle and Approval Gates at [Task Lifecycle](./architecture/task-lifecycle.md) and [Capability Model](./security/capability-model.md)
@@ -57,7 +59,7 @@ Focus: Product Identity, Invariants, Roadmap, Testing Architecture.
 - Review [16-Week Roadmap](./development/roadmap.md) and [Testing Architecture](./development/testing.md)
 
 ### Development Team & AI Collaboration
-Focus: Internal collaboration between Vi (Core & AI Lead) & Truong (Software & Client Lead), Git workflow, sprint deliverables.
+Focus: Internal collaboration between Vĩ (Product & AI/Research Lead), Vinh (SE Lead - Systems, Data & Scale), & Trường (SE Lead - App, Client & Desktop).
 - Review [Internal Coordination Hub](../dev_docs/README.md)
 - Review [Active Sprint Status](../dev_docs/SPRINT_STATUS.md)
 - Review [AI Assistant Vibecoding Rules](../AGENTS.md)
@@ -114,7 +116,7 @@ docs/
 │   └── sources.md                   # Foundational research and technical references
 │
 └── adr/                             # Architecture Decision Records
-    └── README.md                    # Index of 37 formal decisions (ADR-0001 through ADR-0037)
+    └── README.md                    # Architecture decision records and semantic index
 ```
 
 ---

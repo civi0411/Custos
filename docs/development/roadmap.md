@@ -1,6 +1,8 @@
 # 16-Week Delivery Roadmap
 
-> **Status:** Canonical Baseline v4.0  
+> **Classification:** Historical V4 schedule hypothesis, non-normative. The [implementation blueprint](implementation-blueprint.md) and [workboard](../../dev_docs/SPRINT_STATUS.md) own current sequencing.
+
+> **Status:** Historical planning baseline
 > **Source:** Part XIV (§37-38) & Part VII (§56) Canonical Specification
 
 Custos execution follows a strict **Vertical Slices** methodology: each milestone produces a fully testable, end-to-end runnable system rather than disconnected horizontal abstraction layers.

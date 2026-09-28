@@ -1,0 +1,24 @@
+[package]
+name = "custos-bridge"
+version = "0.1.0"
+edition = "2021"
+description = "Session to Task Bridge for Custos Sovereign OS"
+
+[dependencies]
+custos-core-domain = { workspace = true }
+custos-kernel = { workspace = true }
+custos-session = { workspace = true }
+
+async-trait = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+custos-persistence = { workspace = true }
+

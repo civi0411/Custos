@@ -1,83 +1,164 @@
 [workspace]
 resolver = "2"
 members = [
-    "apps/custosd",
-    "apps/custos-cli",
-    "crates/core-domain",
-    "crates/task-kernel",
-    "crates/workflow-runtime",
-    "crates/capability-gateway",
-    "crates/cognitive-runtime",
-    "crates/judgment-contracts",
-    "crates/deliberation-contracts",
-    "crates/context-compiler",
-    "crates/evidence-engine",
-    "crates/memory-service",
-    "crates/repo-intelligence",
-    "crates/artifact-store",
-    "crates/persistence-sqlite",
-    "crates/local-api",
-    "crates/provider-sdk",
-    "crates/domain-pack-sdk",
-    "crates/observability",
-    "crates/authority-engine",
-    "adapters/providers/fake",
-    "adapters/providers/codex",
-    "adapters/providers/claude",
-    "adapters/providers/antigravity",
-    "adapters/providers/local-model",
-    "adapters/judgments/rules",
-    "adapters/judgments/onnx",
-    "adapters/judgments/jev",
-    "adapters/sandboxes/macos-seatbelt",
-    "adapters/sandboxes/linux-bubblewrap",
-    "adapters/tools",
+    "crates/core/custos-domain",
+    "crates/core/custos-kernel",
+    "crates/core/custos-bridge",
+    "crates/core/custos-provider-sdk",
+    "crates/core/custos-provider-types",
+    "crates/infrastructure/custos-persistence",
+    "crates/runtime/custos-session",
+    "crates/runtime/custos-workflow",
+    "crates/runtime/custos-cognitive",
+    "crates/runtime/custos-context",
+    "crates/runtime/custos-security",
+    "crates/runtime/custos-gateway",
+    "crates/runtime/custos-memory-service",
+    "crates/adapters/providers/claude",
+    "crates/runtime/custos-agent",
+    "crates/runtime/custos-context-management",
+    "crates/adapters/custos-adapters-mcp",
+    "crates/adapters/custos-mcp",
+    "crates/adapters/custos-providers",
+    "crates/adapters/custos-local-inference",
+    "crates/adapters/custos-roaming",
+    "crates/adapters/custos-download-manager",
+    "crates/adapters/judgments/contracts",
+    "crates/adapters/judgments/jev",
+    "crates/adapters/judgments/onnx",
+    "crates/adapters/judgments/rules",
+    "crates/adapters/sandboxes/linux-bubblewrap",
+    "crates/adapters/sandboxes/macos-seatbelt",
+    "crates/adapters/providers/antigravity",
+    "crates/adapters/providers/codex",
+    "crates/adapters/providers/fake",
+    "crates/adapters/providers/local-model",
+    "crates/packs/custos-packs-engineering",
+    "crates/packs/custos-packs-research",
+    "crates/packs/custos-packs-assistant",
+    "crates/app/custos-cli",
+    "crates/app/custos-daemon",
+    "crates/app/custos-local-api",
     "tests/contract",
     "tests/e2e",
-    "xtask",
+    "xtask"
 ]
 
-
 [workspace.package]
-version = "0.1.2"
+version = "0.1.0"
 edition = "2021"
-authors = ["Custos Core Team"]
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/agent-hub/custos"
+authors = ["Custos Team"]
+license = "MIT"
+repository = "https://github.com/civi0411/Custos"
+rust-version = "1.80"
+description = "Custos Sovereign Agentic Operating System"
+
+[workspace.lints.rust]
+[workspace.lints.clippy]
 
 [workspace.dependencies]
-# Internal workspace crates
-custos-core-domain = { path = "crates/core-domain" }
-custos-task-kernel = { path = "crates/task-kernel" }
-custos-workflow-runtime = { path = "crates/workflow-runtime" }
-custos-capability-gateway = { path = "crates/capability-gateway" }
-custos-cognitive-runtime = { path = "crates/cognitive-runtime" }
-custos-judgment-contracts = { path = "crates/judgment-contracts" }
-custos-deliberation-contracts = { path = "crates/deliberation-contracts" }
-custos-context-compiler = { path = "crates/context-compiler" }
-custos-evidence-engine = { path = "crates/evidence-engine" }
-custos-memory-service = { path = "crates/memory-service" }
-custos-repo-intelligence = { path = "crates/repo-intelligence" }
-custos-artifact-store = { path = "crates/artifact-store" }
-custos-persistence-sqlite = { path = "crates/persistence-sqlite" }
-custos-local-api = { path = "crates/local-api" }
-custos-provider-sdk = { path = "crates/provider-sdk" }
-custos-domain-pack-sdk = { path = "crates/domain-pack-sdk" }
-custos-observability = { path = "crates/observability" }
-custos-authority-engine = { path = "crates/authority-engine" }
-custos-adapter-provider-fake = { path = "adapters/providers/fake" }
-
-# Common third-party dependencies
+custos-domain = { path = "crates/core/custos-domain" }
+custos-core-domain = { package = "custos-domain", path = "crates/core/custos-domain" }
+custos-kernel = { path = "crates/core/custos-kernel" }
+custos-task-kernel = { package = "custos-kernel", path = "crates/core/custos-kernel" }
+custos-session = { path = "crates/runtime/custos-session" }
+custos-bridge = { path = "crates/core/custos-bridge" }
+custos-provider-sdk = { path = "crates/core/custos-provider-sdk" }
+custos-provider-types = { path = "crates/core/custos-provider-types" }
+tiktoken-rs = { version = "0.12", default-features = false }
+blake3 = { version = "1", default-features = false, features = ["std"] }
+custos-persistence = { path = "crates/infrastructure/custos-persistence" }
+custos-persistence-sqlite = { package = "custos-persistence", path = "crates/infrastructure/custos-persistence" }
+custos-security = { path = "crates/runtime/custos-security" }
+custos-workflow = { path = "crates/runtime/custos-workflow" }
+custos-context = { path = "crates/runtime/custos-context" }
+custos-cognitive = { path = "crates/runtime/custos-cognitive" }
+custos-gateway = { path = "crates/runtime/custos-gateway" }
+custos-memory-service = { path = "crates/runtime/custos-memory-service" }
+custos-local-api = { path = "crates/app/custos-local-api" }
+custos-judgment-contracts = { path = "crates/adapters/judgments/contracts" }
+indicatif = "0.17"
+console = "0.15"
+dialoguer = "0.11"
+similar = { version = "2.4", features = ["inline"] }
+viuer = "0.11.0"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_yaml = "0.9.32"
+serde_path_to_error = "0.1.8"
+jsonschema = "0.55"
+
+# Async & Concurrency
+tokio = { version = "1.36", features = ["full"] }
+async-trait = "0.1"
+futures = "0.3"
+
+# Error Handling
 thiserror = "1.0"
 anyhow = "1.0"
-tokio = { version = "1.38", features = ["full"] }
+
+# Observability
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-sha2 = "0.10"
+
+# Database
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# Config & Env
+dotenvy = "0.15"
+config = "0.14"
+
+# Utilities
 uuid = { version = "1.8", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
-clap = { version = "4.5", features = ["derive"] }
-async-trait = "0.1"
-rusqlite = { version = "0.31", features = ["bundled"] }
+rmcp = { version = "3.2", features = ["server", "macros"] }
+async-stream = "0.3"
+base64 = "0.21"
+once_cell = "1.18"
+rand = "0.8"
+regex = "1.10"
+reqwest = { version = "0.13", features = ["json", "multipart", "stream"] }
+strum = { version = "0.28", features = ["derive"] }
+tokio-stream = "0.1"
+schemars = "1.0.2"
+indoc = "2.0"
+etcetera = "0.11"
+tracing-appender = "0.2.1"
+include_dir = "0.7"
+shell-words = "1.1"
+tokio-util = { version = "0.7", features = ["compat"] }
+tracing-futures = { version = "0.2" }
+url = { version = "2.5" }
+urlencoding = { version = "2.1" }
+http = { version = "1.1" }
+lru = { version = "0.12" }
+dirs = { version = "5" }
+clap = { version = "4.4", features = ["derive"] }
+sha2 = { version = "0.10" }
+arboard = { version = "3" }
+shellexpand = { version = "3" }
+which = { version = "6" }
+bytes = { version = "1.5" }
+keyring = { version = "2" }
+
+# llama.cpp for local inference (exact version pin - has breaking changes in patch releases)
+llama-cpp-2 = { version = "=0.1.146", default-features = false, features = ["sampler", "mtmd"] }
+llama-cpp-sys-2 = { version = "=0.1.146", default-features = false }
+
+# ACP (Agent Client Protocol) — required by custos-sdk-types and roaming
+agent-client-protocol = { version = "2.2.0", default-features = false }
+agent-client-protocol-schema = { version = "=1.9.1", default-features = false }
+agent-client-protocol-http = { version = "2.2.0", default-features = false }
+
+# iroh P2P transport — required by custos-roaming
+iroh = { version = "1.2.0", default-features = false }
+iroh-relay = { version = "1", default-features = false }
+fs2 = "0.4"
+
+# Dev dependencies
+env-lock = "1.0"
+tempfile = "3.8"
+test-case = "3.2"
+wiremock = "0.6"
