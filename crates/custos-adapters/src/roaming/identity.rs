@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 
 use iroh::{PublicKey, SecretKey};
 
-use crate::error::RoamingError;
+use crate::roaming::error::RoamingError;
 
 const KEY_FILE_NAME: &str = "roaming_node_key";
 

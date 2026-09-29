@@ -6,7 +6,7 @@
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-use crate::error::RoamingError;
+use crate::roaming::error::RoamingError;
 
 /// Guard against a malicious peer announcing a huge handshake frame.
 const MAX_FRAME_BYTES: u32 = 64 * 1024;

@@ -31,7 +31,7 @@ use super::super::{finalize_usage, thinking_output::ThinkingOutputFilter, Stream
 use super::inference_engine::{
     generation_loop, prepare_generation, GenerationContext, StopSuffixTrimmer, TokenAction,
 };
-use crate::tool_emulation::{EmulatorAction, StreamingEmulatorParser};
+use crate::local_inference::tool_emulation::{EmulatorAction, StreamingEmulatorParser};
 
 const SHELL_TOOL: &str = "developer__shell";
 const CODE_EXECUTION_TOOL: &str = "code_execution__execute_typescript";

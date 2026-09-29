@@ -1,0 +1,23 @@
+[package]
+name = "custos-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Custos Trusted Core: Kernel State Machine, Authority, Capabilities, and Evidence"
+
+[dependencies]
+custos-domain = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+blake3 = { workspace = true }
+hex = "0.4.3"
+sha2 = "0.11.0"

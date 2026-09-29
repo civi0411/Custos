@@ -5,21 +5,28 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "Custos Daemon: Composition Root, Local Background Server"
+
+[lib]
+name = "custos_daemon"
+path = "src/lib.rs"
+
+[[bin]]
+name = "custos-daemon"
+path = "src/main.rs"
 
 [dependencies]
+custos-domain = { workspace = true }
+custos-core = { workspace = true }
+custos-provider = { workspace = true }
+custos-persistence = { workspace = true }
+custos-bridge = { workspace = true }
+custos-runtime = { workspace = true }
+custos-adapters = { workspace = true }
+
 async-trait = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 chrono = { workspace = true }
 tracing = { workspace = true }
-custos-core-domain = { workspace = true }
-custos-kernel = { workspace = true }
-custos-persistence = { workspace = true }
-custos-session = { workspace = true }
-custos-bridge = { workspace = true }
-custos-workflow = { workspace = true }
-custos-cognitive = { workspace = true }
-custos-security = { workspace = true }
-custos-local-api = { workspace = true }
-custos-adapters-mcp = { path = "../../adapters/custos-adapters-mcp" }

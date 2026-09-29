@@ -16,13 +16,13 @@ name = "custos"
 path = "src/main.rs"
 
 [dependencies]
-custos-core-domain = { workspace = true }
-custos-local-api = { workspace = true }
-custos-provider-sdk = { workspace = true }
-custos-adapter-provider-fake = { path = "../../adapters/providers/fake" }
-custos-agent = { path = "../../runtime/custos-agent" }
-custos-providers = { path = "../../adapters/custos-providers" }
-custos-adapters-mcp = { path = "../../adapters/custos-adapters-mcp" }
+custos-domain = { workspace = true }
+custos-core = { workspace = true }
+custos-provider = { workspace = true }
+custos-runtime = { workspace = true }
+custos-adapters = { workspace = true }
+custos-daemon = { workspace = true }
+
 clap = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

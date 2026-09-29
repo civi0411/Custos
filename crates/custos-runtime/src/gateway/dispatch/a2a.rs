@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use custos_cognitive::RouteDecision;
+use crate::cognitive::RouteDecision;
 
 pub struct A2ADispatcher;
 

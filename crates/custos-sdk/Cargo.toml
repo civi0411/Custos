@@ -6,7 +6,7 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The Custos Development Kit (GDK) for Rust, with optional uniffi bindings for Python/Kotlin"
+description = "The Custos Development Kit (SDK) for Rust, with optional uniffi bindings for Python/Kotlin"
 
 [lib]
 name = "custos_sdk"
@@ -21,28 +21,28 @@ required-features = ["uniffi"]
 default = []
 uniffi = [
     "dep:uniffi",
-    "dep:custos-context-management",
+    "dep:custos-runtime",
     "dep:thiserror",
     "dep:anyhow",
-    "dep:custos-providers",
+    "dep:custos-adapters",
     "dep:futures",
-    "dep:serde_json",
     "dep:tokio",
     "dep:rmcp",
     "dep:base64",
 ]
 
 [dependencies]
-custos-sdk-types = { version = "0.1.0-alpha.10", path = "../custos-sdk-types" }
 agent-client-protocol = { workspace = true }
 agent-client-protocol-schema = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+schemars = { workspace = true, features = ["derive"] }
 
 uniffi = { version = "0.32", features = ["cli"], optional = true }
 thiserror = { version = "2", optional = true }
-custos-providers = { version = "0.1.0-alpha.10", path = "../custos-providers", features = ["rustls-tls"], optional = true }
-custos-context-management = { version = "0.1.0-alpha.10", path = "../custos-context-management", optional = true }
+custos-adapters = { workspace = true, optional = true }
+custos-runtime = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "sync"], optional = true }
 anyhow = { workspace = true, optional = true }
 rmcp = { workspace = true, optional = true }
@@ -53,5 +53,4 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros", "process", 
 tokio-util = { workspace = true, features = ["compat", "rt"] }
 
 [package.metadata.cargo-machete]
-# Used to provide extras imports for agent-client-protocol
 ignored = ["agent-client-protocol-schema"]

@@ -12,14 +12,14 @@ use iroh::{
 use tokio::sync::Mutex;
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
-use crate::card::ConnectionCard;
-use crate::directory::{Direction, Directory};
-use crate::error::RoamingError;
-use crate::frame::{read_frame, write_frame};
-use crate::handshake::{ClientHello, HostAck};
-use crate::identity::RoamingIdentity;
-use crate::relay::RelaySettings;
-use crate::trust::TrustBook;
+use crate::roaming::card::ConnectionCard;
+use crate::roaming::directory::{Direction, Directory};
+use crate::roaming::error::RoamingError;
+use crate::roaming::frame::{read_frame, write_frame};
+use crate::roaming::handshake::{ClientHello, HostAck};
+use crate::roaming::identity::RoamingIdentity;
+use crate::roaming::relay::RelaySettings;
+use crate::roaming::trust::TrustBook;
 
 /// Primary ALPN identifying the Custos ACP-over-iroh protocol.
 pub const ROAMING_ACP_ALPN: &[u8] = b"custos-acp/1";

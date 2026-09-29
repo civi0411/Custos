@@ -6,14 +6,13 @@ license.workspace = true
 publish = false
 
 [dependencies]
-custos-core-domain = { workspace = true }
-custos-task-kernel = { workspace = true }
+custos-domain = { workspace = true }
+custos-core = { workspace = true }
 custos-persistence = { workspace = true }
-custos-context = { workspace = true }
-custos-security = { workspace = true }
-custos-provider-sdk = { workspace = true }
-custos-adapter-provider-fake = { path = "../../crates/adapters/providers/fake" }
-custos-local-api = { workspace = true }
+custos-runtime = { workspace = true }
+custos-provider = { workspace = true }
+custos-adapters = { workspace = true }
+custos-daemon = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }

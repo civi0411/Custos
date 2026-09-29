@@ -9,8 +9,8 @@ repository.workspace = true
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
-custos-domain = { version = "0.1.0", path = "../../core/custos-domain" }
-custos-kernel = { version = "0.1.0", path = "../../core/custos-kernel" }
+custos-domain = { workspace = true }
+custos-core = { workspace = true }
 rusqlite = { workspace = true, features = ["bundled"] }
 serde_json.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }

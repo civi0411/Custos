@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::card::ConnectionCard;
-use crate::error::RoamingError;
+use crate::roaming::card::ConnectionCard;
+use crate::roaming::error::RoamingError;
 
 /// A single saved remote node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -163,7 +163,7 @@ fn write_file(path: &Path, contents: &[u8]) -> Result<(), RoamingError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::identity::RoamingIdentity;
+    use crate::roaming::identity::RoamingIdentity;
 
     fn make_card() -> String {
         let host = RoamingIdentity::generate();

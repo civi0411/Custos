@@ -1,16 +1,10 @@
-//! The goose Development Kit (GDK).
+//! The Custos Development Kit (SDK).
 //!
-//! With default features this crate re-exports the shared GDK wire types from
-//! `custos-sdk-types` so you can build an Agent Client Protocol (ACP) client
-//! that talks to `goose acp` over stdio.
-//!
-//! With `--features uniffi` the crate additionally compiles as a
-//! `cdylib`/`staticlib` and exposes an in-process API to Python and Kotlin via
-//! [uniffi-rs](https://github.com/mozilla/uniffi-rs). The current uniffi surface
-//! lets callers construct declarative providers from JSON and stream provider
-//! completions.
+//! With default features this crate exports the shared wire types from
+//! `wire_types` so you can build an Agent Client Protocol (ACP) client.
 
-pub use custos_sdk_types::{custom_notifications, custom_requests};
+pub mod wire_types;
+pub use wire_types::{custom_notifications, custom_requests};
 
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!("custos-engine");

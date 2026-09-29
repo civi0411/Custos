@@ -3,9 +3,9 @@
 //! Discovers eligible peers via Roaming Directory and verifies trust via TrustBook
 //! before dispatching delegation requests to peer agents.
 
-use crate::directory::{Directory, PeerEntry};
-use crate::error::RoamingError;
-use crate::trust::TrustBook;
+use crate::roaming::directory::{Directory, PeerEntry};
+use crate::roaming::error::RoamingError;
+use crate::roaming::trust::TrustBook;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -108,7 +108,7 @@ impl SystemOneA2ARouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::directory::Direction;
+    use crate::roaming::directory::Direction;
     use iroh::SecretKey;
 
     #[tokio::test]

@@ -9,7 +9,7 @@
 
 use iroh::{RelayConfig, RelayMap, RelayMode, RelayUrl};
 
-use crate::error::RoamingError;
+use crate::roaming::error::RoamingError;
 
 /// How the roaming endpoint reaches relays.
 #[derive(Debug, Clone, Default)]

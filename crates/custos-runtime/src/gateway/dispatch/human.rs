@@ -1,5 +1,5 @@
 use anyhow::Result;
-use custos_cognitive::{HumanGate, HumanGateOutcome};
+use crate::cognitive::{HumanGate, HumanGateOutcome};
 use custos_core_domain::{SessionId, TaskId};
 use std::time::Duration;
 

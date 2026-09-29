@@ -2,9 +2,9 @@ use include_dir::{include_dir, Dir};
 use minijinja::{Environment, Error as MiniJinjaError, Value as MJValue};
 use serde::Serialize;
 
-use crate::paths::Paths;
+use crate::local_inference::paths::Paths;
 
-static CORE_PROMPTS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/src/prompts");
+static CORE_PROMPTS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/src/local_inference/prompts");
 
 pub fn render_string<T: Serialize>(
     template_str: &str,

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use custos_cognitive::RouteDecision;
+use crate::cognitive::{ReasoningTier, RouteDecision};
 
 pub struct LocalDispatcher;
 
@@ -13,7 +13,7 @@ impl LocalDispatcher {
         );
 
         match decision.tier {
-            custos_cognitive::ReasoningTier::TierZero => {
+            ReasoningTier::TierZero => {
                 // System 0 deterministic execution
                 Ok(format!(
                     "[Tier 0 Deterministic Execution] Processed: {}",

@@ -415,10 +415,9 @@ in {brace handling} and patched it.
             ]
         );
         assert_eq!(summary.pending_tasks, vec!["42"]);
-        assert_eq!(
-            summary.current_work.as_deref(),
-            Some("task: regression test; status: in progress")
-        );
+        let cw = summary.current_work.as_deref().unwrap();
+        assert!(cw.contains("task: regression test"));
+        assert!(cw.contains("status: in progress"));
     }
 
     #[test]

@@ -1,8 +1,4 @@
-mod api;
-mod runtime;
-
-use api::{ApiRequest, ApiResponse};
-use runtime::CustosRuntime;
+use custos_daemon::{ApiRequest, ApiResponse, CustosRuntime};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 #[tokio::main]

@@ -96,16 +96,16 @@ mod imp {
     use safemlx_lm_utils::tokenizer::{Chat, Conversation, Role, Tokenizer};
     use serde_json::json;
 
-    use crate::backend::{BackendLoadedModel, LocalGenerationRequest, LocalInferenceBackend};
-    use crate::model::{ModelSettings, ToolCallingMode};
-    use crate::native_tool_parsing::message_from_native_tool_text;
-    use crate::provider_utils::filter_extensions_from_system_prompt;
-    use crate::thinking_output::ThinkingOutputFilter;
-    use crate::tool_emulation::{
+    use crate::local_inference::backend::{BackendLoadedModel, LocalGenerationRequest, LocalInferenceBackend};
+    use crate::local_inference::model::{ModelSettings, ToolCallingMode};
+    use crate::local_inference::native_tool_parsing::message_from_native_tool_text;
+    use crate::local_inference::provider_utils::filter_extensions_from_system_prompt;
+    use crate::local_inference::thinking_output::ThinkingOutputFilter;
+    use crate::local_inference::tool_emulation::{
         build_emulator_tool_description, load_tiny_model_prompt, message_for_emulator_action,
         StreamingEmulatorParser, CODE_EXECUTION_TOOL,
     };
-    use crate::{extract_text_content, ResolvedModelPaths};
+    use crate::local_inference::{extract_text_content, ResolvedModelPaths};
     use custos_provider_types::conversation::message::{Message, MessageContent};
     use custos_provider_types::conversation::token_usage::{
         DraftStats, ProviderStats, ProviderUsage, Usage,
@@ -1011,7 +1011,7 @@ mod imp {
         use super::{
             final_stream_suffix, mlx_max_tokens, split_generated_thinking, token_id_or_ids,
         };
-        use crate::model::ModelSettings;
+        use crate::local_inference::model::ModelSettings;
         use serde_json::json;
 
         #[test]
@@ -1095,9 +1095,9 @@ mod imp {
 mod imp {
     use std::path::Path;
 
-    use crate::backend::{BackendLoadedModel, LocalGenerationRequest, LocalInferenceBackend};
-    use crate::model::ModelSettings;
-    use crate::ResolvedModelPaths;
+    use crate::local_inference::backend::{BackendLoadedModel, LocalGenerationRequest, LocalInferenceBackend};
+    use crate::local_inference::model::ModelSettings;
+    use crate::local_inference::ResolvedModelPaths;
     use custos_provider_types::errors::ProviderError;
 
     pub(crate) const MLX_BACKEND_ID: &str = "mlx";

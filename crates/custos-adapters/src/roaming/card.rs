@@ -23,7 +23,7 @@ use iroh::{EndpointAddr, EndpointId, TransportAddr};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::error::RoamingError;
+use crate::roaming::error::RoamingError;
 
 const CARD_VERSION: u32 = 1;
 const CARD_SCHEME: &str = "custos+roam://";

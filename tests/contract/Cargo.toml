@@ -6,9 +6,8 @@ license.workspace = true
 publish = false
 
 [dependencies]
-custos-core-domain = { workspace = true }
-custos-provider-sdk = { workspace = true }
-custos-adapter-provider-fake = { path = "../../crates/adapters/providers/fake" }
+custos-domain = { workspace = true }
+custos-provider = { workspace = true }
+custos-adapters = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
-

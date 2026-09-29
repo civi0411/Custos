@@ -1,6 +1,6 @@
-use crate::backend::LocalInferenceBackend;
-use crate::model::ModelSettings;
-use crate::multimodal::ExtractedImage;
+use crate::local_inference::backend::LocalInferenceBackend;
+use crate::local_inference::model::ModelSettings;
+use crate::local_inference::multimodal::ExtractedImage;
 use custos_provider_types::errors::ProviderError;
 use custos_provider_types::request_log::{LoggerHandleExt, RequestLogHandle};
 use llama_cpp_2::context::params::LlamaContextParams;
@@ -235,7 +235,7 @@ pub(super) fn build_context_params(
 }
 
 pub(super) fn build_sampler(settings: &crate::model::ModelSettings) -> LlamaSampler {
-    use crate::model::SamplingConfig;
+    use crate::local_inference::model::SamplingConfig;
 
     let has_penalties = settings.repeat_penalty != 1.0
         || settings.frequency_penalty != 0.0
@@ -252,7 +252,7 @@ pub(super) fn build_sampler(settings: &crate::model::ModelSettings) -> LlamaSamp
         ));
     }
 
-    match &settings.sampling {
+    match settings.sampling {
         SamplingConfig::Greedy => {
             samplers.push(LlamaSampler::greedy());
         }
@@ -263,14 +263,14 @@ pub(super) fn build_sampler(settings: &crate::model::ModelSettings) -> LlamaSamp
             min_p,
             seed,
         } => {
-            samplers.push(LlamaSampler::top_k(*top_k));
-            samplers.push(LlamaSampler::top_p(*top_p, 1));
-            samplers.push(LlamaSampler::min_p(*min_p, 1));
-            samplers.push(LlamaSampler::temp(*temperature));
+            samplers.push(LlamaSampler::top_k(top_k));
+            samplers.push(LlamaSampler::top_p(top_p, 1));
+            samplers.push(LlamaSampler::min_p(min_p, 1));
+            samplers.push(LlamaSampler::temp(temperature));
             samplers.push(LlamaSampler::dist(seed.unwrap_or(0)));
         }
         SamplingConfig::MirostatV2 { tau, eta, seed } => {
-            samplers.push(LlamaSampler::mirostat_v2(seed.unwrap_or(0), *tau, *eta));
+            samplers.push(LlamaSampler::mirostat_v2(seed.unwrap_or(0), tau, eta));
         }
     }
 
@@ -612,7 +612,7 @@ pub(super) fn generation_loop(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::ModelSettings;
+    use crate::local_inference::model::ModelSettings;
 
     fn default_settings() -> ModelSettings {
         ModelSettings::default()

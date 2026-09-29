@@ -1,5 +1,5 @@
 use anyhow::Result;
-use custos_cognitive::RouteDecision;
+use crate::cognitive::RouteDecision;
 
 pub struct ExternalDispatcher;
 

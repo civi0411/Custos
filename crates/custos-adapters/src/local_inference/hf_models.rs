@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use crate::huggingface_auth;
-use crate::mlx::snapshot_files_are_complete as mlx_snapshot_files_are_complete;
+use crate::local_inference::huggingface_auth;
+use crate::local_inference::mlx::snapshot_files_are_complete as mlx_snapshot_files_are_complete;
 
 const HF_DOWNLOAD_BASE: &str = "https://huggingface.co";
 const LLAMACPP_BACKEND_ID: &str = "llamacpp";

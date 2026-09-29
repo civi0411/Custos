@@ -6,7 +6,7 @@ pub mod prompt;
 pub mod spinner;
 
 use console::style;
-use custos_core_domain::TaskStatus;
+use custos_domain::TaskStatus;
 
 pub fn get_terminal_width() -> usize {
     if let Ok(c_str) = std::env::var("COLUMNS") {

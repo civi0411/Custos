@@ -1,0 +1,42 @@
+[package]
+name = "custos-runtime"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Custos Cognitive Orchestration & Runtime: Loop, Workflow, Context, Cognitive S1/S2"
+
+[dependencies]
+custos-domain = { workspace = true }
+custos-core = { workspace = true }
+custos-provider = { workspace = true }
+custos-persistence = { workspace = true }
+
+tiktoken-rs = { workspace = true }
+blake3 = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tokio-stream = { workspace = true }
+async-stream = { workspace = true }
+tracing-futures = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+rmcp = { workspace = true }
+indoc = { workspace = true }
+include_dir = { workspace = true }
+dirs = { workspace = true }
+lru = { workspace = true }
+rand = { workspace = true }
+bytes = { workspace = true }
+minijinja = "2.7"

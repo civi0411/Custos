@@ -1,4 +1,4 @@
-use crate::{config_resolver, paths::Paths};
+use crate::local_inference::{config_resolver, paths::Paths};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use futures::future::BoxFuture;

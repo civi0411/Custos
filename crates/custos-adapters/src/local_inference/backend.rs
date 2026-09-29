@@ -1,7 +1,7 @@
 use rmcp::model::Tool;
 use std::any::Any;
 
-use crate::model::ModelSettings;
+use crate::local_inference::model::ModelSettings;
 use custos_provider_types::conversation::message::Message;
 use custos_provider_types::errors::ProviderError;
 use custos_provider_types::request_log::RequestLogHandle;

@@ -1,10 +1,10 @@
-use crate::budget::{BudgetCheck, BudgetGuard, BudgetTracker};
-use crate::dispatch::{A2ADispatcher, ExternalDispatcher, HumanDispatcher, LocalDispatcher};
-use crate::observability::{GatewayMetrics, GatewayTracer};
-use crate::policy::SessionQuotaLimiter;
+use crate::gateway::budget::{BudgetCheck, BudgetGuard, BudgetTracker};
+use crate::gateway::dispatch::{A2ADispatcher, ExternalDispatcher, HumanDispatcher, LocalDispatcher};
+use crate::gateway::observability::{GatewayMetrics, GatewayTracer};
+use crate::gateway::policy::SessionQuotaLimiter;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use custos_cognitive::{HumanGate, ReasoningTier, RouteDecision, RoutingPolicy, RoutingSignals};
+use crate::cognitive::{HumanGate, ReasoningTier, RouteDecision, RoutingPolicy, RoutingSignals};
 use custos_core_domain::{SessionId, TaskId};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -191,7 +191,7 @@ impl AgentGateway for CustosGateway {
                 )
                 .await?;
 
-            if !matches!(outcome, custos_cognitive::HumanGateOutcome::Approved(_)) {
+            if !matches!(outcome, crate::cognitive::HumanGateOutcome::Approved(_)) {
                 return Err(anyhow!("Execution denied by human gate: {:?}", outcome));
             }
         }

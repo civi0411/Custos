@@ -1,3 +1,10 @@
+pub extern crate custos_domain as custos_core_domain;
+pub extern crate custos_provider as custos_provider_sdk;
+
+pub use custos_daemon::custos_local_api;
+pub use custos_adapters::custos_adapters_mcp;
+pub use custos_adapters::custos_adapter_provider_fake;
+
 pub mod ui;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -342,7 +349,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
         Commands::Create { title, metadata } => {
             let meta_json = if let Some(m) = metadata {
-                Some(serde_json::from_str(&m)?)
+                Some(serde_json::from_str::<serde_json::Value>(&m)?)
             } else {
                 None
             };

@@ -18,11 +18,11 @@ use self::inference_emulated_tools::{
 };
 use self::inference_engine::{GenerationContext, LoadedChatTemplates, LoadedModel};
 use self::inference_native_tools::generate_with_native_tools;
-use crate::backend::{BackendLoadedModel, LocalGenerationRequest, LocalInferenceBackend};
-use crate::model::{ChatTemplate, ModelSettings, ToolCallingMode};
-use crate::multimodal::ExtractedImage;
-use crate::tool_parsing::compact_tools_json;
-use crate::{build_openai_messages_json, build_openai_text_messages_json, ResolvedModelPaths};
+use crate::local_inference::backend::{BackendLoadedModel, LocalGenerationRequest, LocalInferenceBackend};
+use crate::local_inference::model::{ChatTemplate, ModelSettings, ToolCallingMode};
+use crate::local_inference::multimodal::ExtractedImage;
+use crate::local_inference::tool_parsing::compact_tools_json;
+use crate::local_inference::{build_openai_messages_json, build_openai_text_messages_json, ResolvedModelPaths};
 use custos_provider_types::errors::ProviderError;
 use custos_provider_types::formats::openai::format_tools;
 

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
 use custos_core_domain::{SessionId, SessionMode, TaskContract, TaskStatus};
 use custos_kernel::{AdvanceTask, CancelTask, CreateTask, TaskService};
-pub use custos_local_api::{
+pub use crate::custos_local_api::{
     AdvanceTaskRequest, ApiRequest, ApiResponse, CancelTaskRequest, CompleteTaskRequest,
     CreateTaskRequest,
 };
@@ -355,7 +355,7 @@ impl LocalApiDispatcher {
 }
 
 #[async_trait::async_trait]
-impl custos_local_api::ApiTransport for LocalApiDispatcher {
+impl crate::custos_local_api::ApiTransport for LocalApiDispatcher {
     async fn send_request(&self, req: ApiRequest) -> Result<ApiResponse, String> {
         Ok(self.handle_request(req).await)
     }

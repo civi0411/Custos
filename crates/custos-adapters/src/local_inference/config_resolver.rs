@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::sync::OnceLock;
 
-use crate::model::ModelSettings;
+use crate::local_inference::model::ModelSettings;
 
 pub type StringParamResolver = fn(&'static str) -> Result<Option<String>>;
 pub type BoolParamResolver = fn(&'static str) -> Result<Option<bool>>;
