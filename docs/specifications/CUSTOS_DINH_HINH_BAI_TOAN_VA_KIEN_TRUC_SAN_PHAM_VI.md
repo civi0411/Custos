@@ -1,5 +1,11 @@
 # Custos — định hình bài toán và kiến trúc sản phẩm
 
+> **⚠️ HISTORICAL SPECIFICATION ARCHIVE — NON-NORMATIVE**  
+> This Vietnamese document is a historical product formulation and architecture rationale draft from 2026-09-25.  
+> It does not override current normative architecture or accepted contracts.  
+> - **Product Vision & Scope:** [`docs/product/identity.md`](../product/identity.md) & [`docs/product/scope.md`](../product/scope.md)  
+> - **Reference Architecture:** [`docs/architecture/reference-architecture.md`](../architecture/reference-architecture.md)
+
 **Bản tổng hợp sau khi đối chiếu ba tài liệu người dùng gửi; 25/09/2026.** Đây là đặc tả quyết định và giả thuyết cần thử nghiệm, không phải báo cáo Custos đã triển khai hay công bố số liệu benchmark. Nguồn Goose để đối chiếu là source atlas đã kiểm tra ở commit `9adae14b64587a26275fe7c4a822a8e8ccdbd3fd`; bản audit cũ dùng commit `302b60806639ea9f0ae8f053f49f8bf0e88b26f4`. Không ghép dữ kiện của hai commit thành một implementation. Source Goose trong máy người dùng và source Custos tại máy Mac chưa nằm trong môi trường này, nên chưa xác nhận build/behavior của hai checkout đó.
 
 ## Bản đồ đọc

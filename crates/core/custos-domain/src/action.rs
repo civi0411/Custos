@@ -61,12 +61,16 @@ impl ActionLifecycleState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Action {
     pub id: String,
+    #[serde(default)]
+    pub task_id: Option<String>,
     pub name: String,
     pub target: String,
     pub parameters: serde_json::Value,
     pub risk_level: RiskLevel,
     pub lifecycle_state: ActionLifecycleState,
     pub evidence_required: bool,
+    #[serde(default)]
+    pub permit_id: Option<String>,
 }
 
 impl Action {
@@ -80,13 +84,25 @@ impl Action {
         let evidence_required = matches!(risk_level, RiskLevel::High | RiskLevel::Critical);
         Self {
             id,
+            task_id: None,
             name,
             target,
             parameters,
             risk_level,
             lifecycle_state: ActionLifecycleState::Intent,
             evidence_required,
+            permit_id: None,
         }
+    }
+
+    pub fn with_task_id(mut self, task_id: impl Into<String>) -> Self {
+        self.task_id = Some(task_id.into());
+        self
+    }
+
+    pub fn with_permit_id(mut self, permit_id: impl Into<String>) -> Self {
+        self.permit_id = Some(permit_id.into());
+        self
     }
 
     pub fn transition(&mut self, next: ActionLifecycleState) -> Result<(), DomainError> {
@@ -103,6 +119,8 @@ impl Action {
 
 /// Canonical alias matching AGENTS.md glossary and system specification.
 pub type ActionIntent = Action;
+/// Version 1 Canonical Contract alias for SSOT.
+pub type ActionIntentV1 = Action;
 
 #[cfg(test)]
 mod tests {

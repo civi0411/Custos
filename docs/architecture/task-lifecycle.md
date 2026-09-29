@@ -1,9 +1,13 @@
 # Task Lifecycle & Domain Model
 
-> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
-
-> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
-> **Source:** Part III (§9), Part VIII (§24-26) & Part VI (§32) Canonical Specification
+> **Document ID:** ARCH-TASK-01  
+> **Status:** Verified Implementation Baseline & Core Specification  
+> **Normative Framework:** [`reference-architecture.md`](reference-architecture.md) & [`runtime-flows.md`](runtime-flows.md)  
+> **Verified Implementation:**  
+> - `Task`, `TaskContract`, `TaskStatus`: **Verified** in [`crates/core/custos-domain/src/task.rs`](../../crates/core/custos-domain/src/task.rs)  
+> - `TaskStateMachine` & `CompletionGate`: **Verified** in [`crates/core/custos-kernel/src/state_machine.rs`](../../crates/core/custos-kernel/src/state_machine.rs)  
+> - Direct transition to `Succeeded` without evidence is rejected: **Verified** in contract test suite  
+> - SQLite Task persistence: **Verified** in [`crates/infrastructure/custos-persistence`](../../crates/infrastructure/custos-persistence)
 
 The fundamental operational unit of Custos is the **Task**. This document details the Canonical Domain Model, the Finite State Machine, transaction patterns, persistence schemas, and real-world runtime execution scenarios.
 

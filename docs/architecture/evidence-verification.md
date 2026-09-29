@@ -1,9 +1,13 @@
 # Evidence & Verification Architecture
 
-> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
-
-> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
-> **Source:** Part IV (§13-14) & Part V (§24) Canonical Specification
+> **Document ID:** ARCH-EVIDENCE-01  
+> **Status:** Verified Implementation Baseline & Core Specification  
+> **Normative Framework:** [`reference-architecture.md`](reference-architecture.md) & [`runtime-flows.md`](runtime-flows.md)  
+> **Verified Implementation:**  
+> - `EvidencePipeline` (SHA-256 hash & patch preview verifiers): **Verified** in [`crates/runtime/custos-security`](../../crates/runtime/custos-security) (`tests/e2e/tests/controlled_effects_proof_closure.rs`)  
+> - `CompletionGate` (rejection of missing or unverified evidence): **Verified** in [`crates/core/custos-kernel`](../../crates/core/custos-kernel)  
+> - Cross-team Contract C-04: Formalized in [`docs/contracts/README.md`](../contracts/README.md)  
+> **Target / Future Scope:** Multi-provider adversarial cross-verification and streaming claim evaluation.
 
 Custos operates under the core invariant: **Reject ungrounded AI assertions; all accepted outcomes must carry objective, verifiable evidence.**
 

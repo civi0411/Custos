@@ -1,9 +1,14 @@
 # Context & Memory Architecture
 
-> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
-
-> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
-> **Source:** Part V (§22-23) Canonical Specification
+> **Document ID:** ARCH-CONTEXT-01  
+> **Status:** Partially Verified & Active Specification  
+> **Normative Framework:** [`reference-architecture.md`](reference-architecture.md) & [`runtime-flows.md`](runtime-flows.md)  
+> **Implementation Mapping:**  
+> - Context Compilation & Token Optimization: Implemented in [`crates/runtime/custos-context`](../../crates/runtime/custos-context)  
+> - Context Summarization & Management: Implemented in [`crates/runtime/custos-context-management`](../../crates/runtime/custos-context-management)  
+> - Memory Service & Persistent Indexing: Implemented in [`crates/runtime/custos-memory-service`](../../crates/runtime/custos-memory-service)  
+> - Repository Slicing & AST Intelligence: Implemented in [`tools/repo_intelligent/`](../../tools/repo_intelligent/)  
+> **Target / Future Scope:** End-to-end automated memory promotion pipeline and dynamic semantic cache invalidation.
 
 To optimize token expenditures and eliminate context clutter, Custos implements a multi-tier context compilation and memory architecture with strict provenance labeling.
 

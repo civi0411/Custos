@@ -1,5 +1,11 @@
 # Custos — cây codebase gốc và bản đồ mổ xẻ Goose
 
+> **⚠️ HISTORICAL SPECIFICATION ARCHIVE — NON-NORMATIVE**  
+> This Vietnamese document is an early codebase extraction design from 2026-09-25.  
+> It does not override the current 42-crate Cargo workspace or active implementation blueprints.  
+> - **Current Repository Structure:** [`docs/development/repository-structure.md`](../development/repository-structure.md)  
+> - **Current Implementation Blueprint:** [`docs/development/implementation-blueprint.md`](../development/implementation-blueprint.md)
+
 **Bản thiết kế cho Vĩ dựng nền tảng để Vinh và Trường phát triển. Ngày 25/09/2026.**
 
 > Phạm vi xác thực: bản V3 được Vĩ cung cấp báo Custos có khoảng 34 Cargo packages tại short SHA `acc6dbd2`, nhiều crate còn scaffold. Workspace của bản tài liệu này **không chứa checkout Rust Custos hoặc Goose trên máy Vĩ**. Snapshot Goose dùng để tra cứu trong `Goose_Source_Atlas_for_Custos_2026-09-25.md` là `9adae14b64587a26275fe7c4a822a8e8ccdbd3fd`. Mọi path và nhận định về Custos thực tế ở đây là **reported**, cần xác nhận bằng full SHA, tree, symbol và test log trước khi sửa. C0 chưa thể gắn nhãn VERIFIED chỉ nhờ bảng kê.

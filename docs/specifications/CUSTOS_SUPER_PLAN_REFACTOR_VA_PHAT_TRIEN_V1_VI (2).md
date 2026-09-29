@@ -1,5 +1,11 @@
 # Custos — kế hoạch chuyển đổi codebase và phát triển sản phẩm
 
+> **⚠️ HISTORICAL SPECIFICATION ARCHIVE — NON-NORMATIVE**  
+> This Vietnamese document is an early refactoring and transition plan from 2026-09-25.  
+> It does not override the current 42-crate Cargo workspace or active implementation blueprints.  
+> - **Current Implementation Blueprint:** [`docs/development/implementation-blueprint.md`](../development/implementation-blueprint.md)  
+> - **Current Repository Structure:** [`docs/development/repository-structure.md`](../development/repository-structure.md)
+
 **Phiên bản 1.1 · 25/09/2026 · plan thực thi theo bằng chứng, có bản đồ mổ xẻ file và hợp đồng cho coding agent.**
 
 Tài liệu này là kế hoạch nối kiến trúc Custos với code có thật. Nó tổng hợp các quyết định gần nhất trong `Custos_Architecture_V14_First_Principles_Goose_Research_VI.md`, `Custos_Product_Feature_Architecture_V14_1_VI.md`, `CUSTOS_DINH_HINH_BAI_TOAN_VA_KIEN_TRUC_SAN_PHAM_VI.md`, source atlas Goose ngày 25/09/2026 và tình trạng `agenthub-starter/` đọc được trong workspace. Đây là **kế hoạch triển khai**, không là bằng chứng Custos trên máy Vĩ đã được kiểm/build, và không ép phải tạo toàn bộ thư mục của các bản “complete monorepo”.

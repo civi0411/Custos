@@ -109,6 +109,19 @@ class NexusToolServer:
                     },
                     "required": ["repo", "query"]
                 }
+            },
+            {
+                "name": "nexus_map",
+                "description": "Get an AST-powered Deep Repository Map of files, structs, traits, enums, functions, and signatures. Supports filtering by subpath/crate.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "repo": {"type": "string", "enum": ["goose", "custos"], "description": "Target repository", "default": "custos"},
+                        "path_prefix": {"type": "string", "description": "Optional prefix to filter files e.g. 'crates/runtime/custos-engine'"},
+                        "max_depth": {"type": "integer", "description": "Max directory depth", "default": 5},
+                        "max_symbols_per_file": {"type": "integer", "description": "Max symbols per file", "default": 15}
+                    }
+                }
             }
         ]
 
@@ -116,6 +129,14 @@ class NexusToolServer:
         repo = args.get("repo", "custos")
         if name == "nexus_overview":
             return self.packer.pack_overview(repo)
+        elif name == "nexus_map":
+            from src.repo_map import generate_repo_map
+            return generate_repo_map(
+                repo=repo,
+                path_prefix=args.get("path_prefix"),
+                max_depth=args.get("max_depth", 5),
+                max_symbols_per_file=args.get("max_symbols_per_file", 15)
+            )
         elif name == "nexus_symbol":
             return self.packer.pack_function(repo, args.get("symbol", ""))
         elif name == "nexus_callers":

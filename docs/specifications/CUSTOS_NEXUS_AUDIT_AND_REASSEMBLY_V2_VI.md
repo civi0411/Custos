@@ -1,5 +1,10 @@
 # Custos: Nexus Audit and Reassembly Blueprint V2
 
+> **⚠️ HISTORICAL SPECIFICATION ARCHIVE — NON-NORMATIVE**  
+> This document records a Nexus AST audit of the early 34-crate snapshot from 2026-09-26.  
+> - **Current Empirical Audit Baseline:** [`docs/status/local-dev-audit-2026-09-28.md`](../status/local-dev-audit-2026-09-28.md)  
+> - **Current 42-Crate Layout:** [`docs/development/repository-structure.md`](../development/repository-structure.md)
+
 Date: 2026-09-26  
 Audited revisions: Custos `acc6dbd2a1d7648227b26c4327200008d11951f7` plus preserved working-tree changes; Goose `9adae14b64587a26275fe7c4a822a8e8ccdbd3fd`.
 

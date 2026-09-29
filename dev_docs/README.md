@@ -16,6 +16,7 @@
 | Code-backed capability status | [Status method](../docs/status/README.md) and dated evidence reports |
 | Latest local restructure audit | [2026-09-28 audit](../docs/status/local-dev-audit-2026-09-28.md) |
 | Current ownership map | [Module ownership matrix](MODULE_OWNERSHIP.md), summarized from `AGENTS.md` |
+| Detailed work allocation | [Team work allocation blueprint](TEAM_WORK_ALLOCATION.md) (Roles, crates, workflows) |
 | Goose naming migration | [Measured migration register](../docs/status/goose-naming-migration.md) and [naming policy](../docs/development/naming-conventions.md) |
 | Vi's AI/product notes | [`vi/`](vi/README.md) |
 | Truong's platform/security notes | [`truong/`](truong/README.md) |

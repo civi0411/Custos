@@ -1,5 +1,10 @@
 # Dual-Process Cognitive Architecture: System 1, System 2, and External Ground-Truth Verification
 
+> **Authority notice (2026-09-28):** This document defines the theoretical and empirical model of the Dual-Process Cognitive Architecture.  
+> - **Normative Cognitive Fabric:** [`docs/architecture/cognitive-fabric.md`](cognitive-fabric.md)  
+> - **Runtime Routing Implementation:** [`crates/runtime/custos-cognitive`](../../crates/runtime/custos-cognitive) (`CognitiveArbiter`)  
+> - **Model Port & Hubs:** [`docs/architecture/connectivity-hubs.md`](connectivity-hubs.md) & [`docs/architecture/intelligence-hub.md`](intelligence-hub.md)
+
 ## 1. Theoretical and Empirical Foundations
 
 Modern autonomous agents face an unsustainable trade-off: invoking frontier reasoning models for every turn drives token costs and latency to unacceptable levels, while delegating tasks to unguided small models leads to cognitive collapse, cascading errors, and hallucinated progress.

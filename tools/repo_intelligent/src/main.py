@@ -47,6 +47,21 @@ def overview(
     md = packer.pack_overview(repo)
     console.print(Markdown(md))
 
+@app.command(name="map")
+def show_map(
+    repo: str = typer.Option("custos", "--repo", "-r", help="Tên repo: 'custos' hoặc 'goose'"),
+    path: str = typer.Option(None, "--path", "-p", help="Lọc theo thư mục con / crate (vd: crates/runtime/custos-engine)"),
+    depth: int = typer.Option(5, "--depth", "-d", help="Độ sâu thư mục tối đa"),
+    max_symbols: int = typer.Option(15, "--max-symbols", "-m", help="Số symbol tối đa cho mỗi file")
+):
+    """
+    Xuất Bản đồ Repository (AST-based Deep Map) siêu chi tiết, hiển thị file và AST symbols bên trong.
+    Tuyệt vời cho AI/LLM lấy context toàn cảnh. Hỗ trợ lọc theo thư mục con (-p).
+    """
+    from src.repo_map import generate_repo_map
+    res = generate_repo_map(repo, path_prefix=path, max_depth=depth, max_symbols_per_file=max_symbols)
+    console.print(res, markup=False)
+
 @app.command()
 def symbol(
     name: str = typer.Argument(..., help="Tên struct, function, trait cần tra cứu"),

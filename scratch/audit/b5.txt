@@ -1,0 +1,13 @@
+--- engine ---
+../../crates/runtime/custos-engine/tests/acp_common_tests/mod.rs:983:        custos_engine::config::paths::Paths::config_dir().join(custos_engine::config::base::CONFIG_YAML_NAME);
+../../crates/runtime/custos-engine/src/otel/otlp.rs:938:            .with_attributes([KeyValue::new("service.name", "custos-engine"), KeyValue::new("service.version", env!("CARGO_PKG_VERSION")), KeyValue::new("service.namespace", "custos-engine"), KeyValue::new("host.name", session_host()), KeyValue::new("user.name", session_user())])
+../../crates/runtime/custos-engine/src/otel/otlp.rs:946:            .with_attributes([KeyValue::new("service.name", "custos-engine"), KeyValue::new("service.version", env!("CARGO_PKG_VERSION")), KeyValue::new("service.namespace", "custos-engine"), KeyValue::new("host.name", session_host()), KeyValue::new("user.name", session_user())])
+../../crates/runtime/custos-engine/src/otel/otlp.rs:955:            .with_attributes([KeyValue::new("service.name", "custos-engine"), KeyValue::new("service.version", env!("CARGO_PKG_VERSION")), KeyValue::new("service.namespace", "custos-engine"), KeyValue::new("host.name", session_host()), KeyValue::new("user.name", session_user())])
+../../crates/runtime/custos-engine/src/otel/otlp.rs:964:            .with_attributes([KeyValue::new("service.name", "custos-engine"), KeyValue::new("service.version", env!("CARGO_PKG_VERSION")), KeyValue::new("service.namespace", "custos-engine"), KeyValue::new("host.name", session_host()), KeyValue::new("user.name", session_user())])
+--- elicitation ---
+--- posthog ---
+--- tool_call_labels ---
+--- recipe_deeplink ---
+../../crates/runtime/custos-engine/tests/acp_server_test.rs:40:use custos_engine::recipe_deeplink;
+--- source_roots ---
+--- doctor ---

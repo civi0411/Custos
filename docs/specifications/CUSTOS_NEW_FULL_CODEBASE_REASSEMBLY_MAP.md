@@ -1,5 +1,10 @@
 # CUSTOS_NEW — BẢN ĐỒ TỔNG THỂ ĐỊNH HÌNH & BỐ TRÍ MÃ NGUỒN (MASTER CODEBASE REASSEMBLY MAP)
 
+> **⚠️ HISTORICAL SPECIFICATION ARCHIVE — OBSOLETE REASSEMBLY LAYOUT**  
+> This Vietnamese document is an early reassembly plan from 2026-09-26. The proposed crate paths in this file have been superseded by the current 42-crate structure.  
+> - **Current Verified 42-Crate Layout:** [`docs/development/repository-structure.md`](../development/repository-structure.md)  
+> - **Current Delivery Blueprint:** [`docs/development/implementation-blueprint.md`](../development/implementation-blueprint.md)
+
 > **Ngày thực hiện:** 26/09/2026  
 > **Cơ sở phân tích:** 6 tài liệu kiến trúc nền tảng + Nexus Lens V2 (2,458 files, 14,468 AST symbols)  
 > **Mục tiêu:** Cắt, định hình và di chuyển toàn bộ các module tinh hoa của **Goose** và **Custos cũ** vào đúng vị trí cấu trúc của **Custos_new** (Modular Monolith), sẵn sàng chia nhỏ để triển khai chi tiết.

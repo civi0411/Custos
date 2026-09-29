@@ -1,6 +1,12 @@
-# CUSTOS — MASTER PRODUCT, RUNTIME, DOMAIN PACK & REPO ARCHITECTURE V8
+# CUSTOS — HISTORICAL MASTER PRODUCT & SYSTEM ARCHITECTURE (V8 BASELINE)
 
-> **Status update (2026-09-27):** Retained V8 design baseline, not an implementation certificate or the sole active navigation source. The [documentation hub](README.md) separates accepted decisions, target architecture, code-backed status and active work. Cross-team snippets below remain proposals until versioned contracts and maintainer decisions accept them.
+> **⚠️ HISTORICAL DESIGN BASELINE (V8.0) — NON-NORMATIVE**  
+> **Status:** Preserved as an architectural philosophy and early design baseline (v8.0).  
+> **Normative Authorities:**  
+> - For active system architecture, see [`docs/architecture/reference-architecture.md`](architecture/reference-architecture.md) (ARCH-REF-01).  
+> - For runtime execution flows, see [`docs/architecture/runtime-flows.md`](architecture/runtime-flows.md) (ARCH-FLOW-01).  
+> - For verified 42-crate monorepo layout, see [`docs/development/repository-structure.md`](development/repository-structure.md).  
+> - Directory sketches, crate counts, and code snippets inside this document reflect historical proposals and do not override Cargo metadata or active contracts.
 
 **Date:** 2026-09-24  
 **Document Type:** Product and system design for discussion, delegation, and AI handoff documentation.  

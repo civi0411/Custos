@@ -1,10 +1,17 @@
 # KIẾN TRÚC TOÀN DIỆN VÀ LUỒNG THỰC THI SÂU MÃ NGUỒN CỦA CUSTOS (CUSTOS DEEP-DIVE ARCHITECTURE & CODE FLOW)
 
-> **Tài liệu đặc tả cấp độ Master (Authoritative Master Reference Document)**  
-> **Phiên bản:** Custos Core Architecture Baseline v4.0 / V8 Canonical Blueprint  
+> **⚠️ HISTORICAL SPECIFICATION ARCHIVE — NON-NORMATIVE**  
+> This Vietnamese document is a historical architecture deep-dive based on an early 34-crate snapshot.  
+> It does not override the current 42-crate Cargo workspace or active contracts.  
+> - **Current System Architecture:** [`docs/architecture/reference-architecture.md`](../architecture/reference-architecture.md) & [`docs/architecture/runtime-flows.md`](../architecture/runtime-flows.md)  
+> - **Current 42-Crate Layout:** [`docs/development/repository-structure.md`](../development/repository-structure.md)  
+> - **Active Interop Contracts:** [`docs/contracts/README.md`](../contracts/README.md)
+
+> **Tài liệu đặc tả cấp độ Master (Authoritative Master Reference Document - Historical)**  
+> **Phiên bản:** Custos Core Architecture Baseline v4.0 / V8 Canonical Blueprint (Historical Snapshot)  
 > **Động cơ phân tích:** [Nexus Lens V2](file:///Users/mac/Project/AgentHub/Nexus) (Tree-sitter AST, Directed Call Graph & Module Topology Engine)  
 > **Repository mục tiêu:** [`/Users/mac/Project/AgentHub/Custos`](file:///Users/mac/Project/AgentHub/Custos)  
-> **Quy mô phân tích:** 34 Workspace Crates, 264 Files mã nguồn, 525 AST Symbols, 2,007 Call Graph Edges, 17,871 Lines of Code.
+> **Quy mô phân tích:** 34 Workspace Crates (Historical), 264 Files mã nguồn, 525 AST Symbols, 2,007 Call Graph Edges, 17,871 Lines of Code.
 
 ---
 

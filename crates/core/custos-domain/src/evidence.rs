@@ -32,6 +32,55 @@ pub struct EvidenceRequirement {
     pub evidence_ref: Option<String>,
 }
 
+/// An EvidenceRecord captures a deterministic verification artifact or execution proof.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EvidenceRecord {
+    pub id: String,
+    pub task_id: String,
+    pub action_id: Option<String>,
+    pub kind: String,
+    pub digest: String,
+    pub status: EvidenceStatus,
+    pub source_version: Option<String>,
+    pub payload: serde_json::Value,
+    pub recorded_at: DateTime<Utc>,
+}
+
+/// Version 1 Canonical Contract alias for SSOT.
+pub type EvidenceRecordV1 = EvidenceRecord;
+
+impl EvidenceRecord {
+    pub fn new(
+        task_id: impl Into<String>,
+        kind: impl Into<String>,
+        digest: impl Into<String>,
+        status: EvidenceStatus,
+        payload: serde_json::Value,
+    ) -> Self {
+        Self {
+            id: new_id("ev"),
+            task_id: task_id.into(),
+            action_id: None,
+            kind: kind.into(),
+            digest: digest.into(),
+            status,
+            source_version: None,
+            payload,
+            recorded_at: Utc::now(),
+        }
+    }
+
+    pub fn with_action_id(mut self, action_id: impl Into<String>) -> Self {
+        self.action_id = Some(action_id.into());
+        self
+    }
+
+    pub fn with_source_version(mut self, source_version: impl Into<String>) -> Self {
+        self.source_version = Some(source_version.into());
+        self
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerificationClaim {
     pub id: String,

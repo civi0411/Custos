@@ -1,6 +1,12 @@
 # GOOSE — ĐẶC TẢ TOÀN DIỆN KIẾN TRÚC & LUỒNG CODE NỘI BỘ (MASTER DEEP-DIVE ARCHITECTURE & CODE FLOW)
 
-> **Tài liệu đặc tả kiến trúc cấp độ Master (Authoritative Master Reference Document)**  
+> **⚠️ VENDOR RESEARCH & UPSTREAM SPECIFICATION — NON-NORMATIVE**  
+> This Vietnamese document analyzes the upstream **Goose** codebase (`github.com/block/goose`) for extraction research.  
+> It does **not** describe Custos product architecture or certified Custos behavior.  
+> - **Custos Upstream Policy:** [`docs/vendor/README.md`](../vendor/README.md) & [`docs/status/goose-naming-migration.md`](../status/goose-naming-migration.md)  
+> - **Custos Reference Architecture:** [`docs/architecture/reference-architecture.md`](../architecture/reference-architecture.md)
+
+> **Tài liệu đặc tả kiến trúc cấp độ Master (Upstream Goose Reference - Historical)**  
 > **Phiên bản:** Goose Core Architecture Baseline (Full Codebase Audit)  
 > **Động cơ phân tích:** [Nexus Lens V2](file:///Users/mac/Project/AgentHub/Nexus) (Tree-sitter AST, Directed Call Graph, Module Graph & Full-Text Search Engine)  
 > **Repository mục tiêu:** [`/Users/mac/Project/AgentHub/goose`](file:///Users/mac/Project/AgentHub/goose)  

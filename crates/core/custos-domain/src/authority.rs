@@ -85,6 +85,8 @@ pub struct Permit {
 
 /// Canonical alias matching AGENTS.md glossary and system specification.
 pub type ExecutionPermit = Permit;
+/// Version 1 Canonical Contract alias for SSOT.
+pub type PermitV1 = Permit;
 
 impl Permit {
     pub fn new(

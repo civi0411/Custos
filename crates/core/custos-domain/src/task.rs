@@ -31,6 +31,9 @@ pub struct TaskContract {
     pub evidence_requirements: Vec<ContractEvidence>,
 }
 
+/// Version 1 Canonical Contract alias for SSOT.
+pub type TaskContractV1 = TaskContract;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TaskStatus {

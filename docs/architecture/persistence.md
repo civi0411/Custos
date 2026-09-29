@@ -1,9 +1,12 @@
 # Persistence Architecture & Storage
 
-> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
-
-> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
-> **Source:** Part V (§21) Canonical Specification
+> **Document ID:** ARCH-PERSIST-01  
+> **Status:** Verified Implementation Baseline & Core Specification  
+> **Normative Framework:** [`reference-architecture.md`](reference-architecture.md) & [`runtime-flows.md`](runtime-flows.md)  
+> **Verified Implementation:**  
+> - SQLite WAL Mode, Safe Lock Timeouts, Foreign Keys: **Verified** in [`crates/infrastructure/custos-persistence`](../../crates/infrastructure/custos-persistence)  
+> - Database Schema Migrations & Tasks Table: **Verified** in `custos-persistence/src/sqlite/`  
+> - Session & Task restart durability: **Verified** in [`tests/e2e/tests/daemon_process_slice.rs`](../../tests/e2e/tests/daemon_process_slice.rs)
 
 Custos adheres strictly to the **Local-First & Durable by Design** principle: all state data, event histories, and generated artifacts are durably persisted on the local workstation with ACID transaction guarantees and instant post-crash recovery.
 

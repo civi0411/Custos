@@ -1,9 +1,13 @@
 # Capability Gateway & Sandboxing
 
-> **Classification:** Legacy V4 design detail, non-normative. Use the [documentation hub](../README.md), [reference architecture](../architecture/reference-architecture.md), and [source-backed status rules](../status/README.md) before treating any statement below as current behavior.
-
-> **Implementation status:** Unknown unless a current status record and source/test evidence say otherwise.
-> **Source:** Part IX (§27-29) & Part VII (§58) Canonical Specification
+> **Document ID:** ARCH-GATEWAY-01  
+> **Status:** Partially Verified & Active Specification  
+> **Normative Framework:** [`reference-architecture.md`](reference-architecture.md) & [`runtime-flows.md`](runtime-flows.md)  
+> **Verified Implementation:**  
+> - `PathSandbox` directory containment: **Verified** in [`crates/runtime/custos-security`](../../crates/runtime/custos-security) (`tests/e2e/tests/controlled_effects_proof_closure.rs`)  
+> - `DeterministicGate` (`read_file`, `list_files`, `patch_preview`): **Verified** in `crates/runtime/custos-security/src/gateway/deterministic.rs`  
+> - `ExecutionPermit` & `ActionIntent` contracts: Standardized in [`docs/contracts/README.md`](../contracts/README.md) (Contract C-03) and [`schemas/protocol/`](../../schemas/protocol/)  
+> **Target / Future Scope:** External Cedar policy compilation and OS-level Bubblewrap/Seatbelt production daemon wiring.
 
 The Capability Gateway enforces Custos's supreme security invariant: **Zero Direct Execution**. All file system operations, shell executions, and network egress calls must traverse this gateway.
 

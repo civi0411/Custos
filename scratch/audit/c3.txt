@@ -1,0 +1,9 @@
+custos-mcp:
+custos-mcp v0.1.0 (/Users/mac/Project/AgentHub/Custos/crates/adapters/custos-mcp)
+└── custos-adapters-mcp v0.1.0 (/Users/mac/Project/AgentHub/Custos/crates/adapters/custos-adapters-mcp)
+    ├── custos-cli v0.1.0 (/Users/mac/Project/AgentHub/Custos/crates/app/custos-cli)
+    └── custos-daemon v0.1.0 (/Users/mac/Project/AgentHub/Custos/crates/app/custos-daemon)
+custos-adapters-mcp:
+custos-adapters-mcp v0.1.0 (/Users/mac/Project/AgentHub/Custos/crates/adapters/custos-adapters-mcp)
+├── custos-cli v0.1.0 (/Users/mac/Project/AgentHub/Custos/crates/app/custos-cli)
+└── custos-daemon v0.1.0 (/Users/mac/Project/AgentHub/Custos/crates/app/custos-daemon)
