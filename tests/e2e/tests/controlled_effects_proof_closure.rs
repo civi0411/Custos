@@ -13,15 +13,15 @@
 //! 6. Proves Success outcome:
 //!    - Real daemon process accepts verified evidence claims and closes proof for a contract task.
 
-use custos_domain as custos_core_domain;
-use custos_daemon::custos_local_api;
+use custos_core::capability::{DeterministicGate, ToolGate};
+use custos_core::evidence::{EvidenceBundle, EvidencePipeline};
 use custos_core_domain::{
     Action, ContractEvidence, DomainError, EvidenceKind, ReceiptStatus, RiskLevel, TaskContract,
     TaskStatus,
 };
+use custos_daemon::custos_local_api;
+use custos_domain as custos_core_domain;
 use custos_local_api::{LocalApiClient, ProcessTransport};
-use custos_core::evidence::{EvidenceBundle, EvidencePipeline};
-use custos_core::capability::{DeterministicGate, ToolGate};
 use std::path::PathBuf;
 
 fn resolve_daemon_binary() -> PathBuf {

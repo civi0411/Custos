@@ -1,5 +1,5 @@
-use anyhow::Result;
 use crate::cognitive::{ReasoningTier, RouteDecision};
+use anyhow::Result;
 
 pub struct LocalDispatcher;
 

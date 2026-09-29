@@ -7,13 +7,13 @@
 //! -> Evidence Engine -> Crash Recovery.
 
 use custos_adapters::custos_adapter_provider_fake::FakeProvider;
-use custos_runtime::context::repo_intelligence::WorkspaceScanner;
-use custos_runtime::context::{ContextBuilder, SourceDocument, TokenAwareContextCompiler};
+use custos_core::evidence::{EvidenceBundle, EvidencePipeline};
+use custos_core::{AdvanceTask, CompleteTask, CreateTask, TaskService, TaskStore};
 use custos_domain::{ContinuationPacket, Span, SpanState, TaskStatus};
 use custos_persistence::{ArtifactStore, FsArtifactStore, SqliteTaskStore};
 use custos_provider::{ModelProvider, ProviderRequest};
-use custos_core::evidence::{EvidenceBundle, EvidencePipeline};
-use custos_core::{AdvanceTask, CompleteTask, CreateTask, TaskService, TaskStore};
+use custos_runtime::context::repo_intelligence::WorkspaceScanner;
+use custos_runtime::context::{ContextBuilder, SourceDocument, TokenAwareContextCompiler};
 use std::sync::Arc;
 
 #[tokio::test]

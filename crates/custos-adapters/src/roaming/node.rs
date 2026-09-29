@@ -60,7 +60,7 @@ pub trait AcpStreamServer: Send + Sync + 'static {
 /// one), and an in-memory directory:
 ///
 /// ```no_run
-/// use custos_roaming::{RoamingConfig, RoamingIdentity, RoamingNode};
+/// use custos_adapters::roaming::{RoamingConfig, RoamingIdentity, RoamingNode};
 /// # async fn f() -> anyhow::Result<()> {
 /// let node = RoamingNode::bind(RoamingConfig::new(RoamingIdentity::generate())).await?;
 /// # Ok(()) }

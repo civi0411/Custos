@@ -7,7 +7,9 @@ use super::{
     available_inference_memory_bytes, builtin_chat_template_names, recommend_local_model,
     InferenceRuntime,
 };
-use crate::local_inference::download_manager::{get_download_manager, DownloadProgress, DownloadStatus};
+use crate::local_inference::download_manager::{
+    get_download_manager, DownloadProgress, DownloadStatus,
+};
 use anyhow::{anyhow, Result};
 use custos_sdk_types::custom_requests::{
     LocalInferenceBuiltinChatTemplatesListResponse, LocalInferenceChatTemplate,

@@ -3,10 +3,10 @@
 //! Manages the agent loop, cognitive S1/S2 routing, workflow DAG execution,
 //! session lifecycle, and context window assembly.
 
-pub extern crate custos_domain as custos_core_domain;
 pub extern crate custos_core as custos_kernel;
-pub extern crate custos_provider as custos_provider_types;
+pub extern crate custos_domain as custos_core_domain;
 pub extern crate custos_provider as custos_provider_sdk;
+pub extern crate custos_provider as custos_provider_types;
 
 pub mod agent;
 pub mod cognitive;

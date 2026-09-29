@@ -9,9 +9,9 @@
 //! - Optimistic concurrency rejection on epoch mismatch
 //! - State invariant rejection on completed tasks
 
+use custos_core::{AdvanceTask, CompleteTask, CreateTask, TaskService, TaskStore};
 use custos_domain::{ContinuationPacket, Span, SpanState, TaskStatus};
 use custos_persistence::SqliteTaskStore;
-use custos_core::{AdvanceTask, CompleteTask, CreateTask, TaskService, TaskStore};
 use std::sync::Arc;
 
 #[tokio::test]

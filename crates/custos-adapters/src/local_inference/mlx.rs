@@ -96,7 +96,9 @@ mod imp {
     use safemlx_lm_utils::tokenizer::{Chat, Conversation, Role, Tokenizer};
     use serde_json::json;
 
-    use crate::local_inference::backend::{BackendLoadedModel, LocalGenerationRequest, LocalInferenceBackend};
+    use crate::local_inference::backend::{
+        BackendLoadedModel, LocalGenerationRequest, LocalInferenceBackend,
+    };
     use crate::local_inference::model::{ModelSettings, ToolCallingMode};
     use crate::local_inference::native_tool_parsing::message_from_native_tool_text;
     use crate::local_inference::provider_utils::filter_extensions_from_system_prompt;
@@ -1095,7 +1097,9 @@ mod imp {
 mod imp {
     use std::path::Path;
 
-    use crate::local_inference::backend::{BackendLoadedModel, LocalGenerationRequest, LocalInferenceBackend};
+    use crate::local_inference::backend::{
+        BackendLoadedModel, LocalGenerationRequest, LocalInferenceBackend,
+    };
     use crate::local_inference::model::ModelSettings;
     use crate::local_inference::ResolvedModelPaths;
     use custos_provider_types::errors::ProviderError;

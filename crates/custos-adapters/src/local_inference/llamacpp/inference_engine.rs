@@ -564,7 +564,7 @@ pub(super) fn generation_loop(
     };
     let hit_context_limit = settings
         .max_output_tokens
-        .map_or(true, |max| context_headroom <= max);
+        .is_none_or(|max| context_headroom <= max);
     let mut decoder = encoding_rs::UTF_8.new_decoder();
     let mut output_token_count: i32 = 0;
     let mut exhausted_loop = true;

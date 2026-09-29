@@ -8,9 +8,9 @@
 //! 5. Crash recovery: Daemon process killed mid-lifecycle, restarted against same SQLite DB,
 //!    recovers intact Task state and continues accepting requests without corruption.
 
-use custos_domain as custos_core_domain;
-use custos_daemon::custos_local_api;
 use custos_core_domain::{Task, TaskStatus};
+use custos_daemon::custos_local_api;
+use custos_domain as custos_core_domain;
 use custos_local_api::{LocalApiClient, ProcessTransport};
 use std::path::PathBuf;
 

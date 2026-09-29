@@ -7,7 +7,8 @@ use anyhow::Result;
 use include_dir::{include_dir, Dir};
 use serde::{Deserialize, Deserializer, Serialize};
 
-pub static FIXED_PROVIDERS: Dir = include_dir!("$CARGO_MANIFEST_DIR/src/providers/providers/declarative/definitions");
+pub static FIXED_PROVIDERS: Dir =
+    include_dir!("$CARGO_MANIFEST_DIR/src/providers/providers/declarative/definitions");
 
 pub(crate) mod declarative_providers {
     use super::*;

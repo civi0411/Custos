@@ -7,7 +7,6 @@
 use std::{collections::HashMap, future::Future, sync::Arc, sync::OnceLock, time::Duration};
 
 use base64::Engine as _;
-use futures::StreamExt;
 use custos_providers::{
     anthropic::AnthropicProviderBuilder,
     api_client::{ApiClient, AuthMethod},
@@ -33,6 +32,7 @@ use custos_providers::{
     },
     utils::sanitize_unicode_tags,
 };
+use futures::StreamExt;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, ContentBlock, ErrorCode, ErrorData, Role, Tool,
 };

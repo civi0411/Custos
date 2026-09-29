@@ -1,9 +1,9 @@
 pub extern crate custos_domain as custos_core_domain;
 pub extern crate custos_provider as custos_provider_sdk;
 
-pub use custos_daemon::custos_local_api;
-pub use custos_adapters::custos_adapters_mcp;
 pub use custos_adapters::custos_adapter_provider_fake;
+pub use custos_adapters::custos_adapters_mcp;
+pub use custos_daemon::custos_local_api;
 
 pub mod ui;
 

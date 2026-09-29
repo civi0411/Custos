@@ -1,10 +1,12 @@
+use crate::cognitive::{HumanGate, ReasoningTier, RouteDecision, RoutingPolicy, RoutingSignals};
 use crate::gateway::budget::{BudgetCheck, BudgetGuard, BudgetTracker};
-use crate::gateway::dispatch::{A2ADispatcher, ExternalDispatcher, HumanDispatcher, LocalDispatcher};
+use crate::gateway::dispatch::{
+    A2ADispatcher, ExternalDispatcher, HumanDispatcher, LocalDispatcher,
+};
 use crate::gateway::observability::{GatewayMetrics, GatewayTracer};
 use crate::gateway::policy::SessionQuotaLimiter;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use crate::cognitive::{HumanGate, ReasoningTier, RouteDecision, RoutingPolicy, RoutingSignals};
 use custos_core_domain::{SessionId, TaskId};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
