@@ -6,275 +6,131 @@
   <img alt="Custos" src="docs/assets/banner.png" width="100%">
 </picture>
 
-**A Human-Governed Workspace for Specialized Agentic Work**
+# Custos
 
-*Vibe coding, research, and personal workflows across the models you choose — with durable state, controlled execution, cost-aware context, and verifiable outcomes.*
-
-<br />
-
-[ EN ] | [ VI ](docs/i18n/README.vi.md) | [ DE ](docs/i18n/README.de.md) | [ ZH ](docs/i18n/README.zh.md)
-
-<br />
-
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
-[![Canonical Specification](https://img.shields.io/badge/Specification-v4.0--draft-blue.svg)](docs/canonical-specification.md)
-[![Core: Rust](https://img.shields.io/badge/Core-Rust%201.82+-dea584.svg)](docs/architecture/reference-architecture.md)
-[![Topology: Local-First](https://img.shields.io/badge/Topology-Local--First%20Daemon-success.svg)](docs/architecture/deployment.md)
+[ EN ] · [ VI ](docs/i18n/CUSTOS_RESEARCH_BACKED_ARCHITECTURE_VI.md)
 
 </div>
 
----
+**A local-first, human-governed runtime for proof-carrying agent work.**
 
-## What Custos Means
+Custos turns transient AI conversations into durable Tasks with explicit intent, bounded execution, recoverable state and evidence-backed outcomes. It is designed for software engineering, technical research and personal workflows across local models, cloud models and external coding agents.
 
-Custos means *guardian*.
+> Custos is under active construction. The architecture is defined, core foundations compile and are tested, but the complete model/worker/effect/evidence path is not yet composed in the daemon. Read [current status](docs/status/README.md) before relying on a feature claim.
 
-The name reflects the product's primary mission: Custos guards the continuity, authority, privacy, resources, and evidence of AI-assisted work while leaving intent and final responsibility with the human.
+## Product contract
 
-Custos is **not** another autonomous black-box agent and not merely a chat wrapper over model APIs. It is a local-first runtime, task kernel, and workspace in which humans, specialized agent domains, cognitive models, tools, and repository knowledge collaborate through durable, verifiable, and governed tasks.
+Custos separates concepts that ordinary agent systems often collapse:
 
-Bring the models you trust. Work naturally. Custos keeps the work coherent, controlled, resumable, and auditable.
+- A **Session** is an interaction channel.
+- A **Task** is the durable unit of intent, policy and acceptance.
+- A **Run** is one execution attempt.
+- An **Effect** is a governed external mutation.
+- **Evidence** proves a bounded claim about a specific subject and revision.
+- A human remains the final authority for scope, policy and consequential approval.
 
----
-
-## The Problem
-
-Modern AI coding and research tools are fast, but the surrounding engineering workflows remain deeply fragmented:
-
-- **Trapped Context:** Critical context is locked inside provider-specific chat sessions and isolated web portals.
-- **Lost Progress:** Work state is lost whenever switching models, encountering rate limits, or restarting environments.
-- **Wasted Tokens:** Agents constantly reread entire repositories, logs, and files from scratch with zero incremental caching.
-- **Cost Inefficiency:** Expensive frontier models are routinely burned on trivial syntax checks and symbol lookups.
-- **Silent Degradation:** Model fallbacks fail silently, dropping tool calling and structured output semantics mid-task.
-- **Unverified Claims:** Generated code and research hypotheses are accepted without independent, reproducible evidence.
-- **Unchecked Side Effects:** Tool executions mutate host file systems without granular approval, rollback, or audit receipts.
-
-Custos replaces brittle, transient chat sessions with **Durable Tasks** governed by explicit execution permits and verifier gates.
-
----
-
-## Core Philosophy: The Durable Task
-
-The fundamental unit of execution in Custos is a **Durable Task**, not an ephemeral chat prompt.
-
-```text
-Durable Task = Contract + State Machine + Context Pack + Workflows + Permits + Evidence Closure
-```
-
-A Custos Task:
-- **Resumes seamlessly** across crashes, process restarts, network outages, and token budget limits.
-- **Handoffs cleanly** between different models (e.g., Claude for planning, Codex for editing, Qwen for local review) without losing memory.
-- **Enforces strict boundaries:** Actions with external side-effects require cryptographic or human-signed **Execution Permits**.
-- **Closes on evidence:** A task cannot succeed merely because an LLM claims "I have finished". Completion requires tangible evidence (passing tests, verified AST diffs, citation hashes, and human sign-off).
-
----
-
-## Tripartite Responsibility Model
-
-Custos cleanly separates authority, screening, and deliberation into three explicit tiers:
-
-| Tier | Role | Responsibility | Authority |
-|---|---|---|---|
-| **Human Principal** | Sovereign Authority | Sets intent, defines budgets, approves consequential actions, grants veto | Ultimate approval and veto |
-| **System One (S1)** | Fast Reflex & Screening | Deterministic rules, local embeddings, risk screening, symbol ranking | Advisory & policy gating only (No mutations) |
-| **System Two (S2)** | Deep Deliberation | Frontier reasoning models, coding agents, synthesis, refactoring plans | Proposes actions via `ActionIntent` |
-
-Neither System One nor System Two can self-grant execution authority. The **Task Kernel** owns state transitions, and the **Capability Gateway** enforces execution permits.
-
----
-
-## Specialized Agent Domains
-
-Custos provides three purpose-built **Domain Packs**:
-
-| Domain | Typical Work | Fast Judgment (S1) | Deep Deliberation (S2) | Completion Evidence |
-|---|---|---|---|---|
-| **Coding** | Architecture explanation, bug fixing, refactoring, feature implementation | File/symbol ranking, risk checks, test selection | Multi-file planning, patch generation, debugging | Worktree diff, clean build, test receipts, linter green |
-| **Research** | Paper comparison, claim extraction, benchmark synthesis | Relevance scoring, deduplication, contradiction flags | Hypothesis evaluation, experiment design | Source citations, dataset hashes, metric logs |
-| **Assistant** | Workspace organization, planning, recurring workflows | Privacy screening, priority classification | Multi-step task drafting, execution coordination | Audit trails, human approval receipts, delivery logs |
-
----
-
-## Real-World CLI Quickstart
-
-Custos is driven by a lightweight, modular CLI (`custos-cli`) communicating via versioned IPC with the local daemon (`custos-daemon`).
-
-### 1. Build and Verify Workspace
-
-```bash
-# Check compilation across all 42 crates
-cargo check --workspace --offline
-
-# Run workspace unit and contract tests
-cargo test --workspace --offline
-```
-
-### 2. Run the Custos CLI
-
-```bash
-# Start an interactive Vibe Coding session
-cargo run -p custos-cli -- vibe --prompt "Explain the repository architecture" --mode coding
-
-# Run an End-to-End Vertical Slice (Repository Architecture Explanation)
-cargo run -p custos-cli -- explain --query "How does the Task State Machine work?"
-
-# Create a governed task
-cargo run -p custos-cli -- create --title "Implement deterministic effect sandbox"
-
-# Inspect task status and timeline
-cargo run -p custos-cli -- status --id <TASK_ID>
-
-# List all active tasks
-cargo run -p custos-cli -- list
-```
-
----
-
-## Repository Architecture
-
-The Custos codebase is organized as an audited, 42-crate Rust monorepo with clear ports-and-adapters layering:
-
-```text
-Custos/
-├── crates/
-│   ├── core/                        # Pure domain abstractions & zero-I/O contracts
-│   │   ├── custos-domain            # Core domain entities: Task, Session, Evidence, Artifact
-│   │   ├── custos-kernel            # CQRS TaskService, StateMachine, CompletionGate
-│   │   ├── custos-bridge            # Session-to-Task lifecycle bridge
-│   │   ├── custos-provider-sdk      # Provider conformance traits & event models
-│   │   ├── custos-provider-types    # Provider message, completion, and stream types
-│   │   └── custos-sdk-types         # Shared SDK data structures
-│   │
-│   ├── runtime/                     # Authoritative runtime engines & state machines
-│   │   ├── custos-session           # Session lifecycle & durable journal
-│   │   ├── custos-workflow          # Durable workflow engine & step dispatch
-│   │   ├── custos-cognitive         # CognitiveArbiter (System 0/1/2 routing)
-│   │   ├── custos-context           # Context compilation & token optimization
-│   │   ├── custos-context-management# Context summarization & structured output
-│   │   ├── custos-security          # PathSandbox, DeterministicGate, EvidencePipeline
-│   │   ├── custos-gateway           # Protocol gateway & connection abstractions
-│   │   ├── custos-memory-service    # Memory indexing & persistent recall
-│   │   └── custos-agent             # Agent loop execution & event coordination
-│   │
-│   ├── infrastructure/              # Durable storage & external system drivers
-│   │   └── custos-persistence       # SQLite WAL persistence, state ledgers, migrations
-│   │
-│   ├── adapters/                    # Pluggable model providers, sandboxes & tools
-│   │   ├── custos-adapters-mcp      # MCP (Model Context Protocol) client & adapter
-│   │   ├── custos-mcp               # Core MCP protocol implementation
-│   │   ├── custos-providers         # Provider hub & dynamic router
-│   │   ├── custos-local-inference   # On-device inference adapter
-│   │   ├── custos-roaming           # Roaming agent synchronization
-│   │   ├── custos-download-manager  # Asset & model artifact downloader
-│   │   ├── judgments/               # System One judgment backends (rules, jev, onnx)
-│   │   ├── providers/               # LLM adapters (Claude, Codex, Antigravity, Fake, Local)
-│   │   └── sandboxes/               # OS-level containment (Linux bubblewrap, macOS seatbelt)
-│   │
-│   ├── packs/                       # Domain workflow templates & prompt recipes
-│   │   ├── custos-packs-engineering # Engineering domain workflows & tool configurations
-│   │   ├── custos-packs-research    # Research domain workflows & claim verification
-│   │   └── custos-packs-assistant   # Assistant domain workflows & note management
-│   │
-│   └── app/                         # Executable entrypoints & user-facing APIs
-│       ├── custos-cli               # Operator CLI & interactive vibe terminal
-│       ├── custos-daemon            # Composition root & local daemon process
-│       └── custos-local-api         # IPC transport client, DTOs & versioned API protocol
-│
-├── schemas/                         # Formal JSON schemas for cross-process contracts
-├── tests/                           # E2E vertical slice & contract verification suites
-│   ├── contract/                    # Strict C-01..C-04 contract conformance tests
-│   └── e2e/                         # Multi-process daemon & CLI integration tests
-├── evals/                           # Evaluation benchmarks & regression harnesses
-├── ui/                              # Web & desktop user interface components
-└── docs/                            # Comprehensive technical documentation
-```
-
----
-
-## Runtime Flow at a Glance
+The intended path is:
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor Human as Human Principal
-    participant CLI as custos-cli
-    participant Daemon as custos-daemon
-    participant Kernel as custos-kernel
-    participant S1 as System One (Screening)
-    participant S2 as System Two (Deliberation)
-    participant Gate as Capability Gateway
-    participant Verifier as Evidence Pipeline
-
-    Human->>CLI: Input prompt / intent
-    CLI->>Daemon: Submit Task via LocalApiClient
-    Daemon->>Kernel: Create Task & initialize StateMachine
-    Kernel->>S1: Screen action risk & rank context
-    Kernel->>S2: Dispatch budgeted ContextPack to Model
-    S2-->>Kernel: Propose ActionIntent (e.g., File Patch)
-    Kernel->>Gate: Validate Action against Security Policy
-    alt Requires Human Approval
-        Gate->>Human: Present exact payload & request permit
-        Human-->>Gate: Sign & issue ExecutionPermit
-    end
-    Gate-->>Kernel: Execute action in sandbox & return Receipt
-    Kernel->>Verifier: Run targeted verification (tests/diff/linter)
-    Verifier-->>Kernel: Produce cryptographically hashed Evidence
-    Kernel->>Kernel: Evaluate CompletionGate criteria
-    Kernel-->>CLI: Return verified outcome & update task state
-    CLI-->>Human: Display diff, evidence summary, and receipt
+flowchart LR
+    Human --> Session
+    Session --> Task
+    Task --> Context[Context and route]
+    Context --> Worker[Model or agent worker]
+    Worker --> Intent[Action intent]
+    Intent --> Gate[Authority and capability gate]
+    Gate --> Effect[Sandboxed effect]
+    Effect --> Evidence
+    Evidence --> Outcome
 ```
 
----
+Custos does not trust a model's declaration of success. Terminal outcomes require current, subject-bound evidence produced by trusted verification paths.
 
-## Documentation Directory
+## Architecture
 
-The technical documentation is organized by architectural concern:
+The repository uses 11 product crates:
 
-| Guide | Description |
+| Crate | Responsibility |
 |---|---|
-| [Documentation Hub](docs/README.md) | Authority register, status taxonomy, and navigation overview |
-| [Start Here & Reading Paths](docs/00-start-here.md) | Role-based onboarding for Systems, AI, Security, and Client engineers |
-| [Reference Architecture](docs/architecture/reference-architecture.md) | Full system design, architectural planes, and cross-cutting invariants |
-| [Runtime Flows](docs/architecture/runtime-flows.md) | End-to-end trace of task intake, cognitive routing, effects, and recovery |
-| [Contract Register](docs/contracts/README.md) | Formal specifications for C-01 (API), C-02 (Task), C-03 (Permits), and C-04 (Evidence) |
-| [Repository Structure](docs/development/repository-structure.md) | 42-crate dependency boundaries, layer rules, and technical debt log |
-| [Implementation Blueprint](docs/development/implementation-blueprint.md) | Phased engineering milestones and PR delivery roadmap |
-| [PR-00 Quality Gates](docs/development/pr-00-gates.md) | Strict conformance checklist required for landing changes |
-| [Security & Threat Model](docs/security/threat-model.md) | STRIDE analysis, isolation sandboxes, and token egress policies |
-| [Current Audit Snapshot](docs/status/local-dev-audit-2026-09-28.md) | Empirical test results and verified capability register |
+| `custos-domain` | Pure domain identities, entities and invariants |
+| `custos-core` | Task application service, authority and completion policy |
+| `custos-persistence` | SQLite migrations and durable repositories |
+| `custos-bridge` | Session-to-Task promotion and current Local API dispatch |
+| `custos-runtime` | Session, workflow, worker, cognition, context and memory |
+| `custos-provider` | Provider-neutral model contracts |
+| `custos-adapters` | Model, agent, protocol, capability and infrastructure adapters |
+| `custos-packs` | Engineering, Research and Assistant workflows |
+| `custos-daemon` | Sole production composition root |
+| `custos-sdk` | Versioned client DTOs and transport contracts |
+| `custos-cli` | Thin operator client |
 
----
+The workspace also contains two test crates and `xtask`. Source consolidated from Goose remains migration debt until a bounded call path is composed and verified.
 
-## Verification Status
+Goose, 9Router, and Agentgateway are upstream research sources. Custos dissects
+their mechanisms independently and may adapt a bounded mechanism through a
+port, but none owns Task state, effect authority, evidence truth, or the Custos
+control plane.
 
-Custos maintains a strict distinction between **Verified Reality** and **Target Architecture**:
+## Current state
 
-- **Verified:** Session durability, Task state machine (direct transitions to `Succeeded` are rejected without evidence), `PathSandbox` directory containment, `DeterministicGate` effect verification, and CLI-to-daemon IPC.
-- **In Progress:** Provider gateway unification, full daemon composition of `DeterministicGate`, and streaming evidence verification.
+Verified foundations include domain state machines, SQLite-backed core repositories, Session-to-Task bridging, Local API dispatch and a broad set of runtime/adapter tests.
 
-Refer to [`docs/status/README.md`](docs/status/README.md) for full status claims and audit logs.
+The most important open gates are:
 
----
+1. replace caller-authored verification claims with trusted, subject-bound evidence;
+2. strengthen permits with task, capability, target, payload, revision, revocation and single-use binding;
+3. replace developer shell execution with production OS sandbox adapters;
+4. make Run/Step, effect and evidence persistence executable rather than schema-only;
+5. compose model, agent, capability and judgment ports in `custos-daemon`;
+6. classify and migrate remaining Goose compatibility/debt deliberately.
 
-## Contributing
+See [current implementation status](docs/status/README.md) for exact exit
+conditions.
 
-Custos enforces high engineering standards:
-1. All changes must respect the **zero-I/O boundary** of `crates/core/custos-domain`.
-2. Any side-effecting operation must flow through `crates/runtime/custos-security`.
-3. Every pull request must pass the automated gates defined in [`docs/development/pr-00-gates.md`](docs/development/pr-00-gates.md).
+## Build and verify
 
-Please review [`AGENTS.md`](AGENTS.md) and [`docs/development/naming-conventions.md`](docs/development/naming-conventions.md) before submitting code.
+Prerequisites are defined by the repository toolchain and package manifests.
 
----
+```bash
+cargo fmt --all -- --check
+cargo check --workspace
+cargo test --workspace --all-targets
+bash scripts/check_naming.sh
+bash scripts/check_deps.sh
+```
+
+The current dirty working tree may temporarily fail formatting while concurrent source refactoring is in progress. A mergeable branch must pass every applicable gate.
+
+## Documentation
+
+Start here:
+
+1. [Documentation authority and navigation](docs/README.md)
+2. [Definitive product architecture](docs/architecture/definitive-product-architecture.md)
+3. [Runtime flows](docs/architecture/runtime-flows.md)
+4. [Repository structure](docs/development/repository-structure.md)
+5. [Upstream dissection protocol](docs/research/upstream-dissection.md)
+6. [Vietnamese research-backed architecture](docs/i18n/CUSTOS_RESEARCH_BACKED_ARCHITECTURE_VI.md)
+7. [Current implementation status](docs/status/README.md)
+8. [Team work hub](dev_docs/README.md)
+9. [Agent and ownership policy](AGENTS.md)
+
+Obsolete plans, dated audits, weekly report copies, and the vendored Goose
+documentation website were removed from the active checkout. Git history
+preserves them when provenance work requires recovery.
+
+## Design principles
+
+- Local-first state and explicit egress policy
+- Task-centric continuity across sessions and workers
+- Human sovereignty and least authority
+- No direct production effects outside a validated capability path
+- Durable attempts before dispatch and no blind retry after uncertainty
+- Evidence-bound completion
+- Ports for models, external agents, capabilities, judgments and protocols
+- Thin clients and one daemon composition root
+- Observable cost, latency, risk and recovery
 
 ## License
 
-Custos is open-source software licensed under the [Apache License 2.0](LICENSE).
-
-<div align="center">
-
-**Custos — Guardian of Work**
-
-*Built for human sovereignty, local autonomy, and verifiable software engineering.*
-
-</div>
+See [LICENSE](LICENSE).

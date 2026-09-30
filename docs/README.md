@@ -1,81 +1,116 @@
-# Custos Documentation Hub
+# Custos documentation
 
-**Document ID:** DOC-HUB-01  
-**Status:** Active navigation, governance, and authority map  
-**Reviewed:** 2026-09-28 against 42-crate workspace and latest verification audit  
-**Quickstart Guide:** For role-based onboarding paths, see [`00-start-here.md`](00-start-here.md)
+Custos intentionally keeps a small documentation surface. Architecture,
+implementation status, and team execution are separate authorities; no other
+document may silently redefine them.
 
----
+## Read in this order
 
-## 1. Primary Reading Order
+1. [`architecture/definitive-product-architecture.md`](architecture/definitive-product-architecture.md)
+   defines the product, trust boundaries, invariants, ports, and target state.
+2. [`architecture/runtime-flows.md`](architecture/runtime-flows.md) defines the
+   end-to-end command, effect, evidence, and recovery flows.
+3. [`development/repository-structure.md`](development/repository-structure.md)
+   maps those boundaries to the current physical repository.
+4. [`contracts/README.md`](contracts/README.md) records proposed shared
+   contracts. A proposal is not accepted until its required reviewers approve
+   it and its fixtures pass.
+5. [`status/README.md`](status/README.md) records what the observed checkout
+   actually implements, wires, and verifies.
+6. [`../dev_docs/README.md`](../dev_docs/README.md) and
+   [`../dev_docs/SPRINT_STATUS.md`](../dev_docs/SPRINT_STATUS.md) coordinate
+   current work.
 
-Follow this sequence to build a rigorous understanding of Custos:
+## Entry paths for the three maintainers
 
-1. **Orientation & Pathways:** [`00-start-here.md`](00-start-here.md) — Role-based pathways and core runtime invariants.
-2. **Product Identity & Scope:** [`product/identity.md`](product/identity.md) and [`product/scope.md`](product/scope.md) — What Custos is, problems solved, and non-goals.
-3. **Current Verified Baseline:** [`status/local-dev-audit-2026-09-28.md`](status/local-dev-audit-2026-09-28.md) and [`status/README.md`](status/README.md) — What the checked source code and E2E tests establish today.
-4. **Reference Architecture:** [`architecture/reference-architecture.md`](architecture/reference-architecture.md) — Complete 6-plane architecture, membranes, and system boundaries.
-5. **Runtime Flows:** [`architecture/runtime-flows.md`](architecture/runtime-flows.md) — End-to-end trace of Task intake, cognitive routing, effect sandboxes, and evidence closure.
-6. **Cross-Team Contracts:** [`contracts/README.md`](contracts/README.md) — The normative contracts (C-01 Local API, C-02 Task, C-03 Action/Permits, C-04 Evidence).
-7. **Implementation Blueprint & Gates:** [`development/implementation-blueprint.md`](development/implementation-blueprint.md) and [`development/pr-00-gates.md`](development/pr-00-gates.md) — PR delivery milestones and quality gates.
-8. **Repository Structure:** [`development/repository-structure.md`](development/repository-structure.md) — 42-crate dependency tree and layering boundaries.
-9. **Active Sprint & Team Ownership:** [`../dev_docs/README.md`](../dev_docs/README.md) — Current work, module ownership, and active blockers.
-
----
-
-## 2. Document Authority Hierarchy
-
-To resolve contradictions across documents, Custos enforces a strict authority hierarchy:
-
-| Tier | Category | Sources | Meaning & Authority |
-|---|---|---|---|
-| **Tier 1** | **Source Truth** | Rust source code, SQL migrations, Cargo workspace metadata, and reproducible tests | Definitive authority on what is implemented, wired, and verified at the pinned commit. |
-| **Tier 2** | **Governance** | [`AGENTS.md`](../AGENTS.md) and accepted ADRs under [`adr/`](adr/README.md) | Authoritative rules for engineering standards, architecture decisions, and code modifications. |
-| **Tier 3** | **Normative Contracts** | Formal schemas in [`schemas/`](../schemas) and contracts in [`contracts/`](contracts/README.md) | Binding cross-team contracts for local API, task events, execution permits, and evidence. |
-| **Tier 4** | **Target Architecture** | [`architecture/reference-architecture.md`](architecture/reference-architecture.md) & [`architecture/target-architecture.md`](architecture/target-architecture.md) | Official architectural target. Describes intended end-state; not proof of current implementation. |
-| **Tier 5** | **Audit Snapshots** | Dated files in [`status/`](status/README.md) | Empirical records of repository status at a specific date and commit. |
-| **Tier 6** | **Historical & Vendor** | [`canonical-specification.md`](canonical-specification.md), [`specifications/`](specifications/README.md), [`goose/`](goose/README.md), [`archive/`](archive/README.md) | Historical context, original design proposals, and upstream references. Completely non-normative. |
-
----
-
-## 3. Status Verification Vocabulary
-
-No document may claim a feature is ready without adhering to the status claim rules:
-
-- **Designed:** Specified in documentation or schemas; not yet implemented in Rust code.
-- **Implemented:** Source code exists in a crate and compiles cleanly under `cargo check --workspace`.
-- **Wired:** Production composition root (`custos-daemon` or `custos-cli`) connects the feature.
-- **Verified:** Tested end-to-end with repeatable verification (unit, integration, or E2E tests).
-- **Degraded / Experimental:** Known issues, test gaps, or unhandled failure modes exist.
-
----
-
-## 4. Navigation by Concern
-
-| Technical Concern | Primary Documentation | Secondary References |
+| Reader | Start with | Then open before changing code |
 |---|---|---|
-| **Task Lifecycle & State Machine** | [`architecture/task-lifecycle.md`](architecture/task-lifecycle.md) | [`crates/core/custos-kernel`](../crates/core/custos-kernel), [`adr/task-state-machine-alignment.md`](adr/task-state-machine-alignment.md) |
-| **End-to-End Execution Flows** | [`architecture/runtime-flows.md`](architecture/runtime-flows.md) | [`architecture/reference-architecture.md`](architecture/reference-architecture.md) |
-| **Cognitive Routing (System 0/1/2)** | [`architecture/cognitive-fabric.md`](architecture/cognitive-fabric.md) | [`architecture/COGNITIVE_ARCHITECTURE_S1_S2.md`](architecture/COGNITIVE_ARCHITECTURE_S1_S2.md), [`architecture/intelligence-hub.md`](architecture/intelligence-hub.md) |
-| **Capability Sandbox & Permits** | [`architecture/capability-gateway.md`](architecture/capability-gateway.md) | [`security/capability-model.md`](security/capability-model.md), [`crates/runtime/custos-security`](../crates/runtime/custos-security) |
-| **Evidence & Completion Verification** | [`architecture/evidence-verification.md`](architecture/evidence-verification.md) | [`contracts/README.md`](contracts/README.md) (Contract C-04) |
-| **Context Compilation & Memory** | [`architecture/context-memory.md`](architecture/context-memory.md) | [`crates/runtime/custos-context`](../crates/runtime/custos-context), [`crates/runtime/custos-memory-service`](../crates/runtime/custos-memory-service) |
-| **Persistence & Storage Engine** | [`architecture/persistence.md`](architecture/persistence.md) | [`crates/infrastructure/custos-persistence`](../crates/infrastructure/custos-persistence) |
-| **Crash Recovery & Resumption** | [`architecture/crash-recovery.md`](architecture/crash-recovery.md) | [`architecture/deployment.md`](architecture/deployment.md) |
-| **MCP & External Connectivity** | [`architecture/connectivity-hubs.md`](architecture/connectivity-hubs.md) | [`research/connectivity-gateway-findings.md`](research/connectivity-gateway-findings.md), [`crates/adapters/custos-mcp`](../crates/adapters/custos-mcp) |
-| **42-Crate Monorepo Structure** | [`development/repository-structure.md`](development/repository-structure.md) | [`development/codebase.md`](development/codebase.md), [`Cargo.toml`](../Cargo.toml) |
-| **Quality & PR Gates** | [`development/pr-00-gates.md`](development/pr-00-gates.md) | [`development/testing.md`](development/testing.md) |
-| **Goose Upstream & Migration** | [`status/goose-naming-migration.md`](status/goose-naming-migration.md) | [`vendor/README.md`](vendor/README.md), [`adr/goose-compatibility-boundary.md`](adr/goose-compatibility-boundary.md) |
+| Vi, AI/data-science lead | Product architecture -> research foundations -> upstream dissection | Repository structure, C-04 evidence contract, current status, sprint lane |
+| Truong, core/platform SE | Current status -> contract register -> runtime failure flows | Repository structure, architecture invariants, decision queue |
+| Vinh, runtime/client SE | Runtime flows -> repository structure -> contract register | Current status, protocol boundaries, sprint lane |
+| New contributor or external reviewer | This page -> product architecture -> current status | `AGENTS.md` and the owner of the affected path |
 
----
+Each route distinguishes **target**, **proposed contract**, and **observed
+code** before an implementation claim. The [work-ready repository
+map](development/repository-structure.md) names exact edit zones, first
+independent tasks, and migration gates. The [team work
+hub](../dev_docs/README.md) records the approximate 55/22.5/22.5 workload
+allocation without changing the review/authority rules in `AGENTS.md`.
 
-## 5. Language and Translation Policy
+## Active document set
 
-All primary technical documentation under `docs/` and internal engineering coordination under `dev_docs/` is authored and maintained in **Technical English**. 
+| Concern | Canonical document |
+|---|---|
+| Product and system architecture | [`ARCH-DEF-01`](architecture/definitive-product-architecture.md) |
+| Runtime and failure flows | [`ARCH-FLOW-01`](architecture/runtime-flows.md) |
+| Process, language, and repository topology | [`ARCH-TOPOLOGY-01`](architecture/polyglot-repository-topology.md) |
+| Current physical codebase | [`DEV-REPO-01`](development/repository-structure.md) |
+| Shared contract proposals | [`contracts/README.md`](contracts/README.md) |
+| Current implementation truth | [`STATUS-CURRENT-01`](status/README.md) |
+| Research foundations | [`architecture-foundations-2026-09-30.md`](research/architecture-foundations-2026-09-30.md) |
+| Goose, 9Router, and Agentgateway extraction | [`upstream-dissection.md`](research/upstream-dissection.md) |
+| Vietnamese architecture explanation | [`CUSTOS_RESEARCH_BACKED_ARCHITECTURE_VI.md`](i18n/CUSTOS_RESEARCH_BACKED_ARCHITECTURE_VI.md) |
+| Accepted or proposed structural decisions | [`adr/README.md`](adr/README.md) |
 
-Localized translations for wider audiences are maintained under [`docs/i18n/`](i18n/README.md):
-- [Vietnamese Translation](i18n/README.vi.md)
-- [German Translation](i18n/README.de.md)
-- [Chinese Translation](i18n/README.zh.md)
+The target now includes dependency-aware evidence reuse, Research-to-Code-to-
+Assistant handoff, change-driven revalidation, and automatic setup. Read
+the relevant architecture sections and runtime flows F4–F8. The associated
+[ADR](adr/evidence-driven-workflows.md) is proposed; these additions do not
+change the recorded implementation status.
 
-Historical Vietnamese design and research drafts are preserved under [`docs/archive/`](archive/README.md) for provenance, and are completely non-normative.
+## Directory contract and stable names
+
+| Directory | Question it answers | What does not belong there |
+|---|---|---|
+| `architecture/` | What is the intended product, topology, and runtime behavior? | Sprint reports or claims that code already works |
+| `development/` | Where does code live and how may it migrate? | Another product architecture or owner-specific diary |
+| `contracts/` | Which cross-team DTOs and invariants are proposed or accepted? | Unsigned schema changes presented as settled |
+| `adr/` | Why was a consequential boundary chosen, by whom, and with which review state? | Chronological meeting notes |
+| `status/` | What does a pinned checkout actually implement, wire, and verify? | Undated aspirations |
+| `research/` | Which primary sources, upstream revisions, and experiments support a hypothesis? | Normative runtime requirements |
+| `i18n/` | How is a canonical document explained in another language? | Independent design authority |
+
+Canonical document filenames are descriptive lowercase kebab-case; folder
+`README.md` is the navigation or register entrypoint. Research snapshots may
+carry an ISO date. ADRs use a stable semantic filename and explicit status.
+Translations retain a link to their canonical document and do not silently
+fork decisions. The existing Vietnamese filename remains a compatibility
+exception until a reviewed link migration; do not add another parallel master
+specification. Prefer stable document IDs (`ARCH-DEF-01`, `ARCH-FLOW-01`,
+`DEV-REPO-01`, `STATUS-CURRENT-01`) in work packets so a future file move does
+not silently change a decision reference.
+
+## Authority order
+
+When documents disagree, use this order:
+
+1. current source, migrations, manifests, and repeatable tests for behavior;
+2. `AGENTS.md` for repository policy and ownership;
+3. accepted ADRs and versioned shared contracts;
+4. definitive architecture for the target state;
+5. current status for observed gaps;
+6. research notes and localization for rationale and explanation.
+
+Target architecture never proves implementation. A type proves only that a
+type exists; compilation proves only compilation; a test proves only its
+executed path. `Wired` requires the production daemon path, and `Verified`
+requires repeatable success and failure evidence on that path.
+
+## Upstream policy
+
+Goose, 9Router, and Agentgateway are research and extraction sources, not
+architectural parents. Custos may adopt a bounded mechanism only through an
+explicit port, pinned source revision, license and threat review, conformance
+fixtures, measured benefit, owner, and rollback plan. Upstream documentation
+and websites are linked by immutable revision where possible; they are not
+vendored into this documentation tree.
+
+## Change discipline
+
+- Update one canonical document instead of adding another master plan.
+- Put Technical English in active docs and translations under `docs/i18n/`.
+- Record a structural decision in an ADR; record active work in `dev_docs/`.
+- Move implementation claims only through `Designed`, `Implemented`, `Wired`,
+  and `Verified`, with exact evidence.
+- Use Git history for obsolete plans and dated audits; do not keep duplicate
+  active-looking copies in the checkout.
