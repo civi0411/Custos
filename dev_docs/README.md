@@ -1,46 +1,102 @@
 # Custos development work hub
 
-**Status:** lead-directed coordination framework, 2026-09-27. This page organizes work; it does not assign disputed shared-module ownership or certify implementation. Read [`AGENTS.md`](../AGENTS.md) for repository rules and the [documentation authority map](../docs/README.md) for design versus code truth.
+`dev_docs/` is an execution board, not an architecture library. It contains
+only this operating model, the current sprint board, and the unresolved
+decision queue.
 
-## Where work lives
+## Sources of truth
 
 | Need | Source |
 |---|---|
-| Current work and blockers | [Sprint status](SPRINT_STATUS.md) |
-| Decisions blocking shared work | [Decision queue](DECISION_QUEUE.md) |
-| Standard issue/PR handoff | [Work item template](WORK_ITEM_TEMPLATE.md) |
-| Full target system design | [Reference architecture](../docs/architecture/reference-architecture.md) and [connectivity hubs](../docs/architecture/connectivity-hubs.md) |
-| Three-person build sequence | [Implementation blueprint](../docs/development/implementation-blueprint.md) |
-| PR-00 decisions, migration and rollback | [PR-00 gates](../docs/development/pr-00-gates.md) |
-| Shared contract proposals | [Contract register](../docs/contracts/README.md) |
-| Code-backed capability status | [Status method](../docs/status/README.md) and dated evidence reports |
-| Latest local restructure audit | [2026-09-28 audit](../docs/status/local-dev-audit-2026-09-28.md) |
-| Current ownership map | [Module ownership matrix](MODULE_OWNERSHIP.md), summarized from `AGENTS.md` |
-| Detailed work allocation | [Team work allocation blueprint](TEAM_WORK_ALLOCATION.md) (Roles, crates, workflows) |
-| Goose naming migration | [Measured migration register](../docs/status/goose-naming-migration.md) and [naming policy](../docs/development/naming-conventions.md) |
-| Vi's AI/product notes | [`vi/`](vi/README.md) |
-| Truong's platform/security notes | [`truong/`](truong/README.md) |
-| Vinh's runtime/coordination notes | [`vinh/`](vinh/README.md) |
-| Earlier coordination text | [`archive/`](archive/README-2026-09-27-pre-restructure.md) |
+| Repository policy and ownership | [`../AGENTS.md`](../AGENTS.md) |
+| Product and system target | [`ARCH-DEF-01`](../docs/architecture/definitive-product-architecture.md) |
+| Runtime flows | [`ARCH-FLOW-01`](../docs/architecture/runtime-flows.md) |
+| Physical repository map | [`DEV-REPO-01`](../docs/development/repository-structure.md) |
+| Proposed shared contracts | [`contracts/README.md`](../docs/contracts/README.md) |
+| Current implementation truth | [`STATUS-CURRENT-01`](../docs/status/README.md) |
+| Active priorities | [`SPRINT_STATUS.md`](SPRINT_STATUS.md) |
+| Unresolved decisions | [`DECISION_QUEUE.md`](DECISION_QUEUE.md) |
 
-## Working rules
+## Team lanes
 
-One Task/Session/Run/effect/evidence state has one canonical writer. A model proposes; Authority grants; the Gateway performs controlled effects; the verifier assesses evidence; the Kernel closes a Task. CLI/IDE/bots and 9Router/Agentgateway do not write canonical Task state. A shared-boundary PR names its producer, consumer, owner and reviewer and cites a versioned contract. Status claims are tied to a code SHA and reproducible test, not a readme assertion.
+| Driver | Primary lane | Cross-review |
+|---|---|---|
+| Vi | Product semantics, architecture, context/memory, routing, providers, packs, evaluation, upstream research | Truong for authority/privacy/effects; Vinh for runtime/agent handoff |
+| Truong | Domain, Kernel, persistence, authority, effects, evidence closure, daemon/API, sandbox, release | Vi for product/evidence semantics; Vinh for lifecycle/recovery |
+| Vinh | Session/bridge, workflow, AgentRuntimePort, MCP/ACP/A2A, CLI/UI/SDK, integration coordination | Truong for durability/effects; Vi for agent/UX semantics |
 
-For shared domain, security, persistence, DTO and effect changes, all three maintainers review. `AGENTS.md` is the current policy and the ownership matrix is its operational summary. Lead direction establishes working ownership but is not evidence that a changed domain contract passed producer/consumer review.
+`AGENTS.md` is authoritative when this summary differs. Shared domain,
+authority, persistence, public DTO, and port changes require their producer,
+consumer, owner, and required reviewers.
 
-## Weekly rhythm
+## Capacity model for a three-person team
 
-1. Pin code SHA, dirty-state summary, Cargo inventory, current test baseline and changed upstream versions.
-2. Each owner posts a bounded deliverable, evidence command/result, blockers and next decision in their workspace.
-3. Review shared contracts and failure fixtures before interface-changing PRs.
-4. Run F1/F2/F3 through the daemon process when the relevant gate is claimed; retain failure logs and limitations.
-5. Update [Sprint status](SPRINT_STATUS.md) with `Proposed`, `Active`, `Blocked` or `Verified at SHA`; never write “100% complete” without scoped proof.
+The planned **implementation and research effort** is approximately Vi 55%,
+Truong 23%, and Vinh 22% across the program. This is a planning range, not a
+claim about hours already spent or a way to override code ownership. Rebalance
+at each gate from observed throughput. Vi can drive 50-60% by owning product
+architecture, source dissection, context/model/routing work, all three pack
+semantics, evaluation fixtures, and integration acceptance; the SEs retain the
+security-critical code they own.
 
-## Delivery rule
+| Person | Primary deliverables | Must not become the sole approval for |
+|---|---|---|
+| Vi, lead and AI/DS | Product decisions; research; context/memory; model and S1/OI experiments; pack criteria; evals; user-facing outcome review; cross-lane integration plan | His own C-04 semantics, egress policy, or unmeasured model-routing claims |
+| Truong, core/platform SE | Domain/Kernel; SQLite and CAS; exact authority/effects; evidence closure; daemon; sandbox; release safety | Product acceptance criteria without Vi; workflow recovery without Vinh |
+| Vinh, runtime/client SE | Session and workflow; external agent/MCP/ACP; API consumers; CLI/UI/SDK; setup and client integration | Effect dispatch/reconciliation without Truong; pack semantics without Vi |
 
-Every active item has one outcome, one owner, named reviewers, affected contracts, a smallest process-level fixture and a rollback or roll-forward note. Work that changes shared DTO, Task/effect/evidence semantics starts as a decision/contract PR. Runtime wiring, adapters and UI follow in separate reviewable PRs. The team does not develop new features on top of an unshareable local restructure.
+The critical path is **Truong's durable trust boundary + Vi's evidence
+semantics + Vinh's recoverable lifecycle**, reviewed together. During that
+path, Vi's independent research/evals and Vinh's client/agent fixtures may
+advance, but no one integrates a dependent feature before its contract gate.
+Keep one shared-contract decision in active review at a time; avoid three
+parallel rewrites of Task, permit, and evidence types. The [repository
+map](../docs/development/repository-structure.md) names edit zones and safe
+independent starting work.
 
-## Scope of historical material
+## Product spine
 
-The former work-hub prose and sprint report are preserved in `archive/`. Dated reports under `truong/reports/` and `vinh/reports/` are also historical author records: commands, branch names, paths, plans, and completion claims inside them are not active instructions. The divergent former `docs/dev_docs/` tree is preserved in [`docs/archive/dev_docs-2026-09-27/`](../docs/archive/dev_docs-2026-09-27/); it is not an active workboard. The large `docs/goose/` tree is imported upstream reference, not an implemented Custos capability list. See the [document register](../docs/document-register.md) before moving or deleting more material.
+```text
+Session -> TaskContract -> Context/Route -> Run/Worker
+        -> ActionIntent -> Permit -> EffectAttempt -> Receipt
+        -> Evidence -> CriterionAssessment -> Outcome/Continuation
+```
+
+Each state family has one writer. Models and external agents propose; the
+Kernel authorizes and closes Tasks; adapters execute; trusted verifiers assess.
+Clients, routers, and protocol gateways remain outside canonical ownership.
+
+## Work packet
+
+Every active item in `SPRINT_STATUS.md` or its linked issue/PR must state:
+
+- identifier, user outcome, owner, reviewers, and target gate;
+- current evidence and exact affected paths;
+- contract/ADR dependencies and explicit non-goals;
+- valid, denied, stale, duplicate, uncertain, crash, and restart fixtures as
+  applicable;
+- observability, privacy, egress, cost, migration, and compatibility impact;
+- rollback or roll-forward behavior;
+- commands and evidence required to move from Implemented to Wired or Verified.
+
+Do not create per-owner README files, weekly report copies, or another workboard.
+Use issues/PRs for detailed execution history and update the one sprint row with
+the current result.
+
+## Change flow
+
+1. Pin branch, commit, dirty state, workspace inventory, and upstream revisions.
+2. Resolve a shared contract or decision before implementation when semantics
+   would otherwise diverge.
+3. Separate mechanical movement, contract changes, implementation, daemon
+   composition, and client changes into reviewable units.
+4. Test the production daemon path and its failure path, not only an in-process
+   assembly.
+5. Update `docs/status/README.md` with exact evidence; update architecture only
+   when the target or boundary changed.
+
+## Status language
+
+Use `Designed`, `Implemented`, `Wired`, `Verified`, `Experimental`, or `Absent`.
+Do not report percentages or “done” without a stated scope and repeatable exit
+evidence.
