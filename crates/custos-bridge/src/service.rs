@@ -2,9 +2,9 @@ use crate::port::{
     AttachMode, BridgePort, ForkReceipt, RecallReceipt, SteerReceipt, TaskObservation,
 };
 use async_trait::async_trait;
-use custos_core_domain::{DomainError, SessionId, SessionStatus, Task, TaskContract, TaskId};
-use custos_kernel::TaskService;
-use custos_session::SessionManager;
+use custos_core::{CreateTask, TaskService};
+use custos_domain::{DomainError, SessionId, SessionStatus, Task, TaskContract, TaskId};
+use custos_runtime::session::SessionManager;
 use std::sync::Arc;
 
 pub struct BridgeService {
@@ -47,7 +47,7 @@ impl BridgePort for BridgeService {
         // Create Task in Kernel
         let (task, _) = self
             .task_service
-            .execute_create(custos_kernel::CreateTask {
+            .execute_create(CreateTask {
                 title: contract.name.clone(),
                 metadata: None,
                 contract: Some(contract),
@@ -185,7 +185,7 @@ impl BridgePort for BridgeService {
 
         let (forked_task, _) = self
             .task_service
-            .execute_create(custos_kernel::CreateTask {
+            .execute_create(CreateTask {
                 title: format!("{}-fork", original_task.title),
                 metadata: Some(original_task.metadata.clone()),
                 contract: forked_contract,

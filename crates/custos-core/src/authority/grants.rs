@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use custos_core_domain::Grant;
+use custos_domain::Grant;
 
 #[derive(Debug, Default, Clone)]
 pub struct GrantStore {

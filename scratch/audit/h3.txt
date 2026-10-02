@@ -1,2 +1,0 @@
-../../crates/runtime/custos-gateway/src/lib.rs
-../../crates/runtime/custos-gateway/src/gateway.rs

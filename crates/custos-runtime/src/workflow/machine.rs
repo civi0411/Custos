@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use custos_core_domain::{ContinuationPacket, DomainError};
-use custos_kernel::TaskStore;
+use custos_domain::{ContinuationPacket, DomainError};
+use custos_core::TaskStore;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -207,9 +207,9 @@ impl WorkflowMachine {
     }
 
     fn effect_key(&self, cursor: usize, effect: &Value) -> Result<String, DomainError> {
-        let canonical = custos_core_domain::canonical_json(effect)
+        let canonical = custos_domain::canonical_json(effect)
             .map_err(|error| DomainError::Validation(error.to_string()))?;
-        Ok(custos_core_domain::digest(
+        Ok(custos_domain::digest(
             format!("{}:{cursor}:{canonical}", self.task_id).as_bytes(),
         ))
     }
@@ -218,8 +218,8 @@ impl WorkflowMachine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_core_domain::{ContinuationPacket, Span, Task};
-    use custos_kernel::TaskEvent;
+    use custos_domain::{ContinuationPacket, Span, Task};
+    use custos_core::TaskEvent;
     use std::collections::HashMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;

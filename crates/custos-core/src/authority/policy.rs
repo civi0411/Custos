@@ -3,7 +3,7 @@
 //! Evaluates policy rules before granting permits.
 
 use async_trait::async_trait;
-use custos_core_domain::{Action, DomainError};
+use custos_domain::{Action, DomainError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PolicyDecision {
@@ -30,16 +30,16 @@ impl PolicyEvaluator for DefaultPolicyEvaluator {
         action: &Action,
     ) -> Result<PolicyDecision, DomainError> {
         match action.risk_level {
-            custos_core_domain::RiskLevel::Low | custos_core_domain::RiskLevel::Medium => {
+            custos_domain::RiskLevel::Low | custos_domain::RiskLevel::Medium => {
                 Ok(PolicyDecision::Allow)
             }
-            custos_core_domain::RiskLevel::High => Ok(PolicyDecision::RequireApproval {
+            custos_domain::RiskLevel::High => Ok(PolicyDecision::RequireApproval {
                 reason: format!(
                     "High-risk action '{}' requires explicit human confirmation",
                     action.name
                 ),
             }),
-            custos_core_domain::RiskLevel::Critical => Ok(PolicyDecision::Deny {
+            custos_domain::RiskLevel::Critical => Ok(PolicyDecision::Deny {
                 reason: format!(
                     "Critical action '{}' is blocked by default policy",
                     action.name

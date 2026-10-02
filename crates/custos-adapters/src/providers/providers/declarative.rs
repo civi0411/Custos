@@ -197,7 +197,7 @@ pub struct DeclarativeProviderConfig {
     #[serde(default)]
     pub emit_clear_thinking: bool,
     #[serde(default)]
-    pub setup: Option<custos_provider_types::canonical::catalog::ProviderSetupMetadata>,
+    pub setup: Option<custos_provider::canonical::catalog::ProviderSetupMetadata>,
 }
 
 fn default_requires_auth() -> bool {

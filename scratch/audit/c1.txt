@@ -1,4 +1,0 @@
-custos-agent:
-custos-agent v0.1.0-alpha.10 (/Users/mac/Project/AgentHub/Custos/crates/runtime/custos-agent)
-└── custos-cli v0.1.0 (/Users/mac/Project/AgentHub/Custos/crates/app/custos-cli)
-custos-engine:

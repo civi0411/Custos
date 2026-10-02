@@ -1,102 +1,53 @@
-# Custos development work hub
+# KHÔNG GIAN KỸ THUẬT NỘI BỘ (DEV DOCS)
+## (Internal Team Workspace: Vĩ — Trường — Vinh)
 
-`dev_docs/` is an execution board, not an architecture library. It contains
-only this operating model, the current sprint board, and the unresolved
-decision queue.
+> **Mục đích:** Khu vực làm việc nội bộ của 3 anh em core team (Vĩ, Trường, Vinh).  
+> **Kiến trúc SSOT:** [`Custos.md`](../Custos.md)  
+> **Tài liệu kỹ thuật chính thức:** [`docs/`](../docs/README.md)
 
-## Sources of truth
+Thư mục `dev_docs/` được giữ **tinh gọn tối đa**, chỉ phục vụ 2 nhu cầu thiết thực hàng ngày:
+1. **Phân chia công việc:** Bảng phân chia 11 crate, ai làm gì, ranh giới rõ ràng để không dẫm chân lên nhau.
+2. **Notes cá nhân:** Mỗi người có một thư mục riêng để lưu ghi chú kỹ thuật, kết quả spike, thử nghiệm hoặc báo cáo tiến độ cá nhân.
 
-| Need | Source |
-|---|---|
-| Repository policy and ownership | [`../AGENTS.md`](../AGENTS.md) |
-| Product and system target | [`ARCH-DEF-01`](../docs/architecture/definitive-product-architecture.md) |
-| Runtime flows | [`ARCH-FLOW-01`](../docs/architecture/runtime-flows.md) |
-| Physical repository map | [`DEV-REPO-01`](../docs/development/repository-structure.md) |
-| Proposed shared contracts | [`contracts/README.md`](../docs/contracts/README.md) |
-| Current implementation truth | [`STATUS-CURRENT-01`](../docs/status/README.md) |
-| Active priorities | [`SPRINT_STATUS.md`](SPRINT_STATUS.md) |
-| Unresolved decisions | [`DECISION_QUEUE.md`](DECISION_QUEUE.md) |
+---
 
-## Team lanes
-
-| Driver | Primary lane | Cross-review |
-|---|---|---|
-| Vi | Product semantics, architecture, context/memory, routing, providers, packs, evaluation, upstream research | Truong for authority/privacy/effects; Vinh for runtime/agent handoff |
-| Truong | Domain, Kernel, persistence, authority, effects, evidence closure, daemon/API, sandbox, release | Vi for product/evidence semantics; Vinh for lifecycle/recovery |
-| Vinh | Session/bridge, workflow, AgentRuntimePort, MCP/ACP/A2A, CLI/UI/SDK, integration coordination | Truong for durability/effects; Vi for agent/UX semantics |
-
-`AGENTS.md` is authoritative when this summary differs. Shared domain,
-authority, persistence, public DTO, and port changes require their producer,
-consumer, owner, and required reviewers.
-
-## Capacity model for a three-person team
-
-The planned **implementation and research effort** is approximately Vi 55%,
-Truong 23%, and Vinh 22% across the program. This is a planning range, not a
-claim about hours already spent or a way to override code ownership. Rebalance
-at each gate from observed throughput. Vi can drive 50-60% by owning product
-architecture, source dissection, context/model/routing work, all three pack
-semantics, evaluation fixtures, and integration acceptance; the SEs retain the
-security-critical code they own.
-
-| Person | Primary deliverables | Must not become the sole approval for |
-|---|---|---|
-| Vi, lead and AI/DS | Product decisions; research; context/memory; model and S1/OI experiments; pack criteria; evals; user-facing outcome review; cross-lane integration plan | His own C-04 semantics, egress policy, or unmeasured model-routing claims |
-| Truong, core/platform SE | Domain/Kernel; SQLite and CAS; exact authority/effects; evidence closure; daemon; sandbox; release safety | Product acceptance criteria without Vi; workflow recovery without Vinh |
-| Vinh, runtime/client SE | Session and workflow; external agent/MCP/ACP; API consumers; CLI/UI/SDK; setup and client integration | Effect dispatch/reconciliation without Truong; pack semantics without Vi |
-
-The critical path is **Truong's durable trust boundary + Vi's evidence
-semantics + Vinh's recoverable lifecycle**, reviewed together. During that
-path, Vi's independent research/evals and Vinh's client/agent fixtures may
-advance, but no one integrates a dependent feature before its contract gate.
-Keep one shared-contract decision in active review at a time; avoid three
-parallel rewrites of Task, permit, and evidence types. The [repository
-map](../docs/development/repository-structure.md) names edit zones and safe
-independent starting work.
-
-## Product spine
+## 1. Cấu Trúc Thư Mục
 
 ```text
-Session -> TaskContract -> Context/Route -> Run/Worker
-        -> ActionIntent -> Permit -> EffectAttempt -> Receipt
-        -> Evidence -> CriterionAssessment -> Outcome/Continuation
+dev_docs/
+├── README.md                  # Hướng dẫn quy ước nội bộ này
+├── TEAM_WORK_ALLOCATION.md    # Phân chia 11 crates & trách nhiệm của 3 người
+│
+├── vi/                        # Notes, nghiên cứu AI & kiến trúc của Vĩ
+│   ├── notes/                 # Ghi chú thuật toán, prompt, AST context
+│   └── reports/               # Báo cáo đánh giá, evals
+│
+├── truong/                    # Notes, kịch bản test lưu trữ & sandbox của Trường
+│   ├── notes/                 # Ghi chú SQLite WAL, sandbox macOS/Linux
+│   └── reports/               # Báo cáo test crash, benchmark I/O
+│
+└── vinh/                      # Notes, luồng thực thi & giao diện của Vinh
+    ├── notes/                 # Ghi chú Session/Task, CLI ratatui, MCP
+    └── reports/               # Báo cáo test E2E client, IPC
 ```
 
-Each state family has one writer. Models and external agents propose; the
-Kernel authorizes and closes Tasks; adapters execute; trusted verifiers assess.
-Clients, routers, and protocol gateways remain outside canonical ownership.
+---
 
-## Work packet
+## 2. Phân Chia Phụ Trách Nhanh
 
-Every active item in `SPRINT_STATUS.md` or its linked issue/PR must state:
+| Thành viên | Vai trò | Phụ trách chính (11 Crates) |
+|---|---|---|
+| **Vĩ** (~60%) | Chief Architect & AI/DS Lead | `custos-domain`, `custos-core`, `custos-provider`, `custos-daemon`, `custos-packs` |
+| **Trường** (~20%) | Systems & Persistence Lead | `custos-persistence`, `crates/custos-adapters/src/sandbox`, test crash |
+| **Vinh** (~20%) | Runtime & Client Lead | `custos-runtime`, `custos-bridge`, `custos-cli`, `custos-sdk`, MCP adapters |
 
-- identifier, user outcome, owner, reviewers, and target gate;
-- current evidence and exact affected paths;
-- contract/ADR dependencies and explicit non-goals;
-- valid, denied, stale, duplicate, uncertain, crash, and restart fixtures as
-  applicable;
-- observability, privacy, egress, cost, migration, and compatibility impact;
-- rollback or roll-forward behavior;
-- commands and evidence required to move from Implemented to Wired or Verified.
+Chi tiết cụ thể từng crate và cách phối hợp xem tại [**`TEAM_WORK_ALLOCATION.md`**](TEAM_WORK_ALLOCATION.md).
 
-Do not create per-owner README files, weekly report copies, or another workboard.
-Use issues/PRs for detailed execution history and update the one sprint row with
-the current result.
+---
 
-## Change flow
+## 3. Quy Ước Đơn Giản Cho 3 Anh Em
 
-1. Pin branch, commit, dirty state, workspace inventory, and upstream revisions.
-2. Resolve a shared contract or decision before implementation when semantics
-   would otherwise diverge.
-3. Separate mechanical movement, contract changes, implementation, daemon
-   composition, and client changes into reviewable units.
-4. Test the production daemon path and its failure path, not only an in-process
-   assembly.
-5. Update `docs/status/README.md` with exact evidence; update architecture only
-   when the target or boundary changed.
-
-## Status language
-
-Use `Designed`, `Implemented`, `Wired`, `Verified`, `Experimental`, or `Absent`.
-Do not report percentages or “done” without a stated scope and repeatable exit
-evidence.
+1. **Không dẫm chân lên nhau:** Crate của ai người đó chủ động viết code và test. Thay đổi interface dùng chung thì hú nhau tiếng trước khi sửa.
+2. **Composition Root:** File `crates/custos-daemon/src/main.rs` do Vĩ ráp nối cuối cùng. Trường và Vinh làm các library crates.
+3. **Thoải mái ghi chép:** Thư mục cá nhân (`vi/`, `truong/`, `vinh/`) là nơi tự do lưu scratchpad, ghi chú nhanh, nhật ký bug.
+4. **Tài liệu chính thức:** Khi tính năng đã chạy ổn định và chốt kiến trúc, hãy viết vào `docs/` để dùng chung lâu dài, không để tài liệu vĩnh cửu tồn đọng rải rác.

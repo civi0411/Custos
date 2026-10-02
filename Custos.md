@@ -152,8 +152,9 @@
   - [15.4 Chỉ Mục Mã Nguồn Tự Động (RepoCodeIndex)](#154-chỉ-mục-mã-nguồn-tự-động-repocodeindex)
   - [15.5 Chiến Dịch Lát Cắt Dọc và Mẫu Gói Công Việc RefactorWorkPacket](#155-chiến-dịch-lát-cắt-dọc-và-mẫu-gói-công-việc-refactorworkpacket)
   - [15.6 Chuẩn Mực Mã Nguồn (DDD, SOLID & Patterns)](#156-chuẩn-mực-mã-nguồn-ddd-solid-&-patterns)
-  - [15.7 Research Foundation](#157-research-foundation)
-  - [15.8 Ranh giới](#158-ranh-giới)
+  - [15.7 Quy Định Bắt Buộc Đồng Bộ Kiến Trúc & Tài Liệu Cho AI Coding Agents](#157-quy-định-bắt-buộc-đồng-bộ-kiến-trúc-&-tài-liệu-cho-ai-coding-agents)
+  - [15.8 Research Foundation](#158-research-foundation)
+  - [15.9 Ranh giới](#159-ranh-giới)
 - [PHẦN 16 — COST OPTIMIZATION VÀ BUDGET GOVERNANCE](#phần-16-cost-optimization-và-budget-governance)
   - [16.1 Motivation](#161-motivation)
   - [16.2 Bảy Đòn Bẩy Độc Lập Kiểm Soát Chi Phí](#162-bảy-đòn-bẩy-độc-lập-kiểm-soát-chi-phí)
@@ -2607,12 +2608,72 @@ Các Domain khác nhau không biến thành một đối tượng Aggregate kh�
 - **Circuit Breaker**: Bảo vệ hệ thống khỏi Backend Health kém.
 - **State Machine**: Vận hành Task Lifecycle.
 
-## 15.7 Research Foundation
+## 15.7 Quy Định Bắt Buộc Đồng Bộ Kiến Trúc & Tài Liệu Cho AI Coding Agents
+
+> **Mục tiêu:** Thiết lập quy trình bất biến nhằm loại bỏ triệt để hiện tượng phân mảnh kiến trúc (Architectural Drift) khi có nhiều AI Coding Agents (Cursor, Claude Code, Antigravity, Copilot, Windsurf) cùng thao tác trên mã nguồn Custos.
+
+### 15.7.1 Tam Giác Đồng Bộ Tài Liệu (The Documentation Triad)
+
+Mọi cấu trúc hoặc quyết định kiến trúc mới trong Custos bắt buộc phải được ánh xạ đồng thời và nhất quán trên đúng 3 tầng tài liệu:
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                   TAM GIÁC ĐỒNG BỘ KIẾN TRÚC & TÀI LIỆU                │
+├────────────────────────────────────────────────────────────────────────┤
+│ 1. Custos.md (Root Master Specification — Single Source of Truth)       │
+│    - Bản chất: Xác lập "TẠI SAO & CÁI GÌ" (Why & What).                │
+│    - Nội dung: Triết lý, 10 Bất biến hệ thống, State Machines, FSMs,   │
+│      Trust Zones, Threat Defense, Cross-Pack Contracts, Topo T0-T8.    │
+│    - Ràng buộc: Mọi quyết định kiến trúc mới PHẢI được cập nhật đúng   │
+│      chương mục tương ứng trong văn kiện này trước tiên.               │
+├────────────────────────────────────────────────────────────────────────┤
+│ 2. Thư mục docs/ (Authoritative Topic-Based Engineering Specs)         │
+│    - Bản chất: Xác lập "HIỆN THỰC THẾ NÀO" (How).                      │
+│    - Nội dung: Đặc tả kỹ thuật chuyên sâu theo từng chủ đề:            │
+│      • docs/architecture/: 9 tài liệu trụ cột hệ thống.                │
+│      • docs/reference/: Bất biến, quy ước đặt tên, schema mapping.    │
+│      • docs/development/: Quy chuẩn kỹ thuật, kiểm thử, phân phối.     │
+│    - Ràng buộc: Tài liệu mang tính thường xanh, tuyệt đối không dùng    │
+│      emoji trang trí hoặc số phiên bản rác.                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ 3. docs/development/codebase-architecture.md (Master Physical Catalog) │
+│    - Bản chất: Xác lập "Ở ĐÂU & GỒM NHỮNG GÌ" (Where).                 │
+│    - Nội dung: Bản đồ vật lý chi tiết đến từng file, số dòng, vai trò  │
+│      kiến trúc, và danh mục struct/trait/hàm của 11 canonical crates.  │
+│    - Ràng buộc: Mọi file mới hoặc thay đổi ranh giới module PHẢI được   │
+│      chèn đúng chỗ vào bảng danh mục của Crate tương ứng.              │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### 15.7.2 Quy Trình 5 Bước Đồng Bộ Khi Có Thay Đổi Kiến Trúc
+
+Khi Người dùng và Agent thống nhất bất kỳ thay đổi nào về kiến trúc, luồng dữ liệu, hoặc cấu trúc file:
+
+1. **Bước 1 — Xác lập Đồng thuận (Consensus):** Xác định rõ thay đổi thuộc về Layer nào (0 đến 4), Crate nào trong 11 canonical product crates, ai chịu trách nhiệm (Vĩ, Trường, hay Vinh), và bất biến nào chi phối.
+2. **Bước 2 — Cập nhật `Custos.md`:** Cập nhật nội dung vào đúng chương mục liên quan trong văn kiện này (ví dụ: Phần 2 cho Tầng kiến trúc, Phần 3 cho Task Kernel, Phần 6 cho Memory, Phần 15 cho Repo Boundaries).
+3. **Bước 3 — Cập nhật `docs/` đúng chủ đề:** Cập nhật hoặc tạo tài liệu chuyên môn tương ứng trong `docs/architecture/`, `docs/reference/`, hoặc `docs/development/`.
+4. **Bước 4 — Chèn đúng chỗ vào `docs/development/codebase-architecture.md`:**
+   - Định vị đúng Crate tại Mục 3 của bản đồ vật lý.
+   - Thêm dòng vào bảng danh mục file theo định dạng chuẩn 4 cột:
+     `| Cột 1: Link file mã nguồn | Cột 2: Số dòng | Cột 3: Vai trò kiến trúc | Cột 4: Struct / Trait / Hàm cốt lõi |`
+     (ví dụ cụ thể: `| [`src/action.rs`](crates/custos-domain/src/action.rs) | 163 | Vai trò... | Các Struct... |`)
+   - Cập nhật số lượng file và tổng số dòng mã của Crate đó.
+5. **Bước 5 — Triển khai Code & Xác thực:** Viết code, chạy `cargo check --workspace` và `cargo test`.
+   - **LỆNH CẤM BẤT BIẾN:** AI Agent tuyệt đối không được viết mã nguồn làm thay đổi ranh giới hoặc cấu trúc file khi chưa hoàn thành Bước 1 đến Bước 4.
+
+### 15.7.3 Mô Hình Tư Duy Chung Dành Cho AI Coding Agents (Shared Mental Model)
+
+Để tránh tình trạng mỗi agent hiểu một kiểu:
+- Trước khi thực hiện tác vụ, mọi Agent **PHẢI** đọc `docs/development/codebase-architecture.md` để nắm rõ cấu trúc file hiện tại, tránh tạo file trùng lặp hoặc suy đoán sai đường dẫn.
+- Tuyệt đối không tự ý tạo thêm các thư mục rác (như `scratch/`, `templates/`, `services/`, `buzz/`, `oidc-proxy/`). Mọi mã nguồn chỉ được phép tồn tại trong 11 canonical product crates hoặc các thư mục hệ thống chuẩn (`schemas/`, `tests/`, `tools/`, `ui/`, `xtask/`).
+- Mọi quy định chi tiết cho Agent được chuẩn hóa tại file gốc [`AGENTS.md`](AGENTS.md) và các quy tắc trong `.agents/rules/`.
+
+## 15.8 Research Foundation
 
 - **Clean Architecture & Hexagonal Architecture (Robert C. Martin / Alistair Cockburn):** Nguyên lý cốt lõi về việc đảo ngược phụ thuộc (Dependency Inversion), giữ cho nghiệp vụ độc lập hoàn toàn với framework và hạ tầng.
 - **Microservices & Modular Monolith Boundary Design (arXiv 2024):** Chứng minh mô hình Modular Monolith bằng Rust Crates mang lại hiệu năng cao gấp 8 lần và chi phí vận hành rẻ hơn 90% so với việc chia nhỏ thành các microservice mạng phân tán trên cùng một máy cục bộ.
 
-## 15.8 Ranh giới
+## 15.9 Ranh giới
 
 - Cấu trúc Repo **KHÔNG** làm nhiệm vụ quản lý việc phân phối nhị phân cho các kho ứng dụng (App Store/Homebrew); đó là phạm vi của quy trình CI/CD Release riêng biệt.
 - Cấu trúc Repo **KHÔNG** chứa bất kỳ mã nguồn đóng hoặc khóa bảo mật nào của bên thứ ba trong cây thư mục git.

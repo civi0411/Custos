@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use custos_core_domain::{Action, DomainError, ExecutionReceipt};
+use custos_domain::{Action, DomainError, ExecutionReceipt};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ExecutionResult {

@@ -1,6 +1,6 @@
 use crate::journal::SessionJournal;
-use custos_core_domain::{DomainError, Session, SessionId, SessionMode, SessionStatus, TaskId};
-use custos_kernel::{SessionStateMachine, SessionStore};
+use custos_domain::{DomainError, Session, SessionId, SessionMode, SessionStatus, TaskId};
+use custos_core::{SessionStateMachine, SessionStore};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

@@ -14,13 +14,12 @@ pub use service::BridgeService;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_core_domain::{
+    use custos_core::kernel::{TaskService, TaskStore};
+    use custos_domain::{
         ContractEvidence, EvidenceKind, SessionMode, SessionStatus, TaskContract,
     };
-    use custos_kernel::TaskService;
-    use custos_kernel::TaskStore;
     use custos_persistence::SqliteTaskStore;
-    use custos_session::SessionManager;
+    use custos_runtime::session::SessionManager;
     use std::sync::Arc;
 
     #[tokio::test]

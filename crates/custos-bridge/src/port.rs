@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use custos_core_domain::{DomainError, SessionId, Task, TaskContract, TaskId};
+use custos_domain::{DomainError, SessionId, Task, TaskContract, TaskId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

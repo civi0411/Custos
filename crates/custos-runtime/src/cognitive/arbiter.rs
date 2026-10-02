@@ -1,5 +1,5 @@
 use crate::{RouteDecision, RoutingPolicy, RoutingSignals};
-use custos_core_domain::DomainError;
+use custos_domain::DomainError;
 
 /// Routes work to a low-cost or deliberate reasoning tier using explicit signals.
 pub struct CognitiveArbiter {

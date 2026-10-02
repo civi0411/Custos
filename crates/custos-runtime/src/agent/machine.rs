@@ -8,7 +8,7 @@ use crate::operation::{
     ConversationEffect, Emitter, Inference, InferenceInput, MachineEffect, Operation,
     OperationFuture, OperationResult, StepResult,
 };
-use custos_provider_types::conversation::Conversation;
+use custos_provider::conversation::Conversation;
 
 pub trait MachineSession: Send + Sync {
     fn id(&self) -> &str;
@@ -29,7 +29,7 @@ pub trait EffectUsage<E>: Send + Sync {
     fn usage(
         &self,
         _effect: &E,
-    ) -> Option<custos_provider_types::conversation::token_usage::Usage> {
+    ) -> Option<custos_provider::conversation::token_usage::Usage> {
         None
     }
 }

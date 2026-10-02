@@ -2,9 +2,9 @@ use rmcp::model::Tool;
 use std::any::Any;
 
 use crate::local_inference::model::ModelSettings;
-use custos_provider_types::conversation::message::Message;
-use custos_provider_types::errors::ProviderError;
-use custos_provider_types::request_log::RequestLogHandle;
+use custos_provider::conversation::message::Message;
+use custos_provider::errors::ProviderError;
+use custos_provider::request_log::RequestLogHandle;
 
 use super::{ResolvedModelPaths, StreamSender};
 

@@ -24,23 +24,28 @@ pub mod task;
 pub mod types;
 pub mod workflow;
 
-// Re-export public domain surface
-pub use action::*;
-pub use approval::*;
-pub use artifact::*;
-pub use authority::*;
-pub use budget::*;
-pub use capability::*;
-pub use claim::*;
-pub use context::*;
-pub use continuation::*;
-pub use error::*;
-pub use evidence::*;
-pub use fact::*;
-pub use ids::*;
-pub use run::*;
-pub use session::*;
-pub use span::*;
-pub use task::*;
-pub use types::*;
-pub use workflow::*;
+// Explicit re-exports of public domain surface (No glob *)
+pub use action::{Action, ActionIntent, ActionIntentV1, ActionLifecycleState, RiskLevel};
+pub use approval::{ApprovalDecision, ApprovalRequest, ApprovalStatus};
+pub use artifact::{ArtifactKind, ArtifactRef};
+pub use authority::{
+    ExecutionPermit, ExecutionReceipt, Grant, Permit, PermitId, PermitV1, Receipt, ReceiptStatus,
+    RiskClass,
+};
+pub use budget::Budget;
+pub use capability::CapabilityManifest;
+pub use claim::Claim;
+pub use context::{ContextItem, ContextPack};
+pub use continuation::ContinuationPacket;
+pub use error::DomainError;
+pub use evidence::{
+    EvidenceRecord, EvidenceRecordV1, EvidenceRequirement, EvidenceStatus, VerificationClaim,
+};
+pub use fact::Fact;
+pub use ids::{canonical_json, digest, new_id, TaskId};
+pub use packet::ContinuationPacket as PacketContinuation;
+pub use run::{Run, RunStatus, WorkerRun};
+pub use session::{Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus};
+pub use span::{Span, SpanState};
+pub use task::{ContractEvidence, EvidenceKind, Task, TaskContract, TaskContractV1, TaskRevision, TaskStatus};
+pub use workflow::{WorkflowIR, WorkflowNodeIR, WorkflowPlan, WorkflowStep};

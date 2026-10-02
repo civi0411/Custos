@@ -21,7 +21,7 @@ impl EvidenceBundle {
         proof: serde_json::Value,
     ) -> Self {
         Self {
-            id: custos_core_domain::new_id("ebundle"),
+            id: custos_domain::new_id("ebundle"),
             task_id: task_id.into(),
             verifier_type: verifier_type.into(),
             claim_statement: claim_statement.into(),

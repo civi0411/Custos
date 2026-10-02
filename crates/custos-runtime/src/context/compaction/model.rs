@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use custos_provider_types::base::Provider;
-use custos_provider_types::conversation::message::Message;
-use custos_provider_types::conversation::token_usage::ProviderUsage;
-use custos_provider_types::errors::ProviderError;
-use custos_provider_types::model::ModelConfig;
+use custos_provider::base::Provider;
+use custos_provider::conversation::message::Message;
+use custos_provider::conversation::token_usage::ProviderUsage;
+use custos_provider::errors::ProviderError;
+use custos_provider::model::ModelConfig;
 
 /// The single completion call compaction needs. Implementations decide model
 /// selection, fallbacks and session plumbing.

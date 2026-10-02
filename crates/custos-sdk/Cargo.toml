@@ -21,10 +21,8 @@ required-features = ["uniffi"]
 default = []
 uniffi = [
     "dep:uniffi",
-    "dep:custos-runtime",
     "dep:thiserror",
     "dep:anyhow",
-    "dep:custos-adapters",
     "dep:futures",
     "dep:tokio",
     "dep:rmcp",
@@ -40,8 +38,6 @@ schemars = { workspace = true, features = ["derive"] }
 
 uniffi = { version = "0.32", features = ["cli"], optional = true }
 thiserror = { version = "2", optional = true }
-custos-adapters = { workspace = true, optional = true }
-custos-runtime = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "sync"], optional = true }
 anyhow = { workspace = true, optional = true }

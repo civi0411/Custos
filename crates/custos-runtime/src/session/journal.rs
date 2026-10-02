@@ -1,4 +1,4 @@
-use custos_core_domain::{SessionId, SessionJournalEntry};
+use custos_domain::{SessionId, SessionJournalEntry};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

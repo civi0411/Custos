@@ -1,0 +1,17 @@
+# Custos — Windsurf Guidelines
+
+Read `AGENTS.md` completely before inspecting or changing this repository. It is the SINGLE source of truth for agent behavior and coding boundaries.
+Read `Custos.md` for the absolute architectural Source of Truth.
+Read `docs/development/codebase-architecture.md` for the deep physical file-by-file codebase catalog.
+
+**Core Directives:**
+1. **The Documentation Triad is Mandatory:** Whenever a new architectural decision or structural change is agreed upon, you MUST synchronously update:
+   - `Custos.md` under the matching topic chapter (Part 1-18).
+   - `docs/` under the corresponding topic specification (`docs/architecture/`, `docs/reference/`, `docs/development/`).
+   - `docs/development/codebase-architecture.md` inserting the file/structs/traits at the exact matching crate and table.
+   Never implement architectural code changes before updating this documentation triad.
+2. **Never Guess Architecture:** Before touching code, inspect `docs/development/codebase-architecture.md` to see where files live, their architectural responsibilities, and crate owners.
+3. **Strict Crate Boundaries:** Respect the 11 canonical product crates. `crates/custos-domain` MUST have Zero-I/O. `crates/custos-bridge` MUST NEVER access `crates/custos-persistence` directly.
+4. **Rust Quality:** Zero `.unwrap()`, zero `.expect()`, zero `panic!()` in production code. Return typed `Result<T, E>`.
+5. **No Decorative Emojis:** Never use emojis in code comments, markdown files, commit logs, or headings.
+6. **Git Safety:** Never run destructive git commands or auto-commit without explicit confirmation.

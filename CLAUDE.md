@@ -1,24 +1,20 @@
 # Custos — Claude Code Guidelines
 
-Follow [`AGENTS.md`](AGENTS.md) for repository-wide rules. The documentation authority, implementation status, target architecture and current repository map are indexed from [`docs/README.md`](docs/README.md).
+Read `AGENTS.md` completely before inspecting or changing this repository. It is the SINGLE source of truth for agent behavior and coding boundaries.
+Read `Custos.md` for the absolute architectural Source of Truth.
+Read `docs/development/codebase-architecture.md` for the authoritative physical file-by-file codebase catalog.
 
-## Workspace
+**Core Directives for Claude:**
+1. **The Documentation Triad is Mandatory:** Whenever a new architectural decision or structural change is agreed upon, you MUST synchronously update:
+   - `Custos.md` under the matching topic chapter (Part 1-18).
+   - `docs/` under the corresponding topic specification (`docs/architecture/`, `docs/reference/`, `docs/development/`).
+   - `docs/development/codebase-architecture.md` inserting the file/structs/traits at the exact matching crate and table.
+   Never implement architectural code changes before updating this documentation triad.
+2. **Never Guess Architecture:** Before touching code, inspect `docs/development/codebase-architecture.md` to see where files live, their architectural responsibilities, and crate owners.
+3. **Strict Crate Boundaries:** Respect the 11 canonical product crates. `crates/custos-domain` MUST have Zero-I/O. `crates/custos-bridge` MUST NEVER access `crates/custos-persistence` directly. Put vendor formats strictly in `crates/custos-adapters`.
+4. **Rust Quality:** Zero `.unwrap()`, zero `.expect()`, zero `panic!()` in production code. Return typed `Result<T, E>` with `thiserror`.
+5. **No Decorative Emojis:** Never use emojis in code comments, markdown files, commit logs, or headings.
+6. **Git Safety:** Never stage, commit, push, merge, or rewrite Git history without explicit, operation-specific authorization from the human operator.
+7. **No Forbidden Frameworks:** Do not add dependencies like LangChain or LlamaIndex. Do not invent new crates outside the 11 canonical product crates.
 
-- Rust workspace packages live under `crates/`; the actual membership is the Cargo workspace, not every directory containing a manifest.
-- External clients and services live in `ui/`, `services/`, `oidc-proxy/` and `packages/` and communicate through versioned contracts.
-- Schemas, tests, evals, examples and workflow recipes are separate from production runtime code.
-- See [`docs/development/repository-structure.md`](docs/development/repository-structure.md) before moving packages or changing dependency direction.
-
-## Engineering rules
-
-- Preserve existing user changes and keep implementation work scoped; do not claim a target design is already implemented.
-- Keep domain contracts independent of persistence, provider SDKs, network clients and runtime orchestration.
-- Put provider/vendor wire formats and external protocol bindings in adapters; keep clients thin and prevent direct database access outside the daemon composition.
-- Use typed errors and explicit validation at external input boundaries. Follow the crate's established error conventions instead of mechanically imposing new dependencies.
-- Do not add dependencies or third-party orchestrators without explicit approval and an architecture rationale.
-- Update ADRs and the repository map when a structural boundary changes.
-- Never stage, commit, push, merge, or rewrite Git history without the explicit operation-specific authorization required by `AGENTS.md`.
-
-## Verification
-
-Use the smallest relevant checks for the changed scope. `scripts/check_deps.sh` checks hard dependency boundaries against Cargo metadata and reports known transitional edges; `--strict` treats those listed edges as failures. Run workspace checks only when the change and environment warrant them, and report exactly what was or was not verified.
+Silence is safer than speculation.

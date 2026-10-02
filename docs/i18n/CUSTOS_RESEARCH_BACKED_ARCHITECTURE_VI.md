@@ -1,10 +1,10 @@
 # CUSTOS — KIẾN TRÚC DỰA TRÊN RESEARCH VÀ CODEBASE THỰC
 
 **Loại:** Bản diễn giải tiếng Việt
-**Ngày:** 2026-09-30
-**Canonical:** [`../architecture/definitive-product-architecture.md`](../architecture/definitive-product-architecture.md)
-**Topology:** [`../architecture/polyglot-repository-topology.md`](../architecture/polyglot-repository-topology.md)
-**Research:** [`../research/architecture-foundations-2026-09-30.md`](../research/architecture-foundations-2026-09-30.md)
+
+**Canonical:** [`../../Custos.md`](../../Custos.md)  
+**Architecture:** [`../architecture/README.md`](../architecture/README.md)  
+**Development:** [`../development/codebase-architecture.md`](../development/codebase-architecture.md)
 
 Tài liệu này giúp team đọc và triển khai kiến trúc bằng tiếng Việt. Nếu có xung
 đột, tài liệu canonical tiếng Anh, contract đã accept, source và test được pin
@@ -39,7 +39,7 @@ flowchart TD
   K --> CP[CapabilityPort]
   R --> JP[JudgmentPort]
   MP --> M[Model hoặc 9Router profile]
-  AP --> A[Goose / Codex / Claude Code qua ACP]
+  AP --> A[Codex / Claude Code / External Agent runtimes qua ACP]
   CP --> T[MCP / filesystem / process / connector]
   T -. optional edge .-> G[agentgateway]
 ```
@@ -95,10 +95,9 @@ System One, Jev hoặc classifier khác chỉ trả `JudgmentRecord` có backend
 version, input digest, confidence/calibration và abstention. Nó không cấp permit,
 không tự pass criterion và không thay deterministic parser cho số/ngày/policy.
 
-## 5. Goose, 9Router và agentgateway
+## 5. Agent Runtime, 9Router và agentgateway
 
-- **Goose:** nguồn lấy agent loop, MCP/ACP, streaming và UX. Tích hợp qua module
-  được rewrite hoặc `AgentRuntimePort`; không trao Kernel authority.
+- **Agent Runtime:** quản lý agent loop, MCP/ACP, streaming và UX qua `AgentRuntimePort`; không trao Kernel authority.
 - **9Router:** optional `ModelPort` transport profile. Chỉ một transport active
   trong một ModelAttempt; fallback/token transform phải được ghi provenance và
   test semantic preservation.
@@ -118,7 +117,7 @@ ui/           TypeScript/Tauri desktop
 packages/     VS Code và npm distribution
 services/     bot/integration chạy ngoài daemon
 config/       deployment và optional gateway profiles
-compatibility/ Goose wire/config shims có removal gate
+compatibility/ Wire/config shims có removal gate
 vendor/       upstream pin nguyên trạng kèm license/provenance
 docs/         architecture, contract, status và research
 ```
@@ -208,7 +207,7 @@ ModelPort, AgentRuntimePort và CapabilityPort riêng; 9Router và agentgateway 
 fallback được ghi thành attempt mới với kiểm tra budget/privacy.
 
 Chi tiết chuẩn nằm trong canonical architecture §§15–20 và runtime F4–F8.
-[ADR đề xuất](../adr/evidence-driven-workflows.md) cùng D-13/D-14 chờ review
+[Kiến trúc Bằng chứng](../architecture/evidence-and-completion-gate.md) cùng quy chuẩn C-02/C-04 đang hiệu lực
 contract; các khả năng trên chưa được tuyên bố là đã triển khai.
 
 ## 12. Bản chốt kiến trúc đích sau khi mổ xẻ bản paste
@@ -235,7 +234,7 @@ effect policy, nhưng cùng Task/authority/evidence protocol. Assistant chỉ g�
 khi đúng người, tài khoản, thời điểm, payload và approval. Engineering không
 coi test là read-only. Research không coi citation là support.
 
-Goose là nguồn học agent loop/ACP/MCP; 9Router là ứng viên transport model;
+`AgentRuntimePort` chuẩn hóa agent loop/ACP/MCP; 9Router là ứng viên transport model;
 agentgateway là ứng viên edge MCP/A2A và có thể thay một model edge. Catalog
 quản lý chung không đồng nghĩa proxy chung nắm quyền. Không chain 9Router và
 agentgateway mặc định; cũng không bắt buộc 3 MCP server hoặc 9 protocol.
@@ -252,6 +251,5 @@ Waiver của human hiển thị riêng, không biến thành machine pass. Đây
 mọi lập luận đều đúng.
 
 Quyết định này được mô tả đầy đủ trong
-[canonical architecture](../architecture/definitive-product-architecture.md),
-[runtime flows](../architecture/runtime-flows.md) và
-[research register](../research/architecture-foundations-2026-09-30.md).
+[Custos Master Specification](../../Custos.md) và
+[Custos Architecture Overview](../architecture/README.md).

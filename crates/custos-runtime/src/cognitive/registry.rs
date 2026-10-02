@@ -6,8 +6,8 @@
 use crate::provider_selector::{ProviderPreference, TierProviderMap};
 use crate::routing::ReasoningTier;
 use chrono::{DateTime, Utc};
-use custos_core_domain::DomainError;
-use custos_provider_sdk::port::ModelProvider;
+use custos_domain::DomainError;
+use custos_provider::port::ModelProvider;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -191,7 +191,7 @@ impl TierProviderMap {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use custos_provider_sdk::request::{ModelResponse, ProviderRequest};
+    use custos_provider::request::{ModelResponse, ProviderRequest};
 
     struct TestProvider {
         id: String,

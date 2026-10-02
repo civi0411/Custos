@@ -3,7 +3,7 @@
 //! Canonical protocol types for IPC communication between CLI / UI / VS Code and custos-daemon.
 
 use async_trait::async_trait;
-use custos_core_domain::{
+use custos_domain::{
     Session, SessionJournalEntry, Task, TaskContract, TaskStatus, VerificationClaim,
 };
 use serde::{Deserialize, Serialize};
@@ -378,7 +378,7 @@ impl LocalApiClient {
         &self,
         req_id: &str,
         task_id: &str,
-    ) -> Result<Vec<custos_core_domain::Span>, String> {
+    ) -> Result<Vec<custos_domain::Span>, String> {
         let params = serde_json::json!({ "task_id": task_id });
         let req = ApiRequest::new(req_id, METHOD_TASKS_SPANS, params);
         let resp = self.transport.send_request(req).await?;
@@ -555,7 +555,7 @@ mod tests {
             match req.method.as_str() {
                 METHOD_TASKS_CREATE => {
                     let task =
-                        Task::new(custos_core_domain::new_id("task"), "Mock Task".to_string());
+                        Task::new(custos_domain::new_id("task"), "Mock Task".to_string());
                     Ok(ApiResponse::ok(
                         req.id,
                         serde_json::to_value(&task).unwrap(),

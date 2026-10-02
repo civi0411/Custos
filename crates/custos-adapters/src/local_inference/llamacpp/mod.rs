@@ -27,8 +27,8 @@ use crate::local_inference::tool_parsing::compact_tools_json;
 use crate::local_inference::{
     build_openai_messages_json, build_openai_text_messages_json, ResolvedModelPaths,
 };
-use custos_provider_types::errors::ProviderError;
-use custos_provider_types::formats::openai::format_tools;
+use custos_provider::errors::ProviderError;
+use custos_provider::formats::openai::format_tools;
 
 pub(super) const LLAMACPP_BACKEND_ID: &str = "llamacpp";
 

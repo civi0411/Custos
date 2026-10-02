@@ -20,8 +20,8 @@ pub mod summarize;
 pub mod templates;
 
 use anyhow::Result;
-use custos_provider_types::conversation::message::Message;
-use custos_provider_types::conversation::token_usage::ProviderUsage;
+use custos_provider::conversation::message::Message;
+use custos_provider::conversation::token_usage::ProviderUsage;
 
 pub use format::format_message_for_compacting;
 pub use model::{CompactionModel, ProviderModel, TokenEstimator};

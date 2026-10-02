@@ -1,6 +1,6 @@
 use crate::compiler::{SourceDocument, TokenAwareContextCompiler};
 use crate::traits::ContextBuilder;
-use custos_core_domain::{ContextItem, ContextPack, DomainError, new_id};
+use custos_domain::{ContextItem, ContextPack, DomainError, new_id};
 use custos_repo_intelligence::scanner::WorkspaceScanner;
 use sha2::{Digest, Sha256};
 use std::path::Path;

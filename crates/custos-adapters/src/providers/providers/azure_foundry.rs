@@ -522,7 +522,7 @@ impl Provider for AzureFoundryProvider {
     }
 
     async fn get_context_limit(&self, model: &str, override_limit: Option<usize>) -> usize {
-        custos_provider_types::context_limit::ContextLimitResolver::new(self.get_name())
+        custos_provider::context_limit::ContextLimitResolver::new(self.get_name())
             .resolve(model, override_limit, || async {
                 self.fetch_model_info(model)
                     .await

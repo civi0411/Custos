@@ -30,30 +30,18 @@ description = "Custos Sovereign Agentic Operating System"
 [workspace.lints.clippy]
 
 [workspace.dependencies]
+# ═══════════════════════════════════════════════════════════════════════
+# Custos 11 Canonical Crates (Hexagonal Architecture)
+# ═══════════════════════════════════════════════════════════════════════
 custos-domain = { path = "crates/custos-domain" }
-custos-core-domain = { package = "custos-domain", path = "crates/custos-domain" }
 custos-core = { path = "crates/custos-core" }
-custos-kernel = { package = "custos-core", path = "crates/custos-core" }
-custos-task-kernel = { package = "custos-core", path = "crates/custos-core" }
-custos-security = { package = "custos-core", path = "crates/custos-core" }
 custos-provider = { path = "crates/custos-provider" }
-custos-provider-sdk = { package = "custos-provider", path = "crates/custos-provider" }
-custos-provider-types = { package = "custos-provider", path = "crates/custos-provider" }
 custos-persistence = { path = "crates/custos-persistence" }
-custos-persistence-sqlite = { package = "custos-persistence", path = "crates/custos-persistence" }
 custos-bridge = { path = "crates/custos-bridge" }
 custos-runtime = { path = "crates/custos-runtime" }
-custos-session = { package = "custos-runtime", path = "crates/custos-runtime" }
-custos-workflow = { package = "custos-runtime", path = "crates/custos-runtime" }
-custos-context = { package = "custos-runtime", path = "crates/custos-runtime" }
-custos-cognitive = { package = "custos-runtime", path = "crates/custos-runtime" }
-custos-gateway = { package = "custos-runtime", path = "crates/custos-runtime" }
-custos-memory-service = { package = "custos-runtime", path = "crates/custos-runtime" }
 custos-adapters = { path = "crates/custos-adapters" }
 custos-sdk = { path = "crates/custos-sdk" }
-custos-sdk-types = { package = "custos-sdk", path = "crates/custos-sdk" }
 custos-daemon = { path = "crates/custos-daemon" }
-custos-local-api = { package = "custos-daemon", path = "crates/custos-daemon" }
 custos-cli = { path = "crates/custos-cli" }
 custos-packs = { path = "crates/custos-packs" }
 tiktoken-rs = { version = "0.12", default-features = false }

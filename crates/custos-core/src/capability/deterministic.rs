@@ -2,7 +2,7 @@ use super::traits::{ExecutionResult, ToolGate};
 use crate::authority::AuthorityEngine;
 use crate::sandbox::PathSandbox;
 use async_trait::async_trait;
-use custos_core_domain::{
+use custos_domain::{
     digest, new_id, Action, DomainError, ExecutionReceipt, ReceiptStatus, VerificationClaim,
 };
 use std::path::PathBuf;
@@ -446,7 +446,7 @@ impl ToolGate for DeterministicGate {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_core_domain::RiskLevel;
+    use custos_domain::RiskLevel;
 
     #[tokio::test]
     async fn test_low_risk_read_file_allowed_with_permit_sandbox_and_receipt() {

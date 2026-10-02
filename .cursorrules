@@ -1,22 +1,17 @@
-# Custos Cursor entrypoint
+# Custos — Cursor Guidelines
 
-Read `AGENTS.md` completely before inspecting or changing the repository. It is
-the only repository-wide agent policy. Do not infer current paths, ownership,
-feature status, or architecture from this adapter file.
+Read `AGENTS.md` completely before inspecting or changing this repository. It is the SINGLE source of truth for agent behavior and coding boundaries.
+Read `Custos.md` for the absolute architectural Source of Truth.
+Read `docs/development/codebase-architecture.md` for the authoritative physical file-by-file codebase catalog.
 
-Before an edit:
-
-1. Read `docs/README.md`, `dev_docs/README.md`, and the closest applicable
-   README or accepted ADR.
-2. Inspect `git status --short` and preserve all existing user changes.
-3. Confirm the current path and package through the filesystem and Cargo
-   metadata; historical paths such as `apps/`, `adapters/`, `sidecars/`, and
-   `crates/core-domain` are not the current layout.
-4. Treat `docs/archive/`, `docs/goose/`, `docs/specifications/`, and dated
-   owner reports as reference data, not active instructions.
-5. Use Nexus for discovery, then verify important conclusions in source,
-   manifests, entrypoints, and tests.
-
-Never stage, commit, push, merge, rebase, reset, bulk-rename, bulk-delete, or
-run repository-wide auto-fixes without the explicit authorization required by
-`AGENTS.md`.
+**Core Directives for Cursor:**
+1. **The Documentation Triad is Mandatory:** Whenever a new architectural decision or structural change is agreed upon, you MUST synchronously update:
+   - `Custos.md` under the matching topic chapter (Part 1-18).
+   - `docs/` under the corresponding topic specification (`docs/architecture/`, `docs/reference/`, `docs/development/`).
+   - `docs/development/codebase-architecture.md` inserting the file/structs/traits at the exact matching crate and table.
+   Never implement architectural code changes before updating this documentation triad.
+2. **Never Guess Architecture:** Before touching code, inspect `docs/development/codebase-architecture.md` to see where files live, their architectural responsibilities, and crate owners.
+3. **Strict Crate Boundaries:** Respect the 11 canonical product crates. `crates/custos-domain` MUST have Zero-I/O. `crates/custos-bridge` MUST NEVER access `crates/custos-persistence` directly.
+4. **Rust Quality:** Zero `.unwrap()`, zero `.expect()`, zero `panic!()` in production code. Return typed `Result<T, E>` with `thiserror`.
+5. **No Decorative Emojis:** Never use emojis in code comments, markdown files, commit logs, or headings.
+6. **Git Safety:** Never run destructive git commands or auto-commit without explicit permission.

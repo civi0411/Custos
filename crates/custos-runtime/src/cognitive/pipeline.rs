@@ -10,8 +10,8 @@ use crate::registry::ProviderRegistry;
 use crate::routing::{ReasoningTier, RouteDecision};
 use crate::signal_extractor::SignalExtractor;
 use async_trait::async_trait;
-use custos_core_domain::{DomainError, SessionId};
-use custos_provider_sdk::request::ProviderRequest;
+use custos_domain::{DomainError, SessionId};
+use custos_provider::request::ProviderRequest;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -217,8 +217,8 @@ impl CognitivePipeline {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_provider_sdk::port::ModelProvider;
-    use custos_provider_sdk::request::ModelResponse;
+    use custos_provider::port::ModelProvider;
+    use custos_provider::request::ModelResponse;
 
     struct TestProvider {
         id: String,
