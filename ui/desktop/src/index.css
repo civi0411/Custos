@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --font-size-2xs: 0.75rem;
+  --font-size-xs: 0.825rem;
+  --font-size-sm: 0.9625rem;
+  --font-size-base: 1.1rem;
+  --font-size-lg: 1.2375rem;
+  --font-size-xl: 1.375rem;
+  --font-size-2xl: 1.65rem;
+  --font-size-3xl: 2.0625rem;
+
+  --color-canvas: #000000;
+  --color-surface: #0a0a0c;
+  --color-surface-card: #111215;
+  --color-surface-elevated: #17181e;
+  --color-surface-border: #1f2128;
+  --color-surface-border-hover: #2d303a;
+  --color-surface-hover: #181920;
+  --color-surface-pill: #131418;
+
+  --color-brand-blue: #0070f3;
+  --color-brand-blue-glow: rgba(0, 112, 243, 0.2);
+  --color-brand-cyan: #00d4ff;
+  --color-brand-emerald: #10b981;
+}
+
+/* Base typography adjustment */
+body, input, textarea, select, button {
+  font-size: 0.9625rem;
+}
+
+/* Custom dark scrollbars */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #22242c; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #353844; }
+
+/* Tooltip styling */
+.has-tooltip { position: relative; }
+.has-tooltip:hover .tooltip-label {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+}
+.tooltip-label {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-4px);
+  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+*:focus-visible {
+  outline: 2px solid #0070f3;
+  outline-offset: 1px;
+}
+
+.resizer-active {
+  user-select: none;
+  cursor: col-resize;
+}
