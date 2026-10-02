@@ -1,8 +1,0 @@
-custos-providers:
-custos-providers v0.1.0-alpha.10 (/Users/mac/Project/AgentHub/Custos/crates/adapters/custos-providers)
-└── custos-cli v0.1.0 (/Users/mac/Project/AgentHub/Custos/crates/app/custos-cli)
---- antigravity ---
---- claude ---
---- codex ---
---- fake ---
---- local-model ---
