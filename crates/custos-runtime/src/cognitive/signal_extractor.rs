@@ -1,5 +1,5 @@
 use crate::routing::RoutingSignals;
-use custos_core_domain::RiskLevel;
+use custos_domain::RiskLevel;
 
 pub struct SignalExtractor;
 

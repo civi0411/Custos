@@ -693,7 +693,7 @@ impl Provider for OpenAiProvider {
             .iter()
             .flatten()
             .filter_map(|model| model.context_limit.map(|limit| (model.name.clone(), limit)));
-        let resolver = custos_provider_types::context_limit::ContextLimitResolver::new(&self.name)
+        let resolver = custos_provider::context_limit::ContextLimitResolver::new(&self.name)
             .with_configured_limits(configured_limits);
 
         resolver

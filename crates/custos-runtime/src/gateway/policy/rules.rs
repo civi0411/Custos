@@ -1,4 +1,4 @@
-use custos_core_domain::RiskLevel;
+use custos_domain::RiskLevel;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

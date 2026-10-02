@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use custos_core_domain::{DomainError, Permit, RiskClass};
+use custos_domain::{DomainError, Permit, RiskClass};
 
 #[derive(Debug, Default, Clone)]
 pub struct PermitIssuer {

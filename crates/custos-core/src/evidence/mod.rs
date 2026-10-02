@@ -13,7 +13,7 @@ pub use verifier::*;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_core_domain::EvidenceRequirement;
+    use custos_domain::EvidenceRequirement;
 
     #[tokio::test]
     async fn test_command_exit_code_verifier_success() {
@@ -124,7 +124,7 @@ mod tests {
         let pipeline = EvidencePipeline::with_standard_verifiers();
         let temp_dir = std::env::temp_dir().join(format!(
             "custos_cite_test_{}",
-            custos_core_domain::new_id("test")
+            custos_domain::new_id("test")
         ));
         std::fs::create_dir_all(&temp_dir).unwrap();
         let file_path = temp_dir.join("sample.rs");

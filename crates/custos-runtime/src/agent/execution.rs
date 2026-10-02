@@ -1,5 +1,5 @@
 use async_stream::stream;
-use custos_provider_types::conversation::message::Message;
+use custos_provider::conversation::message::Message;
 use futures::Stream;
 use futures::StreamExt;
 use rmcp::model::{CallToolResult, ServerNotification};

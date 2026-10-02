@@ -1,8 +1,8 @@
 //! AntigravityProvider Adapter
 
 use async_trait::async_trait;
-use custos_core_domain::DomainError;
-use custos_provider_sdk::{ModelProvider, ModelRequest, ModelResponse};
+use custos_domain::DomainError;
+use custos_provider::{ModelProvider, ModelRequest, ModelResponse};
 
 pub struct AntigravityProvider {
     provider_id: String,

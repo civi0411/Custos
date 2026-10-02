@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-use custos_provider_types::errors::ProviderError;
+use custos_provider::errors::ProviderError;
 
 fn safetensors_shard(filename: &str) -> Option<(&str, u32, u32)> {
     let stem = filename.strip_suffix(".safetensors")?;
@@ -108,14 +108,14 @@ mod imp {
         StreamingEmulatorParser, CODE_EXECUTION_TOOL,
     };
     use crate::local_inference::{extract_text_content, ResolvedModelPaths};
-    use custos_provider_types::conversation::message::{Message, MessageContent};
-    use custos_provider_types::conversation::token_usage::{
+    use custos_provider::conversation::message::{Message, MessageContent};
+    use custos_provider::conversation::token_usage::{
         DraftStats, ProviderStats, ProviderUsage, Usage,
     };
-    use custos_provider_types::errors::ProviderError;
-    use custos_provider_types::formats::openai;
-    use custos_provider_types::images::ImageFormat;
-    use custos_provider_types::request_log::LoggerHandleExt;
+    use custos_provider::errors::ProviderError;
+    use custos_provider::formats::openai;
+    use custos_provider::images::ImageFormat;
+    use custos_provider::request_log::LoggerHandleExt;
 
     pub(crate) const MLX_BACKEND_ID: &str = "mlx";
 
@@ -1102,7 +1102,7 @@ mod imp {
     };
     use crate::local_inference::model::ModelSettings;
     use crate::local_inference::ResolvedModelPaths;
-    use custos_provider_types::errors::ProviderError;
+    use custos_provider::errors::ProviderError;
 
     pub(crate) const MLX_BACKEND_ID: &str = "mlx";
 

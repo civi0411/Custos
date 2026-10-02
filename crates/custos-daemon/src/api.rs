@@ -9,9 +9,9 @@ pub use crate::custos_local_api::{
     CreateTaskRequest,
 };
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
-use custos_core_domain::{SessionId, SessionMode, TaskContract, TaskStatus};
-use custos_kernel::{AdvanceTask, CancelTask, CreateTask, TaskService};
-use custos_session::SessionManager;
+use custos_domain::{SessionId, SessionMode, TaskContract, TaskStatus};
+use custos_core::{AdvanceTask, CancelTask, CreateTask, TaskService};
+use custos_runtime::session::SessionManager;
 
 /// Local API Dispatcher wrapping TaskService, SessionManager, and BridgeService for IPC callers.
 pub struct LocalApiDispatcher {
@@ -159,7 +159,7 @@ impl LocalApiDispatcher {
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
 
-                let cmd = custos_kernel::CompleteTask {
+                let cmd = custos_core::CompleteTask {
                     task_id: params.task_id,
                     expected_epoch: task.epoch,
                     summary: params
@@ -365,8 +365,8 @@ impl crate::custos_local_api::ApiTransport for LocalApiDispatcher {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use custos_core_domain::{ContinuationPacket, DomainError, Span, Task};
-    use custos_kernel::{TaskEvent, TaskStore};
+    use custos_domain::{ContinuationPacket, DomainError, Span, Task};
+    use custos_core::{TaskEvent, TaskStore};
     use std::sync::Mutex;
 
     struct MockStore {
@@ -570,7 +570,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_proof_closure_evidence_gating_via_local_api() {
-        use custos_core_domain::{ContractEvidence, EvidenceKind, TaskContract, VerificationClaim};
+        use custos_domain::{ContractEvidence, EvidenceKind, TaskContract, VerificationClaim};
 
         let store = Arc::new(MockStore {
             tasks: Mutex::new(Vec::new()),

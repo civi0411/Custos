@@ -3,7 +3,7 @@
 //! Manages time-based, interval, and recurring workflow job scheduling.
 
 use chrono::{DateTime, Duration, Utc};
-use custos_core_domain::DomainError;
+use custos_domain::DomainError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;

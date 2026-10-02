@@ -7,7 +7,7 @@ use super::verifier::{
     CitationVerifier, CommandExitCodeVerifier, DiffVerifier, ExactMatchVerifier, HashVerifier,
     PatchPreviewVerifier, SemanticSupportEvaluator, Verifier,
 };
-use custos_core_domain::{DomainError, EvidenceRequirement, VerificationClaim};
+use custos_domain::{DomainError, EvidenceRequirement, VerificationClaim};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;

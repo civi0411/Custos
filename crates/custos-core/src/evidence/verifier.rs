@@ -4,7 +4,7 @@
 
 use super::bundle::EvidenceBundle;
 use async_trait::async_trait;
-use custos_core_domain::{DomainError, VerificationClaim};
+use custos_domain::{DomainError, VerificationClaim};
 
 #[async_trait]
 pub trait Verifier: Send + Sync {

@@ -1,6 +1,3 @@
-pub extern crate custos_domain as custos_core_domain;
-pub extern crate custos_provider as custos_provider_sdk;
-
 pub use custos_adapters::custos_adapter_provider_fake;
 pub use custos_adapters::custos_adapters_mcp;
 pub use custos_daemon::custos_local_api;
@@ -8,7 +5,7 @@ pub use custos_daemon::custos_local_api;
 pub mod ui;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use custos_core_domain::{Task, TaskStatus};
+use custos_domain::{Task, TaskStatus};
 use custos_local_api::{LocalApiClient, ProcessTransport};
 use std::path::{Path, PathBuf};
 
@@ -566,8 +563,8 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
             let spinner = ui::spinner::CliSpinner::new("Compiling workspace context...");
 
             // 1. Compile ContextPack
-            let context_pack = custos_core_domain::ContextPack {
-                id: custos_core_domain::new_id("pack"),
+            let context_pack = custos_domain::ContextPack {
+                id: custos_domain::new_id("pack"),
                 items: vec![],
                 total_tokens: 120,
             };
@@ -608,7 +605,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
             let spinner3 = ui::spinner::CliSpinner::new(
                 "Invoking AI Provider (Goose Engine via Custos SDK)...",
             );
-            use custos_provider_sdk::{ModelProvider, ProviderRequest};
+            use custos_provider::{ModelProvider, ProviderRequest};
 
             // Integrate Goose Engine here!
             // In a full implementation, we'd route this through Goose's providers.

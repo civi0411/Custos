@@ -1,9 +1,9 @@
 use crate::api::LocalApiDispatcher;
 use custos_bridge::BridgeService;
-use custos_core_domain::DomainError;
-use custos_kernel::TaskService;
+use custos_domain::DomainError;
+use custos_core::TaskService;
 use custos_persistence::SqliteTaskStore;
-use custos_session::SessionManager;
+use custos_runtime::session::SessionManager;
 use std::sync::Arc;
 
 #[allow(dead_code)]

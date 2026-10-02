@@ -7,7 +7,7 @@ use crate::gateway::observability::{GatewayMetrics, GatewayTracer};
 use crate::gateway::policy::SessionQuotaLimiter;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use custos_core_domain::{SessionId, TaskId};
+use custos_domain::{SessionId, TaskId};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Instant;
@@ -250,7 +250,7 @@ impl AgentGateway for CustosGateway {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_core_domain::RiskLevel;
+    use custos_domain::RiskLevel;
 
     fn sample_signals() -> RoutingSignals {
         RoutingSignals {

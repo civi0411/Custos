@@ -7,7 +7,7 @@
 use pulldown_cmark::{CodeBlockKind, Event, Parser, Tag};
 
 #[cfg(feature = "mlx")]
-use custos_provider_types::conversation::message::{Message, MessageContent};
+use custos_provider::conversation::message::{Message, MessageContent};
 #[cfg(feature = "mlx")]
 use rmcp::model::{CallToolRequestParams, Tool};
 #[cfg(feature = "mlx")]

@@ -4,7 +4,7 @@
 //! unicode tag sanitization for prompt injection defense, and multi-mode support (Autonomous, Assisted, Chat, Deliberation).
 
 use chrono::Utc;
-use custos_provider_types::utils::sanitize_unicode_tags;
+use custos_provider::utils::sanitize_unicode_tags;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 

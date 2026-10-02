@@ -12,7 +12,7 @@ pub mod databricks_auth;
 pub mod databricks_v2;
 pub mod decision;
 pub mod google;
-pub use custos_provider_types::{
+pub use custos_provider::{
     base, cache_semantics, canonical, context_limit, conversation, custos_mode, documents, errors,
     formats, images, json, model, permission, request_log, retry, thinking, utils,
 };

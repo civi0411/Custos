@@ -1,8 +1,8 @@
 use base64::prelude::*;
 use serde_json::Value;
 
-use custos_provider_types::conversation::message::{Message, MessageContent};
-use custos_provider_types::errors::ProviderError;
+use custos_provider::conversation::message::{Message, MessageContent};
+use custos_provider::errors::ProviderError;
 
 #[derive(Debug)]
 pub struct ExtractedImage {

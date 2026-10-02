@@ -3,7 +3,7 @@
 //! Handles extraction of model response parts, JSON schema type coercion for tool arguments,
 //! and construction of structured tool requests.
 
-use custos_provider_types::conversation::message::ToolRequest;
+use custos_provider::conversation::message::ToolRequest;
 use rmcp::model::CallToolRequestParams;
 use serde_json::{json, Value};
 

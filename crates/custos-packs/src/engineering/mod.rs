@@ -13,7 +13,7 @@ pub use sdk::*;
 pub use skills::*;
 
 use async_trait::async_trait;
-use custos_core_domain::DomainError;
+use custos_domain::DomainError;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EngineeringPackDescriptor {

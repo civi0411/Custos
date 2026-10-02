@@ -1,4 +1,4 @@
-use custos_provider_types::thinking::{FilterOut, ThinkFilter};
+use custos_provider::thinking::{FilterOut, ThinkFilter};
 
 pub(crate) struct ThinkingOutputFilter {
     enabled: bool,

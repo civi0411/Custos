@@ -1,5 +1,5 @@
 use crate::templates::{self, COMPACTION_SUMMARY_TEMPLATE};
-use custos_provider_types::json::safely_parse_json;
+use custos_provider::json::safely_parse_json;
 use serde::{Deserialize, Serialize};
 
 /// Structured output of the compaction LLM call.

@@ -5,9 +5,9 @@ edition = "2021"
 description = "Session to Task Bridge for Custos Sovereign OS"
 
 [dependencies]
-custos-core-domain = { workspace = true }
-custos-kernel = { workspace = true }
-custos-session = { workspace = true }
+custos-domain = { workspace = true }
+custos-core = { workspace = true }
+custos-runtime = { workspace = true }
 
 async-trait = { workspace = true }
 tokio = { workspace = true }
