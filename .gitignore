@@ -9,6 +9,7 @@ target/
 debug/
 **/*.rs.bk
 *.pdb
+*.exe
 **/mutants.out*/
 *.profraw
 *.profdata
