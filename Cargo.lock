@@ -1505,8 +1505,6 @@ dependencies = [
  "agent-client-protocol-schema",
  "anyhow",
  "base64 0.21.7",
- "custos-adapters",
- "custos-runtime",
  "futures",
  "rmcp",
  "schemars 1.2.2",

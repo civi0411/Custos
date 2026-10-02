@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use tiktoken_rs::CoreBPE;
 use tokio::sync::OnceCell;
 
-use custos_provider_types::conversation::message::Message;
+use custos_provider::conversation::message::Message;
 
 static TOKENIZER: OnceCell<Arc<CoreBPE>> = OnceCell::const_new();
 

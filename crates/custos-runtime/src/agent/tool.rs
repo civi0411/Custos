@@ -2,7 +2,7 @@ use std::{collections::HashSet, sync::Arc};
 
 use anyhow::Result;
 use async_trait::async_trait;
-use custos_provider_types::conversation::{
+use custos_provider::conversation::{
     message::{Message, MessageContent, ToolRequest},
     Conversation,
 };

@@ -2,7 +2,7 @@
 //!
 //! Recursively scans repositories, builds file inventories, and extracts basic symbols.
 
-use custos_core_domain::DomainError;
+use custos_domain::DomainError;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -194,7 +194,7 @@ mod tests {
     fn test_scan_and_symbol_extraction() {
         let temp_dir = std::env::temp_dir().join(format!(
             "custos_repo_int_{}",
-            custos_core_domain::new_id("test")
+            custos_domain::new_id("test")
         ));
         std::fs::create_dir_all(temp_dir.join("src")).unwrap();
         std::fs::create_dir_all(temp_dir.join(".git")).unwrap();

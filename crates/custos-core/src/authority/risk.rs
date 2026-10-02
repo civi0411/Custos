@@ -2,7 +2,7 @@
 //!
 //! Evaluates requested capabilities and actions to determine their risk class.
 
-use custos_core_domain::{Action, RiskClass, RiskLevel};
+use custos_domain::{Action, RiskClass, RiskLevel};
 
 pub struct RiskEvaluator;
 

@@ -67,6 +67,7 @@ worktrees/
 data/
 storage/
 logs/
+scratch/
 *.log
 *.trace
 

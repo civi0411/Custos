@@ -9,7 +9,7 @@
 pub mod sdk;
 
 use async_trait::async_trait;
-use custos_core_domain::DomainError;
+use custos_domain::DomainError;
 use sdk::{DomainPack, DomainPackManifest};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

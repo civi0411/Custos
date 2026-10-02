@@ -3,7 +3,7 @@
 //! Provides executable skills for AST symbol queries, Git patch operations, and test runner automation.
 
 use async_trait::async_trait;
-use custos_core_domain::DomainError;
+use custos_domain::DomainError;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

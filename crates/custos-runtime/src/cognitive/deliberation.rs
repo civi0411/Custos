@@ -3,7 +3,7 @@
 //! Executes multi-agent deliberation across 4 distinct cognitive roles:
 //! Architect → Coder → Critic → Tester, enforcing consensus before high-risk mutations.
 
-use custos_core_domain::DomainError;
+use custos_domain::DomainError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

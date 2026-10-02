@@ -1,7 +1,7 @@
 use anyhow::Result;
-use custos_provider_types::conversation::message::{Message, MessageContent};
-use custos_provider_types::conversation::token_usage::ProviderUsage;
-use custos_provider_types::errors::ProviderError;
+use custos_provider::conversation::message::{Message, MessageContent};
+use custos_provider::conversation::token_usage::ProviderUsage;
+use custos_provider::errors::ProviderError;
 use rmcp::model::Role;
 use serde::Serialize;
 use tracing::warn;

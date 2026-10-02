@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use chrono::Utc;
-use custos_core_domain::{SessionId, TaskId};
+use custos_domain::{SessionId, TaskId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;

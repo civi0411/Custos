@@ -6,8 +6,8 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::events::AgentEvent;
-use custos_provider_types::conversation::message::{Message, MessageContent, MessageErrorKind};
-use custos_provider_types::conversation::{effective_role, Conversation, EffectiveRole};
+use custos_provider::conversation::message::{Message, MessageContent, MessageErrorKind};
+use custos_provider::conversation::{effective_role, Conversation, EffectiveRole};
 use rmcp::model::Tool;
 
 pub type OperationFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;

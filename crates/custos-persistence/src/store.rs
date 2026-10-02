@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use custos_domain::{
     ContinuationPacket, DomainError, Session, SessionId, SessionJournalEntry, Span, Task,
 };
-use custos_kernel::{SessionStore, TaskEvent, TaskStore};
+use custos_core::kernel::{SessionStore, TaskEvent, TaskStore};
 
 /// SQLite-backed persistent storage implementing TaskStore and SessionStore.
 /// Manages tasks, execution spans, continuation packets, sessions, and session journals
@@ -163,7 +163,7 @@ impl SessionStore for SqliteTaskStore {
 mod tests {
     use super::*;
     use custos_domain::{ContractEvidence, EvidenceKind, SpanState, TaskContract, TaskStatus};
-    use custos_kernel::{AdvanceTask, CreateTask, TaskReducer, TaskService};
+    use custos_core::kernel::{AdvanceTask, CreateTask, TaskReducer, TaskService};
     use std::sync::Arc;
 
     #[tokio::test]

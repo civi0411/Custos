@@ -6,7 +6,7 @@
 pub mod journal;
 pub mod manager;
 
-pub use custos_kernel::SessionStore;
+pub use custos_core::SessionStore;
 pub use journal::SessionJournal;
 pub use manager::SessionManager;
 
@@ -14,7 +14,7 @@ pub use manager::SessionManager;
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use custos_core_domain::{
+    use custos_domain::{
         DomainError, Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus,
     };
     use std::collections::HashMap;

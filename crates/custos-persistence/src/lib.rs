@@ -1,5 +1,3 @@
-pub extern crate custos_core as custos_kernel;
-
 #[path = "artifacts/lib.rs"]
 pub mod artifacts;
 pub mod connection;

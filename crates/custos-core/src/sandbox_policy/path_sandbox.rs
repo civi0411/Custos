@@ -3,7 +3,7 @@
 //! Enforces workspace containment and prevents directory traversal attacks
 //! (e.g. `../` escapes, symlink traversal, or arbitrary absolute paths).
 
-use custos_core_domain::DomainError;
+use custos_domain::DomainError;
 use std::path::{Component, Path, PathBuf};
 
 #[derive(Debug, Clone)]

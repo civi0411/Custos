@@ -20,8 +20,8 @@
 //! These are inherent to text-based tool emulation. Models with native tool-calling
 //! support should use the `inference_native_tools` path instead.
 
-use custos_provider_types::conversation::message::{Message, MessageContent};
-use custos_provider_types::errors::ProviderError;
+use custos_provider::conversation::message::{Message, MessageContent};
+use custos_provider::errors::ProviderError;
 use rmcp::model::{CallToolRequestParams, Tool};
 use serde_json::json;
 use std::borrow::Cow;

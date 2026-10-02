@@ -1,6 +1,6 @@
-use custos_provider_types::conversation::message::Message;
-use custos_provider_types::conversation::token_usage::ProviderUsage;
-use custos_provider_types::conversation::Conversation;
+use custos_provider::conversation::message::Message;
+use custos_provider::conversation::token_usage::ProviderUsage;
+use custos_provider::conversation::Conversation;
 use serde::{Deserialize, Serialize};
 
 pub const CONVERSATION_CONTINUATION_TEXT: &str =

@@ -4,10 +4,6 @@
 //! Model Context Protocol (MCP), OS Sandboxes (Seatbelt, Bubblewrap),
 //! Local Inference, Download Manager, and Roaming.
 
-pub extern crate custos_domain as custos_core_domain;
-pub extern crate custos_provider as custos_provider_sdk;
-pub extern crate custos_provider as custos_provider_types;
-
 pub mod download_manager;
 pub mod local_inference;
 pub mod mcp;

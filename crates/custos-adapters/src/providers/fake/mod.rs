@@ -4,8 +4,8 @@
 //! to provide deterministic, offline responses for testing workflows and CI.
 
 use async_trait::async_trait;
-use custos_core_domain::DomainError;
-use custos_provider_sdk::{
+use custos_domain::DomainError;
+use custos_provider::{
     ModelProvider, ModelResponse, ProviderEvent, ProviderRequest, TokenUsage,
 };
 use std::collections::VecDeque;
@@ -134,13 +134,13 @@ mod tests {
         let chunk = rx.recv().await.unwrap();
         assert_eq!(
             chunk.event_type,
-            custos_provider_sdk::ProviderEventType::Chunk
+            custos_provider::ProviderEventType::Chunk
         );
 
         let completed = rx.recv().await.unwrap();
         assert_eq!(
             completed.event_type,
-            custos_provider_sdk::ProviderEventType::Completed
+            custos_provider::ProviderEventType::Completed
         );
     }
 }

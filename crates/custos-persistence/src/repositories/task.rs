@@ -1,6 +1,6 @@
 use crate::connection::DbConnection;
+use custos_core::kernel::{TaskEvent, TaskSnapshotImported};
 use custos_domain::{DomainError, Task, TaskStatus};
-use custos_kernel::TaskEvent;
 use rusqlite::{params, Connection, OptionalExtension};
 
 #[derive(Clone)]
@@ -147,7 +147,7 @@ impl TaskRepository {
                         event.sequence()
                     )));
                 }
-                let imported = TaskEvent::SnapshotImported(custos_kernel::TaskSnapshotImported {
+                let imported = TaskEvent::SnapshotImported(TaskSnapshotImported {
                     task: previous,
                 });
                 let imported_sequence = i64::try_from(imported.sequence()).map_err(|_| {

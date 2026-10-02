@@ -26,15 +26,15 @@ use anyhow::{bail, Result};
 use async_stream::try_stream;
 use async_trait::async_trait;
 use backend::{BackendLoadedModel, LocalInferenceBackend};
-use custos_provider_types::base::{MessageStream, Provider, ProviderDescriptor, ProviderMetadata};
-use custos_provider_types::conversation::message::{
+use custos_provider::base::{MessageStream, Provider, ProviderDescriptor, ProviderMetadata};
+use custos_provider::conversation::message::{
     Message, MessageContent, SystemNotificationType,
 };
-use custos_provider_types::conversation::token_usage::{ProviderUsage, Usage};
-use custos_provider_types::errors::ProviderError;
-use custos_provider_types::images::ImageFormat;
-use custos_provider_types::model::ModelConfig;
-use custos_provider_types::request_log::{start_log, LoggerHandleExt, RequestLogHandle};
+use custos_provider::conversation::token_usage::{ProviderUsage, Usage};
+use custos_provider::errors::ProviderError;
+use custos_provider::images::ImageFormat;
+use custos_provider::model::ModelConfig;
+use custos_provider::request_log::{start_log, LoggerHandleExt, RequestLogHandle};
 use llamacpp::{LlamaCppBackend, LLAMACPP_BACKEND_ID};
 use mlx::{MlxBackend, MLX_BACKEND_ID};
 use model::ChatTemplate;
@@ -477,7 +477,7 @@ fn build_openai_messages_json(
     messages: &[Message],
     media_marker: Option<&str>,
 ) -> String {
-    use custos_provider_types::formats::openai::format_messages;
+    use custos_provider::formats::openai::format_messages;
 
     let mut arr: Vec<Value> = vec![json!({"role": "system", "content": system})];
     arr.extend(format_messages(messages, &ImageFormat::OpenAi));
@@ -741,7 +741,7 @@ impl Provider for LocalInferenceProvider {
     }
 
     async fn get_context_limit(&self, model: &str, override_limit: Option<usize>) -> usize {
-        custos_provider_types::context_limit::ContextLimitResolver::new(&self.name)
+        custos_provider::context_limit::ContextLimitResolver::new(&self.name)
             .resolve(model, override_limit, || async {
                 Ok(resolve_model_path(model)
                     .await

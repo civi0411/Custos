@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   PanelLeft, 
   ChevronDown, 
@@ -19,8 +20,8 @@ interface HeaderProps {
   onToggleSessions: () => void;
   viewMode: ViewMode;
   onSetViewMode: (mode: ViewMode) => void;
-  onOpenSettings: () => void;
-  onShowToast: (msg: string) => void;
+  onOpenSettings?: () => void;
+  onShowToast?: (msg: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -33,10 +34,12 @@ export const Header: React.FC<HeaderProps> = ({
   viewMode,
   onSetViewMode,
   onOpenSettings,
-  onShowToast
+  onShowToast: _onShowToast
 }) => {
   const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -49,11 +52,15 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   return (
-    <header className="h-12 bg-black border-b border-surface-border flex items-center justify-between px-3 shrink-0 z-30 min-w-0">
+    <header className="h-12 bg-surface border-b border-surface-border flex items-center justify-between px-3 shrink-0 z-30 min-w-0 select-none">
       {/* Left Section: Brand Logo + Sidebar Toggle + Project Selector */}
       <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
         {/* Brand Logo */}
-        <div className="flex items-center gap-2 pr-1 shrink-0 group cursor-pointer" title="Custos Platform">
+        <div 
+          onClick={() => navigate('/studio')}
+          className="flex items-center gap-2 pr-1 shrink-0 group cursor-pointer" 
+          title="Custos Platform - Return to Studio"
+        >
           <img 
             src="/assets/custos-logo.png" 
             alt="Custos Logo" 
@@ -156,41 +163,41 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Center/Right: View Mode Selector & Links */}
       <div className="flex items-center gap-2 shrink-0">
         {/* Studio View Mode Selector */}
-        <div className="flex items-center bg-surface-card p-0.5 rounded-lg border border-surface-border text-[11px]">
+        <div className="flex items-center bg-surface-card p-0.5 rounded-lg border border-surface-border">
           <button 
             onClick={() => onSetViewMode('split')} 
-            className={`px-2 sm:px-2.5 py-1 rounded-md transition flex items-center gap-1 ${
+            className={`px-2 sm:px-2.5 py-1 rounded-md transition flex items-center gap-1 text-[10.5px] ${
               viewMode === 'split' 
                 ? 'bg-surface-elevated text-white font-medium' 
                 : 'text-neutral-400 hover:text-white'
             }`}
             title="Split View (⌘\)"
           >
-            <Columns2 className="w-3.5 h-3.5" />
+            <Columns2 className="w-3 h-3" />
             <span className="hidden sm:inline">Split</span>
           </button>
           <button 
             onClick={() => onSetViewMode('chat')} 
-            className={`px-2 sm:px-2.5 py-1 rounded-md transition flex items-center gap-1 ${
+            className={`px-2 sm:px-2.5 py-1 rounded-md transition flex items-center gap-1 text-[10.5px] ${
               viewMode === 'chat' 
                 ? 'bg-surface-elevated text-white font-medium' 
                 : 'text-neutral-400 hover:text-white'
             }`}
             title="Chat Only"
           >
-            <MessageSquare className="w-3.5 h-3.5" />
+            <MessageSquare className="w-3 h-3" />
             <span className="hidden sm:inline">Chat</span>
           </button>
           <button 
             onClick={() => onSetViewMode('diff')} 
-            className={`px-2 sm:px-2.5 py-1 rounded-md transition flex items-center gap-1 ${
+            className={`px-2 sm:px-2.5 py-1 rounded-md transition flex items-center gap-1 text-[10.5px] ${
               viewMode === 'diff' 
                 ? 'bg-surface-elevated text-white font-medium' 
                 : 'text-neutral-400 hover:text-white'
             }`}
             title="Code Diff Only"
           >
-            <FileDiff className="w-3.5 h-3.5" />
+            <FileDiff className="w-3 h-3" />
             <span className="hidden sm:inline">Code</span>
           </button>
         </div>
@@ -198,23 +205,38 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="h-3 w-[1px] bg-surface-border shrink-0"></div>
 
         {/* Links & Settings */}
-        <div className="flex items-center gap-1 sm:gap-2 text-xs font-medium shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <button 
-            onClick={() => onShowToast('Navigating to Dashboard')} 
-            className="text-neutral-400 hover:text-white transition px-2 py-1 rounded-md hover:bg-surface-elevated hidden lg:inline-block"
+            onClick={() => navigate('/dashboard')} 
+            className={`text-[11px] font-medium transition px-2 py-1 rounded-md hidden lg:inline-block ${
+              location.pathname === '/dashboard'
+                ? 'bg-surface-elevated text-white'
+                : 'text-neutral-400 hover:text-white hover:bg-surface-elevated'
+            }`}
           >
             Dashboard
           </button>
           <button 
-            onClick={() => onShowToast('Opening API Documentation')} 
-            className="text-neutral-400 hover:text-white transition px-2 py-1 rounded-md hover:bg-surface-elevated hidden lg:inline-block"
+            onClick={() => navigate('/docs')} 
+            className={`text-[11px] font-medium transition px-2 py-1 rounded-md hidden lg:inline-block ${
+              location.pathname === '/docs'
+                ? 'bg-surface-elevated text-white'
+                : 'text-neutral-400 hover:text-white hover:bg-surface-elevated'
+            }`}
           >
             API Docs
           </button>
           
           <button 
-            onClick={onOpenSettings} 
-            className="p-1.5 hover:bg-surface-elevated rounded-lg text-neutral-400 hover:text-white transition flex items-center gap-1.5" 
+            onClick={() => {
+              if (onOpenSettings) onOpenSettings();
+              else navigate('/settings');
+            }} 
+            className={`p-1.5 rounded-lg transition flex items-center gap-1.5 ${
+              location.pathname === '/settings'
+                ? 'bg-surface-elevated text-white'
+                : 'text-neutral-400 hover:text-white hover:bg-surface-elevated'
+            }`} 
             title="Settings (⌘,)"
           >
             <Settings className="w-4 h-4" />

@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use custos_core_domain::{DomainError, Fact};
+use custos_domain::{DomainError, Fact};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MemoryTier {

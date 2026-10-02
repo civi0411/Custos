@@ -1,8 +1,8 @@
 use crate::local_inference::backend::LocalInferenceBackend;
 use crate::local_inference::model::ModelSettings;
 use crate::local_inference::multimodal::ExtractedImage;
-use custos_provider_types::errors::ProviderError;
-use custos_provider_types::request_log::{LoggerHandleExt, RequestLogHandle};
+use custos_provider::errors::ProviderError;
+use custos_provider::request_log::{LoggerHandleExt, RequestLogHandle};
 use llama_cpp_2::context::params::LlamaContextParams;
 use llama_cpp_2::llama_batch::LlamaBatch;
 use llama_cpp_2::model::{AddBos, ChatTemplateResult, LlamaChatTemplate, LlamaModel};

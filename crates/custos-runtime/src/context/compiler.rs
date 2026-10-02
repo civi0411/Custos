@@ -4,7 +4,7 @@
 
 use crate::traits::{ContextBuilder, ContextSlice};
 use async_trait::async_trait;
-use custos_core_domain::{new_id, ContextItem, DomainError};
+use custos_domain::{new_id, ContextItem, DomainError};
 use std::path::Path;
 
 #[derive(Debug, Clone)]

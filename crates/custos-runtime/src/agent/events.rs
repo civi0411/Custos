@@ -1,4 +1,4 @@
-use custos_provider_types::conversation::{
+use custos_provider::conversation::{
     message::{Message, MessageUsage},
     token_usage::ProviderUsage,
     Conversation,

@@ -10,7 +10,6 @@ description = "Custos Trusted Core: Kernel State Machine, Authority, Capabilitie
 [dependencies]
 custos-domain = { workspace = true }
 async-trait = { workspace = true }
-tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -21,3 +20,6 @@ uuid = { workspace = true }
 blake3 = { workspace = true }
 hex = "0.4.3"
 sha2 = "0.11.0"
+
+[dev-dependencies]
+tokio = { workspace = true }

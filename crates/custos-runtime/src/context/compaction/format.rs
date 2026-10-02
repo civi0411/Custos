@@ -1,4 +1,4 @@
-use custos_provider_types::conversation::message::{ActionRequiredData, Message, MessageContent};
+use custos_provider::conversation::message::{ActionRequiredData, Message, MessageContent};
 use rmcp::model::Role;
 
 pub fn format_message_for_compacting(msg: &Message) -> String {

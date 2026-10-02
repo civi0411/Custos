@@ -3,8 +3,6 @@
 //! Kernel state machine transitions, capability gating, authority evaluation,
 //! and cryptographic evidence verification.
 
-pub extern crate custos_domain as custos_core_domain;
-
 pub mod authority;
 pub mod capability;
 pub mod evidence;

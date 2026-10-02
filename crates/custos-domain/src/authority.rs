@@ -87,6 +87,8 @@ pub struct Permit {
 pub type ExecutionPermit = Permit;
 /// Version 1 Canonical Contract alias for SSOT.
 pub type PermitV1 = Permit;
+/// Strongly-typed or alias for Permit ID
+pub type PermitId = String;
 
 impl Permit {
     pub fn new(

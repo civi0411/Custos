@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-use custos_core_domain::{ApprovalDecision, ApprovalRequest, ApprovalStatus, DomainError};
+use custos_domain::{ApprovalDecision, ApprovalRequest, ApprovalStatus, DomainError};
 
 #[derive(Debug, Default, Clone)]
 pub struct ApprovalManager {
