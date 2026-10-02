@@ -7,12 +7,22 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "start": "node ./bin/custos-cli.js",
     "tauri": "tauri"
   },
+  "bin": {
+    "custos": "./bin/custos-cli.js"
+  },
   "dependencies": {
+    "@inquirer/prompts": "^8.7.2",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "boxen": "^9.0.0",
+    "chalk": "^6.0.1",
+    "jpeg-js": "^0.4.4",
     "lucide-react": "^1.50.0",
+    "ora": "^9.4.1",
+    "pngjs": "^7.0.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

@@ -1,20 +1,20 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "cli",
+  "productName": "custos",
   "version": "0.1.0",
-  "identifier": "com.admin.cli",
+  "identifier": "com.custos.cli",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
-        "title": "cli",
-        "width": 800,
-        "height": 600
+        "title": "Custos CLI — Guardian of Agentic Work",
+        "width": 1200,
+        "height": 800
       }
     ],
     "security": {

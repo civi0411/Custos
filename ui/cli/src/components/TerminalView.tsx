@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ExecutionPermit, OperationalMode, TerminalLine, Task, TaskStatus } from '../types';
-import { ASCII_BANNER, CUSTOS_VERSION, OPERATIONAL_MODES, SAMPLE_DIFF } from '../data/constants';
+import { ASCII_BANNER, CUSTOS_VERSION, SAMPLE_DIFF } from '../data/constants';
 import { CustosApi } from '../services/custosApi';
 import { DiffViewer } from './DiffViewer';
 import { Trash2, Copy, Check, Sparkles, HelpCircle } from 'lucide-react';
@@ -112,8 +112,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
       onModeChange(selected);
       setVibeSession({ step: 'goal', mode: selected });
-      addLine('info', `✔ Operational Mode selected: [${selected}] (${OPERATIONAL_MODES[selected].tagline})`);
-      addLine('prompt', `❄ Tôi có thể giúp gì cho bạn trong chế độ [${selected}]? Nhập mục tiêu:`);
+      addLine('card', '', { mode: selected });
       return;
     }
 
@@ -209,17 +208,36 @@ COMMANDS:
         break;
       }
 
+      case 'code': {
+        onModeChange('Code');
+        addLine('card', '', { mode: 'Code' });
+        break;
+      }
+
+      case 'research': {
+        onModeChange('Research');
+        addLine('card', '', { mode: 'Research' });
+        break;
+      }
+
+      case 'assistant':
+      case 'assitant': {
+        onModeChange('Assitant');
+        addLine('card', '', { mode: 'Assitant' });
+        break;
+      }
+
       case 'mode': {
         const target = args[0]?.toLowerCase();
         if (target === 'code') {
           onModeChange('Code');
-          addLine('success', 'Active mode changed to [Code] (Coder Owl).');
+          addLine('card', '', { mode: 'Code' });
         } else if (target === 'research') {
           onModeChange('Research');
-          addLine('success', 'Active mode changed to [Research] (Inspector Owl).');
+          addLine('card', '', { mode: 'Research' });
         } else if (target === 'assistant' || target === 'assitant') {
           onModeChange('Assitant');
-          addLine('success', 'Active mode changed to [Assistant] (Steward Owl).');
+          addLine('card', '', { mode: 'Assitant' });
         } else {
           addLine('warning', `Unknown mode '${target}'. Options: code, research, assistant.`);
         }
@@ -512,9 +530,80 @@ Metadata:    ${JSON.stringify(task.metadata || {})}`);
         {lines.map((line) => {
           if (line.type === 'banner') {
             return (
-              <pre key={line.id} className="terminal-banner-text">
-                {line.content}
-              </pre>
+              <div key={line.id} className="terminal-banner-image-container">
+                <img
+                  src="/assets/banner-main.png"
+                  alt="Custos CLI Guardian Banner"
+                  className="terminal-banner-img"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              </div>
+            );
+          }
+
+          if (line.type === 'card') {
+            const mode = (line.metadata?.mode || currentMode) as OperationalMode;
+            const modeImg =
+              mode === 'Research'
+                ? '/assets/custos-owl-inspector.png'
+                : mode === 'Assitant'
+                ? '/assets/custos-owl-steward.png'
+                : '/assets/custos-owl-coder.png';
+
+            const modeTitle =
+              mode === 'Research'
+                ? 'CHẾ ĐỘ: RESEARCH MODE (ĐIỀU TRA & NGHIÊN CỨU)'
+                : mode === 'Assitant'
+                ? 'CHẾ ĐỘ: ASSISTANT MODE (TRỢ LÝ & ĐIỀU PHỐI)'
+                : 'CHẾ ĐỘ: CODE MODE (LẬP TRÌNH & THỰC THI)';
+
+            const mascotName =
+              mode === 'Research'
+                ? 'Custos Inspector Owl'
+                : mode === 'Assitant'
+                ? 'Custos Steward Owl'
+                : 'Custos Coder Owl';
+
+            const bullets =
+              mode === 'Research'
+                ? [
+                    'Điều tra cấu trúc dự án & đối soát bằng chứng',
+                    'Phân tích tài liệu, kiến trúc & suy luận chuyên sâu',
+                    'Kiểm chứng các thay đổi trước khi xin phê duyệt',
+                  ]
+                : mode === 'Assitant'
+                ? [
+                    'Điều phối quy trình tác vụ tự động theo chuẩn runtime',
+                    'Quản lý trạng thái Task, Epoch Lock & Audit Logs',
+                    'Theo dõi tiến trình & báo cáo kết quả thực thi',
+                  ]
+                : [
+                    'Lập trình tính năng, sửa lỗi & tái cấu trúc mã nguồn',
+                    'Thực thi an toàn trong Sandbox Worktree cách ly',
+                    'Tối ưu thuật toán & kiểm tra tính đúng đắn',
+                  ];
+
+            return (
+              <div key={line.id} className={`terminal-mode-card mode-${mode.toLowerCase()}`}>
+                <div className="terminal-mode-card-owl">
+                  <img src={modeImg} alt={mascotName} className="terminal-mode-owl-img" />
+                </div>
+                <div className="terminal-mode-card-speech">
+                  <div className="speech-badge">[ {modeTitle} ]</div>
+                  <div className="speech-title">Xin chào! Tôi là {mascotName}. ❄</div>
+                  <div className="speech-quote">"Tôi có thể giúp gì cho bạn hôm nay?"</div>
+                  <ul className="speech-bullets">
+                    {bullets.map((b, idx) => (
+                      <li key={idx}>• {b}</li>
+                    ))}
+                  </ul>
+                  <div className="speech-hint">
+                    Nhập mục tiêu nhiệm vụ hoặc mã lệnh bạn muốn thực thi bên dưới.
+                  </div>
+                </div>
+              </div>
             );
           }
 
