@@ -1,8 +1,0 @@
-[Desktop Entry]
-Name=Custos
-Exec=/usr/lib/custos/Custos %U
-Icon=/usr/share/pixmaps/custos.png
-Terminal=false
-Type=Application
-Categories=Development;
-MimeType=x-scheme-handler/custos;x-scheme-handler/goose;
