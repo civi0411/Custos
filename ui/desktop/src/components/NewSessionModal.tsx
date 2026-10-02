@@ -26,7 +26,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 select-none">
+    <div className="fixed inset-0 bg-canvas/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 select-none">
       <div className="w-full max-w-md bg-surface-card border border-surface-border rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
         <div className="h-12 border-b border-surface-border px-5 flex items-center justify-between shrink-0 bg-surface">
           <div className="flex items-center gap-2">

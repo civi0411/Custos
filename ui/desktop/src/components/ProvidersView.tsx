@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Sparkles, Cpu, Laptop, Terminal } from 'lucide-react';
+import { Plus, Cpu, Laptop, Terminal } from 'lucide-react';
 import { ProviderItem, ClientApiKey } from '../types';
 
 interface ProvidersViewProps {
@@ -11,6 +11,21 @@ interface ProvidersViewProps {
   onTestConnection: (providerName: string) => void;
 }
 
+const getProviderLogo = (iconType: string): string | null => {
+  switch (iconType) {
+    case 'anthropic':
+      return '/assets/provider-logo/anthropic.jpg';
+    case 'openai':
+      return '/assets/provider-logo/openai.jpg';
+    case 'gemini':
+      return '/assets/provider-logo/gemini.jpg';
+    case 'deepseek':
+      return '/assets/provider-logo/deepseek.jpg';
+    default:
+      return null;
+  }
+};
+
 export const ProvidersView: React.FC<ProvidersViewProps> = ({
   providers,
   clientKeys,
@@ -20,7 +35,7 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
   onTestConnection
 }) => {
   return (
-    <main className="flex-1 bg-black flex flex-col overflow-y-auto min-w-0">
+    <main className="flex-1 bg-surface flex flex-col overflow-y-auto min-w-0">
       {/* Providers Header */}
       <div className="px-4 sm:px-8 pt-6 sm:pt-8 pb-4 border-b border-surface-border flex items-center justify-between min-w-0">
         <div className="min-w-0">
@@ -58,6 +73,7 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {providers.map((p) => {
+              const logoUrl = getProviderLogo(p.iconType);
               return (
                 <div 
                   key={p.id} 
@@ -65,23 +81,16 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      {p.iconType === 'anthropic' && (
-                        <div className="w-10 h-10 rounded-xl bg-orange-600/20 border border-orange-500/30 flex items-center justify-center text-orange-400 font-bold text-sm shrink-0">
-                          A
+                      {logoUrl ? (
+                        <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-sm">
+                          <img 
+                            src={logoUrl} 
+                            alt={p.name} 
+                            className="w-full h-full object-cover"
+                          />
                         </div>
-                      )}
-                      {p.iconType === 'openai' && (
-                        <div className="w-10 h-10 rounded-xl bg-brand-blue/20 border border-brand-blue/30 flex items-center justify-center text-brand-blue font-bold text-sm shrink-0">
-                          <Sparkles className="w-5 h-5" />
-                        </div>
-                      )}
-                      {p.iconType === 'gemini' && (
-                        <div className="w-10 h-10 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-sm shrink-0">
-                          G
-                        </div>
-                      )}
-                      {p.iconType === 'deepseek' && (
-                        <div className="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-400 font-bold text-sm shrink-0">
+                      ) : (
+                        <div className="w-10 h-10 rounded-xl bg-surface-elevated flex items-center justify-center text-neutral-400 font-bold text-sm shrink-0">
                           <Cpu className="w-5 h-5" />
                         </div>
                       )}

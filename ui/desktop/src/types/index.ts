@@ -1,5 +1,5 @@
 export type ViewMode = 'split' | 'chat' | 'diff';
-export type MainTab = 'studio' | 'providers';
+export type MainTab = 'studio' | 'providers' | 'chains' | 'telemetry' | 'cache' | 'dashboard' | 'docs' | 'settings';
 
 export interface ChatMessage {
   id?: string;
