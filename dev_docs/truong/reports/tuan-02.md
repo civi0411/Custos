@@ -119,7 +119,7 @@ npm publish
 
 ### 3.4. Tự động hóa Pipeline với GitHub Actions
 
-Đã cấu hình file workflow [.github/workflows/release-cli.yml](file:///d:/Agentic%20Work%20Runtime/Custos/.github/workflows/release-cli.yml):
+Đã cấu hình file workflow [.github/workflows/release-cli.yml](../../../.github/workflows/release-cli.yml):
 * **Trigger:** Tự động kích hoạt mỗi khi có tag mới bắt đầu bằng `v*` được đẩy lên GitHub (`on: push: tags: ['v*']`).
 * **Jobs:**
   1. Checkout code và thiết lập toolchain Rust + Node.js.
