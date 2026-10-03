@@ -135,11 +135,11 @@ Trường chịu trách nhiệm đảm bảo hệ thống phục hồi an toàn 
 | **A (Local E2E)** | CLI $\rightarrow$ Daemon $\rightarrow$ Local Model $\rightarrow$ `repo_explain` | Context Compiler minimal + S1/S2 stub + Evidence Fact | SQLite WAL + CAS + Task FSM + T1-T5 skeleton | CLI + Daemon + Local API + worktree read-only | 6-8 tuần |
 | **B (Workspace)** | PatchBundle + Sandbox test | Semantic verifier + OI route cơ bản | Sandbox (Seatbelt/Bwrap) + crash test T1-T5 | Workflow loop + cancel + checkpoint | 6-8 tuần |
 | **C (Crash)** | Bắn SIGKILL giữa T3-EXT $\rightarrow$ `Uncertain` | Evidence LTL + Reconciliation logic | Outbox durable + Reconciliation protocol | Recovery UI + audit T3 | 4 tuần |
-| **D (Taint)** | 100% injection bị chặn đứng | Taint semantics + Context isolation + Secret redaction | — | MCP fail-closed + red-team fixtures | 4 tuần |
-| **E (SWE-bench)**| SWE-bench Lite subset pass | OI routing đầy đủ + Engineering Pack | — | **1 harness adapter** (Claude Code/Codex) | 8-12 tuần |
+| **D (Taint)** | Đạt mục tiêu phòng thủ cơ bản với Red-team fixtures | Taint semantics + Context isolation + Secret redaction | — | MCP fail-closed + red-team fixtures | 4 tuần |
+| **E (SWE-bench)**| SWE-bench Lite subset pass (Baseline khởi điểm, không đủ làm nghiệm thu Authority/Recovery) | OI routing đầy đủ + Engineering Pack | — | **1 harness adapter** (Claude Code/Codex) | 8-12 tuần |
 | **F (Research)** | Tái lập 1 paper + Reproducibility | Research Pack + FIRE + DatasetCard | — | Experiment runner + Batch API | 6-8 tuần |
 | **G (Memory)** | LongMemEval temporal consistency | Temporal facts + MemoryPort + ContinuationPacket| — | Memory runtime + FTS5 recall | 4 tuần |
-| **OPT (Cost)** | `CostPerAcceptedTask` giảm $\ge$ 20%| OI economics + cache + cascade + compaction | — | Usage telemetry T2 | 4-6 tuần |
+| **OPT (Cost)** | Thí nghiệm mục tiêu giảm `CostPerAcceptedTask` $\ge$ 20% | OI economics + cache + cascade + compaction | — | Usage telemetry T2 | 4-6 tuần |
 
 ---
 

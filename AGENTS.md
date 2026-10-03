@@ -29,7 +29,7 @@ Every crate in `crates/` belongs to a specific architectural layer. Agents must 
 
 | Layer | Product Crate | Owner (RACI) | Responsibility Boundary | Strict Constraints |
 |---|---|:---:|---|---|
-| **Layer 0** | `crates/custos-domain` | **Vĩ** | Pure domain entities, Task, Session, Evidence, Permits. | **Zero-I/O Absolute Invariant:** No tokio, rusqlite, reqwest, std::fs. Zero dependencies outside std. |
+| **Layer 0** | `crates/custos-domain` | **Vĩ** | Pure domain entities, Task, Session, Evidence, Permits. | **No I/O Absolute Invariant:** No tokio, rusqlite, reqwest, std::fs. Dependencies limited to std, serde, chrono. |
 | **Layer 1** | `crates/custos-core` | **Vĩ** | Task Kernel, Authority Engine, Completion Gate, Invariants. | Depends exclusively on `custos-domain`. No adapter logic, no direct SQLite calls. |
 | | `crates/custos-persistence` | **Trường** | SQLite WAL mode, schema migrations, Outbox, CAS storage. | Implements domain repository traits. Single-writer connection. Zero WAL starvation. |
 | | `crates/custos-provider` | **Vĩ** | ProviderPort, token streaming, wire format transformers. | Abstracts model providers; no vendor-specific SDK hardcoding. |
