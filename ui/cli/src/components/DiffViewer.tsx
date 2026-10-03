@@ -16,11 +16,9 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
 
-  // Compute line-by-line diff
   const oldLines = oldCode.split('\n');
   const newLines = newCode.split('\n');
 
-  // Simple unified diff algorithm
   interface DiffLine {
     type: 'add' | 'del' | 'eq';
     content: string;
@@ -32,7 +30,6 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   let additions = 0;
   let deletions = 0;
 
-  // Render removals
   oldLines.forEach((line, idx) => {
     if (!newLines.includes(line)) {
       deletions++;
@@ -40,7 +37,6 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
     }
   });
 
-  // Render additions & common lines
   newLines.forEach((line, idx) => {
     if (!oldLines.includes(line)) {
       additions++;

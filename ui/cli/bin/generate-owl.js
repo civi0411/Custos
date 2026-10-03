@@ -9,7 +9,6 @@ export function renderPixelOwl(imagePath, targetW = 38, targetH = 46) {
   const h = raw.height;
   const data = raw.data;
 
-  // Flood fill outer background
   const visited = new Uint8Array(w * h);
   const queue = [];
 
@@ -56,11 +55,10 @@ export function renderPixelOwl(imagePath, targetW = 38, targetH = 46) {
 
   for (let i = 0; i < visited.length; i++) {
     if (visited[i]) {
-      data[i * 4 + 3] = 0; // Transparent
+      data[i * 4 + 3] = 0;
     }
   }
 
-  // Autocrop
   let minX = w, minY = h, maxX = 0, maxY = 0;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -86,13 +84,11 @@ export function renderPixelOwl(imagePath, targetW = 38, targetH = 46) {
   for (let r = 0; r < targetH; r += 2) {
     let line = '';
     for (let c = 0; c < targetW; c++) {
-      // Top pixel
       const srcX1 = Math.floor(minX + (c / targetW) * cropW);
       const srcY1 = Math.floor(minY + (r / targetH) * cropH);
       const idx1 = (srcY1 * w + srcX1) * 4;
       const a1 = data[idx1 + 3] >= 65;
 
-      // Bottom pixel
       const srcX2 = Math.floor(minX + (c / targetW) * cropW);
       const srcY2 = Math.floor(minY + ((r + 1) / targetH) * cropH);
       const idx2 = (srcY2 * w + srcX2) * 4;
@@ -114,7 +110,6 @@ export function renderPixelOwl(imagePath, targetW = 38, targetH = 46) {
   return outRows;
 }
 
-// Test when run directly
 if (process.argv[1]?.endsWith('generate-owl.js')) {
   const p = path.resolve('public/assets/owl.png');
   const rows = renderPixelOwl(p, 38, 46);

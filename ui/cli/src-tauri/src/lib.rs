@@ -231,7 +231,6 @@ fn uuid_simple() -> String {
 pub fn run() {
     let state = AppState::default();
 
-    // Pre-populate with initial demonstration tasks
     {
         let mut tasks = state.tasks.lock().unwrap();
         tasks.push(Task {

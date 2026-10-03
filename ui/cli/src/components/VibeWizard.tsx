@@ -3,7 +3,7 @@ import { ExecutionPermit, OperationalMode, Task } from '../types';
 import { OPERATIONAL_MODES, SAMPLE_DIFF } from '../data/constants';
 import { DiffViewer } from './DiffViewer';
 import { CustosApi } from '../services/custosApi';
-import { Zap, ArrowRight, Loader2, CheckCircle, XCircle, RotateCcw, ShieldAlert, Terminal } from 'lucide-react';
+import { Zap, ArrowRight, Loader2, CheckCircle, XCircle, RotateCcw, ShieldAlert, Terminal, Code2, Compass, Bot } from 'lucide-react';
 
 interface VibeWizardProps {
   initialMode: OperationalMode;
@@ -18,6 +18,17 @@ export const VibeWizard: React.FC<VibeWizardProps> = ({
 }) => {
   const [mode, setMode] = useState<OperationalMode>(initialMode);
   const [goal, setGoal] = useState('');
+
+  const getModeIcon = (m: OperationalMode) => {
+    switch (m) {
+      case 'Code':
+        return <Code2 size={16} />;
+      case 'Research':
+        return <Compass size={16} />;
+      case 'Assitant':
+        return <Bot size={16} />;
+    }
+  };
   const [stage, setStage] = useState<
     'input' | 'analyzing' | 'synthesizing' | 'review_diff' | 'executing' | 'completed' | 'cancelled'
   >('input');
@@ -37,7 +48,6 @@ export const VibeWizard: React.FC<VibeWizardProps> = ({
     setStage('analyzing');
     setProgressMsg(`Analyzing repository and compiling context recipe for [${mode}] mode...`);
 
-    // Simulate analysis delay
     await new Promise((r) => setTimeout(r, 700));
 
     setStage('synthesizing');
@@ -45,12 +55,10 @@ export const VibeWizard: React.FC<VibeWizardProps> = ({
 
     await new Promise((r) => setTimeout(r, 900));
 
-    // Create task in backend
     const task = await CustosApi.createTask(goal, mode);
     setCurrentTask(task);
     if (onTaskCreated) onTaskCreated(task);
 
-    // Create permit with diff
     const permit = CustosApi.createPermit(
       task.id,
       'ExecutionPermit: Apply Code Diff',
@@ -139,7 +147,6 @@ export const VibeWizard: React.FC<VibeWizardProps> = ({
       </div>
 
       <div className="vibe-wizard-body">
-        {/* STAGE 1: INPUT */}
         {stage === 'input' && (
           <div className="wizard-input-stage">
             <div className="mode-select-row">
@@ -157,7 +164,9 @@ export const VibeWizard: React.FC<VibeWizardProps> = ({
                       }}
                       onClick={() => setMode(m)}
                     >
-                      <img src={cfg.mascotImage} alt={cfg.name} className="btn-owl-thumb" />
+                      <span className="btn-mode-icon" style={{ color: mode === m ? cfg.badgeColor : 'inherit' }}>
+                        {getModeIcon(m)}
+                      </span>
                       <span>{cfg.name}</span>
                     </button>
                   );
@@ -211,12 +220,13 @@ export const VibeWizard: React.FC<VibeWizardProps> = ({
           </div>
         )}
 
-        {/* STAGE 2: ANALYZING / SYNTHESIZING */}
         {(stage === 'analyzing' || stage === 'synthesizing' || stage === 'executing') && (
           <div className="wizard-loading-stage">
-            <div className="loading-mascot-box">
-              <img src={currentCfg.mascotImage} alt={currentCfg.name} className="floating-owl-img" />
-              <Loader2 size={36} className="spinner-icon animate-spin" style={{ color: currentCfg.badgeColor }} />
+            <div className="loading-mascot-box engine-loading" style={{ borderColor: `${currentCfg.badgeColor}40`, backgroundColor: `${currentCfg.badgeColor}12` }}>
+              <div className="loading-center-icon" style={{ color: currentCfg.badgeColor }}>
+                {getModeIcon(mode)}
+              </div>
+              <Loader2 size={40} className="spinner-icon animate-spin" style={{ color: currentCfg.badgeColor }} />
             </div>
 
             <h3 className="loading-title">Custos Runtime Active</h3>
@@ -239,7 +249,6 @@ export const VibeWizard: React.FC<VibeWizardProps> = ({
           </div>
         )}
 
-        {/* STAGE 3: REVIEW DIFF & PERMIT */}
         {stage === 'review_diff' && pendingPermit && (
           <div className="wizard-diff-stage">
             <div className="permit-request-banner">
@@ -273,7 +282,6 @@ export const VibeWizard: React.FC<VibeWizardProps> = ({
           </div>
         )}
 
-        {/* STAGE 4: COMPLETED */}
         {stage === 'completed' && currentTask && (
           <div className="wizard-result-stage success">
             <div className="result-icon-wrapper success">
@@ -306,7 +314,6 @@ export const VibeWizard: React.FC<VibeWizardProps> = ({
           </div>
         )}
 
-        {/* STAGE 4: CANCELLED */}
         {stage === 'cancelled' && currentTask && (
           <div className="wizard-result-stage cancelled">
             <div className="result-icon-wrapper cancelled">

@@ -2,7 +2,6 @@ import { invoke } from '@tauri-apps/api/core';
 import { ExecutionPermit, OperationalMode, RiskLevel, Task, TaskSpan, TaskStatus } from '../types';
 import { SAMPLE_DIFF } from '../data/constants';
 
-// In-memory initial state for developer preview & local simulation
 let mockTasks: Task[] = [
   {
     id: 'tsk_01jk98a1m4z0',

@@ -110,7 +110,6 @@ export const TaskManager: React.FC<TaskManagerProps> = ({ onSelectTaskInCli }) =
       </div>
 
       <div className="task-manager-body">
-        {/* Task List Table */}
         <div className="task-table-wrapper">
           <table className="tasks-table">
             <thead>
@@ -214,7 +213,6 @@ export const TaskManager: React.FC<TaskManagerProps> = ({ onSelectTaskInCli }) =
           </table>
         </div>
 
-        {/* Selected Task Detail Drawer */}
         {selectedTask && (
           <div className="task-detail-pane">
             <div className="detail-pane-header">
@@ -261,7 +259,6 @@ export const TaskManager: React.FC<TaskManagerProps> = ({ onSelectTaskInCli }) =
               </div>
             )}
 
-            {/* Audit Spans Timeline */}
             <div className="spans-timeline-section">
               <div className="timeline-title">Immutable SQLite Audit Spans ({taskSpans.length}):</div>
               <div className="spans-list">

@@ -1,0 +1,9 @@
+{
+  "name": "custos-workspace",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix ui/cli run build",
+    "dev": "npm --prefix ui/cli run dev",
+    "start": "npm --prefix ui/cli start"
+  }
+}
