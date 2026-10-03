@@ -83,12 +83,14 @@ impl AuthorityEngine {
                 )))
             }
             PolicyDecision::Allow => {
-                let permit = self.permits.issue_permit(
+                let digest = action.argument_digest();
+                let permit = self.permits.issue_permit_with_digest(
                     task_id.to_string(),
                     action.id.clone(),
                     action.name.clone(),
                     None,
                     risk_class,
+                    digest,
                     300, // 5 min TTL
                 );
 

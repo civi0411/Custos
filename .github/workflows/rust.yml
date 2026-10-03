@@ -31,7 +31,9 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Verify Architecture Boundaries
-        run: ./scripts/check_deps.sh
+        run: |
+          bash scripts/check_deps.sh
+          bash scripts/check_naming.sh
 
       - name: Check Formatting
         run: cargo fmt --check --all

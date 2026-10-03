@@ -433,7 +433,13 @@ impl ToolGate for DeterministicGate {
             .authorize_action(task_id, action, actor)
             .await?;
 
-        // Step 2: Dispatch action under sandbox containment
+        // Step 2: Atomic consume/burn permit before physical execution (Invariant INV-04)
+        let expected_digest = action.argument_digest();
+        self.authority
+            .permits
+            .consume_permit(&permit.id, &expected_digest)?;
+
+        // Step 3: Dispatch action under sandbox containment
         match action.name.as_str() {
             "read_file" => self.execute_read_file(action, &permit.id).await,
             "list_files" => self.execute_list_files(action, &permit.id).await,
