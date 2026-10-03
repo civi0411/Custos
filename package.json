@@ -5,7 +5,9 @@
     "build": "npm --prefix ui/cli run build",
     "dev": "npm --prefix ui/cli run dev",
     "start": "npm --prefix ui/cli start",
-    "tauri:cli": "npm --prefix ui/cli run tauri:dev",
-    "tauri:desktop": "npm --prefix ui/desktop run tauri:dev"
+    "tauri:cli:dev": "npm --prefix ui/cli run tauri:dev --",
+    "tauri:cli:build": "npm --prefix ui/cli run tauri:build --",
+    "tauri:desktop:dev": "npm --prefix ui/desktop run tauri:dev --",
+    "tauri:desktop:build": "npm --prefix ui/desktop run tauri:build --"
   }
 }

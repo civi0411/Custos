@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "ai.custos.desktop",
   "build": {
-    "beforeDevCommand": "npm --prefix ../../../ui/desktop run dev",
+    "beforeDevCommand": "npm --prefix ../../ui/desktop run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm --prefix ../../../ui/desktop run build",
+    "beforeBuildCommand": "npm --prefix ../../ui/desktop run build",
     "frontendDist": "../../../ui/desktop/dist"
   },
   "app": {
