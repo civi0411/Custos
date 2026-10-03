@@ -23,7 +23,7 @@ Hệ điều hành chủ quyền tác nhân Custos được xây dựng dựa tr
 3. **Cành Nhánh Lưu Trữ & Cách Ly Hệ Điều Hành (Persistence & OS Sandboxing) — Trọng trách của Trường:**  
    Bao gồm hạ tầng lưu trữ quan hệ bền vững SQLite WAL, giải quyết triệt để lỗi đói WAL (P0 WAL Starvation), kho lưu trữ định danh nội dung (CAS), động cơ Transactional Outbox, và cơ chế sandbox cô lập tiến trình cấp hệ điều hành (Apple Seatbelt trên macOS / Bubblewrap trên Linux).
 4. **Cành Nhánh Điều Phối Thực Thi & Giao Tiếp Client (Runtime, Protocols & UX) — Trọng trách của Vinh:**  
-   Bao gồm vòng đời Session/Task, vòng lặp thực thi từng bước (Step Execution Loop), cơ chế giữ chỗ tác vụ (Worker Lease), chuẩn giao thức công cụ ngoại vi (MCP 2026-07-28, A2A v1.0.0), 5 bộ điều hợp Harness ngoại vi (Claude Code, Codex, Cursor, Antigravity, Goose), và giao diện tương tác người dùng (Terminal TUI / CLI / SDK).
+   Bao gồm vòng đời Session/Task, vòng lặp thực thi từng bước (Step Execution Loop), cơ chế giữ chỗ tác vụ (Worker Lease), chuẩn giao thức công cụ ngoại vi (MCP, A2A theo version adapter đã kiểm), các ứng viên Harness ngoài (Claude Code, Codex, Cursor, Antigravity, Goose), và giao diện tương tác người dùng (Terminal TUI / CLI / SDK). Mỗi adapter phải qua conformance gate; danh sách không đồng nghĩa đã triển khai.
 
 ```text
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
@@ -413,3 +413,21 @@ Bất kỳ vi phạm nào đối với 6 điều luật thép dưới đây sẽ
    Nếu cần sửa đổi bất kỳ Trait dùng chung hoặc Schema nào trong `schemas/`, người đề xuất phải mở một Pull Request thảo luận và nhận được sự đồng thuận của cả 3 thành viên trước khi tiến hành viết code triển khai.
 4. **Quyền Phủ Quyết Của Kiến Trúc Sư Trưởng (Chief Architect Veto Authority):**
    Trong trường hợp phát sinh tranh luận kỹ thuật không đạt được sự đồng thuận sau 2 vòng review, quyết định của **Vĩ (Chief Architect)** căn cứ trên văn kiện tối cao [`Custos.md`](../Custos.md) là quyết định thi hành cuối cùng.
+
+---
+
+## 8. Chiến Lược Phát Triển Độc Lập & Chống Thắt Cổ Chai (Anti-Blocking Strategy)
+
+Để đảm bảo Vĩ (AI/Data) không bị block bởi tiến độ làm UI/Runtime của Vinh, và Trường/Vinh (SE) không phải chờ Vĩ tune prompt AI xong mới test được hệ thống, toàn team tuân thủ 3 nguyên tắc **Phát triển Tách rời (Decoupled Engineering)**:
+
+1. **Giao tiếp hoàn toàn qua JSON Schema (Schema-First):**
+   - Vĩ định nghĩa trước các cấu trúc DTO đầu vào/đầu ra cho AI (ActionIntent, ContextSnapshot) tại `schemas/`.
+   - Trường và Vinh chỉ cần code bám theo Schema này, không quan tâm "bên trong cái hộp AI" có gì.
+
+2. **Luôn cung cấp Mock/Stub AI cho team SE:**
+   - Tại lớp `custos-adapters`, cung cấp sẵn các `MockSystemOne` và `MockSystemTwo`.
+   - Các Mock này trả về JSON tĩnh (hardcode) đúng chuẩn Schema ngay lập tức. Trường và Vinh dùng Mock này để thỏa sức test UX, lưu trữ SQLite, chặn quyền Sandbox mà không tốn 1 xu tiền API hay phải chờ AI suy luận.
+
+3. **Môi trường Đánh giá (Evals) Độc lập cho AI:**
+   - Vĩ tự do phát triển, thử nghiệm các mô hình S1/S2 mới tại thư mục `evals/` bằng script độc lập (Python/Rust CLI) mà không cần giao diện người dùng hay Backend Daemon phải hoàn thiện.
+   - Khi lõi AI đạt độ chính xác (accuracy), chỉ việc cắm vào trait `ModelProvider` là toàn hệ thống (UI, DB, Sandbox) tự động thừa hưởng lõi xịn.
