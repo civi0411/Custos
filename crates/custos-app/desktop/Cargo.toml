@@ -1,21 +1,23 @@
 [package]
-name = "custos-desktop"
+name = "custos-app-desktop"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-repository.workspace = true
-description = "Custos Desktop GUI Application (Presentation Layer)"
+description = "Custos Desktop App (Tauri backend)"
 
-[[bin]]
-name = "custos-desktop"
-path = "src/main.rs"
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "desktop_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
 
 [dependencies]
-custos-domain = { workspace = true }
-custos-sdk = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { workspace = true }
 serde_json = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-tokio = { workspace = true }

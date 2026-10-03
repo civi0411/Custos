@@ -1,12 +1,6 @@
-//! Custos Desktop GUI Entrypoint (Thin Presentation Client)
-//!
-//! Communicates strictly via `custos-sdk` over Unix Domain Sockets (`daemon.sock`).
-//! Never connects directly to SQLite WAL persistence or runs internal FSM state logic.
+// Prevents additional console window on Windows in release, DO NOT REMOVE!!
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
-    tracing::info!("Initializing Custos Desktop Presentation Client...");
-    println!("Custos Desktop GUI (Connected via custos-sdk)");
-    Ok(())
+fn main() {
+    desktop_lib::run()
 }

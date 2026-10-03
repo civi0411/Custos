@@ -12,13 +12,11 @@ members = [
     "crates/custos-app/cli",
     "crates/custos-app/desktop",
     "crates/custos-packs",
+    "crates/custos-app/cli",
+    "crates/custos-app/desktop",
     "tests/contract",
     "tests/e2e",
     "xtask"
-]
-exclude = [
-    "ui/cli/src-tauri",
-    "ui/desktop/src-tauri"
 ]
 
 [workspace.package]
@@ -50,6 +48,8 @@ custos-cli = { path = "crates/custos-app/cli" }
 custos-desktop = { path = "crates/custos-app/desktop" }
 custos-local-api = { package = "custos-daemon", path = "crates/custos-daemon" }
 custos-packs = { path = "crates/custos-packs" }
+custos-app-cli = { path = "crates/custos-app/cli" }
+custos-app-desktop = { path = "crates/custos-app/desktop" }
 tiktoken-rs = { version = "0.12", default-features = false }
 blake3 = { version = "1", default-features = false, features = ["std"] }
 indicatif = "0.17"
