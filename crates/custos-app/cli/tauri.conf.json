@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "com.custos.cli",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm --prefix ../../../ui/cli run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
-    "frontendDist": "../dist"
+    "beforeBuildCommand": "npm --prefix ../../../ui/cli run build",
+    "frontendDist": "../../../ui/cli/dist"
   },
   "app": {
     "windows": [
