@@ -179,7 +179,7 @@ Quy chuẩn phân định trách nhiệm RACI chuẩn mực:
 - **Giao Thức Tác Nhân A2A Protocol v1.0.0:**  
   Hiện thực hóa cơ chế phát hiện Agent Card, bắt tay ủy quyền tác vụ giữa các agent cục bộ và phân tán.
 - **Năm Bộ Điều Hợp Harness Ngoại Vi:**  
-  Triển khai 5 Harness adapter chuẩn: Claude Code, OpenAI Codex, Cursor, Antigravity, và Goose.
+  Triển khai từng Harness adapter theo conformance gate, không coi danh sách Claude Code, OpenAI Codex, Cursor, Antigravity và Goose là năm adapter đã hoạt động. Trước khi nhận adapter mới, xác định loop owner, workspace owner, mức chặn tool/effect, event coverage, approval, usage, cancel/resume và assurance theo từng action. Goose-derived source hiện hữu phải được kiểm tra active/dormant và provenance trước khi đưa vào runtime chính.
 
 #### 4. Trải Nghiệm Người Dùng Dòng Lệnh & SDK (`crates/custos-cli`, `crates/custos-sdk`)
 - **Giao Diện Dòng Lệnh Trực Quan (`crates/custos-cli`):**  
