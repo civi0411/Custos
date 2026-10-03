@@ -1,7 +1,9 @@
+[workspace]
+
 [package]
-name = "cli"
+name = "custos_cli_tauri"
 version = "0.1.0"
-description = "A Tauri App"
+description = "Custos CLI App"
 authors = ["you"]
 edition = "2021"
 

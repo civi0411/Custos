@@ -23,10 +23,10 @@ release/
 **/release/
 
 # Backup files
-**/*.rs.bk
 *.pdb
+*.exe
+**/mutants.out*/
 *.profraw
-*.profdata
 
 # Cargo-specific
 **/mutants.out*/

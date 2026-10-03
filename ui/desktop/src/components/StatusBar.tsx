@@ -32,7 +32,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
   const presets = [85, 90, 100, 110, 120, 130, 140, 150];
 
   return (
-    <footer className="h-6 bg-black border-t border-surface-border px-3 flex items-center justify-between text-[11px] font-mono text-neutral-500 shrink-0 z-20">
+    <footer className="h-6 bg-surface border-t border-surface-border px-3 flex items-center justify-between text-[11px] font-mono text-neutral-400 shrink-0 z-20 select-none">
       {/* Active Session Info */}
       <div className="flex items-center gap-3 truncate">
         <span className="flex items-center gap-1.5 text-neutral-400">

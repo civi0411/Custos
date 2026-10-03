@@ -1414,6 +1414,20 @@ Mọi thay đổi trong Local API đều tuân thủ chính sách Semantic Versi
 
 ## 7.7 Năm Bộ Điều Hợp Harness (Claude, Codex, Cursor, Antigravity, Goose)
 
+> **Trạng thái triển khai:** Bảng bên dưới là danh mục tích hợp đích, không phải chứng nhận đã vận hành. Tại commit `3e4dac4`, các `CodexProvider`, `ClaudeProvider`, `AntigravityProvider` trong `custos-adapters` còn trả stub; `AgentRuntimePort` mới có một implementation một lượt inference; daemon chưa compose các harness này. Mọi nhãn assurance chỉ được cấp theo *action và đường thực thi đã test*, không theo tên adapter.
+
+### Hợp đồng thực thi chung
+
+`ModelPort` là một lần suy luận model có request/attempt ID, stream, tool-call proposal, usage và cancel theo capability thực tế. `AgentRuntimePort` đại diện một harness sở hữu vòng lặp nhiều bước, có event/tool proposal, approval request, artifact, terminal status, usage và resume **nếu adapter hỗ trợ**. Goose-derived loop chạy trong Custos có thể triển khai `AgentRuntimePort` và dùng `ModelPort` bên dưới; Goose CLI chạy ngoài process là một adapter khác. Không coi hai hình thức này tương đương về quyền.
+
+Mỗi execution path phải công bố riêng: `loop_owner`, `workspace_owner`, `tool_mediation`, `event_coverage`, `approval_coverage`, `usage_visibility`, `cancel_semantics`, `resume_semantics`, `sandbox_profile`. `custos-mediated` chỉ áp dụng cho action mà mọi đường effect khả dụng đã được chặn *trước dispatch* bởi Custos và qua kiểm thử conformance/escape. Tool event, hook, App Server approval hay worktree đơn lẻ không đủ chứng minh điều đó. Nếu agent có native tool ngoài Gateway, action ấy là `provider-governed` hoặc `observe-only` tùy bằng chứng; unknown khi chưa audit.
+
+`ActionIntent` do bất kỳ model/harness nào đề xuất đều không phải permit. Research agent có thể thu thập và tổng hợp nhưng Custos phải mở lại source version/passage trước khi công nhận claim. Coding agent có thể sửa trên worktree riêng nhưng Custos kiểm base hash, diff scope và test độc lập trước tích hợp. Assistant agent có thể soạn exact draft; gửi mail/lịch chỉ `custos-mediated` khi connector do Custos dispatch sau approval bound payload. Không bắt buộc `DirectModel` chỉ vì Task thuộc Research hoặc Assistant.
+
+**Goose trong checkout:** `crates/custos-runtime/src/engine/agents/` chứa nhiều mã agent loop/MCP/extension kế thừa nhưng `runtime/src/lib.rs` chưa mount `engine`; các primitive đã tách trong `runtime/src/agent/` được compile nhưng chưa thấy daemon nối thành một vòng lặp thực. Giữ mã làm nguồn tái sử dụng, inventory `active / compiled-unwired / dormant / duplicate` cùng upstream SHA/license/attribution; chọn một vòng lặp sản phẩm bằng test parity thay vì bật song song hai engine. Không tự nhận Goose hiện đã nằm hoàn toàn dưới Gateway.
+
+**Thứ tự gate:** (1) một execution spine có permit/outbox/receipt bền vững, unknown tool fail closed; (2) thống nhất hai interface provider đang tồn tại bằng adapter/fixture, không thêm hệ thứ ba; (3) internal harness chạy e2e với fake model/tool; (4) external harness từng cái với conformance về event, approval, native-tool bypass, worktree, cancel, usage và crash; (5) tối ưu routing sau khi có baseline. CAP là draft tùy chọn, không phải giao thức lõi bắt buộc.
+
 Custos không tìm cách phát minh lại các công cụ chuyên biệt của thị trường mà tích hợp chúng thông qua **5 Harness Adapters**:
 
 ```
@@ -3042,7 +3056,6 @@ Toàn bộ các quyết định thiết kế kiến trúc của Custos đều đ
 
 ---
 *HẾT TOÀN VĂN ĐẶC TẢ KIẾN TRÚC CUSTOS*
-
 
 
 

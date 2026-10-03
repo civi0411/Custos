@@ -40,7 +40,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({
       {/* Sessions Column Header */}
       <div className="p-3 border-b border-surface-border flex items-center justify-between min-w-0">
         <div className="flex items-center gap-2 min-w-0">
-          <Layers className="w-3.5 h-3.5 text-brand-blue shrink-0" />
+          <Layers className="w-3.5 h-3.5 shrink-0" />
           <span className="text-xs font-semibold text-neutral-200 truncate">
             {currentProject}
           </span>
@@ -119,7 +119,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({
       </div>
 
       {/* Sessions Column Footer: Active Gateway Status */}
-      <div className="p-2.5 border-t border-surface-border bg-black/40 flex items-center justify-between text-[11px] font-mono text-neutral-500 shrink-0">
+      <div className="p-2.5 border-t border-surface-border bg-surface-card/60 flex items-center justify-between text-[11px] font-mono text-neutral-400 shrink-0">
         <div className="flex items-center gap-1.5 truncate">
           <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse"></span>
           <span className="truncate">127.0.0.1:8045</span>

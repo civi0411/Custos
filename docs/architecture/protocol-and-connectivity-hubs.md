@@ -4,7 +4,7 @@
 > **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md) (Part 7).  
 > **Architecture Hub:** See [Custos Architecture Overview](README.md).
 
-Custos interacts with client user interfaces (CLI, VS Code, Web UI), external tool providers (MCP Servers), remote agents (A2A networks), and AI reasoning backends through a unified **Protocol & Connectivity Hub Layer** hosted within `custos-daemon`.
+Custos targets client interfaces, tool providers, remote agents, and model backends through a composed connectivity layer. The six hubs below describe responsibilities, not six fully implemented services. Adapter support and assurance must be confirmed by executable call-path and conformance tests.
 
 ---
 
@@ -99,9 +99,6 @@ Any artifact or message ingested from a remote agent via A2A is unconditionally 
 
 ## 5. Five Harness Adapters
 
-Custos integrates established development tools through five dedicated harness adapters:
-1. **Claude Code Adapter:** Intercepts tool calls and converts them into governed `ActionIntent` records.
-2. **OpenAI Codex Adapter:** Translates tool-use payloads into typed capability requests.
-3. **Cursor Adapter:** Connects to editor workspace contexts and projects diffs into isolated worktrees.
-4. **Antigravity Adapter:** Interfaces with DeepMind-style autonomous agent execution harnesses.
-5. **Goose Adapter:** Integrates headless command-line execution and environment automation.
+These are integration candidates, not five shipped adapters. At commit `3e4dac4`, model-named Codex, Claude, and Antigravity modules are stubs. Goose-derived code exists in the runtime source tree, but the legacy `engine` module is not mounted by `runtime/src/lib.rs` and is not a daemon-composed harness.
+
+The boundary is defined by loop ownership, not brand: `ModelPort` performs one inference attempt; `AgentRuntimePort` drives a multi-step harness. Both emit proposals. Effect authorization and domain verification remain independent. Each adapter advertises tested event, approval, tool, workspace, usage, cancel, and resume coverage. Assurance is recorded per action. Codex App Server and Claude hooks may expose tool events and approval points, but neither automatically routes every native side effect through Custos. CAP remains an optional draft adapter; ACP is a client-agent protocol, not an authority ledger.

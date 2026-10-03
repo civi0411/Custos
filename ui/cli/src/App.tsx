@@ -1,50 +1,172 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { useState, useEffect } from 'react';
+import { ExecutionPermit, OperationalMode, ResponsiveTier, ViewMode } from './types';
+import { Header } from './components/Header';
+import { TerminalView } from './components/TerminalView';
+import { MascotShowcase } from './components/MascotShowcase';
+import { VibeWizard } from './components/VibeWizard';
+import { TaskManager } from './components/TaskManager';
+import { StatusBar } from './components/StatusBar';
+import { ExecutionPermitModal } from './components/ExecutionPermitModal';
+import { CustosApi, subscribeToApi } from './services/custosApi';
+import './App.css';
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+export function App() {
+  const [currentMode, setCurrentMode] = useState<OperationalMode>('Code');
+  const [viewMode, setViewMode] = useState<ViewMode>('split');
+  const [crtEffect, setCrtEffect] = useState<boolean>(false);
+  const [termWidth, setTermWidth] = useState<number>(100);
+  const [responsiveTier, setResponsiveTier] = useState<ResponsiveTier>('Standard');
+  const [activePermit, setActivePermit] = useState<ExecutionPermit | null>(null);
+  const [initialCliCommand, setInitialCliCommand] = useState<string | undefined>();
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  useEffect(() => {
+    const handleResize = () => {
+      const calculatedCols = Math.max(20, Math.floor(window.innerWidth / 8.8));
+      setTermWidth(calculatedCols);
+
+      if (calculatedCols < 70) {
+        setResponsiveTier('Compact');
+      } else if (calculatedCols < 105) {
+        setResponsiveTier('Standard');
+      } else if (calculatedCols < 160) {
+        setResponsiveTier('Wide');
+      } else {
+        setResponsiveTier('UltraWide');
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  useEffect(() => {
+    const checkPermits = () => {
+      const pending = CustosApi.getPendingPermits();
+      if (pending.length > 0 && !activePermit) {
+        setActivePermit(pending[0]);
+      } else if (pending.length === 0 && activePermit) {
+        setActivePermit(null);
+      }
+    };
+
+    const unsub = subscribeToApi(checkPermits);
+    return unsub;
+  }, [activePermit]);
+
+  const handlePermitApprove = (permitId: string) => {
+    CustosApi.resolvePermit(permitId, true);
+    setActivePermit(null);
+  };
+
+  const handlePermitReject = (permitId: string) => {
+    CustosApi.resolvePermit(permitId, false);
+    setActivePermit(null);
+  };
+
+  const handleStartVibeFromMascot = (mode: OperationalMode) => {
+    setCurrentMode(mode);
+    setInitialCliCommand(`custos vibe --mode ${mode.toLowerCase()}`);
+  };
+
+  const handleSelectTaskInCli = (taskId: string) => {
+    setInitialCliCommand(`custos status -i ${taskId}`);
+    if (viewMode === 'visual') {
+      setViewMode('split');
+    }
+  };
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <div className="cli-app-root">
+      {crtEffect && <div className="crt-overlay" />}
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
+      <Header
+        currentMode={currentMode}
+        onModeChange={setCurrentMode}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        responsiveTier={responsiveTier}
+        crtEffect={crtEffect}
+        onToggleCrt={() => setCrtEffect((prev) => !prev)}
+        termWidth={termWidth}
+      />
 
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
+      <main className="cli-main-content">
+        {viewMode === 'terminal' && (
+          <div className="view-container-terminal">
+            <TerminalView
+              currentMode={currentMode}
+              onModeChange={setCurrentMode}
+              initialCommand={initialCliCommand}
+              onClearInitialCommand={() => setInitialCliCommand(undefined)}
+            />
+          </div>
+        )}
+
+        {viewMode === 'visual' && (
+          <div className="view-container-visual">
+            <MascotShowcase
+              currentMode={currentMode}
+              onSelectMode={setCurrentMode}
+              onStartVibe={handleStartVibeFromMascot}
+            />
+
+            <VibeWizard
+              initialMode={currentMode}
+              onOpenTerminalWithCommand={(cmd) => {
+                setInitialCliCommand(cmd);
+                setViewMode('split');
+              }}
+            />
+
+            <TaskManager onSelectTaskInCli={handleSelectTaskInCli} />
+          </div>
+        )}
+
+        {viewMode === 'split' && (
+          <div className="view-container-split">
+            <div className="split-left">
+              <TerminalView
+                currentMode={currentMode}
+                onModeChange={setCurrentMode}
+                initialCommand={initialCliCommand}
+                onClearInitialCommand={() => setInitialCliCommand(undefined)}
+              />
+            </div>
+            <div className="split-right">
+              <VibeWizard
+                initialMode={currentMode}
+                onOpenTerminalWithCommand={(cmd) => {
+                  setInitialCliCommand(cmd);
+                }}
+              />
+
+              <MascotShowcase
+                currentMode={currentMode}
+                onSelectMode={setCurrentMode}
+                onStartVibe={handleStartVibeFromMascot}
+              />
+
+              <TaskManager onSelectTaskInCli={handleSelectTaskInCli} />
+            </div>
+          </div>
+        )}
+      </main>
+
+      {activePermit && (
+        <ExecutionPermitModal
+          permit={activePermit}
+          onApprove={handlePermitApprove}
+          onReject={handlePermitReject}
         />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+      )}
+
+      <StatusBar
+        currentMode={currentMode}
+        responsiveTier={responsiveTier}
+        termWidth={termWidth}
+      />
+    </div>
   );
 }
 

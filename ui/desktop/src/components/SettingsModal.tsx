@@ -19,8 +19,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-3 select-none">
-      <div className="w-full max-w-3xl h-[560px] max-h-[92vh] bg-black border border-surface-border rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-canvas/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 select-none">
+      <div className="w-full max-w-3xl h-[560px] max-h-[92vh] bg-surface border border-surface-border rounded-2xl shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="h-12 border-b border-surface-border px-4 sm:px-6 flex items-center justify-between shrink-0 bg-surface">
           <div className="flex items-center gap-2.5">
@@ -38,7 +38,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Body */}
         <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
           {/* Tab Sidebar */}
-          <aside className="w-full md:w-52 border-b md:border-b-0 md:border-r border-surface-border p-2 md:p-3 flex md:flex-col gap-1 bg-surface/30 shrink-0 text-xs overflow-x-auto">
+          <aside className="w-full md:w-52 border-b md:border-b-0 md:border-r border-surface-border p-2 md:p-3 flex md:flex-col gap-1 bg-surface-card/40 shrink-0 text-xs overflow-x-auto">
             <button 
               onClick={() => setActiveTab('omniroute')}
               className={`text-left px-3 py-2 rounded-lg font-medium flex items-center gap-2 shrink-0 transition ${
