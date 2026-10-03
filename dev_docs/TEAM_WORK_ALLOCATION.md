@@ -149,3 +149,13 @@ Trường chịu trách nhiệm đảm bảo hệ thống phục hồi an toàn 
 2. **MCP/A2A Fail-closed:** Nếu adapter chưa thỏa mãn Conformance Gate, client bắt buộc fail-closed. Không claim `custos-mediated` khi chưa có test thật.
 3. **1 Harness Trước:** Vinh chỉ làm duy nhất 1 Harness Adapter (VD: Claude Code) để đi qua Gate E, tuyệt đối không làm 5 cái cùng lúc.
 4. **Cam kết Review 24h & RFC:** Đổi hợp đồng phải có RFC. Review code trong 24h. Vĩ giữ quyền phủ quyết cuối cùng (Veto) dựa trên Custos.md.
+
+---
+
+## 8. Base Linkage & Khung Testbed Độc Lập Cho AI/Data Lead
+
+Để Vĩ phát triển chuyên sâu phần AI mà không phụ thuộc vào hạ tầng SE:
+- **Base Linkage:** Luồng dữ liệu 7 khớp nối kết nối CLI/UI $\rightarrow$ Kernel $\rightarrow$ Context Compiler $\rightarrow$ ModelPort $\rightarrow$ S1/S2 $\rightarrow$ Authority $\rightarrow$ Sandbox $\rightarrow$ Evidence $\rightarrow$ Storage.
+- **In-Memory Harness (`CustosAiTestbed`):** Khung mock in-memory trong RAM cho phép Vĩ chạy TDD unit test và integration test cho Context Compiler, S1/S2 và Evidence Verifier độc lập với tiến độ SQLite/Sandbox.
+- **Tài liệu tham chiếu chi tiết:** Xem `ARCHITECTURAL_BASE_LINKAGE_AND_AI_DEV_PLAN.md`.
+

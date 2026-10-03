@@ -1,0 +1,17 @@
+[package]
+name = "custos-testkit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Mock/in-memory implementations of the 6 Custos ports + a vertical-slice harness (not a product crate)"
+
+[dependencies]
+custos-domain = { workspace = true }
+custos-core = { workspace = true }
+custos-provider = { workspace = true }
+custos-persistence = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
