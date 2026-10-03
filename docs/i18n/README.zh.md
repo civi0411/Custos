@@ -5,7 +5,6 @@
   <source media="(prefers-color-scheme: light)" srcset="../assets/banner.png">
   <img alt="Custos" src="../assets/banner.png" width="100%">
 </picture>
-# Custos
 
 [ EN ](../../README.md) · [ VI ](README.vi.md) · [ DE ](README.de.md) · [ ZH ](README.zh.md)
 

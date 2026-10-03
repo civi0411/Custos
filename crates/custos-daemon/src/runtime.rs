@@ -50,7 +50,7 @@ impl CustosRuntime {
         
         let model = Arc::new(FakeProvider::new("fake"));
         
-        let workflow = Arc::new(TaskRuntime::new());
+        let workflow = Arc::new(TaskRuntime::with_ports(kernel.clone(), model.clone()));
 
         Ok(Self {
             store,

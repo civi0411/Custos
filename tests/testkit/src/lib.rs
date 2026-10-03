@@ -14,13 +14,15 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use custos_core::contracts::sandbox::verify_permit_binding;
+use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::contracts::{
     MemoryPort, OutboxEntry, OutboxPort, OutboxStatus, SandboxCommand, SandboxPort, TrustedKernel,
 };
 use custos_domain::{
-    digest, new_id, ActionIntent, DomainError, ExecutionReceipt, FactProposal, MemoryEntry,
-    MemoryError, MemoryScope, PersonalFact, Permit, ProposalReceipt, ProposalStatus, ReceiptStatus,
-    RecallQuery, WorkerRunId,
+    digest, new_id, ActionIntent, CancelReceipt, ContinuationPacket, DomainError,
+    ExecutionReceipt, FactProposal, MemoryEntry, MemoryError, MemoryScope, PersonalFact, Permit,
+    ProposalReceipt, ProposalStatus, ReceiptStatus, RecallQuery, RunHandle, StartRunCommand,
+    WorkerRunId,
 };
 use custos_persistence::SqliteTaskStore;
 use custos_provider::request::{ModelResponse, ProviderRequest};
@@ -234,6 +236,59 @@ impl OutboxPort for InMemoryOutbox {
     }
 }
 
+// ──────────────────────────── WorkflowPort mock (Vinh) ───────────────────────────
+
+#[derive(Default)]
+pub struct MockWorkflow {
+    pub started_runs: Mutex<Vec<StartRunCommand>>,
+    pub cancelled_runs: Mutex<Vec<(String, String)>>,
+}
+
+#[async_trait]
+impl WorkflowPort for MockWorkflow {
+    async fn start_run(&self, cmd: StartRunCommand) -> Result<RunHandle, DomainError> {
+        let run_id = new_id("run");
+        self.started_runs.lock().unwrap().push(cmd.clone());
+        Ok(RunHandle {
+            run_id,
+            task_id: cmd.task_id,
+            status: custos_domain::RunStatus::Active,
+            started_at: Utc::now(),
+        })
+    }
+
+    async fn request_cancel(&self, run_id: &str, reason: &str) -> Result<CancelReceipt, DomainError> {
+        self.cancelled_runs.lock().unwrap().push((run_id.to_string(), reason.to_string()));
+        Ok(CancelReceipt {
+            run_id: run_id.to_string(),
+            cancelled_at: Utc::now(),
+            reason: reason.to_string(),
+            uncertain_effects_count: 0,
+        })
+    }
+
+    async fn resume(&self, run_id: &str) -> Result<RunHandle, DomainError> {
+        Ok(RunHandle {
+            run_id: run_id.to_string(),
+            task_id: "resumed".into(),
+            status: custos_domain::RunStatus::Active,
+            started_at: Utc::now(),
+        })
+    }
+
+    async fn checkpoint(&self, run_id: &str) -> Result<ContinuationPacket, DomainError> {
+        ContinuationPacket::create(
+            "task_mock".into(),
+            0,
+            1,
+            "mock".into(),
+            "mock".into(),
+            format!("Checkpoint for {run_id}"),
+            serde_json::json!({}),
+        )
+    }
+}
+
 // ─────────────────────────────── Vertical harness ───────────────────────────────
 
 /// Everything wired in RAM. This is a miniature `custos-daemon` composition root:
@@ -245,6 +300,7 @@ pub struct Harness {
     pub sandbox: Arc<MockSandbox>,
     pub memory: Arc<InMemoryMemory>,
     pub outbox: Arc<InMemoryOutbox>,
+    pub workflow: Arc<MockWorkflow>,
     pub workspace: PathBuf,
 }
 
@@ -260,6 +316,7 @@ impl Harness {
             sandbox: Arc::new(MockSandbox::default()),
             memory: Arc::new(InMemoryMemory::default()),
             outbox: Arc::new(InMemoryOutbox::default()),
+            workflow: Arc::new(MockWorkflow::default()),
             workspace,
         }
     }

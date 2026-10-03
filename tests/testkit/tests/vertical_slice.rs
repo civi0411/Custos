@@ -3,11 +3,12 @@
 //! plus the negative paths that Custos.md's invariants demand.
 
 use custos_core::context::{CompileContextRequest, ContextCompiler};
+use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::contracts::{KernelPort, MemoryPort, OutboxEntry, OutboxPort, OutboxStatus, SandboxPort};
 use custos_core::evidence::EvidenceBundle;
 use custos_domain::{
     new_id, ActionIntent, ContractEvidence, EvidenceKind, FactProposal, MemoryScope,
-    ProposalStatus, RecallQuery, RiskLevel, TaskContract, TaskStatus,
+    ProposalStatus, RecallQuery, RiskLevel, StartRunCommand, TaskContract, TaskStatus,
 };
 use custos_provider::request::ProviderRequest;
 use custos_provider::ModelProvider;
@@ -239,3 +240,25 @@ async fn illegal_task_transition_is_rejected() {
     let task = h.kernel.create_task("t".into()).await.unwrap();
     assert!(h.kernel.transition_task(&task.id, TaskStatus::Succeeded).await.is_err(), "Draft cannot jump to Succeeded");
 }
+
+#[tokio::test]
+async fn test_workflow_port_lifecycle() {
+    let h = Harness::new();
+    let task = h.kernel.create_task("run workflow lifecycle".into()).await.unwrap();
+
+    // 1. start_run via WorkflowPort
+    let cmd = StartRunCommand::new(&task.id, "worker_1");
+    let handle = h.workflow.start_run(cmd).await.unwrap();
+    assert_eq!(handle.task_id, task.id);
+    assert_eq!(handle.status, custos_domain::RunStatus::Active);
+
+    // 2. checkpoint
+    let cp = h.workflow.checkpoint(&handle.run_id).await.unwrap();
+    assert_eq!(cp.task_id, "task_mock");
+
+    // 3. cancel
+    let cancel = h.workflow.request_cancel(&handle.run_id, "test abort").await.unwrap();
+    assert_eq!(cancel.run_id, handle.run_id);
+    assert_eq!(cancel.reason, "test abort");
+}
+

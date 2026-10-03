@@ -49,8 +49,11 @@ pub use memory::{
     ProposalStatus, RecallQuery, WorkerRunId,
 };
 pub use packet::ContinuationPacket as PacketContinuation;
-pub use run::{Run, RunStatus, WorkerRun};
+pub use run::{CancelReceipt, NodeAttempt, Run, RunHandle, RunStatus, StartRunCommand, WorkerRun};
 pub use session::{Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus};
 pub use span::{Span, SpanState};
-pub use task::{ContractEvidence, EvidenceKind, Task, TaskContract, TaskContractV1, TaskRevision, TaskStatus};
+pub use task::{
+    ContractEvidence, CriterionSpec, EvidenceKind, Task, TaskContract, TaskContractRevision,
+    TaskContractV1, TaskRevision, TaskStatus,
+};
 pub use workflow::{WorkflowIR, WorkflowNodeIR, WorkflowPlan, WorkflowStep};

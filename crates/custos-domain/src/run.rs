@@ -57,6 +57,8 @@ impl RunStatus {
 pub struct Run {
     pub id: String,
     pub task_id: String,
+    #[serde(default)]
+    pub workflow_revision: Option<String>,
     pub status: RunStatus,
     pub attempt: u32,
     pub current_span_num: u32,
@@ -70,6 +72,7 @@ impl Run {
         Self {
             id: new_id("run"),
             task_id,
+            workflow_revision: None,
             status: RunStatus::Pending,
             attempt,
             current_span_num: 0,
@@ -77,6 +80,11 @@ impl Run {
             ended_at: None,
             metadata: serde_json::json!({}),
         }
+    }
+
+    pub fn with_workflow_revision(mut self, revision: impl Into<String>) -> Self {
+        self.workflow_revision = Some(revision.into());
+        self
     }
 
     pub fn transition(&mut self, next: RunStatus) -> Result<(), DomainError> {
@@ -97,6 +105,8 @@ impl Run {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkerRun {
     pub id: String,
+    #[serde(default)]
+    pub run_id: Option<String>,
     pub task_id: String,
     pub worker_id: String,
     pub attempt_id: u32,
@@ -111,6 +121,7 @@ impl WorkerRun {
     pub fn new(task_id: String, worker_id: String, max_attempts: u32) -> Self {
         Self {
             id: new_id("wrun"),
+            run_id: None,
             task_id,
             worker_id,
             attempt_id: 1,
@@ -120,6 +131,11 @@ impl WorkerRun {
             ended_at: None,
             continuation_packet_ref: None,
         }
+    }
+
+    pub fn with_run_id(mut self, run_id: impl Into<String>) -> Self {
+        self.run_id = Some(run_id.into());
+        self
     }
 
     pub fn can_retry(&self) -> bool {
@@ -137,6 +153,95 @@ impl WorkerRun {
         self.status = RunStatus::Active;
         Ok(self.attempt_id)
     }
+
+    pub fn transition(&mut self, next: RunStatus) -> Result<(), DomainError> {
+        if !self.status.can_transition_to(next) {
+            return Err(DomainError::InvalidStateTransition {
+                from: self.status.to_string(),
+                to: next.to_string(),
+            });
+        }
+        self.status = next;
+        if next.is_terminal() {
+            self.ended_at = Some(Utc::now());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeAttempt {
+    pub id: String,
+    pub worker_run_id: String,
+    pub attempt_number: u32,
+    pub status: RunStatus,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
+    pub exit_reason: Option<String>,
+}
+
+impl NodeAttempt {
+    pub fn new(worker_run_id: String, attempt_number: u32) -> Self {
+        Self {
+            id: new_id("node_att"),
+            worker_run_id,
+            attempt_number,
+            status: RunStatus::Active,
+            started_at: Utc::now(),
+            ended_at: None,
+            exit_reason: None,
+        }
+    }
+
+    pub fn complete(&mut self) {
+        self.status = RunStatus::Completed;
+        self.ended_at = Some(Utc::now());
+    }
+
+    pub fn fail(&mut self, reason: String) {
+        self.status = RunStatus::Failed;
+        self.ended_at = Some(Utc::now());
+        self.exit_reason = Some(reason);
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartRunCommand {
+    pub task_id: String,
+    pub actor: String,
+    #[serde(default)]
+    pub workflow_revision: Option<String>,
+}
+
+impl StartRunCommand {
+    pub fn new(task_id: impl Into<String>, actor: impl Into<String>) -> Self {
+        Self {
+            task_id: task_id.into(),
+            actor: actor.into(),
+            workflow_revision: None,
+        }
+    }
+
+    pub fn with_workflow_revision(mut self, revision: impl Into<String>) -> Self {
+        self.workflow_revision = Some(revision.into());
+        self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunHandle {
+    pub run_id: String,
+    pub task_id: String,
+    pub status: RunStatus,
+    pub started_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CancelReceipt {
+    pub run_id: String,
+    pub cancelled_at: DateTime<Utc>,
+    pub reason: String,
+    pub uncertain_effects_count: u32,
 }
 
 #[cfg(test)]
