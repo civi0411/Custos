@@ -1387,6 +1387,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "custos-desktop"
+version = "0.1.0"
+dependencies = [
+ "custos-domain",
+ "custos-sdk",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "custos-domain"
 version = "0.1.0"
 dependencies = [

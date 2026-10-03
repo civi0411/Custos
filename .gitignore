@@ -1,121 +1,1121 @@
 # ==============================================================================
-# Custos — Git Ignore Specification (Rust-First Polyglot Monorepo)
+# CUSTOS — GIT IGNORE SPECIFICATION
+# Rust-First Polyglot Monorepo
+#
+# Nguyên tắc:
+# 1. Canonical vs Derived — chỉ ignore derived
+# 2. Secrets tuyệt đối — không bao giờ commit secrets
+# 3. Cross-platform — macOS, Linux, Windows
+# 4. Polyglot-aware — Rust, Python, TypeScript, SQL, YAML, TOML
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# 1. Rust & Cargo Core
-# ------------------------------------------------------------------------------
+
+# ==============================================================================
+# 1. RUST & CARGO CORE
+# ==============================================================================
+
+# Build artifacts
 target/
 debug/
+release/
+**/target/
+**/debug/
+**/release/
+
+# Backup files
 **/*.rs.bk
 *.pdb
-**/mutants.out*/
 *.profraw
 *.profdata
 
-# ------------------------------------------------------------------------------
-# 2. Python Sidecars (sidecars/python-judgment)
-# ------------------------------------------------------------------------------
+# Cargo-specific
+**/mutants.out*/
+.cargo/
+!/.cargo/config.toml          # Giữ config.toml cho workspace
+Cargo.lock                     # ⚠️ KHÔNG ignore nếu là binary crate
+# Nhưng ignore cho library crates:
+# /crates/custos-domain/Cargo.lock
+# /crates/custos-core/Cargo.lock
+
+# Rustfmt / clippy caches
+.rustfmt.toml.bk
+.clippy.toml.bk
+
+# Cross-compilation
+.cargo-cross/
+cross/
+
+# Benchmarks
+criterion/
+**/criterion/
+
+# Fuzzing
+**/fuzz/target/
+**/fuzz/corpus/
+**/fuzz/artifacts/
+**/fuzz/coverage/
+
+# Miri
+**/miri/
+
+# Rust analyzer cache
+**/.rust-analyzer/
+rust-analyzer-target/
+
+
+# ==============================================================================
+# 2. PYTHON SIDECARS
+# ==============================================================================
+
 # Bytecode & Caches
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
 
 # Virtual Environments
 .venv/
 venv/
 env/
 ENV/
+env.bak/
+venv.bak/
+
+# uv-specific
+.uv/
+uv.lock                        # ⚠️ KHÔNG ignore cho workspace
+# Nhưng ignore cho individual packages:
+# /sidecars/document-parser-py/uv.lock
+# /sidecars/judgment-py/uv.lock
+
+# Poetry
+.poetry/
+poetry.lock                    # ⚠️ Tùy chọn — thường commit
+
+# Pip
+pip-log.txt
+pip-delete-this-directory.txt
+*.egg-info/
+.eggs/
+*.egg
 
 # Tooling & Testing Caches
 .pytest_cache/
 .mypy_cache/
+.dmypy.json
+dmypy.json
 .ruff_cache/
 .hypothesis/
 .coverage
+.coverage.*
 htmlcov/
 .tox/
+.nox/
+.python-version
+coverage.xml
+*.cover
+*.py.cover
 
-# ------------------------------------------------------------------------------
-# 3. TypeScript / Node Sidecars (sidecars/ts-claude-agent & UI)
-# ------------------------------------------------------------------------------
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+
+# Python-specific
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# PyCharm
+# (đã có trong phần IDE)
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.env.*
+!.env.example
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+
+# ==============================================================================
+# 3. TYPESCRIPT / NODE SIDECARS & UI
+# ==============================================================================
+
+# Dependencies
 node_modules/
+.pnp
+.pnp.js
+.pnp.cjs
+.pnp.mjs
+
+# Build artifacts
 dist/
 out/
 build/
+.next/
+.nuxt/
+.output/
+.vite/
+.parcel-cache/
+.turbo/
+
+# TypeScript
 *.tsbuildinfo
+.next-env.d.ts
+*.d.ts.map
+
+# Package managers
 .npm/
 .pnpm-store/
 .yarn/cache/
 .yarn/unplugged/
-.eslintcache/
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+package-lock.json              # ⚠️ Dùng pnpm-lock.yaml
+yarn.lock                      # ⚠️ Dùng pnpm-lock.yaml
+# Nhưng giữ:
+# pnpm-lock.yaml
 
-# ------------------------------------------------------------------------------
-# 4. Custos Runtime Daemon, Persistence & Sandboxes
-# ------------------------------------------------------------------------------
+# Testing
+coverage/
+.nyc_output/
+*.lcov
+junit.xml
+
+# ESLint / Prettier
+.eslintcache
+.prettiercache
+
+# Storybook
+storybook-static/
+.storybook/cache/
+
+# Tauri-specific (cho Desktop app)
+src-tauri/target/
+src-tauri/gen/
+src-tauri/.tauri/
+
+# Electron-specific (nếu dùng)
+dist_electron/
+out/
+release/
+
+# Vite
+.vite/
+*.local
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+
+# Turbo
+.turbo/
+
+# Bun
+bun.lockb                       # ⚠️ Tùy chọn
+
+
+# ==============================================================================
+# 4. CUSTOS RUNTIME DAEMON, PERSISTENCE & SANDBOXES
+# ==============================================================================
+
 # SQLite Databases & Write-Ahead Logs
 *.db
 *.db-shm
 *.db-wal
 *.sqlite
 *.sqlite3
+*.sqlite-shm
+*.sqlite-wal
 
-# Local Daemon State & Ephemeral Worktrees
+# Local Daemon State
 .custos/
+.custos-local/
+.custos-state/
+daemon-state/
+runtime-state/
+
+# Ephemeral Worktrees
 worktrees/
-data/
+.worktrees/
+**/.git/worktrees/
+# Nhưng giữ worktree config nếu có:
+!.worktrees/config.json
+
+# CAS / Artifacts
+cas/
+.cas/
+artifacts/
 storage/
+data/
+cache/
+.cache/
+
+# Logs
 logs/
-scratch/
 *.log
 *.trace
+*.trace.json
+trace.jsonl
+event-log.jsonl
 
-# ------------------------------------------------------------------------------
-# 5. Secrets & Local Environment Variables
-# ------------------------------------------------------------------------------
+# Scratch / Temp
+scratch/
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+
+# Sandbox state
+sandbox/
+.sandbox/
+sandbox-state/
+
+# Benchmarks output
+benchmarks/output/
+benches/output/
+bench-results/
+results/
+
+# Evaluation reports (generated)
+evaluation/reports/
+evaluation/generated/
+eval-results/
+
+# Profiling
+*.prof
+*.pprof
+perf.data
+perf.data.old
+flamegraph.svg
+*.folded
+
+# Heap dumps
+*.hprof
+heapdump.*
+
+
+# ==============================================================================
+# 5. SECRETS & LOCAL ENVIRONMENT VARIABLES
+# ==============================================================================
+
+# Environment files
 .env
 .env.*
 !.env.example
+!.env.template
+!.env.test.example
+
+# Secrets directory
 secrets/
+. secrets/
+credentials/
+.keys/
+
+# Certificates & Keys
 *.pem
 *.key
 *.cert
+*.crt
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.truststore
 
-# ------------------------------------------------------------------------------
-# 6. Operating System Artifacts
-# ------------------------------------------------------------------------------
+# SSH
+.ssh/
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+known_hosts
+authorized_keys
+
+# AWS
+.aws/
+credentials.csv
+*.aws-credentials
+
+# GCP
+.gcp/
+gcloud-credentials.json
+*-credentials.json
+service-account*.json
+
+# Azure
+.azure/
+azure-credentials.json
+
+# Vault
+.vault-token
+vault-token
+
+# API keys
+api-keys.json
+api_keys.json
+*.api-key
+
+# OAuth
+.oauth/
+oauth-tokens.json
+tokens.json
+
+# Custos-specific secrets
+.jev-api-key
+.typesafe-api-key
+.anthropic-api-key
+.openai-api-key
+.mcp-credentials/
+
+
+# ==============================================================================
+# 6. OPERATING SYSTEM ARTIFACTS
+# ==============================================================================
+
 # macOS
 .DS_Store
-.AppleDouble
-.LSOverride
+.DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
+.AppleDouble
+.LSOverride
+Icon?
+.fseventsd
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+*.icloud
 
 # Windows
 Thumbs.db
+Thumbs.db:encryptable
 ehthumbs.db
+ehthumbs_vista.db
 Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+*.stackdump
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
 
 # Linux
 *~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
 
-# ------------------------------------------------------------------------------
-# 7. IDEs & Editors
-# ------------------------------------------------------------------------------
-# JetBrains
+# FreeBSD
+.DS_Store
+
+
+# ==============================================================================
+# 7. IDES & EDITORS
+# ==============================================================================
+
+# JetBrains (IntelliJ, RustRover, PyCharm, WebStorm)
 .idea/
 *.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
 
-# VS Code / Cursor (Ignore user local workspace state, keep shared settings if needed)
+# VS Code / Cursor / Windsurf
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+!.vscode/*.code-snippets
+.history/
+*.vsix
 
-# Vim / Emacs
+# Vim / Neovim
 *.swp
 *.swo
-.#*
+*.swn
+.[._]*.s[a-v][a-z]
+.[._]*.sw[a-p]
+.[._]s[a-rt-v][a-z]
+.[._]ss[a-gi-z]
+.[._]sw[a-p]
+Session.vim
+Sessionx.vim
+.netrwhist
+tags
+tag?
+TAGS
+!tags/
+*_TAGS
+*.code-workspace
 
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Zed
+.zed/
+!.zed/settings.json
+
+# Helix
+.helix/
+!.helix/config.toml
+
+# Eclipse
+.metadata/
+.classpath
+.project
+.settings/
+bin/
+
+# NetBeans
+nbproject/private/
+nbbuild/
+nbdist/
+.nb-gradle/
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+DerivedData/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+
+# Android Studio
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+bin/
+gen/
+out/
+.gradle/
+build/
+
+
+# ==============================================================================
+# 8. CUSTOS-SPECIFIC ARTIFACTS
+# ==============================================================================
+
+# Daemon runtime
+daemon.pid
+*.pid
+custos.sock
+custos.pipe
+.custos-socket
+.ipc/
+
+# Session state
+sessions/
+.session/
+chat-history/
+transcripts/
+
+# Task state (ephemeral)
+tasks/ephemeral/
+tasks/cache/
+
+# Context packs (derived)
+context-packs/
+context-cache/
+.context/
+
+# Memory (derived)
+memory-cache/
+memory-index/
+memory-graph-cache/
+
+# Indexes (derived, rebuildable)
+indexes/
+fts-index/
+symbol-index/
+vector-index/
+embeddings/
+.embeddings/
+
+# Cost ledger (local)
+cost-ledger/
+usage-events/
+.cost/
+
+# Event logs (local)
+event-logs/
+.events/
+
+# Calibration data (local)
+calibration-data/
+.calibration/
+
+# Sandbox profiles (local)
+sandbox-profiles/
+.sandbox-local/
+
+# Upstream clones (không commit)
+third_party/vendor/
+upstream/
+.references/
+references/
+!docs/UPSTREAM_SOURCE_MAP.md
+
+# Provider-specific
+.anthropic/
+.openai/
+.google/
+.ollama/
+.jev/
+.typesafe/
+
+
+# ==============================================================================
+# 9. INFRASTRUCTURE & DEPLOYMENT
+# ==============================================================================
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+!.terraform-version
+.terraformrc
+terraform.rc
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformignore
+!example.tfvars
+!example.tf
+
+# Terragrunt
+.terragrunt-cache/
+*.hcl.bk
+
+# Kubernetes
+*.kubeconfig
+.kube/
+kubeconfig
+!deploy/helm/custos/values.yaml
+!deploy/helm/custos/values.*.yaml
+
+# Helm
+*.tgz
+charts/
+
+# Docker
+.docker/
+docker-compose.override.yml
+docker-compose.*.override.yml
+!deploy/compose/docker-compose.yml
+
+# Ansible
+*.retry
+.ansible/
+ansible.log
+
+# Packer
+*.box
+packer_cache/
+crash.log
+
+
+# ==============================================================================
+# 10. TESTING & EVALUATION
+# ==============================================================================
+
+# Test outputs (generated)
+test-results/
+test-output/
+junit/
+reports/
+*.xml
+!Cargo.toml
+
+# Coverage
+coverage/
+.coverage/
+lcov.info
+coverage.xml
+*.lcov
+
+# Golden fixtures — ⚠️ KHÔNG ignore
+# schemas/fixtures/ — PHẢI commit
+# tests/fixtures/ — PHẢI commit
+
+# Crash dumps
+crash-dumps/
+coredumps/
+core
+core.*
+
+# Fuzzing artifacts
+fuzz-artifacts/
+fuzz-corpus/
+fuzz-output/
+
+# Benchmark data (generated)
+bench-data/
+benchmark-data/
+
+# Snapshot testing
+*.snap.new
+*.snap.pending
+__snapshots__/*.snap.new
+
+
+# ==============================================================================
+# 11. DOCUMENTATION & BUILD OUTPUTS
+# ==============================================================================
+
+# Rust docs
+target/doc/
+doc/
+
+# mdBook
+book/
+mdbook-build/
+
+# Sphinx
+docs/_build/
+docs/_static/generated/
+docs/_templates/generated/
+
+# Docusaurus
+.docusaurus/
+build/
+
+# MkDocs
+site/
+
+# Jekyll
+_site/
+.sass-cache/
+.jekyll-cache/
+.jekyll-metadata
+
+# Generated API docs
+api-docs/
+openapi-generated/
+
+
+# ==============================================================================
+# 12. DATABASE & MIGRATION ARTIFACTS
+# ==============================================================================
+
+# Migration outputs
+migrations/output/
+migrations/generated/
+*.migration.log
+
+# Database backups
+*.backup.db
+*.dump
+*.sql.gz
+*.sql.bz2
+pg_dump/
+mysqldump/
+
+# Schema snapshots (derived)
+schema-snapshots/
+schema-diff/
+
+
+# ==============================================================================
+# 13. CI/CD ARTIFACTS
+# ==============================================================================
+
+# GitHub Actions
+.github/workflows/*.log
+.act/
+.actrc
+
+# GitLab CI
+.gitlab-ci-local/
+.gitlab-runner/
+
+# Buildkite
+.buildkite/cache/
+
+# CircleCI
+.circleci/cache/
+
+# Jenkins
+jenkins/
+
+# Artifacts
+artifacts/
+*.artifact
+*.zip
+*.tar.gz
+*.tgz
+*.tar.bz2
+*.tar.xz
+
+
+# ==============================================================================
+# 14. PLATFORM-SPECIFIC
+# ==============================================================================
+
+# macOS-specific
+*.dSYM/
+*.dSYM.zip
+*.swiftpm/
+.swiftpm/
+
+# Linux-specific
+*.deb
+*.rpm
+*.AppImage
+*.snap
+*.flatpak
+
+# Windows-specific
+*.exe
+*.dll
+*.lib
+*.obj
+*.pdb
+*.idb
+*.ilk
+*.exp
+*.cab
+*.msi
+*.msm
+*.msp
+*.nupkg
+
+
+# ==============================================================================
+# 15. MISC / TOOLING
+# ==============================================================================
+
+# Editor swap
+*.swp
+*.swo
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+
+# Patch files
+*.patch
+*.diff
+# Nhưng giữ patches trong thư mục cụ thể:
+!docs/patches/*.patch
+
+# Archive files
+*.7z
+*.rar
+*.zip
+*.tar
+*.gz
+*.bz2
+*.xz
+*.lz
+*.lzma
+*.zst
+
+# Compiled binaries
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+
+# IDE/editor swap
+*.~*
+
+# OS metadata
+*.lnk
+
+# Package manager caches
+.cache/
+.cache/**
+
+# Lock file backups
+*.lock.bak
+
+# Log files (but keep structured logs if needed)
+*.log
+!logs/important.log
+
+# Local overrides
+local.*
+*.local
+*.local.*
+!*.local.example
+
+# Temporary
+*.tmp
+*.temp
+*.bak
+*.orig
+*.pid
+*.seed
+*.pid.lock
+
+
+# ==============================================================================
+# 16. CUSTOS UPSTREAM REFERENCES
+# ==============================================================================
+
+# Goose (local clone for research)
+goose/
+!docs/integration/goose.md
+
+# 9Router / LiteLLM (local clone)
+9router/
+litellm/
+!docs/integration/9router.md
+
+# Agentgateway (local clone)
+agentgateway/
+!docs/integration/agentgateway.md
+
+# OmniRoute (local clone)
+omniroute/
+!docs/integration/omniroute.md
+
+# IronWarden (local clone)
+ironwarden/
+!docs/integration/ironwarden.md
+
+# BrighTO (local clone)
+brighto/
+!docs/integration/brighto.md
+
+# AdaptOrch (local clone)
+adaptorch/
+!docs/integration/adaptorch.md
+
+# General reference clones
+.references/
+references/
+upstream/
+
+
+# ==============================================================================
+# 17. BUILD SYSTEMS
+# ==============================================================================
+
+# Bazel
+bazel-*
+.bazelrc.local
+
+# Buck
+buck-out/
+.buckd/
+.buckconfig.local
+
+# Meson
+builddir/
+.ninja_deps
+.ninja_log
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+!Makefile
+compile_commands.json
+.ninja_deps
+.ninja_log
+
+# Autotools
+autom4te.cache/
+config.status
+config.log
+configure
+Makefile.in
+aclocal.m4
+libtool
+
+
+# ==============================================================================
+# 18. DOCUMENTATION & RESEARCH
+# ==============================================================================
+
+# Research notes (local)
+research-notes/
+notes/
+.personal/
+
+# Paper PDFs (giữ nếu được phép)
+papers/
+!docs/research/papers.md
+
+# Generated diagrams (rebuildable)
+diagrams/generated/
+*.generated.svg
+*.generated.png
+
+# Mermaid generated
+*.mermaid.generated.md
+
+
+# ==============================================================================
+# 19. FINAL RULES — ĐẢM BẢO KHÔNG BỎ SÓT
+# ==============================================================================
+
+# ⚠️ KHÔNG BAO GIỜ IGNORE:
+# Cargo.lock
+# pnpm-lock.yaml
+# uv.lock
+# .env.example
+# schemas/fixtures/
+# domain-packs/
+# docs/adr/
+# docs/UPSTREAM_SOURCE_MAP.md
+# tests/
+# evaluation/datasets/
+
+# ⚠️ FORCE INCLUDE các file quan trọng:
+!Cargo.lock
+!pnpm-lock.yaml
+!uv.lock
+!.env.example
+!schemas/fixtures/**
+!domain-packs/**
+!docs/adr/**
+!docs/UPSTREAM_SOURCE_MAP.md
+!tests/**
+!evaluation/datasets/**

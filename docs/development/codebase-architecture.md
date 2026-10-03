@@ -90,7 +90,9 @@ Custos/
 │   ├── custos-packs/                # Layer 3: Engineering Pack, Research Pack, Assistant Pack workflows
 │   ├── custos-daemon/               # Layer 4: Điểm ráp nối duy nhất (Sole Composition Root), background service
 │   ├── custos-sdk/                  # Layer 4: Client bindings (Rust, Python, Kotlin/Java) & versioned DTOs
-│   └── custos-cli/                  # Layer 4: Terminal TUI operator interface (ratatui, clap)
+│   └── custos-app/
+│       ├── cli/                     # Layer 4: Terminal TUI operator interface (ratatui, clap)
+│       └── desktop/                 # Layer 4: Desktop GUI app interface (Tauri, Webview)
 │
 ├── schemas/                         # Versioned cross-process JSON Schemas
 ├── tests/                           # Workspace test suites (contract, e2e, crash, test-support)
@@ -116,7 +118,8 @@ Custos/
 | **Layer 3** | `crates/custos-packs` | **Vĩ** | Engineering Pack, Research Pack, Assistant Pack workflows. | Phụ thuộc `custos-runtime` và `custos-core`. |
 | **Layer 4** | `crates/custos-daemon` | **Vĩ** | **Sole Composition Root**: Ráp nối storage, runtime, adapters. | Crate duy nhất được import concrete implementations. |
 | | `crates/custos-sdk` | **Vinh** | Versioned Client DTOs, UniFFI bindings (Python, Kotlin). | Thư viện client nhẹ; không mang runtime daemon hay database. |
-| | `crates/custos-cli` | **Vinh** | Terminal TUI operator interface (`ratatui`, `clap`). | Giao tiếp với Daemon độc quyền qua IPC socket / SDK. |
+| | `crates/custos-app/cli` | **Vinh** | Terminal TUI operator interface (`ratatui`, `clap`). | Giao tiếp với Daemon độc quyền qua IPC socket / SDK. |
+| | `crates/custos-app/desktop` | **Vinh** | Desktop GUI app interface (Tauri, Webview). | Giao tiếp với Daemon độc quyền qua IPC socket / SDK. |
 
 ---
 
@@ -904,28 +907,30 @@ Custos/
 | [`src/wire_types/mod.rs`](../../crates/custos-sdk/src/wire_types/mod.rs) | 7 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`uniffi.toml`](../../crates/custos-sdk/uniffi.toml) | 2 | Module uniffi: phục vụ các cấu trúc và chức năng liên quan | None |
 
-### 3.11. Crate `custos-cli` — Layer 4: Operator Terminal TUI
+### 3.11. Crate `custos-app/cli` & `custos-app/desktop` — Layer 4: Thin Presentation Clients
 
-- **Đường dẫn thư mục:** `crates/custos-cli`
+- **Đường dẫn thư mục:** `crates/custos-app/cli` & `crates/custos-app/desktop`
 - **Chủ sở hữu chính (Owner):** **Vinh (Client Lead)**
-- **Quy tắc ranh giới:** Giao tiếp với Daemon thuần túy qua IPC socket; cấm truy cập SQLite trực tiếp.
-- **Tổng số file:** 10 files | **Tổng số dòng mã:** 2,637 lines
-- **Mô tả chức năng:** Giao diện dòng lệnh trực quan: Render tiến độ tác vụ bằng ratatui, bảng hiển thị mã màu diff thay đổi, bảng điều khiển trạng thái và xác nhận cấp quyền.
+- **Quy tắc ranh giới:** Giao tiếp với Daemon thuần túy qua IPC socket; cấm truy cập SQLite trực tiếp. Không dính GUI Tauri dependency vào CLI binary.
+- **Tổng số file:** 11 files | **Tổng số dòng mã:** ~2,650 lines
+- **Mô tả chức năng:** Các ứng dụng giao diện trình diễn mỏng (Thin Presentation Clients): Render tiến độ tác vụ bằng ratatui (CLI) và Tauri Webview (Desktop), bảng hiển thị mã màu diff thay đổi, bảng điều khiển trạng thái và xác nhận cấp quyền.
 
-#### Danh mục các file bên trong `crates/custos-cli/`:
+#### Danh mục các file bên trong `crates/custos-app/cli/` & `crates/custos-app/desktop/`:
 
 | Tập tin | Số dòng | Vai trò & Trách nhiệm kiến trúc | Các Struct / Trait / Hàm cốt lõi |
 |---|:---:|---|---|
-| [`Cargo.toml`](../../crates/custos-cli/Cargo.toml) | 35 | Module Cargo: phục vụ các cấu trúc và chức năng liên quan | None |
-| [`src/lib.rs`](../../crates/custos-cli/src/lib.rs) | 667 | Module lib: phục vụ các cấu trúc và chức năng liên quan | `struct Cli`, `enum CliTaskStatus`, `fn from`, `enum Commands` |
-| [`src/main.rs`](../../crates/custos-cli/src/main.rs) | 4 | Điểm khởi đầu thực thi duy nhất của daemon (Composition Root) | None |
-| [`src/ui/art.rs`](../../crates/custos-cli/src/ui/art.rs) | 751 | Đồ họa ASCII và giao diện khởi động terminal | `fn center_text`, `fn compute_showcase_dims`, `fn get_banner_lines`, `fn compute_mascot_size` |
-| [`src/ui/assets.rs`](../../crates/custos-cli/src/ui/assets.rs) | 823 | Module assets: phục vụ các cấu trúc và chức năng liên quan | `enum AssetKind`, `fn raw_bytes`, `fn filename`, `fn title` |
-| [`src/ui/banner.rs`](../../crates/custos-cli/src/ui/banner.rs) | 26 | Module banner: phục vụ các cấu trúc và chức năng liên quan | `fn print_banner`, `fn print_text_banner` |
-| [`src/ui/diff.rs`](../../crates/custos-cli/src/ui/diff.rs) | 53 | Render mã màu cho bản vá (diff) trực quan | `struct DiffSummary`, `fn print_unified_diff` |
-| [`src/ui/mod.rs`](../../crates/custos-cli/src/ui/mod.rs) | 110 | Module mod: phục vụ các cấu trúc và chức năng liên quan | `fn get_terminal_width`, `fn get_terminal_height`, `enum ResponsiveTier`, `fn current` |
-| [`src/ui/prompt.rs`](../../crates/custos-cli/src/ui/prompt.rs) | 122 | Nhận phản hồi duyệt quyền hạn từ người dùng | `enum RiskLevel`, `fn badge`, `fn confirm_execution`, `fn wait_for_mode_prompt` |
-| [`src/ui/spinner.rs`](../../crates/custos-cli/src/ui/spinner.rs) | 46 | Hiển thị hoạt ảnh tiến độ công việc | `struct CliSpinner`, `fn new`, `fn set_message`, `fn finish_success` |
+| [`cli/Cargo.toml`](../../crates/custos-app/cli/Cargo.toml) | 35 | Module Cargo CLI: phục vụ biên dịch executable `custos-cli` siêu nhẹ | None |
+| [`cli/src/lib.rs`](../../crates/custos-app/cli/src/lib.rs) | 667 | Module lib CLI: các lệnh, parser và UI helpers | `struct Cli`, `enum CliTaskStatus`, `fn from`, `enum Commands` |
+| [`cli/src/main.rs`](../../crates/custos-app/cli/src/main.rs) | 4 | Điểm khởi đầu thực thi duy nhất của `custos-cli` | None |
+| [`cli/src/ui/art.rs`](../../crates/custos-app/cli/src/ui/art.rs) | 751 | Đồ họa ASCII và giao diện khởi động terminal | `fn center_text`, `fn compute_showcase_dims`, `fn get_banner_lines`, `fn compute_mascot_size` |
+| [`cli/src/ui/assets.rs`](../../crates/custos-app/cli/src/ui/assets.rs) | 823 | Module assets: phục vụ lưu giữ banner/asset | `enum AssetKind`, `fn raw_bytes`, `fn filename`, `fn title` |
+| [`cli/src/ui/banner.rs`](../../crates/custos-app/cli/src/ui/banner.rs) | 26 | Module banner: in banner terminal | `fn print_banner`, `fn print_text_banner` |
+| [`cli/src/ui/diff.rs`](../../crates/custos-app/cli/src/ui/diff.rs) | 53 | Render mã màu cho bản vá (diff) trực quan | `struct DiffSummary`, `fn print_unified_diff` |
+| [`cli/src/ui/mod.rs`](../../crates/custos-app/cli/src/ui/mod.rs) | 110 | Module mod UI terminal | `fn get_terminal_width`, `fn get_terminal_height`, `enum ResponsiveTier`, `fn current` |
+| [`cli/src/ui/prompt.rs`](../../crates/custos-app/cli/src/ui/prompt.rs) | 122 | Nhận phản hồi duyệt quyền hạn từ người dùng | `enum RiskLevel`, `fn badge`, `fn confirm_execution`, `fn wait_for_mode_prompt` |
+| [`cli/src/ui/spinner.rs`](../../crates/custos-app/cli/src/ui/spinner.rs) | 46 | Hiển thị hoạt ảnh tiến độ công việc | `struct CliSpinner`, `fn new`, `fn set_message`, `fn finish_success` |
+| [`desktop/Cargo.toml`](../../crates/custos-app/desktop/Cargo.toml) | 18 | Module Cargo Desktop: phục vụ biên dịch executable `custos-desktop` (Tauri/Webview) | None |
+| [`desktop/src/main.rs`](../../crates/custos-app/desktop/src/main.rs) | 6 | Điểm khởi đầu thực thi duy nhất của `custos-desktop` | None |
 
 ---
 

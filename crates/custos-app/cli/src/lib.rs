@@ -567,6 +567,7 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 id: custos_domain::new_id("pack"),
                 items: vec![],
                 total_tokens: 120,
+                context_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_string(),
             };
             spinner.finish_success(&format!(
                 "Context compiled: {} files, {} tokens (Budget: 40k)",
