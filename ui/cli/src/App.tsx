@@ -19,10 +19,8 @@ export function App() {
   const [activePermit, setActivePermit] = useState<ExecutionPermit | null>(null);
   const [initialCliCommand, setInitialCliCommand] = useState<string | undefined>();
 
-  // Responsive Tier computation matching crates/custos-cli/src/ui/mod.rs
   useEffect(() => {
     const handleResize = () => {
-      // Approximate 8.2 pixels per monospace character in terminal
       const calculatedCols = Math.max(20, Math.floor(window.innerWidth / 8.8));
       setTermWidth(calculatedCols);
 
@@ -42,7 +40,6 @@ export function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Listen to pending execution permits from CustosApi
   useEffect(() => {
     const checkPermits = () => {
       const pending = CustosApi.getPendingPermits();
@@ -70,7 +67,6 @@ export function App() {
   const handleStartVibeFromMascot = (mode: OperationalMode) => {
     setCurrentMode(mode);
     setInitialCliCommand(`custos vibe --mode ${mode.toLowerCase()}`);
-    // If in visual view, also make sure user sees the flow
   };
 
   const handleSelectTaskInCli = (taskId: string) => {
@@ -84,7 +80,6 @@ export function App() {
     <div className="cli-app-root">
       {crtEffect && <div className="crt-overlay" />}
 
-      {/* Main Header with Mode Switcher & View Toggles */}
       <Header
         currentMode={currentMode}
         onModeChange={setCurrentMode}
@@ -96,9 +91,7 @@ export function App() {
         termWidth={termWidth}
       />
 
-      {/* Main Workspace Area */}
       <main className="cli-main-content">
-        {/* TERMINAL ONLY VIEW */}
         {viewMode === 'terminal' && (
           <div className="view-container-terminal">
             <TerminalView
@@ -110,7 +103,6 @@ export function App() {
           </div>
         )}
 
-        {/* VISUAL ONLY VIEW */}
         {viewMode === 'visual' && (
           <div className="view-container-visual">
             <MascotShowcase
@@ -131,7 +123,6 @@ export function App() {
           </div>
         )}
 
-        {/* SPLIT VIEW (Terminal + Visual Dashboard) */}
         {viewMode === 'split' && (
           <div className="view-container-split">
             <div className="split-left">
@@ -162,7 +153,6 @@ export function App() {
         )}
       </main>
 
-      {/* Floating ExecutionPermit Modal */}
       {activePermit && (
         <ExecutionPermitModal
           permit={activePermit}
@@ -171,7 +161,6 @@ export function App() {
         />
       )}
 
-      {/* Bottom Status Bar */}
       <StatusBar
         currentMode={currentMode}
         responsiveTier={responsiveTier}

@@ -1,10 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * Custos CLI — Sovereign Agentic Operating System
- * High-Fidelity Pixel-Art Terminal User Interface (Reading Directly from frame-ui)
- */
-
 import chalk from 'chalk';
 import boxen from 'boxen';
 import ora from 'ora';
@@ -21,7 +16,6 @@ const __dirname = path.dirname(__filename);
 
 const VERSION = '0.1.1';
 
-// ── Load Mascots Cache (Built from ui/cli/frame-ui) ─────────────────────────
 function loadMascots() {
   const cachePath = path.join(__dirname, 'mascots-cache.json');
   try {
@@ -38,7 +32,6 @@ function getTerminalWidth() {
   return process.stdout.columns || 100;
 }
 
-// ── Main Banner Lines ───────────────────────────────────────────────────────
 function getBannerLines(version) {
   return [
     '',
@@ -50,23 +43,14 @@ function getBannerLines(version) {
     '\x1b[38;2;240;248;255;1m  ╚██████╗ ╚██████╔╝ ███████║    ██║    ╚██████╔╝ ███████║\x1b[0m',
     '\x1b[38;2;248;250;252;1m   ╚═════╝  ╚═════╝  ╚══════╝    ╚═╝     ╚═════╝  ╚══════╝\x1b[0m',
     '',
-    `  \x1b[38;2;56;189;248m❄\x1b[0m\x1b[38;2;251;191;36;1mCustos\x1b[0m \x1b[38;2;148;163;184mv${version}\x1b[0m \x1b[38;2;125;211;252;3m- Guardian of Agentic Work\x1b[0m`,
-    '  \x1b[38;2;148;163;184mHuman-governed runtime for specialized agentic workflows\x1b[0m',
-    '  \x1b[38;2;51;65;85m────────────────────────────────────────────────────────────\x1b[0m',
-    '  \x1b[38;2;251;191;36m•\x1b[0m \x1b[38;2;248;250;252;1mIntelligence Engine:\x1b[0m \x1b[38;2;148;163;184mCustos Snowy Owl Mascot (owl.png)\x1b[0m',
-    '  \x1b[38;2;125;211;252m•\x1b[0m \x1b[38;2;248;250;252;1mConcurrency Defense:\x1b[0m \x1b[38;2;148;163;184mEpoch Optimistic Lock & Replay\x1b[0m',
-    '  \x1b[38;2;56;189;248m•\x1b[0m \x1b[38;2;248;250;252;1mWorktree Isolation:\x1b[0m  \x1b[38;2;148;163;184mSeatbelt & Bubblewrap Sandbox\x1b[0m',
-    '  \x1b[38;2;168;85;247m•\x1b[0m \x1b[38;2;248;250;252;1mHuman-in-the-Loop:\x1b[0m   \x1b[38;2;148;163;184mExplicit ExecutionPermit Grants\x1b[0m',
-    '  \x1b[38;2;52;211;153m•\x1b[0m \x1b[38;2;248;250;252;1mAudit Trail:\x1b[0m         \x1b[38;2;148;163;184mImmutable SQLite Task & Span Logs\x1b[0m',
-    '',
-    '  \x1b[38;2;51;65;85m────────────────────────────────────────────────────────────\x1b[0m',
-    '  \x1b[38;2;125;211;252mOperational Modes:\x1b[0m  \x1b[38;2;203;213;225m1. Code  │  2. Research  │  3. Assitant\x1b[0m',
-    '  \x1b[38;2;148;163;184mQuick Commands:\x1b[0m     \x1b[38;2;100;116;139mcustos vibe  │  status  │  advance  │  list\x1b[0m',
+    `  \x1b[38;2;56;189;248m❄\x1b[0m \x1b[38;2;251;191;36;1mCustos\x1b[0m \x1b[38;2;148;163;184mv${version}\x1b[0m \x1b[38;2;125;211;252;3m- Guardian of Agentic Work\x1b[0m`,
+    '  \x1b[38;2;148;163;184mHuman-governed runtime for agentic workflows\x1b[0m',
+    '  \x1b[38;2;100;116;139mChat tự do hoặc nhấn \'/\' để chọn mode:\x1b[0m',
+    '  \x1b[38;2;56;189;248m(custos-code, custos-research, custos-assistant)\x1b[0m',
     '',
   ];
 }
 
-// ── Print Main Banner (Side-by-Side: Guardian Owl from owl.png) ───────────
 export function printMainBanner() {
   const termW = getTerminalWidth();
   const bannerLines = getBannerLines(VERSION);
@@ -77,25 +61,20 @@ export function printMainBanner() {
   console.log();
 
   if (termW >= 85 && owlLines.length > 0) {
-    const combinedW = owlWidth + 3 + 62;
-    const leftPadN = termW > combinedW ? Math.min(Math.floor((termW - combinedW) / 2), 4) : 1;
+    const leftPadN = 1;
     const padStr = ' '.repeat(leftPadN);
     const maxLines = Math.max(owlLines.length, bannerLines.length);
+    const maxRightW = Math.max(20, termW - owlWidth - leftPadN - 4);
 
     for (let i = 0; i < maxLines; i++) {
       const left = i < owlLines.length ? owlLines[i] : blankOwl;
-      const right = i < bannerLines.length ? bannerLines[i] : '';
+      let right = i < bannerLines.length ? bannerLines[i] : '';
+      if (stripAnsi(right).length > maxRightW) {
+        right = right.slice(0, maxRightW);
+      }
       console.log(`${padStr}${left}   ${right}`);
     }
   } else {
-    if (owlLines.length > 0) {
-      const padN = Math.max(0, Math.floor((termW - owlWidth) / 2));
-      const padStr = ' '.repeat(padN);
-      for (const line of owlLines) {
-        console.log(`${padStr}${line}`);
-      }
-      console.log();
-    }
     for (const line of bannerLines) {
       console.log(line);
     }
@@ -103,61 +82,55 @@ export function printMainBanner() {
   console.log();
 }
 
-// ── Strip ANSI for calculating string length ────────────────────────────────
 function stripAnsi(str) {
   return str.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
-// ── Mode Card: Mini Mascot Owl (from frame-ui) + Greeting Dialogue Box ─────
 export function printModeCard(mode) {
   const modeKey = (mode || 'Code').toLowerCase();
 
   const configs = {
     code: {
-      name: 'Code',
-      tag: 'CHẾ ĐỘ: CODE MODE (LẬP TRÌNH & THỰC THI)',
-      title: 'Xin chào! Tôi là Custos Coder Owl. ❄',
-      msg: '"Tôi có thể giúp gì cho bạn hôm nay?"',
+      name: 'Code Engine',
+      slug: 'custos-code',
+      tag: 'CHẾ ĐỘ: CODE ENGINE (custos-code)',
+      title: 'Custos Code Engine ⚡',
+      msg: '"Hệ thống lập trình, sửa lỗi & thực thi trong Sandbox"',
       b1: 'Lập trình tính năng, sửa lỗi & tái cấu trúc mã nguồn',
       b2: 'Thực thi an toàn trong Sandbox Worktree cách ly',
       b3: 'Tối ưu thuật toán & kiểm tra tính đúng đắn',
       color: '\x1b[38;2;125;211;252;1m',
       badgeColor: '#38bdf8',
-      owl: MASCOTS.coder || [],
     },
     research: {
-      name: 'Research',
-      tag: 'CHẾ ĐỘ: RESEARCH MODE (ĐIỀU TRA & NGHIÊN CỨU)',
-      title: 'Xin chào! Tôi là Custos Inspector Owl. ❄',
-      msg: '"Tôi có thể giúp gì cho bạn hôm nay?"',
+      name: 'Research Engine',
+      slug: 'custos-research',
+      tag: 'CHẾ ĐỘ: RESEARCH ENGINE (custos-research)',
+      title: 'Custos Research Engine 🔍',
+      msg: '"Hệ thống điều tra cấu trúc dự án & đối soát bằng chứng"',
       b1: 'Điều tra cấu trúc dự án & đối soát bằng chứng',
       b2: 'Phân tích tài liệu, kiến trúc & suy luận chuyên sâu',
       b3: 'Kiểm chứng các thay đổi trước khi xin phê duyệt',
       color: '\x1b[38;2;251;191;36;1m',
       badgeColor: '#f59e0b',
-      owl: MASCOTS.inspector || [],
     },
     assistant: {
-      name: 'Assistant',
-      tag: 'CHẾ ĐỘ: ASSISTANT MODE (TRỢ LÝ & ĐIỀU PHỐI)',
-      title: 'Xin chào! Tôi là Custos Steward Owl. ❄',
-      msg: '"Tôi có thể giúp gì cho bạn hôm nay?"',
+      name: 'Assistant Engine',
+      slug: 'custos-assistant',
+      tag: 'CHẾ ĐỘ: ASSISTANT ENGINE (custos-assistant)',
+      title: 'Custos Assistant Engine 🤖',
+      msg: '"Hệ thống điều phối quy trình tác vụ tự động theo chuẩn runtime"',
       b1: 'Điều phối quy trình tác vụ tự động theo chuẩn runtime',
       b2: 'Quản lý trạng thái Task, Epoch Lock & Audit Logs',
       b3: 'Theo dõi tiến trình & báo cáo kết quả thực thi',
       color: '\x1b[38;2;52;211;153;1m',
       badgeColor: '#10b981',
-      owl: MASCOTS.steward || [],
     },
   };
 
   const cfg = configs[modeKey] || configs.code;
   const termW = getTerminalWidth();
-  const owlLines = cfg.owl;
-  const owlW = 20;
-  const blankOwl = ' '.repeat(owlW);
-
-  const boxW = Math.min(Math.max(termW - 28, 56), 72);
+  const boxW = Math.min(Math.max(termW - 10, 56), 76);
 
   const padLine = (content) => {
     const visibleLen = stripAnsi(content).length;
@@ -180,34 +153,45 @@ export function printModeCard(mode) {
     padLine(`\x1b[38;2;125;211;252m•\x1b[0m \x1b[38;2;226;232;240m${cfg.b2}\x1b[0m`),
     padLine(`\x1b[38;2;125;211;252m•\x1b[0m \x1b[38;2;226;232;240m${cfg.b3}\x1b[0m`),
     emptyRow,
-    padLine('\x1b[38;2;148;163;184mNhập mục tiêu nhiệm vụ hoặc mã lệnh bạn muốn thực thi bên dưới.\x1b[0m'),
+    padLine('\x1b[38;2;148;163;184mNhập mục tiêu nhiệm vụ hoặc mã lệnh bên dưới. Gõ \'/\' để đổi mode.\x1b[0m'),
     borderBot,
   ];
 
   console.log();
-  if (termW >= 80 && owlLines.length > 0) {
-    const maxRows = Math.max(owlLines.length, boxLines.length);
-    for (let i = 0; i < maxRows; i++) {
-      const left = i < owlLines.length ? owlLines[i] : blankOwl;
-      const right = i < boxLines.length ? boxLines[i] : '';
-      console.log(`  ${left}   ${right}`);
-    }
-  } else {
-    // Stacked layout
-    if (owlLines.length > 0) {
-      for (const line of owlLines) {
-        console.log(`  ${line}`);
-      }
-      console.log();
-    }
-    for (const line of boxLines) {
-      console.log(`  ${line}`);
-    }
+  for (const line of boxLines) {
+    console.log(`  ${line}`);
   }
   console.log();
 }
 
-// ── Persistent Task Storage ────────────────────────────────────────────────
+export async function promptModeSelection() {
+  console.log(chalk.bold.hex('#38bdf8')('\n  ══ BẢNG CHỌN CHẾ ĐỘ HOẠT ĐỘNG (OPERATIONAL MODE) ══\n'));
+
+  const choice = await select({
+    message: chalk.bold.white('Chọn mode để gán vào prompt dòng lệnh:'),
+    choices: [
+      {
+        name: `${chalk.hex('#38bdf8').bold('custos-code')}       ${chalk.dim('— Lập trình, sửa lỗi & Sandbox Worktree')}`,
+        value: 'code',
+      },
+      {
+        name: `${chalk.hex('#f59e0b').bold('custos-research')}   ${chalk.dim('— Điều tra kiến trúc & đối soát bằng chứng')}`,
+        value: 'research',
+      },
+      {
+        name: `${chalk.hex('#10b981').bold('custos-assistant')}  ${chalk.dim('— Điều phối quy trình tác vụ & Epoch Lock')}`,
+        value: 'assistant',
+      },
+      {
+        name: `${chalk.white.bold('custos')}            ${chalk.dim('— Quay lại chế độ giao tiếp chung (chat tự do)')}`,
+        value: 'custos',
+      },
+    ],
+  });
+
+  return choice;
+}
+
 const DATA_DIR = path.join(os.homedir(), '.custos');
 const TASKS_FILE = path.join(DATA_DIR, 'cli-tasks.json');
 
@@ -259,7 +243,6 @@ function saveTasks(tasks) {
 
 let tasks = loadTasks();
 
-// ── Unified Diff Viewer ─────────────────────────────────────────────────────
 export function printUnifiedDiff() {
   const filePath = 'crates/custos-runtime/src/handler.rs';
   const diffLines = [
@@ -298,7 +281,6 @@ export function printUnifiedDiff() {
   );
 }
 
-// ── Task Table ──────────────────────────────────────────────────────────────
 export function printTaskList() {
   console.log(chalk.bold.hex('#38bdf8')('\n  ══ Custos Task Registry & SQLite Spans ══\n'));
 
@@ -332,7 +314,6 @@ export function printTaskList() {
   console.log();
 }
 
-// ── Status Display ──────────────────────────────────────────────────────────
 export function printStatus() {
   const statusContent =
     `${chalk.bold.hex('#38bdf8')('Custos Sovereign Runtime Status')}\n\n` +
@@ -341,8 +322,7 @@ export function printStatus() {
     `${chalk.cyan('• Active Sandbox')}    : ${chalk.white('Bubblewrap / Seatbelt Worktree (Clean)')}\n` +
     `${chalk.cyan('• Concurrency Guard')}: ${chalk.white('Epoch Optimistic Lock v0.1.1')}\n` +
     `${chalk.cyan('• Registered Tasks')}: ${chalk.yellow(tasks.length + ' active tasks')}\n` +
-    `${chalk.cyan('• Audit Spans Logged')}: ${chalk.yellow(tasks.reduce((acc, t) => acc + (t.spans || 0), 0) + ' spans')}\n` +
-    `${chalk.cyan('• Active Mascots')}   : ${chalk.white('Guardian (owl.png), Coder, Inspector, Steward')}\n` +
+    `${chalk.cyan('• Operational Modes')}: ${chalk.white('$custos-code, $custos-research, $custos-assistant')}\n` +
     `${chalk.cyan('• Execution Mode')}   : ${chalk.hex('#10b981').bold('Direct Terminal Interactive')}`;
 
   console.log(
@@ -355,7 +335,6 @@ export function printStatus() {
   );
 }
 
-// ── Advance Task ────────────────────────────────────────────────────────────
 export function advanceTask(taskId) {
   const task = tasks.find((t) => t.id === taskId || t.id === `task-${taskId}`);
   if (!task) {
@@ -383,7 +362,6 @@ export function advanceTask(taskId) {
   );
 }
 
-// ── Execution Permit Confirmation ───────────────────────────────────────────
 export async function promptPermitApproval() {
   console.log(chalk.bold.hex('#f59e0b')('\n  ══ Human-in-the-Loop Execution Permit Grant ══\n'));
 
@@ -419,7 +397,6 @@ export async function promptPermitApproval() {
   console.log();
 }
 
-// ── Interactive Vibe Coding Wizard with Mode Card ───────────────────────────
 export async function runVibeWizard(initialMode = null) {
   let mode = initialMode;
 
@@ -429,25 +406,23 @@ export async function runVibeWizard(initialMode = null) {
       message: chalk.cyan.bold('❄ Chọn chế độ Custos (Operational Mode):'),
       choices: [
         {
-          name: `${chalk.hex('#38bdf8').bold('Code')}       ${chalk.dim('• Lập trình, sửa lỗi & tái cấu trúc mã nguồn (Coder Owl)')}`,
+          name: `${chalk.hex('#38bdf8').bold('$custos-code')}       ${chalk.dim('• Lập trình, sửa lỗi & tái cấu trúc mã nguồn')}`,
           value: 'Code',
         },
         {
-          name: `${chalk.hex('#f59e0b').bold('Research')}   ${chalk.dim('• Điều tra, kiến trúc & suy luận chuyên sâu (Inspector Owl)')}`,
+          name: `${chalk.hex('#f59e0b').bold('$custos-research')}   ${chalk.dim('• Điều tra, kiến trúc & suy luận chuyên sâu')}`,
           value: 'Research',
         },
         {
-          name: `${chalk.hex('#10b981').bold('Assistant')}  ${chalk.dim('• Trợ lý điều phối quy trình tự động (Steward Owl)')}`,
+          name: `${chalk.hex('#10b981').bold('$custos-assistant')}  ${chalk.dim('• Trợ lý điều phối quy trình tự động')}`,
           value: 'Assistant',
         },
       ],
     });
   }
 
-  // Display the crisp mode card with mini owl next to introduction box!
   printModeCard(mode);
 
-  // User begins coding / entering task prompt right below the introduction
   const taskPrompt = await input({
     message: chalk.hex(mode === 'Research' ? '#f59e0b' : mode === 'Assistant' ? '#10b981' : '#38bdf8').bold(
       `[${mode.toUpperCase()}] Bắt đầu viết mã / nhập mục tiêu nhiệm vụ:`
@@ -459,7 +434,6 @@ export async function runVibeWizard(initialMode = null) {
       : 'Refactor handler with verified sandbox & epoch lock guard',
   });
 
-  // Sandboxing & AST Synthesis
   console.log();
   const s1 = ora(chalk.cyan('Khởi tạo sandbox cô lập (Worktree Sandbox)...')).start();
   await new Promise((r) => setTimeout(r, 500));
@@ -473,11 +447,9 @@ export async function runVibeWizard(initialMode = null) {
   await new Promise((r) => setTimeout(r, 600));
   s3.succeed(chalk.white('Tất cả kiểm thử vượt qua (5/5 passed)'));
 
-  // Show Diff
   console.log();
   printUnifiedDiff();
 
-  // Execution Permit
   const approve = await confirm({
     message: chalk.bold.white('Phê duyệt Giấy phép Thực thi (ExecutionPermit) để áp dụng vào mã nguồn?'),
     default: true,
@@ -505,19 +477,21 @@ export async function runVibeWizard(initialMode = null) {
   console.log();
 }
 
-// ── Interactive REPL ────────────────────────────────────────────────────────
 export async function startRepl() {
   printMainBanner();
 
-  let currentMode = 'standard';
+  let currentMode = 'custos';
   const rl = readline.createInterface({ input: inputDevice, output: outputDevice });
 
   const getPrompt = () => {
+    if (currentMode === 'custos') {
+      return `${chalk.hex('#38bdf8').bold('custos')} ${chalk.dim('❯')} `;
+    }
     let modeColor = chalk.hex('#38bdf8');
     if (currentMode === 'code') modeColor = chalk.hex('#38bdf8');
     if (currentMode === 'research') modeColor = chalk.hex('#f59e0b');
     if (currentMode === 'assistant') modeColor = chalk.hex('#10b981');
-    return `${modeColor.bold('custos')} ${chalk.dim(`[${currentMode}]`)} ${chalk.dim('❯')} `;
+    return `${modeColor.bold(`custos-${currentMode}`)} ${chalk.dim('❯')} `;
   };
 
   while (true) {
@@ -530,30 +504,55 @@ export async function startRepl() {
     const lowerCmd = cmd.toLowerCase();
 
     if (lowerCmd === 'exit' || lowerCmd === 'quit' || lowerCmd === 'q') {
-      console.log(chalk.dim('\n  Tạm biệt! Custos Guardian Owl đang bảo vệ hệ thống của bạn.\n'));
+      console.log(chalk.dim('\n  Tạm biệt! Custos Runtime đang bảo vệ hệ thống của bạn.\n'));
       break;
     } else if (lowerCmd === 'clear' || lowerCmd === 'cls') {
       console.clear();
       printMainBanner();
-    } else if (lowerCmd === 'vibe' || lowerCmd === 'v') {
-      await runVibeWizard(currentMode !== 'standard' ? currentMode : null);
-    } else if (lowerCmd === 'code' || (lowerCmd === 'mode' && args[0]?.toLowerCase() === 'code')) {
+    } else if (lowerCmd === '/' || lowerCmd === '/mode' || lowerCmd === 'mode' && !args[0]) {
+      rl.pause();
+      const chosen = await promptModeSelection();
+      rl.resume();
+      currentMode = chosen;
+      console.log(chalk.cyan(`\n  ✔ Đã chuyển sang chế độ [${currentMode === 'custos' ? 'custos' : `custos-${currentMode}`}].\n`));
+    } else if (
+      lowerCmd === '/code' ||
+      lowerCmd === 'code' ||
+      lowerCmd === 'custos-code' ||
+      (lowerCmd === 'mode' && args[0]?.toLowerCase() === 'code')
+    ) {
       currentMode = 'code';
-      printModeCard('Code');
-    } else if (lowerCmd === 'research' || (lowerCmd === 'mode' && args[0]?.toLowerCase() === 'research')) {
+      console.log(chalk.cyan(`\n  ✔ Đã chuyển sang chế độ [custos-code].\n`));
+    } else if (
+      lowerCmd === '/research' ||
+      lowerCmd === 'research' ||
+      lowerCmd === 'custos-research' ||
+      (lowerCmd === 'mode' && args[0]?.toLowerCase() === 'research')
+    ) {
       currentMode = 'research';
-      printModeCard('Research');
-    } else if (lowerCmd === 'assistant' || (lowerCmd === 'mode' && args[0]?.toLowerCase() === 'assistant')) {
+      console.log(chalk.cyan(`\n  ✔ Đã chuyển sang chế độ [custos-research].\n`));
+    } else if (
+      lowerCmd === '/assistant' ||
+      lowerCmd === 'assistant' ||
+      lowerCmd === 'custos-assistant' ||
+      (lowerCmd === 'mode' && args[0]?.toLowerCase() === 'assistant')
+    ) {
       currentMode = 'assistant';
-      printModeCard('Assistant');
+      console.log(chalk.cyan(`\n  ✔ Đã chuyển sang chế độ [custos-assistant].\n`));
+    } else if (lowerCmd === 'custos' || lowerCmd === '/custos' || lowerCmd === 'exit-mode') {
+      currentMode = 'custos';
+      console.log(chalk.cyan('\n  ✔ Đã quay lại chế độ gốc [custos]. Bạn có thể chat bình thường hoặc gõ / để chọn mode.\n'));
+    } else if (lowerCmd === 'vibe' || lowerCmd === 'v') {
+      await runVibeWizard(currentMode !== 'custos' ? currentMode : null);
     } else if (lowerCmd === 'list' || lowerCmd === 'tasks' || lowerCmd === 'ls') {
       printTaskList();
     } else if (lowerCmd === 'create' || lowerCmd === 'new') {
       const title = argStr || 'New sovereign agentic workflow';
+      const modeName = currentMode !== 'custos' ? (currentMode.charAt(0).toUpperCase() + currentMode.slice(1)) : 'Code';
       const newTask = {
         id: `task-${Math.random().toString(36).substring(2, 6)}`,
         title,
-        mode: currentMode !== 'standard' ? (currentMode.charAt(0).toUpperCase() + currentMode.slice(1)) : 'Code',
+        mode: modeName,
         status: 'Pending',
         risk: 'Low',
         spans: 1,
@@ -573,10 +572,9 @@ export async function startRepl() {
     } else if (lowerCmd === 'help' || lowerCmd === '?') {
       printHelp();
     } else {
-      // If user is in a specialized mode (code / research / assistant), any input starts coding / task workflow!
-      if (currentMode !== 'standard') {
+      if (currentMode !== 'custos') {
         const fullPrompt = line;
-        console.log(chalk.cyan(`\n  ⚡ [${currentMode.toUpperCase()}] Đang xử lý yêu cầu: "${fullPrompt}"...`));
+        console.log(chalk.cyan(`\n  ⚡ [custos-${currentMode.toLowerCase()}] Đang xử lý yêu cầu: "${fullPrompt}"...`));
         const s1 = ora(chalk.cyan('Khởi tạo sandbox cô lập (Worktree Sandbox)...')).start();
         await new Promise((r) => setTimeout(r, 500));
         s1.succeed(chalk.white('Sandbox cô lập đã sẵn sàng: ') + chalk.dim('.custos/sandboxes/worktree-live'));
@@ -614,14 +612,8 @@ export async function startRepl() {
         }
         console.log();
       } else {
-        console.log(
-          chalk.red(`  Lệnh không hợp lệ: "${cmd}". `) +
-            chalk.dim('Gõ ') +
-            chalk.yellow.bold('help') +
-            chalk.dim(' để xem danh sách lệnh, hoặc gõ ') +
-            chalk.cyan.bold('code') +
-            chalk.dim(' để bắt đầu lập trình.\n')
-        );
+        console.log(chalk.cyan(`\n  💬 [CUSTOS] `) + chalk.white(`"${line}"`));
+        console.log(chalk.dim(`  Hệ thống đang ở chế độ giao tiếp chung. Bạn có thể chat tự do hoặc gõ `) + chalk.yellow.bold('/') + chalk.dim(` để kích hoạt engine chuyên biệt (custos-code, custos-research, custos-assistant).\n`));
       }
     }
   }
@@ -629,15 +621,16 @@ export async function startRepl() {
   rl.close();
 }
 
-// ── Help Menu ───────────────────────────────────────────────────────────────
 export function printHelp() {
   console.log(chalk.bold.hex('#38bdf8')('\n  ══ Custos CLI — Bảng tra cứu lệnh ══\n'));
 
   const commands = [
+    ['/ (hoặc mode)', 'Mở bảng chọn chế độ hoạt động (custos-code, custos-research, ...)'],
+    ['custos', 'Quay lại chế độ giao tiếp chung để chat tự do'],
+    ['code / /code', 'Kích hoạt custos-code (Code Engine) trong Sandbox'],
+    ['research / /research', 'Kích hoạt custos-research (Research Engine) điều tra'],
+    ['assistant / /assistant', 'Kích hoạt custos-assistant (Assistant Engine) điều phối'],
     ['vibe (hoặc v)', 'Khởi chạy quy trình Vibe Coding tương tác từng bước'],
-    ['code', 'Chuyển sang Code Mode (Coder Owl) và bắt đầu viết mã'],
-    ['research', 'Chuyển sang Research Mode (Inspector Owl) để nghiên cứu'],
-    ['assistant', 'Chuyển sang Assistant Mode (Steward Owl) để điều phối'],
     ['list / tasks', 'Hiển thị bảng danh sách các task và số lượng SQLite Spans'],
     ['create <tiêu đề>', 'Tạo một nhiệm vụ agentic mới vào hàng đợi'],
     ['advance <id>', 'Chuyển tiến trình task sang trạng thái tiếp theo'],
@@ -650,14 +643,14 @@ export function printHelp() {
   ];
 
   commands.forEach(([c, d]) => {
-    console.log(`  ${chalk.yellow.bold(c.padEnd(18))} ${chalk.white(d)}`);
+    console.log(`  ${chalk.yellow.bold(c.padEnd(24))} ${chalk.white(d)}`);
   });
 
   console.log(chalk.dim('\n  Tham số dòng lệnh nhanh:'));
   console.log(`  ${chalk.white('custos vibe')}         ${chalk.dim('Chạy ngay wizard Vibe Coding')}`);
-  console.log(`  ${chalk.white('custos code')}         ${chalk.dim('Kích hoạt Code Mode với Coder Owl')}`);
-  console.log(`  ${chalk.white('custos research')}     ${chalk.dim('Kích hoạt Research Mode với Inspector Owl')}`);
-  console.log(`  ${chalk.white('custos assistant')}    ${chalk.dim('Kích hoạt Assistant Mode với Steward Owl')}`);
+  console.log(`  ${chalk.white('custos code')}         ${chalk.dim('Kích hoạt Code Engine (custos-code)')}`);
+  console.log(`  ${chalk.white('custos research')}     ${chalk.dim('Kích hoạt Research Engine (custos-research)')}`);
+  console.log(`  ${chalk.white('custos assistant')}    ${chalk.dim('Kích hoạt Assistant Engine (custos-assistant)')}`);
   console.log(`  ${chalk.white('custos list')}         ${chalk.dim('In bảng task hiện tại')}`);
   console.log(`  ${chalk.white('custos status')}       ${chalk.dim('In thông tin trạng thái')}`);
   console.log(`  ${chalk.white('custos diff')}         ${chalk.dim('Xem bản vá Unified Diff')}`);
@@ -665,7 +658,6 @@ export function printHelp() {
   console.log();
 }
 
-// ── Main Entrypoint ─────────────────────────────────────────────────────────
 async function main() {
   const args = process.argv.slice(2);
   const first = args[0]?.toLowerCase();

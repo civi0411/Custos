@@ -37,7 +37,6 @@ export const Header: React.FC<HeaderProps> = ({
 
         <div className="header-divider" />
 
-        {/* Operational Mode Selector */}
         <div className="mode-selector-group">
           {(['Code', 'Research', 'Assitant'] as OperationalMode[]).map((mode) => {
             const cfg = OPERATIONAL_MODES[mode];
@@ -69,7 +68,6 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div className="header-right">
-        {/* View Mode Toggle */}
         <div className="view-toggle-group">
           <button
             className={`view-btn ${viewMode === 'terminal' ? 'active' : ''}`}
@@ -97,7 +95,6 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </div>
 
-        {/* CRT Scanline Toggle */}
         <button
           className={`icon-toggle-btn ${crtEffect ? 'active' : ''}`}
           onClick={onToggleCrt}

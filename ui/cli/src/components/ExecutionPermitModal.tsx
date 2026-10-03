@@ -17,7 +17,6 @@ export const ExecutionPermitModal: React.FC<ExecutionPermitModalProps> = ({
 }) => {
   const riskBadge = RISK_BADGES[permit.risk] || RISK_BADGES.Medium;
 
-  // Keyboard shortcut: 'y' to approve, 'n' to reject
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {

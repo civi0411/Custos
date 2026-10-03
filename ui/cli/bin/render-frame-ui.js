@@ -16,14 +16,14 @@ export function loadImage(filePath) {
     return {
       width: raw.width,
       height: raw.height,
-      data: raw.data, // RGBA Uint8Array
+      data: raw.data,
     };
   } else {
     const png = PNG.sync.read(buf);
     return {
       width: png.width,
       height: png.height,
-      data: png.data, // RGBA Buffer
+      data: png.data,
     };
   }
 }
@@ -33,7 +33,6 @@ export function processAndRasterize(img, targetW, targetH, sharpenStrength = 0.3
   const h = img.height;
   const data = img.data;
 
-  // 1. Flood fill outer background from border pixels
   const visited = new Uint8Array(w * h);
   const queue = [];
 
@@ -88,11 +87,10 @@ export function processAndRasterize(img, targetW, targetH, sharpenStrength = 0.3
 
   for (let i = 0; i < visited.length; i++) {
     if (visited[i]) {
-      data[i * 4 + 3] = 0; // Transparent
+      data[i * 4 + 3] = 0;
     }
   }
 
-  // 2. Autocrop
   let minX = w, minY = h, maxX = 0, maxY = 0;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -113,8 +111,6 @@ export function processAndRasterize(img, targetW, targetH, sharpenStrength = 0.3
   const cropW = Math.max(1, maxX - minX + 1);
   const cropH = Math.max(1, maxY - minY + 1);
 
-  // 3. High-Quality Area-Averaged Downsample
-  // Grid buffer: targetW x targetH (RGBA)
   const gridR = new Float32Array(targetW * targetH);
   const gridG = new Float32Array(targetW * targetH);
   const gridB = new Float32Array(targetW * targetH);
@@ -164,7 +160,6 @@ export function processAndRasterize(img, targetW, targetH, sharpenStrength = 0.3
     }
   }
 
-  // 4. Sharpening Filter
   const sharpR = new Uint8Array(targetW * targetH);
   const sharpG = new Uint8Array(targetW * targetH);
   const sharpB = new Uint8Array(targetW * targetH);
@@ -191,7 +186,6 @@ export function processAndRasterize(img, targetW, targetH, sharpenStrength = 0.3
     }
   }
 
-  // 5. Half-block ANSI rasterization
   const outRows = [];
   for (let r = 0; r < targetH; r += 2) {
     let line = '';
@@ -235,14 +229,12 @@ export function rasterizeFullBanner(img, targetW = 96, targetH = 46) {
   for (let r = 0; r < targetH; r += 2) {
     let line = '';
     for (let c = 0; c < targetW; c++) {
-      // Top pixel
       const sx1 = Math.floor((c / targetW) * w);
       const sy1 = Math.floor((r / targetH) * h);
       const idx1 = (sy1 * w + sx1) * 4;
       const r1 = data[idx1], g1 = data[idx1 + 1], b1 = data[idx1 + 2];
       const vis1 = r1 > 20 || g1 > 20 || b1 > 20;
 
-      // Bottom pixel
       const hasBot = r + 1 < targetH;
       const sx2 = Math.floor((c / targetW) * w);
       const sy2 = Math.floor(((r + 1) / targetH) * h);
@@ -280,7 +272,6 @@ export function buildAllMascots() {
 
   const results = {};
 
-  // Check if banner-main.png exists
   const bannerMainPath = path.join(frameDir, 'banner-main.png');
   if (fs.existsSync(bannerMainPath)) {
     console.log('Processing banner-main.png directly...');
