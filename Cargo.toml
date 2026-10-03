@@ -12,8 +12,6 @@ members = [
     "crates/custos-app/cli",
     "crates/custos-app/desktop",
     "crates/custos-packs",
-    "crates/custos-app/cli",
-    "crates/custos-app/desktop",
     "tests/contract",
     "tests/e2e",
     "xtask"

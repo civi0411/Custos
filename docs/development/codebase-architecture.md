@@ -918,7 +918,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-app/cli` & `crates/custos-app/desktop`
 - **Chủ sở hữu chính (Owner):** **Vinh (Client Lead)**
 - **Quy tắc ranh giới:** Giao tiếp với Daemon thuần túy qua IPC socket; cấm truy cập SQLite trực tiếp. Không dính GUI Tauri dependency vào CLI binary.
-- **Tổng số file:** 11 files | **Tổng số dòng mã:** ~2,650 lines
+- **Tổng số file:** 13 files | **Tổng số dòng mã:** ~2,670 lines
 - **Mô tả chức năng:** Các ứng dụng giao diện trình diễn mỏng (Thin Presentation Clients): Render tiến độ tác vụ bằng ratatui (CLI) và Tauri Webview (Desktop), bảng hiển thị mã màu diff thay đổi, bảng điều khiển trạng thái và xác nhận cấp quyền.
 
 #### Danh mục các file bên trong `crates/custos-app/cli/` & `crates/custos-app/desktop/`:
@@ -935,8 +935,10 @@ Custos/
 | [`cli/src/ui/mod.rs`](../../crates/custos-app/cli/src/ui/mod.rs) | 110 | Module mod UI terminal | `fn get_terminal_width`, `fn get_terminal_height`, `enum ResponsiveTier`, `fn current` |
 | [`cli/src/ui/prompt.rs`](../../crates/custos-app/cli/src/ui/prompt.rs) | 122 | Nhận phản hồi duyệt quyền hạn từ người dùng | `enum RiskLevel`, `fn badge`, `fn confirm_execution`, `fn wait_for_mode_prompt` |
 | [`cli/src/ui/spinner.rs`](../../crates/custos-app/cli/src/ui/spinner.rs) | 46 | Hiển thị hoạt ảnh tiến độ công việc | `struct CliSpinner`, `fn new`, `fn set_message`, `fn finish_success` |
-| [`desktop/Cargo.toml`](../../crates/custos-app/desktop/Cargo.toml) | 18 | Module Cargo Desktop: phục vụ biên dịch executable `custos-desktop` (Tauri/Webview) | None |
-| [`desktop/src/main.rs`](../../crates/custos-app/desktop/src/main.rs) | 6 | Điểm khởi đầu thực thi duy nhất của `custos-desktop` | None |
+| [`desktop/Cargo.toml`](../../crates/custos-app/desktop/Cargo.toml) | 24 | Module Cargo Desktop: phục vụ biên dịch executable `custos-desktop` (Tauri/Webview) | None |
+| [`desktop/build.rs`](../../crates/custos-app/desktop/build.rs) | 4 | Build script Tauri cho desktop backend | `fn main` |
+| [`desktop/src/lib.rs`](../../crates/custos-app/desktop/src/lib.rs) | 15 | Khởi tạo Tauri app, đăng ký plugin và invoke handlers | `fn greet`, `fn run` |
+| [`desktop/src/main.rs`](../../crates/custos-app/desktop/src/main.rs) | 7 | Điểm khởi đầu thực thi duy nhất của `custos-desktop` | None |
 
 ---
 

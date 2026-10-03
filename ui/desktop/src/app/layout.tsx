@@ -1,13 +1,13 @@
 import React from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { useAppContext } from '../context/AppContext';
-import { Header } from '../components/Header';
-import { IconSidebar } from '../components/IconSidebar';
-import { StatusBar } from '../components/StatusBar';
-import { SettingsModal } from '../components/SettingsModal';
-import { NewSessionModal } from '../components/NewSessionModal';
-import { AddProviderModal } from '../components/AddProviderModal';
-import { Toast } from '../components/Toast';
+import { useAppContext } from '@/context/AppContext';
+import { Header } from '@/components/Header';
+import { IconSidebar } from '@/components/IconSidebar';
+import { StatusBar } from '@/components/StatusBar';
+import { SettingsModal } from '@/components/SettingsModal';
+import { NewSessionModal } from '@/components/NewSessionModal';
+import { AddProviderModal } from '@/components/AddProviderModal';
+import { Toast } from '@/components/Toast';
 
 export const RootLayout: React.FC = () => {
   const {
