@@ -28,14 +28,10 @@ impl ModelProvider for AntigravityProvider {
         &self.provider_id
     }
 
-    async fn generate(&self, req: &ModelRequest) -> Result<ModelResponse, DomainError> {
-        Ok(ModelResponse::text(
-            format!(
-                "Stub response from {} for: {}",
-                self.provider_id, req.prompt
-            ),
-            self.provider_id.clone(),
-            42,
+    async fn generate(&self, _req: &ModelRequest) -> Result<ModelResponse, DomainError> {
+        Err(DomainError::Validation(
+            "Antigravity transport is not configured; this placeholder cannot perform inference"
+                .into(),
         ))
     }
 }

@@ -37,14 +37,9 @@ impl ModelProvider for LocalModelProvider {
         &self.provider_id
     }
 
-    async fn generate(&self, req: &ModelRequest) -> Result<ModelResponse, DomainError> {
-        Ok(ModelResponse::text(
-            format!(
-                "Local inference response from {} for prompt: {}",
-                self.provider_id, req.prompt
-            ),
-            self.provider_id.clone(),
-            req.prompt.split_whitespace().count() + 20,
+    async fn generate(&self, _req: &ModelRequest) -> Result<ModelResponse, DomainError> {
+        Err(DomainError::Validation(
+            "Local model transport is not configured; use a loaded inference backend".into(),
         ))
     }
 }

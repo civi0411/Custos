@@ -11,3 +11,28 @@ pub use codex::*;
 pub use fake::*;
 pub use local_model::*;
 pub use providers::*;
+
+#[cfg(test)]
+mod placeholder_tests {
+    use super::*;
+    use custos_provider::{ModelProvider, ProviderRequest};
+
+    #[tokio::test]
+    async fn unconfigured_adapters_never_return_fabricated_model_output() {
+        let request = ProviderRequest::simple("Explain the repository");
+        let adapters: Vec<Box<dyn ModelProvider>> = vec![
+            Box::new(CodexProvider::new()),
+            Box::new(ClaudeProvider::new()),
+            Box::new(AntigravityProvider::new()),
+            Box::new(LocalModelProvider::new()),
+        ];
+
+        for adapter in adapters {
+            assert!(
+                adapter.generate(&request).await.is_err(),
+                "{} returned fabricated output",
+                adapter.provider_id()
+            );
+        }
+    }
+}

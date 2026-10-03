@@ -375,36 +375,12 @@ impl DeterministicGate {
     async fn execute_generic(
         &self,
         action: &Action,
-        permit_id: &str,
+        _permit_id: &str,
     ) -> Result<ExecutionResult, DomainError> {
-        let result_json = serde_json::json!({
-            "status": "executed",
-            "action": action.name,
-            "target": action.target,
-            "permit_id": permit_id,
-        });
-
-        let evidence_hash = format!("sha256:{}", digest(result_json.to_string().as_bytes()));
-
-        let receipt = ExecutionReceipt {
-            receipt_id: new_id("rcpt"),
-            permit_id: permit_id.to_string(),
-            action_id: action.id.clone(),
-            status: ReceiptStatus::Success,
-            output_digest: evidence_hash.clone(),
-            output_data: Some(result_json.clone()),
-            error_message: None,
-            duration_ms: Some(1),
-            executed_at: chrono::Utc::now(),
-        };
-
-        Ok(ExecutionResult {
-            success: true,
-            output: result_json,
-            permit_id: Some(permit_id.to_string()),
-            evidence: Some(evidence_hash),
-            receipt: Some(receipt),
-        })
+        Err(DomainError::Unauthorized(format!(
+            "Unsupported capability '{}': no physical dispatcher is registered",
+            action.name
+        )))
     }
 }
 
@@ -485,6 +461,26 @@ mod tests {
         assert_eq!(res.output["content"], "Hello Custos Sovereign!");
 
         let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[tokio::test]
+    async fn test_unknown_low_risk_action_does_not_fabricate_success() {
+        let gate = DeterministicGate::default();
+        let action = Action::new(
+            "act_unknown_1".into(),
+            "unknown_tool".into(),
+            "target".into(),
+            serde_json::json!({"target": "target"}),
+            RiskLevel::Low,
+        );
+
+        let result = gate
+            .dispatch_for_task("task_unknown", &action, "developer")
+            .await;
+        assert!(matches!(
+            result,
+            Err(DomainError::Unauthorized(message)) if message.contains("Unsupported capability")
+        ));
     }
 
     #[tokio::test]
