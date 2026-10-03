@@ -6,8 +6,6 @@
   <img alt="Custos" src="docs/assets/banner.png" width="100%">
 </picture>
 
-# Custos
-
 [ EN ](README.md) · [ VI ](docs/i18n/README.vi.md) · [ DE ](docs/i18n/README.de.md) · [ ZH ](docs/i18n/README.zh.md)
 
 </div>

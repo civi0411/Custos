@@ -16,6 +16,7 @@ pub mod error;
 pub mod evidence;
 pub mod fact;
 pub mod ids;
+pub mod memory;
 pub mod packet;
 pub mod run;
 pub mod session;
@@ -43,9 +44,16 @@ pub use evidence::{
 };
 pub use fact::Fact;
 pub use ids::{canonical_json, digest, new_id, TaskId};
+pub use memory::{
+    FactProposal, MemoryEntry, MemoryError, MemoryScope, PersonalFact, ProposalReceipt,
+    ProposalStatus, RecallQuery, WorkerRunId,
+};
 pub use packet::ContinuationPacket as PacketContinuation;
-pub use run::{Run, RunStatus, WorkerRun};
+pub use run::{CancelReceipt, NodeAttempt, Run, RunHandle, RunStatus, StartRunCommand, WorkerRun};
 pub use session::{Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus};
 pub use span::{Span, SpanState};
-pub use task::{ContractEvidence, EvidenceKind, Task, TaskContract, TaskContractV1, TaskRevision, TaskStatus};
+pub use task::{
+    ContractEvidence, CriterionSpec, EvidenceKind, Task, TaskContract, TaskContractRevision,
+    TaskContractV1, TaskRevision, TaskStatus,
+};
 pub use workflow::{WorkflowIR, WorkflowNodeIR, WorkflowPlan, WorkflowStep};

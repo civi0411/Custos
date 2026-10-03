@@ -72,6 +72,7 @@ impl TaskRepository {
                             Box::new(error),
                         )
                     })?,
+                active_contract_revision: None,
                 metadata,
             })
         });
@@ -298,6 +299,7 @@ impl TaskRepository {
                                 Box::new(error),
                             )
                         })?,
+                    active_contract_revision: None,
                     metadata,
                 })
             })

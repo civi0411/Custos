@@ -23,12 +23,47 @@ pub struct ContractEvidence {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CriterionSpec {
+    pub criterion_id: String,
+    pub pack: String,
+    pub rubric: String,
+    pub required_evidence: Vec<ContractEvidence>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskContractRevision {
+    pub revision: u64,
+    pub pack_id: String,
+    pub name: String,
+    pub description: String,
+    pub required_capabilities: Vec<String>,
+    pub criteria: Vec<CriterionSpec>,
+    pub evidence_requirements: Vec<ContractEvidence>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskContract {
     pub pack_id: String,
     pub name: String,
     pub description: String,
     pub required_capabilities: Vec<String>,
     pub evidence_requirements: Vec<ContractEvidence>,
+}
+
+impl TaskContract {
+    pub fn to_revision(&self, revision: u64) -> TaskContractRevision {
+        TaskContractRevision {
+            revision,
+            pack_id: self.pack_id.clone(),
+            name: self.name.clone(),
+            description: self.description.clone(),
+            required_capabilities: self.required_capabilities.clone(),
+            criteria: Vec::new(),
+            evidence_requirements: self.evidence_requirements.clone(),
+            created_at: Utc::now(),
+        }
+    }
 }
 
 /// Version 1 Canonical Contract alias for SSOT.
@@ -104,6 +139,8 @@ pub struct Task {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub contract: Option<TaskContract>,
+    #[serde(default)]
+    pub active_contract_revision: Option<TaskContractRevision>,
     pub metadata: serde_json::Value,
 }
 
@@ -121,6 +158,7 @@ impl Task {
             created_at: now,
             updated_at: now,
             contract: None,
+            active_contract_revision: None,
             metadata: serde_json::json!({}),
         }
     }

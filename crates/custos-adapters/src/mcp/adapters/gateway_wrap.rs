@@ -91,15 +91,15 @@ impl McpCapabilityAdapter {
 }
 
 #[async_trait]
-impl custos_provider::CapabilityPort for McpCapabilityAdapter {
-    fn capability_name(&self) -> &str {
+impl custos_core::contracts::sandbox::SandboxPort for McpCapabilityAdapter {
+    fn driver_id(&self) -> &str {
         &self.capability_name
     }
 
-    async fn dispatch(
+    async fn execute(
         &self,
         action: &custos_domain::ActionIntent,
-        permit: &custos_domain::ExecutionPermit,
+        permit: &custos_domain::Permit,
     ) -> Result<custos_domain::ExecutionReceipt, DomainError> {
         // A copied Permit can be replayed after a crash. Until the adapter is
         // supplied with an atomically claimed, durable attempt, deny dispatch.
@@ -115,7 +115,7 @@ impl custos_provider::CapabilityPort for McpCapabilityAdapter {
 mod tests {
     use super::*;
     use custos_domain::{Action, Permit, RiskClass, RiskLevel};
-    use custos_provider::CapabilityPort;
+    use custos_core::contracts::sandbox::SandboxPort;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct MockTool {
@@ -191,7 +191,7 @@ mod tests {
             300,
         );
 
-        let result = adapter.dispatch(&action, &permit).await;
+        let result = adapter.execute(&action, &permit).await;
         assert!(matches!(result, Err(DomainError::Unauthorized(_))));
     }
 
@@ -221,7 +221,7 @@ mod tests {
             300,
         );
 
-        let res = adapter.dispatch(&action, &permit).await;
+        let res = adapter.execute(&action, &permit).await;
         assert!(res.is_err());
     }
 }

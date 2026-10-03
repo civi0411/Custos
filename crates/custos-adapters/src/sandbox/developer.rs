@@ -11,9 +11,9 @@
 
 use async_trait::async_trait;
 use custos_domain::{
-    digest, new_id, ActionIntent, DomainError, ExecutionPermit, ExecutionReceipt, ReceiptStatus,
+    digest, new_id, ActionIntent, DomainError, ExecutionReceipt, ReceiptStatus,
 };
-use custos_provider::CapabilityPort;
+use custos_core::contracts::sandbox::{SandboxPort, verify_permit_binding};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -215,32 +215,18 @@ impl SovereignDeveloperAdapter {
 }
 
 #[async_trait]
-impl CapabilityPort for SovereignDeveloperAdapter {
-    fn capability_name(&self) -> &str {
+impl SandboxPort for SovereignDeveloperAdapter {
+    fn driver_id(&self) -> &str {
         "developer"
     }
 
-    async fn dispatch(
+    async fn execute(
         &self,
         action: &ActionIntent,
-        permit: &ExecutionPermit,
+        permit: &custos_domain::Permit,
     ) -> Result<ExecutionReceipt, DomainError> {
-        // 1. Invariant I2: Strict permit correlation
-        if permit.action_id != action.id {
-            return Err(DomainError::Unauthorized(format!(
-                "Permit action ID mismatch: permit is for '{}', action is '{}'",
-                permit.action_id, action.id
-            )));
-        }
-
-        // 2. Validate TTL expiration
-        let now = chrono::Utc::now();
-        if now > permit.expires_at {
-            return Err(DomainError::Unauthorized(format!(
-                "Execution permit '{}' expired at {} (current time: {})",
-                permit.id, permit.expires_at, now
-            )));
-        }
+        // 1. Invariant I2: Strict permit correlation & TTL expiration via Kernel's verify_permit_binding
+        verify_permit_binding(permit, action)?;
 
         let start = Instant::now();
 
@@ -334,7 +320,7 @@ mod tests {
             60,
         );
 
-        let write_receipt = adapter.dispatch(&write_action, &write_permit).await.unwrap();
+        let write_receipt = adapter.execute(&write_action, &write_permit).await.unwrap();
         assert_eq!(write_receipt.status, ReceiptStatus::Success);
         assert!(write_receipt.output_digest.starts_with("blake3:"));
 
@@ -358,7 +344,7 @@ mod tests {
             60,
         );
 
-        let read_receipt = adapter.dispatch(&read_action, &read_permit).await.unwrap();
+        let read_receipt = adapter.execute(&read_action, &read_permit).await.unwrap();
         assert_eq!(read_receipt.status, ReceiptStatus::Success);
         let data = read_receipt.output_data.unwrap();
         assert_eq!(data["content"], "Sovereign Custos Execution");
@@ -393,7 +379,7 @@ mod tests {
             60,
         );
 
-        let receipt = adapter.dispatch(&action, &permit).await.unwrap();
+        let receipt = adapter.execute(&action, &permit).await.unwrap();
         assert_eq!(receipt.status, ReceiptStatus::Failure);
         assert!(receipt.error_message.unwrap().contains("Path traversal violation"));
 

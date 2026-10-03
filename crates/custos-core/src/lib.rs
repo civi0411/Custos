@@ -6,6 +6,7 @@
 pub mod authority;
 pub mod capability;
 pub mod context;
+pub mod contracts;
 pub mod evidence;
 pub mod kernel;
 pub mod sandbox_policy;
