@@ -3,6 +3,7 @@
 //! Event-driven CQRS task orchestration engine enforcing business invariants,
 //! state machine transitions, and audit-ready domain events.
 
+pub mod budget;
 pub mod commands;
 pub mod completion;
 pub mod events;
@@ -14,6 +15,7 @@ pub mod session_state_machine;
 pub mod span_service;
 pub mod state_machine;
 
+pub use budget::BudgetGovernor;
 pub use commands::*;
 pub use completion::CompletionGate;
 pub use events::*;

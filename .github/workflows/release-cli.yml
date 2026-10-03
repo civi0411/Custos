@@ -34,6 +34,17 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -93,7 +104,7 @@ jobs:
       - name: Publish to NPM Registry
         if: env.NODE_AUTH_TOKEN != ''
         run: |
-          cd custos-npm-package
+          cd packages/custos-npm-package
           npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

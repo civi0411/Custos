@@ -32,7 +32,7 @@ pub use authority::{
     ExecutionPermit, ExecutionReceipt, Grant, Permit, PermitId, PermitV1, Receipt, ReceiptStatus,
     RiskClass,
 };
-pub use budget::Budget;
+pub use budget::{Budget, Headroom, ReservationToken};
 pub use capability::CapabilityManifest;
 pub use claim::Claim;
 pub use context::{ContextItem, ContextPack};
