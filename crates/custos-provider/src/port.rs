@@ -57,20 +57,4 @@ pub trait AgentRuntimePort: Send + Sync {
     ) -> Result<Vec<custos_domain::ActionIntent>, DomainError>;
 }
 
-/// Capability Dispatch Port
-///
-/// Port for executing physical effects (MCP, shell, local filesystem)
-/// strictly governed by ExecutionPermits issued by the Security Kernel.
-#[async_trait]
-pub trait CapabilityPort: Send + Sync {
-    /// Identifier for this capability (e.g. "fs_read", "fs_write", "shell", "mcp:git")
-    fn capability_name(&self) -> &str;
-
-    /// Dispatches an action intent that has been authorized with an ExecutionPermit
-    async fn dispatch(
-        &self,
-        action: &custos_domain::ActionIntent,
-        permit: &custos_domain::ExecutionPermit,
-    ) -> Result<custos_domain::ExecutionReceipt, DomainError>;
-}
 
