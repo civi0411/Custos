@@ -9,7 +9,8 @@ members = [
     "crates/custos-runtime",
     "crates/custos-adapters",
     "crates/custos-sdk",
-    "crates/custos-daemon",
+    "crates/custos-app/cli",
+    "crates/custos-app/desktop",
     "crates/custos-packs",
     "crates/custos-app/cli",
     "crates/custos-app/desktop",
@@ -43,6 +44,8 @@ custos-runtime = { path = "crates/custos-runtime" }
 custos-adapters = { path = "crates/custos-adapters" }
 custos-sdk = { path = "crates/custos-sdk" }
 custos-daemon = { path = "crates/custos-daemon" }
+custos-cli = { path = "crates/custos-app/cli" }
+custos-desktop = { path = "crates/custos-app/desktop" }
 custos-local-api = { package = "custos-daemon", path = "crates/custos-daemon" }
 custos-packs = { path = "crates/custos-packs" }
 custos-app-cli = { path = "crates/custos-app/cli" }

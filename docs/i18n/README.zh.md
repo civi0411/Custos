@@ -5,10 +5,9 @@
   <source media="(prefers-color-scheme: light)" srcset="../assets/banner.png">
   <img alt="Custos" src="../assets/banner.png" width="100%">
 </picture>
-
 # Custos
 
-[ English ](../../README.md) · [ Tiếng Việt ](README.vi.md) · [ Deutsch ](README.de.md) · [ 简体中文 ](README.zh.md)
+[ EN ](../../README.md) · [ VI ](README.vi.md) · [ DE ](README.de.md) · [ ZH ](README.zh.md)
 
 </div>
 
@@ -152,4 +151,4 @@ cargo test --workspace --all-targets
 
 ## 许可证
 
-本项目依据 Apache License 2.0 许可证授权开源。详情请参阅 [LICENSE](../../LICENSE)。
+仓库根目录的 [LICENSE](../../LICENSE) 目前为 MIT 许可证。Goose 衍生代码的来源与署名要求正在[上游源码清单](../development/upstream-source-map.md)中核查；不能仅凭根目录许可证判断所有衍生文件的条款。

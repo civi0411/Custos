@@ -30,14 +30,12 @@ impl ToolPort for GatewayTool {
             "GatewayTool intercepting execution for capability validation"
         );
 
-        // Disallow arbitrary un-sandboxed effects (Invariant I1)
-        if call.name == "raw_shell_exec" {
-            return Err(DomainError::Unauthorized(
-                "Direct un-sandboxed shell execution is strictly prohibited by Invariant I1".into(),
-            ));
-        }
-
-        self.inner.execute(call).await
+        // This wrapper has no permit or durable dispatch claim. Forwarding any
+        // tool call here would bypass the authority boundary, regardless of name.
+        Err(DomainError::Unauthorized(format!(
+            "Tool '{}' requires a durable Custos capability dispatch claim",
+            call.name
+        )))
     }
 }
 
@@ -103,78 +101,13 @@ impl custos_provider::CapabilityPort for McpCapabilityAdapter {
         action: &custos_domain::ActionIntent,
         permit: &custos_domain::ExecutionPermit,
     ) -> Result<custos_domain::ExecutionReceipt, DomainError> {
-        let now = chrono::Utc::now();
-
-        // 1. Verify permit validity & expiration
-        if permit.action_id != action.id {
-            return Err(DomainError::Unauthorized(format!(
-                "Permit action_id mismatch: permit for '{}', action is '{}'",
-                permit.action_id, action.id
-            )));
-        }
-
-        if now > permit.expires_at {
-            return Err(DomainError::Unauthorized(format!(
-                "ExecutionPermit expired at {:?}",
-                permit.expires_at
-            )));
-        }
-
-        // 2. Formulate ToolCall
-        let tool_call = ToolCall {
-            call_id: action.id.clone(),
-            name: action.name.clone(),
-            arguments: action.parameters.clone(),
-        };
-
-        // 3. Dispatch through MCP ToolPort
-        let start = std::time::Instant::now();
-        let result = self.inner_tool.execute(tool_call).await;
-        let duration_ms = start.elapsed().as_millis() as u64;
-
-        // 4. Seal into ExecutionReceipt
-        match result {
-            Ok(output) => {
-                let digest_val = custos_domain::digest(output.output.as_bytes());
-                Ok(custos_domain::ExecutionReceipt {
-                    receipt_id: custos_domain::new_id("rcpt"),
-                    permit_id: permit.id.clone(),
-                    action_id: action.id.clone(),
-                    status: if output.is_error {
-                        custos_domain::ReceiptStatus::Failure
-                    } else {
-                        custos_domain::ReceiptStatus::Success
-                    },
-                    output_digest: format!("sha256:{}", digest_val),
-                    output_data: Some(serde_json::json!({
-                        "output": output.output,
-                        "is_error": output.is_error,
-                    })),
-                    error_message: if output.is_error {
-                        Some(output.output)
-                    } else {
-                        None
-                    },
-                    duration_ms: Some(duration_ms),
-                    executed_at: chrono::Utc::now(),
-                })
-            }
-            Err(e) => {
-                let err_msg = e.to_string();
-                let digest_val = custos_domain::digest(err_msg.as_bytes());
-                Ok(custos_domain::ExecutionReceipt {
-                    receipt_id: custos_domain::new_id("rcpt"),
-                    permit_id: permit.id.clone(),
-                    action_id: action.id.clone(),
-                    status: custos_domain::ReceiptStatus::Failure,
-                    output_digest: format!("sha256:{}", digest_val),
-                    output_data: None,
-                    error_message: Some(err_msg),
-                    duration_ms: Some(duration_ms),
-                    executed_at: chrono::Utc::now(),
-                })
-            }
-        }
+        // A copied Permit can be replayed after a crash. Until the adapter is
+        // supplied with an atomically claimed, durable attempt, deny dispatch.
+        let registered_tool = self.inner_tool.definition().name;
+        Err(DomainError::Unauthorized(format!(
+            "MCP dispatch of '{}' through '{}' requires a durable, single-use attempt claim (permit '{}')",
+            action.name, registered_tool, permit.id
+        )))
     }
 }
 
@@ -183,10 +116,12 @@ mod tests {
     use super::*;
     use custos_domain::{Action, Permit, RiskClass, RiskLevel};
     use custos_provider::CapabilityPort;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct MockTool {
         name: String,
         output: String,
+        calls: Arc<AtomicUsize>,
     }
 
     #[async_trait]
@@ -200,6 +135,7 @@ mod tests {
         }
 
         async fn execute(&self, _call: ToolCall) -> Result<ToolResult, DomainError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
             Ok(ToolResult {
                 call_id: "test_call".into(),
                 output: self.output.clone(),
@@ -209,10 +145,32 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_mcp_capability_adapter_dispatch_with_valid_permit() {
+    async fn test_gateway_tool_never_forwards_without_claim() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let tool = Arc::new(MockTool {
+            name: "read_file".into(),
+            output: "secret".into(),
+            calls: calls.clone(),
+        });
+        let gateway = GatewayTool::new(tool, "task_1".into());
+        let result = gateway
+            .execute(ToolCall {
+                call_id: "call_1".into(),
+                name: "read_file".into(),
+                arguments: serde_json::json!({"path": "secret.txt"}),
+            })
+            .await;
+
+        assert!(matches!(result, Err(DomainError::Unauthorized(_))));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn test_mcp_capability_adapter_denies_unclaimed_permit() {
         let tool = Arc::new(MockTool {
             name: "read_file".into(),
             output: "hello world".into(),
+            calls: Arc::new(AtomicUsize::new(0)),
         });
         let adapter = McpCapabilityAdapter::new("fs_read", tool);
 
@@ -233,11 +191,8 @@ mod tests {
             300,
         );
 
-        let receipt = adapter.dispatch(&action, &permit).await.unwrap();
-        assert_eq!(receipt.action_id, "act_1");
-        assert_eq!(receipt.permit_id, permit.id);
-        assert_eq!(receipt.status, custos_domain::ReceiptStatus::Success);
-        assert!(receipt.output_digest.starts_with("sha256:"));
+        let result = adapter.dispatch(&action, &permit).await;
+        assert!(matches!(result, Err(DomainError::Unauthorized(_))));
     }
 
     #[tokio::test]
@@ -245,6 +200,7 @@ mod tests {
         let tool = Arc::new(MockTool {
             name: "read_file".into(),
             output: "hello".into(),
+            calls: Arc::new(AtomicUsize::new(0)),
         });
         let adapter = McpCapabilityAdapter::new("fs_read", tool);
 
@@ -269,4 +225,3 @@ mod tests {
         assert!(res.is_err());
     }
 }
-

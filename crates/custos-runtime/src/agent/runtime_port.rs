@@ -170,8 +170,10 @@ mod tests {
                 score: 1.0,
                 tokens: 10,
                 provenance_hash: None,
+                is_tainted: false,
             }],
             total_tokens: 10,
+            context_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_string(),
         };
 
         let intents = runtime.execute_turn(&worker_run, &context_pack).await.unwrap();

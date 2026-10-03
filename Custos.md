@@ -58,11 +58,11 @@
   - [6.8 Ranh giới](#68-ranh-giới)
 - [PHẦN 7 — PROTOCOL VÀ HUB LAYER](#phần-7-protocol-và-hub-layer)
   - [7.1 Motivation](#71-motivation)
-  - [7.2 Sáu Hub Chuyên Biệt Trong Local Daemon](#72-sáu-hub-chuyên-biệt-trong-local-daemon)
-  - [7.3 Bản Đồ Giao Thức Theo Chiều Tương Tác](#73-bản-đồ-giao-thức-theo-chiều-tương-tác)
-  - [7.4 Chuẩn MCP 2026-07-28: OAuth 2.1, Transports và Cơ chế Callback](#74-chuẩn-mcp-2026-07-28-oauth-21-transports-và-cơ-chế-callback)
-  - [7.5 Chuẩn A2A Protocol v1.0.0 (Agent Cards & Delegation Protocol)](#75-chuẩn-a2a-protocol-v100-agent-cards-&-delegation-protocol)
-  - [7.6 ACP (Agent Communication Protocol) và Versioned Local API v1](#76-acp-agent-communication-protocol-và-versioned-local-api-v1)
+  - [7.2 Hub là trách nhiệm logic, không phải sáu service](#72-hub-là-trách-nhiệm-logic-không-phải-sáu-service)
+  - [7.3 Bản đồ quyết định IPC, Local HTTP, MCP, CAP, ACP và A2A](#73-bản-đồ-quyết-định-ipc-local-http-mcp-cap-acp-và-a2a)
+  - [7.4 MCP: công cụ và dữ liệu ngoài](#74-mcp-công-cụ-và-dữ-liệu-ngoài)
+  - [7.5 A2A: giao việc cho remote agent độc lập](#75-a2a-giao-việc-cho-remote-agent-độc-lập)
+  - [7.6 Local API, IPC, Local HTTP, ACP và CAP](#76-local-api-ipc-local-http-acp-và-cap)
   - [7.7 Năm Bộ Điều Hợp Harness (Claude, Codex, Cursor, Antigravity, Goose)](#77-năm-bộ-điều-hợp-harness-claude-codex-cursor-antigravity-goose)
   - [7.8 Vòng Đời Kết Nối Và Quản Trị Hợp Đồng (Hub Lifecycle)](#78-vòng-đời-kết-nối-và-quản-trị-hợp-đồng-hub-lifecycle)
   - [7.9 Cơ Chế Xử Lý Lỗi Và Tính Khả Quan Sát (Observability)](#79-cơ-chế-xử-lý-lỗi-và-tính-khả-quan-sát-observability)
@@ -133,7 +133,7 @@
 - [PHẦN 14 — ORCHESTRATION INTELLIGENCE (OI, S1, S2, META)](#phần-14-orchestration-intelligence-oi-s1-s2-meta)
   - [14.1 Motivation](#141-motivation)
   - [14.2 Bộ Não Điều Phối OI Engine](#142-bộ-não-điều-phối-oi-engine)
-  - [14.3 Chín Topo Điều Phối Chuẩn Mực (T0–T8)](#143-chín-topo-điều-phối-chuẩn-mực-t0t8)
+  - [14.3 Họ Topology Có Thể Lắp Ghép](#143-họ-topology-có-thể-lắp-ghép)
   - [14.4 Phối Hợp Nhanh-Chậm SOFAI-LM (Fast S1 vs Deliberative S2)](#144-phối-hợp-nhanh-chậm-sofai-lm-fast-s1-vs-deliberative-s2)
   - [14.5 Các Đặc Trưng DAG Từ AdaptOrch Trong Định Tuyến](#145-các-đặc-trưng-dag-từ-adaptorch-trong-định-tuyến)
   - [14.6 Meta Engine Ngoại Tuyến (Offline Optimization Pipeline)](#146-meta-engine-ngoại-tuyến-offline-optimization-pipeline)
@@ -229,7 +229,7 @@ Custos không phải là một plugin gọi mô hình thông thường, cũng kh
 
 - **Chế độ Assist (Trợ thủ trực tiếp):**
   - Dành cho các tác vụ mang tính đối thoại, tra cứu nhanh, hoặc khám phá mã nguồn từng bước.
-  - Sử dụng topo nhẹ (T0 Direct Model hoặc T1 Single Worker).
+  - Ưu tiên direct response hoặc một worker/native harness; không thêm planner cho hot path khi chưa có lý do.
   - Ưu tiên độ trễ phát token đầu tiên (TTFT - Time To First Token) cực thấp, streaming tức thì về giao diện người dùng. Người dùng liên tục dẫn đường (steering) qua từng lượt phản hồi.
 - **Chế độ Delegated (Ủy thác có giới hạn):**
   - Dành cho các tác vụ lập trình phức tạp, tái cấu trúc đa file, nghiên cứu tài liệu quy mô lớn, hoặc tự động hóa trợ lý.
@@ -257,7 +257,7 @@ Mọi dòng mã nguồn được viết trong Custos đều phải tuân thủ n
 | **INV-07** | **No Phantom Distributed Atomicity** | Hiệu ứng bên ngoài hệ quản trị SQLite không được tuyên bố là atomic. Mọi can thiệp I/O đều phải trải qua mô hình Outbox / Receipt / Reconciliation. |
 | **INV-08** | **No Implicit Delegation** | Việc chuyển giao công việc giữa các agent hoặc phân rã sub-task không tự động kế thừa toàn bộ quyền của tác vụ cha. Mọi quyền ủy thác đều phải tuân thủ nguyên tắc thu hẹp (Delegation Diminishment). |
 | **INV-09** | **Audited Transports** | Mọi lượt gọi mô hình (`ModelAttempt`) đều phải ghi nhận rõ cơ chế vận chuyển (`LocalInference`, `DirectVendorSdk`, `McpSamplingCallback`, `ProxyGateway`) kèm chi phí thực hoặc cờ `CostUnknown`. |
-| **INV-10** | **Single Model First-Class** | Kiến trúc luôn vận hành hoàn hảo với đúng một mô hình đơn lẻ (T1) làm chuẩn cơ sở (baseline). Multi-agent (T2–T8) chỉ được kích hoạt khi chứng minh được giá trị vượt trội thông qua phép đo lường thực tế. |
+| **INV-10** | **Single Model First-Class** | Một model hoặc một native harness đủ năng lực phải là baseline có thể làm trọn Task; multi-worker chỉ bật mặc định trên task slice đã chứng minh lợi ích cùng tiêu chí chất lượng/quyền/chi phí toàn Task. |
 
 ### Năm Nguyên Tắc Vàng (The Five Golden Rules)
 
@@ -280,12 +280,12 @@ graph TD
 
 ### Đối chiếu Kiến trúc Thực tế với Thị trường (2025–2026)
 
-Thị trường trợ lý kỹ thuật năm 2026 ghi nhận các giải pháp tiêu biểu như Cursor Projects, Claude Code (Anthropic), và LangGraph (LangChain). Custos định vị giá trị cốt lõi không phải bằng việc sao chép tính năng mà bằng sự vượt trội về kiểm soát rủi ro và tính bất biến:
+Thị trường trợ lý kỹ thuật năm 2026 ghi nhận các giải pháp tiêu biểu như Cursor Projects, Claude Code (Anthropic), và LangGraph (LangChain). Bảng sau là **so sánh định hướng ở phạm vi đã quan sát, không chứng nhận Custos vượt trội hay mô tả đầy đủ năng lực đối thủ**; mọi claim hiệu quả cần test cùng điều kiện:
 
 | Thuộc Tính Kiến Trúc | Cursor Projects (2026) | Claude Code (2026) | LangGraph (2025–2026) | CUSTOS (Kiến trúc Đích) |
 |---|---|---|---|---|
 | **Cơ chế Bền vững** | Coordinator + Shared Context | Git Worktrees + Subagents | StateGraph + Checkpointers | Canonical SQLite WAL + Event Sourcing + CAS |
-| **Kiểm soát Quyền Hạn** | Yêu cầu phê duyệt từng tool call | Phê duyệt quyền theo phiên | Interruption points / Human-in-the-loop | 3 tầng Grant/Intent/Permit + IBCT Token Chain |
+| **Kiểm soát Quyền Hạn** | Yêu cầu phê duyệt theo cấu hình | Phê duyệt quyền theo cấu hình | Interruption points / Human-in-the-loop | Grant/Intent/Permit theo đích; IBCT chỉ là đề xuất optional cho remote delegation |
 | **Tính Chịu Lỗi I/O** | Ghi đè file trực tiếp | Rollback qua git commit | State rollback qua checkpointer | 5 Transaction Boundaries (T1–T5) + Explicit Uncertain |
 | **Xác thực Bằng chứng** | Model tự thông báo xong | Model tự kiểm tra bằng test suite | Custom Evaluator Node | Evidence Engine (Fact/Extraction/Semantic) + REAL |
 | **Phân tầng Bảo mật** | Tin cậy context workspace | Sandbox cấp tiến trình cơ bản | Phụ thuộc ứng dụng người dùng | 3 Vùng Tin cậy + Taint Propagation + Provenance Tracking |
@@ -840,6 +840,8 @@ sequenceDiagram
 
 # PHẦN 4 — AUTHORITY ENGINE VÀ CAPABILITY GATEWAY
 
+> **Ranh giới giữa thiết kế đích và code hiện tại:** Các bất biến trong phần này là điều kiện nghiệm thu, không phải cam kết đã được thực thi. Tại audit commit `3e4dac4`, permit issuer còn trong RAM; SQLite có schema permit/outbox nhưng chưa nối thành durable dispatch claim. Đường MCP/tool wrapper chưa có claim bền vững nên hiện fail closed; `DeterministicGate` chỉ thực thi một tập lệnh nguyên mẫu (read/list/patch-preview), không phải Gateway production. Không gọi permit hiện tại là token ký mật mã hoặc hứa recovery sau crash khi chưa có test.
+
 ## 4.1 Motivation
 
 Trong các kiến trúc agent thông thường, khi một công cụ (tool) được cấp cho LLM, mô hình có thể gọi công cụ đó bất kỳ lúc nào với bất kỳ tham số nào trong suốt phiên làm việc. Đây là cơ chế **Ambient Authority** (quyền hạn môi trường) cực kỳ nguy hiểm: nếu mô hình bị đánh lừa bởi một prompt độc hại nằm trong tài liệu đọc vào, nó có thể dùng chính công cụ ghi file hoặc gửi email để phát tán dữ liệu nhạy cảm ra ngoài.
@@ -927,7 +929,7 @@ Khi thực thi hiệu ứng ngoại biên thông qua Capability Gateway, hệ th
 
 ## 4.4 Invocation-Bound Capability Tokens (IBCT) và Delegation Diminishment
 
-Khi Custos giao tiếp với các agent từ xa qua giao thức Agent-to-Agent (A2A), việc gửi trực tiếp `Permit` cục bộ là một lỗ hổng an ninh nghiêm trọng. Hệ thống áp dụng chuẩn **Invocation-Bound Capability Tokens (IBCT)**:
+Khi Custos giao tiếp với agent từ xa, không gửi `Permit` cục bộ cho bên kia. **Invocation-Bound Capability Token (IBCT) dưới đây là đề xuất hợp đồng nội bộ của Custos, không phải trường hay cơ chế bắt buộc của A2A.** Chỉ phát hành credential ủy nhiệm nếu hai đầu đã có cơ chế xác thực, ánh xạ scope và thu hồi được kiểm thử; mặc định chỉ gửi work packet đã redacted, còn effect cục bộ tiếp tục đi qua Authority/Gateway của Custos:
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1296,105 +1298,66 @@ flowchart TB
 
 ## 7.1 Motivation
 
-Để Custos có thể tương tác liền mạch với nhiều giao diện người dùng (CLI, VS Code, Web UI), tích hợp các công cụ chuyên sâu từ hệ sinh thái nguồn mở (như MCP Servers), và kết nối với các mô hình suy luận đa dạng mà không làm vỡ kiến trúc nội bộ, hệ thống cần một **Tầng Giao Thức và Trung Tâm Điều Phối (Protocol & Hub Layer)**.
+Custos có **một hợp đồng công việc và quyền nội bộ**, rồi nhiều đường kết nối ở rìa. Không xếp MCP, IPC, HTTP, CAP, ACP và A2A thành sáu protocol thay thế nhau: IPC/HTTP là *transport*; MCP/ACP/A2A/CAP có mục đích và bên đối thoại khác nhau; Custos Local API là hợp đồng sản phẩm riêng. Một thông điệp đi được qua mạng không có nghĩa đã được cấp quyền, thực thi thành công hoặc đạt criterion.
 
-Tầng này đảm nhận việc:
-1. Chuẩn hóa mọi dòng thông tin đi vào và đi ra thông qua các giao thức mở có phiên bản rõ ràng.
-2. Cô lập sự khác biệt về mặt giao thức (STDIO, HTTP, SSE, WebSocket) thành các đối tượng nghiệp vụ thuần túy trong Domain.
-3. Đảm bảo an ninh tuyệt đối cho các kết nối ngoại biên theo các tiêu chuẩn mới nhất (OAuth 2.1, A2A v1.0.0).
+**Ba quy tắc:** (1) Daemon sở hữu Task/effect/evidence canonical; (2) mọi adapter khai báo phiên bản, capability, mức quan sát và đường tool thực tế; (3) transport/proxy/Agent Card không tự trở thành grant, permit hoặc bằng chứng hoàn thành. Không hứa "an ninh tuyệt đối" từ việc chọn giao thức.
 
-## 7.2 Sáu Hub Chuyên Biệt Trong Local Daemon
+## 7.2 Hub là trách nhiệm logic, không phải sáu service
 
-Kiến trúc của `custos-daemon` đóng vai trò là một Composition Root, bên trong chứa đúng 6 Hub chuyên biệt:
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        SÁU HUB ĐIỀU PHỐI CỦA DAEMON                    │
-├────────────────────┬───────────────────────────────────────────────────┤
-│ **Session Hub**    │ Quản lý các kênh kết nối từ Client (CLI/IDE/Web)  │
-│ **Capability Hub** │ Cổng kiểm soát các công cụ cục bộ & Sandbox       │
-│ **MCP Hub**        │ Kết nối và quản lý vòng đời các MCP Servers       │
-│ **A2A Hub**        │ Quản lý mạng lưới ủy thác giữa các Agent từ xa    │
-│ **Model Hub**      │ Điều phối kết nối đến các Provider LLM/SLM        │
-│ **Event Bus Hub**  │ Kênh phát sóng sự kiện bất biến nội bộ Daemon     │
-└────────────────────┴───────────────────────────────────────────────────┘
-```
+`Session/Client`, `Model`, `AgentRuntime`, `Capability/MCP`, `Remote Delegation` và `Event Projection` là **nhóm trách nhiệm**. Daemon là composition root, không bắt buộc sáu process, sáu server, sáu registry hay sáu crate. Tạo module chỉ khi có lifecycle, state và conformance test riêng. Kernel quyết định admission/evidence; runtime chọn đường thực thi trong scope; adapter chuyển đổi wire; persistence giữ attempt/outbox; UI chỉ đọc API.
 
 ```mermaid
-graph TD
-    Client[Client UI / CLI / IDE] -->|Local API v1 Domain Socket| SessionHub[Session Hub]
-    SessionHub --> Kernel[Task Kernel & Core Engine]
-    
-    Kernel --> ModelHub[Model Provider Hub]
-    Kernel --> CapHub[Capability Hub]
-    Kernel --> McpHub[MCP Hub]
-    Kernel --> A2aHub[A2A Hub]
-    
-    ModelHub --> ExtLLM[Local / Cloud LLMs]
-    CapHub --> LocalTools[Hệ thống tệp / Shell Sandbox]
-    McpHub --> ExtMCP[External MCP Servers STDIO / SSE]
-    A2aHub --> ExtAgents[Mạng lưới Remote Agents]
-
-    Kernel -.-> EventBus[Event Bus Hub]
-    EventBus -.-> SessionHub
+flowchart TD
+    Client["CLI / IDE / Desktop"] -->|"Custos Local API qua IPC; HTTP opt-in"| Daemon["Daemon composition root"]
+    Daemon --> Kernel["Task Kernel + Authority + Evidence"]
+    Kernel --> Runtime["Runtime: workflow / agent / route"]
+    Runtime --> Model["ModelPort → vendor hoặc proxy profile"]
+    Runtime --> Agent["AgentRuntimePort → native harness hoặc ACP/CAP adapter"]
+    Runtime --> Capability["CapabilityPort → local tool hoặc MCP client"]
+    Runtime --> Remote["DelegationPort → A2A client nếu bật"]
+    Capability -->|"effect attempt / receipt"| Kernel
+    Remote -->|"remote task / artifact chưa tin"| Kernel
 ```
 
-## 7.3 Bản Đồ Giao Thức Theo Chiều Tương Tác
+## 7.3 Bản đồ quyết định IPC, Local HTTP, MCP, CAP, ACP và A2A
 
-| Chiều | Giao Thức | Cơ Chế Vận Chuyển | Xác Thực & An Toàn | Đơn Vị Xử Lý |
+| Biên / công việc | Có cần cho sản phẩm lõi? | Giao thức hay transport | Chủ hợp đồng và vị trí triển khai | Không được nhầm với |
 |---|---|---|---|---|
-| **Inbound** (Client $\rightarrow$ Daemon) | Local API v1 | Unix Domain Socket / Named Pipe | Kiểm tra UID tiến trình hệ điều hành (OS IPC Peer Credential) | `custos-bridge` & `SessionHub` |
-| **Inbound** (Editor $\rightarrow$ Daemon) | ACP (Agent Comm Protocol) | JSON-RPC 2.0 qua IPC | Token phiên làm việc một lần | `custos-bridge` |
-| **Outbound** (Daemon $\rightarrow$ Tools) | MCP v2026-07-28 | STDIO (Local) / SSE & HTTP (Remote) | OAuth 2.1 AS Metadata + Scoped Perms | `McpHub` |
-| **Outbound** (Daemon $\rightarrow$ Agent) | A2A Protocol v1.0.0 | HTTPS REST + SSE Streaming | Agent Cards + IBCT Token Chain | `A2aHub` |
-| **Outbound** (Daemon $\rightarrow$ Models)| Provider Native / OpenAI Wire | HTTPS REST / Streaming | Khóa bảo mật lưu trong OS Keychain | `ModelHub` |
+| CLI/IDE/Desktop ↔ Daemon | **Có: Local API; transport chọn theo surface** | Custos Local API qua stdio JSONL hiện có; Unix socket/named pipe là đích khi nhiều client | `custos-daemon` host; `custos-bridge` giữ session–task bridge; `custos-sdk` là client | ACP, MCP hoặc grant |
+| Web UI/local integration ↔ Daemon | **Tùy nhu cầu**, không bắt buộc nếu IPC đủ | Local HTTP là transport khác của **cùng Local API** | Daemon listener + cùng command handler/schema, auth và origin policy riêng | API công khai Internet hoặc Task engine thứ hai |
+| Custos ↔ tools/data servers | **MCP client hữu ích**, nhưng một tool nội bộ không cần MCP | MCP stdio hoặc Streamable HTTP | `custos-adapters/src/mcp/` chuyển wire; Authority/Gateway kiểm effect | Model provider hoặc permit |
+| Custos ↔ coding harness có ACP | **Tùy adapter** | ACP = Agent Client Protocol; Custos là client của agent | AgentRuntimePort + adapter ACP có conformance; không thay Local API | A2A hoặc quyền native tool |
+| Custos ↔ CLI agents theo CAP | **Chưa bắt buộc; watchlist/experiment** | CAP = CLI Agent Protocol draft, PTY fallback/structured fast paths | Adapter agent tùy chọn sau khi pin spec và đo fidelity | Hợp đồng AgentRuntimePort hoặc bằng chứng mediation |
+| Custos ↔ remote agent độc lập | **Chỉ khi có remote delegation thật** | A2A; Agent Card, remote Task/Message/Artifact | DelegationPort và A2A adapter; Custos map remote ID vào WorkerRun | Custos TaskContract hoặc local Permit |
+| Custos ↔ model / proxy | **Có ít nhất một ModelPort** | Vendor API hoặc proxy profile; 9Router là ứng viên proxy | `custos-provider` contract; `custos-adapters/src/providers/` concrete | AgentRuntimePort, MCP hoặc Task policy |
 
-## 7.4 Chuẩn MCP 2026-07-28: OAuth 2.1, Transports và Cơ chế Callback
+**9Router** là tham khảo cho model request translation, streaming, provider/account fallback và usage; **agentgateway** là tham khảo cho proxy/federation của model–MCP–A2A. Hai dự án không sở hữu Task/Authority/Evidence của Custos. Chỉ đưa vào như adapter/sidecar sau khi pin SHA/license, kiểm auth/ToS, transport fidelity, latency, secret boundary và các effect còn bypass. [9Router architecture](https://github.com/decolua/9router/blob/master/docs/ARCHITECTURE.md), [agentgateway](https://github.com/agentgateway/agentgateway/blob/main/README.md).
 
-Custos ghim chặt triển khai Model Context Protocol theo bản đặc tả quy chuẩn **MCP 2026-07-28**:
+## 7.4 MCP: công cụ và dữ liệu ngoài
 
-### Ba Cơ Chế Vận Chuyển và Cấp Độ Tin Cậy:
-1. **STDIO Transport:** Chạy máy chủ MCP dưới dạng tiến trình con (child process). Chỉ áp dụng cho các công cụ cục bộ đáng tin cậy. Được bảo vệ bởi sandbox giới hạn thư mục làm việc của hệ điều hành.
-2. **HTTP Transport (Streamable):** Áp dụng cho các dịch vụ MCP trên mạng cục bộ hoặc máy chủ từ xa. **Bắt buộc áp dụng OAuth 2.1** với cơ chế khám phá máy chủ ủy quyền tự động (AS Metadata - RFC 8414) và đăng ký client động (Dynamic Client Registration - RFC 7591).
-3. **SSE Transport (Server-Sent Events):** Sử dụng cho các luồng truyền dữ liệu sự kiện một chiều từ MCP Server về Custos. Xác thực qua Bearer Token có thời hạn ngắn.
+MCP là biên **client ↔ tool/resource server**, không phải biên client ↔ Custos Task hay giao thức model. Bản [MCP 2026-07-28](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports) định nghĩa hai transport chuẩn: `stdio` và `Streamable HTTP`; SSE có thể là stream phản hồi **trong** HTTP. Legacy HTTP+SSE thuộc đường tương thích phải khai báo riêng. Không mặc định mọi MCP server local là đáng tin, và workdir của subprocess không phải sandbox.
 
-### Kiểm Soát Các Điểm Gọi Lại (MCP Callbacks):
-- **Sampling Callback (Mô hình gọi ngược lại LLM):** Khi một MCP Server yêu cầu "hãy phân tích dữ liệu này qua LLM", lời gọi này **bắt buộc phải đi qua ModelHub của Custos**. MCP Server không được phép cấu hình model tùy tiện; Custos sẽ áp dụng hạn mức ngân sách và kiểm tra bảo mật trước khi chuyển tiếp.
-- **Elicitation Callback (Yêu cầu làm rõ thông tin):** Tự động chuyển đổi thành trạng thái `TaskBlocked`, gửi thông báo về giao diện người dùng để con người trực tiếp trả lời.
-- **Roots Callback (Hỏi danh sách thư mục gốc):** Chỉ trả về các đường dẫn nằm trong danh sách trắng (`TaskScope`), tuyệt đối không làm lộ cấu trúc cây thư mục gốc của hệ thống máy chủ.
+HTTP authorization của MCP là **optional theo deployment**; khi được dùng, adapter phải theo phiên bản spec đã chọn, Protected Resource Metadata, client registration thích hợp và audience/scope. Dynamic Client Registration là lựa chọn tương thích, **không bắt buộc cho mọi server**. Stdio dùng cách cấp credential/phân quyền của process, không áp nguyên OAuth HTTP lên stdio. [MCP authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization).
 
-## 7.5 Chuẩn A2A Protocol v1.0.0 (Agent Cards & Delegation Protocol)
+Ở revision 2026-07-28, server không tự gửi JSON-RPC request ngược; sampling/elicitation/roots tương tác qua kết quả `input_required` nhiều vòng của request đang xử lý. Adapter hỗ trợ revision cũ có thể cần legacy callback shim; mỗi vòng vẫn phải kiểm scope, privacy, budget, số round và human consent tương ứng. Tool metadata/output là untrusted; `tools/list` không cho phép gọi tool; `tools/call` có effect chỉ dispatch qua permit/outbox khi Custos thực sự sở hữu điểm gọi. [MCP release](https://blog.modelcontextprotocol.io/posts/2026-07-28/), [SDK migration](https://ts.sdk.modelcontextprotocol.io/v2/migration/support-2026-07-28).
 
-Giao thức Agent-to-Agent (A2A v1.0.0, ấn bản Tháng 3/2026) cho phép Custos giao tiếp với các hệ thống AI độc lập khác:
+**Hiện trạng checkout:** `crates/custos-adapters/src/mcp/adapters/client.rs` có client mô phỏng trả `CallToolResult::success` từ chuỗi định dạng, không phải xác nhận đã gọi external server. Gateway wrapper hiện chưa có durable dispatch claim nên phải fail closed. Cần test stdio/HTTP thật, version negotiation, tool list/call, auth, cancel, output taint và crash trước khi gọi là MCP integration production.
 
-```json
-// Bản mô tả định danh Agent Card (/.well-known/agent-card.json)
-{
-  "agent_id": "urn:custos:agent:engineering-node-01",
-  "display_name": "Custos Rust Specialist Worker",
-  "version": "2.0.0",
-  "capabilities": [
-    { "name": "rust_code_repair", "version": "1.0", "assurance": "custos-mediated" },
-    { "name": "cargo_clippy_audit", "version": "1.0", "assurance": "custos-mediated" }
-  ],
-  "endpoint": "https://node01.custos.local/a2a/v1",
-  "security": {
-    "auth_type": "OAuth2.1-PoP",
-    "supported_tokens": ["urn:ietf:params:oauth:token-type:ibct"]
-  }
-}
-```
+## 7.5 A2A: giao việc cho remote agent độc lập
 
-### Quy Trình Ủy Quyền An Toàn Qua A2A Hub:
-1. **Khám Phá:** Tải `agent-card.json` từ máy chủ đối tác, kiểm tra chữ ký số để xác minh danh tính.
-2. **Ký Hợp Đồng:** So khớp năng lực đối tác với yêu cầu của `DelegationContract`.
-3. **Cấp Token Thu Hẹp:** Tạo một `InvocationBoundToken` (IBCT) với quyền hạn là tập con thu hẹp của Task hiện tại (tăng `chain_depth`).
-4. **Thực Thi Bất Đồng Bộ:** Gửi yêu cầu qua `POST /tasks`, lắng nghe sự kiện qua SSE, và nhận kết quả dưới dạng CAS Artifact References.
-5. **Đối Soát:** Toàn bộ dữ liệu nhận về từ remote agent đều bị gán cờ `TaintLevel::Untrusted` và phải trải qua Evidence Engine trước khi tích hợp vào dự án.
+A2A mô tả **Agent Card** để discovery và remote **Task, Message, Part, Artifact** với lifecycle riêng, có request/response, streaming hoặc push theo khả năng của peer. Agent Card là metadata do bên kia công bố, không phải chữ ký bảo đảm danh tính hay chính sách quyền của Custos. Kiểm TLS/identity/auth theo deployment và card/version đã chọn; không tự thêm trường Custos (`assurance`, `IBCT`) rồi gọi đó là trường chuẩn A2A. [A2A core concepts](https://a2a-protocol.org/latest/topics/key-concepts/).
 
-## 7.6 ACP (Agent Communication Protocol) và Versioned Local API v1
+Custos chỉ gửi `WorkPacket` đã chọn nguồn/redact/consent. `remote_task_id` liên kết vào `WorkerRun/EffectAttempt` của **Custos Task**, không thay TaskContract; remote result/artifact mặc định untrusted và phải qua verifier. Custos không chuyển local permit, secret hoặc CAS path cho peer. Network timeout sau delegation là `uncertain` đến khi query/reconcile; không tạo remote Task thứ hai bằng retry mù. IBCT ở §4.4 là đề xuất riêng cần compatibility và conformance, **không là điều kiện A2A**. Chưa bật inbound A2A server nếu chưa có nhu cầu nhận job từ peer.
 
-Nhằm phục vụ tích hợp trực tiếp vào trình soạn thảo (như VS Code Extension), Custos cung cấp giao diện chuẩn hóa:
+**Hiện trạng checkout:** `crates/custos-adapters/src/roaming/a2a.rs` tự ghi `Simulated immediate dispatch / RPC handshake`; chưa có A2A protocol client/Agent Card/task mapping thật. Đừng gắn `custos-mediated` cho effect bên trong remote agent.
+
+## 7.6 Local API, IPC, Local HTTP, ACP và CAP
+
+**Local API** là hợp đồng ổn định của Custos: command/query/event envelope có `schema_version`, `command_id`, actor, correlation, expected revision, deadline, privacy class và event cursor. Một command có cùng ý nghĩa qua mọi transport. `stdio JSONL`, Unix socket hoặc Windows named pipe là IPC transports; `Local HTTP` chỉ thêm listener khi UI/browser/integration thật cần. HTTP local phải bind loopback, có auth/origin/CSRF policy và không tin `localhost` tự là người dùng; IPC cũng cần kiểm quyền endpoint/peer theo OS. Không mở public listener mặc định. **Code hiện tại** ở `custos-daemon/src/main.rs` dùng `stdio-jsonl`; socket/pipe/HTTP là đích, chưa được ghi là đã chạy.
+
+**ACP (Agent Client Protocol)** phục vụ một client (có thể là Custos hoặc editor) giao tiếp với agent có session/prompt/update/permission. Nó không phải Local API và không bắt buộc để VS Code nói chuyện với Custos; extension có thể dùng Local API trực tiếp. Chỉ tạo ACP client/server adapter khi có đối tác thật và test version/cancel/permission/fs/terminal. **CAP (CLI Agent Protocol)** là draft điều khiển CLI agent qua PTY/fast paths; thử sau native harness adapter nếu giảm công tích hợp mà vẫn giữ event, approval, worktree và cancel fidelity. CAP không làm cho native tool trở thành `custos-mediated`. [ACP specification](https://agentclientprotocol.com/protocol/v1/overview), [CAP draft](https://cap-protocol.org/).
+
+Ví dụ envelope Local API dưới đây là **contract đích**, không tuyên bố type hiện tại đã có đủ trường:
 
 ```rust
 // Cấu trúc lệnh của Local API v1
@@ -1414,29 +1377,36 @@ Mọi thay đổi trong Local API đều tuân thủ chính sách Semantic Versi
 
 ## 7.7 Năm Bộ Điều Hợp Harness (Claude, Codex, Cursor, Antigravity, Goose)
 
-Custos không tìm cách phát minh lại các công cụ chuyên biệt của thị trường mà tích hợp chúng thông qua **5 Harness Adapters**:
+> **Trạng thái triển khai:** Bảng bên dưới là danh mục tích hợp đích, không phải chứng nhận đã vận hành. Tại audit commit `3e4dac4`, `CodexProvider`, `ClaudeProvider`, `AntigravityProvider` và `LocalModelProvider` trong nhóm adapter đơn giản đều trả nội dung mô phỏng; các adapter ấy phải fail closed cho đến khi có transport thật. `AgentRuntimePort` mới có một implementation một lượt inference; daemon chưa compose các harness này. Mọi nhãn assurance chỉ được cấp theo *action và đường thực thi đã test*, không theo tên adapter.
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                        NĂM BỘ ĐIỀU HỢP HARNESS                         │
-├─────────────────┬────────────────────┬─────────────────────────────────┤
-│ ADAPTER         │ BẢN CHẤT TÍCH HỢP  │ MỨC ĐỘ CAM KẾT (ASSURANCE)      │
-├─────────────────┼────────────────────┼─────────────────────────────────┤
-│ **Claude Code** │ CLI Subprocess     │ Provider-governed (Bọc an toàn) │
-│ **Codex Server**│ App Server Socket  │ Custos-mediated qua Interceptor │
-│ **Cursor**      │ Coordinator Engine │ Observe-only / File Watching    │
-│ **Antigravity** │ Native IDE Hook    │ Custos-mediated hoàn toàn       │
-│ **Goose**       │ Tool Extensions    │ Biến tấu an toàn (Pin SHA)      │
-└─────────────────┴────────────────────┴─────────────────────────────────┘
-```
+### Hợp đồng thực thi chung
+
+**Hợp đồng đích:** `ModelPort` là một lần suy luận model có request/attempt ID, stream, tool-call proposal, usage và cancel theo capability thực tế. `AgentRuntimePort` đại diện một harness sở hữu vòng lặp nhiều bước, có event/tool proposal, approval request, artifact, terminal status, usage và resume **nếu adapter hỗ trợ**. Trait hiện tại chưa cung cấp đủ các trường và sự kiện ấy; không mô tả nó như tính năng đã có. Goose-derived loop chạy trong Custos có thể triển khai `AgentRuntimePort` và dùng `ModelPort` bên dưới; Goose CLI chạy ngoài process là một adapter khác. Không coi hai hình thức này tương đương về quyền.
+
+Mỗi execution path phải công bố riêng: `loop_owner`, `workspace_owner`, `tool_mediation`, `event_coverage`, `approval_coverage`, `usage_visibility`, `cancel_semantics`, `resume_semantics`, `sandbox_profile`. `custos-mediated` chỉ áp dụng cho action mà mọi đường effect khả dụng đã được chặn *trước dispatch* bởi Custos và qua kiểm thử conformance/escape. Tool event, hook, App Server approval hay worktree đơn lẻ không đủ chứng minh điều đó. Nếu agent có native tool ngoài Gateway, action ấy là `provider-governed` hoặc `observe-only` tùy bằng chứng; unknown khi chưa audit.
+
+`ActionIntent` do bất kỳ model/harness nào đề xuất đều không phải permit. Research agent có thể thu thập và tổng hợp nhưng Custos phải mở lại source version/passage trước khi công nhận claim. Coding agent có thể sửa trên worktree riêng nhưng Custos kiểm base hash, diff scope và test độc lập trước tích hợp. Assistant agent có thể soạn exact draft; gửi mail/lịch chỉ `custos-mediated` khi connector do Custos dispatch sau approval bound payload. Không bắt buộc `DirectModel` chỉ vì Task thuộc Research hoặc Assistant.
+
+**Goose trong checkout:** `crates/custos-runtime/src/engine/agents/` chứa nhiều mã agent loop/MCP/extension kế thừa nhưng `runtime/src/lib.rs` chưa mount `engine`; các primitive đã tách trong `runtime/src/agent/` được compile nhưng chưa thấy daemon nối thành một vòng lặp thực. Giữ mã làm nguồn tái sử dụng, inventory `active / compiled-unwired / dormant / duplicate` cùng upstream SHA/license/attribution; chọn một vòng lặp sản phẩm bằng test parity thay vì bật song song hai engine. Không tự nhận Goose hiện đã nằm hoàn toàn dưới Gateway.
+
+**Thứ tự gate:** (1) một execution spine có permit/outbox/receipt bền vững, unknown tool fail closed; (2) thống nhất hai interface provider đang tồn tại bằng adapter/fixture, không thêm hệ thứ ba; (3) internal harness chạy e2e với fake model/tool; (4) external harness từng cái với conformance về event, approval, native-tool bypass, worktree, cancel, usage và crash; (5) tối ưu routing sau khi có baseline. CAP là draft tùy chọn, không phải giao thức lõi bắt buộc.
+
+Custos có thể tích hợp các harness chuyên biệt, nhưng **năm mục sau là ứng viên**, không phải năm adapter đã hoạt động:
+
+| Ứng viên | Đường tích hợp cần kiểm | Trạng thái / assurance |
+|---|---|---|
+| Claude Code | SDK/CLI + hooks | Chưa có conformance; chưa claim |
+| Codex | App Server/CLI | Chưa có conformance; chưa claim |
+| Cursor | API nếu hỗ trợ | Chưa có conformance; chưa claim |
+| Antigravity | API nếu hỗ trợ | Stub model; chưa claim |
+| Goose | Internal/CLI | Source có; chưa compose |
 
 > **ĐỊNH HƯỚNG VỚI GOOSE ADAPTER:**  
-> Custos tuyệt đối không loại bỏ hay thanh trừng Goose. Ngược lại, chúng ta tiếp thu những điểm tinh hoa trong cơ chế quản lý tool extensions của Goose, đóng gói lại thành một Adapter chuẩn mực trong `custos-adapters`. Adapter này được ghim chặt tại commit SHA ổn định, kiểm toán giấy phép bản quyền (Apache 2.0), và đặt dưới sự kiểm soát 100% của Capability Gateway.
+> Custos giữ các phần Goose có ích sau khi kiểm provenance/SHA/license và test đường thực thi. Goose-derived loop nội bộ thuộc runtime; Goose CLI ngoài process thuộc adapter. Hiện chưa có bằng chứng tất cả phần này đã được đóng gói trong `custos-adapters` hoặc chịu mediation 100% bởi Gateway. Không đổi quyền sở hữu source chỉ bằng cách đổi tên module.
 
 
 ## 7.8 Vòng Đời Kết Nối Và Quản Trị Hợp Đồng (Hub Lifecycle)
-Lifecycle tiêu chuẩn của một điểm tích hợp trong Hub: `configured → discovered → validated → enabled → degraded/disabled → removed`. 
-Việc Discovery chỉ đọc metadata; Enablement mới thực sự cho phép đưa điểm nối vào danh sách ứng viên (candidate route) cho Agent. Health check bao gồm độ trễ (latency), rate-limit và capability drift (lệch chuẩn schema).
+Lifecycle đích của một điểm tích hợp: `configured → discovered → validated → enabled → degraded/disabled → removed`. `discovered` chỉ xác nhận metadata/endpoint; `validated` đòi schema/version/identity và fixture; `enabled` còn cần user consent, secret ref, policy và capability phù hợp. Health check đo transport, auth expiry, latency/rate-limit và schema drift nhưng **không** chứng minh chất lượng model hay sự an toàn của native agent tools. `removed` không xóa receipt lịch sử. Catalog chia bốn loại `model_endpoint`, `agent_runtime`, `tool_server`, `remote_agent`; một endpoint có nhiều vai trò thì ghi nhiều binding, không suy một role từ tên vendor.
 
 ## 7.9 Cơ Chế Xử Lý Lỗi Và Tính Khả Quan Sát (Observability)
 | Failure Type | Xử lý | Dữ liệu cần giữ |
@@ -1448,28 +1418,37 @@ Việc Discovery chỉ đọc metadata; Enablement mới thực sự cho phép �
 | Schema drift | Re-discover + invalidate | Old/new schema digests |
 
 ## 7.10 Ranh Giới Mã Nguồn Các Hub (Code Boundaries)
-Đích code theo trách nhiệm, tận dụng modules đang có và ghi migration vào RepoCodeIndex:
-- `custos-domain`: `integration/{connection,capability,delegation,workspace}.rs`
-- `custos-provider`: model/agent contracts + normalized attempt events
-- `custos-core`: `ports/{capability,connection_store,delegation_store}.rs`, `authority/` + `effects/` giữ admission/dispatch invariants
-- `custos-runtime`: `integration/{catalog,resolver,health,callbacks}.rs`, `agent/` và `workflow/` dùng typed ports
-- `custos-adapters`: `mcp/{client,server_facade,versions,normalize}.rs`, `a2a/{client,server_facade,card,task_mapping}.rs`, `agents/{codex,claude,cursor,antigravity,goose}/`
-- `custos-persistence`: connection/capability snapshots, delegation/attempt repositories
-- `custos-daemon`: compose registries/adapters + Local API + supervisors
+
+**Không tạo thêm crate `protocol-hub`.** Dùng vị trí hiện có; các path chưa tồn tại dưới đây là *đích khi feature đạt gate*, không phải lệnh tạo folder rỗng. `RepoCodeIndex` phân loại mỗi file `active / compiled-unwired / dormant / simulated / stub` trước khi chuyển.
+
+| Trách nhiệm | Vị trí hiện có | Đích khi triển khai |
+|---|---|---|
+| Custos Local API và session/task bridge | `custos-daemon/src/{api.rs,main.rs,local_api/}`; `custos-bridge/src/` | Giữ command handler duy nhất; thêm socket/pipe/HTTP listener trong daemon khi cần; client DTO trong `custos-sdk` |
+| Model/agent attempt contracts | `custos-provider/src/{port.rs,events.rs,types/}` | Chốt một public ModelPort và một AgentRuntimePort; adapter vendor/proxy không nằm trong core |
+| Route, workflow, integration catalog | `custos-runtime/src/{agent,cognitive,workflow,context}/` | Catalog/resolver/health trong runtime **nếu** nhiều binding thực; không trùng registry/provider selector hiện có |
+| MCP client | `custos-adapters/src/mcp/` | Hoàn thiện stdio/Streamable HTTP, version/auth/normalization tại đây; MCP server facade chỉ khi external client có job thật |
+| Native harness, ACP, CAP | `custos-adapters/src/providers/{codex,claude,antigravity}/` hiện là model-named stubs | Tách model endpoint khỏi harness adapter khi triển khai; ACP/CAP dưới agent adapter, không trong Local API |
+| A2A remote | `custos-adapters/src/roaming/a2a.rs` hiện là simulated router | A2A client/card/task mapping trong adapter riêng **chỉ sau** remote use case; roaming transport không tự là A2A |
+| Policy và hiệu ứng | `custos-core/src/{authority,capability,kernel,evidence}/`; `custos-persistence/` | Core giữ admission/criterion; persistence giữ connection refs, permits/outbox/attempts; adapter không ghi DB |
+| Composition và UI | `custos-daemon/`, `custos-app/`, `custos-sdk/` | Daemon wire concrete adapters; clients chỉ dùng Local API |
+
+**Luồng import:** domain/core/port contracts không import MCP/A2A/HTTP vendor types. Runtime dùng port; adapters implement port; daemon compose. Một proxy như 9Router/agentgateway chạy ngoài Custos là *một connection profile*, không được mở đường vòng vào DB hoặc mint permit.
 
 ## 7.11 Tiêu Chuẩn Tuân Thủ Tích Hợp (Conformance)
-Fixture tối thiểu theo adapter: valid/invalid schema, unsupported capability, stream ordering, disconnect/reconnect, cancel race, auth expiry, metadata drift, usage missing, unknown remote outcome và redaction. Native harness thêm worktree handoff. Public capability matrix gắn version, OS và account profile đã thử.
+
+Mỗi binding có hồ sơ `protocol/version, direction, transport, endpoint identity, credential owner, loop owner, workspace owner, tool mediation, event coverage, usage visibility, cancellation/resume, assurance, tests`. Fixture chung: valid/invalid schema, unsupported capability, event ordering, disconnect/reconnect, cancel race, auth expiry, metadata drift, usage missing, unknown outcome, privacy/redaction. Thêm theo biên: IPC/HTTP replay/peer/origin; MCP tool metadata injection + version/round-trip; ACP/CAP native tool bypass + worktree/cancel; A2A remote task duplicate + artifact provenance; model proxy translation fidelity và fallback không đổi model pin. Public capability matrix gắn binary/spec version, OS và account profile đã thử. **Không qua fixture thì `unsupported` hoặc opt-in experimental, không auto-route.**
 
 ## 7.12 Research Foundation
 
-- **Model Context Protocol Specification (Anthropic 2024–2026):** Khung giao tiếp tiêu chuẩn công nghiệp giữa mô hình AI và các nguồn dữ liệu/công cụ ngoại vi.
-- **RFC 8414 & RFC 7591 (IETF):** Các tiêu chuẩn cốt lõi về ủy quyền dịch vụ phân tán, làm nền tảng cho việc ngăn chặn tấn công mạo danh trong mạng lưới agent.
+- [MCP transports](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports), [authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization) và [migration của SDK](https://ts.sdk.modelcontextprotocol.io/v2/migration/support-2026-07-28): phân biệt revision 2026 với legacy callback/HTTP+SSE.
+- [ACP Agent Client Protocol](https://agentclientprotocol.com/protocol/v1/overview), [A2A core concepts](https://a2a-protocol.org/latest/topics/key-concepts/) và [CAP draft](https://cap-protocol.org/): ba biên agent khác nhau, không là policy engine.
+- [9Router architecture](https://github.com/decolua/9router/blob/master/docs/ARCHITECTURE.md) và [agentgateway](https://github.com/agentgateway/agentgateway/blob/main/README.md): nguồn tham khảo proxy/adapter, không chứng minh phù hợp Custos trước audit SHA/license/conformance.
 
 
 ## 7.13 Ranh giới
 
 - Tầng này **KHÔNG** làm nhiệm vụ kiểm tra logic nghiệp vụ hay ra quyết định phê duyệt hành động (thuộc về Core Layer).
-- Tầng này **KHÔNG** mở cổng lắng nghe công khai ra Internet (mặc định chỉ bind vào localhost `127.0.0.1` hoặc Unix Domain Socket cục bộ).
+- Tầng này **KHÔNG** mở cổng lắng nghe công khai ra Internet theo mặc định. `stdio-jsonl` hiện có; socket/named pipe/loopback HTTP chỉ được thêm khi có auth, lifecycle và conformance tương ứng.
 
 ---
 
@@ -1755,10 +1734,10 @@ T1–T5 là các transaction riêng rẽ, không gộp thành một transaction 
 
 Lập trình với sự hỗ trợ của AI trong giai đoạn hiện nay thường gặp phải hai vấn đề lớn:
 1. **Sửa mã mù quáng (Blind Patching):** Mô hình đưa ra các đoạn code trông rất thuyết phục nhưng phá vỡ các tệp phụ thuộc ngầm, không thể biên dịch hoặc làm giảm hiệu năng hệ thống.
-2. **Xung đột khi xử lý đa tệp (Multi-file Drift):** Khi phải sửa đổi hàng chục tệp tin cùng lúc trong một đợt tái cấu trúc, các agent đơn lẻ thường bị "quên" ngữ cảnh của các tệp đã sửa trước đó hoặc ghi đè chồng chéo lên nhau.
+2. **Xung đột trong thay đổi rộng (Multi-file Drift):** Một coding agent mạnh có thể tự refactor hàng chục tệp trong một lượt. Rủi ro thực tế là source đổi, interface ngầm, test/criterion thiếu và xung đột khi **nhiều** worker cùng sửa; không được mặc định chia nhỏ chỉ theo số file.
 
 **Custos Engineering Pack** được thiết kế như một **Hệ Thống Công Trình Phần Mềm Khép Kín (Closed-Loop Software Engineering System)**:
-- Không bao giờ sửa mã trực tiếp trên thư mục làm việc chính; mọi thao tác đều diễn ra trong không gian cô lập (`isolated_worktree`).
+- Ưu tiên `isolated_worktree` cho thay đổi được giao tự chạy hoặc nhiều worker; với Assist, user có thể chọn apply trong working tree đã xác định scope/base hash. Worktree cô lập branch/files, **không** là sandbox tiến trình/mạng.
 - Mọi thay đổi đều được đóng gói thành các bản vá nguyên tử (`PatchBundle`) có kiểm tra điều kiện tiên quyết.
 - Tích hợp chuẩn giao diện công cụ SWE-agent và quy trình đối soát tích hợp đa luồng.
 
@@ -1852,7 +1831,7 @@ Theo nghiên cứu từ công trình **SWE-agent (arXiv 2024)**, thiết kế gi
 4. **Cấp độ L3 (Giả thuyết mô hình):** Mô hình đề xuất vùng nghi vấn (mang trạng thái `Uncertain`, bắt buộc phải tạo test case để tái hiện).
 
 ### Quy Trình Hợp Nhất Đa Worker (Multi-Worker IntegrationSpec):
-Khi triển khai topo T4 (nhiều Worker chạy song song trên các worktree riêng biệt để giải quyết các module khác nhau):
+Khi chọn họ **parallel writes** sau khi xác nhận write sets và interface đủ độc lập (không phải mặc định cho refactor lớn):
 
 ```mermaid
 sequenceDiagram
@@ -2217,85 +2196,77 @@ Ví dụ: “Đánh giá hai cách giảm latency retrieval, thử cách phù h�
 
 ## 14.1 Motivation
 
-Nhiều khung làm việc agentic hiện nay quảng bá mô hình "đội quân hàng trăm agent" (Swarm of Agents) như một giải pháp thần kỳ cho mọi vấn đề. Tuy nhiên, các nghiên cứu khoa học nghiêm túc trong năm 2025–2026 (như *Multi-Agent Failure Modes*, arXiv 2025) đã chứng minh:
-- Càng nhiều agent tham gia vào một tác vụ đơn giản, chi phí token càng tăng vọt theo hàm mũ, độ trễ càng cao, và nguy cơ mất mát thông tin khi chuyển giao (Handoff Data Loss) càng lớn.
-- Với hơn 60% các tác vụ lập trình hàng ngày, **một mô hình đơn lẻ được trang bị công cụ tốt (Single-Worker with Tools) mang lại hiệu quả vượt trội so với một mạng lưới đa agent phức tạp**.
+**OI là bộ chọn chiến lược thực thi bị ràng buộc bởi TaskContract**, không phải một LLM planner thường trực và cũng không phải lời hứa rằng chia việc cho nhiều agent luôn rẻ hơn. Một model hoặc một coding-agent harness mạnh làm trọn Task là ứng viên mặc định; workflow chỉ được thêm khi có lý do theo pack, bằng chứng/khả năng độc lập và ngân sách. Việc S2 suy luận sâu bên trong một worker không bị OI ép thành nhiều micro-worker.
 
-**Custos Orchestration Intelligence (OI)** được thiết kế như một **Bộ Não Điều Phối Tiết Kiệm và Thực Dụng**:
-- Mặc định sử dụng topo đơn giản nhất có thể giải quyết được vấn đề.
-- Chỉ kích hoạt multi-agent khi độ phức tạp của đồ thị tác vụ đòi hỏi sự phân tách ranh giới ghi rõ ràng.
-- Kết hợp hoàn hảo giữa phản xạ nhanh (System 1 Fabric) và tư duy chiến lược chậm (System 2 Runtime).
+[Thử nghiệm Free-Executor Paradox](https://github.com/kenimo49/free-executor-paradox) quan sát planner đọc lại nhiều context và tăng chi phí trong **ba** bài code-repair, 40 trials; đó là cảnh báo thực nghiệm chứ không phải tỷ lệ chung cho Custos. [MAST](https://arxiv.org/html/2503.13657v3) phân tích failure traces của các hệ đa agent được thử, không đưa ra luật “đa agent luôn hỏng”. Custos phải đo trên **toàn Task** (bao gồm handoff, retry, verifier, human time), so với strong single-worker baseline cùng điều kiện.
+
+**Ranh giới:** Human chốt goal/scope/pin và grant; pack đặt template, artifact và criterion; OI chọn chiến lược trong constraint; S1 đưa typed signal có thể abstain; S2/native harness suy luận và tạo proposal; compiler/scheduler xử lý graph; Kernel/Authority giữ quyền; domain verifier và completion gate quyết định evidence. OI không đổi nghĩa criterion, tự cấp permit, tự công nhận success hay can thiệp vào hidden reasoning của agent ngoài khi adapter thật sự hỗ trợ.
 
 ## 14.2 Bộ Não Điều Phối OI Engine
 
-OI Engine không phải là một mô hình LLM đơn thuần; nó là một thuật toán điều phối kết hợp giữa logic hình thức và đánh giá xác suất:
+OI có **hai thời điểm quyết định**, không có planner đọc lại toàn bộ transcript sau mỗi tool call:
 
 ```mermaid
 flowchart TD
-    TaskIn[Yêu cầu Tác vụ Mới] --> CandidateBuilder[1. Candidate Builder: Sinh các Topo khả thi T0 - T8]
-    CandidateBuilder --> HardFilter[2. Hard Filter: Lọc bỏ Topo vi phạm Budget / Scope / LocalOnly]
-    HardFilter --> Estimator[3. Utility Estimator: Tính toán Chi phí / Thời gian / Tỷ lệ Thành công]
-    Estimator --> Selector[4. Topology Selector: Chọn Topo có Utility cao nhất]
-    Selector --> Dispatch[5. Scheduler: Điều phối Worker thực thi]
-    
-    Dispatch --> Monitor{6. Quá trình Thực thi}
-    Monitor -- Gặp rào cản / Thất bại --> Replanner[7. Dynamic Replanner: Đổi Topo hoặc Tinh chỉnh DAG]
-    Replanner --> HardFilter
-    Monitor -- Hoàn tất --> Done[Nghiệm thu Tác vụ]
+    T["TaskContract + pack template + source snapshot"] --> F["Hard filter: scope, pin, privacy, capability, budget"]
+    F --> C["D0 rules; D1 bounded planner; D2 strong planner khi cần"]
+    C --> R["RoutePlan: direct / one worker / bounded graph"]
+    R --> P["Preflight + deterministic Plan Compiler theo revision"]
+    P --> S["Event-driven scheduler; worker S2 hoặc native harness"]
+    S --> V["Pack verifier + criterion gate"]
+    V -->|"pass/limited"| O["Outcome + ContinuationPacket"]
+    V -->|"material change, bounded"| B["ReplanBrief: delta + artifact refs"]
+    B --> F
 ```
 
-### Hàm Đánh Giá Lợi Ích (Utility Function):
-$$\text{Utility}(\text{Topo}_i) = P_{\text{success}}(\text{Topo}_i) \cdot Q_{\text{expected}} - \lambda_C \cdot \text{Cost}(\text{Topo}_i) - \lambda_T \cdot \text{Latency}(\text{Topo}_i)$$
-Trong đó:
-- $P_{\text{success}}$: Xác suất thành công ước tính dựa trên dữ liệu lịch sử của các tác vụ tương tự.
-- $Q_{\text{expected}}$: Điểm chất lượng kỳ vọng.
-- $\lambda_C, \lambda_T$: Trọng số phạt chi phí và thời gian do người dùng cấu hình (ví dụ: chế độ tiết kiệm sẽ tăng $\lambda_C$).
+**Trước run:** D0 dùng rules/template và thường chọn direct hoặc một worker; D1 lập kế hoạch gọn khi có nhiều bước phụ thuộc; D2 dùng S2 mạnh để phân rã khi goal có coupling, rủi ro hoặc khoảng trống ngữ nghĩa cao. Đây là **mức đầu tư lập kế hoạch**, không phải ba mức chất lượng executor. User pin/model capability, local-only, egress, scope, approval và budget là hard constraints; D2 không tự chuyển executor sang model rẻ. Nếu thiếu dữ liệu dự báo, chọn baseline một worker và ghi `unknown`, không giả tạo xác suất thành công.
 
-## 14.3 Chín Topo Điều Phối Chuẩn Mực (T0–T8)
+**Trong run:** scheduler quyết định `ready`, dependency, lease, timeout, cancellation và budget theo sự kiện; không hỏi LLM tại mỗi bước. Chỉ đề xuất replan khi source/giả định quan trọng bị bác bỏ, verifier chỉ ra thiếu criterion, lỗi lặp có cap, provider không còn khả dụng, budget không đủ, hoặc human revise. Trước replan phải reconcile effect `uncertain`; chỉ thay future nodes, giữ evidence và effect quá khứ. `ReplanBrief` tối thiểu gồm `task_revision`, `workflow_revision`, affected nodes, failed assumptions, verifier statuses, remaining budgets, pending/uncertain effects, artifact references và privacy label; truy hồi log đầy đủ có chọn lọc trong scope. Giới hạn số lần replan và fan-out theo TaskContract.
 
-Custos chuẩn hóa đúng 9 cấu trúc liên kết điều phối:
+**Tính kinh tế không đếm hai lần:** Ledger cộng *mọi attempt thực tế* của planning, execution, handoff/context transfer, verification và replan/retry; retry là nhãn nguyên nhân của attempt, không cộng thêm một khoản đã nằm trong model/tool bill. Báo riêng `billed USD`, `local compute estimate`, `human minutes`, `latency p50/p95`, `unknown usage` và `cost per accepted Task` với cả Task thất bại trong mẫu số chi phí. Dự báo trước run dùng khoảng ước lượng có độ tin cậy/calibration theo pack; không lấy một công thức utility với xác suất chưa đo làm chân lý.
 
-| Topo | Tên Gọi | Cấu Trúc Vận Hành | Trường Hợp Sử Dụng Tối Ưu |
-|---|---|---|---|
-| **T0** | **Direct Model** | Gửi thẳng prompt đến LLM, stream kết quả về UI. | Tra cứu nhanh, giải thích cú pháp, chat ngắn. |
-| **T1** | **Single Worker** | Một Worker duy nhất trang bị bộ công cụ ACI. | Sửa bug đơn lẻ, viết unit test, khảo sát repo. |
-| **T2** | **Verifier Loop** | Worker thực thi kết hợp với Verifier kiểm tra độc lập. | Viết tính năng mới đòi hỏi vượt qua test suite khắt khe. |
-| **T3** | **Dual Specialist** | Hai worker chuyên biệt (ví dụ: 1 Coder + 1 Reviewer). | Tái cấu trúc mã nguồn liên quan đến an ninh bảo mật. |
-| **T4** | **Parallel Lanes** | Nhiều worker chạy song song trên các Git Worktree tách biệt. | Sửa đổi nhiều module hoàn toàn độc lập về mặt mã nguồn. |
-| **T5** | **Hierarchical** | Một Lead Planner phân việc cho các Sub-Workers. | Các tác vụ kỹ thuật lớn kéo dài nhiều ngày. |
-| **T6** | **Adaptive DAG** | Đồ thị luồng công việc tự động biến đổi dựa trên kết quả trung gian. | Nghiên cứu sâu đa bước kết hợp kiểm chứng lặp FIRE. |
-| **T7** | **Cross-Pack** | Chuyển giao giữa các Pack (ví dụ: Research $\rightarrow$ Engineering). | Đọc bài báo khoa học rồi tự động viết mã mẫu thử nghiệm. |
-| **T8** | **Consensus Swarm**| Đa mô hình bỏ phiếu đồng thuận (chỉ dùng khi cực kỳ quan trọng). | Kiểm toán hợp đồng thông minh hoặc mã nguồn hạt nhân P0. |
+`RoutePlan` ghi chosen candidate, alternatives hợp lệ, vì sao không chọn single worker, snapshot/policy/model/harness version, cost–latency *range*, verifier obligations và giới hạn replan. Quyết định hard policy do Kernel tái kiểm ở dispatch; route không phải grant.
+
+## 14.3 Họ Topology Có Thể Lắp Ghép
+
+Không đóng đinh chín tên `T0–T8` thành API hay yêu cầu triển khai. OI chọn từ các **họ graph** nhỏ, có thể ghép verification/human barrier vào từng họ; cross-pack là cạnh artifact có kiểu chứ không tự là topology thứ chín.
+
+| Họ | Khi dùng | Điều kiện chặn/phần phải kiểm |
+|---|---|---|
+| Direct response | Read-only, scoped query, stream sớm | Source/egress đúng scope; không ép planner. |
+| One worker / one native harness | Mặc định cho coding, research, draft và việc cần suy luận mạnh liền mạch | Không làm mất native tools/worktree/context; gắn assurance thật của adapter. |
+| Bounded sequential graph | Có handoff hữu ích hoặc bước phụ thuộc bắt buộc: inspect → patch → verify, acquire → claims → synthesize | Artifact schema, criterion, chi phí chuyển context và điểm dừng rõ. |
+| Parallel independent branches | Search nhiều nguồn hoặc read-only modules độc lập; write chỉ khi disjoint được xác thực và có integration gate | Input/version độc lập, privacy/effect scope, concurrency cap; worktree không phải sandbox. |
+| Hierarchical/competitive experiment | Chỉ opt-in/experimental khi mạnh hơn baseline trên slice được đo | Bounded fan-out, review độc lập, tránh judge cùng lỗi; không coi “consensus” là bằng chứng. |
+
+Pack chọn template đầu tiên: Engineering không tách refactor lớn chỉ vì nhiều file; Research có thể fan-out acquisition rồi hợp nhất claim; Assistant có thể đọc song song nhưng external write phải qua exact authorization và serial barrier. Multi-pack dùng cùng Task và typed handoff; không tự thừa kế quyền giữa pack.
+
+**Preflight:** Pack template hoặc S2 tạo `PlanSpec` *đề xuất*. `SemanticPreflight` nêu mục tiêu/criterion bị bỏ, giả định chưa có source, bước không thể kiểm, xung đột và privacy risk; đó là cảnh báo có provenance, không chứng minh tính đúng của phân rã. `PlanCompiler` kiểm tất định schema/version, input/output edges, cycle/missing deps, scope/egress, budget, write set, effect ordering và evidence obligations **một lần mỗi workflow revision**. Plan đã biên dịch vẫn có thể sai về ngữ nghĩa; verifier/domain reviewer xử lý điều này. [AdaptOrch](https://arxiv.org/html/2602.16873v1) nêu trực tiếp rằng decomposition kém lan lỗi xuống các pha sau và coupling estimate là thô.
 
 ## 14.4 Phối Hợp Nhanh-Chậm SOFAI-LM (Fast S1 vs Deliberative S2)
 
-Lấy cảm hứng từ công trình khoa học **SOFAI-LM (Fast-Slow Cognitive Architecture for LLM Agents, arXiv 2025–2026)**, Custos chia bộ não điều phối thành hai bán cầu:
+Lấy cảm hứng từ [SOFAI-LM](https://arxiv.org/abs/2508.17959), nhưng **không sao chép một pipeline bắt buộc**. “S1/S2” mô tả vai trò, không buộc S1 luôn chạy trước S2 hoặc S2 chỉ làm planner:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                   HAI BÁN CẦU ĐIỀU PHỐI CỦA CUSTOS                     │
 ├────────────────────┬───────────────────────────────────────────────────┤
-│ **SYSTEM 1 (FAST)**│ S1 Fabric: Quy tắc cứng, bộ phân loại nhỏ (SLM),  │
-│                    │ heuristic, phát hiện mẫu, chi phí cực rẻ (gần 0$) │
+│ SYSTEM 1 (SCOPED)  │ Rules, local classifier/judge/scout; typed output,  │
+│                    │ provenance, deadline và abstain.                 │
 ├────────────────────┼───────────────────────────────────────────────────┤
-│ **SYSTEM 2 (SLOW)**│ S2 Runtime: Mô hình frontier lớn, lập luận suy luận│
-│                    │ sâu (Tree-of-Thought), lập kế hoạch dài hạn, tốn $│
+│ SYSTEM 2 (DEEP)    │ Model/harness suy luận, viết patch/brief/draft;    │
+│                    │ có thể tự điều phối tool loop bên trong.          │
 └────────────────────┴───────────────────────────────────────────────────┘
 ```
 
-### Điều Kiện Leo Thang Bắt Buộc (S1 Escalate to S2):
-S1 Fabric không được tự giải quyết mà bắt buộc phải chuyển giao cho S2 khi:
-1. Độ phức tạp của tác vụ vượt quá ngưỡng phân vị hiệu chuẩn (`CalibrationSlice`).
-2. Tỷ lệ không chắc chắn (`AbstainRate`) của S1 vượt quá $20\%$ trong phiên làm việc.
-3. Tác vụ đòi hỏi quyền ghi (`WriteScope`) vượt ra ngoài thư mục hiện tại.
-4. Bộ kiểm thử độc lập phát hiện lỗi logic mà S1 không có quy tắc xử lý tương ứng.
+**Điều kiện chuyển giao:** S1 abstain khi ngoài calibration slice, thiếu source/capability, timeout, ambiguity hoặc output không đủ rubric. Task cần reasoning/semantic synthesis thì chọn S2 theo nhu cầu Task, không suy từ một ngưỡng `abstain rate` 20% tùy ý. Write scope là vấn đề Authority, không phải bằng chứng rằng S1 hay S2 đủ quyền. Model rẻ/local chỉ được làm micro-task nếu output kiểm được và tổng chi phí kể cả rework có lợi; không tự thay model pin của user.
 
 ### Quyền Bác Bỏ Của S2 (S2 Rejection of S1 Hint):
-S2 Runtime hoàn toàn có quyền bác bỏ gợi ý của S1 nếu nhận thấy gợi ý đó mâu thuẫn với tiêu chí nghiệm thu tổng thể của người dùng. Mọi hành vi bác bỏ đều được ghi nhận vào nhật ký sự kiện để Meta Engine phân tích sau này.
+S2 có thể bác gợi ý relevance/route/hypothesis của S1 và ghi lý do khi có thể; **không** được bác scope, permit hay criterion của Kernel. Một native harness có reasoning ẩn không thể hứa log mọi suy nghĩ/bác bỏ; Custos ghi artifact và signal quan sát được.
 
 ## 14.5 Các Đặc Trưng DAG Từ AdaptOrch Trong Định Tuyến
 
-Khi đánh giá đồ thị phân rã tác vụ (Task DAG), Custos trích xuất các đặc trưng toán học lấy cảm hứng từ công trình **AdaptOrch (arXiv 2025–2026)** để bổ sung vào `PlanningSnapshot`:
+Các signal có thể thử nghiệm lấy cảm hứng từ [AdaptOrch](https://arxiv.org/html/2602.16873v1): ready width, critical path, shared context, coupling giữa interface, write overlap, verifier coverage và nguồn dữ liệu cho từng ước lượng. Chúng chỉ tồn tại khi index/parser và source snapshot đủ coverage; `unknown` không biến thành số 0. Kiểu dưới đây là **mẫu dữ liệu nghiên cứu, chưa phải Rust API đã tồn tại**:
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2303,44 +2274,42 @@ pub struct PlanningSnapshot {
     pub task_id: TaskId,
     pub dag_ready_width: usize,        // Số lượng node có thể chạy song song ngay lúc này
     pub critical_path_depth: usize,     // Chiều dài đường dẫn găng tới đích
-    pub shared_context_ratio: f32,     // Tỷ lệ phần trăm ngữ cảnh dùng chung giữa các node
-    pub interface_coupling_index: f32, // Mức độ phụ thuộc API giữa các module
-    pub estimated_write_overlap: f32,  // Dự báo mức độ đụng độ tệp tin giữa các worker
-    pub calibration_confidence: f32,   // Độ tin cậy của thuật toán dự báo
+    pub shared_context_ratio: Option<f32>,
+    pub interface_coupling_index: Option<f32>,
+    pub estimated_write_overlap: Option<f32>,
+    pub calibration_ref: Option<String>,
 }
 ```
 
-> **QUY TẮC BẢO THỦ TRONG ĐỊNH TUYẾN:**  
-> Nếu `estimated_write_overlap > 0.05` (có nguy cơ dù chỉ 5% đụng độ tệp tin), hệ thống **TUYỆT ĐỐI CẤM** chọn topo song song T4. Hệ thống bắt buộc phải tuần tự hóa luồng công việc (chuyển về T1 hoặc T2) để bảo vệ tính toàn vẹn của mã nguồn.
+**Quy tắc kiểm được:** overlapping *effective write targets* hoặc đường symlink chưa resolve → không chạy parallel writes; read-only branches có thể song song trong cùng source/privacy scope. Dự báo overlap là tín hiệu để cân nhắc, không phải threshold 5% bảo mật. Worktree tách file/branch và hỗ trợ integration, không cô lập network/process. Trước merge phải kiểm base hash, interface compatibility và test tích hợp. Parallel phải thắng chi phí handoff/merge, không chỉ ngắn hơn đường găng trên giấy.
 
 ## 14.6 Meta Engine Ngoại Tuyến (Offline Optimization Pipeline)
 
-Meta Engine là cơ chế tự tiến hóa của Custos, hoạt động hoàn toàn ngoại tuyến và tách biệt khỏi luồng thực thi thời gian thực:
+Meta Engine là vòng đánh giá/cải tiến **ngoài Task run**, không tự học rồi đổi route ngay giữa phiên:
 
 ```mermaid
 flowchart LR
     TraceCollector[1. Redacted Trace Collector: Thu thập log đã khử định danh] --> QualityLabeler[2. Quality Labeler: Gắn nhãn nghiệm thu thực tế]
-    QualityLabeler --> HeldOutEval[3. Held-Out Evaluator: Chạy benchmark đối soát độc lập]
-    HeldOutEval --> PolicyProposer[4. Policy Proposer: Đề xuất Policy tối ưu hóa mới]
-    PolicyProposer --> ShadowRunner[5. Shadow / Canary: Chạy thử ngầm 5% lưu lượng]
-    ShadowRunner --> HumanGate{6. BẮT BUỘC CON NGƯỜI DUYỆT}
+    QualityLabeler --> HeldOutEval[3. Paired eval theo pack so strong single-worker baseline]
+    HeldOutEval --> PolicyProposer[4. Đề xuất policy version + phạm vi áp dụng]
+    PolicyProposer --> ShadowRunner[5. Shadow/opt-in khi privacy và chi phí cho phép]
+    ShadowRunner --> HumanGate{6. Human review và phát hành policy}
     HumanGate -- Duyệt --> ProductionPolicy[Cập nhật Policy vào Daemon]
     HumanGate -- Từ chối --> Discard[Hủy bỏ Đề xuất]
 ```
 
-> **NGUYÊN TẮC VÀNG SỐ 4:**  
-> **Meta Engine tuyệt đối không bao giờ được tự động áp đặt Policy mới lên Runtime đang chạy.** Mọi cải tiến về trọng số định tuyến, quy tắc gợi ý công cụ hay chính sách bộ nhớ đệm do Meta Engine sinh ra đều phải được đóng gói thành một `PolicyProposal` và chờ con người trực tiếp ký duyệt.
+Meta không tự áp policy lên Task đang chạy. Shadow/canary là tùy chọn có consent và ngân sách, **không** mặc định gửi 5% lưu lượng cho model khác. Đo chất lượng theo criterion và false pass, không huấn luyện route từ tự nhận “done” của worker.
 
 ## 14.7 Sáu Câu Hỏi Định Tuyến Của S1
-S1 trả lời 6 câu hỏi chính: Intent classification, Relevance scoring, Candidate ranking, Ambiguity detection, Risk signal, Task candidate scoring. Tùy trường hợp sẽ dùng Rules, Classifier, FTS hoặc Embeddings.
+S1 có thể trả lời intent classification, relevance, candidate ranking, ambiguity, **risk signal** và Task-candidate scoring. Đây là typed judgment có method/version/abstain, không phải risk authorization. Phần lớn hot path dùng rules/lexical search; local model hoặc remote judgment chỉ khi giá trị dự kiến vượt latency/egress cost và user cho phép.
 
 ## 14.8 Sự Tham Gia Xuyên Suốt Của S1
-- **Trước S2:** Gợi ý nguồn/symbol; phát hiện mơ hồ; ước lượng write overlap; không tự lập kế hoạch phức tạp thay S2.
-- **Trong khi S2 làm:** Theo dõi trace để tìm source drift, budget, lặp tool call; không ngắt reasoning chỉ vì score thấp.
-- **Sau S2:** Rerank candidate artifacts, kiểm tra locator; không dùng confidence của chính mình làm oracle thay thế.
+- **Trước S2:** Gợi ý nguồn/symbol/test, detect ambiguity và preflight assumptions khi dữ liệu đủ; không bắt S2 chờ classifier cho việc đơn giản.
+- **Trong khi S2 làm:** Rule/event monitor phát hiện source drift, budget hoặc tool-call repetition; chỉ đưa hint có giá trị, không chặn native harness chỉ vì một score thấp.
+- **Sau S2:** Rerank artifact và check locator/exact fields; semantic support phải qua rubric/verifier độc lập, không dùng confidence S1 làm oracle.
 
 ## 14.9 S1 Micro-Worker Trong Worktree
-Có ba chế độ API chuyên biệt: **Judge** (JudgmentSpec → JudgmentRecord), **Scout** (WorkPacket read-only → Artifact/Locators), và **MicroExecutor** (Write scope nhỏ → WorkerResult). Các Micro-task phù hợp bao gồm: tạo regression test, tóm tắt log, sửa import, trích xuất dữ liệu, chuẩn hóa draft.
+**Judge** (typed judgment) và **Scout** (read-only scoped artifact) có thể chạy bên trong hoặc ngoài worktree để giúp worker mạnh tìm symbol, test, log và bằng chứng. **MicroExecutor** là tùy chọn thực nghiệm cho transformation hẹp có output kiểm độc lập; không mặc định “planner mạnh → executor rẻ”. Test do nó viết vẫn là agent-authored evidence, không là oracle acceptance. Worker chính/natural coding harness vẫn giữ quyền tự giải bài toán sâu; OI không tự chia mỗi edit thành micro-task.
 
 ## 14.10 Giao Diện Con Người (Human Interface)
 Sự hiện diện (Presence) và thẩm quyền (Authority) là hai trục độc lập.
@@ -2366,15 +2335,23 @@ Mức độ ưu tiên của hệ thống thông báo:
 
 ## 14.13 Research Foundation
 
-- **SOFAI-LM: Fast-Slow Cognitive Architecture for LLM Agents (arXiv 2025–2026):** Chứng minh việc phối hợp giữa System 1 nhỏ và System 2 lớn giúp giảm $68\%$ chi phí suy luận trong khi vẫn duy trì chất lượng giải quyết vấn đề tương đương.
-- **AdaptOrch: Adaptive Multi-Agent Orchestration via Dynamic DAG Profiling (arXiv 2025–2026):** Xác lập phương pháp luận trích xuất đặc trưng đồ thị tác vụ để tối ưu hóa việc phân bổ tài nguyên tính toán.
-- **Why Multi-Agent Systems Fail: An Empirical Study (arXiv 2025):** Liệt kê các chế độ lỗi điển hình của hệ thống đa agent, làm cơ sở cho việc thiết lập các bộ lọc cứng (Hard Filters) trong Custos OI.
+| Nguồn gốc | Bài học cho OI | Không được suy ra |
+|---|---|---|
+| [Free-Executor Paradox](https://github.com/kenimo49/free-executor-paradox) | Đo planner rereads/cache, handoff và retry ngay cả khi executor local không có hóa đơn token. | Ba task/40 trials không chứng minh mọi single worker đều rẻ hơn. |
+| [AdaptOrch](https://arxiv.org/html/2602.16873v1) | DAG shape/coupling có thể giúp chọn topology; decomposition quality là đầu vào quan trọng. | DAG hợp lệ về cấu trúc không chứng minh plan đúng semantic. |
+| [MAST](https://arxiv.org/html/2503.13657v3) | Failure modes của multiagent đáng thành fixture. | Tỷ lệ failure của tập traces không phải xác suất của Custos. |
+| [IBM/UC Berkeley ITBench–MAST analysis](https://huggingface.co/blog/ibm-research/itbenchandmast) | Trong 310 SRE traces được nhóm tác giả gắn nhãn, incorrect verification liên hệ mạnh với failure; cần verifier ngoài lời tự nhận của agent. | Kết quả SRE không chứng minh nó luôn là failure mode số một của coding/research/assistant Custos. |
+| [AgentRouter](https://arxiv.org/pdf/2609.22951) | Per-step model routing là một ablation đáng thử. | 44,1% tiết kiệm/48 ms của baseline cascade và 97,3% relative quality không là Custos SLO hay chứng minh noninferiority. |
+| [SOFAI-LM](https://arxiv.org/abs/2508.17959) | Fast/slow với feedback theo domain là cảm hứng cho judgment có abstain. | Không suy ra con số “giảm 68%” cho Custos hoặc ép mọi Task đi cheap-first. |
+| [Zeph PR #2235](https://github.com/bug-ops/zeph/pull/2235) | Có thể tham khảo cấu trúc verify/replan; PR mô tả các error path verifier fail-open. | Không lấy error→`complete=true`/`None` của PR làm Completion Gate; không khẳng định current upstream giống PR. |
 
 
 ## 14.14 Ranh giới
 
 - OI Engine **KHÔNG** làm nhiệm vụ tự viết code thay cho các Worker; nó chỉ đóng vai trò nhạc trưởng điều phối tài nguyên và luồng thực thi.
 - OI Engine **KHÔNG** được phép vượt qua ngân sách trần (`BudgetLimit`) đã được ký trong `TaskContract`, bất kể nó tin rằng việc gọi thêm mô hình sẽ mang lại kết quả tốt hơn.
+- Verifier lỗi, thiếu nguồn hoặc thiếu receipt phải thành `unknown`/`stale`, **không** `pass`; human waiver được ghi riêng, không sửa status evidence.
+- Routing/multiagent chỉ bật mặc định theo **slice đã đo**: paired strong-single baseline, criterion acceptance/false pass, billed + estimated + unknown cost, retry/handoff/replan, p50/p95 latency và human minutes; quality noninferiority margin đặt trước. Không đủ mẫu/calibration thì giữ single worker hoặc opt-in.
 
 ---
 
@@ -2391,7 +2368,7 @@ Custos thiết lập một **Kiến Trúc Đa Crate Phân Tầng Chặt Chẽ (S
 
 ## 15.2 Cây Thư Mục 11 Crates Sản Phẩm Đích
 
-Toàn bộ kho mã nguồn của Custos được tổ chức thành 11 Rust Crates cốt lõi bên trong thư mục `crates/`:
+Cây sau là **đề xuất vị trí theo trách nhiệm, không phải bản sao checkout hiện tại**. Tên crate/file phải đối chiếu `cargo metadata`, `rg --files` và [catalog vật lý](docs/development/codebase-architecture.md) trước khi tạo hoặc di chuyển. Riêng protocol/transport, §7.10 là bản đồ quyết định mới hơn; không tạo `hubs/` chỉ vì sơ đồ này:
 
 ```
 Custos/
@@ -2441,14 +2418,14 @@ Custos/
 │   │   │   ├── models/                 # Anthropic, OpenAI, Ollama, Local Llama.cpp
 │   │   │   ├── harness/                # Claude Code, Codex, Cursor, Goose Adapter
 │   │   │   ├── sandbox/                # OS Process Sandbox (Seatbelt / Landlock)
-│   │   │   └── mcp/                    # MCP Client (STDIO / SSE transports)
+│   │   │   └── mcp/                    # MCP client: stdio / Streamable HTTP; legacy riêng
 │   │   └── Cargo.toml
 │   │
 │   ├── custos-runtime/                 # TẦNG 3A: Động Cơ Thực Thi & Điều Phối
 │   │   ├── src/
 │   │   │   ├── s1/                     # System 1 Fast Fabric (Scout, Judge, MicroExec)
-│   │   │   ├── s2/                     # System 2 Deliberative Planner
-│   │   │   ├── oi/                     # Orchestration Intelligence (Topos T0-T8)
+│   │   │   ├── s2/                     # System 2 reasoning/worker (đích, không buộc tách folder)
+│   │   │   ├── oi/                     # OI route/plan/replan (đích, không buộc tạo folder)
 │   │   │   ├── context/                # Context Compiler (8-step pipeline)
 │   │   │   └── meta/                   # Meta Engine Offline Optimizer
 │   │   └── Cargo.toml
@@ -2460,17 +2437,17 @@ Custos/
 │   │   │   └── assistant/              # 6 Work Classes, Stability Contract
 │   │   └── Cargo.toml
 │   │
-│   ├── custos-bridge/                  # TẦNG 3C: Cầu Nối Phiên Tương Tác & Local API
+│   ├── custos-bridge/                  # TẦNG 3C: Cầu nối phiên và Task, không host transport
 │   │   ├── src/
 │   │   │   ├── session_service.rs      # Quản lý ConversationTurn & EphemeralQuery
 │   │   │   ├── task_mapper.rs          # Ánh xạ SessionTaskBinding
-│   │   │   └── local_api_v1/           # Xử lý lệnh từ CLI/IDE qua IPC Socket
+│   │   │   └── local_api_v1/           # DTO/bridge contract nếu cần; listener thuộc daemon
 │   │   └── Cargo.toml
 │   │
 │   ├── custos-daemon/                  # TẦNG 4: Composition Root & Background Daemon
 │   │   ├── src/
 │   │   │   ├── bootstrap.rs            # Khởi tạo DB, kiểm tra WAL, ráp Ports & Adapters
-│   │   │   ├── hubs/                   # 6 Hubs (Session, Capability, MCP, A2A, Model, Event)
+│   │   │   ├── local_api/              # Một handler; thêm transport adapter khi có nhu cầu
 │   │   │   ├── lifecycle.rs            # Graceful shutdown, Signal handling, Crash Recovery
 │   │   │   └── main.rs                 # Daemon entrypoint binary
 │   │   └── Cargo.toml
@@ -2487,24 +2464,9 @@ Custos/
 │       └── Cargo.toml
 ```
 
-## 15.3 Tháo Gỡ Nợ Kỹ Thuật P0: Xóa Bỏ Cầu Nối Bridge $\rightarrow$ Persistence
+## 15.3 Kiểm Soát Phụ Thuộc Bridge và Persistence
 
-Trong quá trình phát triển các phiên bản thử nghiệm ban đầu, giữa `custos-bridge` và `custos-persistence` xuất hiện một liên kết trực tiếp (Transitional Edge). Điều này vi phạm nguyên tắc Clean Architecture vì tầng giao tiếp tương tác lại được phép gọi trực tiếp vào cơ sở dữ liệu vật lý mà không đi qua kiểm duyệt của Task Kernel.
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                   XÓA BỎ LIÊN KẾT CHUYỂN TIẾP TẠM THỜI                 │
-├────────────────────────────────────────────────────────────────────────┤
-│ ❌ CŨ (VI PHẠM):                                                      │
-│    custos-bridge ──[Gọi Trực Tiếp]──> custos-persistence (SQLite)     │
-│                                                                        │
-│ ✅ KIẾN TRÚC ĐÍCH:                                                    │
-│    custos-bridge ──> custos-core (KernelPort) ──> custos-persistence  │
-│                                                                        │
-│ Ý NGHĨA: Mọi tương tác từ phiên hội thoại bắt buộc phải đi qua         │
-│ Task Kernel để xác thực quyền hạn và ghi nhận biến cố bất biến.        │
-└────────────────────────────────────────────────────────────────────────┘
-```
+Ở checkout đã kiểm, `custos-bridge` có `custos-persistence` trong **`[dev-dependencies]` cho test in-memory**, không phải import production. Vì vậy không được mô tả một cầu nối production Bridge → SQLite như lỗi đã chứng minh. Quy tắc đích vẫn giữ: lệnh production từ bridge đi qua Task service/port; daemon ráp implementation lưu trữ. Test có thể dùng persistence concrete để kiểm contract, nhưng không tạo đường ghi DB từ client/bridge ở runtime. Trước khi gọi một dependency là vi phạm, kiểm `[dependencies]` khác `[dev-dependencies]` và call path thực.
 
 ## 15.4 Chỉ Mục Mã Nguồn Tự Động (RepoCodeIndex)
 
@@ -2623,7 +2585,7 @@ Mọi cấu trúc hoặc quyết định kiến trúc mới trong Custos bắt b
 │ 1. Custos.md (Root Master Specification — Single Source of Truth)       │
 │    - Bản chất: Xác lập "TẠI SAO & CÁI GÌ" (Why & What).                │
 │    - Nội dung: Triết lý, 10 Bất biến hệ thống, State Machines, FSMs,   │
-│      Trust Zones, Threat Defense, Cross-Pack Contracts, Topo T0-T8.    │
+│      Trust Zones, Threat Defense, Cross-Pack Contracts, OI decisions.  │
 │    - Ràng buộc: Mọi quyết định kiến trúc mới PHẢI được cập nhật đúng   │
 │      chương mục tương ứng trong văn kiện này trước tiên.               │
 ├────────────────────────────────────────────────────────────────────────┤
@@ -2901,8 +2863,9 @@ Toàn bộ các tính năng mới hoặc các bản cập nhật kiến trúc c�
 │ **GATE A**   │ **Local Process E2E:** Chạy từ CLI qua Daemon, gọi một  │
 │              │ model cục bộ giải thích repo, chứng minh cờ LocalOnly.  │
 ├──────────────┼─────────────────────────────────────────────────────────┤
-│ **GATE B**   │ **Worktree Isolation:** Chứng minh việc sửa file diễn   │
-│              │ ra hoàn toàn trong isolated_worktree, main repo sạch.   │
+│ **GATE B**   │ **Workspace Assurance:** Delegated/parallel writes dùng  │
+│              │ worktree đã kiểm; Assist direct apply phải có scope/base │
+│              │ hash, diff và assurance đúng đường thực thi.           │
 ├──────────────┼─────────────────────────────────────────────────────────┤
 │ **GATE C**   │ **Crash Resilience:** Giả lập SIGKILL giữa T3 và EXT,    │
 │              │ khẳng định hệ thống khởi động lại chuyển sang Uncertain.│
@@ -3007,10 +2970,10 @@ Toàn bộ các quyết định thiết kế kiến trúc của Custos đều đ
 | **15**| **ALCE** (ACL 2023) | Đánh giá tính xác thực của trích dẫn | Đường ống kiểm tra trích dẫn 4 bước tự động | Trích dẫn đúng URL không đồng nghĩa nội dung đúng| **High** |
 | **16**| **MiniCheck** (EMNLP 2024) | Đánh giá độ trung thực của các khẳng định | Kiểm tra tính hỗ trợ ngữ nghĩa của đoạn văn | Mô hình thẩm định có thể gặp ảo giác riêng | **High** |
 | **17**| **FrugalGPT** (arXiv 2023) | Chiến lược tối ưu hóa chi phí LLM đa tầng | 7 đòn bẩy kinh tế và thuật toán xếp tầng mô hình | Baseline của bài báo khác với Custos stack | **Medium** |
-| **18**| **AgentRouter** (arXiv 2025) | Định tuyến câu hỏi thông minh theo độ phức tạp | Bộ chọn Topo T0–T8 trong OI Engine | Ngưỡng định tuyến cần tự hiệu chuẩn động | **Medium** |
-| **19**| **MCP Spec 2026-07-28** | Tiêu chuẩn kết nối công cụ và ngữ cảnh | Triển khai MCP Hub với OAuth 2.1 & Callbacks | Cần tuân thủ chặt chẽ conformance test suite | **Critical**|
-| **20**| **A2A Protocol v1.0.0** (2026)| Giao thức tương tác giữa các mạng lưới agent | Agent Cards và chuỗi ủy thác an toàn IBCT | Dữ liệu từ xa luôn bị coi là Untrusted | **Critical**|
-| **21**| **A2A Trust Chains** (DeepMind) | Mô hình toán học về chuỗi ủy quyền an toàn | Invocation-Bound Capability Tokens (IBCT) | Phải giới hạn độ sâu ủy quyền chain_depth | **High** |
+| **18**| **AgentRouter** ([arXiv:2609.22951](https://arxiv.org/pdf/2609.22951)) | Nghiên cứu model routing theo bước trong multi-step workflow | Candidate để ablation model route; không đồng nghĩa topology selector | Chi phí và relative quality của paper không là SLO Custos; cần paired eval theo pack | **Nghiên cứu** |
+| **19**| **MCP Spec 2026-07-28** | Giao tiếp tool/resource; stdio và Streamable HTTP | MCP client có version negotiation; modern `input_required`, legacy callback chỉ khi cần | OAuth HTTP theo deployment; tool metadata không phải permit | **Theo use case** |
+| **20**| **A2A Protocol** | Agent Card và remote Task/Message/Artifact | Adapter remote delegation sau khi có job thật | Remote Task không thay Custos Task; dữ liệu nhận về untrusted | **Tùy chọn** |
+| **21**| **Delegation attenuation của Custos** | Thu hẹp scope khi ủy nhiệm | IBCT ở §4.4 là đề xuất riêng cần thiết kế và thử tương thích | Không tự nhận là trường/chuẩn A2A; không chuyển local permit | **Nghiên cứu** |
 | **22**| **OpenID Agentic Identity** (2026)| Quản lý danh tính Agent như một Principal | Nguyên tắc Thu hẹp Ủy thác (Delegation Diminishment)| Cần tích hợp mượt mà với IAM doanh nghiệp | **High** |
 | **23**| **Enterprise Agent Design** (2026)| Phân lập năng lực suy luận và quyền hạn | Kiến trúc 3 Vùng Tin Cậy và Taint Tracking Engine | Quy mô doanh nghiệp khác với máy cá nhân | **Medium** |
 | **24**| **Meta-Governance MAS** (ICLR 2026)| Giám sát và tự tiến hóa trong hệ đa agent | Đường ống tối ưu hóa ngoại tuyến Meta Engine | Meta Engine tuyệt đối không tự áp policy | **Low** |
@@ -3042,7 +3005,3 @@ Toàn bộ các quyết định thiết kế kiến trúc của Custos đều đ
 
 ---
 *HẾT TOÀN VĂN ĐẶC TẢ KIẾN TRÚC CUSTOS*
-
-
-
-

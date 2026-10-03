@@ -4,7 +4,7 @@
 > **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md) (Part 4).  
 > **Architecture Hub:** See [Custos Architecture Overview](README.md).
 
-Custos enforces a strict tripartite separation of concerns for all side effects: **Proposal vs Decision vs Effect**. Models and workers are granted zero ambient authority; every interaction with the host environment must be vetted by the Authority Engine and executed via the Capability Gateway under a cryptographically signed permit.
+Custos targets a strict tripartite separation of concerns for mediated side effects: **Proposal vs Decision vs Effect**. This is a target contract, not a statement that every current integration satisfies it. At commit `3e4dac4`, permit issuance is backed by an in-memory map, and the SQLite permit/outbox tables are not yet connected to that dispatch path. The current permit is an opaque in-process record, not a cryptographically signed token. External harnesses can have native tools outside Custos; those actions must not be labelled Custos-mediated without tested interception or isolation.
 
 ---
 
@@ -42,20 +42,26 @@ An unprivileged proposal submitted by a reasoning worker. It declares:
 An `ActionIntent` possesses zero execution capability.
 
 ### 1.2 ExecutionPermit
-A cryptographically verifiable capability minted exclusively by the Trusted Kernel:
+A capability record minted exclusively by the Trusted Kernel on the mediated path:
 - Valid for exactly one invocation (`max_uses = 1`).
-- Strictly bound to the exact `argument_digest` (any parameter mutation voids the permit).
+- Strictly bound to the exact `argument_digest` (any parameter mutation voids the permit) once a durable dispatch claim is implemented.
 - Enforces an immutable expiration deadline (`expires_at`).
-- Binds to a specific `task_id` and authorized worker identity.
+- Binds to a specific `task_id`, action, capability, and grant/policy revision. Worker identity binding remains a target until implemented and tested.
+
+The production gate requires an atomic, durable one-use claim in SQLite before physical dispatch, followed by a receipt or an explicit `uncertain` state. A process-local mutex or copied `Permit` cannot prevent replay across a crash. Unknown capabilities must fail closed; a generated success receipt is not proof that a tool ran.
+
+Current defensive behavior: `DeterministicGate` rejects unsupported capabilities; `GatewayTool` and `McpCapabilityAdapter` deny physical dispatch until a durable claim path exists. This prevents a false mediated-success claim but intentionally leaves MCP effects unavailable through these wrappers. Read/list/patch-preview are prototype operations, not proof of a complete sandbox or durable authorization.
 
 ### 1.3 ExecutionReceipt
 An immutable proof record emitted after physical execution:
 - Captures output content digest (`output_digest`), duration in milliseconds, exit status, and error logs.
-- Persisted durably in SQLite and CAS before results are communicated back to workers.
+- Must be persisted durably in SQLite/CAS before being treated as canonical evidence. Current prototypes do not yet meet this requirement.
 
 ---
 
 ## 2. Invocation-Bound Capability Tokens (IBCT) & Delegation Diminishment
+
+The token structure below is a **design target**, not an implemented or issued credential in the current checkout.
 
 In multi-agent or hierarchical sub-task configurations, authority propagation follows the mathematical principle of **Delegation Diminishment**:
 
@@ -97,6 +103,8 @@ Custos mitigates this vulnerability through three structural defenses:
 ---
 
 ## 4. Multi-Tiered Sandbox Defense
+
+The table below lists intended platform controls. A Git worktree isolates Git changes; it does not confine filesystem or network effects. The actual isolation profile must be measured for each adapter and operating system before an assurance label is granted.
 
 Physical mutations are executed inside an OS-enforced capability sandbox:
 

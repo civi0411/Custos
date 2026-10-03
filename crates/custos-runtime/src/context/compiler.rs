@@ -131,6 +131,7 @@ impl ContextBuilder for TokenAwareContextCompiler {
                     score,
                     tokens: doc_tokens,
                     provenance_hash: None,
+                    is_tainted: false,
                 });
                 total_tokens += doc_tokens;
             } else {
@@ -148,6 +149,7 @@ impl ContextBuilder for TokenAwareContextCompiler {
                             score,
                             tokens: actual_tokens,
                             provenance_hash: None,
+                            is_tainted: false,
                         });
                         total_tokens += actual_tokens;
                     }

@@ -8,7 +8,7 @@
 
 # Custos
 
-[ English ](README.md) · [ Tiếng Việt ](docs/i18n/README.vi.md) · [ Deutsch ](docs/i18n/README.de.md) · [ 简体中文 ](docs/i18n/README.zh.md)
+[ EN ](README.md) · [ VI ](docs/i18n/README.vi.md) · [ DE ](docs/i18n/README.de.md) · [ ZH ](docs/i18n/README.zh.md)
 
 </div>
 
@@ -152,4 +152,4 @@ cargo test --workspace --all-targets
 
 ## License
 
-This project is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
+The root [LICENSE](LICENSE) currently contains the MIT License. Licensing and attribution for Goose-derived source are under review; see the [upstream source audit](docs/development/upstream-source-map.md). Do not assume the root license alone describes every upstream-derived file.

@@ -1,107 +1,100 @@
-# Protocol & Connectivity Hub Architecture
+# Protocol and Connectivity Boundaries
 
-> **Classification:** Core Architectural Pillar  
-> **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md) (Part 7).  
-> **Architecture Hub:** See [Custos Architecture Overview](README.md).
+> **Architecture decision:** [Custos.md, Part 7](../../Custos.md). This document maps the decision to implementation boundaries. A named hub is a logical responsibility, not a required process, crate, or shipped endpoint.
 
-Custos interacts with client user interfaces (CLI, VS Code, Web UI), external tool providers (MCP Servers), remote agents (A2A networks), and AI reasoning backends through a unified **Protocol & Connectivity Hub Layer** hosted within `custos-daemon`.
+## 1. Six names, distinct boundaries
 
----
+| Item | Kind | Purpose | Default decision |
+|---|---|---|---|
+| IPC | Local transport | Carry the Custos Local API between owned processes | Current stdio JSONL; socket/pipe when multiple clients require it |
+| Local HTTP | Local transport | Carry the **same** Local API to a browser or integration | Optional, disabled by default |
+| MCP | Tool/data protocol | Consume external tools/resources/prompts | Build a client when a real server is needed; no mandatory MCP server |
+| ACP | Agent Client Protocol | Client ↔ coding agent session/permissions/events | Optional harness adapter or editor interoperability |
+| CAP | CLI Agent Protocol draft | Orchestrator ↔ CLI agents via PTY/structured binding | Research/experiment; not a Custos internal contract |
+| A2A | Remote-agent protocol | Delegate to an independent HTTP agent | Defer until remote delegation is a product job |
 
-## 1. The Six Specialized Daemon Hubs
+Model/vendor APIs are a seventh **different** boundary: `ModelPort` is a single inference attempt. Neither MCP nor A2A is a model transport. 9Router is a possible model proxy profile; agentgateway is a possible external model/MCP/A2A proxy. Both need source/license/fidelity/security review before use. [9Router architecture](https://github.com/decolua/9router/blob/master/docs/ARCHITECTURE.md), [agentgateway](https://github.com/agentgateway/agentgateway/blob/main/README.md).
 
-The `custos-daemon` acts as a central composition root housing six dedicated hubs:
+## 2. Ownership and execution flow
 
 ```mermaid
-graph TD
-    Client["Client UI (CLI / IDE / Web)"] -->|Local API (Unix Domain Socket)| SessionHub["1. Session Hub"]
-    SessionHub --> Kernel["Trusted Task Kernel"]
-    
-    Kernel --> ModelHub["2. Model Hub"]
-    Kernel --> CapHub["3. Capability Hub"]
-    Kernel --> McpHub["4. MCP Hub"]
-    Kernel --> A2aHub["5. A2A Hub"]
-    
-    ModelHub --> ExtLLM["Local & Cloud LLMs"]
-    CapHub --> LocalTools["Host Tools & Sandboxes"]
-    McpHub --> ExtMCP["External MCP Servers"]
-    A2aHub --> ExtAgents["Remote Agent Networks"]
-
-    Kernel -.-> EventBus["6. Event Bus Hub"]
-    EventBus -.-> SessionHub
+flowchart TD
+    UI["CLI / IDE / Desktop"] -->|"Custos Local API over IPC or opt-in HTTP"| Daemon["Daemon: composition root"]
+    Daemon --> Kernel["Core: Task / Authority / Evidence"]
+    Kernel --> Runtime["Runtime: route / workflow / agent"]
+    Runtime --> Model["ModelPort: direct provider or proxy"]
+    Runtime --> Harness["AgentRuntimePort: native / ACP / CAP adapter"]
+    Runtime --> Tool["CapabilityPort: local tool or MCP client"]
+    Runtime --> Peer["DelegationPort: A2A client, optional"]
+    Tool -->|"effect receipt / uncertainty"| Kernel
+    Peer -->|"untrusted artifact / remote status"| Kernel
 ```
 
-| Hub Name | Core Architectural Responsibility | Protocol Boundary |
+The Local API owns command IDs, actor, task revision, deadline, privacy, and event cursor. IPC/HTTP cannot mint permissions. `AgentRuntimePort` owns harness turn/cancel/resume semantics, not Task success. `CapabilityPort` is the actual effect boundary where mediation is possible; external harnesses that run native tools outside it must receive a lower assurance label. An A2A Task is linked to, but never replaces, the Custos Task.
+
+## 3. Protocol-specific contracts
+
+### Local API over IPC and HTTP
+
+The current daemon [main](../../crates/custos-daemon/src/main.rs) accepts **stdio JSONL**. Unix-domain socket on macOS/Linux and named pipe or authenticated loopback on Windows are target transports, not current capabilities. HTTP is an opt-in second listener over the *same handler/schema*, not a second Task API. IPC endpoints need OS-level endpoint/peer permissions; local HTTP needs explicit authentication, origin/CSRF checks, a loopback-only bind, and a documented browser threat model. Neither `127.0.0.1` nor possession of a session ID is a grant. Persist important events and resume by cursor; do not treat an ephemeral broadcast channel as the canonical event log.
+
+### MCP
+
+The [2026-07-28 transport spec](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports) has stdio and Streamable HTTP. HTTP may return request-scoped SSE; legacy HTTP+SSE is a compatibility path, not a third default transport. OAuth authorization is optional for deployments; if HTTP auth is enabled, follow [resource metadata, discovery, audience and client registration rules](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization). Dynamic Client Registration is not mandatory for every peer. Stdio credentials belong to the spawned process environment and require scope/secret controls; setting `cwd` alone does not sandbox it.
+
+On the modern revision, server-provided sampling/elicitation/roots requests are carried through multi-round-trip `input_required`, not unsolicited reverse JSON-RPC requests; older revisions may use the legacy callback channel. Handle each round with a bounded budget, privacy policy, source scope and human response where required. [MCP release](https://blog.modelcontextprotocol.io/posts/2026-07-28/), [SDK migration](https://ts.sdk.modelcontextprotocol.io/v2/migration/support-2026-07-28). Discovery metadata and tool output remain untrusted. `tools/list` never grants `tools/call`; a side effect goes through the Custos permit/attempt path only if Custos actually controls dispatch.
+
+### ACP and CAP
+
+[ACP](https://agentclientprotocol.com/protocol/v1/overview) is the **Agent Client Protocol** for client ↔ agent communication, with session updates, permission requests and optional filesystem/terminal methods. It is not the Custos Local API; an editor may call the Local API directly without ACP. [CAP](https://cap-protocol.org/) is a separate draft for orchestrator ↔ CLI agent, with PTY and optional structured fast paths. Use either only for an identified harness integration, with pinned protocol/binary version and measured event, permission, cancellation and native-tool coverage. Neither grants Custos authority over a harness's unseen side effects.
+
+### A2A
+
+[A2A](https://a2a-protocol.org/latest/topics/key-concepts/) exposes Agent Card metadata and remote Task/Message/Artifact semantics. Custos must separately authenticate the peer and map `remote_task_id → WorkerRun`; a card is not a signed Custos permission. Send only a selected, redacted work packet; never send a local permit or secret. Validate remote artifact source/version and reconcile unknown remote status before retry. Custos-specific IBCT is an optional design for compatible deployments, not a normative A2A field. An inbound A2A server is deferred until a real external client needs Custos to accept jobs.
+
+## 4. Physical ownership and current-state map
+
+This table assigns a place to investigate and eventually build; it does **not** order the creation of empty folders. Update the [physical catalog](../development/codebase-architecture.md) with a verified file/entrypoint/call-path before marking an implementation active.
+
+| Responsibility | Current location and evidence | Target location if the feature is built |
 |---|---|---|
-| **Session Hub** | Manages client connections, heartbeat liveness, and session lifecycle. | Local API v1 (Domain Sockets, Named Pipes) |
-| **Capability Hub** | Dispatches vetted commands to local OS sandboxes and Git worktrees. | Internal Rust Capability Port |
-| **MCP Hub** | Discovers, connects to, and governs external Model Context Protocol servers. | MCP Protocol (STDIO, HTTP, SSE) |
-| **A2A Hub** | Manages cryptographic agent-to-agent delegation networks. | A2A Protocol (HTTPS REST, SSE) |
-| **Model Hub** | Orchestrates provider-neutral model dispatch, token streaming, and fallback. | HTTPS REST / Streaming |
-| **Event Bus Hub** | Broadcasts immutable domain events asynchronously to clients. | Tokio broadcast channels |
+| Local API handler and transport | `custos-daemon/src/{api.rs,main.rs,local_api/}`; `main.rs` says `transport=stdio-jsonl` | Add IPC socket/pipe or HTTP listener **in daemon**, reusing the same handler; client DTOs in `custos-sdk` |
+| Session ↔ Task binding | `custos-bridge/src/{port.rs,service.rs}` | Keep bridge focused on binding/steering, not transport listeners or SQLite |
+| Model and harness contracts | `custos-provider/src/{port.rs,events.rs,types/}` has thin and Goose-derived provider interfaces | Reconcile into one supported public contract per job; no third provider abstraction |
+| Workflow/catalog/health | `custos-runtime/src/{agent,cognitive,workflow,context}` | Add integration catalog only after proving existing registries cannot represent a real connection lifecycle |
+| MCP | `custos-adapters/src/mcp/`; `adapters/client.rs` currently fabricates a success result for mock tools | Real stdio/Streamable HTTP client, version/auth/normalization in the same adapter boundary |
+| Native agents, ACP, CAP | `custos-adapters/src/providers/{codex,claude,antigravity}` are model-named stubs | Distinct harness adapters under `custos-adapters`, only when native/ACP/CAP implementation and conformance exist |
+| A2A | `custos-adapters/src/roaming/a2a.rs` contains `Simulated immediate dispatch` | Distinct A2A client/card/task mapping only after a remote job requires it; roaming transport is not A2A |
+| Canonical effects and connections | `custos-core/src/{authority,capability,kernel,evidence}`; `custos-persistence/` | Core admits; persistence stores connection refs, permit/outbox/attempt/receipt; adapters never write canonical DB |
 
----
-
-## 2. Inbound & Outbound Protocol Map
-
-| Direction | Protocol Standard | Transport Layer | Authentication Mechanism | Managing Crate |
-|---|---|---|---|---|
-| **Inbound** (Client $\rightarrow$ Daemon) | Local API v1 | Unix Domain Socket / Named Pipe | OS IPC Peer Credential (UID Check) | `custos-bridge` |
-| **Inbound** (Editor $\rightarrow$ Daemon) | ACP (Agent Comm Protocol) | JSON-RPC 2.0 over IPC | Ephemeral session token | `custos-bridge` |
-| **Outbound** (Daemon $\rightarrow$ Tools) | MCP Specification | STDIO (Local) / HTTP & SSE | OAuth 2.1 AS Metadata + Scoped Perms | `custos-adapters` |
-| **Outbound** (Daemon $\rightarrow$ Agents)| A2A Protocol | HTTPS REST + SSE Streaming | Agent Cards + IBCT Token Chain | `custos-adapters` |
-| **Outbound** (Daemon $\rightarrow$ Models)| Provider Native / OpenAI Wire| HTTPS REST / Streaming | API Keys in OS Secure Keychain | `custos-provider` |
-
----
-
-## 3. Model Context Protocol (MCP) Integration
-
-Custos implements the Model Context Protocol strictly adhering to the specification:
-
-### 3.1 Transport Security
-- **STDIO Transport:** Launches external MCP servers as child processes restricted by working directory sandboxes.
-- **HTTP Transport:** Requires **OAuth 2.1** with Authorization Server Metadata (RFC 8414) and Dynamic Client Registration (RFC 7591).
-- **SSE Transport:** Ingests unidirectional streaming tool updates verified with short-lived Bearer tokens.
-
-### 3.2 Callback Interception
-- **Sampling Callback (Model Calling Reverse LLM):** If an MCP server requests an LLM sampling call, it **must route through Custos's Model Hub**. Direct model querying by MCP servers is blocked to enforce budget limits and taint tracking.
-- **Elicitation Callback:** Prompts the user via the Session Hub for clarifying information, parking the task in `Blocked`.
-- **Roots Callback:** Only exposes paths explicitly granted in `TaskScope`. The host machine's root filesystem is never exposed.
-
----
-
-## 4. Agent-to-Agent (A2A) Delegation Protocol
-
-Custos discovers and coordinates with independent external agent systems using the A2A standard:
-
-```json
-// Agent Card Representation (/.well-known/agent-card.json)
-{
-  "agent_id": "urn:custos:agent:rust-specialist-node",
-  "display_name": "Custos Rust Specialist Worker",
-  "version": "2.0.0",
-  "capabilities": [
-    { "name": "rust_code_repair", "assurance": "custos-mediated" },
-    { "name": "cargo_clippy_audit", "assurance": "custos-mediated" }
-  ],
-  "endpoint": "https://node.custos.local/a2a/v1",
-  "security": {
-    "auth_type": "OAuth2.1-PoP",
-    "supported_tokens": ["urn:ietf:params:oauth:token-type:ibct"]
-  }
-}
-```
-
-### Delegation Invariant:
-Any artifact or message ingested from a remote agent via A2A is unconditionally stamped with `Taint::Untrusted`. It cannot modify local configuration or bypass the Completion Gate without verified evidence.
-
----
+Dependency direction: pure domain → core/ports → runtime/pack semantics → daemon composition, with persistence and external adapters implementing ports. `custos-adapters/mcp` or a future A2A module must not decide Task success, mint a permit, or turn remote metadata into policy. A proxy binary is an optional supervised connection, not a new source of canonical state.
 
 ## 5. Five Harness Adapters
 
-Custos integrates established development tools through five dedicated harness adapters:
-1. **Claude Code Adapter:** Intercepts tool calls and converts them into governed `ActionIntent` records.
-2. **OpenAI Codex Adapter:** Translates tool-use payloads into typed capability requests.
-3. **Cursor Adapter:** Connects to editor workspace contexts and projects diffs into isolated worktrees.
-4. **Antigravity Adapter:** Interfaces with DeepMind-style autonomous agent execution harnesses.
-5. **Goose Adapter:** Integrates headless command-line execution and environment automation.
+These are integration candidates, not five shipped adapters. At audit commit `3e4dac4`, model-named Codex, Claude, Antigravity, and LocalModel modules were simulation stubs; until real transports and conformance tests exist, they must return an explicit unsupported error rather than a fabricated model response. Goose-derived code exists in the runtime source tree, but the legacy `engine` module is not mounted by `runtime/src/lib.rs` and is not a daemon-composed harness.
+
+The boundary is defined by loop ownership, not brand: `ModelPort` performs one inference attempt; `AgentRuntimePort` drives a multi-step harness. Both emit proposals. Effect authorization and domain verification remain independent. Each adapter advertises tested event, approval, tool, workspace, usage, cancel, and resume coverage. Assurance is recorded per action. Codex App Server and Claude hooks may expose tool events and approval points, but neither automatically routes every native side effect through Custos. CAP remains an optional draft adapter; ACP is a client-agent protocol, not an authority ledger.
+
+### Harness conformance gate
+
+Before a harness is enabled, record its exact binary/API version, supported transport, actor and model identity, loop owner, workspace owner, and capability manifest. Exercise these cases against a fake workspace and fake external connector:
+
+| Fixture | Required observation | Failure handling |
+|---|---|---|
+| Read and patch inside an isolated worktree | Base commit/dirty manifest, exact changed paths, tool events where the harness exposes them | Reject stale base, symlink escape, or unexpected write set; do not treat a worktree as a sandbox |
+| Native shell, MCP, and network effect | Identify whether Custos can intercept before dispatch, only approve via provider, or merely observe | Downgrade the **action** assurance; prevent false `custos-mediated` labels |
+| Cancel, crash, reconnect, and resume | Terminal reason, partial artifact, source revision, and whether native session state really resumes | Unknown external effect enters reconciliation; never blindly repeat a non-idempotent call |
+| Missing usage, model switch, and fallback | Per-attempt usage is actual, estimated, or unknown; record the real model | Never show unknown spend as zero or silently override a user pin |
+| Approval payload changed after preview | Target/arguments/digest are compared at dispatch, not only in UI | Reject stale approval and request a new decision |
+
+For coding, exactly one component owns a writable checkout for a worker run. A provider-managed worktree is an isolated *proposal workspace*: Custos imports and verifies the diff against a pinned base before applying to the user's checkout. For research, an agent-supplied citation is provisional until Custos reopens the exact source revision and passage. For assistant work, any agent may draft, but Custos-mediated send requires Custos's own connector, exact-payload permit, durable outbox, and reconciliation.
+
+## 6. Adoption order and external-source gates
+
+1. **Stabilize the Custos spine:** one command handler, Task/effect attempt IDs, durable permit/outbox/receipt, event replay and an explicitly unsupported error for paths without a real transport. This is a dependency of mediated side effects, not of all read-only model calls.
+2. **Prove one direct model route and one tool route:** pin model/transport/version, preserve streaming and usage, run a tool through the actual authority path. A proxy may be added as a `ModelPort` connection profile only after comparing identical requests and failure paths.
+3. **Implement one real MCP client:** choose one server and pinned revision; test stdio or Streamable HTTP, auth/metadata, tool call, cancellation, modern `input_required` and legacy compatibility only if required. Do not start with a virtual MCP federation.
+4. **Add harness adapters one at a time:** prefer the agent's supported structured integration when it preserves needed features; ACP and CAP are candidates, not default infrastructure. Test native-tool bypass and worktree ownership before assurance claims.
+5. **Add A2A only for a named remote delegation job:** test card/version/auth, remote Task mapping, timeout/reconciliation, artifact provenance, and no local-permit leakage. Add inbound server/federation only if Custos must serve outside agents.
+
+For 9Router, inspect provider translation, streamed tool calls, fallback, usage, secret handling, ToS and pinned source/license. For agentgateway, inspect MCP/A2A protocol compatibility, connection/auth management, routing policy and whether an extra process yields a measurable benefit over a direct adapter. Neither upstream's marketing claims or protocol support imply Custos's action-level mediation. Record `candidate → tested → enabled` per integration and keep the direct path as a baseline.

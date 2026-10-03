@@ -8,7 +8,7 @@
 
 # Custos
 
-[ English ](../../README.md) · [ Tiếng Việt ](README.vi.md) · [ Deutsch ](README.de.md) · [ 简体中文 ](README.zh.md)
+[ EN ](../../README.md) · [ VI ](README.vi.md) · [ DE ](README.de.md) · [ ZH ](README.zh.md)
 
 </div>
 
@@ -152,4 +152,4 @@ cargo test --workspace --all-targets
 
 ## Lizenz
 
-Dieses Projekt ist unter der Apache-Lizenz, Version 2.0 lizenziert. Details siehe [LICENSE](../../LICENSE).
+Die [LICENSE](../../LICENSE) im Repository enthält derzeit die MIT-Lizenz. Herkunft und Kennzeichnung von Goose-abgeleitetem Code werden im [Upstream-Quellenverzeichnis](../development/upstream-source-map.md) geprüft; die Root-Lizenz beschreibt nicht zwangsläufig jeden übernommenen Bestandteil.

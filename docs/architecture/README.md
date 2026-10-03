@@ -81,7 +81,7 @@ The architecture of Custos is structured into eight core domain pillars, directl
 | **[4. Data, Context & Memory](data-context-and-memory.md)** | Four core data zones, SQLite WAL starvation mitigation (P0), 8-step Context Compiler pipeline, 4 memory tiers, and ContinuationPacket safe resumption. | Parts 6, 9 |
 | **[5. Protocol & Connectivity Hubs](protocol-and-connectivity-hubs.md)** | Six specialized daemon hubs (Session, Capability, MCP, A2A, Model, Event Bus), MCP OAuth 2.1 integration, A2A protocol, and 5 harness adapters. | Part 7 |
 | **[6. Security & Threat Defense](security-and-threat-defense.md)** | Comprehensive STRIDE agent threat model, Taint Tracking Engine, defense-in-depth sandbox containment, and continuous red-teaming fixtures. | Part 8 |
-| **[7. Cognitive Fabric & Orchestration](cognitive-fabric-and-orchestration.md)** | Hybrid SOFAI-LM dual-process cognition (Fast S1 vs Deliberative S2), nine canonical topologies (T0–T8), Meta Engine, and agent pathology mitigations. | Part 14 |
+| **[7. Cognitive Fabric & Orchestration](cognitive-fabric-and-orchestration.md)** | Single-worker-first OI; D0/D1/D2 planning, composable topology families, S1 hints without weakening S2, event-driven replan, criterion evidence and offline Meta evaluation. | Part 14 |
 | **[8. Domain Packs & Workflows](domain-packs-and-workflows.md)** | Engineering Pack (3-path workspace, atomic patch bundles), Research Pack (ReproducibilityBundle, FIRE pattern), Assistant Pack, and cross-pack handoffs. | Parts 10, 11, 12, 13 |
 
 ---
