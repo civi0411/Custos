@@ -2,7 +2,9 @@
 //!
 //! Enforces completion gate checks and evidence verification before a task succeeds.
 
-use custos_domain::{DomainError, EvidenceKind, Task, TaskStatus, VerificationClaim};
+use custos_domain::{
+    DomainError, EvidenceKind, EvidenceStatus, Task, TaskStatus, VerificationClaim,
+};
 
 pub struct CompletionGate;
 
@@ -13,7 +15,7 @@ impl CompletionGate {
     }
 
     /// Validates whether a task meets criteria to complete successfully,
-    /// enforcing proof-closure against required contract evidence.
+    /// enforcing proof-closure against required contract evidence and freshness (INV-02).
     pub fn can_complete_with_evidence(
         task: &Task,
         claims: &[VerificationClaim],
@@ -36,26 +38,40 @@ impl CompletionGate {
                 let mut missing = Vec::new();
                 for req in required_evidence {
                     let satisfied = claims.iter().any(|claim| {
-                        claim.passed
-                            && match req.kind {
-                                EvidenceKind::FileAnchor => {
-                                    claim.verifier_id == "file_anchor"
-                                        || claim.verifier_id == "hash"
-                                        || claim.verifier_id == "citation"
-                                }
-                                EvidenceKind::SymbolAnchor => {
-                                    claim.verifier_id == "symbol_anchor"
-                                        || claim.verifier_id == "exact_match"
-                                }
-                                EvidenceKind::TestResult => {
-                                    claim.verifier_id == "command_exit_code"
-                                        || claim.verifier_id == "test_result"
-                                }
-                                EvidenceKind::Diff => {
-                                    claim.verifier_id == "diff"
-                                        || claim.verifier_id == "patch_preview"
-                                }
+                        // Strict Invariant INV-02: Must be passed and actively in Pass status (never Stale)
+                        if !claim.passed || claim.status != EvidenceStatus::Pass {
+                            return false;
+                        }
+
+                        // Version matching invariant: if both claim and task specify source_version, they must match
+                        if let (Some(claim_ver), Some(task_ver)) = (
+                            &claim.source_version,
+                            task.metadata.get("source_version").and_then(|v| v.as_str()),
+                        ) {
+                            if claim_ver != task_ver {
+                                return false;
                             }
+                        }
+
+                        match req.kind {
+                            EvidenceKind::FileAnchor => {
+                                claim.verifier_id == "file_anchor"
+                                    || claim.verifier_id == "hash"
+                                    || claim.verifier_id == "citation"
+                            }
+                            EvidenceKind::SymbolAnchor => {
+                                claim.verifier_id == "symbol_anchor"
+                                    || claim.verifier_id == "exact_match"
+                            }
+                            EvidenceKind::TestResult => {
+                                claim.verifier_id == "command_exit_code"
+                                    || claim.verifier_id == "test_result"
+                            }
+                            EvidenceKind::Diff => {
+                                claim.verifier_id == "diff"
+                                    || claim.verifier_id == "patch_preview"
+                            }
+                        }
                     });
 
                     if !satisfied {
@@ -182,5 +198,75 @@ mod tests {
         );
 
         assert!(CompletionGate::can_complete_with_evidence(&task, &[passing_claim]).is_ok());
+    }
+
+    #[test]
+    fn test_task_with_stale_claim_fails_completion() {
+        let mut task = Task::new("task_stale".into(), "Contract task".into());
+        task.status = TaskStatus::Running;
+        task.contract = Some(TaskContract {
+            pack_id: "engineering".into(),
+            name: "Build".into(),
+            description: "Must pass tests".into(),
+            required_capabilities: vec![],
+            evidence_requirements: vec![ContractEvidence {
+                kind: EvidenceKind::TestResult,
+                required: true,
+            }],
+        });
+
+        let mut stale_claim = VerificationClaim::new(
+            "task_stale".into(),
+            "Build succeeded".into(),
+            "command_exit_code".into(),
+            true,
+            serde_json::json!({"exit_code": 0}),
+        );
+        stale_claim.status = EvidenceStatus::Stale;
+
+        let err = CompletionGate::can_complete_with_evidence(&task, &[stale_claim]).unwrap_err();
+        assert!(matches!(err, DomainError::InvariantViolation(_)));
+    }
+
+    #[test]
+    fn test_task_with_mismatched_source_version_fails_completion() {
+        let mut task = Task::new("task_ver".into(), "Contract task".into());
+        task.status = TaskStatus::Running;
+        task.metadata = serde_json::json!({ "source_version": "commit_b" });
+        task.contract = Some(TaskContract {
+            pack_id: "engineering".into(),
+            name: "Build".into(),
+            description: "Must pass tests".into(),
+            required_capabilities: vec![],
+            evidence_requirements: vec![ContractEvidence {
+                kind: EvidenceKind::TestResult,
+                required: true,
+            }],
+        });
+
+        // Claim from commit_a (older version)
+        let old_claim = VerificationClaim::new(
+            "task_ver".into(),
+            "Build succeeded".into(),
+            "command_exit_code".into(),
+            true,
+            serde_json::json!({"exit_code": 0}),
+        )
+        .with_source_version("commit_a");
+
+        let err = CompletionGate::can_complete_with_evidence(&task, &[old_claim]).unwrap_err();
+        assert!(matches!(err, DomainError::InvariantViolation(_)));
+
+        // Claim from commit_b (matching version)
+        let fresh_claim = VerificationClaim::new(
+            "task_ver".into(),
+            "Build succeeded".into(),
+            "command_exit_code".into(),
+            true,
+            serde_json::json!({"exit_code": 0}),
+        )
+        .with_source_version("commit_b");
+
+        assert!(CompletionGate::can_complete_with_evidence(&task, &[fresh_claim]).is_ok());
     }
 }

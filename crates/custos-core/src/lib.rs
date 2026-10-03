@@ -5,6 +5,7 @@
 
 pub mod authority;
 pub mod capability;
+pub mod context;
 pub mod evidence;
 pub mod kernel;
 pub mod sandbox_policy;
@@ -12,6 +13,7 @@ pub mod sandbox_policy;
 // Re-exports and compatibility aliases
 pub use authority::*;
 pub use capability::*;
+pub use context::*;
 pub use evidence::*;
 pub use kernel::*;
 pub use sandbox_policy as sandbox;
