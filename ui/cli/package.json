@@ -8,7 +8,9 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "start": "node ./bin/custos-cli.js",
-    "tauri": "tauri"
+    "tauri": "node ./bin/tauri-runner.mjs",
+    "tauri:dev": "node ./bin/tauri-runner.mjs dev",
+    "tauri:build": "node ./bin/tauri-runner.mjs build"
   },
   "bin": {
     "custos": "./bin/custos-cli.js"
