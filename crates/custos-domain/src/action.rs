@@ -115,6 +115,12 @@ impl Action {
         self.lifecycle_state = next;
         Ok(())
     }
+
+    /// Computes deterministic SHA-256 digest of action parameters for Permit binding (INV-04)
+    pub fn argument_digest(&self) -> String {
+        let serialized = crate::ids::canonical_json(&self.parameters).unwrap_or_default();
+        format!("sha256:{}", crate::ids::digest(serialized.as_bytes()))
+    }
 }
 
 /// Canonical alias matching AGENTS.md glossary and system specification.
