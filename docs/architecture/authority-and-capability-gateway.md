@@ -50,6 +50,8 @@ A capability record minted exclusively by the Trusted Kernel on the mediated pat
 
 The production gate requires an atomic, durable one-use claim in SQLite before physical dispatch, followed by a receipt or an explicit `uncertain` state. A process-local mutex or copied `Permit` cannot prevent replay across a crash. Unknown capabilities must fail closed; a generated success receipt is not proof that a tool ran.
 
+Current defensive behavior: `DeterministicGate` rejects unsupported capabilities; `GatewayTool` and `McpCapabilityAdapter` deny physical dispatch until a durable claim path exists. This prevents a false mediated-success claim but intentionally leaves MCP effects unavailable through these wrappers. Read/list/patch-preview are prototype operations, not proof of a complete sandbox or durable authorization.
+
 ### 1.3 ExecutionReceipt
 An immutable proof record emitted after physical execution:
 - Captures output content digest (`output_digest`), duration in milliseconds, exit status, and error logs.
@@ -58,6 +60,8 @@ An immutable proof record emitted after physical execution:
 ---
 
 ## 2. Invocation-Bound Capability Tokens (IBCT) & Delegation Diminishment
+
+The token structure below is a **design target**, not an implemented or issued credential in the current checkout.
 
 In multi-agent or hierarchical sub-task configurations, authority propagation follows the mathematical principle of **Delegation Diminishment**:
 
@@ -99,6 +103,8 @@ Custos mitigates this vulnerability through three structural defenses:
 ---
 
 ## 4. Multi-Tiered Sandbox Defense
+
+The table below lists intended platform controls. A Git worktree isolates Git changes; it does not confine filesystem or network effects. The actual isolation profile must be measured for each adapter and operating system before an assurance label is granted.
 
 Physical mutations are executed inside an OS-enforced capability sandbox:
 

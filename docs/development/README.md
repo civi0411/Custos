@@ -33,7 +33,7 @@ cargo deny check
 
 ## 2. Development Guides Directory
 
-The development documentation is organized into 4 focused, authoritative guides:
+The development documentation includes focused engineering guides and an upstream source audit:
 
 | Guide | Scope & Key Topics | Primary Target |
 |---|---|---|
@@ -41,6 +41,7 @@ The development documentation is organized into 4 focused, authoritative guides:
 | **[Testing & Verification Standards](testing-and-verification.md)** | The 5-layer testing pyramid, automated crash recovery matrix, 8 product acceptance gates (Gates A–OPT), and status claim standards. | Test engineers, security reviewers, CI maintainers |
 | **[Engineering Standards & Observability](engineering-standards.md)** | 5 open source adoption modes, dependency whitelist, license compliance (`cargo-deny`), OpenTelemetry tracing, and pre-log secret redaction. | Platform engineers, DevOps, security auditors |
 | **[Delivery Blueprint & Release Gates](delivery-blueprint.md)** | Vertical slice engineering methodology (observe $\rightarrow$ choose $\rightarrow$ work $\rightarrow$ authorize $\rightarrow$ verify $\rightarrow$ continue), release gates (G0–G5), and PR delivery sequence (PR-00 to PR-11). | Release managers, team leads, system architects |
+| **[Upstream Source Inventory](upstream-source-map.md)** | Goose-derived source locations, runtime status, provenance gaps, and attribution audit fields. | Integrators and release reviewers |
 
 ---
 
