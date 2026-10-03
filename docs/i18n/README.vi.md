@@ -8,7 +8,7 @@
 
 # Custos
 
-[ English ](../../README.md) · [ Tiếng Việt ](README.vi.md) · [ Deutsch ](README.de.md) · [ 简体中文 ](README.zh.md)
+[ EN ](../../README.md) · [ VI ](README.vi.md) · [ DE ](README.de.md) · [ ZH ](README.zh.md)
 
 </div>
 
@@ -152,4 +152,4 @@ cargo test --workspace --all-targets
 
 ## Giấy Phép
 
-Dự án được cấp phép theo Giấy phép Apache, Phiên bản 2.0. Xem [LICENSE](../../LICENSE) để biết thêm chi tiết.
+Tệp [LICENSE](../../LICENSE) ở gốc hiện ghi giấy phép MIT. Nguồn gốc và nghĩa vụ ghi nhận mã kế thừa Goose đang được rà soát trong [bản đồ mã upstream](../development/upstream-source-map.md); không suy ra một tệp LICENSE mô tả mọi mã kế thừa.
