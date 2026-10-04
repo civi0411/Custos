@@ -98,6 +98,7 @@ impl SandboxPort for MockSandbox {
             error_message: None,
             duration_ms: Some(1),
             executed_at: Utc::now(),
+            assurance: custos_domain::Assurance::CustosMediated,
         })
     }
 }
@@ -231,6 +232,21 @@ impl OutboxPort for InMemoryOutbox {
             .unwrap()
             .iter()
             .filter(|e| e.status == status)
+            .cloned()
+            .collect())
+    }
+
+    async fn list_by_task_and_status(
+        &self,
+        task_id: &str,
+        status: OutboxStatus,
+    ) -> Result<Vec<OutboxEntry>, DomainError> {
+        Ok(self
+            .entries
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|e| e.task_id == task_id && e.status == status)
             .cloned()
             .collect())
     }

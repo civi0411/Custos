@@ -78,6 +78,7 @@ async fn vertical_slice_links_all_ports() {
             action_id: intent.id.clone(),
             permit_id: permit.id.clone(),
             argument_digest: permit.argument_digest.clone(),
+            idempotency_key: None,
             status: OutboxStatus::Pending,
             created_at: chrono::Utc::now(),
             receipt: None,
