@@ -74,7 +74,7 @@ export const IconSidebar: React.FC<IconSidebarProps> = ({
         >
           <Icon className={iconClasses} />
         </button>
-        <span className="tooltip-label absolute left-12 px-2 py-1 bg-surface-elevated border border-surface-border text-neutral-200 text-[11px] font-medium rounded-md whitespace-nowrap shadow-xl z-50 pointer-events-none">
+        <span className="tooltip-label absolute left-12 sm:left-14 px-2 py-1 bg-surface-elevated border border-surface-border text-neutral-200 text-[11px] font-medium rounded-md whitespace-nowrap shadow-xl z-[9999] pointer-events-none">
           {label}
         </span>
       </div>
@@ -82,7 +82,7 @@ export const IconSidebar: React.FC<IconSidebarProps> = ({
   };
 
   return (
-    <aside className="w-12 sm:w-14 bg-surface border-r border-surface-border flex flex-col items-center py-2.5 sm:py-3 justify-between shrink-0 z-20 select-none">
+    <aside className="w-12 sm:w-14 bg-surface border-r border-surface-border flex flex-col items-center py-2.5 sm:py-3 justify-between shrink-0 z-40 select-none">
       {/* Top Navigation Group */}
       <div className="flex flex-col items-center gap-2 w-full px-1">
         {NAV_ITEMS.map((item) => (
@@ -109,73 +109,80 @@ export const IconSidebar: React.FC<IconSidebarProps> = ({
         )}
 
         {/* User Avatar */}
-        <div className="relative" ref={avatarRef}>
+        <div className="has-tooltip relative" ref={avatarRef}>
           <button 
             onClick={(e) => {
               e.stopPropagation();
               setIsAvatarMenuOpen(!isAvatarMenuOpen);
             }} 
             className="w-7 sm:w-8 h-7 sm:h-8 rounded-full bg-gradient-to-tr from-brand-blue to-purple-600 p-[1.5px] focus:outline-none hover:ring-2 hover:ring-brand-blue/60 transition cursor-pointer" 
-            title="Alex Smith (alex@custos.io)"
           >
             <div className="w-full h-full rounded-full bg-surface-elevated flex items-center justify-center text-[10px] sm:text-[11px] font-bold text-white">
               AS
             </div>
           </button>
+          {!isAvatarMenuOpen && (
+            <span className="tooltip-label absolute left-12 sm:left-14 px-2 py-1 bg-surface-elevated border border-surface-border text-neutral-200 text-[11px] font-medium rounded-md whitespace-nowrap shadow-xl z-[9999] pointer-events-none">
+              Alex Smith (alex@custos.io)
+            </span>
+          )}
 
           {isAvatarMenuOpen && (
-            <div className="absolute left-12 bottom-0 w-56 bg-surface-card border border-surface-border rounded-xl shadow-2xl p-1.5 text-xs z-50">
-              <div className="px-3 py-2 border-b border-surface-border mb-1">
-                <div className="font-semibold text-white flex items-center gap-1.5">
+            <div className="absolute left-14 bottom-1 w-60 bg-surface-card/95 backdrop-blur-md border border-surface-border rounded-xl shadow-2xl p-1.5 text-xs z-50 animate-in fade-in zoom-in-95 duration-100">
+              <div className="px-2.5 py-2 border-b border-surface-border/40 pb-2 mb-1 bg-surface-elevated/40 rounded-lg">
+                <div className="font-semibold text-white flex items-center justify-between text-xs">
                   <span>Alex Smith</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50"></span>
                 </div>
-                <div className="text-[11px] text-neutral-500 truncate">alex@custos.io</div>
+                <div className="text-[10.5px] text-neutral-400 truncate mt-0.5 font-mono">alex@custos.io</div>
               </div>
 
-              <button 
-                onClick={() => {
-                  onSwitchTab('dashboard');
-                  setIsAvatarMenuOpen(false);
-                }} 
-                className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-surface-hover text-neutral-300 flex items-center gap-2"
-              >
-                <Activity className="w-3.5 h-3.5" />
-                <span>Dashboard Overview</span>
-              </button>
+              <div className="space-y-0.5">
+                <button 
+                  onClick={() => {
+                    onSwitchTab('dashboard');
+                    setIsAvatarMenuOpen(false);
+                  }} 
+                  className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-surface-hover text-neutral-400 hover:text-white flex items-center gap-2.5 transition cursor-pointer"
+                >
+                  <Activity className="w-3.5 h-3.5 text-brand-blue shrink-0" />
+                  <span className="truncate">Dashboard Overview</span>
+                </button>
+                
+                <button 
+                  onClick={() => {
+                    onSwitchTab('providers');
+                    setIsAvatarMenuOpen(false);
+                  }} 
+                  className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-surface-hover text-neutral-400 hover:text-white flex items-center gap-2.5 transition cursor-pointer"
+                >
+                  <Key className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span className="truncate">API Keys & Providers</span>
+                </button>
+                
+                <button 
+                  onClick={() => {
+                    if (onOpenSettings) onOpenSettings();
+                    else onSwitchTab('settings');
+                    setIsAvatarMenuOpen(false);
+                  }} 
+                  className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-surface-hover text-neutral-400 hover:text-white flex items-center gap-2.5 transition cursor-pointer"
+                >
+                  <SettingsIcon className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                  <span className="truncate">Preferences</span>
+                </button>
+              </div>
               
-              <button 
-                onClick={() => {
-                  onSwitchTab('providers');
-                  setIsAvatarMenuOpen(false);
-                }} 
-                className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-surface-hover text-neutral-300 flex items-center gap-2"
-              >
-                <Key className="w-3.5 h-3.5" />
-                <span>API Keys & Providers</span>
-              </button>
-              
-              <button 
-                onClick={() => {
-                  if (onOpenSettings) onOpenSettings();
-                  else onSwitchTab('settings');
-                  setIsAvatarMenuOpen(false);
-                }} 
-                className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-surface-hover text-neutral-300 flex items-center gap-2"
-              >
-                <SettingsIcon className="w-3.5 h-3.5" />
-                <span>Preferences</span>
-              </button>
-              
-              <div className="h-[1px] bg-surface-border my-1"></div>
+              <div className="h-[1px] bg-surface-border/80 my-1"></div>
               
               <button 
                 onClick={() => {
                   onShowToast('Signed out of session');
                   setIsAvatarMenuOpen(false);
                 }} 
-                className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-red-500/10 text-red-400 flex items-center gap-2"
+                className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-red-500/10 text-red-400 hover:text-red-300 flex items-center gap-2.5 transition cursor-pointer font-medium"
               >
-                <LogOut className="w-3.5 h-3.5" />
+                <LogOut className="w-3.5 h-3.5 shrink-0" />
                 <span>Sign out</span>
               </button>
             </div>

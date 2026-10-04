@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { FileDiff, Check, FileCode, Copy, Sparkles } from 'lucide-react';
 import { Highlight, themes } from 'prism-react-renderer';
 import { Session } from '../types';
+import { Tooltip } from './Tooltip';
 
 interface DiffSectionProps {
   session: Session | null;
@@ -154,95 +155,98 @@ export const DiffSection: React.FC<DiffSectionProps> = ({
       </div>
 
       {/* Code Diff Viewer Body */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 font-mono text-[11px] leading-5 text-neutral-300 bg-canvas/40 min-w-0 select-text">
-        <div className="border border-surface-border rounded-xl overflow-hidden bg-surface-card/60 shadow-inner min-w-0">
-          {/* Header Bar */}
-          <div className="px-3 py-1.5 bg-surface-card border-b border-surface-border flex items-center justify-between text-neutral-400 text-[10px] shrink-0 select-none">
-            <div className="flex items-center gap-2">
-              <span className="truncate font-mono text-neutral-300">{session.diffHunk}</span>
-              <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-surface-elevated font-mono text-neutral-400 border border-surface-border">
-                {language}
-              </span>
-            </div>
-            <button 
-              onClick={onCopyDiff} 
-              className="hover:text-white flex items-center gap-1 shrink-0 ml-2 cursor-pointer transition"
-              title="Copy diff to clipboard"
-            >
-              <Copy className="w-3 h-3" />
-              <span className="hidden sm:inline">Copy Diff</span>
-            </button>
-          </div>
-          
-          {/* Syntax Highlighted Diff Lines with Gutter Line Numbers */}
-          <Highlight theme={themes.vsDark} code={fullCodeString} language={language}>
-            {({ tokens, getTokenProps }) => (
-              <div className="overflow-x-auto py-2 font-mono text-[11px] leading-relaxed select-text">
-                {computedLines.map((line, idx) => {
-                  const isAdd = line.type === 'add';
-                  const isDel = line.type === 'del';
-
-                  const rowBg = isAdd
-                    ? 'bg-emerald-500/15 hover:bg-emerald-500/20'
-                    : isDel
-                    ? 'bg-red-500/15 hover:bg-red-500/20'
-                    : 'hover:bg-surface-elevated/40';
-
-                  const signColor = isAdd
-                    ? 'text-emerald-400 font-bold'
-                    : isDel
-                    ? 'text-red-400 font-bold'
-                    : 'text-transparent';
-
-                  const lineTokens = tokens[idx] || [];
-
-                  return (
-                    <div
-                      key={idx}
-                      className={`flex items-stretch min-w-fit transition-colors duration-100 ${rowBg}`}
-                    >
-                      {/* Gutter: Old Line Number */}
-                      <span className="w-9 sm:w-10 text-right pr-2 text-neutral-500/70 select-none shrink-0 font-mono text-[10.5px] tabular-nums py-0.5">
-                        {line.oldNum}
-                      </span>
-
-                      {/* Gutter: New Line Number */}
-                      <span className="w-9 sm:w-10 text-right pr-2 text-neutral-500/70 select-none shrink-0 font-mono text-[10.5px] tabular-nums py-0.5 border-r border-surface-border/40">
-                        {line.newNum}
-                      </span>
-
-                      {/* Sign indicator (+ / - / space) */}
-                      <span className={`w-5 text-center select-none shrink-0 font-mono text-xs py-0.5 ${signColor}`}>
-                        {line.sign}
-                      </span>
-
-                      {/* Code Content highlighted by prism-react-renderer */}
-                      <div className="flex-1 px-2 py-0.5 overflow-x-visible whitespace-pre font-mono select-text text-neutral-200">
-                        {lineTokens.length > 0 ? (
-                          lineTokens.map((token, key) => (
-                            <span key={key} {...getTokenProps({ token })} />
-                          ))
-                        ) : (
-                          <span>{line.cleanText || ' '}</span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 font-mono text-[11px] leading-5 text-neutral-300 bg-canvas/40 min-w-0 select-text">
+        <div className="max-w-5xl w-full mx-auto space-y-4">
+          <div className="border border-surface-border rounded-xl overflow-hidden bg-surface-card/60 shadow-inner min-w-0 w-full">
+            {/* Header Bar */}
+            <div className="relative z-20 px-3 py-1.5 bg-surface-card border-b border-surface-border flex items-center justify-between text-neutral-400 text-[10px] shrink-0 select-none">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="truncate font-mono text-neutral-300">{session.diffHunk}</span>
+                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-surface-elevated font-mono text-neutral-400 border border-surface-border shrink-0">
+                  {language}
+                </span>
               </div>
-            )}
-          </Highlight>
-        </div>
+              <Tooltip content="Copy diff to clipboard" position="bottom" align="end">
+                <button 
+                  onClick={onCopyDiff} 
+                  className="hover:text-white flex items-center gap-1 shrink-0 ml-2 cursor-pointer transition"
+                >
+                  <Copy className="w-3 h-3" />
+                  <span className="hidden sm:inline">Copy Diff</span>
+                </button>
+              </Tooltip>
+            </div>
+            
+            {/* Syntax Highlighted Diff Lines with Gutter Line Numbers */}
+            <Highlight theme={themes.vsDark} code={fullCodeString} language={language}>
+              {({ tokens, getTokenProps }) => (
+                <div className="py-2 font-mono text-[11px] leading-relaxed select-text w-full overflow-x-hidden">
+                  {computedLines.map((line, idx) => {
+                    const isAdd = line.type === 'add';
+                    const isDel = line.type === 'del';
 
-        {/* Diff Summary / AST inspection */}
-        <div className="mt-4 p-3 rounded-xl border border-surface-border bg-surface-card text-xs select-text">
-          <div className="flex items-center justify-between text-neutral-300 font-sans mb-1.5 select-none">
-            <span className="font-medium">Diff Analysis & Inspection</span>
-            <span className="text-[10px] text-emerald-400 font-mono">Clean AST Patch</span>
+                    const rowBg = isAdd
+                      ? 'bg-emerald-500/15 hover:bg-emerald-500/20'
+                      : isDel
+                      ? 'bg-red-500/15 hover:bg-red-500/20'
+                      : 'hover:bg-surface-elevated/40';
+
+                    const signColor = isAdd
+                      ? 'text-emerald-400 font-bold'
+                      : isDel
+                      ? 'text-red-400 font-bold'
+                      : 'text-transparent';
+
+                    const lineTokens = tokens[idx] || [];
+
+                    return (
+                      <div
+                        key={idx}
+                        className={`flex items-stretch w-full min-w-0 transition-colors duration-100 ${rowBg}`}
+                      >
+                        {/* Gutter: Old Line Number */}
+                        <span className="w-9 sm:w-10 text-right pr-2 text-neutral-500/70 select-none shrink-0 font-mono text-[10.5px] tabular-nums py-0.5">
+                          {line.oldNum}
+                        </span>
+
+                        {/* Gutter: New Line Number */}
+                        <span className="w-9 sm:w-10 text-right pr-2 text-neutral-500/70 select-none shrink-0 font-mono text-[10.5px] tabular-nums py-0.5 border-r border-surface-border/40">
+                          {line.newNum}
+                        </span>
+
+                        {/* Sign indicator (+ / - / space) */}
+                        <span className={`w-5 text-center select-none shrink-0 font-mono text-xs py-0.5 ${signColor}`}>
+                          {line.sign}
+                        </span>
+
+                        {/* Code Content highlighted by prism-react-renderer */}
+                        <div className="flex-1 px-2 py-0.5 whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word] font-mono select-text text-neutral-200 min-w-0">
+                          {lineTokens.length > 0 ? (
+                            lineTokens.map((token, key) => (
+                              <span key={key} {...getTokenProps({ token })} />
+                            ))
+                          ) : (
+                            <span>{line.cleanText || ' '}</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Highlight>
           </div>
-          <p className="text-neutral-400 text-[11px] leading-relaxed font-sans select-text">
-            {session.summary}
-          </p>
+
+          {/* Diff Summary / AST inspection */}
+          <div className="p-3 rounded-xl border border-surface-border bg-surface-card text-xs select-text">
+            <div className="flex items-center justify-between text-neutral-300 font-sans mb-1.5 select-none">
+              <span className="font-medium">Diff Analysis & Inspection</span>
+              <span className="text-[10px] text-emerald-400 font-mono">Clean AST Patch</span>
+            </div>
+            <p className="text-neutral-400 text-[11px] leading-relaxed font-sans select-text whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+              {session.summary}
+            </p>
+          </div>
         </div>
       </div>
     </section>

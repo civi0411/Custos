@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { GitFork, ShieldCheck, Zap, Activity, RefreshCw } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { CustomSelect } from '../../components/CustomSelect';
 
 export const ChainsPage: React.FC = () => {
   const { showToast } = useAppContext();
@@ -143,26 +144,28 @@ export const ChainsPage: React.FC = () => {
             <span>Resilience & Recovery Rules</span>
           </div>
           <div className="space-y-3">
-            <label className="flex items-center justify-between cursor-pointer">
+            <label className="flex items-center justify-between p-3 rounded-lg bg-surface-elevated/40 border border-surface-border/60 hover:border-surface-border cursor-pointer transition select-none">
               <span className="text-xs text-neutral-300">Auto-fallback on HTTP 429 / 5xx</span>
               <input
                 type="checkbox"
                 checked={autoFallback}
                 onChange={(e) => setAutoFallback(e.target.checked)}
-                className="rounded border-surface-border bg-surface-elevated text-brand-blue focus:ring-0 w-4 h-4"
               />
             </label>
             <div className="flex items-center justify-between">
               <span className="text-xs text-neutral-300">Max retries before failover</span>
-              <select
-                value={maxRetries}
-                onChange={(e) => setMaxRetries(parseInt(e.target.value, 10))}
-                className="bg-surface-elevated border border-surface-border rounded-md px-2 py-1 text-xs text-white"
-              >
-                <option value={1}>1 Retry</option>
-                <option value={2}>2 Retries</option>
-                <option value={3}>3 Retries</option>
-              </select>
+              <div className="w-32 shrink-0">
+                <CustomSelect
+                  value={maxRetries}
+                  onChange={(val) => setMaxRetries(Number(val))}
+                  options={[
+                    { value: 1, label: '1 Retry' },
+                    { value: 2, label: '2 Retries' },
+                    { value: 3, label: '3 Retries' },
+                  ]}
+                  headerTitle="Failover Retries"
+                />
+              </div>
             </div>
           </div>
         </div>
