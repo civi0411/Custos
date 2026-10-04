@@ -11,7 +11,10 @@ use async_trait::async_trait;
 use custos_domain::{
     Action, ActionIntent, ActionLifecycleState, ContextPack, DomainError, RiskLevel, WorkerRun,
 };
-use custos_provider::{AgentRuntimePort, ModelProvider, ProviderRequest};
+use custos_core::contracts::harness::{
+    AgentRuntimePort, CostVisibility, HarnessProfile, ToolMediationLevel, WorktreeOwnership,
+};
+use custos_provider::{ModelProvider, ProviderRequest};
 use std::sync::Arc;
 
 pub struct GovernedAgentRuntime {
@@ -61,6 +64,21 @@ impl GovernedAgentRuntime {
 
 #[async_trait]
 impl AgentRuntimePort for GovernedAgentRuntime {
+    fn harness_id(&self) -> &str {
+        "governed-agent-runtime"
+    }
+
+    fn profile(&self) -> HarnessProfile {
+        HarnessProfile {
+            harness_id: "governed-agent-runtime".into(),
+            tool_mediation: ToolMediationLevel::CustosMediated,
+            worktree_ownership: WorktreeOwnership::SharedLive,
+            supports_cancel: true,
+            supports_steer: true,
+            cost_visibility: CostVisibility::ExactTokens,
+        }
+    }
+
     async fn execute_turn(
         &self,
         worker_run: &WorkerRun,

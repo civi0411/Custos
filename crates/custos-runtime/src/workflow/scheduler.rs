@@ -99,6 +99,12 @@ impl WorkflowScheduler {
         id
     }
 
+    /// Retrieve a job by its scheduled job ID
+    pub async fn get_job(&self, id: &ScheduledJobId) -> Option<ScheduledJob> {
+        let lock = self.jobs.read().await;
+        lock.get(id).cloned()
+    }
+
     /// Retrieve all jobs that are due for execution at the specified reference time
     pub async fn get_due_jobs(&self, now: DateTime<Utc>) -> Vec<ScheduledJob> {
         let lock = self.jobs.read().await;

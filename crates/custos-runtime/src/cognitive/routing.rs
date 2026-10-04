@@ -90,6 +90,21 @@ pub struct RouteDecision {
     pub trace_id: String,
 }
 
+impl RouteDecision {
+    /// Resolves the permitted tool_set strings to concrete Skill instances using the SkillRegistry.
+    pub fn resolve_skills(
+        &self,
+        registry: &crate::cognitive::skills::SkillRegistry,
+    ) -> Vec<std::sync::Arc<dyn crate::cognitive::skills::Skill>> {
+        registry.resolve_tool_set(&self.tool_set)
+    }
+
+    /// Checks if a skill is explicitly permitted by this route decision.
+    pub fn allows_skill(&self, skill_id: &str) -> bool {
+        self.tool_set.iter().any(|s| s == skill_id)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RoutingPolicy {
     pub ambiguity_escalation: f32,
@@ -229,7 +244,11 @@ impl RoutingPolicy {
                 cost_ceiling_usd: Some(0.05),
                 latency_sla_ms: Some(2500),
                 pack_id: Some("assistant".into()),
-                tool_set: vec!["file_read".into(), "grep_search".into()],
+                tool_set: vec![
+                    "contact_resolve".into(),
+                    "file_read".into(),
+                    "lexical_search".into(),
+                ],
                 a2a_target: None,
                 context_mode: ContextMode::Summarized,
                 fallback_chain: vec![FallbackRoute {
@@ -249,7 +268,13 @@ impl RoutingPolicy {
                 cost_ceiling_usd: Some(0.50),
                 latency_sla_ms: Some(15000),
                 pack_id: Some("engineering".into()),
-                tool_set: vec!["all".into()],
+                tool_set: vec![
+                    "ast_search".into(),
+                    "git_patch".into(),
+                    "cargo_test".into(),
+                    "file_read".into(),
+                    "lexical_search".into(),
+                ],
                 a2a_target: None,
                 context_mode: ContextMode::Full,
                 fallback_chain: vec![FallbackRoute {
@@ -379,5 +404,25 @@ mod tests {
 
         // Trace ID
         assert!(!d.trace_id.is_empty());
+    }
+
+    #[test]
+    fn test_route_decision_skill_resolution() {
+        use crate::cognitive::skills::{FileReadSkill, SkillRegistry};
+        use std::sync::Arc;
+
+        let mut registry = SkillRegistry::new();
+        registry.register(Arc::new(FileReadSkill));
+
+        let policy = RoutingPolicy::default();
+        let s = signals();
+        let d = policy.decide(&s).unwrap();
+
+        assert!(d.allows_skill("file_read"));
+        assert!(!d.allows_skill("forbidden_skill"));
+
+        let resolved = d.resolve_skills(&registry);
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].skill_id(), "file_read");
     }
 }
