@@ -31,6 +31,8 @@ pub struct CustosRuntime {
 impl CustosRuntime {
     pub fn bootstrap(database_path: &str) -> Result<Self, DomainError> {
         let store = Arc::new(SqliteTaskStore::new(database_path)?);
+        // Crash Recovery Reconcile (Gate 3): transition any InFlight effects to Uncertain on startup
+        let _ = store.outbox().reconcile_on_startup();
         let task_service = Arc::new(TaskService::new(store.clone()));
         let session_manager = Arc::new(SessionManager::with_store(store.clone()));
         let bridge_service = Arc::new(BridgeService::new(
@@ -50,7 +52,15 @@ impl CustosRuntime {
         
         let model = Arc::new(FakeProvider::new("fake"));
         
-        let workflow = Arc::new(TaskRuntime::with_ports(kernel.clone(), model.clone()));
+        let workflow = Arc::new(
+            TaskRuntime::new()
+                .with_kernel(kernel.clone())
+                .with_model(model.clone())
+                .with_sandbox(sandbox.clone())
+                .with_outbox(store.clone())
+                .with_effect_ledger(store.clone())
+                .with_run_store(store.clone()),
+        );
 
         Ok(Self {
             store,

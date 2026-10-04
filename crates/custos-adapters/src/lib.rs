@@ -5,6 +5,7 @@
 //! Local Inference, Download Manager, and Roaming.
 
 pub mod download_manager;
+pub mod harness;
 pub mod local_inference;
 pub mod mcp;
 pub mod providers;
@@ -30,6 +31,7 @@ pub use local_inference::tool_emulation;
 pub use local_inference::tool_parsing;
 
 pub use download_manager::*;
+pub use harness::*;
 pub use local_inference::*;
 pub use mcp::*;
 pub use providers::*;

@@ -17,6 +17,8 @@ pub mod evidence;
 pub mod fact;
 pub mod ids;
 pub mod memory;
+pub mod decision;
+pub mod oi;
 pub mod packet;
 pub mod run;
 pub mod session;
@@ -26,7 +28,10 @@ pub mod types;
 pub mod workflow;
 
 // Explicit re-exports of public domain surface (No glob *)
-pub use action::{Action, ActionIntent, ActionIntentV1, ActionLifecycleState, RiskLevel};
+pub use action::{
+    Action, ActionIntent, ActionIntentV1, ActionLifecycleState, Assurance, EffectAttempt,
+    EffectStatus, RiskLevel,
+};
 pub use approval::{ApprovalDecision, ApprovalRequest, ApprovalStatus};
 pub use artifact::{ArtifactKind, ArtifactRef};
 pub use authority::{
@@ -38,6 +43,11 @@ pub use capability::CapabilityManifest;
 pub use claim::Claim;
 pub use context::{ContextItem, ContextPack};
 pub use continuation::ContinuationPacket;
+pub use decision::{
+    Candidate, DecisionRecord, DecisionSnapshot, ExecutionTopology, NodePlacement,
+    RejectionReason, ReplanBrief, ReplanRecord, ReplanTrigger, StrategyProposal, WorkPacket,
+    WorkerResult, WorkerStatus,
+};
 pub use error::DomainError;
 pub use evidence::{
     EvidenceRecord, EvidenceRecordV1, EvidenceRequirement, EvidenceStatus, VerificationClaim,
@@ -56,4 +66,6 @@ pub use task::{
     ContractEvidence, CriterionSpec, EvidenceKind, Task, TaskContract, TaskContractRevision,
     TaskContractV1, TaskRevision, TaskStatus,
 };
-pub use workflow::{WorkflowIR, WorkflowNodeIR, WorkflowPlan, WorkflowStep};
+pub use workflow::{
+    RevisionNode, WorkflowIR, WorkflowNodeIR, WorkflowPlan, WorkflowRevision, WorkflowStep,
+};

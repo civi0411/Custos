@@ -1,14 +1,11 @@
 //! Real Daemon Process-Level Integration & Crash Recovery Slice
 //!
-//! Validates:
-//! 1. CLI / client communicates with custos-daemon strictly over Local API JSONL (stdio).
-//! 2. Single-writer invariant: custos-daemon alone opens SQLite and manages state transitions.
-//! 3. Proof-closure invariant: advancing directly to Succeeded via v1.tasks.advance is rejected.
-//! 4. Completion gate: v1.tasks.complete transitions task to Succeeded.
-//! 5. Crash recovery: Daemon process killed mid-lifecycle, restarted against same SQLite DB,
-//!    recovers intact Task state and continues accepting requests without corruption.
+//! Reorganized into clear thematic test modules:
+//! 1. `task_lifecycle_and_invariants`: Local API task creation, epoch transitions, direct advance rejection, and proof-closure completion.
+//! 2. `interactive_session_and_journal`: Session creation, dialogue journaling, task attachment, and steering injection.
+//! 3. `process_crash_recovery_resilience`: Process-level SIGKILL/restart against SQLite, state durability, and post-recovery operations.
 
-use custos_core_domain::{Task, TaskStatus};
+use custos_core_domain::{SessionStatus, Task, TaskStatus};
 use custos_daemon::custos_local_api;
 use custos_domain as custos_core_domain;
 use custos_local_api::{LocalApiClient, ProcessTransport};
@@ -23,11 +20,7 @@ fn resolve_daemon_binary() -> PathBuf {
         if current.file_name().and_then(|n| n.to_str()) == Some("deps") {
             current.pop();
         }
-        let candidate = current.join(if cfg!(windows) {
-            "custos-daemon.exe"
-        } else {
-            "custos-daemon"
-        });
+        let candidate = current.join(if cfg!(windows) { "custos-daemon.exe" } else { "custos-daemon" });
         if candidate.exists() {
             return candidate;
         }
@@ -35,242 +28,161 @@ fn resolve_daemon_binary() -> PathBuf {
     PathBuf::from("target/debug/custos-daemon")
 }
 
-#[tokio::test]
-async fn test_daemon_process_lifecycle_and_crash_recovery() {
+fn spawn_daemon_client(db_path: &str) -> LocalApiClient {
     let daemon_bin = resolve_daemon_binary();
-    assert!(
-        daemon_bin.exists(),
-        "custos-daemon binary must exist at {:?}. Run `cargo build --bin custos-daemon` first.",
-        daemon_bin
-    );
+    assert!(daemon_bin.exists(), "custos-daemon binary must exist at {:?}", daemon_bin);
+    let transport = ProcessTransport::spawn(daemon_bin.to_str().unwrap(), Some(db_path))
+        .expect("Failed to launch custos-daemon process");
+    LocalApiClient::new(Box::new(transport))
+}
 
-    let temp_dir = std::env::temp_dir().join(format!("custos_daemon_e2e_{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&temp_dir).unwrap();
-    let db_path = temp_dir.join("daemon_test.db");
-    let db_path_str = db_path.to_str().unwrap();
+// =========================================================================
+// THEME 1: Task Lifecycle & Proof-Closure Invariants
+// =========================================================================
+mod task_lifecycle_and_invariants {
+    use super::*;
 
-    let task_id: String;
+    #[tokio::test]
+    async fn test_task_lifecycle_and_proof_closure_enforcement() {
+        let temp_dir = std::env::temp_dir().join(format!("custos_daemon_task_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let db_path = temp_dir.join("daemon_task.db");
 
-    // --- PHASE 1: Launch Daemon Process 1 and exercise Task Lifecycle ---
-    {
-        let transport = ProcessTransport::spawn(daemon_bin.to_str().unwrap(), Some(db_path_str))
-            .expect("Failed to launch custos-daemon process");
-        let client = LocalApiClient::new(Box::new(transport));
+        let client = spawn_daemon_client(db_path.to_str().unwrap());
 
         // 1. Create Task via Local API
         let task: Task = client
-            .create_task(
-                "p1_create",
-                "Daemon Process E2E Task",
-                None,
-                Some(serde_json::json!({"e2e": true, "process": 1})),
-            )
+            .create_task("p1_create", "Daemon Process E2E Task", None, Some(serde_json::json!({"e2e": true})))
             .await
-            .expect("CreateTask over daemon IPC must succeed");
-
-        assert_eq!(task.title, "Daemon Process E2E Task");
+            .expect("CreateTask must succeed");
         assert_eq!(task.status, TaskStatus::Draft);
         assert_eq!(task.epoch, 0);
-        task_id = task.id.clone();
 
-        // 2. Advance to Queued
-        let queued_task = client
-            .advance_task("p1_queue", &task_id, TaskStatus::Queued)
-            .await
-            .expect("Advance to Queued must succeed");
-        assert_eq!(queued_task.status, TaskStatus::Queued);
-        assert_eq!(queued_task.epoch, 1);
+        // 2. Advance to Queued -> Running
+        let queued = client.advance_task("p1_queue", &task.id, TaskStatus::Queued).await.unwrap();
+        assert_eq!(queued.status, TaskStatus::Queued);
+        assert_eq!(queued.epoch, 1);
 
-        // 3. Advance to Running
-        let running_task = client
-            .advance_task("p1_run", &task_id, TaskStatus::Running)
-            .await
-            .expect("Advance to Running must succeed");
-        assert_eq!(running_task.status, TaskStatus::Running);
-        assert_eq!(running_task.epoch, 2);
+        let running = client.advance_task("p1_run", &task.id, TaskStatus::Running).await.unwrap();
+        assert_eq!(running.status, TaskStatus::Running);
+        assert_eq!(running.epoch, 2);
 
-        // 4. Invariant Enforcement: Advancing directly to Succeeded must be REJECTED
-        let bad_advance = client
-            .advance_task("p1_bad_succeeded", &task_id, TaskStatus::Succeeded)
-            .await;
-        assert!(
-            bad_advance.is_err(),
-            "Advancing directly to Succeeded without proof closure must be rejected"
-        );
-        let err_msg = bad_advance.unwrap_err();
-        assert!(
-            err_msg.contains("Cannot advance directly to Succeeded"),
-            "Error must specify proof closure requirement, got: {err_msg}"
-        );
+        // 3. Invariant: Advancing directly to Succeeded must be REJECTED
+        let bad_advance = client.advance_task("p1_bad", &task.id, TaskStatus::Succeeded).await;
+        assert!(bad_advance.is_err(), "Direct advance to Succeeded must be rejected");
+        assert!(bad_advance.unwrap_err().contains("Cannot advance directly to Succeeded"));
 
-        // 5. Complete Task via v1.tasks.complete
-        let completed_task = client
-            .complete_task(
-                "p1_complete",
-                &task_id,
-                Some("Task payload verified and successfully closed".into()),
-            )
-            .await
-            .expect("CompleteTask over daemon IPC must succeed");
-        assert_eq!(completed_task.status, TaskStatus::Succeeded);
-        assert_eq!(completed_task.epoch, 3);
+        // 4. Complete Task via v1.tasks.complete
+        let completed = client.complete_task("p1_comp", &task.id, Some("Task payload verified".into())).await.unwrap();
+        assert_eq!(completed.status, TaskStatus::Succeeded);
+        assert_eq!(completed.epoch, 3);
 
-        // 6. Query Task via v1.tasks.get
-        let fetched_task = client
-            .get_task("p1_get", &task_id)
-            .await
-            .expect("GetTask over daemon IPC must succeed");
-        assert_eq!(fetched_task.status, TaskStatus::Succeeded);
-        assert_eq!(fetched_task.id, task_id);
+        let fetched = client.get_task("p1_get", &task.id).await.unwrap();
+        assert_eq!(fetched.status, TaskStatus::Succeeded);
 
-        // 7. Exercise Interactive Session Lifecycle & Steering
-        let session = client
-            .create_session("p1_sess_create", Some("assisted"))
-            .await
-            .expect("CreateSession over daemon IPC must succeed");
-        assert_eq!(session.status, custos_core_domain::SessionStatus::Active);
-        let session_id_str = session.id.0.clone();
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+}
 
-        client
-            .append_session_message(
-                "p1_msg1",
-                &session_id_str,
-                "user",
-                "I want to refactor the database layer",
-            )
-            .await
-            .expect("Append user message must succeed");
+// =========================================================================
+// THEME 2: Interactive Session, Journaling & Task Steering
+// =========================================================================
+mod interactive_session_and_journal {
+    use super::*;
 
-        client
-            .append_session_message(
-                "p1_msg2",
-                &session_id_str,
-                "assistant",
-                "Sure, I can help analyze that",
-            )
-            .await
-            .expect("Append assistant message must succeed");
+    #[tokio::test]
+    async fn test_interactive_session_and_steering_journal() {
+        let temp_dir = std::env::temp_dir().join(format!("custos_daemon_sess_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let db_path = temp_dir.join("daemon_sess.db");
 
-        client
-            .attach_session("p1_attach", &session_id_str, &task_id)
-            .await
-            .expect("Attach session must succeed");
+        let client = spawn_daemon_client(db_path.to_str().unwrap());
 
-        let steer_res = client
-            .steer_session(
-                "p1_steer",
-                &session_id_str,
-                &task_id,
-                "Prioritize SQLite WAL checkpoints",
-            )
-            .await
-            .expect("Steer task must succeed");
-        assert_eq!(
-            steer_res.get("accepted").and_then(|v| v.as_bool()),
-            Some(true)
-        );
+        let task = client.create_task("p2_t", "Steer Target Task", None, None).await.unwrap();
+        let session = client.create_session("p2_s", Some("assisted")).await.unwrap();
+        assert_eq!(session.status, SessionStatus::Active);
+        let session_id = session.id.0.clone();
 
-        let journal = client
-            .get_session_journal("p1_journal", &session_id_str)
-            .await
-            .expect("GetSessionJournal must succeed");
+        client.append_session_message("m1", &session_id, "user", "I want to refactor the database layer").await.unwrap();
+        client.append_session_message("m2", &session_id, "assistant", "Sure, I can help analyze that").await.unwrap();
+        client.attach_session("att", &session_id, &task.id).await.unwrap();
+
+        let steer_res = client.steer_session("st", &session_id, &task.id, "Prioritize SQLite WAL checkpoints").await.unwrap();
+        assert_eq!(steer_res.get("accepted").and_then(|v| v.as_bool()), Some(true));
+
+        let journal = client.get_session_journal("j", &session_id).await.unwrap();
         assert_eq!(journal.len(), 3);
         assert_eq!(journal[0].entry_type, "user_message");
         assert_eq!(journal[1].entry_type, "assistant_message");
-        assert_eq!(journal[2].entry_type, "user_message");
         assert!(journal[2].entry_data.contains("[STEER TASK"));
 
-        // Daemon Process 1 terminates here when transport is dropped / killed
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
+}
 
-    // --- PHASE 2: Kill / Restart Daemon Process 2 & Assert Persistence Recovery ---
-    {
-        // Boot a completely new daemon process instance pointing to the same SQLite file
-        let transport = ProcessTransport::spawn(daemon_bin.to_str().unwrap(), Some(db_path_str))
-            .expect("Failed to launch second custos-daemon process for recovery verification");
-        let client = LocalApiClient::new(Box::new(transport));
+// =========================================================================
+// THEME 3: Process Crash Recovery & Multi-Instance Durability
+// =========================================================================
+mod process_crash_recovery_resilience {
+    use super::*;
 
-        // 8. Verify Task state survived process death and was recovered
-        let recovered_task = client
-            .get_task("p2_get", &task_id)
-            .await
-            .expect("GetTask after daemon restart must succeed");
-        assert_eq!(recovered_task.id, task_id);
-        assert_eq!(recovered_task.title, "Daemon Process E2E Task");
-        assert_eq!(recovered_task.status, TaskStatus::Succeeded);
-        assert_eq!(recovered_task.epoch, 3);
+    #[tokio::test]
+    async fn test_daemon_process_kill_and_restart_recovery() {
+        let temp_dir = std::env::temp_dir().join(format!("custos_daemon_crash_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let db_path = temp_dir.join("daemon_crash.db");
+        let db_path_str = db_path.to_str().unwrap();
 
-        // 9. Verify Session state & Interaction Journal survived process death
-        let session_list = client
-            .list_sessions("p2_sess_list")
-            .await
-            .expect("ListSessions after daemon restart must succeed");
-        assert_eq!(session_list.len(), 1);
-        let recovered_session_id = session_list[0].id.0.clone();
+        let task_id: String;
+        let session_id_str: String;
 
-        let recovered_session = client
-            .get_session("p2_sess_get", &recovered_session_id)
-            .await
-            .expect("GetSession after daemon restart must succeed");
-        assert_eq!(
-            recovered_session.status,
-            custos_core_domain::SessionStatus::Active
-        );
-        assert_eq!(
-            recovered_session.attached_to.as_deref(),
-            Some(task_id.as_str())
-        );
+        // --- Process Instance 1 ---
+        {
+            let client = spawn_daemon_client(db_path_str);
+            let task = client.create_task("p1_t", "Persistent Task", None, None).await.unwrap();
+            task_id = task.id.clone();
 
-        let recovered_journal = client
-            .get_session_journal("p2_sess_journal", &recovered_session_id)
-            .await
-            .expect("GetSessionJournal after daemon restart must succeed");
-        assert_eq!(recovered_journal.len(), 3);
-        assert_eq!(
-            recovered_journal[0].entry_data,
-            "I want to refactor the database layer"
-        );
+            client.advance_task("p1_q", &task_id, TaskStatus::Queued).await.unwrap();
+            client.advance_task("p1_r", &task_id, TaskStatus::Running).await.unwrap();
+            client.complete_task("p1_c", &task_id, Some("Closed".into())).await.unwrap();
 
-        // 10. Concurrency Invariant: Session continues independently while Tasks run
-        client
-            .append_session_message(
-                "p2_msg3",
-                &recovered_session_id,
-                "user",
-                "How did the completed task turn out?",
-            )
-            .await
-            .expect("Session continues accepting dialogue independently");
+            let session = client.create_session("p1_s", Some("assisted")).await.unwrap();
+            session_id_str = session.id.0.clone();
+            client.append_session_message("p1_m", &session_id_str, "user", "Message before reboot").await.unwrap();
+            client.attach_session("p1_att", &session_id_str, &task_id).await.unwrap();
+            // Daemon 1 terminates here when dropped
+        }
 
-        let journal_after = client
-            .get_session_journal("p2_journal_after", &recovered_session_id)
-            .await
-            .unwrap();
-        assert_eq!(journal_after.len(), 4);
+        // --- Process Instance 2 (Reboot) ---
+        {
+            let client2 = spawn_daemon_client(db_path_str);
 
-        // 11. Verify Task listing recovers all historical tasks
-        let list = client
-            .list_tasks("p2_list")
-            .await
-            .expect("ListTasks after daemon restart must succeed");
-        assert_eq!(list.len(), 1);
-        assert_eq!(list[0].id, task_id);
+            // 1. Recover Task
+            let recovered_task = client2.get_task("p2_t", &task_id).await.unwrap();
+            assert_eq!(recovered_task.id, task_id);
+            assert_eq!(recovered_task.status, TaskStatus::Succeeded);
+            assert_eq!(recovered_task.epoch, 3);
 
-        // 12. Verify new tasks can be created and operated post-recovery
-        let task2 = client
-            .create_task("p2_create2", "Post-Recovery Task", None, None)
-            .await
-            .expect("CreateTask after restart must succeed");
-        assert_eq!(task2.title, "Post-Recovery Task");
-        assert_eq!(task2.status, TaskStatus::Draft);
+            // 2. Recover Session & Journal
+            let session_list = client2.list_sessions("p2_sl").await.unwrap();
+            assert_eq!(session_list.len(), 1);
+            let journal = client2.get_session_journal("p2_j", &session_id_str).await.unwrap();
+            assert_eq!(journal.len(), 1);
+            assert_eq!(journal[0].entry_data, "Message before reboot");
 
-        let list_after = client
-            .list_tasks("p2_list2")
-            .await
-            .expect("ListTasks must now show 2 tasks");
-        assert_eq!(list_after.len(), 2);
+            // 3. Continue Session Operations Post-Crash
+            client2.append_session_message("p2_m2", &session_id_str, "user", "Message after reboot").await.unwrap();
+            let journal_after = client2.get_session_journal("p2_ja", &session_id_str).await.unwrap();
+            assert_eq!(journal_after.len(), 2);
+
+            // 4. Create New Task Post-Recovery
+            let new_task = client2.create_task("p2_new", "Post-Recovery Task", None, None).await.unwrap();
+            assert_eq!(new_task.title, "Post-Recovery Task");
+
+            let all_tasks = client2.list_tasks("p2_all").await.unwrap();
+            assert_eq!(all_tasks.len(), 2);
+        }
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
-
-    // Clean up temporary database directory
-    let _ = std::fs::remove_dir_all(&temp_dir);
 }

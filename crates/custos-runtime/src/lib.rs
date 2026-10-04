@@ -11,6 +11,7 @@ pub mod gateway;
 pub mod memory_service;
 pub mod session;
 pub mod workflow;
+pub mod oi;
 
 // Compatibility shims for intra-crate modules and engine integration
 pub use cognitive as custos_cognitive;

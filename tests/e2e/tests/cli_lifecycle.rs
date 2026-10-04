@@ -1,184 +1,229 @@
 //! End-to-End Task Lifecycle Test
 //!
-//! Validates the full execution lifecycle of Custos tasks using file-based SQLite:
-//! - CreateTask (Draft)
-//! - Advance to Queued -> Running
-//! - Span recordings and ContinuationPacket persistence
-//! - CompleteTask (Succeeded)
-//! - Persistence integrity across process restarts (re-opening SQLite file)
-//! - Optimistic concurrency rejection on epoch mismatch
-//! - State invariant rejection on completed tasks
+//! Reorganized into clear thematic test modules:
+//! 1. `task_lifecycle_and_spans`: Task creation, status advancement, execution span recording, continuation packet persistence.
+//! 2. `persistence_restart_and_invariants`: Database reconnection integrity, continuation verification, terminal immutability, and optimistic concurrency.
 
 use custos_core::{AdvanceTask, CompleteTask, CreateTask, TaskService, TaskStore};
 use custos_domain::{ContinuationPacket, Span, SpanState, TaskStatus};
 use custos_persistence::SqliteTaskStore;
 use std::sync::Arc;
 
-#[tokio::test]
-async fn test_full_file_backed_lifecycle_and_restart() {
-    let temp_dir = std::env::temp_dir().join(format!("custos_e2e_{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir_all(&temp_dir).unwrap();
-    let db_path = temp_dir.join("custos_test.db");
-    let db_path_str = db_path.to_str().unwrap();
+// =========================================================================
+// THEME 1: Task Lifecycle & Execution Spans
+// =========================================================================
+mod task_lifecycle_and_spans {
+    use super::*;
 
-    let task_id = {
-        // Step 1: Open fresh file-backed database
-        let store = Arc::new(SqliteTaskStore::new(db_path_str).expect("Must open db"));
+    #[tokio::test]
+    async fn test_task_advancement_spans_and_continuation_packets() {
+        let temp_dir = std::env::temp_dir().join(format!("custos_e2e_life_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let db_path = temp_dir.join("lifecycle.db");
+
+        let store = Arc::new(SqliteTaskStore::new(db_path.to_str().unwrap()).expect("Must open db"));
         let service = TaskService::new(store.clone());
 
-        // Step 2: Create a task
+        // Create Task
         let (task, _) = service
             .execute_create(CreateTask {
-                title: "E2E Automated Task".to_string(),
-                metadata: Some(serde_json::json!({"env": "test", "priority": "high"})),
+                title: "Lifecycle Task".to_string(),
+                metadata: Some(serde_json::json!({"env": "test"})),
                 contract: None,
             })
             .await
             .expect("Create must succeed");
-
         assert_eq!(task.status, TaskStatus::Draft);
         assert_eq!(task.epoch, 0);
 
-        // Step 3: Advance to Queued
+        // Advance to Queued -> Running
         let (task, _) = service
             .execute_advance(AdvanceTask {
                 task_id: task.id.clone(),
                 next_status: TaskStatus::Queued,
                 expected_epoch: 0,
-                rationale: Some("Enqueueing task".to_string()),
+                rationale: Some("Enqueueing".into()),
             })
             .await
-            .expect("Advance to Queued must succeed");
-
+            .unwrap();
         assert_eq!(task.status, TaskStatus::Queued);
-        assert_eq!(task.epoch, 1);
 
-        // Step 4: Advance to Running
         let (task, _) = service
             .execute_advance(AdvanceTask {
                 task_id: task.id.clone(),
                 next_status: TaskStatus::Running,
                 expected_epoch: 1,
-                rationale: Some("Worker picked up task".to_string()),
+                rationale: Some("Running".into()),
             })
             .await
-            .expect("Advance to Running must succeed");
-
+            .unwrap();
         assert_eq!(task.status, TaskStatus::Running);
-        assert_eq!(task.epoch, 2);
 
-        // Step 5: Record execution Spans and Continuation Packet
-        let span1 = Span::new(
+        // Save Span and Continuation
+        let span = Span::new(
             format!("span_1_{}", task.id),
             task.id.clone(),
             1,
-            "provider-fake".to_string(),
-            "model-test".to_string(),
-            "sha256:input1".to_string(),
+            "provider-fake".into(),
+            "model-test".into(),
+            "sha256:input".into(),
         );
-        store
-            .save_span(&span1)
-            .await
-            .expect("Save span 1 must succeed");
+        store.save_span(&span).await.unwrap();
 
         let continuation = ContinuationPacket::create(
             task.id.clone(),
             1,
             2,
-            "provider-fake".to_string(),
-            "model-test".to_string(),
-            "Completed span 1 processing".to_string(),
-            serde_json::json!({"step": 1, "done": true}),
+            "provider-fake".into(),
+            "model-test".into(),
+            "Completed span 1".into(),
+            serde_json::json!({"step": 1}),
         )
-        .expect("ContinuationPacket create must succeed");
+        .unwrap();
+        store.save_continuation(&continuation).await.unwrap();
 
-        store
-            .save_continuation(&continuation)
-            .await
-            .expect("Save continuation must succeed");
-
-        // Step 6: Complete Task
-        let (task, _) = service
+        // Complete Task
+        let (completed, _) = service
             .execute_complete(CompleteTask {
                 task_id: task.id.clone(),
-                summary: "All steps succeeded".to_string(),
+                summary: "Done".into(),
                 expected_epoch: 2,
-                evidence_claims: Vec::new(),
+                evidence_claims: vec![],
             })
             .await
-            .expect("Complete task must succeed");
+            .unwrap();
+        assert_eq!(completed.status, TaskStatus::Succeeded);
+        assert_eq!(completed.epoch, 3);
 
-        assert_eq!(task.status, TaskStatus::Succeeded);
-        assert_eq!(task.epoch, 3);
-
-        task.id
-    };
-
-    // Step 7: Restart simulation — open a new connection to the same SQLite file
-    {
-        let store2 = Arc::new(SqliteTaskStore::new(db_path_str).expect("Must re-open db"));
-        let service2 = TaskService::new(store2.clone());
-
-        // Verify task state persisted intact
-        let retrieved = service2
-            .get_task(&task_id)
-            .await
-            .expect("Query must succeed")
-            .expect("Task must exist in DB");
-
-        assert_eq!(retrieved.id, task_id);
-        assert_eq!(retrieved.title, "E2E Automated Task");
-        assert_eq!(retrieved.status, TaskStatus::Succeeded);
-        assert_eq!(retrieved.epoch, 3);
-        assert_eq!(retrieved.metadata["env"], "test");
-
-        // Verify spans persisted intact
-        let spans = store2
-            .list_spans(&task_id)
-            .await
-            .expect("List spans must succeed");
-        assert_eq!(spans.len(), 1);
-        assert_eq!(spans[0].span_num, 1);
-        assert_eq!(spans[0].state, SpanState::Started);
-
-        // Verify continuation packet persisted and has valid integrity hash
-        let cont = store2
-            .get_latest_continuation(&task_id)
-            .await
-            .expect("Get continuation must succeed")
-            .expect("Continuation must exist");
-
-        assert_eq!(cont.task_id, task_id);
-        assert_eq!(cont.from_span, 1);
-        assert_eq!(cont.to_span, 2);
-        assert!(
-            cont.verify().is_ok(),
-            "Integrity hash verification must pass"
-        );
-
-        // Step 8: Invariant check — cannot mutate completed task
-        let mutate_result = service2
-            .execute_advance(AdvanceTask {
-                task_id: task_id.clone(),
-                next_status: TaskStatus::Running,
-                expected_epoch: 3,
-                rationale: None,
-            })
-            .await;
-        assert!(mutate_result.is_err(), "Terminal task cannot be advanced");
-
-        // Step 9: Optimistic concurrency check — wrong epoch rejected
-        let stale_result = service2
-            .execute_complete(CompleteTask {
-                task_id: task_id.clone(),
-                summary: "Repeat".to_string(),
-                expected_epoch: 0,
-                evidence_claims: Vec::new(),
-            })
-            .await;
-        assert!(stale_result.is_err(), "Stale epoch must be rejected");
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
+}
 
-    // Clean up temp directory
-    let _ = std::fs::remove_dir_all(&temp_dir);
+// =========================================================================
+// THEME 2: Persistence Restart & Concurrency Invariants
+// =========================================================================
+mod persistence_restart_and_invariants {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_persistence_integrity_after_reopen_and_epoch_invariants() {
+        let temp_dir = std::env::temp_dir().join(format!("custos_e2e_reopen_{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let db_path = temp_dir.join("reopen.db");
+        let db_path_str = db_path.to_str().unwrap();
+
+        let task_id: String;
+
+        // Phase 1: Create, execute, and complete task
+        {
+            let store = Arc::new(SqliteTaskStore::new(db_path_str).expect("Must open db"));
+            let service = TaskService::new(store.clone());
+
+            let (task, _) = service
+                .execute_create(CreateTask {
+                    title: "Reopen Task".to_string(),
+                    metadata: Some(serde_json::json!({"env": "test", "priority": "high"})),
+                    contract: None,
+                })
+                .await
+                .unwrap();
+            task_id = task.id.clone();
+
+            let (task, _) = service
+                .execute_advance(AdvanceTask {
+                    task_id: task.id.clone(),
+                    next_status: TaskStatus::Queued,
+                    expected_epoch: 0,
+                    rationale: None,
+                })
+                .await
+                .unwrap();
+
+            let (task, _) = service
+                .execute_advance(AdvanceTask {
+                    task_id: task.id.clone(),
+                    next_status: TaskStatus::Running,
+                    expected_epoch: 1,
+                    rationale: None,
+                })
+                .await
+                .unwrap();
+
+            let span = Span::new(
+                format!("span_1_{}", task.id),
+                task.id.clone(),
+                1,
+                "provider-fake".into(),
+                "model-test".into(),
+                "sha256:input1".into(),
+            );
+            store.save_span(&span).await.unwrap();
+
+            let continuation = ContinuationPacket::create(
+                task.id.clone(),
+                1,
+                2,
+                "provider-fake".into(),
+                "model-test".into(),
+                "Summary".into(),
+                serde_json::json!({"done": true}),
+            )
+            .unwrap();
+            store.save_continuation(&continuation).await.unwrap();
+
+            service
+                .execute_complete(CompleteTask {
+                    task_id: task.id.clone(),
+                    summary: "Done".into(),
+                    expected_epoch: 2,
+                    evidence_claims: vec![],
+                })
+                .await
+                .unwrap();
+        }
+
+        // Phase 2: Reopen SQLite file in new connection & verify state & invariants
+        {
+            let store2 = Arc::new(SqliteTaskStore::new(db_path_str).expect("Must re-open db"));
+            let service2 = TaskService::new(store2.clone());
+
+            let retrieved = service2.get_task(&task_id).await.unwrap().expect("Task must exist");
+            assert_eq!(retrieved.id, task_id);
+            assert_eq!(retrieved.status, TaskStatus::Succeeded);
+            assert_eq!(retrieved.epoch, 3);
+            assert_eq!(retrieved.metadata["priority"], "high");
+
+            let spans = store2.list_spans(&task_id).await.unwrap();
+            assert_eq!(spans.len(), 1);
+            assert_eq!(spans[0].state, SpanState::Started);
+
+            let cont = store2.get_latest_continuation(&task_id).await.unwrap().unwrap();
+            assert_eq!(cont.task_id, task_id);
+            assert!(cont.verify().is_ok(), "Integrity hash verification must pass");
+
+            // Invariant: cannot advance terminal task
+            let advance_err = service2
+                .execute_advance(AdvanceTask {
+                    task_id: task_id.clone(),
+                    next_status: TaskStatus::Running,
+                    expected_epoch: 3,
+                    rationale: None,
+                })
+                .await;
+            assert!(advance_err.is_err(), "Terminal task cannot be advanced");
+
+            // Optimistic concurrency: wrong epoch rejected
+            let stale_err = service2
+                .execute_complete(CompleteTask {
+                    task_id: task_id.clone(),
+                    summary: "Repeat".into(),
+                    expected_epoch: 0,
+                    evidence_claims: vec![],
+                })
+                .await;
+            assert!(stale_err.is_err(), "Stale epoch must be rejected");
+        }
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
 }

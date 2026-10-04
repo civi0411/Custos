@@ -16,14 +16,26 @@
 //! NOTE: module is `contracts`, not `ports`, because `kernel::ports` is glob re-exported
 //! at the crate root and a top-level `ports` module would shadow `crate::ports::TaskStore`.
 
+pub mod harness;
+pub mod judgment;
 pub mod kernel;
 pub mod memory;
+pub mod oi;
 pub mod sandbox;
 pub mod storage;
 pub mod workflow;
 
+pub use harness::{
+    AgentRuntimePort, CostVisibility, HarnessExecutionResult, HarnessProfile, ToolMediationLevel,
+    WorktreeOwnership,
+};
+pub use judgment::{JudgmentPort, JudgmentRequest, JudgmentResult};
 pub use kernel::{KernelPort, TrustedKernel};
 pub use memory::MemoryPort;
+pub use oi::OiPlannerPort;
 pub use sandbox::{SandboxCommand, SandboxPort};
-pub use storage::{CasPort, OutboxEntry, OutboxPort, OutboxStatus, StoragePort};
+pub use storage::{
+    CasPort, DecisionPort, EffectLedgerPort, OutboxEntry, OutboxPort, OutboxStatus, ReplanPort,
+    RunPort, StoragePort, WorkflowRevisionPort,
+};
 pub use workflow::WorkflowPort;

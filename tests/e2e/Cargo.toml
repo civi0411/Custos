@@ -12,7 +12,12 @@ custos-persistence = { workspace = true }
 custos-runtime = { workspace = true }
 custos-provider = { workspace = true }
 custos-adapters = { workspace = true }
+custos-bridge = { workspace = true }
+custos-packs = { workspace = true }
 custos-daemon = { workspace = true }
+async-trait = { workspace = true }
 tokio = { workspace = true }
+chrono = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
+tempfile = { workspace = true }

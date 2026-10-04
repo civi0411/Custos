@@ -6,11 +6,20 @@
 //! 3. Daily Agenda & Meeting Action Item Extraction.
 //! 4. Contextual File & Document Linking.
 
+pub mod fixtures;
+pub mod profile;
 pub mod sdk;
+pub mod skills;
+pub mod verifiers;
+
+pub use fixtures::*;
+pub use profile::*;
+pub use sdk::*;
+pub use skills::*;
+pub use verifiers::*;
 
 use async_trait::async_trait;
 use custos_domain::DomainError;
-use sdk::{DomainPack, DomainPackManifest};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AssistantPackDescriptor {

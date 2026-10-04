@@ -1573,6 +1573,8 @@ dependencies = [
  "custos-core",
  "custos-domain",
  "custos-runtime",
+ "regex",
+ "reqwest",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -1590,7 +1592,9 @@ dependencies = [
  "custos-domain",
  "rusqlite",
  "serde_json",
+ "tempfile",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -1651,6 +1655,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "tempfile",
  "thiserror 1.0.69",
  "tiktoken-rs",
  "tokio",
@@ -1709,14 +1714,19 @@ dependencies = [
 name = "custos-tests-e2e"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
  "custos-adapters",
+ "custos-bridge",
  "custos-core",
  "custos-daemon",
  "custos-domain",
+ "custos-packs",
  "custos-persistence",
  "custos-provider",
  "custos-runtime",
  "serde_json",
+ "tempfile",
  "tokio",
  "uuid",
 ]

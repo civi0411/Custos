@@ -53,6 +53,12 @@ pub fn verify_permit_binding(permit: &Permit, intent: &ActionIntent) -> Result<(
             permit.id, permit.argument_digest, actual
         )));
     }
+    if permit.idempotency_key.is_some() && permit.idempotency_key != intent.idempotency_key {
+        return Err(DomainError::Unauthorized(format!(
+            "idempotency key mismatch for permit {}: bound {:?}, got {:?}",
+            permit.id, permit.idempotency_key, intent.idempotency_key
+        )));
+    }
     if chrono::Utc::now() > permit.expires_at {
         return Err(DomainError::Unauthorized(format!(
             "permit {} has expired",

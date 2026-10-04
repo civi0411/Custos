@@ -6,11 +6,17 @@
 //! 3. Test Runner & Regression Engine: Automated execution of unit/integration tests with patch verification.
 //! 4. Refactoring Workflows: Multi-step AST-safe transformations and lint rule conformance.
 
+pub mod fixtures;
+pub mod profile;
 pub mod sdk;
 pub mod skills;
+pub mod verifiers;
 
+pub use fixtures::*;
+pub use profile::*;
 pub use sdk::*;
 pub use skills::*;
+pub use verifiers::*;
 
 use async_trait::async_trait;
 use custos_domain::DomainError;

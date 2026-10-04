@@ -6,11 +6,20 @@
 //! 3. Citation Verification: Automated cross-reference verification to prevent hallucination.
 //! 4. ReadingCard Synthesis: Structured markdown research summaries with verified sources.
 
+pub mod fixtures;
+pub mod profile;
 pub mod sdk;
+pub mod skills;
+pub mod verifiers;
+
+pub use fixtures::*;
+pub use profile::*;
+pub use sdk::*;
+pub use skills::*;
+pub use verifiers::*;
 
 use async_trait::async_trait;
 use custos_domain::DomainError;
-use sdk::{DomainPack, DomainPackManifest};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ResearchPackDescriptor {
