@@ -23,6 +23,7 @@ pub const METHOD_SESSIONS_MESSAGE: &str = "v1.sessions.message";
 pub const METHOD_SESSIONS_PROMOTE: &str = "v1.sessions.promote";
 pub const METHOD_BRIDGE_ATTACH: &str = "v1.bridge.attach";
 pub const METHOD_BRIDGE_STEER: &str = "v1.bridge.steer";
+pub const METHOD_OI_EXPLAIN: &str = "v1.oi.explain";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiRequest {
@@ -132,6 +133,21 @@ pub struct SessionSteerRequest {
     pub session_id: String,
     pub task_id: String,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExplainPlanRequest {
+    pub title: String,
+    #[serde(default)]
+    pub task_id: Option<String>,
+    #[serde(default)]
+    pub contract: Option<TaskContract>,
+    #[serde(default)]
+    pub estimated_files_count: Option<u32>,
+    #[serde(default)]
+    pub estimated_complexity: Option<u32>,
+    #[serde(default)]
+    pub budget_limit_tokens: Option<u64>,
 }
 
 /// Abstract transport for communicating with the Custos Daemon
@@ -540,6 +556,23 @@ impl LocalApiClient {
 
         let result = resp.result.ok_or("Empty result in response")?;
         serde_json::from_value(result).map_err(|e| format!("Failed to parse Task: {e}"))
+    }
+
+    pub async fn explain_plan(
+        &self,
+        req_id: &str,
+        request: ExplainPlanRequest,
+    ) -> Result<custos_runtime::oi::ExplainReport, String> {
+        let params = serde_json::to_value(request).map_err(|e| e.to_string())?;
+        let req = ApiRequest::new(req_id, METHOD_OI_EXPLAIN, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse ExplainReport: {e}"))
     }
 }
 

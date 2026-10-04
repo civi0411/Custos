@@ -265,6 +265,7 @@ impl SandboxPort for SovereignDeveloperAdapter {
                     error_message: None,
                     duration_ms: Some(duration_ms),
                     executed_at: chrono::Utc::now(),
+                    assurance: custos_domain::Assurance::CustosMediated,
                 })
             }
             Err(err) => {
@@ -281,6 +282,7 @@ impl SandboxPort for SovereignDeveloperAdapter {
                     error_message: Some(err_msg),
                     duration_ms: Some(duration_ms),
                     executed_at: chrono::Utc::now(),
+                    assurance: custos_domain::Assurance::CustosMediated,
                 })
             }
         }

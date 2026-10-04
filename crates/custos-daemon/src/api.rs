@@ -349,6 +349,29 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
+            "v1.oi.explain" => {
+                let params: crate::custos_local_api::ExplainPlanRequest = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
+                };
+
+                let task_id = params.task_id.unwrap_or_else(|| custos_domain::new_id("task"));
+                let mut snapshot = custos_domain::oi::DecisionSnapshot::new(&task_id);
+                if let Some(budget) = params.budget_limit_tokens {
+                    snapshot.remaining_budget_tokens = budget;
+                }
+                if let Some(ref contract) = params.contract {
+                    snapshot.required_capabilities = contract.required_capabilities.clone();
+                }
+
+                match custos_runtime::oi::ExplainService::explain(&snapshot) {
+                    Ok(report) => match serde_json::to_value(&report) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
             unknown => ApiResponse::error(req.id, format!("Unknown method: {unknown}")),
         }
     }
