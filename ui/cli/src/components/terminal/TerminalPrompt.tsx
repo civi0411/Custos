@@ -28,7 +28,8 @@ export const TerminalPrompt: React.FC<TerminalPromptProps> = ({
   onToggleModeSelector,
   onSend,
 }) => {
-  const isSpecialized = currentMode && currentMode !== 'standard' && currentMode !== 'custos';
+  const normalizedMode = String(currentMode).toLowerCase();
+  const isSpecialized = normalizedMode !== 'standard' && normalizedMode !== 'custos';
   const modeSlug = getModeSlug(currentMode as OperationalMode);
   const cfg = AVAILABLE_MODES.find((m) => m.slug === modeSlug);
   const badgeColor = cfg ? cfg.color : '#38bdf8';
