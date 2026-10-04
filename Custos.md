@@ -382,6 +382,8 @@ graph TD
 3. **`custos-bridge` là dịch vụ tiến trình của Daemon:** Bridge quản lý phiên làm việc tương tác và ánh xạ session-to-task. Bridge **không phải là Local API**. Việc gọi trực tiếp từ `custos-bridge` sang `custos-persistence` là cầu nối chuyển tiếp tạm thời (transitional edge) và phải được thay thế hoàn toàn bằng việc đi qua `custos-core` Kernel Ports.
 4. **Clients không bao giờ kết nối SQLite trực tiếp:** CLI, GUI, hoặc IDE Extensions chỉ được phép giao tiếp với `custos-daemon` thông qua giao thức phiên bản hóa **Local API** (Domain Socket trên Unix / Named Pipe trên Windows).
 
+5. **CLI chat-first:** `custos` mở phiên chat chung. Phím `/` phải mở command palette ngay mà không cần Enter; `/mode` mở tầng chọn `/code`, `/research`, `/assistant`. Mode được chọn phải hiện trên prompt dưới dạng `custos-code`, `custos-research` hoặc `custos-assistant`.
+
 ## 2.3 Ba Vùng Tin Cậy (Trust Zones) và Assurance Labels
 
 Toàn bộ thực thể trong hệ thống được phân định rõ ràng vào 3 Vùng Tin Cậy:

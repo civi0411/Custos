@@ -53,3 +53,6 @@ To enforce absolute semantic consistency across Rust source code, IPC contracts,
 ### 2.3 Explicit Boundary Identifiers
 - Storage interfaces must be suffixed with `Repository` or `Port` (e.g., `TaskRepository`, `EventStorePort`).
 - Adapter implementations in `custos-runtime` or `custos-persistence` must reflect their concrete backend (e.g., `SqliteTaskRepository`, `StdioMcpTransport`).
+# CLI mode labels
+
+The neutral interactive prompt is `custos`. Specialized prompt labels are `custos-code`, `custos-research`, and `custos-assistant`. The slash palette uses a two-level path: `/` exposes `/mode` and actions, while `/mode` exposes `/code`, `/research`, and `/assistant`.

@@ -937,6 +937,7 @@ Custos/
 - **Quy tắc ranh giới:** Giao tiếp với Daemon thuần túy qua IPC socket; cấm truy cập SQLite trực tiếp. Không dính GUI Tauri dependency vào CLI binary.
 - **Tổng số file:** 13 files | **Tổng số dòng mã:** ~2,670 lines
 - **Mô tả chức năng:** Các ứng dụng giao diện trình diễn mỏng (Thin Presentation Clients): Render tiến độ tác vụ bằng ratatui (CLI) và Tauri Webview (Desktop), bảng hiển thị mã màu diff thay đổi, bảng điều khiển trạng thái và xác nhận cấp quyền.
+- **Hợp đồng tương tác CLI:** phiên mặc định mang nhãn `custos`; `/` mở palette không cần Enter; `/mode` mở tầng mode gồm `/code`, `/research`, `/assistant`; prompt phản ánh mode bằng nhãn `custos-<mode>`.
 
 #### Danh mục các file bên trong `crates/custos-app/cli/` & `crates/custos-app/desktop/`:
 

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { OperationalMode } from '../types';
-import { getModeSlug, SLASH_ITEMS, SlashItem } from './terminal/types';
+import { getModeSlug, MODE_SLASH_ITEMS, ROOT_SLASH_ITEMS, SlashItem } from './terminal/types';
 import { useTerminalCommands } from './terminal/useTerminalCommands';
 import { TerminalLineItem } from './terminal/TerminalLineItem';
 import { ModeSelectorPalette } from './terminal/ModeSelectorPalette';
@@ -22,6 +22,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 }) => {
   const [inputVal, setInputVal] = useState('');
   const [copied, setCopied] = useState(false);
+  const [paletteLevel, setPaletteLevel] = useState<'root' | 'mode'>('root');
 
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -46,9 +47,10 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   const modeSlug = getModeSlug(currentMode);
 
+  const paletteItems = paletteLevel === 'mode' ? MODE_SLASH_ITEMS : ROOT_SLASH_ITEMS;
   const filterQuery = inputVal.startsWith('/') ? inputVal.slice(1).trim() : '';
   const query = filterQuery.toLowerCase();
-  const filteredSlashItems = SLASH_ITEMS.filter((item) => {
+  const filteredSlashItems = paletteItems.filter((item) => {
     if (!query) return true;
     return item.name.toLowerCase().includes(query);
   });
@@ -68,6 +70,26 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     }
   }, [initialCommand]);
 
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '/' && document.activeElement !== inputRef.current) {
+        const target = e.target as HTMLElement | null;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+          return;
+        }
+        e.preventDefault();
+        inputRef.current?.focus();
+        setInputVal('/');
+        setPaletteLevel('root');
+        setShowModeSelector(true);
+        setSelectedModeIndex(0);
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, []);
+
   const handleCopyLogs = () => {
     const raw = lines.map((l) => l.content).join('\n');
     navigator.clipboard.writeText(raw);
@@ -76,12 +98,23 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   };
 
   const handleSelectSlashItem = (item: SlashItem) => {
+    if (item.type === 'submenu') {
+      setPaletteLevel('mode');
+      setInputVal('/');
+      setSelectedModeIndex(0);
+      inputRef.current?.focus();
+      return;
+    }
     setShowModeSelector(false);
     setInputVal('');
-    if (item.id === 'mode-custos' || item.mode === 'custos') {
-      resetToCustos();
-    } else if (item.mode) {
-      selectMode(item.mode as OperationalMode);
+    if (item.type === 'mode') {
+      if (item.id === 'mode-custos' || item.mode === 'custos') {
+        resetToCustos();
+      } else if (item.mode) {
+        selectMode(item.mode as OperationalMode);
+      }
+    } else if (item.type === 'command' && item.command) {
+      executeCommand(item.command);
     }
     inputRef.current?.focus();
   };
@@ -90,6 +123,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     const val = e.target.value;
     setInputVal(val);
     if (val.startsWith('/')) {
+      if (val === '/') setPaletteLevel('root');
       setShowModeSelector(true);
       setSelectedModeIndex(0);
     } else if (showModeSelector) {
@@ -101,6 +135,12 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     if (showModeSelector) {
       if (e.key === 'Escape') {
         e.preventDefault();
+        if (paletteLevel === 'mode') {
+          setPaletteLevel('root');
+          setInputVal('/');
+          setSelectedModeIndex(0);
+          return;
+        }
         setShowModeSelector(false);
         setInputVal('');
         return;
@@ -135,10 +175,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     }
 
     if (e.key === 'Enter') {
-      if (inputVal.trim() === '/' || inputVal.trim() === '/mode' || inputVal.trim() === 'mode') {
+      if (inputVal.trim() === '/mode' || inputVal.trim() === 'mode') {
+        setPaletteLevel('mode');
         setShowModeSelector(true);
         setSelectedModeIndex(0);
-        setInputVal('');
+        setInputVal('/');
         return;
       }
       executeCommand(inputVal);
@@ -165,10 +206,11 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
 
   const handleSend = () => {
     if (!inputVal.trim()) return;
-    if (inputVal.trim() === '/' || inputVal.trim() === '/mode' || inputVal.trim() === 'mode') {
+    if (inputVal.trim() === '/mode' || inputVal.trim() === 'mode') {
+      setPaletteLevel('mode');
       setShowModeSelector(true);
       setSelectedModeIndex(0);
-      setInputVal('');
+      setInputVal('/');
       return;
     }
     executeCommand(inputVal);
@@ -233,6 +275,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
         <div className="terminal-prompt-wrapper">
           {showModeSelector && (
             <ModeSelectorPalette
+              items={paletteItems}
+              title={paletteLevel === 'mode' ? 'CHỌN MODE' : 'LỆNH & CHỨC NĂNG CUSTOS'}
               filterQuery={filterQuery}
               selectedIndex={selectedModeIndex}
               onSelectIndex={setSelectedModeIndex}
@@ -250,6 +294,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             onInputChange={handleInputChange}
             onKeyDown={handleKeyDown}
             onToggleModeSelector={() => {
+              setPaletteLevel('root');
               setShowModeSelector((prev) => !prev);
               setSelectedModeIndex(0);
               inputRef.current?.focus();
