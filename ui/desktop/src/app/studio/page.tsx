@@ -149,6 +149,7 @@ export const StudioPage: React.FC = () => {
               setSplitPercent(50);
               showToast('Reset split layout to 50/50');
             }}
+            isDragging={isDragging}
           />
         )}
 

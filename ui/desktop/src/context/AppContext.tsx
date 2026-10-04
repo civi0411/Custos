@@ -143,17 +143,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Toggle settings (⌘,)
+      // Toggle settings (Ctrl+,)
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault();
         setIsSettingsOpen((prev) => !prev);
       }
-      // Toggle Sessions Sidebar (⌘B)
+      // Toggle Sessions Sidebar (Ctrl+B)
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         setIsSessionsCollapsed((prev) => !prev);
       }
-      // Toggle Split View / Full view (⌘\)
+      // Toggle Split View / Full view (Ctrl+\)
       if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
         e.preventDefault();
         setViewMode((prev) => {
@@ -162,17 +162,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return 'split';
         });
       }
-      // UI Zoom In (⌘+ or ⌘=)
+      // UI Zoom In (Ctrl++ or Ctrl+=)
       if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
         e.preventDefault();
         handleStepUiScale(10);
       }
-      // UI Zoom Out (⌘-)
+      // UI Zoom Out (Ctrl+-)
       if ((e.metaKey || e.ctrlKey) && (e.key === '-' || e.key === '_')) {
         e.preventDefault();
         handleStepUiScale(-10);
       }
-      // Reset UI Scale (⌘0)
+      // Reset UI Scale (Ctrl+0)
       if ((e.metaKey || e.ctrlKey) && e.key === '0') {
         e.preventDefault();
         handleSetUiScale(100);
@@ -204,7 +204,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       badge: 'Autonomous Kernel Engine',
       stepName: 'Analyzing AST tree & compiling patch',
       duration: '48ms',
-      text: `Received prompt: "${text}". Synthesizing change set and verifying invariants against Task Kernel...`
+      text: `Received prompt:\n"${text}"\n\nSynthesizing change set and verifying invariants against Task Kernel...`
     };
 
     setProjectData((prev) => {

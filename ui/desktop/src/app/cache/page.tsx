@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Database, Search, Trash2, RefreshCw } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
+import { Tooltip } from '../../components/Tooltip';
 
 interface CacheItem {
   key: string;
@@ -133,16 +134,17 @@ export const CachePage: React.FC = () => {
                   <div className="flex items-center gap-4 shrink-0 text-[11px] text-neutral-400 font-mono">
                     <span>{item.size}</span>
                     <span className="text-emerald-400">TTL: {item.ttl}</span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteKey(item.key);
-                      }}
-                      className="text-neutral-500 hover:text-red-400 transition"
-                      title="Purge key"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <Tooltip content="Purge key" position="left">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteKey(item.key);
+                        }}
+                        className="text-neutral-500 hover:text-red-400 transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </Tooltip>
                   </div>
                 </div>
               ))
