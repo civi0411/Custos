@@ -58,6 +58,51 @@ impl ActionLifecycleState {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Assurance {
+    CustosMediated,
+    ProviderGoverned,
+    ObserveOnly,
+    Unknown,
+}
+
+impl Default for Assurance {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+impl Assurance {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::CustosMediated => "custos-mediated",
+            Self::ProviderGoverned => "provider-governed",
+            Self::ObserveOnly => "observe-only",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+impl std::fmt::Display for Assurance {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl std::str::FromStr for Assurance {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
+            "custos-mediated" => Self::CustosMediated,
+            "provider-governed" => Self::ProviderGoverned,
+            "observe-only" => Self::ObserveOnly,
+            _ => Self::Unknown,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Action {
     pub id: String,
@@ -71,6 +116,10 @@ pub struct Action {
     pub evidence_required: bool,
     #[serde(default)]
     pub permit_id: Option<String>,
+    #[serde(default)]
+    pub idempotency_key: Option<String>,
+    #[serde(default)]
+    pub assurance: Assurance,
 }
 
 impl Action {
@@ -82,6 +131,12 @@ impl Action {
         risk_level: RiskLevel,
     ) -> Self {
         let evidence_required = matches!(risk_level, RiskLevel::High | RiskLevel::Critical);
+        let assurance = parameters
+            .get("assurance")
+            .and_then(|v| v.as_str())
+            .map(|s| s.parse::<Assurance>().unwrap_or_default())
+            .unwrap_or_default();
+
         Self {
             id,
             task_id: None,
@@ -92,7 +147,15 @@ impl Action {
             lifecycle_state: ActionLifecycleState::Intent,
             evidence_required,
             permit_id: None,
+            idempotency_key: None,
+            assurance,
         }
+    }
+
+    pub fn with_assurance(mut self, assurance: Assurance) -> Self {
+        self.assurance = assurance;
+        self.parameters["assurance"] = serde_json::json!(assurance.as_str());
+        self
     }
 
     pub fn with_task_id(mut self, task_id: impl Into<String>) -> Self {
@@ -102,6 +165,11 @@ impl Action {
 
     pub fn with_permit_id(mut self, permit_id: impl Into<String>) -> Self {
         self.permit_id = Some(permit_id.into());
+        self
+    }
+
+    pub fn with_idempotency_key(mut self, key: impl Into<String>) -> Self {
+        self.idempotency_key = Some(key.into());
         self
     }
 
@@ -127,6 +195,117 @@ impl Action {
 pub type ActionIntent = Action;
 /// Version 1 Canonical Contract alias for SSOT.
 pub type ActionIntentV1 = Action;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EffectStatus {
+    Pending,
+    InFlight,
+    Succeeded,
+    Failed,
+    Uncertain,
+}
+
+impl EffectStatus {
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::Succeeded | Self::Failed)
+    }
+
+    pub fn can_transition_to(&self, next: EffectStatus) -> bool {
+        match self {
+            EffectStatus::Pending => matches!(next, EffectStatus::InFlight | EffectStatus::Failed),
+            EffectStatus::InFlight => matches!(
+                next,
+                EffectStatus::Succeeded | EffectStatus::Failed | EffectStatus::Uncertain
+            ),
+            EffectStatus::Uncertain => matches!(
+                next,
+                EffectStatus::Succeeded | EffectStatus::Failed
+            ),
+            EffectStatus::Succeeded | EffectStatus::Failed => false,
+        }
+    }
+}
+
+/// Layer 5 in Execution Lifecycle (RFC 001): Durable Effect Attempt bound to a Permit
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EffectAttempt {
+    pub id: String,
+    pub node_attempt_id: String,
+    pub permit_id: String,
+    pub idempotency_key: String,
+    pub status: EffectStatus,
+    pub started_at: chrono::DateTime<chrono::Utc>,
+    pub ended_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub receipt: Option<crate::authority::ExecutionReceipt>,
+}
+
+impl EffectAttempt {
+    pub fn new(
+        node_attempt_id: impl Into<String>,
+        permit_id: impl Into<String>,
+        idempotency_key: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: crate::ids::new_id("eff_att"),
+            node_attempt_id: node_attempt_id.into(),
+            permit_id: permit_id.into(),
+            idempotency_key: idempotency_key.into(),
+            status: EffectStatus::Pending,
+            started_at: chrono::Utc::now(),
+            ended_at: None,
+            receipt: None,
+        }
+    }
+
+    pub fn mark_in_flight(&mut self) -> Result<(), DomainError> {
+        if !self.status.can_transition_to(EffectStatus::InFlight) {
+            return Err(DomainError::InvalidStateTransition {
+                from: format!("{:?}", self.status),
+                to: format!("{:?}", EffectStatus::InFlight),
+            });
+        }
+        self.status = EffectStatus::InFlight;
+        Ok(())
+    }
+
+    pub fn mark_uncertain(&mut self) -> Result<(), DomainError> {
+        if !self.status.can_transition_to(EffectStatus::Uncertain) {
+            return Err(DomainError::InvalidStateTransition {
+                from: format!("{:?}", self.status),
+                to: format!("{:?}", EffectStatus::Uncertain),
+            });
+        }
+        self.status = EffectStatus::Uncertain;
+        Ok(())
+    }
+
+    pub fn succeed(&mut self, receipt: crate::authority::ExecutionReceipt) -> Result<(), DomainError> {
+        if !self.status.can_transition_to(EffectStatus::Succeeded) {
+            return Err(DomainError::InvalidStateTransition {
+                from: format!("{:?}", self.status),
+                to: format!("{:?}", EffectStatus::Succeeded),
+            });
+        }
+        self.status = EffectStatus::Succeeded;
+        self.ended_at = Some(chrono::Utc::now());
+        self.receipt = Some(receipt);
+        Ok(())
+    }
+
+    pub fn fail(&mut self, receipt: Option<crate::authority::ExecutionReceipt>) -> Result<(), DomainError> {
+        if !self.status.can_transition_to(EffectStatus::Failed) {
+            return Err(DomainError::InvalidStateTransition {
+                from: format!("{:?}", self.status),
+                to: format!("{:?}", EffectStatus::Failed),
+            });
+        }
+        self.status = EffectStatus::Failed;
+        self.ended_at = Some(chrono::Utc::now());
+        self.receipt = receipt;
+        Ok(())
+    }
+}
 
 #[cfg(test)]
 mod tests {

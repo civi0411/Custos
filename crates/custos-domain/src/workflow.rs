@@ -3,6 +3,7 @@
 //! Typed, reviewable plans decomposed from intent for governed task execution.
 
 use crate::ids::new_id;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,6 +111,51 @@ impl WorkflowIR {
 
     pub fn add_dependency(&mut self, from: impl Into<String>, to: impl Into<String>) {
         self.dependencies.push((from.into(), to.into()));
+    }
+}
+
+/// Typed, reviewable workflow revision produced by the compiler (RFC 004 §2C)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkflowRevision {
+    pub revision_id: String,
+    pub task_id: String,
+    pub proposal_id: String,
+    pub revision_number: u32,
+    pub nodes: Vec<RevisionNode>,
+    pub dependencies: Vec<(String, String)>,
+    pub obligations: Vec<String>,
+    #[serde(default = "Utc::now")]
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RevisionNode {
+    pub node_id: String,
+    pub step_name: String,
+    pub role: String,
+    pub harness_id: String,
+    pub allocated_budget_tokens: u64,
+    pub read_set: Vec<String>,
+    pub write_set: Vec<String>,
+    pub required_capabilities: Vec<String>,
+}
+
+impl WorkflowRevision {
+    pub fn new(
+        task_id: impl Into<String>,
+        proposal_id: impl Into<String>,
+        revision_number: u32,
+    ) -> Self {
+        Self {
+            revision_id: new_id("wrev"),
+            task_id: task_id.into(),
+            proposal_id: proposal_id.into(),
+            revision_number,
+            nodes: Vec::new(),
+            dependencies: Vec::new(),
+            obligations: Vec::new(),
+            created_at: Utc::now(),
+        }
     }
 }
 

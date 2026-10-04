@@ -100,6 +100,7 @@ impl DeterministicGate {
                 error_message: Some(format!("File not found: {}", resolved_path.display())),
                 duration_ms: Some(1),
                 executed_at: chrono::Utc::now(),
+                assurance: custos_domain::Assurance::CustosMediated,
             };
 
             return Ok(ExecutionResult {
@@ -133,6 +134,7 @@ impl DeterministicGate {
                     error_message: Some(format!("Failed to read file: {e}")),
                     duration_ms: Some(1),
                     executed_at: chrono::Utc::now(),
+                    assurance: custos_domain::Assurance::CustosMediated,
                 };
 
                 return Ok(ExecutionResult {
@@ -167,6 +169,7 @@ impl DeterministicGate {
             error_message: None,
             duration_ms: Some(1),
             executed_at: chrono::Utc::now(),
+            assurance: custos_domain::Assurance::CustosMediated,
         };
 
         Ok(ExecutionResult {
@@ -216,6 +219,7 @@ impl DeterministicGate {
                 error_message: Some(format!("Directory not found: {}", resolved_path.display())),
                 duration_ms: Some(1),
                 executed_at: chrono::Utc::now(),
+                assurance: custos_domain::Assurance::CustosMediated,
             };
 
             return Ok(ExecutionResult {
@@ -250,6 +254,7 @@ impl DeterministicGate {
                     error_message: Some(format!("Failed to read directory: {e}")),
                     duration_ms: Some(1),
                     executed_at: chrono::Utc::now(),
+                    assurance: custos_domain::Assurance::CustosMediated,
                 };
 
                 return Ok(ExecutionResult {
@@ -293,6 +298,7 @@ impl DeterministicGate {
             error_message: None,
             duration_ms: Some(1),
             executed_at: chrono::Utc::now(),
+            assurance: custos_domain::Assurance::CustosMediated,
         };
 
         Ok(ExecutionResult {
@@ -361,6 +367,7 @@ impl DeterministicGate {
             error_message: None,
             duration_ms: Some(1),
             executed_at: chrono::Utc::now(),
+            assurance: custos_domain::Assurance::CustosMediated,
         };
 
         Ok(ExecutionResult {

@@ -82,6 +82,8 @@ pub struct Permit {
     #[serde(default)]
     pub argument_digest: String,
     #[serde(default)]
+    pub idempotency_key: Option<String>,
+    #[serde(default)]
     pub max_uses: u32,
     #[serde(default)]
     pub used_at: Option<DateTime<Utc>>,
@@ -114,11 +116,17 @@ impl Permit {
             grant_id,
             risk_class,
             argument_digest: String::new(),
+            idempotency_key: None,
             max_uses: 1,
             used_at: None,
             issued_at: now,
             expires_at: now + chrono::Duration::seconds(ttl_seconds),
         }
+    }
+
+    pub fn with_idempotency_key(mut self, key: impl Into<String>) -> Self {
+        self.idempotency_key = Some(key.into());
+        self
     }
 
     pub fn with_argument_digest(mut self, digest: impl Into<String>) -> Self {
@@ -183,6 +191,8 @@ pub struct ExecutionReceipt {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
     pub executed_at: DateTime<Utc>,
+    #[serde(default)]
+    pub assurance: crate::action::Assurance,
 }
 
 /// Canonical alias matching AGENTS.md glossary.
