@@ -1,9 +1,19 @@
 pub mod continuation;
+pub mod decision;
+pub mod outbox;
+pub mod replan;
+pub mod run;
 pub mod session;
 pub mod span;
 pub mod task;
+pub mod workflow_revision;
 
 pub use continuation::*;
+pub use decision::*;
+pub use outbox::*;
+pub use replan::*;
+pub use run::*;
 pub use session::*;
 pub use span::*;
 pub use task::*;
+pub use workflow_revision::*;

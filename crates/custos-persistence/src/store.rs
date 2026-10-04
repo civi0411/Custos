@@ -1,16 +1,23 @@
 use crate::connection::DbConnection;
 use crate::repositories::{
-    ContinuationRepository, SessionRepository, SpanRepository, TaskRepository,
+    ContinuationRepository, DecisionRepository, OutboxRepository, ReplanRepository, RunRepository,
+    SessionRepository, SpanRepository, TaskRepository, WorkflowRevisionRepository,
 };
 use async_trait::async_trait;
+use custos_core::contracts::storage::{
+    DecisionPort, EffectLedgerPort, OutboxEntry, OutboxPort, OutboxStatus, ReplanPort, RunPort,
+    WorkflowRevisionPort,
+};
 use custos_domain::{
-    ContinuationPacket, DomainError, Session, SessionId, SessionJournalEntry, Span, Task,
+    ContinuationPacket, DecisionRecord, DomainError, ExecutionReceipt, NodePlacement, ReplanRecord,
+    Run, Session, SessionId, SessionJournalEntry, Span, Task, WorkerRun, WorkflowRevision,
 };
 use custos_core::kernel::{SessionStore, TaskEvent, TaskStore};
 
-/// SQLite-backed persistent storage implementing TaskStore and SessionStore.
-/// Manages tasks, execution spans, continuation packets, sessions, and session journals
-/// with WAL mode and foreign key integrity.
+/// SQLite-backed persistent storage implementing TaskStore, SessionStore, OutboxPort, RunPort,
+/// DecisionPort, WorkflowRevisionPort, and ReplanPort.
+/// Manages tasks, execution spans, continuation packets, sessions, outbox, runs, decision records,
+/// workflow revisions, and replans with WAL mode and foreign key integrity.
 #[derive(Clone)]
 pub struct SqliteTaskStore {
     db: DbConnection,
@@ -18,6 +25,11 @@ pub struct SqliteTaskStore {
     span_repo: SpanRepository,
     continuation_repo: ContinuationRepository,
     session_repo: SessionRepository,
+    outbox_repo: OutboxRepository,
+    run_repo: RunRepository,
+    decision_repo: DecisionRepository,
+    workflow_repo: WorkflowRevisionRepository,
+    replan_repo: ReplanRepository,
 }
 
 impl SqliteTaskStore {
@@ -28,12 +40,22 @@ impl SqliteTaskStore {
         let span_repo = SpanRepository::new(db.clone());
         let continuation_repo = ContinuationRepository::new(db.clone());
         let session_repo = SessionRepository::new(db.clone());
+        let outbox_repo = OutboxRepository::new(db.clone());
+        let run_repo = RunRepository::new(db.clone());
+        let decision_repo = DecisionRepository::new(db.clone());
+        let workflow_repo = WorkflowRevisionRepository::new(db.clone());
+        let replan_repo = ReplanRepository::new(db.clone());
         Ok(Self {
             db,
             task_repo,
             span_repo,
             continuation_repo,
             session_repo,
+            outbox_repo,
+            run_repo,
+            decision_repo,
+            workflow_repo,
+            replan_repo,
         })
     }
 
@@ -44,17 +66,31 @@ impl SqliteTaskStore {
         let span_repo = SpanRepository::new(db.clone());
         let continuation_repo = ContinuationRepository::new(db.clone());
         let session_repo = SessionRepository::new(db.clone());
+        let outbox_repo = OutboxRepository::new(db.clone());
+        let run_repo = RunRepository::new(db.clone());
+        let decision_repo = DecisionRepository::new(db.clone());
+        let workflow_repo = WorkflowRevisionRepository::new(db.clone());
+        let replan_repo = ReplanRepository::new(db.clone());
         Ok(Self {
             db,
             task_repo,
             span_repo,
             continuation_repo,
             session_repo,
+            outbox_repo,
+            run_repo,
+            decision_repo,
+            workflow_repo,
+            replan_repo,
         })
     }
 
     pub fn db(&self) -> &DbConnection {
         &self.db
+    }
+
+    pub fn outbox(&self) -> &OutboxRepository {
+        &self.outbox_repo
     }
 
     pub fn tasks(&self) -> &TaskRepository {
@@ -71,6 +107,22 @@ impl SqliteTaskStore {
 
     pub fn sessions(&self) -> &SessionRepository {
         &self.session_repo
+    }
+
+    pub fn runs(&self) -> &RunRepository {
+        &self.run_repo
+    }
+
+    pub fn decisions(&self) -> &DecisionRepository {
+        &self.decision_repo
+    }
+
+    pub fn workflow_revisions(&self) -> &WorkflowRevisionRepository {
+        &self.workflow_repo
+    }
+
+    pub fn replans(&self) -> &ReplanRepository {
+        &self.replan_repo
     }
 
     /// Lists all tasks ordered by creation time descending.
@@ -156,6 +208,151 @@ impl SessionStore for SqliteTaskStore {
         session_id: &SessionId,
     ) -> Result<Vec<SessionJournalEntry>, DomainError> {
         self.session_repo.get_journal(session_id)
+    }
+}
+
+#[async_trait]
+impl OutboxPort for SqliteTaskStore {
+    async fn enqueue(&self, entry: OutboxEntry) -> Result<(), DomainError> {
+        self.outbox_repo.enqueue(entry).await
+    }
+
+    async fn mark_dispatching(&self, id: &str) -> Result<(), DomainError> {
+        self.outbox_repo.mark_dispatching(id).await
+    }
+
+    async fn mark_receipted(&self, id: &str, receipt: ExecutionReceipt) -> Result<(), DomainError> {
+        self.outbox_repo.mark_receipted(id, receipt).await
+    }
+
+    async fn mark_uncertain(&self, id: &str) -> Result<(), DomainError> {
+        self.outbox_repo.mark_uncertain(id).await
+    }
+
+    async fn list_by_status(&self, status: OutboxStatus) -> Result<Vec<OutboxEntry>, DomainError> {
+        self.outbox_repo.list_by_status(status).await
+    }
+
+    async fn list_by_task_and_status(
+        &self,
+        task_id: &str,
+        status: OutboxStatus,
+    ) -> Result<Vec<OutboxEntry>, DomainError> {
+        self.outbox_repo.list_by_task_and_status(task_id, status).await
+    }
+}
+
+#[async_trait]
+impl EffectLedgerPort for SqliteTaskStore {
+    async fn record_effect(&self, effect: &custos_domain::EffectAttempt) -> Result<(), DomainError> {
+        self.outbox_repo.record_effect(effect)
+    }
+
+    async fn update_effect_status(
+        &self,
+        id: &str,
+        status: custos_domain::EffectStatus,
+        receipt: Option<&ExecutionReceipt>,
+    ) -> Result<(), DomainError> {
+        self.outbox_repo.update_effect_status(id, status, receipt)
+    }
+
+    async fn get_effect_by_idempotency_key(
+        &self,
+        key: &str,
+    ) -> Result<Option<custos_domain::EffectAttempt>, DomainError> {
+        self.outbox_repo.get_effect_by_idempotency_key(key)
+    }
+
+    async fn reconcile_on_startup(&self) -> Result<usize, DomainError> {
+        self.outbox_repo.reconcile_on_startup()
+    }
+}
+
+#[async_trait]
+impl RunPort for SqliteTaskStore {
+    async fn save_run(&self, run: &Run) -> Result<(), DomainError> {
+        self.run_repo.save_run(run)
+    }
+
+    async fn get_run(&self, run_id: &str) -> Result<Option<Run>, DomainError> {
+        self.run_repo.get_run(run_id)
+    }
+
+    async fn list_runs_for_task(&self, task_id: &str) -> Result<Vec<Run>, DomainError> {
+        self.run_repo.list_runs_for_task(task_id)
+    }
+
+    async fn save_worker_run(&self, wrun: &WorkerRun) -> Result<(), DomainError> {
+        self.run_repo.save_worker_run(wrun)
+    }
+
+    async fn get_worker_run(&self, wrun_id: &str) -> Result<Option<WorkerRun>, DomainError> {
+        self.run_repo.get_worker_run(wrun_id)
+    }
+
+    async fn list_worker_runs_for_task(&self, task_id: &str) -> Result<Vec<WorkerRun>, DomainError> {
+        self.run_repo.list_worker_runs_for_task(task_id)
+    }
+
+    async fn list_worker_runs_for_run(&self, run_id: &str) -> Result<Vec<WorkerRun>, DomainError> {
+        self.run_repo.list_worker_runs_for_run(run_id)
+    }
+}
+
+#[async_trait]
+impl DecisionPort for SqliteTaskStore {
+    async fn record_decision(&self, record: &DecisionRecord) -> Result<(), DomainError> {
+        self.decision_repo.save_decision(record)
+    }
+
+    async fn get_decision(&self, id: &str) -> Result<Option<DecisionRecord>, DomainError> {
+        self.decision_repo.get_decision(id)
+    }
+
+    async fn list_decisions_for_task(&self, task_id: &str) -> Result<Vec<DecisionRecord>, DomainError> {
+        self.decision_repo.list_decisions_for_task(task_id)
+    }
+}
+
+#[async_trait]
+impl WorkflowRevisionPort for SqliteTaskStore {
+    async fn save_revision(
+        &self,
+        revision: &WorkflowRevision,
+        placements: &[NodePlacement],
+    ) -> Result<(), DomainError> {
+        self.workflow_repo.save_revision(revision, placements)
+    }
+
+    async fn get_revision(&self, revision_id: &str) -> Result<Option<WorkflowRevision>, DomainError> {
+        self.workflow_repo.get_revision(revision_id)
+    }
+
+    async fn list_revisions_for_task(&self, task_id: &str) -> Result<Vec<WorkflowRevision>, DomainError> {
+        self.workflow_repo.list_revisions_for_task(task_id)
+    }
+
+    async fn get_placements_for_revision(
+        &self,
+        revision_id: &str,
+    ) -> Result<Vec<NodePlacement>, DomainError> {
+        self.workflow_repo.get_placements_for_revision(revision_id)
+    }
+}
+
+#[async_trait]
+impl ReplanPort for SqliteTaskStore {
+    async fn record_replan(&self, record: &ReplanRecord) -> Result<(), DomainError> {
+        self.replan_repo.save_replan(record)
+    }
+
+    async fn get_replan(&self, id: &str) -> Result<Option<ReplanRecord>, DomainError> {
+        self.replan_repo.get_replan(id)
+    }
+
+    async fn list_replans_for_task(&self, task_id: &str) -> Result<Vec<ReplanRecord>, DomainError> {
+        self.replan_repo.list_replans_for_task(task_id)
     }
 }
 
@@ -403,4 +600,110 @@ mod tests {
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].id, session_id);
     }
+
+    #[tokio::test]
+    async fn test_run_and_worker_run_persistence() {
+        use custos_domain::{Run, RunStatus, WorkerRun};
+
+        let store = SqliteTaskStore::new_in_memory().unwrap();
+        let task = Task::new("task_run_1".into(), "Run Test Task".into());
+        store.save_task(&task).await.unwrap();
+
+        // 1. Create and save Run
+        let mut run = Run::new(task.id.clone(), 1);
+        run.workflow_revision = Some("rev-1".into());
+        run.transition(RunStatus::Active).unwrap();
+        store.save_run(&run).await.unwrap();
+
+        // 2. Query Run
+        let loaded = store.get_run(&run.id).await.unwrap().unwrap();
+        assert_eq!(loaded.id, run.id);
+        assert_eq!(loaded.task_id, task.id);
+        assert_eq!(loaded.status, RunStatus::Active);
+        assert_eq!(loaded.workflow_revision.as_deref(), Some("rev-1"));
+
+        // 3. Create and save WorkerRun
+        let mut wrun = WorkerRun::new(task.id.clone(), "worker_alpha".into(), 3);
+        wrun.run_id = Some(run.id.clone());
+        wrun.transition(RunStatus::Active).unwrap();
+        store.save_worker_run(&wrun).await.unwrap();
+
+        // 4. Query WorkerRun
+        let loaded_wrun = store.get_worker_run(&wrun.id).await.unwrap().unwrap();
+        assert_eq!(loaded_wrun.id, wrun.id);
+        assert_eq!(loaded_wrun.run_id.as_deref(), Some(run.id.as_str()));
+        assert_eq!(loaded_wrun.status, RunStatus::Active);
+        assert_eq!(loaded_wrun.worker_id, "worker_alpha");
+
+        // 5. Update Run status to Completed
+        run.transition(RunStatus::Completed).unwrap();
+        store.save_run(&run).await.unwrap();
+        let updated_run = store.get_run(&run.id).await.unwrap().unwrap();
+        assert_eq!(updated_run.status, RunStatus::Completed);
+        assert!(updated_run.ended_at.is_some());
+
+        // 6. List runs and worker runs
+        let runs = store.list_runs_for_task(&task.id).await.unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].id, run.id);
+
+        let wruns = store.list_worker_runs_for_task(&task.id).await.unwrap();
+        assert_eq!(wruns.len(), 1);
+        assert_eq!(wruns[0].id, wrun.id);
+
+        let wruns_by_run = store.list_worker_runs_for_run(&run.id).await.unwrap();
+        assert_eq!(wruns_by_run.len(), 1);
+        assert_eq!(wruns_by_run[0].id, wrun.id);
+    }
+
+    #[tokio::test]
+    async fn test_workflow_revision_and_replan_ports() {
+        use custos_domain::{ReplanBrief, ReplanTrigger, RevisionNode};
+
+        let store = SqliteTaskStore::new_in_memory().unwrap();
+        let task = Task::new("task_store_rev_1".to_string(), "Rev Test".to_string());
+        store.save_task(&task).await.unwrap();
+
+        // 1. Save and query WorkflowRevision
+        let mut revision = WorkflowRevision::new(&task.id, "prop_oi_01", 1);
+        revision.nodes.push(RevisionNode {
+            node_id: "node_1".into(),
+            step_name: "Inspect".into(),
+            role: "worker".into(),
+            harness_id: "claude_code".into(),
+            allocated_budget_tokens: 3000,
+            read_set: vec!["file.txt".into()],
+            write_set: vec![],
+            required_capabilities: vec!["fs_read".into()],
+        });
+
+        let placements = vec![NodePlacement::new("node_1", "worker", "claude_code", 3000)];
+
+        store.save_revision(&revision, &placements).await.unwrap();
+
+        let loaded_rev = store.get_revision(&revision.revision_id).await.unwrap().unwrap();
+        assert_eq!(loaded_rev.revision_id, revision.revision_id);
+        assert_eq!(loaded_rev.nodes.len(), 1);
+
+        let loaded_placements = store.get_placements_for_revision(&revision.revision_id).await.unwrap();
+        assert_eq!(loaded_placements.len(), 1);
+        assert_eq!(loaded_placements[0].budget_tokens_slice, 3000);
+
+        let revs = store.list_revisions_for_task(&task.id).await.unwrap();
+        assert_eq!(revs.len(), 1);
+
+        // 2. Save and query ReplanRecord
+        let brief = ReplanBrief::new(&task.id, ReplanTrigger::SourceDrift, None, "Files changed on disk");
+        let replan = ReplanRecord::new(&task.id, brief, "prop_oi_02");
+        store.record_replan(&replan).await.unwrap();
+
+        let loaded_replan = store.get_replan(&replan.id).await.unwrap().unwrap();
+        assert_eq!(loaded_replan.id, replan.id);
+        assert_eq!(loaded_replan.brief.trigger, ReplanTrigger::SourceDrift);
+
+        let replans = store.list_replans_for_task(&task.id).await.unwrap();
+        assert_eq!(replans.len(), 1);
+        assert_eq!(replans[0].id, replan.id);
+    }
 }
+
