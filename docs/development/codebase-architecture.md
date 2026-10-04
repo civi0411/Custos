@@ -165,8 +165,18 @@ Custos/
 | [`src/session.rs`](../../crates/custos-domain/src/session.rs) | 81 | Thực thể Session, SessionId, SessionStatus, nhật ký SessionJournalEntry | `struct SessionId`, `fn new`, `fn generate`, `fn fmt` |
 | [`src/span.rs`](../../crates/custos-domain/src/span.rs) | 90 | Quản lý phân đoạn thực thi Span, SpanState | `enum SpanState`, `fn fmt`, `struct Span`, `fn new` |
 | [`src/task.rs`](../../crates/custos-domain/src/task.rs) | 228 | Version 1 Canonical Contract alias for SSOT. | `enum EvidenceKind`, `struct ContractEvidence`, `struct TaskContract`, `type TaskContractV1` |
+| [`src/decision.rs`](../../crates/custos-domain/src/decision.rs) | 35 | Re-export tương thích ngược cho mô hình quyết định OI | `type DecisionRecord`, `type StrategyProposal`, `type ExecutionTopology` |
+| [`src/oi/candidate.rs`](../../crates/custos-domain/src/oi/candidate.rs) | 48 | Cấu trúc Candidate và phân loại lý do từ chối RejectionReason | `struct Candidate`, `enum RejectionReason` |
+| [`src/oi/mod.rs`](../../crates/custos-domain/src/oi/mod.rs) | 20 | Module khai báo và re-export toàn bộ từ vựng miền OI | None |
+| [`src/oi/placement.rs`](../../crates/custos-domain/src/oi/placement.rs) | 30 | Ánh xạ vị trí NodePlacement và ngân sách cắt lát | `struct NodePlacement`, `fn new` |
+| [`src/oi/proposal.rs`](../../crates/custos-domain/src/oi/proposal.rs) | 39 | Bản đề xuất chiến lược StrategyProposal của OI | `struct StrategyProposal`, `fn native_baseline` |
+| [`src/oi/record.rs`](../../crates/custos-domain/src/oi/record.rs) | 30 | Bản ghi quyết định DecisionRecord lưu vào sổ cái | `struct DecisionRecord`, `fn new` |
+| [`src/oi/replan.rs`](../../crates/custos-domain/src/oi/replan.rs) | 65 | Bản tóm tắt tái hoạch định ReplanBrief và ReplanTrigger | `struct ReplanBrief`, `enum ReplanTrigger`, `struct ReplanRecord` |
+| [`src/oi/snapshot.rs`](../../crates/custos-domain/src/oi/snapshot.rs) | 48 | Bức tranh thực tại DecisionSnapshot v2 kèm pin và egress rules | `struct DecisionSnapshot`, `fn new` |
+| [`src/oi/topology.rs`](../../crates/custos-domain/src/oi/topology.rs) | 68 | Phân loại chiến thuật ExecutionTopology T0–T8 | `enum ExecutionTopology`, `fn is_parallel`, `fn requires_isolation` |
+| [`src/oi/work_packet.rs`](../../crates/custos-domain/src/oi/work_packet.rs) | 62 | Gói công việc WorkPacket và kết quả WorkerResult | `struct WorkPacket`, `struct WorkerResult`, `enum WorkerStatus` |
 | [`src/types.rs`](../../crates/custos-domain/src/types.rs) | 10 | Định nghĩa các kiểu dữ liệu dùng chung | None |
-| [`src/workflow.rs`](../../crates/custos-domain/src/workflow.rs) | 131 | Intermediate Representation (IR) for compiled DAG execution | `struct WorkflowStep`, `fn new`, `fn with_dependencies`, `struct WorkflowPlan` |
+| [`src/workflow.rs`](../../crates/custos-domain/src/workflow.rs) | 175 | Intermediate Representation (IR) và WorkflowRevision (RFC 004) | `struct WorkflowStep`, `struct WorkflowRevision`, `struct RevisionNode` |
 
 ### 3.2. Crate `custos-core` — Layer 1: Kernel & Invariants
 
@@ -215,6 +225,13 @@ Custos/
 | [`src/kernel/span_service.rs`](../../crates/custos-core/src/kernel/span_service.rs) | 60 | Dịch vụ xử lý TaskKernel chính (TaskService) | `struct SpanService`, `fn new` |
 | [`src/kernel/state_machine.rs`](../../crates/custos-core/src/kernel/state_machine.rs) | 41 | Returns all valid next states for a given state | `struct TaskStateMachine`, `fn valid_next_states`, `fn can_transition`, `fn ensure_can_transition` |
 | [`src/lib.rs`](../../crates/custos-core/src/lib.rs) | 17 | Module lib: phục vụ các cấu trúc và chức năng liên quan | None |
+| [`src/contracts/judgment.rs`](../../crates/custos-core/src/contracts/judgment.rs) | 13 | Khế ước thẩm định phán quyết và độ tin cậy của bằng chứng (S1 Fabric) | `trait JudgmentPort` |
+| [`src/contracts/oi.rs`](../../crates/custos-core/src/contracts/oi.rs) | 15 | Khế ước giao tiếp với bộ não lập kế hoạch Orchestration Intelligence | `trait OiPlannerPort` |
+| [`src/decision.rs`](../../crates/custos-core/src/decision.rs) | 90 | Trích xuất Snapshot hiện thực chuẩn hoá (lọc theo task, fix G6) | `struct DecisionSnapshotExtractor`, `fn extract_snapshot` |
+| [`src/oi/admissibility.rs`](../../crates/custos-core/src/oi/admissibility.rs) | 45 | Cổng thẩm định tính hợp lệ của đề xuất chiến lược | `enum AdmissibilityResult`, `struct AdmissibilityEvaluator` |
+| [`src/oi/compiler.rs`](../../crates/custos-core/src/oi/compiler.rs) | 180 | Trình biên dịch đề xuất thành WorkflowRevision tất định T0–T8 | `struct PlanCompiler`, `fn compile` |
+| [`src/oi/hard_filters.rs`](../../crates/custos-core/src/oi/hard_filters.rs) | 80 | Bộ lọc tĩnh tất định (pin, ngân sách, giới hạn mạng) | `struct HardFilters`, `fn evaluate` |
+| [`src/oi/mod.rs`](../../crates/custos-core/src/oi/mod.rs) | 12 | Module quản trị các cổng OI Core | None |
 | [`src/sandbox_policy/bubblewrap.rs`](../../crates/custos-core/src/sandbox_policy/bubblewrap.rs) | 13 | Cấu hình chính sách sandbox Bubblewrap cho Linux | `struct BubblewrapSandbox`, `fn new`, `fn default` |
 | [`src/sandbox_policy/mod.rs`](../../crates/custos-core/src/sandbox_policy/mod.rs) | 7 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/sandbox_policy/path_sandbox.rs`](../../crates/custos-core/src/sandbox_policy/path_sandbox.rs) | 130 | Resolves and validates that the requested path strictly resides within the sandbox workspace. | `struct PathSandbox`, `fn new`, `fn workspace_root`, `fn resolve_and_contain` |

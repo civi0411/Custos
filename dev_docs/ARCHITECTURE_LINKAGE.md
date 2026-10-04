@@ -126,6 +126,37 @@ sequenceDiagram
 
 **Quy tắc bất biến đã có test:** permit dùng một lần · đổi tham số bị chặn (cả Kernel lẫn Sandbox) · risk High/Critical không tự cấp permit · Draft không nhảy thẳng Succeeded · proposal bộ nhớ không tự thành fact · đường dẫn `../../` bị loại ở bước 1 của Context Compiler.
 
+### 4.1 Luồng Thực Thi Orchestration Intelligence (OI Engine)
+
+Từ kết quả kiểm thử E2E gần đây, hệ thống điều phối OI (Orchestration Intelligence) đã được chuẩn hóa kiến trúc với các cơ chế bảo vệ nghiêm ngặt:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant K as Kernel/TaskStore
+    participant E as AdmissibilityEvaluator
+    participant OI as OiEngine
+    participant GR as GraphRuntime / DagGraph
+    participant C as Completion Gate / Evidence
+
+    K->>E: Cấp DecisionSnapshot (TaskState, Effects)
+    E->>E: Kiểm tra Idempotency (Gate 3)<br/>reconcile_on_startup() -> Uncertain
+    E-->>OI: Snapshot hợp lệ
+    OI->>OI: Phân rã & Biên dịch Kế hoạch
+    OI-->>K: Lưu WorkflowRevision
+    OI->>GR: Chuyển giao Graph
+    GR->>GR: DagGraph::validate_dag() (Gate 5)<br/>Phát hiện & loại bỏ chu trình
+    GR->>GR: Thực thi các làn sóng song song (Parallel Waves)
+    GR-->>C: Đệ trình EvidenceClaim
+    C->>C: Xác thực Proof-Closure (Gate 4)
+    C-->>K: complete_task() nếu EvidenceBundle hợp lệ
+```
+
+**Các Bất Biến Chạy Runtime Đã Được Đảm Bảo (OI Invariants):**
+- **Gate 3 (Idempotency & Crash Recovery):** Bất kỳ sự cố tắt đột ngột nào cũng không dẫn đến việc mù quáng thử lại (blind retries). Quá trình đối soát `reconcile_on_startup()` biến đổi các effect đang ở trạng thái `InFlight` thành `Uncertain`. Hệ thống phải giải quyết trạng thái `Uncertain` (Outbox/EffectLedger) trước khi lên lịch tiếp.
+- **Gate 4 (Harness Assurance & Proof-Closure):** Một `TaskContract` chỉ được phép đóng (`complete_task`) khi và chỉ khi có đầy đủ gói `EvidenceClaim` đã được xác thực (Proof-Closure). Không có ngoại lệ cho việc tự tuyên bố thành công.
+- **Gate 5 (Graph Runtime & Cycle Detection):** Động cơ `GraphRuntime` sử dụng `DagGraph` kết hợp `validate_dag()` để ngăn chặn hoàn toàn các chu trình phụ thuộc (cyclic dependency) từ kế hoạch sinh ra bởi model. Các tác vụ con được nhóm và thực thi an toàn theo từng làn sóng song song (parallel waves).
+
 ---
 
 ## 5. Các điểm lệch giữa Custos.md và code (phải quyết trước khi "freeze")
