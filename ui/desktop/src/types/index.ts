@@ -1,4 +1,5 @@
-export type ViewMode = 'split' | 'chat' | 'diff';
+export type WorkspacePaneType = 'chat' | 'engineering' | 'research' | 'assistant' | 'diff' | 'browser' | 'markdown';
+export type WorkbenchLens = 'copilot' | 'coding' | 'research';
 export type MainTab = 'studio' | 'providers' | 'chains' | 'telemetry' | 'cache' | 'dashboard' | 'docs' | 'settings';
 
 export interface ChatMessage {
@@ -18,6 +19,10 @@ export interface DiffLine {
 
 export interface Session {
   id: string;
+  source?: 'demo' | 'daemon';
+  taskStatus?: string;
+  sessionId?: string;
+  pack?: string;
   title: string;
   time: string;
   preview: string;

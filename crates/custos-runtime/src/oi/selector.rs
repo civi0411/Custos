@@ -1,11 +1,14 @@
-use custos_domain::oi::{Candidate, DecisionSnapshot, StrategyProposal};
 use custos_core::oi::hard_filters::HardFilters;
+use custos_domain::oi::{Candidate, DecisionSnapshot, StrategyProposal};
 use custos_domain::DomainError;
 
 pub struct Selector;
 
 impl Selector {
-    pub fn select(candidates: Vec<Candidate>, snapshot: &DecisionSnapshot) -> Result<StrategyProposal, DomainError> {
+    pub fn select(
+        candidates: Vec<Candidate>,
+        snapshot: &DecisionSnapshot,
+    ) -> Result<StrategyProposal, DomainError> {
         let mut alternatives = Vec::new();
         let mut best: Option<Candidate> = None;
 
@@ -13,7 +16,7 @@ impl Selector {
             let temp_proposal = StrategyProposal {
                 id: custos_domain::new_id("prop"),
                 task_id: snapshot.task_id.clone(),
-                chosen_topology: cand.topology.clone(),
+                chosen_topology: cand.topology,
                 candidate_harness: cand.harness_id.clone(),
                 reasoning: "".into(),
                 estimated_cost_usd: cand.est_cost_usd_max,
@@ -32,7 +35,11 @@ impl Selector {
                     }
                 }
                 Err(reasons) => {
-                    let reason_str = reasons.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(", ");
+                    let reason_str = reasons
+                        .iter()
+                        .map(|r| r.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ");
                     alternatives.push(format!("{} (abstained: {})", cand.harness_id, reason_str));
                 }
             }
@@ -52,7 +59,9 @@ impl Selector {
                 context_strategy: Some("default_windowed".into()),
             })
         } else {
-            Err(DomainError::Validation("No admissible candidates found".into()))
+            Err(DomainError::Validation(
+                "No admissible candidates found".into(),
+            ))
         }
     }
 }

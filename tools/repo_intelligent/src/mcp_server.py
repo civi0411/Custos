@@ -15,6 +15,28 @@ from src.tools import tool_read_file
 logging.basicConfig(level=logging.INFO, stream=sys.stderr, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("nexus-mcp")
 
+import subprocess
+from src.workspace import resolve_repo_path
+
+SUPPORTED_PROTOCOL_VERSIONS = ["2024-11-05", "2024-10-07", "0.1.0"]
+
+def get_repo_snapshot_id(repo: str) -> str:
+    """Resolves HEAD commit hash or fallback identifier for repo snapshot."""
+    try:
+        base = resolve_repo_path(repo)
+        res = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=base,
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if res.returncode == 0 and res.stdout.strip():
+            return res.stdout.strip()
+    except Exception:
+        pass
+    return "snapshot_untracked"
+
 class NexusMcpServer:
     def __init__(self):
         self.tool_server = NexusToolServer()
@@ -26,11 +48,17 @@ class NexusMcpServer:
         params = request.get("params", {})
 
         if method == "initialize":
+            client_version = params.get("protocolVersion")
+            protocol_version = (
+                client_version
+                if client_version in SUPPORTED_PROTOCOL_VERSIONS
+                else SUPPORTED_PROTOCOL_VERSIONS[0]
+            )
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
                 "result": {
-                    "protocolVersion": "2024-11-05",
+                    "protocolVersion": protocol_version,
                     "serverInfo": {
                         "name": "custos-repo-intelligent",
                         "version": "2.0.0"
@@ -88,16 +116,32 @@ class NexusMcpServer:
         elif method == "tools/call":
             name = params.get("name")
             arguments = params.get("arguments", {})
+            repo = arguments.get("repo", "custos")
+            snapshot_id = get_repo_snapshot_id(repo)
 
             try:
                 if name == "nexus_read":
-                    repo = arguments.get("repo", "custos")
                     path = arguments.get("path", "")
                     start = arguments.get("start_line", 1)
                     end = arguments.get("end_line", 100)
                     text = tool_read_file(repo=repo, path=path, start_line=start, end_line=end)
+                    locator = {"repo": repo, "path": path, "start_line": start, "end_line": end}
                 else:
                     text = self.tool_server.call_tool(name, arguments)
+                    locator = {"repo": repo, "tool": name, "args": arguments}
+
+                formatted_output = {
+                    "snapshot_id": snapshot_id,
+                    "locator": locator,
+                    "stale_status": "fresh",
+                    "payload": text,
+                }
+
+                output_text = (
+                    json.dumps(formatted_output, indent=2)
+                    if not isinstance(text, str)
+                    else f"/* snapshot_id: {snapshot_id} | stale_status: fresh */\n{text}"
+                )
 
                 return {
                     "jsonrpc": "2.0",
@@ -106,7 +150,7 @@ class NexusMcpServer:
                         "content": [
                             {
                                 "type": "text",
-                                "text": str(text)
+                                "text": output_text
                             }
                         ],
                         "isError": False
@@ -127,6 +171,7 @@ class NexusMcpServer:
                         "isError": True
                     }
                 }
+
 
         else:
             return {

@@ -228,7 +228,10 @@ mod s1_scout_and_micro_executor {
             .expect("preview diff");
 
         assert!(diff_receipt.success);
-        assert!(diff_receipt.preview_diff.unwrap().contains("+pub fn new() {}"));
+        assert!(diff_receipt
+            .preview_diff
+            .unwrap()
+            .contains("+pub fn new() {}"));
     }
 
     #[tokio::test]

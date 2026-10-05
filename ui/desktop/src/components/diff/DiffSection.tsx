@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { FileDiff, Check, FileCode, Copy, Sparkles } from 'lucide-react';
 import { Highlight, themes } from 'prism-react-renderer';
-import { Session } from '../types';
+import { Session } from '@/types';
 
 interface DiffSectionProps {
   session: Session | null;

@@ -1,2 +1,2 @@
 pub mod ast_search;
-pub use ast_search::AstSearchSkill;
+pub use ast_search::{AstSearchSkill, LexicalSearchSkill};

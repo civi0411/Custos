@@ -80,7 +80,7 @@ impl ExplainService {
             let temp_proposal = StrategyProposal {
                 id: custos_domain::new_id("prop"),
                 task_id: snapshot.task_id.clone(),
-                chosen_topology: cand.topology.clone(),
+                chosen_topology: cand.topology,
                 candidate_harness: cand.harness_id.clone(),
                 reasoning: String::new(),
                 estimated_cost_usd: cand.est_cost_usd_max,
@@ -93,7 +93,7 @@ impl ExplainService {
             match HardFilters::evaluate(&temp_proposal, snapshot) {
                 Ok(()) => {
                     candidate_explanations.push(CandidateExplanation {
-                        topology: cand.topology.clone(),
+                        topology: cand.topology,
                         harness_id: cand.harness_id.clone(),
                         estimated_tokens: cand.est_tokens,
                         estimated_cost_usd_min: cand.est_cost_usd_min,
@@ -106,7 +106,7 @@ impl ExplainService {
                 Err(reasons) => {
                     let reason_strings = reasons.iter().map(|r| r.to_string()).collect();
                     candidate_explanations.push(CandidateExplanation {
-                        topology: cand.topology.clone(),
+                        topology: cand.topology,
                         harness_id: cand.harness_id.clone(),
                         estimated_tokens: cand.est_tokens,
                         estimated_cost_usd_min: cand.est_cost_usd_min,

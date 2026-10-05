@@ -192,10 +192,8 @@ mod tests {
 
     #[test]
     fn test_scan_and_symbol_extraction() {
-        let temp_dir = std::env::temp_dir().join(format!(
-            "custos_repo_int_{}",
-            custos_domain::new_id("test")
-        ));
+        let temp_dir =
+            std::env::temp_dir().join(format!("custos_repo_int_{}", custos_domain::new_id("test")));
         std::fs::create_dir_all(temp_dir.join("src")).unwrap();
         std::fs::create_dir_all(temp_dir.join(".git")).unwrap();
 

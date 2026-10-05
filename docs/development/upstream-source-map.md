@@ -15,6 +15,8 @@
 
 ## External gateway candidates, not imported Custos code
 
+[OrCa source study](orca-source-study.md) inspects local upstream commit `3f6225deeb08a82448c5f0b0725073401629d462` (MIT, Lovecast Inc.) as an **architecture/UX reference**, not as code imported into Custos. Its Electron/Node runtime, SQLite orchestration tables and React state are not Custos's Task Kernel or DB. Before any selective copy, record exact original path, license notice, dependencies, behavior parity, platform assumptions and tests; the presence of an MIT license alone is not an integration decision.
+
 | Upstream | Narrow reason to inspect | Custos integration boundary | Current audit state |
 |---|---|---|---|
 | [decolua/9router](https://github.com/decolua/9router/blob/master/docs/ARCHITECTURE.md) | Provider/account routing, request/stream translation, fallback and usage | Optional `ModelPort` proxy profile through `custos-adapters/src/providers/`; never Task/Authority storage | Candidate only; exact SHA, license, ToS/auth handling, stream/tool/usage fidelity and latency unverified |

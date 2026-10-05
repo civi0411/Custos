@@ -27,9 +27,7 @@ use async_stream::try_stream;
 use async_trait::async_trait;
 use backend::{BackendLoadedModel, LocalInferenceBackend};
 use custos_provider::base::{MessageStream, Provider, ProviderDescriptor, ProviderMetadata};
-use custos_provider::conversation::message::{
-    Message, MessageContent, SystemNotificationType,
-};
+use custos_provider::conversation::message::{Message, MessageContent, SystemNotificationType};
 use custos_provider::conversation::token_usage::{ProviderUsage, Usage};
 use custos_provider::errors::ProviderError;
 use custos_provider::images::ImageFormat;

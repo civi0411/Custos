@@ -5,7 +5,6 @@
 //! 2. `gate3_idempotency_conflict`: Strict rejection of duplicate idempotency keys with DomainError::Conflict.
 //! 3. `crash_reconciliation_and_cancellation`: InFlight to Uncertain startup recovery and graceful run cancellation.
 
-use std::sync::Arc;
 use async_trait::async_trait;
 use custos_adapters::sandbox::SovereignDeveloperAdapter;
 use custos_core::contracts::harness::{AgentRuntimePort, HarnessProfile, ToolMediationLevel};
@@ -19,6 +18,7 @@ use custos_domain::{
 };
 use custos_persistence::SqliteTaskStore;
 use custos_runtime::workflow::TaskRuntime;
+use std::sync::Arc;
 
 struct TestGovernedHarness;
 
@@ -51,7 +51,12 @@ impl AgentRuntimePort for TestGovernedHarness {
     }
 }
 
-async fn setup_spine_fixture() -> (Arc<SqliteTaskStore>, Arc<dyn KernelPort>, Arc<dyn WorkflowPort>, Task) {
+async fn setup_spine_fixture() -> (
+    Arc<SqliteTaskStore>,
+    Arc<dyn KernelPort>,
+    Arc<dyn WorkflowPort>,
+    Task,
+) {
     let store = Arc::new(SqliteTaskStore::new_in_memory().expect("in-memory sqlite store"));
     let kernel: Arc<dyn KernelPort> = Arc::new(TrustedKernel::new(store.clone()));
     let harness: Arc<dyn AgentRuntimePort> = Arc::new(TestGovernedHarness);
@@ -96,23 +101,39 @@ mod mediated_spine_execution {
         let (store, kernel, runtime, task) = setup_spine_fixture().await;
         assert_eq!(task.status, TaskStatus::Draft);
 
-        let start_cmd = StartRunCommand::new(&task.id, "governor").with_workflow_revision("spine_v1");
-        let run_handle: RunHandle = runtime.start_run(start_cmd).await.expect("start_run must succeed");
+        let start_cmd =
+            StartRunCommand::new(&task.id, "governor").with_workflow_revision("spine_v1");
+        let run_handle: RunHandle = runtime
+            .start_run(start_cmd)
+            .await
+            .expect("start_run must succeed");
 
         assert_eq!(run_handle.task_id, task.id);
         assert_eq!(run_handle.status, RunStatus::Active);
 
         // Verify Task state in Kernel transitioned to Running
-        let running_task = kernel.get_task(&task.id).await.unwrap().expect("task exists");
+        let running_task = kernel
+            .get_task(&task.id)
+            .await
+            .unwrap()
+            .expect("task exists");
         assert_eq!(running_task.status, TaskStatus::Running);
 
         // Verify Durable Run in SQLite
-        let persisted_run = store.get_run(&run_handle.run_id).await.unwrap().expect("run exists");
+        let persisted_run = store
+            .get_run(&run_handle.run_id)
+            .await
+            .unwrap()
+            .expect("run exists");
         assert_eq!(persisted_run.status, RunStatus::Active);
         assert_eq!(persisted_run.workflow_revision.as_deref(), Some("spine_v1"));
 
         // Verify Transactional Outbox
-        let receipted = store.outbox().list_by_status(OutboxStatus::Receipted).await.unwrap();
+        let receipted = store
+            .outbox()
+            .list_by_status(OutboxStatus::Receipted)
+            .await
+            .unwrap();
         assert_eq!(receipted.len(), 1);
         let entry = &receipted[0];
         assert_eq!(entry.task_id, task.id);
@@ -123,7 +144,11 @@ mod mediated_spine_execution {
         assert!(receipt.output_digest.starts_with("blake3:"));
 
         // Verify Effect Ledger
-        let effect = store.get_effect_by_idempotency_key("idemp-spine-001").await.unwrap().expect("effect exists");
+        let effect = store
+            .get_effect_by_idempotency_key("idemp-spine-001")
+            .await
+            .unwrap()
+            .expect("effect exists");
         assert_eq!(effect.status, EffectStatus::Succeeded);
     }
 }
@@ -138,14 +163,16 @@ mod gate3_idempotency_conflict {
     async fn test_gate3_duplicate_idempotency_key_conflict() {
         let (store, _, runtime, task) = setup_spine_fixture().await;
 
-        let start_cmd = StartRunCommand::new(&task.id, "governor").with_workflow_revision("spine_v1");
+        let start_cmd =
+            StartRunCommand::new(&task.id, "governor").with_workflow_revision("spine_v1");
         runtime.start_run(start_cmd).await.expect("start_run");
 
         let worker_runs = store.list_worker_runs_for_task(&task.id).await.unwrap();
         assert_eq!(worker_runs.len(), 1);
 
         // Attempt duplicate idempotency key insertion
-        let dup_effect = EffectAttempt::new(worker_runs[0].id.clone(), "permit_dummy", "idemp-spine-001");
+        let dup_effect =
+            EffectAttempt::new(worker_runs[0].id.clone(), "permit_dummy", "idemp-spine-001");
         let conflict_result = store.record_effect(&dup_effect).await;
         assert!(
             matches!(conflict_result, Err(DomainError::Conflict(_))),
@@ -164,23 +191,38 @@ mod crash_reconciliation_and_cancellation {
     async fn test_reconciliation_and_graceful_cancellation() {
         let (store, kernel, runtime, task) = setup_spine_fixture().await;
 
-        let start_cmd = StartRunCommand::new(&task.id, "governor").with_workflow_revision("spine_v1");
+        let start_cmd =
+            StartRunCommand::new(&task.id, "governor").with_workflow_revision("spine_v1");
         let run_handle = runtime.start_run(start_cmd).await.expect("start_run");
 
         // Simulate interrupted in-flight effect
-        let in_flight = EffectAttempt::new("node_interrupt", "permit_interrupt", "idemp-interrupted-002");
+        let in_flight = EffectAttempt::new(
+            "node_interrupt",
+            "permit_interrupt",
+            "idemp-interrupted-002",
+        );
         store.record_effect(&in_flight).await.unwrap();
-        store.update_effect_status(&in_flight.id, EffectStatus::InFlight, None).await.unwrap();
+        store
+            .update_effect_status(&in_flight.id, EffectStatus::InFlight, None)
+            .await
+            .unwrap();
 
         // Reconcile on startup converts InFlight -> Uncertain (INV-03)
         let count = store.reconcile_on_startup().await.unwrap();
         assert_eq!(count, 1);
 
-        let reconciled = store.get_effect_by_idempotency_key("idemp-interrupted-002").await.unwrap().unwrap();
+        let reconciled = store
+            .get_effect_by_idempotency_key("idemp-interrupted-002")
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(reconciled.status, EffectStatus::Uncertain);
 
         // Request Graceful Cancellation
-        let cancel_receipt = runtime.request_cancel(&run_handle.run_id, "Audit finished").await.unwrap();
+        let cancel_receipt = runtime
+            .request_cancel(&run_handle.run_id, "Audit finished")
+            .await
+            .unwrap();
         assert_eq!(cancel_receipt.run_id, run_handle.run_id);
         assert_eq!(cancel_receipt.reason, "Audit finished");
 

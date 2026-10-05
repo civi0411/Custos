@@ -5,12 +5,12 @@
 //! 2. `cycle_detection_and_invariants`: Gate 5 cycle detection and cyclic dependency rejection.
 //! 3. `periodic_workflow_scheduler`: Interval recurrence scheduling and due job execution triggers.
 
-use std::sync::Arc;
 use async_trait::async_trait;
 use custos_domain::{DomainError, WorkflowPlan, WorkflowStep};
 use custos_runtime::workflow::dag::{DagGraph, DagNode};
 use custos_runtime::workflow::graph_runtime::{GraphRuntime, StepExecutor};
 use custos_runtime::workflow::scheduler::{JobRecurrence, WorkflowScheduler};
+use std::sync::Arc;
 
 struct RecordingStepExecutor {
     executed_order: Arc<tokio::sync::Mutex<Vec<String>>>,
@@ -37,7 +37,9 @@ impl StepExecutor for RecordingStepExecutor {
         _inputs: &serde_json::Value,
     ) -> Result<serde_json::Value, DomainError> {
         if node_id == "failing_step" {
-            return Err(DomainError::Validation("Explicit node failure in test".into()));
+            return Err(DomainError::Validation(
+                "Explicit node failure in test".into(),
+            ));
         }
         self.executed_order.lock().await.push(node_id.to_string());
         Ok(serde_json::json!({
@@ -68,11 +70,21 @@ mod topological_waves_execution {
             "ci_cd",
             "Full CI/CD Pipeline",
             vec![
-                WorkflowStep::new("Init", "Initialize workspace", "setup", serde_json::json!({})),
+                WorkflowStep::new(
+                    "Init",
+                    "Initialize workspace",
+                    "setup",
+                    serde_json::json!({}),
+                ),
                 WorkflowStep::new("Build", "Compile code", "build", serde_json::json!({})),
                 WorkflowStep::new("Lint", "Run linter", "lint", serde_json::json!({})),
                 WorkflowStep::new("Test", "Run test suite", "test", serde_json::json!({})),
-                WorkflowStep::new("Deploy", "Deploy to staging", "deploy", serde_json::json!({})),
+                WorkflowStep::new(
+                    "Deploy",
+                    "Deploy to staging",
+                    "deploy",
+                    serde_json::json!({}),
+                ),
             ],
         );
 
@@ -84,19 +96,49 @@ mod topological_waves_execution {
         let deploy_id = plan.steps[4].id.clone();
 
         graph
-            .add_node(DagNode::new(&init_id, "Init", "setup", serde_json::json!({}), vec![]))
+            .add_node(DagNode::new(
+                &init_id,
+                "Init",
+                "setup",
+                serde_json::json!({}),
+                vec![],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new(&build_id, "Build", "build", serde_json::json!({}), vec![init_id.clone()]))
+            .add_node(DagNode::new(
+                &build_id,
+                "Build",
+                "build",
+                serde_json::json!({}),
+                vec![init_id.clone()],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new(&lint_id, "Lint", "lint", serde_json::json!({}), vec![init_id.clone()]))
+            .add_node(DagNode::new(
+                &lint_id,
+                "Lint",
+                "lint",
+                serde_json::json!({}),
+                vec![init_id.clone()],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new(&test_id, "Test", "test", serde_json::json!({}), vec![build_id.clone(), lint_id.clone()]))
+            .add_node(DagNode::new(
+                &test_id,
+                "Test",
+                "test",
+                serde_json::json!({}),
+                vec![build_id.clone(), lint_id.clone()],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new(&deploy_id, "Deploy", "deploy", serde_json::json!({}), vec![test_id.clone()]))
+            .add_node(DagNode::new(
+                &deploy_id,
+                "Deploy",
+                "deploy",
+                serde_json::json!({}),
+                vec![test_id.clone()],
+            ))
             .unwrap();
 
         // Validate Gate 5
@@ -142,10 +184,22 @@ mod cycle_detection_and_invariants {
     async fn test_gate_5_cycle_rejection_in_graph_runtime() {
         let mut graph = DagGraph::new("Cyclic Graph");
         graph
-            .add_node(DagNode::new("A", "Node A", "exec", serde_json::json!({}), vec!["B".into()]))
+            .add_node(DagNode::new(
+                "A",
+                "Node A",
+                "exec",
+                serde_json::json!({}),
+                vec!["B".into()],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new("B", "Node B", "exec", serde_json::json!({}), vec!["A".into()]))
+            .add_node(DagNode::new(
+                "B",
+                "Node B",
+                "exec",
+                serde_json::json!({}),
+                vec!["A".into()],
+            ))
             .unwrap();
 
         let (executor, _) = RecordingStepExecutor::new();
@@ -182,7 +236,9 @@ mod periodic_workflow_scheduler {
         assert_eq!(job.name, "Hourly Security Sweep");
         assert_eq!(job.recurrence, JobRecurrence::Interval { seconds: 3600 });
 
-        let due_jobs = scheduler.get_due_jobs(chrono::Utc::now() + chrono::Duration::seconds(10)).await;
+        let due_jobs = scheduler
+            .get_due_jobs(chrono::Utc::now() + chrono::Duration::seconds(10))
+            .await;
         assert_eq!(due_jobs.len(), 1);
         assert_eq!(due_jobs[0].id, job_id);
     }

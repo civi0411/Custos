@@ -8,11 +8,11 @@ use custos_core::contracts::storage::{
     DecisionPort, EffectLedgerPort, OutboxEntry, OutboxPort, OutboxStatus, ReplanPort, RunPort,
     WorkflowRevisionPort,
 };
+use custos_core::kernel::{SessionStore, TaskEvent, TaskStore};
 use custos_domain::{
     ContinuationPacket, DecisionRecord, DomainError, ExecutionReceipt, NodePlacement, ReplanRecord,
     Run, Session, SessionId, SessionJournalEntry, Span, Task, WorkerRun, WorkflowRevision,
 };
-use custos_core::kernel::{SessionStore, TaskEvent, TaskStore};
 
 /// SQLite-backed persistent storage implementing TaskStore, SessionStore, OutboxPort, RunPort,
 /// DecisionPort, WorkflowRevisionPort, and ReplanPort.
@@ -238,13 +238,18 @@ impl OutboxPort for SqliteTaskStore {
         task_id: &str,
         status: OutboxStatus,
     ) -> Result<Vec<OutboxEntry>, DomainError> {
-        self.outbox_repo.list_by_task_and_status(task_id, status).await
+        self.outbox_repo
+            .list_by_task_and_status(task_id, status)
+            .await
     }
 }
 
 #[async_trait]
 impl EffectLedgerPort for SqliteTaskStore {
-    async fn record_effect(&self, effect: &custos_domain::EffectAttempt) -> Result<(), DomainError> {
+    async fn record_effect(
+        &self,
+        effect: &custos_domain::EffectAttempt,
+    ) -> Result<(), DomainError> {
         self.outbox_repo.record_effect(effect)
     }
 
@@ -291,7 +296,10 @@ impl RunPort for SqliteTaskStore {
         self.run_repo.get_worker_run(wrun_id)
     }
 
-    async fn list_worker_runs_for_task(&self, task_id: &str) -> Result<Vec<WorkerRun>, DomainError> {
+    async fn list_worker_runs_for_task(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<WorkerRun>, DomainError> {
         self.run_repo.list_worker_runs_for_task(task_id)
     }
 
@@ -310,7 +318,10 @@ impl DecisionPort for SqliteTaskStore {
         self.decision_repo.get_decision(id)
     }
 
-    async fn list_decisions_for_task(&self, task_id: &str) -> Result<Vec<DecisionRecord>, DomainError> {
+    async fn list_decisions_for_task(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<DecisionRecord>, DomainError> {
         self.decision_repo.list_decisions_for_task(task_id)
     }
 }
@@ -325,11 +336,17 @@ impl WorkflowRevisionPort for SqliteTaskStore {
         self.workflow_repo.save_revision(revision, placements)
     }
 
-    async fn get_revision(&self, revision_id: &str) -> Result<Option<WorkflowRevision>, DomainError> {
+    async fn get_revision(
+        &self,
+        revision_id: &str,
+    ) -> Result<Option<WorkflowRevision>, DomainError> {
         self.workflow_repo.get_revision(revision_id)
     }
 
-    async fn list_revisions_for_task(&self, task_id: &str) -> Result<Vec<WorkflowRevision>, DomainError> {
+    async fn list_revisions_for_task(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<WorkflowRevision>, DomainError> {
         self.workflow_repo.list_revisions_for_task(task_id)
     }
 
@@ -359,8 +376,8 @@ impl ReplanPort for SqliteTaskStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::{ContractEvidence, EvidenceKind, SpanState, TaskContract, TaskStatus};
     use custos_core::kernel::{AdvanceTask, CreateTask, TaskReducer, TaskService};
+    use custos_domain::{ContractEvidence, EvidenceKind, SpanState, TaskContract, TaskStatus};
     use std::sync::Arc;
 
     #[tokio::test]
@@ -681,11 +698,18 @@ mod tests {
 
         store.save_revision(&revision, &placements).await.unwrap();
 
-        let loaded_rev = store.get_revision(&revision.revision_id).await.unwrap().unwrap();
+        let loaded_rev = store
+            .get_revision(&revision.revision_id)
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(loaded_rev.revision_id, revision.revision_id);
         assert_eq!(loaded_rev.nodes.len(), 1);
 
-        let loaded_placements = store.get_placements_for_revision(&revision.revision_id).await.unwrap();
+        let loaded_placements = store
+            .get_placements_for_revision(&revision.revision_id)
+            .await
+            .unwrap();
         assert_eq!(loaded_placements.len(), 1);
         assert_eq!(loaded_placements[0].budget_tokens_slice, 3000);
 
@@ -693,7 +717,12 @@ mod tests {
         assert_eq!(revs.len(), 1);
 
         // 2. Save and query ReplanRecord
-        let brief = ReplanBrief::new(&task.id, ReplanTrigger::SourceDrift, None, "Files changed on disk");
+        let brief = ReplanBrief::new(
+            &task.id,
+            ReplanTrigger::SourceDrift,
+            None,
+            "Files changed on disk",
+        );
         let replan = ReplanRecord::new(&task.id, brief, "prop_oi_02");
         store.record_replan(&replan).await.unwrap();
 
@@ -706,4 +735,3 @@ mod tests {
         assert_eq!(replans[0].id, replan.id);
     }
 }
-

@@ -9,10 +9,7 @@ pub fn assistant_agenda_fixture() -> TaskContract {
         name: "Daily Agenda & Inbox Triage".into(),
         description: "Parse notifications, extract urgent action items, and draft calendar block"
             .into(),
-        required_capabilities: vec![
-            "calendar.read".into(),
-            "inbox.read".into(),
-        ],
+        required_capabilities: vec!["calendar.read".into(), "inbox.read".into()],
         evidence_requirements: vec![],
     }
 }
@@ -23,9 +20,7 @@ pub fn assistant_draft_reply_fixture() -> TaskContract {
         pack_id: "assistant".into(),
         name: "Compose Safe Delegation Reply".into(),
         description: "Draft message reply with proposed timeline and resource requirements".into(),
-        required_capabilities: vec![
-            "inbox.read".into(),
-        ],
+        required_capabilities: vec!["inbox.read".into()],
         evidence_requirements: vec![],
     }
 }

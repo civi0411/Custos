@@ -2,8 +2,8 @@
 //!
 //! Controls token and span quotas and enforces Anti-Gaming Invariants (Custos.md §16.3).
 
-use serde::{Deserialize, Serialize};
 use crate::error::DomainError;
+use serde::{Deserialize, Serialize};
 
 /// Abstract headroom signals provided to models to prevent gaming behavior (Custos.md §16.3 Anti-Gaming Invariant).
 /// The model is NEVER told the exact token numbers remaining.

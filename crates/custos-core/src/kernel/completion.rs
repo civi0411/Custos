@@ -68,8 +68,7 @@ impl CompletionGate {
                                     || claim.verifier_id == "test_result"
                             }
                             EvidenceKind::Diff => {
-                                claim.verifier_id == "diff"
-                                    || claim.verifier_id == "patch_preview"
+                                claim.verifier_id == "diff" || claim.verifier_id == "patch_preview"
                             }
                         }
                     });

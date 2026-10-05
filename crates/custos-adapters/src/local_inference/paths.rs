@@ -39,8 +39,7 @@ impl Paths {
 
     fn path_root() -> Option<PathBuf> {
         Self::validated_path_root(
-            std::env::var_os("CUSTOS_PATH_ROOT")
-                .or_else(|| std::env::var_os("GOOSE_PATH_ROOT")),
+            std::env::var_os("CUSTOS_PATH_ROOT").or_else(|| std::env::var_os("GOOSE_PATH_ROOT")),
         )
     }
 

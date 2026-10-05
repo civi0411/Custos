@@ -10,9 +10,13 @@
 
 </div>
 
-**A local-first, human-governed runtime for proof-carrying agent work.**
+**A local-first Agent Workspace for coding, research, and assistance.**
 
-Custos transforms transient artificial intelligence conversations into durable, governed tasks with explicit intent, bounded execution, recoverable state, and evidence-backed outcomes. It operates locally across local models, cloud providers, and external coding harnesses.
+**Product direction: Custos SADE — Supervised Agent Development Environment.** An ADE experience with source-aware supervision, strong-agent reasoning, bounded S1 assistance, and cost optimization measured on accepted outcomes. See the [SADE design](docs/architecture/sade-design-and-supervision.md); this is a target architecture, not a benchmark superiority claim.
+
+Custos brings conversations, resources, agent runs, and results into one workspace. Its target architecture combines durable tasks, scoped execution, source-aware outcomes, and honest effect status across local models, cloud APIs, and native agent harnesses. Desktop/CLI surfaces are clients of the same runtime; a native harness retains its own loop and declared assurance limits.
+
+**Status:** evolving implementation and target design, not a claim that the full workspace or all connectors are shipped. Start with the [workspace/UI specification](docs/architecture/agent-workspace-and-ui.md), [restructuring plan](docs/development/workspace-restructuring-plan.md), and [documentation hub](docs/README.md). These distinguish existing paths from planned modules and preserve compatibility during migration.
 
 ---
 

@@ -60,17 +60,13 @@ impl ActionLifecycleState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[derive(Default)]
 pub enum Assurance {
     CustosMediated,
     ProviderGoverned,
     ObserveOnly,
+    #[default]
     Unknown,
-}
-
-impl Default for Assurance {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 impl Assurance {
@@ -218,10 +214,9 @@ impl EffectStatus {
                 next,
                 EffectStatus::Succeeded | EffectStatus::Failed | EffectStatus::Uncertain
             ),
-            EffectStatus::Uncertain => matches!(
-                next,
-                EffectStatus::Succeeded | EffectStatus::Failed
-            ),
+            EffectStatus::Uncertain => {
+                matches!(next, EffectStatus::Succeeded | EffectStatus::Failed)
+            }
             EffectStatus::Succeeded | EffectStatus::Failed => false,
         }
     }
@@ -280,7 +275,10 @@ impl EffectAttempt {
         Ok(())
     }
 
-    pub fn succeed(&mut self, receipt: crate::authority::ExecutionReceipt) -> Result<(), DomainError> {
+    pub fn succeed(
+        &mut self,
+        receipt: crate::authority::ExecutionReceipt,
+    ) -> Result<(), DomainError> {
         if !self.status.can_transition_to(EffectStatus::Succeeded) {
             return Err(DomainError::InvalidStateTransition {
                 from: format!("{:?}", self.status),
@@ -293,7 +291,10 @@ impl EffectAttempt {
         Ok(())
     }
 
-    pub fn fail(&mut self, receipt: Option<crate::authority::ExecutionReceipt>) -> Result<(), DomainError> {
+    pub fn fail(
+        &mut self,
+        receipt: Option<crate::authority::ExecutionReceipt>,
+    ) -> Result<(), DomainError> {
         if !self.status.can_transition_to(EffectStatus::Failed) {
             return Err(DomainError::InvalidStateTransition {
                 from: format!("{:?}", self.status),

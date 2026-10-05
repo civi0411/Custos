@@ -19,15 +19,27 @@ impl PlanCompiler {
         match proposal.chosen_topology {
             ExecutionTopology::T0Direct | ExecutionTopology::DirectModel => {
                 rev.nodes.push(Self::node(
-                    format!("{}_t0_turn", tid), "Direct Synthesis", "synthesizer", h,
-                    proposal.estimated_tokens, vec![], vec![], vec![],
+                    format!("{}_t0_turn", tid),
+                    "Direct Synthesis",
+                    "synthesizer",
+                    h,
+                    proposal.estimated_tokens,
+                    vec![],
+                    vec![],
+                    vec![],
                 ));
             }
 
             ExecutionTopology::T1SingleWorker | ExecutionTopology::NativeBaseline => {
                 rev.nodes.push(Self::node(
-                    format!("{}_t1_worker", tid), "Governed Native Execution", "worker", h,
-                    proposal.estimated_tokens, vec!["workspace/**"], vec!["workspace/**"], vec!["shell", "file_write"],
+                    format!("{}_t1_worker", tid),
+                    "Governed Native Execution",
+                    "worker",
+                    h,
+                    proposal.estimated_tokens,
+                    vec!["workspace/**"],
+                    vec!["workspace/**"],
+                    vec!["shell", "file_write"],
                 ));
                 rev.obligations.push("evidence_verification".into());
             }
@@ -38,9 +50,36 @@ impl PlanCompiler {
                 let v_id = format!("{}_stage_3_verify", tid);
                 let b = proposal.estimated_tokens / 3;
 
-                rev.nodes.push(Self::node(&a_id, "Workspace Analysis", "analyzer", h, b, vec!["workspace/**"], vec![], vec!["read_file"]));
-                rev.nodes.push(Self::node(&e_id, "Patch Generation", "coder", h, b, vec!["workspace/**"], vec!["workspace/**"], vec!["shell", "file_write"]));
-                rev.nodes.push(Self::node(&v_id, "Verification & Gate Proof", "verifier", h, b, vec!["workspace/**"], vec![], vec!["shell"]));
+                rev.nodes.push(Self::node(
+                    &a_id,
+                    "Workspace Analysis",
+                    "analyzer",
+                    h,
+                    b,
+                    vec!["workspace/**"],
+                    vec![],
+                    vec!["read_file"],
+                ));
+                rev.nodes.push(Self::node(
+                    &e_id,
+                    "Patch Generation",
+                    "coder",
+                    h,
+                    b,
+                    vec!["workspace/**"],
+                    vec!["workspace/**"],
+                    vec!["shell", "file_write"],
+                ));
+                rev.nodes.push(Self::node(
+                    &v_id,
+                    "Verification & Gate Proof",
+                    "verifier",
+                    h,
+                    b,
+                    vec!["workspace/**"],
+                    vec![],
+                    vec!["shell"],
+                ));
                 rev.dependencies.push((a_id, e_id.clone()));
                 rev.dependencies.push((e_id, v_id));
                 rev.obligations.push("evidence_verification".into());
@@ -52,9 +91,36 @@ impl PlanCompiler {
                 let m = format!("{}_merge_summary", tid);
                 let b = proposal.estimated_tokens / 3;
 
-                rev.nodes.push(Self::node(&f1, "Parallel Read Source", "reader", h, b, vec!["workspace/src/**"], vec![], vec!["read_file"]));
-                rev.nodes.push(Self::node(&f2, "Parallel Read Tests", "reader", h, b, vec!["workspace/tests/**"], vec![], vec!["read_file"]));
-                rev.nodes.push(Self::node(&m, "Consolidation & Merge", "synthesizer", h, b, vec![], vec![], vec![]));
+                rev.nodes.push(Self::node(
+                    &f1,
+                    "Parallel Read Source",
+                    "reader",
+                    h,
+                    b,
+                    vec!["workspace/src/**"],
+                    vec![],
+                    vec!["read_file"],
+                ));
+                rev.nodes.push(Self::node(
+                    &f2,
+                    "Parallel Read Tests",
+                    "reader",
+                    h,
+                    b,
+                    vec!["workspace/tests/**"],
+                    vec![],
+                    vec!["read_file"],
+                ));
+                rev.nodes.push(Self::node(
+                    &m,
+                    "Consolidation & Merge",
+                    "synthesizer",
+                    h,
+                    b,
+                    vec![],
+                    vec![],
+                    vec![],
+                ));
                 rev.dependencies.push((f1, m.clone()));
                 rev.dependencies.push((f2, m));
             }
@@ -65,9 +131,36 @@ impl PlanCompiler {
                 let int = format!("{}_integrator", tid);
                 let b = proposal.estimated_tokens / 3;
 
-                rev.nodes.push(Self::node(&ba, "Worktree Branch A", "worker", h, b, vec!["workspace/**"], vec!["workspace/src/**"], vec!["shell", "file_write"]));
-                rev.nodes.push(Self::node(&bb, "Worktree Branch B", "worker", h, b, vec!["workspace/**"], vec!["workspace/tests/**"], vec!["shell", "file_write"]));
-                rev.nodes.push(Self::node(&int, "Integrator Merge & Test", "integrator", h, b, vec!["workspace/**"], vec!["workspace/**"], vec!["shell", "file_write"]));
+                rev.nodes.push(Self::node(
+                    &ba,
+                    "Worktree Branch A",
+                    "worker",
+                    h,
+                    b,
+                    vec!["workspace/**"],
+                    vec!["workspace/src/**"],
+                    vec!["shell", "file_write"],
+                ));
+                rev.nodes.push(Self::node(
+                    &bb,
+                    "Worktree Branch B",
+                    "worker",
+                    h,
+                    b,
+                    vec!["workspace/**"],
+                    vec!["workspace/tests/**"],
+                    vec!["shell", "file_write"],
+                ));
+                rev.nodes.push(Self::node(
+                    &int,
+                    "Integrator Merge & Test",
+                    "integrator",
+                    h,
+                    b,
+                    vec!["workspace/**"],
+                    vec!["workspace/**"],
+                    vec!["shell", "file_write"],
+                ));
                 rev.dependencies.push((ba, int.clone()));
                 rev.dependencies.push((bb, int));
                 rev.obligations.push("worktree_clean_merge".into());
@@ -79,16 +172,40 @@ impl PlanCompiler {
                 let ev = format!("{}_attempt_eval", tid);
                 let half = proposal.estimated_tokens / 2;
 
-                rev.nodes.push(Self::node(&ex, "Implementation Attempt", "worker", h, half, vec!["workspace/**"], vec!["workspace/**"], vec!["shell", "file_write"]));
-                rev.nodes.push(Self::node(&ev, "Evaluator Check", "evaluator", h, half, vec!["workspace/**"], vec![], vec!["shell"]));
+                rev.nodes.push(Self::node(
+                    &ex,
+                    "Implementation Attempt",
+                    "worker",
+                    h,
+                    half,
+                    vec!["workspace/**"],
+                    vec!["workspace/**"],
+                    vec!["shell", "file_write"],
+                ));
+                rev.nodes.push(Self::node(
+                    &ev,
+                    "Evaluator Check",
+                    "evaluator",
+                    h,
+                    half,
+                    vec!["workspace/**"],
+                    vec![],
+                    vec!["shell"],
+                ));
                 rev.dependencies.push((ex, ev));
                 rev.obligations.push("repair_budget_bounded".into());
             }
 
             _ => {
                 rev.nodes.push(Self::node(
-                    format!("{}_fallback_worker", tid), "Sovereign Baseline", "worker", h,
-                    proposal.estimated_tokens, vec!["workspace/**"], vec!["workspace/**"], vec!["shell"],
+                    format!("{}_fallback_worker", tid),
+                    "Sovereign Baseline",
+                    "worker",
+                    h,
+                    proposal.estimated_tokens,
+                    vec!["workspace/**"],
+                    vec!["workspace/**"],
+                    vec!["shell"],
                 ));
             }
         }
@@ -114,7 +231,8 @@ impl PlanCompiler {
             );
 
             if proposal.chosen_topology == ExecutionTopology::T4Worktree && node.role == "worker" {
-                placement.workspace_lease_id = Some(format!("lease_{}_{}", proposal.task_id, node.node_id));
+                placement.workspace_lease_id =
+                    Some(format!("lease_{}_{}", proposal.task_id, node.node_id));
             }
 
             placements.push(placement);
@@ -123,6 +241,7 @@ impl PlanCompiler {
         (revision, placements)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn node(
         id: impl Into<String>,
         name: &str,

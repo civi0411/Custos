@@ -8,15 +8,13 @@ import {
   SlidersHorizontal, 
   Key, 
   Settings as SettingsIcon, 
-  LogOut 
 } from 'lucide-react';
-import { MainTab } from '../types';
+import { MainTab } from '@/types';
 
 interface IconSidebarProps {
   currentTab: MainTab;
   onSwitchTab: (tab: MainTab) => void;
   onOpenSettings?: () => void;
-  onShowToast: (msg: string) => void;
 }
 
 interface NavItem {
@@ -37,8 +35,7 @@ const NAV_ITEMS: NavItem[] = [
 export const IconSidebar: React.FC<IconSidebarProps> = ({
   currentTab,
   onSwitchTab,
-  onOpenSettings,
-  onShowToast
+  onOpenSettings
 }) => {
   const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
   const avatarRef = useRef<HTMLDivElement>(null);
@@ -116,10 +113,10 @@ export const IconSidebar: React.FC<IconSidebarProps> = ({
               setIsAvatarMenuOpen(!isAvatarMenuOpen);
             }} 
             className="w-7 sm:w-8 h-7 sm:h-8 rounded-full bg-gradient-to-tr from-brand-blue to-purple-600 p-[1.5px] focus:outline-none hover:ring-2 hover:ring-brand-blue/60 transition cursor-pointer" 
-            title="Alex Smith (alex@custos.io)"
+            title="Custos menu"
           >
             <div className="w-full h-full rounded-full bg-surface-elevated flex items-center justify-center text-[10px] sm:text-[11px] font-bold text-white">
-              AS
+              C
             </div>
           </button>
 
@@ -127,9 +124,9 @@ export const IconSidebar: React.FC<IconSidebarProps> = ({
             <div className="absolute left-12 bottom-0 w-56 bg-surface-card border border-surface-border rounded-xl shadow-2xl p-1.5 text-xs z-50">
               <div className="px-3 py-2 border-b border-surface-border mb-1">
                 <div className="font-semibold text-white flex items-center gap-1.5">
-                  <span>Alex Smith</span>
+                  <span>Custos</span>
                 </div>
-                <div className="text-[11px] text-neutral-500 truncate">alex@custos.io</div>
+                <div className="text-[11px] text-neutral-500 truncate">Workspace controls</div>
               </div>
 
               <button 
@@ -166,18 +163,6 @@ export const IconSidebar: React.FC<IconSidebarProps> = ({
                 <span>Preferences</span>
               </button>
               
-              <div className="h-[1px] bg-surface-border my-1"></div>
-              
-              <button 
-                onClick={() => {
-                  onShowToast('Signed out of session');
-                  setIsAvatarMenuOpen(false);
-                }} 
-                className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-red-500/10 text-red-400 flex items-center gap-2"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>Sign out</span>
-              </button>
             </div>
           )}
         </div>

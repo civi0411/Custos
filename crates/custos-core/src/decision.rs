@@ -3,8 +3,8 @@
 //! Extracts an immutable DecisionSnapshot from the current state of reality:
 //! Task, Budget, Outbox, and Contract criteria.
 
-use custos_domain::{DecisionSnapshot, DomainError, Task};
 use crate::contracts::storage::{OutboxPort, OutboxStatus};
+use custos_domain::{DecisionSnapshot, DomainError, Task};
 
 pub struct DecisionSnapshotExtractor;
 

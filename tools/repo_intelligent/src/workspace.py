@@ -43,7 +43,7 @@ def resolve_repo_path(repo: str) -> Path:
     repo_key = repo.lower().strip()
     if repo_key not in REPO_MAP:
         raise ValueError(f"Unknown repo '{repo}'. Supported repos: {list(REPO_MAP.keys())}")
-    path = REPO_MAP[repo_key]
+    path = REPO_MAP[repo_key].resolve()
     if not path.exists():
         raise FileNotFoundError(f"Repo path '{path}' does not exist.")
     return path
@@ -61,31 +61,54 @@ def language_of(path: Path | str) -> str:
     return LANGUAGE_EXTENSIONS.get(suffix, "text")
 
 def list_repo_files(repo: str, subpath: str = "", extensions: Optional[List[str]] = None) -> List[str]:
-    base = resolve_repo_path(repo)
-    target_dir = base / subpath.lstrip("/")
-    if not target_dir.exists():
+    """
+    Lists files within the specified repository and subpath.
+    Guarantees no symlink escapes outside the repository root.
+    """
+    base = resolve_repo_path(repo).resolve()
+    clean_subpath = Path(subpath.lstrip("/\\"))
+    target_dir = (base / clean_subpath).resolve()
+    try:
+        target_dir.relative_to(base)
+    except ValueError:
+        raise PermissionError(f"Access denied: subpath '{subpath}' attempts to traverse outside repo root '{base}'.")
+
+    if not target_dir.exists() or not target_dir.is_dir():
         return []
     
     ext_set = set(extensions) if extensions else None
     results = []
-    for root, dirs, files in os.walk(target_dir):
+    for root, dirs, files in os.walk(target_dir, followlinks=False):
         dirs[:] = [d for d in dirs if d not in IGNORED_DIRS and d not in {".git", ".idea", ".vscode"}]
         for f in files:
-            file_path = Path(root) / f
+            file_path = (Path(root) / f).resolve()
+            try:
+                rel_path = file_path.relative_to(base)
+            except ValueError:
+                # Symlink target points outside the base repository; skip for security
+                continue
             if not is_ignored(file_path):
                 if ext_set and file_path.suffix not in ext_set:
                     continue
-                rel_path = file_path.relative_to(base)
-                results.append(str(rel_path))
+                results.append(str(rel_path).replace("\\", "/"))
     return sorted(results)
 
 def read_file_raw(repo: str, path: str) -> Tuple[str, int, int]:
     """
     Returns (content, line_count, size_bytes).
     Reads the complete file without truncation.
+    Strictly canonicalizes paths and validates boundaries to prevent directory
+    traversal and symlink escape attacks.
     """
-    base = resolve_repo_path(repo)
-    target = base / path.lstrip("/")
+    base = resolve_repo_path(repo).resolve()
+    clean_path = Path(path.lstrip("/\\"))
+    target = (base / clean_path).resolve()
+    
+    try:
+        target.relative_to(base)
+    except ValueError:
+        raise PermissionError(f"Access denied: path '{path}' attempts to traverse outside repo root '{base}'.")
+
     if not target.exists() or not target.is_file():
         raise FileNotFoundError(f"File '{path}' does not exist in repo '{repo}'.")
     
@@ -100,9 +123,13 @@ def get_repo_stats(repo: str) -> Dict[str, any]:
     total_lines = 0
     total_size = 0
 
-    base = resolve_repo_path(repo)
+    base = resolve_repo_path(repo).resolve()
     for f in files:
-        full_p = base / f
+        full_p = (base / f).resolve()
+        try:
+            full_p.relative_to(base)
+        except ValueError:
+            continue
         lang = language_of(f)
         lang_counts[lang] = lang_counts.get(lang, 0) + 1
         try:
@@ -124,3 +151,4 @@ def get_repo_stats(repo: str) -> Dict[str, any]:
         "language_files": lang_counts,
         "language_lines": lang_lines,
     }
+

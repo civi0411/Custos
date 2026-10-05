@@ -17,11 +17,13 @@ mod task_lifecycle_and_spans {
 
     #[tokio::test]
     async fn test_task_advancement_spans_and_continuation_packets() {
-        let temp_dir = std::env::temp_dir().join(format!("custos_e2e_life_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("custos_e2e_life_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).unwrap();
         let db_path = temp_dir.join("lifecycle.db");
 
-        let store = Arc::new(SqliteTaskStore::new(db_path.to_str().unwrap()).expect("Must open db"));
+        let store =
+            Arc::new(SqliteTaskStore::new(db_path.to_str().unwrap()).expect("Must open db"));
         let service = TaskService::new(store.clone());
 
         // Create Task
@@ -107,7 +109,8 @@ mod persistence_restart_and_invariants {
 
     #[tokio::test]
     async fn test_persistence_integrity_after_reopen_and_epoch_invariants() {
-        let temp_dir = std::env::temp_dir().join(format!("custos_e2e_reopen_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("custos_e2e_reopen_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_dir).unwrap();
         let db_path = temp_dir.join("reopen.db");
         let db_path_str = db_path.to_str().unwrap();
@@ -187,7 +190,11 @@ mod persistence_restart_and_invariants {
             let store2 = Arc::new(SqliteTaskStore::new(db_path_str).expect("Must re-open db"));
             let service2 = TaskService::new(store2.clone());
 
-            let retrieved = service2.get_task(&task_id).await.unwrap().expect("Task must exist");
+            let retrieved = service2
+                .get_task(&task_id)
+                .await
+                .unwrap()
+                .expect("Task must exist");
             assert_eq!(retrieved.id, task_id);
             assert_eq!(retrieved.status, TaskStatus::Succeeded);
             assert_eq!(retrieved.epoch, 3);
@@ -197,9 +204,16 @@ mod persistence_restart_and_invariants {
             assert_eq!(spans.len(), 1);
             assert_eq!(spans[0].state, SpanState::Started);
 
-            let cont = store2.get_latest_continuation(&task_id).await.unwrap().unwrap();
+            let cont = store2
+                .get_latest_continuation(&task_id)
+                .await
+                .unwrap()
+                .unwrap();
             assert_eq!(cont.task_id, task_id);
-            assert!(cont.verify().is_ok(), "Integrity hash verification must pass");
+            assert!(
+                cont.verify().is_ok(),
+                "Integrity hash verification must pass"
+            );
 
             // Invariant: cannot advance terminal task
             let advance_err = service2

@@ -137,7 +137,11 @@ impl SandboxedProcess {
             let canonical = path
                 .canonicalize()
                 .map_err(|e| SkillError::SandboxViolation(format!("canonicalize failed: {}", e)))?;
-            if canonical.to_str().map(|s| s.contains("..")).unwrap_or(false) {
+            if canonical
+                .to_str()
+                .map(|s| s.contains(".."))
+                .unwrap_or(false)
+            {
                 return Err(SkillError::SandboxViolation(
                     "path traversal detected in working directory".into(),
                 ));
@@ -186,10 +190,7 @@ impl SandboxedProcess {
 
         let duration = Duration::from_millis(self.timeout_ms);
 
-        let result = timeout(duration, async move {
-            cmd.output().await
-        })
-        .await;
+        let result = timeout(duration, async move { cmd.output().await }).await;
 
         let elapsed_ms = start.elapsed().as_millis() as u64;
 

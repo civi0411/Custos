@@ -1,6 +1,6 @@
 import React from 'react';
 import { Plus, Cpu, Laptop, Terminal } from 'lucide-react';
-import { ProviderItem, ClientApiKey } from '../types';
+import { ProviderItem, ClientApiKey } from '@/types';
 
 interface ProvidersViewProps {
   providers: ProviderItem[];

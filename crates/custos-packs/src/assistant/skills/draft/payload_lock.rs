@@ -96,10 +96,7 @@ mod tests {
         let out1 = skill.run(&ctx).await.unwrap();
         let out2 = skill.run(&ctx).await.unwrap();
 
-        assert_eq!(
-            out1.result["payload_digest"],
-            out2.result["payload_digest"]
-        );
+        assert_eq!(out1.result["payload_digest"], out2.result["payload_digest"]);
         assert_eq!(out1.result["locked"], true);
     }
 }

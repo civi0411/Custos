@@ -111,6 +111,23 @@ pub struct CodeNode {
     pub importance_score: f32, // Centrality / priority for LLM context packing
 }
 
+/// Classification of relation confidence and extraction methodology.
+///
+/// Ensures the LLM and Context Compiler distinguish between exact compiler-resolved
+/// links vs heuristic/lexical candidate matches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[derive(Default)]
+pub enum RelationType {
+    /// Discovered via lexical regular expressions or text matching (heuristic candidate).
+    TextMatch,
+    /// Discovered via AST grammar syntax tree parser without full symbol table resolution.
+    #[default]
+    SyntacticRelation,
+    /// Verified by compiler, semantic analyzer, or LSP (authoritative resolution).
+    ResolvedRelation,
+}
+
 /// Semantic relationship edge between two nodes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EdgeKind {
@@ -131,12 +148,18 @@ pub struct GraphEdge {
     pub from: SymbolId,
     pub to: SymbolId,
     pub kind: EdgeKind,
+    #[serde(default)]
+    pub relation_type: RelationType,
     pub label: Option<String>,
 }
 
 /// In-memory, high-performance Code Graph.
-/// Serves as the authoritative semantic index for both LLM context compilation
-/// and long-term agent memory.
+/// Serves as a derived relational index for LLM context compilation
+/// and contextual neighborhood extraction.
+///
+/// NOTE: This graph is a derived, cached representation. The underlying Git
+/// worktree files remain the authoritative source of truth. Edges are classified
+/// with `RelationType` to prevent unwarranted confidence in heuristic links.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CodeGraph {
     pub nodes: HashMap<SymbolId, CodeNode>,
@@ -160,7 +183,7 @@ impl CodeGraph {
         self.nodes.insert(node.id.clone(), node);
     }
 
-    /// Add a directed semantic edge between two nodes.
+    /// Add a directed semantic edge between two nodes with default syntactic confidence.
     pub fn add_edge(
         &mut self,
         from: SymbolId,
@@ -168,10 +191,23 @@ impl CodeGraph {
         kind: EdgeKind,
         label: Option<String>,
     ) {
+        self.add_edge_with_relation(from, to, kind, RelationType::SyntacticRelation, label);
+    }
+
+    /// Add a directed edge with explicit confidence / provenance relation type.
+    pub fn add_edge_with_relation(
+        &mut self,
+        from: SymbolId,
+        to: SymbolId,
+        kind: EdgeKind,
+        relation_type: RelationType,
+        label: Option<String>,
+    ) {
         let edge = GraphEdge {
             from: from.clone(),
             to: to.clone(),
             kind,
+            relation_type,
             label,
         };
         self.outgoing
@@ -319,5 +355,23 @@ mod tests {
         // Test neighborhood extraction
         let neighborhood = graph.extract_neighborhood(&trait_id, 1);
         assert_eq!(neighborhood.len(), 2);
+
+        // Test relation types
+        let outgoing = graph.outgoing.get(&struct_id).unwrap();
+        assert_eq!(outgoing[0].relation_type, RelationType::SyntacticRelation);
+
+        let fn_id = SymbolId::symbol_node("task_kernel", "run");
+        graph.add_edge_with_relation(
+            struct_id.clone(),
+            fn_id.clone(),
+            EdgeKind::Calls,
+            RelationType::ResolvedRelation,
+            Some("compiler_verified".into()),
+        );
+        let updated_outgoing = graph.outgoing.get(&struct_id).unwrap();
+        assert_eq!(
+            updated_outgoing[1].relation_type,
+            RelationType::ResolvedRelation
+        );
     }
 }

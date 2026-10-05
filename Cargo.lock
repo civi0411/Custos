@@ -1475,22 +1475,29 @@ dependencies = [
 name = "custos-app-cli"
 version = "0.1.0"
 dependencies = [
+ "custos-core",
+ "custos-daemon",
+ "custos-domain",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "tokio",
 ]
 
 [[package]]
 name = "custos-app-desktop"
 version = "0.1.0"
 dependencies = [
+ "custos-daemon",
+ "custos-domain",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "tokio",
 ]
 
 [[package]]

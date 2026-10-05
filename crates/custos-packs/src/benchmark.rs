@@ -48,7 +48,8 @@ impl OiBenchmarkRunner {
 
         let baseline_tokens = 5_000;
         let oi_tokens = explain.estimated_tokens;
-        let token_delta_pct = ((baseline_tokens as f32 - oi_tokens as f32) / baseline_tokens as f32) * 100.0;
+        let token_delta_pct =
+            ((baseline_tokens as f32 - oi_tokens as f32) / baseline_tokens as f32) * 100.0;
 
         let (oi_parallelism, assurance) = match explain.chosen_topology {
             ExecutionTopology::T4Worktree => (

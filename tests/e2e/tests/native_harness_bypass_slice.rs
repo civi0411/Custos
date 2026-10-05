@@ -17,7 +17,8 @@ mod harness_profile_and_gate4_invariants {
 
     #[tokio::test]
     async fn test_honest_profile_and_fraudulent_claim_rejection() {
-        let temp_ws = std::env::temp_dir().join(format!("custos_harness_prof_{}", uuid::Uuid::new_v4()));
+        let temp_ws =
+            std::env::temp_dir().join(format!("custos_harness_prof_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_ws).unwrap();
         let adapter = ClaudeCodeHarnessAdapter::new(&temp_ws).with_mock_mode();
         let profile = adapter.profile();
@@ -44,7 +45,9 @@ mod harness_profile_and_gate4_invariants {
 
         let violation_err = profile
             .validate_intent_assurance(&fraudulent_intent)
-            .expect_err("Fraudulent claim of custos-mediated by unmediated harness must be rejected");
+            .expect_err(
+                "Fraudulent claim of custos-mediated by unmediated harness must be rejected",
+            );
 
         assert!(
             violation_err.to_string().contains("Gate 4 Violation"),
@@ -64,7 +67,8 @@ mod native_bypass_effect_tracking {
 
     #[tokio::test]
     async fn test_observed_intents_labeled_provider_governed() {
-        let temp_ws = std::env::temp_dir().join(format!("custos_harness_track_{}", uuid::Uuid::new_v4()));
+        let temp_ws =
+            std::env::temp_dir().join(format!("custos_harness_track_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_ws).unwrap();
         let adapter = ClaudeCodeHarnessAdapter::new(&temp_ws).with_mock_mode();
         let profile = adapter.profile();
@@ -83,7 +87,8 @@ Process finished with code 0.
         let mut worker_run = WorkerRun::new("task_native_001".into(), "claude-code".into(), 1);
         worker_run.run_id = Some("run_gate4_001".into());
 
-        let context_pack = ContextPack::new("pack_001".into(), vec![], 0, "sha256:test_digest".into());
+        let context_pack =
+            ContextPack::new("pack_001".into(), vec![], 0, "sha256:test_digest".into());
         let observed_intents = adapter
             .execute_turn(&worker_run, &context_pack)
             .await
@@ -96,11 +101,16 @@ Process finished with code 0.
             assert_eq!(intent.parameters["assurance"], "provider-governed");
             assert_eq!(intent.parameters["provider_governed"], true);
             assert_eq!(intent.task_id.as_deref(), Some("task_native_001"));
-            profile.validate_intent_assurance(intent).expect("must pass validation");
+            profile
+                .validate_intent_assurance(intent)
+                .expect("must pass validation");
         }
 
         assert_eq!(observed_intents[0].name, "shell_exec");
-        assert_eq!(observed_intents[1].parameters["command"], "cargo test --lib");
+        assert_eq!(
+            observed_intents[1].parameters["command"],
+            "cargo test --lib"
+        );
         assert_eq!(observed_intents[2].target, "src/solution.rs");
         assert_eq!(observed_intents[3].target, "src/domain.rs");
         assert_eq!(observed_intents[4].target, "docs/plan.md");
@@ -117,16 +127,23 @@ mod harness_lifecycle_steer_and_cancel {
 
     #[tokio::test]
     async fn test_lifecycle_steering_and_cancellation() {
-        let temp_ws = std::env::temp_dir().join(format!("custos_harness_life_{}", uuid::Uuid::new_v4()));
+        let temp_ws =
+            std::env::temp_dir().join(format!("custos_harness_life_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_ws).unwrap();
         let adapter = ClaudeCodeHarnessAdapter::new(&temp_ws).with_mock_mode();
 
         adapter
-            .steer_run("run_gate4_002", "Focus on domain errors and avoid git mutations")
+            .steer_run(
+                "run_gate4_002",
+                "Focus on domain errors and avoid git mutations",
+            )
             .await
             .expect("steering succeeds");
 
-        adapter.cancel_run("run_gate4_002").await.expect("cancel_run succeeds cleanly");
+        adapter
+            .cancel_run("run_gate4_002")
+            .await
+            .expect("cancel_run succeeds cleanly");
 
         let _ = std::fs::remove_dir_all(&temp_ws);
     }

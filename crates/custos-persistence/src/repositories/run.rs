@@ -56,7 +56,7 @@ impl RunRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let run = stmt
-            .query_row(params![run_id], |row| Self::map_run(row))
+            .query_row(params![run_id], Self::map_run)
             .optional()
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
@@ -73,7 +73,7 @@ impl RunRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let rows = stmt
-            .query_map(params![task_id], |row| Self::map_run(row))
+            .query_map(params![task_id], Self::map_run)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let mut runs = Vec::new();
@@ -128,7 +128,7 @@ impl RunRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let wrun = stmt
-            .query_row(params![wrun_id], |row| Self::map_worker_run(row))
+            .query_row(params![wrun_id], Self::map_worker_run)
             .optional()
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
@@ -145,7 +145,7 @@ impl RunRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let rows = stmt
-            .query_map(params![task_id], |row| Self::map_worker_run(row))
+            .query_map(params![task_id], Self::map_worker_run)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let mut wruns = Vec::new();
@@ -165,7 +165,7 @@ impl RunRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let rows = stmt
-            .query_map(params![run_id], |row| Self::map_worker_run(row))
+            .query_map(params![run_id], Self::map_worker_run)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let mut wruns = Vec::new();

@@ -6,9 +6,9 @@
 //! Enforces Gate 4 (Native Bypass Assurance): External/native harnesses that run their
 //! own tools cannot fraudulently claim `custos-mediated` assurance.
 
-use std::path::Path;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 
 use custos_domain::{ActionIntent, Assurance, ContextPack, DomainError, WorkerRun};
 

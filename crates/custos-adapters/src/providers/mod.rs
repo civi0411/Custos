@@ -3,6 +3,7 @@ pub mod claude;
 pub mod codex;
 pub mod fake;
 pub mod local_model;
+#[allow(clippy::module_inception)]
 pub mod providers;
 
 pub use antigravity::*;

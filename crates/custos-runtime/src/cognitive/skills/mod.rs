@@ -269,13 +269,10 @@ impl SkillRegistry {
 
     /// Retrieve permitted skill IDs for a routing decision.
     /// Returns None if no explicit mapping is set (caller should use a safe default).
-    pub fn permitted_skills_for(
-        &self,
-        tier: &str,
-        pack_id: Option<&str>,
-    ) -> Option<&Vec<String>> {
+    pub fn permitted_skills_for(&self, tier: &str, pack_id: Option<&str>) -> Option<&Vec<String>> {
         let pack = pack_id.unwrap_or("_any");
-        self.tier_permissions.get(&(tier.to_string(), pack.to_string()))
+        self.tier_permissions
+            .get(&(tier.to_string(), pack.to_string()))
     }
 }
 
@@ -297,10 +294,7 @@ mod tests {
             SkillCapabilityProfile::read_only(1_000)
         }
         async fn run(&self, ctx: &SkillContext) -> Result<SkillOutput, SkillError> {
-            Ok(SkillOutput::clean(
-                self.skill_id(),
-                ctx.args.clone(),
-            ))
+            Ok(SkillOutput::clean(self.skill_id(), ctx.args.clone()))
         }
     }
 

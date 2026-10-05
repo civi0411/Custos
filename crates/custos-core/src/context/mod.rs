@@ -62,7 +62,11 @@ impl ContextCompiler {
                     }
                 }
                 Err(err) => {
-                    tracing::warn!("Scope resolution rejected candidate path '{}': {}", rel_path, err);
+                    tracing::warn!(
+                        "Scope resolution rejected candidate path '{}': {}",
+                        rel_path,
+                        err
+                    );
                     // Strictly skip out-of-scope files
                 }
             }
@@ -100,7 +104,10 @@ impl ContextCompiler {
 
         // Step 4: Taint Tagging (Gắn nhãn Provenance và Tainted nếu nguồn chưa tin cậy)
         for item in &mut raw_items {
-            let is_untrusted = req.untrusted_sources.iter().any(|u| item.source.contains(u));
+            let is_untrusted = req
+                .untrusted_sources
+                .iter()
+                .any(|u| item.source.contains(u));
             item.is_tainted = is_untrusted;
             let prov_hash = format!("sha256:{}", digest(item.content.as_bytes()));
             item.provenance_hash = Some(prov_hash);
@@ -153,7 +160,9 @@ impl ContextCompiler {
         let mut matches = 0;
         let content_lower = content.to_lowercase();
         for word in &goal_words {
-            let clean_word = word.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase();
+            let clean_word = word
+                .trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase();
             if !clean_word.is_empty() && content_lower.contains(&clean_word) {
                 matches += 1;
             }
@@ -208,7 +217,11 @@ mod tests {
         assert_eq!(pack.items.len(), 2);
 
         // Step 4: Taint tagging on secret.rs
-        let secret_item = pack.items.iter().find(|it| it.source == "secret.rs").unwrap();
+        let secret_item = pack
+            .items
+            .iter()
+            .find(|it| it.source == "secret.rs")
+            .unwrap();
         assert!(secret_item.is_tainted);
 
         // Step 7: Secret redaction

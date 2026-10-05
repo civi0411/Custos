@@ -92,9 +92,7 @@ impl S1Judge {
         }
 
         // If candidate is null or empty object, confidence is minimal
-        if candidate.is_null()
-            || candidate.as_object().map(|m| m.is_empty()).unwrap_or(false)
-        {
+        if candidate.is_null() || candidate.as_object().map(|m| m.is_empty()).unwrap_or(false) {
             return 0.10;
         }
 
@@ -130,7 +128,8 @@ impl JudgmentPort for S1Judge {
         criteria: &[String],
         payload: &str,
     ) -> Result<f32, DomainError> {
-        let val: serde_json::Value = serde_json::from_str(payload).unwrap_or(serde_json::Value::Null);
+        let val: serde_json::Value =
+            serde_json::from_str(payload).unwrap_or(serde_json::Value::Null);
         let conf = self.compute_confidence(&val, criteria.len());
         Ok(conf as f32)
     }
@@ -185,7 +184,10 @@ impl JudgmentPort for S1Judge {
         let rationale = if passed {
             "S1 Verified: all criteria satisfied with calibrated confidence".to_string()
         } else {
-            format!("S1 Rejected: {} criteria violations detected", violations.len())
+            format!(
+                "S1 Rejected: {} criteria violations detected",
+                violations.len()
+            )
         };
 
         Ok(JudgmentResult {
@@ -205,8 +207,8 @@ impl JudgmentPort for S1Judge {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::calibration::ABSTAIN_CONFIDENCE_THRESHOLD;
+    use super::*;
     use serde_json::json;
 
     #[tokio::test]

@@ -4,7 +4,9 @@
 //! conflicts prior to execution, and merges clean diffs into base workspace via Integrator.
 
 use crate::workflow::lease::{WorkspaceLease, WorkspaceLeaseManager};
-use custos_core::oi::join_policy::{JoinEvaluation, JoinEvaluator, JoinPolicy, WriteSetConflictChecker};
+use custos_core::oi::join_policy::{
+    JoinEvaluation, JoinEvaluator, JoinPolicy, WriteSetConflictChecker,
+};
 use custos_domain::oi::{NodePlacement, WorkerResult};
 use custos_domain::workflow::RevisionNode;
 use custos_domain::DomainError;
@@ -112,9 +114,10 @@ mod tests {
         let r1 = WorkerResult::success("branch_a", "Branch A diff ready");
         let r2 = WorkerResult::success("branch_b", "Branch B diff ready");
 
-        let join_res = T4WorktreeCoordinator::integrate_branches(&leases, &lease_manager, &[r1, r2])
-            .await
-            .unwrap();
+        let join_res =
+            T4WorktreeCoordinator::integrate_branches(&leases, &lease_manager, &[r1, r2])
+                .await
+                .unwrap();
 
         assert!(matches!(join_res, JoinEvaluation::Approved { .. }));
     }

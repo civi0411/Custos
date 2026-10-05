@@ -31,7 +31,11 @@ pub struct JudgmentResult {
 pub trait JudgmentPort: Send + Sync {
     /// Evaluates execution evidence or assertions against contract criteria.
     /// Returns calibrated confidence score [0.0, 1.0].
-    async fn evaluate_evidence(&self, criteria: &[String], payload: &str) -> Result<f32, DomainError>;
+    async fn evaluate_evidence(
+        &self,
+        criteria: &[String],
+        payload: &str,
+    ) -> Result<f32, DomainError>;
 
     /// Evaluates a full JudgmentRequest and produces a calibrated JudgmentResult.
     async fn judge(&self, request: JudgmentRequest) -> Result<JudgmentResult, DomainError>;

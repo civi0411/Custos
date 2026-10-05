@@ -31,7 +31,9 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
 
     conn.execute_batch(include_str!("../migrations/0008_task_events.sql"))?;
     conn.execute_batch(include_str!("../migrations/0009_outbox_and_effects.sql"))?;
-    conn.execute_batch(include_str!("../migrations/0010_harden_outbox_and_effects.sql"))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0010_harden_outbox_and_effects.sql"
+    ))?;
     conn.execute_batch(include_str!("../migrations/0011_runs_and_worker_runs.sql"))?;
     conn.execute_batch(include_str!("../migrations/0012_decision_records.sql"))?;
     conn.execute_batch(include_str!("../migrations/0013_workflow_revisions.sql"))?;

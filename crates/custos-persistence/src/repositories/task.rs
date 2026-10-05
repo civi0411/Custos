@@ -148,9 +148,7 @@ impl TaskRepository {
                         event.sequence()
                     )));
                 }
-                let imported = TaskEvent::SnapshotImported(TaskSnapshotImported {
-                    task: previous,
-                });
+                let imported = TaskEvent::SnapshotImported(TaskSnapshotImported { task: previous });
                 let imported_sequence = i64::try_from(imported.sequence()).map_err(|_| {
                     DomainError::InvariantViolation(
                         "imported task sequence exceeds SQLite integer range".into(),

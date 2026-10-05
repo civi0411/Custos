@@ -83,10 +83,12 @@ impl PermitIssuer {
         expected_digest: &str,
     ) -> Result<Permit, DomainError> {
         let mut guard = self.permits.write().expect("lock poisoned");
-        let permit = guard.get_mut(permit_id).ok_or_else(|| DomainError::NotFound {
-            kind: "Permit".into(),
-            id: permit_id.into(),
-        })?;
+        let permit = guard
+            .get_mut(permit_id)
+            .ok_or_else(|| DomainError::NotFound {
+                kind: "Permit".into(),
+                id: permit_id.into(),
+            })?;
 
         permit.consume(expected_digest)?;
         Ok(permit.clone())

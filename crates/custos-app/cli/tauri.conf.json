@@ -4,17 +4,19 @@
   "version": "0.1.0",
   "identifier": "com.custos.cli",
   "build": {
-    "beforeDevCommand": "npm --prefix ../../ui/cli run dev",
+    "beforeDevCommand": "npm --prefix ../../../ui/desktop run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm --prefix ../../ui/cli run build",
-    "frontendDist": "../../../ui/cli/dist"
+    "beforeBuildCommand": "npm --prefix ../../../ui/desktop run build",
+    "frontendDist": "../../../ui/desktop/dist"
   },
   "app": {
     "windows": [
       {
-        "title": "Custos CLI — Guardian of Agentic Work",
-        "width": 1200,
-        "height": 800
+        "title": "Custos SADE — Chat, Code & Research Studio",
+        "width": 1360,
+        "height": 860,
+        "minWidth": 960,
+        "minHeight": 640
       }
     ],
     "security": {

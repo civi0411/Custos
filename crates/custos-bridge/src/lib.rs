@@ -15,9 +15,7 @@ pub use service::BridgeService;
 mod tests {
     use super::*;
     use custos_core::kernel::{TaskService, TaskStore};
-    use custos_domain::{
-        ContractEvidence, EvidenceKind, SessionMode, SessionStatus, TaskContract,
-    };
+    use custos_domain::{ContractEvidence, EvidenceKind, SessionMode, SessionStatus, TaskContract};
     use custos_persistence::SqliteTaskStore;
     use custos_runtime::session::SessionManager;
     use std::sync::Arc;

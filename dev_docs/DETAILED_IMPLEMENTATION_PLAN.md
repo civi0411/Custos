@@ -1,5 +1,9 @@
 # CUSTOS DETAILED IMPLEMENTATION PLAN (GATE-DRIVEN)
 
+**Concrete refactor packets:** [Current code audit and R0–R10](../docs/development/workspace-restructuring-plan.md#6-audit-code-và-quyết-định-giữchuyểnhợp-nhất) now specify physical migrations and correct older package/CLI assumptions. Retain `AgentRuntimePort` in core contracts for this migration; do not add a duplicate trait in provider as an unconditional action from the older PR outline below. Client/API wire code moves toward SDK; composition remains daemon.
+
+**Product restructuring alignment:** Use the [Agent Workspace migration plan](../docs/development/workspace-restructuring-plan.md) for current-to-target repository/UI mappings, and the [workspace specification](../docs/architecture/agent-workspace-and-ui.md) for user behavior. The execution-spine packets below remain backend dependencies; UI read-only work can proceed alongside them. Paths/signatures below must be checked against current code before implementation, not applied as unconditional renames. No ADE shell/UI crate is required.
+
 > **Mã tài liệu:** DEV-PLAN-03 (Execution Spine First)  
 > **Trạng thái:** Sẵn sàng thực thi (Actionable)  
 > **Nguyên tắc cốt lõi:** Không xây "Siêu Agent OI" từ đầu. Bắt buộc hoàn thiện đường trục thực thi (Execution Spine) có thể quan sát, phục hồi được sau crash, sau đó mới gắn OI vào để ra quyết định dựa trên dữ liệu thật.

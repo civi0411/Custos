@@ -6,6 +6,7 @@
 
 pub mod budget;
 pub mod dispatch;
+#[allow(clippy::module_inception)]
 pub mod gateway;
 pub mod observability;
 pub mod policy;

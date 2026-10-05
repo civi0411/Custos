@@ -114,8 +114,8 @@ impl custos_core::contracts::sandbox::SandboxPort for McpCapabilityAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::{Action, Permit, RiskClass, RiskLevel};
     use custos_core::contracts::sandbox::SandboxPort;
+    use custos_domain::{Action, Permit, RiskClass, RiskLevel};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     struct MockTool {

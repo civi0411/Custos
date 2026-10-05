@@ -17,7 +17,10 @@ impl AnchorRetriever {
 
         let query_terms: Vec<String> = query
             .split_whitespace()
-            .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).to_lowercase())
+            .map(|w| {
+                w.trim_matches(|c: char| !c.is_alphanumeric())
+                    .to_lowercase()
+            })
             .filter(|w| w.len() >= 3)
             .collect();
 
@@ -40,7 +43,12 @@ impl AnchorRetriever {
 
         if matched_indices.is_empty() {
             // If no exact term matched, return first 40 lines as preview
-            return lines.iter().take(40).cloned().collect::<Vec<_>>().join("\n");
+            return lines
+                .iter()
+                .take(40)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join("\n");
         }
 
         // Render matched lines with continuity breaks

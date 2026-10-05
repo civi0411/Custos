@@ -39,7 +39,8 @@ pub trait RunPort: Send + Sync {
     async fn list_runs_for_task(&self, task_id: &str) -> Result<Vec<Run>, DomainError>;
     async fn save_worker_run(&self, wrun: &WorkerRun) -> Result<(), DomainError>;
     async fn get_worker_run(&self, wrun_id: &str) -> Result<Option<WorkerRun>, DomainError>;
-    async fn list_worker_runs_for_task(&self, task_id: &str) -> Result<Vec<WorkerRun>, DomainError>;
+    async fn list_worker_runs_for_task(&self, task_id: &str)
+        -> Result<Vec<WorkerRun>, DomainError>;
     async fn list_worker_runs_for_run(&self, run_id: &str) -> Result<Vec<WorkerRun>, DomainError>;
 }
 
@@ -48,7 +49,10 @@ pub trait RunPort: Send + Sync {
 pub trait DecisionPort: Send + Sync {
     async fn record_decision(&self, record: &DecisionRecord) -> Result<(), DomainError>;
     async fn get_decision(&self, id: &str) -> Result<Option<DecisionRecord>, DomainError>;
-    async fn list_decisions_for_task(&self, task_id: &str) -> Result<Vec<DecisionRecord>, DomainError>;
+    async fn list_decisions_for_task(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<DecisionRecord>, DomainError>;
 }
 
 /// Persistence Port for Workflow Revisions and Node Placements (RFC 004).
@@ -59,8 +63,14 @@ pub trait WorkflowRevisionPort: Send + Sync {
         revision: &WorkflowRevision,
         placements: &[NodePlacement],
     ) -> Result<(), DomainError>;
-    async fn get_revision(&self, revision_id: &str) -> Result<Option<WorkflowRevision>, DomainError>;
-    async fn list_revisions_for_task(&self, task_id: &str) -> Result<Vec<WorkflowRevision>, DomainError>;
+    async fn get_revision(
+        &self,
+        revision_id: &str,
+    ) -> Result<Option<WorkflowRevision>, DomainError>;
+    async fn list_revisions_for_task(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<WorkflowRevision>, DomainError>;
     async fn get_placements_for_revision(
         &self,
         revision_id: &str,
@@ -128,7 +138,8 @@ pub trait OutboxPort: Send + Sync {
 /// Durable effect ledger for recording and looking up effect attempts (Gate 3).
 #[async_trait]
 pub trait EffectLedgerPort: Send + Sync {
-    async fn record_effect(&self, effect: &custos_domain::EffectAttempt) -> Result<(), DomainError>;
+    async fn record_effect(&self, effect: &custos_domain::EffectAttempt)
+        -> Result<(), DomainError>;
     async fn update_effect_status(
         &self,
         id: &str,
@@ -141,4 +152,3 @@ pub trait EffectLedgerPort: Send + Sync {
     ) -> Result<Option<custos_domain::EffectAttempt>, DomainError>;
     async fn reconcile_on_startup(&self) -> Result<usize, DomainError>;
 }
-

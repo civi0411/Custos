@@ -1,5 +1,17 @@
 # Custos Developer Hub & Getting Started
 
+Để refactor đúng từng crate, đọc [blueprint §22](workspace-restructuring-plan.md#22-crate-blueprint-và-chuyển-lõi-orca-theo-trách-nhiệm): actual/target dependencies, module addresses, OrCa core decomposition, atomic storage operations, resource/lease gap và skill/model/native integration.
+
+Để giao triển khai kết hợp desktop/headless, bắt đầu từ [superplan §21](workspace-restructuring-plan.md#21-superplan-kết-hợp-custos-và-orca-cho-desktop-và-headless): reuse decisions, source findings, module map, packets đầu và gates. Mobile nằm ngoài scope; ba pack cùng phát triển trên foundation OF/R/P hiện có.
+
+**Chiến dịch hiện tại:** [SADE refactor plan](workspace-restructuring-plan.md#11-quyết-định-khóa-cho-chiến-dịch-sade) — source gaps → live worker/cost ledger → native resources → Coding/Research/Assistant → coordination → measured optimization. [OrCa foundation §20](workspace-restructuring-plan.md#20-chương-trình-hấp-thụ-orca-vào-nền-custos) map toàn bộ capability families sang Custos OF0–OF7; đây là functional assimilation, không nhúng OrCa runtime. [Domain design](../architecture/domain-packs-and-workflows.md) và [evaluation contract](../../evals/oi/README.md) đi cùng; không đợi OI hoàn thiện mới đo economics.
+
+For the concrete source refactor, read [audit and R0–R10 packets](workspace-restructuring-plan.md#6-audit-code-và-quyết-định-giữchuyểnhợp-nhất): exact current paths, keep/move/consolidate decisions, target imports, compatibility and verification gates. Package names come from Cargo metadata; folder names alone do not establish active runtime behavior.
+
+The [OrCa source study](orca-source-study.md) pins a local upstream commit and separates what OrCa already implements from the Custos SADE contracts and migration gates. Read it before designing worktree, native agent launch, worker supervision or multi-run UI.
+
+Start product restructuring with the [Agent Workspace migration plan](workspace-restructuring-plan.md), [workspace/UI specification](../architecture/agent-workspace-and-ui.md), and [capability/skill ownership](../architecture/capability-catalog-and-skills.md). These define current-to-target mappings and measurable gates; they do not claim source files have already moved. Build the read-only workspace UI alongside the execution spine, then enable mutation/domain features only after their gates pass.
+
 > **Classification:** Normative Developer Onboarding & Engineering Hub  
 > **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md).  
 > **Repository Documentation Hub:** See [Custos Documentation Overview](../README.md).
@@ -42,6 +54,7 @@ The development documentation includes focused engineering guides and an upstrea
 | **[Engineering Standards & Observability](engineering-standards.md)** | 5 open source adoption modes, dependency whitelist, license compliance (`cargo-deny`), OpenTelemetry tracing, and pre-log secret redaction. | Platform engineers, DevOps, security auditors |
 | **[Delivery Blueprint & Release Gates](delivery-blueprint.md)** | Vertical slice engineering methodology (observe $\rightarrow$ choose $\rightarrow$ work $\rightarrow$ authorize $\rightarrow$ verify $\rightarrow$ continue), release gates (G0–G5), and PR delivery sequence (PR-00 to PR-11). | Release managers, team leads, system architects |
 | **[Upstream Source Inventory](upstream-source-map.md)** | Goose-derived source locations, runtime status, provenance gaps, and attribution audit fields. | Integrators and release reviewers |
+| **[OrCa Source Study](orca-source-study.md)** | Pinned OrCa source evidence, actual runtime/worktree/orchestration/agent/UI boundaries, limits of Nexus inventory, and Custos implementation gates. | Runtime, UI and architecture implementers |
 
 ---
 

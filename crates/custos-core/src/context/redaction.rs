@@ -144,7 +144,8 @@ mod tests {
 
     #[test]
     fn test_redact_sk_keys() {
-        let input = "export OPENAI_API_KEY=sk-ant-api03-abcdef1234567890abcdef1234567890\nkeep going";
+        let input =
+            "export OPENAI_API_KEY=sk-ant-api03-abcdef1234567890abcdef1234567890\nkeep going";
         let redacted = SecretRedactor::redact(input);
         assert!(!redacted.contains("sk-ant-api03"));
         assert!(redacted.contains("[REDACTED_API_KEY]"));

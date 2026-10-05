@@ -47,12 +47,12 @@ mod t3_read_fan_out_topology {
 // Theme 2: T4 Worktree Integrator Topology (WorkspaceLease Isolation)
 // ─────────────────────────────────────────────────────────────────────────────
 mod t4_worktree_integrator_topology {
-    use std::fs;
     use custos_core::oi::compiler::PlanCompiler;
     use custos_core::oi::join_policy::JoinEvaluation;
     use custos_domain::oi::{ExecutionTopology, StrategyProposal, WorkerResult};
     use custos_runtime::oi::topologies::T4WorktreeCoordinator;
     use custos_runtime::workflow::lease::WorkspaceLeaseManager;
+    use std::fs;
 
     #[tokio::test]
     async fn test_workspace_lease_isolation_and_clean_merge() {
@@ -65,7 +65,9 @@ mod t4_worktree_integrator_topology {
 
         let (revision, placements) = PlanCompiler::compile_with_placements(&proposal, 1);
         assert_eq!(revision.nodes.len(), 3);
-        assert!(revision.obligations.contains(&"worktree_clean_merge".into()));
+        assert!(revision
+            .obligations
+            .contains(&"worktree_clean_merge".into()));
 
         let leases = T4WorktreeCoordinator::prepare_and_verify_leases(
             &revision.nodes,
@@ -100,7 +102,10 @@ mod t4_worktree_integrator_topology {
 
         let base_a = temp_workspace.path().join("src").join("feature_a.rs");
         let base_b = temp_workspace.path().join("tests").join("test_b.rs");
-        assert!(base_a.exists(), "Feature A must be merged into base workspace");
+        assert!(
+            base_a.exists(),
+            "Feature A must be merged into base workspace"
+        );
         assert!(base_b.exists(), "Test B must be merged into base workspace");
     }
 }
@@ -136,11 +141,7 @@ mod write_set_isolation_invariants {
             required_capabilities: vec![],
         };
 
-        let check = WriteSetConflictChecker::check_conflicts(
-            &[node_alpha, node_beta],
-            &[],
-            None,
-        );
+        let check = WriteSetConflictChecker::check_conflicts(&[node_alpha, node_beta], &[], None);
 
         assert!(
             check.is_err(),
@@ -164,7 +165,10 @@ mod t6_repair_loop_topology {
         let eval_round1 = T6RepairLoopCoordinator::evaluate_iteration(3, 1, &eval_fail);
 
         match eval_round1 {
-            JoinEvaluation::RetryRequired { next_iteration, feedback } => {
+            JoinEvaluation::RetryRequired {
+                next_iteration,
+                feedback,
+            } => {
                 assert_eq!(next_iteration, 2);
                 assert!(feedback.contains("assertion failed"));
             }
@@ -172,7 +176,8 @@ mod t6_repair_loop_topology {
         }
 
         // 2. Fix applied and evaluator succeeds
-        let eval_success = WorkerResult::success("eval_step", "All test assertions passed successfully");
+        let eval_success =
+            WorkerResult::success("eval_step", "All test assertions passed successfully");
         let eval_round2 = T6RepairLoopCoordinator::evaluate_iteration(3, 2, &eval_success);
 
         assert!(matches!(eval_round2, JoinEvaluation::Approved { .. }));

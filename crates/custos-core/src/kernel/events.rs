@@ -64,6 +64,7 @@ pub struct TaskSnapshotImported {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "event_type", rename_all = "snake_case")]
+#[allow(clippy::large_enum_variant)]
 pub enum TaskEvent {
     Created(TaskCreated),
     Advanced(TaskAdvanced),

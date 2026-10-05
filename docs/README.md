@@ -1,29 +1,27 @@
-# Custos Documentation
+# Tài liệu Custos
 
-> **Notice:** The definitive architecture and specification of this repository have been fully consolidated into a Single Source of Truth (SSOT).
+Custos là local-first Agent Workspace cho Coding, Research và Assistant. Bộ docs phân biệt **kiến trúc đích**, **cách xây**, và **hiện trạng có bằng chứng**; tài liệu không thay kết quả build/test.
 
-## 1. Canonical Architecture
-All architectural boundaries, design decisions, invariants, and component specifications are documented exclusively in **[Custos.md](../Custos.md)**. 
-- Please read `Custos.md` first before reading any historical files in this directory.
+Định vị sản phẩm đầy đủ: **Supervised Agent Development Environment (SADE)**. [SADE design/supervision](architecture/sade-design-and-supervision.md) giải thích bản sắc, research rationale và economics; Workspace là bề mặt tương tác của cùng sản phẩm.
 
-## 2. Agent Behavior & Team Policy
-All AI agents, human collaborators, and bots must strictly adhere to the rules outlined in **[AGENTS.md](../AGENTS.md)**.
+## Bắt đầu đọc
 
-## 3. Internationalization (i18n)
-Localized documentation and repository overviews are available in **[i18n/README.md](i18n/README.md)** (English, Tiếng Việt, Deutsch, 简体中文).
+1. [Custos.md](../Custos.md): product, invariants, flows và subsystem decisions.
+2. [Workspace và UI](architecture/agent-workspace-and-ui.md): experience ba miền, panes, worktrees, comparison, approvals và reconnect.
+3. [Capabilities và skills](architecture/capability-catalog-and-skills.md): nơi đặt tính năng và dùng với model API/native agents.
+4. [Kế hoạch tái cấu trúc SADE](development/workspace-restructuring-plan.md): source audit, cost core từ attempt đầu, module contracts, W0–W5, migration và acceptance gates.
+5. [Catalog vật lý](development/codebase-architecture.md): tìm file hiện có; ghi chú gắn SHA là audit tại thời điểm đó.
 
-## 4. Definitive Documentation Structure
-The documentation is strictly organized into 5 core subdirectories to maintain cleanliness and prevent overlap with `Custos.md`:
+## Theo chủ đề
 
-- **`i18n/`**: Localized README translations (English, Tiếng Việt, Deutsch, 简体中文).
-- **`assets/`**: Images, diagrams, and visual resources.
-- **`architecture/`**: System foundations, trust zones, and 8 deep-dive architectural pillars supporting Custos.md.
-- **`reference/`**: Dictionaries, API schemas, error codes, and naming conventions for quick lookup.
-- **`development/`**: Developer guides, codebase topology, testing standards, supply chain policy, and delivery blueprints.
+- [Ba domain pack](architecture/domain-packs-and-workflows.md): jobs/artifacts/verification, Repo Intelligence, research AI/Data experiments và assistant effects/automation.
+- [OI economics evaluation](../evals/oi/README.md): baseline, ablations, report fields và negative cases; design khác benchmark result.
 
-## Authority Order
-When documents disagree, use this strict order:
-1. Current source code and manifests.
-2. `AGENTS.md` (for repository policy and boundaries).
-3. `Custos.md` (for definitive architecture and target state).
-4. The specific deep-dive documents in `architecture/`, `reference/`, or `development/`.
+- [Architecture](architecture/README.md): Task/kernel, authority/effects, evidence, context/memory, OI và protocol boundaries.
+- [Development](development/README.md): code organization, delivery, testing và upstream reuse.
+- [Reference](reference/README.md): vocabulary, naming, schema mapping và invariants.
+- [Dev docs](../dev_docs/README.md): execution packets/RFC và phân công; không thay master decisions.
+
+Master giữ WHY/WHAT; topic docs giữ HOW; catalog giữ WHERE. AGENTS.md là quy tắc làm việc trên repo, không phải runtime authorization. Code/tests mô tả reality, không tự biến implementation violation thành target policy. Thay quyết định thì sửa đúng topic và master/catalog liên quan, không tạo thêm một bản “final” cạnh tranh.
+
+Research/vendor sources chỉ chứng minh kỹ thuật hoặc feature theo version của họ. Hiệu năng, safety và savings của Custos phải đo riêng. Demo/mock/stub phải ghi rõ; unsupported/unknown là trạng thái hợp lệ.

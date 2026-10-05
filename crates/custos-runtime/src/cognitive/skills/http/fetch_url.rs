@@ -136,7 +136,9 @@ mod tests {
     fn ssrf_blocks_localhost_and_metadata() {
         assert!(FetchUrlSkill::validate_ssrf_safety("http://localhost:8080").is_err());
         assert!(FetchUrlSkill::validate_ssrf_safety("http://127.0.0.1/admin").is_err());
-        assert!(FetchUrlSkill::validate_ssrf_safety("http://169.254.169.254/latest/meta-data").is_err());
+        assert!(
+            FetchUrlSkill::validate_ssrf_safety("http://169.254.169.254/latest/meta-data").is_err()
+        );
         assert!(FetchUrlSkill::validate_ssrf_safety("ftp://example.com").is_err());
         assert!(FetchUrlSkill::validate_ssrf_safety("https://api.crossref.org/works").is_ok());
     }

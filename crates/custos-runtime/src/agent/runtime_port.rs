@@ -8,11 +8,11 @@
 //! `ExecutionPermit`s from the Security Kernel (`custos-core`).
 
 use async_trait::async_trait;
-use custos_domain::{
-    Action, ActionIntent, ActionLifecycleState, ContextPack, DomainError, RiskLevel, WorkerRun,
-};
 use custos_core::contracts::harness::{
     AgentRuntimePort, CostVisibility, HarnessProfile, ToolMediationLevel, WorktreeOwnership,
+};
+use custos_domain::{
+    Action, ActionIntent, ActionLifecycleState, ContextPack, DomainError, RiskLevel, WorkerRun,
 };
 use custos_provider::{ModelProvider, ProviderRequest};
 use std::sync::Arc;
@@ -93,7 +93,10 @@ impl AgentRuntimePort for GovernedAgentRuntime {
         ));
 
         for item in &context_pack.items {
-            prompt_content.push_str(&format!("--- Source: {} ---\n{}\n\n", item.source, item.content));
+            prompt_content.push_str(&format!(
+                "--- Source: {} ---\n{}\n\n",
+                item.source, item.content
+            ));
         }
 
         // 2. Formulate provider request
@@ -191,10 +194,15 @@ mod tests {
                 is_tainted: false,
             }],
             total_tokens: 10,
-            context_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            context_digest:
+                "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                    .to_string(),
         };
 
-        let intents = runtime.execute_turn(&worker_run, &context_pack).await.unwrap();
+        let intents = runtime
+            .execute_turn(&worker_run, &context_pack)
+            .await
+            .unwrap();
         assert_eq!(intents.len(), 1);
         assert_eq!(intents[0].name, "write_file");
         assert_eq!(intents[0].target, "src/main.rs");

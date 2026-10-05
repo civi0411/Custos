@@ -1,6 +1,6 @@
-use custos_domain::WorkflowRevision;
-use custos_domain::DomainError;
 use super::dag::{DagGraph, DagNode};
+use custos_domain::DomainError;
+use custos_domain::WorkflowRevision;
 use std::collections::HashMap;
 
 pub struct RevisionLoader;
@@ -17,7 +17,7 @@ impl RevisionLoader {
 
         for rev_node in &revision.nodes {
             let node_deps = deps.get(&rev_node.node_id).cloned().unwrap_or_default();
-            
+
             let inputs = serde_json::json!({
                 "role": rev_node.role,
                 "harness_id": rev_node.harness_id,

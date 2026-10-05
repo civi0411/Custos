@@ -133,7 +133,10 @@ impl WorkspaceLeaseManager {
         for rel_path in &modified {
             let rel_str = rel_path.to_string_lossy();
             if let Some(prefix) = permitted_prefix {
-                let clean_prefix = prefix.trim_start_matches('/').trim_end_matches("/**").trim_end_matches("/*");
+                let clean_prefix = prefix
+                    .trim_start_matches('/')
+                    .trim_end_matches("/**")
+                    .trim_end_matches("/*");
                 if !rel_str.starts_with(clean_prefix) {
                     return Err(DomainError::Validation(format!(
                         "Gate 5 Violation: Worktree lease '{}' attempted to write to unauthorized path '{}' outside permitted prefix '{}'",
@@ -162,6 +165,12 @@ impl WorkspaceLeaseManager {
         }
 
         Ok(merged)
+    }
+
+    /// Retrieves a clone of an active lease by ID, if present.
+    pub fn get_lease(&self, lease_id: &str) -> Option<WorkspaceLease> {
+        let lock = self.active_leases.lock().ok()?;
+        lock.get(lease_id).cloned()
     }
 
     /// Releases a lease by ID and cleans up its storage.

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAppContext } from '../../context/AppContext';
-import { ProvidersView } from '../../components/ProvidersView';
+import { ProvidersView } from '@/components/providers';
 
 export const ProvidersPage: React.FC = () => {
   const {

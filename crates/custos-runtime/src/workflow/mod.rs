@@ -8,9 +8,9 @@ pub mod graph_runtime;
 pub mod lease;
 pub mod machine;
 pub mod outbox;
+pub mod revision_loader;
 pub mod scheduler;
 pub mod task_runtime;
-pub mod revision_loader;
 pub mod worker_executor;
 
 pub use dag::*;

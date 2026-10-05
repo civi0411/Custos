@@ -68,7 +68,6 @@ pub fn verify_permit_binding(permit: &Permit, intent: &ActionIntent) -> Result<(
     Ok(())
 }
 
-
 #[async_trait]
 pub trait SandboxPort: Send + Sync {
     /// Stable driver name, e.g. "seatbelt", "bubblewrap", "mock".

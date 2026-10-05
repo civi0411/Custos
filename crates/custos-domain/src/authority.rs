@@ -222,7 +222,9 @@ mod tests {
         // 1. Confused deputy attempt with tampered parameters must fail
         let tamper_res = permit.consume(digest_tampered);
         assert!(tamper_res.is_err());
-        assert!(matches!(tamper_res.unwrap_err(), DomainError::Unauthorized(msg) if msg.contains("Argument digest mismatch")));
+        assert!(
+            matches!(tamper_res.unwrap_err(), DomainError::Unauthorized(msg) if msg.contains("Argument digest mismatch"))
+        );
 
         // 2. Legitimate consume succeeds
         assert!(permit.consume(digest_valid).is_ok());
@@ -231,6 +233,8 @@ mod tests {
         // 3. Replay attack must be blocked (Single-use violation)
         let replay_res = permit.consume(digest_valid);
         assert!(replay_res.is_err());
-        assert!(matches!(replay_res.unwrap_err(), DomainError::Unauthorized(msg) if msg.contains("already been consumed")));
+        assert!(
+            matches!(replay_res.unwrap_err(), DomainError::Unauthorized(msg) if msg.contains("already been consumed"))
+        );
     }
 }

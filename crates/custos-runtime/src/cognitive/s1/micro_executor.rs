@@ -110,8 +110,9 @@ impl MicroExecutor {
                     });
                 }
 
-                let content = std::fs::read(&full_path)
-                    .map_err(|e| DomainError::Validation(format!("Failed to read file {}: {}", path, e)))?;
+                let content = std::fs::read(&full_path).map_err(|e| {
+                    DomainError::Validation(format!("Failed to read file {}: {}", path, e))
+                })?;
                 let truncated = &content[..content.len().min(max_bytes)];
                 let lossy_str = String::from_utf8_lossy(truncated).to_string();
 
@@ -164,7 +165,11 @@ impl MicroExecutor {
                     task_type: "ValidateSyntax".into(),
                     success: valid,
                     duration_ms: start.elapsed().as_millis() as u64,
-                    output: Some(if valid { "valid".into() } else { "invalid".into() }),
+                    output: Some(if valid {
+                        "valid".into()
+                    } else {
+                        "invalid".into()
+                    }),
                     preview_diff: None,
                     error: if valid {
                         None

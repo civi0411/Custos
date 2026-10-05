@@ -19,10 +19,9 @@ use custos_core::contracts::{
     MemoryPort, OutboxEntry, OutboxPort, OutboxStatus, SandboxCommand, SandboxPort, TrustedKernel,
 };
 use custos_domain::{
-    digest, new_id, ActionIntent, CancelReceipt, ContinuationPacket, DomainError,
-    ExecutionReceipt, FactProposal, MemoryEntry, MemoryError, MemoryScope, PersonalFact, Permit,
-    ProposalReceipt, ProposalStatus, ReceiptStatus, RecallQuery, RunHandle, StartRunCommand,
-    WorkerRunId,
+    digest, new_id, ActionIntent, CancelReceipt, ContinuationPacket, DomainError, ExecutionReceipt,
+    FactProposal, MemoryEntry, MemoryError, MemoryScope, Permit, PersonalFact, ProposalReceipt,
+    ProposalStatus, RecallQuery, ReceiptStatus, RunHandle, StartRunCommand, WorkerRunId,
 };
 use custos_persistence::SqliteTaskStore;
 use custos_provider::request::{ModelResponse, ProviderRequest};
@@ -162,7 +161,7 @@ impl MemoryPort for InMemoryMemory {
                 f.subject == subject
                     && f.predicate == predicate
                     && f.valid_from <= at_time
-                    && f.valid_to.map_or(true, |end| at_time < end)
+                    && f.valid_to.is_none_or(|end| at_time < end)
             })
             .cloned())
     }
@@ -173,7 +172,10 @@ impl MemoryPort for InMemoryMemory {
         worker_run_id: WorkerRunId,
     ) -> Result<ProposalReceipt, MemoryError> {
         // Proposals never become facts here: acceptance is a Kernel decision.
-        self.proposals.lock().unwrap().push((worker_run_id, proposal));
+        self.proposals
+            .lock()
+            .unwrap()
+            .push((worker_run_id, proposal));
         Ok(ProposalReceipt {
             proposal_id: new_id("prop"),
             status: ProposalStatus::Pending,
@@ -273,8 +275,15 @@ impl WorkflowPort for MockWorkflow {
         })
     }
 
-    async fn request_cancel(&self, run_id: &str, reason: &str) -> Result<CancelReceipt, DomainError> {
-        self.cancelled_runs.lock().unwrap().push((run_id.to_string(), reason.to_string()));
+    async fn request_cancel(
+        &self,
+        run_id: &str,
+        reason: &str,
+    ) -> Result<CancelReceipt, DomainError> {
+        self.cancelled_runs
+            .lock()
+            .unwrap()
+            .push((run_id.to_string(), reason.to_string()));
         Ok(CancelReceipt {
             run_id: run_id.to_string(),
             cancelled_at: Utc::now(),

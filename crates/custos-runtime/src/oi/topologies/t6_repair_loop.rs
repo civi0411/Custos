@@ -33,7 +33,10 @@ mod tests {
         let failure_res = WorkerResult::failed("eval_1", "Unit tests failed: assert_eq!(2, 3)");
         let eval = T6RepairLoopCoordinator::evaluate_iteration(3, 1, &failure_res);
         match eval {
-            JoinEvaluation::RetryRequired { next_iteration, feedback } => {
+            JoinEvaluation::RetryRequired {
+                next_iteration,
+                feedback,
+            } => {
                 assert_eq!(next_iteration, 2);
                 assert!(feedback.contains("assert_eq"));
             }

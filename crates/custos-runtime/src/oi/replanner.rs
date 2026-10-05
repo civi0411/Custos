@@ -27,7 +27,7 @@ impl Replanner {
         // Enforce INV-03: Check if failed node or any task outbox entry is in Uncertain status
         let has_uncertain_effect = outbox_entries.iter().any(|entry| {
             entry.status == OutboxStatus::Uncertain
-                && failed_node_id.map_or(true, |fid| entry.action_id.contains(fid))
+                && failed_node_id.is_none_or(|fid| entry.action_id.contains(fid))
         });
 
         if has_uncertain_effect {
@@ -200,7 +200,8 @@ mod tests {
         }];
         let new_deps = vec![("node_1".into(), "node_2_repaired".into())];
 
-        let new_rev = Replanner::apply_delta(&rev, &brief, "prop_2", replacement, new_deps).unwrap();
+        let new_rev =
+            Replanner::apply_delta(&rev, &brief, "prop_2", replacement, new_deps).unwrap();
         assert_eq!(new_rev.revision_number, 2);
         assert_eq!(new_rev.nodes.len(), 2); // node_1 + node_2_repaired
         assert_eq!(new_rev.nodes[0].node_id, "node_1");

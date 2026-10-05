@@ -21,10 +21,7 @@ pub fn register_assistant_skills(registry: &mut SkillRegistry) {
     registry.set_tier_permissions(
         "tier_zero",
         "assistant",
-        vec![
-            "contact_resolve".into(),
-            "file_read".into(),
-        ],
+        vec!["contact_resolve".into(), "file_read".into()],
     );
 
     // Configure tier permissions for SystemOne / assistant pack

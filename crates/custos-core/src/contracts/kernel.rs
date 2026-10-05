@@ -46,8 +46,10 @@ pub trait KernelPort: Send + Sync {
     ) -> Result<Permit, DomainError>;
 
     /// Evidence step: run the registered deterministic verifier for the bundle.
-    async fn verify_evidence(&self, bundle: &EvidenceBundle)
-        -> Result<VerificationClaim, DomainError>;
+    async fn verify_evidence(
+        &self,
+        bundle: &EvidenceBundle,
+    ) -> Result<VerificationClaim, DomainError>;
 
     /// The ONLY way to reach `Succeeded` (plain `transition_task` is refused). Runs the
     /// Completion Gate: task must be Running and every required contract evidence kind must be
@@ -133,7 +135,9 @@ impl KernelPort for TrustedKernel {
         intent: &ActionIntent,
         actor: &str,
     ) -> Result<Permit, DomainError> {
-        self.authority.authorize_action(task_id, intent, actor).await
+        self.authority
+            .authorize_action(task_id, intent, actor)
+            .await
     }
 
     async fn consume_permit(
@@ -179,4 +183,3 @@ impl KernelPort for TrustedKernel {
         Ok(updated)
     }
 }
-
