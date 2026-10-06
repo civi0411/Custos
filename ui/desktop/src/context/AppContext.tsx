@@ -34,6 +34,9 @@ interface AppContextType {
   // Modals
   isSettingsOpen: boolean;
   setIsSettingsOpen: (open: boolean) => void;
+  settingsTab: string;
+  setSettingsTab: (tab: string) => void;
+  openSettings: (tab?: string) => void;
   isNewSessionOpen: boolean;
   setIsNewSessionOpen: (open: boolean) => void;
   isAddProviderOpen: boolean;
@@ -68,8 +71,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [projectData, setProjectData] = useState<ProjectData>(() => daemonClient.isDemoMode
     ? Object.fromEntries(Object.entries(initialProjectData).map(([name, sessions]) =>
       [name, sessions.map((session) => ({ ...session, source: 'demo' as const }))]))
-    : { 'Custos OS': [] });
-  const [currentProject, setCurrentProject] = useState<string>('Custos OS');
+    : { 'VinUni_Codelab_Day02_Template': [], 'Custos OS': [] });
+  const [currentProject, setCurrentProject] = useState<string>('VinUni_Codelab_Day02_Template');
   const [activeSessionId, setActiveSessionId] = useState<string>('auth');
   const [tasks, setTasks] = useState<Task[]>([]);
 
@@ -88,8 +91,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Modals state
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [settingsTab, setSettingsTab] = useState<string>('general');
   const [isNewSessionOpen, setIsNewSessionOpen] = useState<boolean>(false);
   const [isAddProviderOpen, setIsAddProviderOpen] = useState<boolean>(false);
+
+  const openSettings = useCallback((tab?: string) => {
+    if (tab) setSettingsTab(tab);
+    setIsSettingsOpen(true);
+  }, []);
 
   // UI Scale state
   const [uiScale, setUiScale] = useState<number>(() => {
@@ -206,15 +215,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         setIsSessionsCollapsed((prev) => !prev);
-      }
-      // Toggle Split View / Full view (Ctrl+\)
-      if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
-        e.preventDefault();
-        setViewMode((prev) => {
-          if (prev === 'split') return 'chat';
-          if (prev === 'chat') return 'diff';
-          return 'split';
-        });
       }
       // UI Zoom In (Ctrl++ or Ctrl+=)
       if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
@@ -505,6 +505,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setClientKeys,
         isSettingsOpen,
         setIsSettingsOpen,
+        settingsTab,
+        setSettingsTab,
+        openSettings,
         isNewSessionOpen,
         setIsNewSessionOpen,
         isAddProviderOpen,

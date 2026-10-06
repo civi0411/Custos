@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Scaling } from 'lucide-react';
-import { Tooltip } from './Tooltip';
+import { Tooltip } from '../Tooltip';
 
 interface StatusBarProps {
   activeSessionTitle: string;

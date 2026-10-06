@@ -1,5 +1,6 @@
 import React from 'react';
-import { Plus, Cpu, Laptop, Terminal, KeyRound, CheckCircle2, ShieldCheck, Activity } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Cpu, Laptop, Terminal, KeyRound, CheckCircle2, ShieldCheck, Activity, ArrowLeft } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 
 const getProviderLogo = (iconType: string): string | null => {
@@ -20,8 +21,10 @@ const getProviderLogo = (iconType: string): string | null => {
 /**
  * ProvidersPage - Dedicated full-page route (/providers)
  * Manages connected AI model providers, API credentials, and client gateway tokens.
+ * Styled in sync with the dark-gray SADE / Claude / Codex aesthetic.
  */
 export const ProvidersPage: React.FC = () => {
+  const navigate = useNavigate();
   const {
     providers,
     clientKeys,
@@ -32,22 +35,30 @@ export const ProvidersPage: React.FC = () => {
   } = useAppContext();
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-surface overflow-y-auto min-w-0 select-text">
+    <div className="flex-1 flex flex-col h-full bg-[#0d1117] overflow-y-auto min-w-0 select-text text-[#c9d1d9]">
       {/* Top Header */}
-      <div className="px-4 sm:px-8 pt-6 sm:pt-8 pb-5 border-b border-surface-border flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0 bg-surface">
-        <div>
+      <div className="px-4 sm:px-8 pt-5 pb-5 border-b border-[#21262d] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shrink-0 bg-[#0d1117]">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/studio')}
+            className="p-1.5 rounded-lg bg-[#161b22] hover:bg-[#21262d] border border-[#30363d] text-[#8b949e] hover:text-white transition flex items-center gap-1.5 text-xs"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Studio</span>
+          </button>
+          <div className="h-4 w-[1px] bg-[#21262d]" />
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-brand-blue/10 border border-brand-blue/30 text-brand-blue">
-              <KeyRound className="w-5 h-5" />
+            <div className="w-8 h-8 rounded-xl bg-[#161b22] border border-[#30363d] flex items-center justify-center text-[#58a6ff]">
+              <KeyRound className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-lg sm:text-xl font-bold tracking-tight text-white">API Keys & Model Providers</h1>
-                <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono font-medium">
+                <h1 className="text-base sm:text-lg font-bold tracking-tight text-white">API Keys & Model Providers</h1>
+                <span className="text-[10px] px-2 py-0.2 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono font-medium">
                   {providers.length} Active
                 </span>
               </div>
-              <p className="text-xs text-neutral-400 mt-0.5">
+              <p className="text-xs text-[#8b949e] mt-0.5">
                 Configure upstream AI provider credentials, rate limits, latency routing, and OmniRoute priorities
               </p>
             </div>
@@ -56,10 +67,10 @@ export const ProvidersPage: React.FC = () => {
 
         <div className="flex items-center gap-2 shrink-0">
           <button 
-            onClick={() => showToast('Refreshed provider health checks')} 
-            className="px-3 py-1.5 rounded-lg bg-surface-card hover:bg-surface-elevated text-neutral-300 text-xs font-medium border border-surface-border transition flex items-center gap-1.5"
+            onClick={() => showToast('Refreshed provider health checks: Anthropic 340ms, Gemini 140ms, DeepSeek 480ms - 200 OK')} 
+            className="px-3 py-1.5 rounded-lg bg-[#161b22] hover:bg-[#21262d] text-[#c9d1d9] text-xs font-medium border border-[#30363d] transition flex items-center gap-1.5"
           >
-            <Activity className="w-3.5 h-3.5 text-neutral-400" />
+            <Activity className="w-3.5 h-3.5 text-emerald-400" />
             <span>Health Check All</span>
           </button>
           <button 
@@ -78,14 +89,14 @@ export const ProvidersPage: React.FC = () => {
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-[#8b949e]">
                 Connected AI Model Providers
               </h2>
-              <p className="text-[11px] text-neutral-500 mt-0.5">
+              <p className="text-[11px] text-[#6e7681] mt-0.5">
                 Upstream LLM endpoints calibrated for OmniRoute multi-tier fallback
               </p>
             </div>
-            <span className="text-[11px] font-mono text-neutral-500">
+            <span className="text-[11px] font-mono text-[#8b949e]">
               Total quota usage: 68%
             </span>
           </div>
@@ -96,12 +107,12 @@ export const ProvidersPage: React.FC = () => {
               return (
                 <div 
                   key={p.id} 
-                  className="p-5 rounded-2xl bg-surface-card border border-surface-border hover:border-surface-borderHover transition flex flex-col justify-between space-y-4 shadow-sm"
+                  className="p-5 rounded-2xl bg-[#161b22] border border-[#21262d] hover:border-[#384252] transition flex flex-col justify-between space-y-4 shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
                       {logoUrl ? (
-                        <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-sm border border-surface-border/60 bg-surface">
+                        <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-sm border border-[#30363d] bg-[#0d1117]">
                           <img 
                             src={logoUrl} 
                             alt={p.name} 
@@ -109,7 +120,7 @@ export const ProvidersPage: React.FC = () => {
                           />
                         </div>
                       ) : (
-                        <div className="w-10 h-10 rounded-xl bg-surface-elevated flex items-center justify-center text-neutral-400 font-bold text-sm shrink-0 border border-surface-border/60">
+                        <div className="w-10 h-10 rounded-xl bg-[#0d1117] flex items-center justify-center text-purple-400 font-bold text-sm shrink-0 border border-[#30363d]">
                           <Cpu className="w-5 h-5" />
                         </div>
                       )}
@@ -119,7 +130,7 @@ export const ProvidersPage: React.FC = () => {
                           <h3 className="text-sm font-semibold text-white truncate">{p.name}</h3>
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                         </div>
-                        <span className="text-[11px] text-neutral-500 font-mono truncate block">{p.model}</span>
+                        <span className="text-[11px] text-[#8b949e] font-mono truncate block">{p.model}</span>
                       </div>
                     </div>
 
@@ -128,21 +139,21 @@ export const ProvidersPage: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="space-y-2 text-xs bg-surface/60 p-3 rounded-xl border border-surface-border/50">
-                    <div className="flex items-center justify-between text-neutral-400">
+                  <div className="space-y-2 text-xs bg-[#0d1117] p-3 rounded-xl border border-[#21262d]">
+                    <div className="flex items-center justify-between text-[#8b949e]">
                       <span>{p.endpoint ? 'Endpoint' : 'API Key'}</span>
-                      <span className="font-mono text-neutral-300 text-[11px] truncate max-w-[240px]">{p.endpoint || p.apiKey}</span>
+                      <span className="font-mono text-[#c9d1d9] text-[11px] truncate max-w-[240px]">{p.endpoint || p.apiKey}</span>
                     </div>
 
                     {p.quotaUsed && p.quotaTotal && (
                       <div className="space-y-1 pt-1">
-                        <div className="flex items-center justify-between text-neutral-400 text-[11px]">
+                        <div className="flex items-center justify-between text-[#8b949e] text-[11px]">
                           <span>Monthly Quota</span>
-                          <span className="text-neutral-300 font-mono">{p.quotaUsed} / {p.quotaTotal}</span>
+                          <span className="text-[#c9d1d9] font-mono">{p.quotaUsed} / {p.quotaTotal}</span>
                         </div>
-                        <div className="w-full bg-surface-elevated rounded-full h-1.5 overflow-hidden">
+                        <div className="w-full bg-[#21262d] rounded-full h-1.5 overflow-hidden">
                           <div 
-                            className="bg-brand-blue h-1.5 rounded-full transition-all duration-300" 
+                            className="bg-[#238636] h-1.5 rounded-full transition-all duration-300" 
                             style={{ width: `${p.quotaPercent || 0}%` }}
                           />
                         </div>
@@ -150,29 +161,29 @@ export const ProvidersPage: React.FC = () => {
                     )}
 
                     {p.rateLimit && (
-                      <div className="flex items-center justify-between text-neutral-400 pt-0.5">
+                      <div className="flex items-center justify-between text-[#8b949e] pt-0.5">
                         <span>Rate Limit</span>
-                        <span className="text-neutral-300 font-mono">{p.rateLimit}</span>
+                        <span className="text-[#c9d1d9] font-mono">{p.rateLimit}</span>
                       </div>
                     )}
 
                     {p.vram && (
-                      <div className="flex items-center justify-between text-neutral-400 pt-0.5">
+                      <div className="flex items-center justify-between text-[#8b949e] pt-0.5">
                         <span>VRAM Footprint</span>
-                        <span className="text-neutral-300 font-mono">{p.vram}</span>
+                        <span className="text-[#c9d1d9] font-mono">{p.vram}</span>
                       </div>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between pt-2 border-t border-surface-border/70 text-xs">
-                    <div className="flex items-center gap-1.5 text-neutral-400 font-mono text-[11px]">
+                  <div className="flex items-center justify-between pt-2 border-t border-[#21262d] text-xs">
+                    <div className="flex items-center gap-1.5 text-[#8b949e] font-mono text-[11px]">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                       <span>{p.latency}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <button 
                         onClick={() => showToast(`Testing connection to ${p.name}... 200 OK (${p.latency})`)} 
-                        className="px-2.5 py-1 rounded-lg bg-surface-elevated hover:bg-surface-hover text-neutral-300 text-[11px] font-medium border border-surface-border transition"
+                        className="px-2.5 py-1 rounded-lg bg-[#21262d] hover:bg-[#30363d] text-[#c9d1d9] text-[11px] font-medium border border-[#30363d] transition"
                       >
                         {p.endpoint ? 'Check Health' : 'Test Connection'}
                       </button>
@@ -188,25 +199,25 @@ export const ProvidersPage: React.FC = () => {
         <section className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-[#8b949e]">
                 Desktop & CLI Gateway Tokens
               </h2>
-              <p className="text-[11px] text-neutral-500 mt-0.5">
+              <p className="text-[11px] text-[#6e7681] mt-0.5">
                 Keys used by the Custos CLI, VS Code Extension, and SDK to interact with the local daemon
               </p>
             </div>
             <button 
               onClick={handleGenerateClientKey} 
-              className="px-3 py-1 bg-surface-elevated hover:bg-surface-hover border border-surface-border rounded-lg text-xs text-brand-blue font-medium flex items-center gap-1.5 transition"
+              className="px-3 py-1 bg-[#161b22] hover:bg-[#21262d] border border-[#30363d] rounded-lg text-xs text-[#58a6ff] font-medium flex items-center gap-1.5 transition"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Generate New Key</span>
             </button>
           </div>
 
-          <div className="border border-surface-border rounded-xl overflow-x-auto bg-surface-card shadow-sm">
+          <div className="border border-[#21262d] rounded-xl overflow-x-auto bg-[#161b22] shadow-sm">
             <div className="min-w-[560px]">
-              <div className="grid grid-cols-12 px-4 py-2.5 border-b border-surface-border text-[11px] font-mono text-neutral-500 bg-surface">
+              <div className="grid grid-cols-12 px-4 py-2.5 border-b border-[#21262d] text-[11px] font-mono text-[#8b949e] bg-[#0d1117]">
                 <span className="col-span-4">APPLICATION</span>
                 <span className="col-span-4">TOKEN SECRET</span>
                 <span className="col-span-2">CREATED</span>
@@ -216,18 +227,18 @@ export const ProvidersPage: React.FC = () => {
               {clientKeys.map((k) => (
                 <div 
                   key={k.id} 
-                  className="grid grid-cols-12 px-4 py-3 items-center border-b border-surface-border/50 last:border-b-0 text-xs text-neutral-300 hover:bg-surface/40 transition"
+                  className="grid grid-cols-12 px-4 py-3 items-center border-b border-[#21262d]/50 last:border-b-0 text-xs text-[#c9d1d9] hover:bg-[#0d1117]/50 transition"
                 >
                   <span className="col-span-4 font-medium text-white flex items-center gap-2 truncate">
                     {k.icon === 'laptop' ? (
-                      <Laptop className="w-3.5 h-3.5 text-brand-blue shrink-0" />
+                      <Laptop className="w-3.5 h-3.5 text-[#58a6ff] shrink-0" />
                     ) : (
-                      <Terminal className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                      <Terminal className="w-3.5 h-3.5 text-[#8b949e] shrink-0" />
                     )}
                     <span className="truncate">{k.name}</span>
                   </span>
-                  <span className="col-span-4 font-mono text-[11px] text-neutral-400 truncate select-all">{k.token}</span>
-                  <span className="col-span-2 text-neutral-500 text-[11px] font-mono">{k.created}</span>
+                  <span className="col-span-4 font-mono text-[11px] text-[#8b949e] truncate select-all">{k.token}</span>
+                  <span className="col-span-2 text-[#6e7681] text-[11px] font-mono">{k.created}</span>
                   <div className="col-span-2 text-right">
                     <button 
                       onClick={() => handleRevokeClientKey(k.id)} 
@@ -243,11 +254,11 @@ export const ProvidersPage: React.FC = () => {
         </section>
 
         {/* Security Notice */}
-        <div className="p-4 rounded-xl bg-surface-card border border-surface-border flex items-start gap-3">
+        <div className="p-4 rounded-xl bg-[#161b22] border border-[#21262d] flex items-start gap-3">
           <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
           <div className="text-xs">
             <span className="font-semibold text-white block">Credential Storage Security</span>
-            <span className="text-neutral-400">
+            <span className="text-[#8b949e]">
               API keys are encrypted locally via OS Keychain (DPAPI on Windows) and never transmitted to external telemetry servers. All upstream calls route through your configured local Custos daemon.
             </span>
           </div>

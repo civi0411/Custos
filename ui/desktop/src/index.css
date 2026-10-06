@@ -1,89 +1,151 @@
 @import "tailwindcss";
 
+/* ============================================================
+   CUSTOS SADE — DESIGN SYSTEM
+   Inspired by: Claude Code, VS Code, GitHub Primer Dark
+   Philosophy: Density without noise. Signal over chrome.
+   ============================================================ */
+
 @theme {
-  --font-sans: "Plus Jakarta Sans", "Geist", -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: "JetBrains Mono", "Geist Mono", monospace;
+  /* ── Typography ─────────────────────────────────────────── */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "Menlo", "Consolas", "DejaVu Sans Mono", monospace;
 
-  --font-size-2xs: 0.625rem;
-  --font-size-xs: 0.75rem;
-  --font-size-sm: 0.875rem;
-  --font-size-base: 1rem;
-  --font-size-lg: 1.125rem;
-  --font-size-xl: 1.25rem;
-  --font-size-2xl: 1.5rem;
-  --font-size-3xl: 1.875rem;
+  --font-size-2xs: 0.6875rem;  /* 11px */
+  --font-size-xs:  0.75rem;    /* 12px */
+  --font-size-sm:  0.8125rem;  /* 13px — primary UI size */
+  --font-size-base: 0.875rem;  /* 14px */
+  --font-size-lg:  1rem;       /* 16px */
+  --font-size-xl:  1.125rem;
 
-  --color-canvas: #0e0f14;
-  --color-surface: #14151b;
-  --color-surface-card: #1a1b24;
-  --color-surface-elevated: #222330;
-  --color-surface-border: #282a3a;
-  --color-surface-border-hover: #3d4056;
-  --color-surface-hover: #212330;
-  --color-surface-pill: #181922;
+  /* ── Base canvas (GitHub Primer dark, not pitch black) ─── */
+  --color-canvas:          #0d1117;   /* GitHub dark bg */
+  --color-canvas-subtle:   #161b22;   /* slightly elevated */
+  --color-canvas-inset:    #010409;   /* deepest inset */
 
-  --color-brand-blue: #0070f3;
-  --color-brand-blue-glow: rgba(0, 112, 243, 0.25);
-  --color-brand-cyan: #00d4ff;
-  --color-brand-emerald: #10b981;
-  --color-brand-amber: #f59e0b;
-  --color-brand-rose: #f43f5e;
+  /* ── Surface layers ───────────────────────────────────────*/
+  --color-surface-0:       #0d1117;   /* base layer */
+  --color-surface-1:       #161b22;   /* sidebar, panels */
+  --color-surface-2:       #1c2128;   /* cards, elevated */
+  --color-surface-3:       #22272e;   /* menus, tooltips */
+  --color-surface-overlay: #2d333b;   /* dropdowns, popovers */
 
-  --color-agent-question: #eab308;
-  --color-agent-question-text: #fef08a;
-  --color-muted-foreground: #8b8d98;
+  /* ── Border system ────────────────────────────────────────*/
+  --color-border-default:  #30363d;
+  --color-border-muted:    #21262d;
+  --color-border-subtle:   #1c2128;
+  --color-border-emphasis: #6e7681;
+
+  /* ── Foreground ───────────────────────────────────────────*/
+  --color-editor-fg:       #e6edf3;   /* primary text — warm white */
+  --color-fg-muted:        #8b949e;   /* secondary text */
+  --color-fg-subtle:       #6e7681;   /* hints, placeholders */
+  --color-fg-on-emphasis:  #ffffff;
+
+  /* ── SADE Domain accent colors ────────────────────────────*/
+  /* Copilot / Assistant — violet */
+  --color-copilot:         #a78bfa;
+  --color-copilot-subtle:  rgba(167, 139, 250, 0.10);
+  --color-copilot-muted:   rgba(167, 139, 250, 0.25);
+
+  /* Coding / Engineering — emerald (like terminal green) */
+  --color-coding:          #3fb950;
+  --color-coding-subtle:   rgba(63, 185, 80, 0.10);
+  --color-coding-muted:    rgba(63, 185, 80, 0.25);
+
+  /* Research / Science — cyan/azure */
+  --color-research:        #58a6ff;
+  --color-research-subtle: rgba(88, 166, 255, 0.10);
+  --color-research-muted:  rgba(88, 166, 255, 0.25);
+
+  /* ── Task / run state colors ──────────────────────────────*/
+  --color-task-active:     #3fb950;   /* emerald — running */
+  --color-task-blocked:    #d29922;   /* amber — blocked */
+  --color-task-unknown:    #6e7681;   /* gray — unverifiable */
+  --color-task-done:       #58a6ff;   /* blue — done */
+  --color-task-failed:     #f85149;   /* red — failed */
+  --color-task-draft:      #8b949e;   /* muted — draft */
+
+  /* ── Assurance levels ─────────────────────────────────────*/
+  --color-assurance-mediated: #3fb950;
+  --color-assurance-provider: #d29922;
+  --color-assurance-observe:  #6e7681;
+  --color-assurance-unknown:  #f85149;
+
+  /* ── Syntax highlight tokens (Claude Code palette) ────────*/
+  /* Primary accent — blue */
+  --syntax-keyword:    #ff7b72;   /* fn, pub, impl, use — red/coral */
+  --syntax-string:     #a5d6ff;   /* strings — light blue */
+  --syntax-number:     #79c0ff;   /* numbers — blue */
+  --syntax-comment:    #8b949e;   /* comments — gray (italic) */
+  --syntax-type:       #ffa657;   /* types, structs — orange */
+  --syntax-function:   #d2a8ff;   /* function names — purple */
+  --syntax-variable:   #e6edf3;   /* variables — plain */
+  --syntax-operator:   #ff7b72;   /* operators — coral */
+  --syntax-punctuation:#e6edf3;   /* brackets — plain */
+  --syntax-attr:       #79c0ff;   /* attributes — blue */
+  --syntax-constant:   #79c0ff;   /* constants — blue */
+  --syntax-deleted:    #ffa198;   /* diff removed */
+  --syntax-inserted:   #56d364;   /* diff added */
+
+  /* ── Interactive/focus ring ───────────────────────────────*/
+  --color-accent:      #58a6ff;
+  --color-accent-subtle: rgba(88, 166, 255, 0.15);
+
+  /* ── Status bar ───────────────────────────────────────────*/
+  --color-statusbar-bg: #0d1117;
+  --color-statusbar-fg: #6e7681;
+
+  /* Legacy compatibility — used in existing components */
+  --color-brand-blue:    #58a6ff;
+  --color-brand-blue-glow: rgba(88, 166, 255, 0.20);
+  --color-brand-cyan:    #79c0ff;
+  --color-brand-emerald: #3fb950;
+  --color-brand-amber:   #d29922;
+  --color-brand-rose:    #f85149;
+  --color-surface:       #161b22;
+  --color-surface-card:  #1c2128;
+  --color-surface-elevated: #22272e;
+  --color-surface-border: #30363d;
+  --color-surface-border-hover: #444c56;
+  --color-surface-hover: #1c2128;
+  --color-surface-pill:  #1c2128;
+  --color-muted-foreground: #8b949e;
+  --color-agent-question: #d29922;
+  --color-agent-question-text: #e3b341;
+  --color-editor-fg:     #e6edf3;
 }
 
-/* Compositor-driven agent working spinner rotation */
-@keyframes agent-spinner-rotate {
-  to {
-    transform: rotate(86400turn);
-  }
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
-.agent-working-spinner {
-  animation: agent-spinner-rotate 86400s steps(1036800, end) infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .agent-working-spinner {
-    animation: none;
-  }
-}
-
-/* Smooth expansion reveal */
-@keyframes expansion-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(-2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-reveal {
-  animation: expansion-reveal 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-/* Base typography adjustment */
 body {
-  font-size: 0.875rem;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;      /* 13px — same as VS Code */
+  line-height: 1.5;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";  /* Inter optical features */
+  font-variation-settings: normal;
   background-color: var(--color-canvas);
-  color: #e2e4ea;
+  color: var(--color-editor-fg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-input,
-textarea,
-select,
-button {
+input, textarea, select, button {
   font-family: inherit;
   font-size: inherit;
 }
 
+/* ============================================================
+   CURSOR POLICY
+   ============================================================ */
 
-/* Ensure all clickable buttons and interactive triggers have pointer cursor */
 button,
 [role="button"],
 [role="tab"],
@@ -102,135 +164,28 @@ label[for] {
 button:disabled,
 button[disabled],
 [role="button"][aria-disabled="true"],
-[role="tab"][aria-disabled="true"],
-[role="menuitem"][aria-disabled="true"],
-[role="switch"][aria-disabled="true"],
-input[type="button"]:disabled,
-input[type="submit"]:disabled,
-input[type="reset"]:disabled {
+[role="tab"][aria-disabled="true"] {
   cursor: not-allowed;
+  opacity: 0.5;
 }
 
+/* ============================================================
+   FOCUS RING
+   ============================================================ */
 
-/* Custom styled dropdown select element */
-select {
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  background-color: var(--color-surface-elevated);
-  border: 1px solid rgba(46, 48, 61, 0.7);
-  border-radius: 0.5rem;
-  color: #f1f2f6;
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238c92a4' stroke-width='2'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e");
-  background-position: right 0.75rem center;
-  background-repeat: no-repeat;
-  background-size: 0.95rem 0.95rem;
-  padding-right: 2.25rem !important;
-  cursor: pointer;
-  transition: all 0.15s ease-in-out;
+*:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
-select:hover {
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-surface-border);
-  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23ffffff' stroke-width='2'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e");
-}
+/* ============================================================
+   SCROLLBARS — minimal, Claude Code style
+   ============================================================ */
 
-select:focus {
-  outline: none;
-  border-color: #0070f3 !important;
-  box-shadow: 0 0 0 1px rgba(0, 112, 243, 0.4);
-}
-
-select option {
-  background-color: #1f2029;
-  color: #e2e4ea;
-  padding: 8px 12px;
-}
-
-select option:checked {
-  background-color: #252732;
-  color: #ffffff;
-  font-weight: 500;
-}
-
-/* Clean & Minimal Checkbox */
-input[type="checkbox"] {
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  width: 1rem;
-  height: 1rem;
-  border-radius: 0.25rem;
-  background-color: var(--color-surface-elevated);
-  border: 1px solid var(--color-surface-border);
-  cursor: pointer;
-  display: inline-grid;
-  place-content: center;
-  position: relative;
-  vertical-align: middle;
-}
-
-input[type="checkbox"]:hover {
-  background-color: var(--color-surface-hover);
-  border-color: var(--color-surface-border-hover);
-}
-
-input[type="checkbox"]:focus-visible {
-  outline: 1px solid var(--color-brand-blue);
-  outline-offset: 1px;
-}
-
-input[type="checkbox"]:checked {
-  background-color: var(--color-brand-blue);
-  border-color: var(--color-brand-blue);
-  background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M3.5 8.5l3 3 6-6'/%3e%3c/svg%3e");
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: 70% 70%;
-}
-
-input[type="checkbox"]:checked:hover {
-  background-color: #0060df;
-  border-color: #0060df;
-}
-
-/* Emerald Accent Checkbox (simple flat style, no glow) */
-input[type="checkbox"].accent-emerald-500:checked,
-input[type="checkbox"].accent-emerald:checked {
-  background-color: #10b981;
-  border-color: #10b981;
-}
-
-input[type="checkbox"].accent-emerald-500:checked:hover,
-input[type="checkbox"].accent-emerald:checked:hover {
-  background-color: #059669;
-  border-color: #059669;
-}
-
-/* Purple Accent Checkbox (simple flat style, no glow) */
-input[type="checkbox"].accent-purple-500:checked,
-input[type="checkbox"].accent-purple:checked {
-  background-color: #a855f7;
-  border-color: #a855f7;
-}
-
-input[type="checkbox"].accent-purple-500:checked:hover,
-input[type="checkbox"].accent-purple:checked:hover {
-  background-color: #9333ea;
-  border-color: #9333ea;
-}
-
-input[type="checkbox"]:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  border-color: var(--color-surface-border);
-}
-
-/* Custom dark sleek scrollbars */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -238,15 +193,100 @@ input[type="checkbox"]:disabled {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #252735;
+  background: #30363d;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3b3e52;
+  background: #444c56;
 }
 
-/* Tooltip styling */
+/* ============================================================
+   TEXT SELECTION
+   ============================================================ */
+
+::selection {
+  background-color: rgba(88, 166, 255, 0.35);
+  color: #e6edf3;
+}
+
+/* ============================================================
+   FORM CONTROLS
+   ============================================================ */
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--color-surface-2);
+  border: 1px solid var(--color-border-default);
+  border-radius: 6px;
+  color: var(--color-editor-fg);
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238b949e' stroke-width='2'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e");
+  background-position: right 0.625rem center;
+  background-repeat: no-repeat;
+  background-size: 0.875rem 0.875rem;
+  padding-right: 2rem !important;
+  cursor: pointer;
+  transition: border-color 0.1s;
+}
+
+select:hover {
+  border-color: var(--color-border-emphasis);
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-subtle);
+}
+
+select option {
+  background-color: var(--color-surface-3);
+  color: var(--color-editor-fg);
+}
+
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 3px;
+  background-color: var(--color-surface-2);
+  border: 1px solid var(--color-border-default);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  vertical-align: middle;
+  transition: background-color 0.1s, border-color 0.1s;
+}
+
+input[type="checkbox"]:hover {
+  border-color: var(--color-border-emphasis);
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+input[type="checkbox"]:checked {
+  background-color: var(--color-accent);
+  border-color: var(--color-accent);
+  background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M3.5 8.5l3 3 6-6'/%3e%3c/svg%3e");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 70% 70%;
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   TOOLTIP SYSTEM
+   ============================================================ */
+
 .has-tooltip {
   position: relative;
 }
@@ -264,10 +304,22 @@ input[type="checkbox"]:disabled {
   opacity: 0;
   visibility: hidden;
   z-index: 9999;
-  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.1s ease, transform 0.1s ease;
+  pointer-events: none;
+  font-family: var(--font-sans);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  background: var(--color-surface-overlay);
+  border: 1px solid var(--color-border-default);
+  border-radius: 4px;
+  color: var(--color-editor-fg);
+  padding: 3px 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
 
-/* Default / Right positioning (used in IconSidebar) */
+/* Tooltip directions */
 .tooltip-label:not(.tooltip-top):not(.tooltip-bottom):not(.tooltip-left):not(.tooltip-right) {
   transform: translateX(-4px);
 }
@@ -275,104 +327,88 @@ input[type="checkbox"]:disabled {
   transform: translateX(0) !important;
 }
 
-.tooltip-label.tooltip-right {
-  transform: translateY(-50%) translateX(-4px);
-}
-.has-tooltip:hover .tooltip-label.tooltip-right {
-  transform: translateY(-50%) translateX(0) !important;
-}
-.tooltip-label.tooltip-right.tooltip-align-start,
-.tooltip-label.tooltip-right.tooltip-align-end {
-  transform: translateX(-4px);
-}
-.has-tooltip:hover .tooltip-label.tooltip-right.tooltip-align-start,
-.has-tooltip:hover .tooltip-label.tooltip-right.tooltip-align-end {
-  transform: translateX(0) !important;
-}
+.tooltip-label.tooltip-right { transform: translateY(-50%) translateX(-4px); }
+.has-tooltip:hover .tooltip-label.tooltip-right { transform: translateY(-50%) translateX(0) !important; }
 
-.tooltip-label.tooltip-left {
-  transform: translateY(-50%) translateX(4px);
-}
-.has-tooltip:hover .tooltip-label.tooltip-left {
-  transform: translateY(-50%) translateX(0) !important;
-}
-.tooltip-label.tooltip-left.tooltip-align-start,
-.tooltip-label.tooltip-left.tooltip-align-end {
-  transform: translateX(4px);
-}
-.has-tooltip:hover .tooltip-label.tooltip-left.tooltip-align-start,
-.has-tooltip:hover .tooltip-label.tooltip-left.tooltip-align-end {
-  transform: translateX(0) !important;
-}
+.tooltip-label.tooltip-left { transform: translateY(-50%) translateX(4px); }
+.has-tooltip:hover .tooltip-label.tooltip-left { transform: translateY(-50%) translateX(0) !important; }
 
-.tooltip-label.tooltip-bottom {
-  transform: translateX(-50%) translateY(-4px);
-}
-.has-tooltip:hover .tooltip-label.tooltip-bottom {
-  transform: translateX(-50%) translateY(0) !important;
-}
-.tooltip-label.tooltip-bottom.tooltip-align-start,
-.tooltip-label.tooltip-bottom.tooltip-align-end {
-  transform: translateY(-4px);
-}
-.has-tooltip:hover .tooltip-label.tooltip-bottom.tooltip-align-start,
-.has-tooltip:hover .tooltip-label.tooltip-bottom.tooltip-align-end {
-  transform: translateY(0) !important;
-}
+.tooltip-label.tooltip-bottom { transform: translateX(-50%) translateY(-4px); }
+.has-tooltip:hover .tooltip-label.tooltip-bottom { transform: translateX(-50%) translateY(0) !important; }
 
-.tooltip-label.tooltip-top {
-  transform: translateX(-50%) translateY(4px);
-}
-.has-tooltip:hover .tooltip-label.tooltip-top {
-  transform: translateX(-50%) translateY(0) !important;
-}
-.tooltip-label.tooltip-top.tooltip-align-start,
-.tooltip-label.tooltip-top.tooltip-align-end {
-  transform: translateY(4px);
-}
-.has-tooltip:hover .tooltip-label.tooltip-top.tooltip-align-start,
-.has-tooltip:hover .tooltip-label.tooltip-top.tooltip-align-end {
-  transform: translateY(0) !important;
-}
+.tooltip-label.tooltip-top { transform: translateX(-50%) translateY(4px); }
+.has-tooltip:hover .tooltip-label.tooltip-top { transform: translateX(-50%) translateY(0) !important; }
 
-*:focus-visible {
-  outline-offset: 1px;
-}
+/* ============================================================
+   RESIZER
+   ============================================================ */
 
 .resizer-active {
   user-select: none;
   cursor: col-resize;
 }
 
-/* Text selection highlight */
-::selection {
-  background-color: rgba(0, 112, 243, 0.45);
-  color: #ffffff;
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-/* Markdown Styling */
+.animate-reveal {
+  animation: fade-in 0.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Agent working state — subtle opacity pulse, no rotation flash */
+@keyframes agent-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.agent-working-spinner {
+  animation: agent-pulse 1.5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-working-spinner {
+    animation: none;
+  }
+  .animate-reveal {
+    animation: none;
+  }
+}
+
+/* ============================================================
+   MARKDOWN BODY — Claude Code style
+   ============================================================ */
+
 .markdown-body {
-  font-family: inherit;
-  font-size: 13px;
-  line-height: 1.6;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;    /* 13px */
+  line-height: 1.65;
+  color: var(--color-editor-fg);
 }
 
 .markdown-body p {
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.75em;
 }
 
 .markdown-body p:last-child {
   margin-bottom: 0;
 }
 
+/* Inline code — GitHub-style pill */
 .markdown-body code {
   font-family: var(--font-mono);
-  font-size: 12px;
-  background-color: rgba(0, 0, 0, 0.3);
-  padding: 0.15rem 0.3rem;
-  border-radius: 0.25rem;
-  color: #e2e4ea;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 0.75rem;       /* 12px */
+  background-color: rgba(110, 118, 129, 0.15);
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  color: #e6edf3;
+  border: 1px solid rgba(110, 118, 129, 0.25);
+  line-height: 1.4;
 }
 
 .markdown-body pre code {
@@ -380,77 +416,703 @@ input[type="checkbox"]:disabled {
   padding: 0;
   border: none;
   border-radius: 0;
+  font-size: inherit;
 }
 
+/* Code blocks — tight and readable */
 .markdown-body pre {
-  background-color: #0e0f14;
-  border: 1px solid var(--color-surface-border);
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
+  background-color: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 12px 16px;
   overflow-x: auto;
-  margin-bottom: 1rem;
-  box-shadow: inset 0 1px 4px rgba(0,0,0,0.2);
+  margin: 0.75em 0;
+  font-size: 0.75rem;      /* 12px */
+  line-height: 1.6;
 }
 
 .markdown-body ul {
   list-style-type: disc;
-  padding-left: 1.5rem;
-  margin-bottom: 0.75rem;
+  padding-left: 1.25em;
+  margin-bottom: 0.75em;
 }
 
 .markdown-body ol {
   list-style-type: decimal;
-  padding-left: 1.5rem;
-  margin-bottom: 0.75rem;
+  padding-left: 1.25em;
+  margin-bottom: 0.75em;
 }
 
 .markdown-body li {
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.2em;
+}
+
+.markdown-body li::marker {
+  color: var(--color-fg-muted);
 }
 
 .markdown-body strong {
   font-weight: 600;
-  color: #ffffff;
+  color: #e6edf3;
 }
 
+.markdown-body em {
+  font-style: italic;
+  color: #cdd9e5;
+}
+
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+  font-weight: 600;
+  color: #e6edf3;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+  line-height: 1.3;
+}
+
+.markdown-body h1 { font-size: 1rem; }
+.markdown-body h2 { font-size: 0.9375rem; }
+.markdown-body h3 { font-size: 0.875rem; }
+
 .markdown-body a {
-  color: var(--color-brand-blue);
+  color: var(--color-research);
   text-decoration: none;
-  transition: all 0.15s;
+  transition: color 0.1s;
 }
 
 .markdown-body a:hover {
   text-decoration: underline;
-  text-shadow: 0 0 8px var(--color-brand-blue-glow);
+  color: #79c0ff;
 }
 
-/* Smooth fade mask for chat scroll views */
+.markdown-body blockquote {
+  border-left: 3px solid var(--color-border-default);
+  padding-left: 0.875em;
+  margin: 0.75em 0;
+  color: var(--color-fg-muted);
+  font-style: italic;
+}
+
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+  margin: 0.75em 0;
+}
+
+.markdown-body th {
+  background-color: #161b22;
+  padding: 6px 12px;
+  text-align: left;
+  font-weight: 600;
+  border: 1px solid #30363d;
+  color: #8b949e;
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+}
+
+.markdown-body td {
+  padding: 6px 12px;
+  border: 1px solid #21262d;
+  color: #e6edf3;
+}
+
+.markdown-body tr:hover td {
+  background-color: rgba(255,255,255,0.02);
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid #30363d;
+  margin: 1em 0;
+}
+
+/* ============================================================
+   SYNTAX HIGHLIGHT TOKENS
+   Applied via className on pre/code elements
+   ============================================================ */
+
+.token-keyword   { color: var(--syntax-keyword); }
+.token-string    { color: var(--syntax-string); }
+.token-number    { color: var(--syntax-number); }
+.token-comment   { color: var(--syntax-comment); font-style: italic; }
+.token-type      { color: var(--syntax-type); }
+.token-function  { color: var(--syntax-function); }
+.token-variable  { color: var(--syntax-variable); }
+.token-operator  { color: var(--syntax-operator); }
+.token-constant  { color: var(--syntax-constant); }
+.token-attr      { color: var(--syntax-attr); }
+.token-deleted   { color: var(--syntax-deleted); background: rgba(248,81,73,0.10); }
+.token-inserted  { color: var(--syntax-inserted); background: rgba(86,211,100,0.10); }
+
+/* ============================================================
+   DIFF LINES — used in DiffSection / engineering workbench
+   ============================================================ */
+
+.diff-line { display: flex; font-family: var(--font-mono); font-size: 0.75rem; line-height: 1.6; }
+.diff-line-add  { background: rgba(86,211,100,0.08); color: #56d364; }
+.diff-line-del  { background: rgba(248,81,73,0.08);  color: #ffa198; }
+.diff-line-ctx  { color: #6e7681; }
+.diff-gutter    { user-select: none; color: #6e7681; padding: 0 12px; min-width: 48px; text-align: right; border-right: 1px solid #21262d; }
+
+/* ============================================================
+   SADE DOMAIN BADGES
+   ============================================================ */
+
+.badge-copilot {
+  background: var(--color-copilot-subtle);
+  color: var(--color-copilot);
+  border: 1px solid var(--color-copilot-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.badge-coding {
+  background: var(--color-coding-subtle);
+  color: var(--color-coding);
+  border: 1px solid var(--color-coding-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.badge-research {
+  background: var(--color-research-subtle);
+  color: var(--color-research);
+  border: 1px solid var(--color-research-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+/* Task state pills */
+.state-active  { color: var(--color-task-active);  }
+.state-blocked { color: var(--color-task-blocked); }
+.state-unknown { color: var(--color-task-unknown); }
+.state-done    { color: var(--color-task-done);    }
+.state-failed  { color: var(--color-task-failed);  }
+.state-draft   { color: var(--color-task-draft);   }
+
+/* ============================================================
+   ACTIVE LENS INDICATOR — left border on nav item
+   ============================================================ */
+
+.lens-indicator-copilot  { border-left: 2px solid var(--color-copilot); }
+.lens-indicator-coding   { border-left: 2px solid var(--color-coding); }
+.lens-indicator-research { border-left: 2px solid var(--color-research); }
+
+/* ============================================================
+   WORKBENCH PANE HEADER — tight, dense
+   ============================================================ */
+
+.pane-header {
+  height: 2rem;         /* 32px — same as VS Code tab bar */
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--color-surface-1);
+  border-bottom: 1px solid var(--color-border-muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--color-fg-muted);
+  gap: 8px;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.pane-header .pane-title {
+  color: var(--color-editor-fg);
+  font-weight: 500;
+}
+
+/* ============================================================
+   TASK STRIP — persistent anchor bar
+   ============================================================ */
+
+.task-strip {
+  height: 2.25rem;      /* 36px */
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  background: var(--color-surface-1);
+  border-bottom: 1px solid var(--color-border-default);
+  gap: 8px;
+  font-size: 0.6875rem;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* ============================================================
+   NAVIGATION RAIL — ultra minimal
+   ============================================================ */
+
+.nav-rail {
+  width: 2.5rem;        /* 40px */
+  background: var(--color-canvas);
+  border-right: 1px solid var(--color-border-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 0;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.nav-rail-btn {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-fg-subtle);
+  transition: background-color 0.1s, color 0.1s;
+  position: relative;
+}
+
+.nav-rail-btn:hover {
+  background: var(--color-surface-2);
+  color: var(--color-editor-fg);
+}
+
+.nav-rail-btn.active {
+  color: var(--color-editor-fg);
+  background: var(--color-surface-2);
+}
+
+/* Domain-specific active states */
+.nav-rail-btn.active-copilot  { color: var(--color-copilot); }
+.nav-rail-btn.active-coding   { color: var(--color-coding); }
+.nav-rail-btn.active-research { color: var(--color-research); }
+
+/* ============================================================
+   LENS SWITCHER TABS
+   ============================================================ */
+
+.lens-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--color-fg-muted);
+  cursor: pointer;
+  transition: background-color 0.1s, color 0.1s;
+  user-select: none;
+  letter-spacing: 0.01em;
+}
+
+.lens-tab:hover {
+  background: var(--color-surface-2);
+  color: var(--color-editor-fg);
+}
+
+.lens-tab.active-copilot {
+  background: var(--color-copilot-subtle);
+  color: var(--color-copilot);
+}
+
+.lens-tab.active-coding {
+  background: var(--color-coding-subtle);
+  color: var(--color-coding);
+}
+
+.lens-tab.active-research {
+  background: var(--color-research-subtle);
+  color: var(--color-research);
+}
+
+/* ============================================================
+   CONVERSATION MESSAGES — Claude-style
+   ============================================================ */
+
+.message-user {
+  font-size: 0.8125rem;
+  color: var(--color-editor-fg);
+  background: #1c2128;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 10px 14px;
+  line-height: 1.6;
+}
+
+.message-assistant {
+  font-size: 0.8125rem;
+  color: #cdd9e5;
+  line-height: 1.65;
+}
+
+/* Thinking trace block */
+.thinking-trace {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  overflow: hidden;
+}
+
+.thinking-trace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  background: #1c2128;
+  border-bottom: 1px solid #21262d;
+  cursor: pointer;
+  color: var(--color-fg-muted);
+  font-size: 0.6875rem;
+  transition: color 0.1s;
+}
+
+.thinking-trace-header:hover {
+  color: var(--color-editor-fg);
+}
+
+.thinking-trace-body {
+  padding: 8px 12px;
+  color: #6e7681;
+  line-height: 1.6;
+}
+
+/* ============================================================
+   CHAT COMPOSER — minimal, Claude-style
+   ============================================================ */
+
+.composer-wrapper {
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  background: var(--color-surface-1);
+  transition: border-color 0.15s;
+}
+
+.composer-wrapper:focus-within {
+  border-color: var(--color-accent);
+}
+
+.composer-textarea {
+  background: transparent;
+  color: var(--color-editor-fg);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  resize: none;
+  width: 100%;
+  padding: 10px 14px;
+}
+
+.composer-textarea::placeholder {
+  color: var(--color-fg-subtle);
+}
+
+.composer-textarea:focus {
+  outline: none;
+}
+
+/* ============================================================
+   FILE TREE — VS Code-style
+   ============================================================ */
+
+.file-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: 0.8125rem;
+  color: var(--color-editor-fg);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background-color 0.08s;
+  user-select: none;
+  min-width: 0;
+}
+
+.file-tree-item:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+.file-tree-item.active {
+  background: rgba(88, 166, 255, 0.12);
+  color: var(--color-research);
+}
+
+.file-tree-item .file-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--color-fg-muted);
+}
+
+/* ============================================================
+   CLAIM MATRIX — Research workbench
+   ============================================================ */
+
+.claim-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border-muted);
+  font-size: 0.8125rem;
+}
+
+.claim-row:last-child { border-bottom: none; }
+
+.claim-status-supported  { color: var(--color-task-active); }
+.claim-status-unknown    { color: var(--color-task-unknown); }
+.claim-status-contradicted { color: var(--color-task-failed); }
+
+/* ============================================================
+   STATUS DOT INDICATOR
+   Always shown with text label, never color-only.
+   ============================================================ */
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.status-dot.active   { background: var(--color-task-active); }
+.status-dot.blocked  { background: var(--color-task-blocked); }
+.status-dot.unknown  { background: var(--color-task-unknown); }
+.status-dot.done     { background: var(--color-task-done); }
+.status-dot.failed   { background: var(--color-task-failed); }
+.status-dot.running  { background: var(--color-task-active); animation: agent-pulse 1.5s ease-in-out infinite; }
+
+/* ============================================================
+   DEMO MODE BANNER
+   ============================================================ */
+
+.demo-banner {
+  background: rgba(210, 153, 34, 0.08);
+  border-bottom: 1px solid rgba(210, 153, 34, 0.25);
+  color: #d29922;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  padding: 4px 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   CHAT SCROLL MASK — fade at edges
+   ============================================================ */
+
 .chat-scroll-mask {
   mask-image: linear-gradient(
     to bottom,
     transparent 0px,
-    rgba(0, 0, 0, 0.08) 6px,
-    rgba(0, 0, 0, 0.35) 16px,
-    rgba(0, 0, 0, 0.8) 28px,
-    black 40px,
-    black calc(100% - 40px),
-    rgba(0, 0, 0, 0.8) calc(100% - 28px),
-    rgba(0, 0, 0, 0.35) calc(100% - 16px),
-    rgba(0, 0, 0, 0.08) calc(100% - 6px),
+    black 32px,
+    black calc(100% - 32px),
     transparent 100%
   );
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0px,
-    rgba(0, 0, 0, 0.08) 6px,
-    rgba(0, 0, 0, 0.35) 16px,
-    rgba(0, 0, 0, 0.8) 28px,
-    black 40px,
-    black calc(100% - 40px),
-    rgba(0, 0, 0, 0.8) calc(100% - 28px),
-    rgba(0, 0, 0, 0.35) calc(100% - 16px),
-    rgba(0, 0, 0, 0.08) calc(100% - 6px),
+    black 32px,
+    black calc(100% - 32px),
     transparent 100%
   );
 }
+
+/* ============================================================
+   SIDEBAR SESSION LIST ITEM
+   ============================================================ */
+
+.session-item {
+  padding: 8px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.08s;
+  border: 1px solid transparent;
+}
+
+.session-item:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.session-item.active {
+  background: rgba(88, 166, 255, 0.06);
+  border-color: rgba(88, 166, 255, 0.20);
+}
+
+.session-item-title {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-editor-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-item-preview {
+  font-size: 0.75rem;
+  color: var(--color-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.session-item-meta {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--color-fg-subtle);
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ============================================================
+   BUTTON VARIANTS
+   ============================================================ */
+
+/* Primary button */
+.btn-primary {
+  background: var(--color-accent);
+  color: #0d1117;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--color-accent);
+  transition: background-color 0.1s, opacity 0.1s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-primary:hover {
+  background: #79c0ff;
+  border-color: #79c0ff;
+}
+
+/* Ghost button */
+.btn-ghost {
+  background: transparent;
+  color: var(--color-fg-muted);
+  font-size: 0.8125rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: background-color 0.1s, color 0.1s, border-color 0.1s;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.btn-ghost:hover {
+  background: var(--color-surface-2);
+  color: var(--color-editor-fg);
+  border-color: var(--color-border-default);
+}
+
+/* Danger button */
+.btn-danger {
+  background: transparent;
+  color: var(--color-task-failed);
+  font-size: 0.8125rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(248,81,73,0.4);
+  transition: background-color 0.1s;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.btn-danger:hover {
+  background: rgba(248,81,73,0.10);
+  border-color: rgba(248,81,73,0.6);
+}
+
+/* Icon button — used in toolbars */
+.btn-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-fg-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background-color 0.08s, color 0.08s, border-color 0.08s;
+}
+
+.btn-icon:hover {
+  background: var(--color-surface-2);
+  color: var(--color-editor-fg);
+  border-color: var(--color-border-default);
+}
+
+/* ============================================================
+   TERMINAL OUTPUT — dense, monospaced
+   ============================================================ */
+
+.terminal-output {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: #cdd9e5;
+  background: var(--color-canvas-inset);
+  padding: 8px 12px;
+}
+
+.terminal-prompt { color: var(--color-coding); }
+.terminal-error  { color: var(--color-task-failed); }
+.terminal-warning { color: var(--color-task-blocked); }
+.terminal-success { color: var(--color-coding); }
+.terminal-comment { color: var(--color-fg-subtle); }
+
+/* ============================================================
+   CODE BLOCK — used in CodeBlock component
+   ============================================================ */
+
+.code-block {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 0.5em 0;
+}
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
+  background: #1c2128;
+  border-bottom: 1px solid #21262d;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: #6e7681;
+  user-select: none;
+}
+
+.code-block-lang {
+  color: #8b949e;
+  text-transform: lowercase;
+}
+
+.code-block-body {
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: #e6edf3;
+  tab-size: 2;
 }

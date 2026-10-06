@@ -1,22 +1,24 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { 
-  MessageSquareCode, 
-  KeyRound, 
-  GitFork, 
-  Activity, 
-  Database, 
-  SlidersHorizontal, 
-  Plus, 
-  Search, 
-  PanelLeftClose, 
-  PanelLeftOpen, 
-  ChevronDown, 
+import {
+  Sparkles,
+  MessageSquare,
+  KeyRound,
+  GitFork,
+  Activity,
+  Database,
+  Settings2,
+  Plus,
+  Search,
+  PanelLeftClose,
+  PanelLeftOpen,
   Terminal,
-  BookOpen,
+  FlaskConical,
   Bot,
   Inbox,
+  FolderOpen,
+  ChevronDown,
   CheckCircle2,
-  FolderGit2
+  MoreHorizontal
 } from 'lucide-react';
 import { MainTab, Session } from '@/types';
 
@@ -37,19 +39,50 @@ interface UnifiedSidebarProps {
   onShowToast: (msg: string) => void;
 }
 
-interface NavItem {
-  id: MainTab;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
+type PackFilter = 'all' | 'coding' | 'research' | 'assistant';
+
+const PACK_FILTERS: { id: PackFilter; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'all',       label: 'All',      icon: MessageSquare },
+  { id: 'coding',    label: 'Code',     icon: Terminal },
+  { id: 'research',  label: 'Research', icon: FlaskConical },
+  { id: 'assistant', label: 'Assist',   icon: Bot },
+];
+
+function sessionMatchesPack(session: Session, pack: PackFilter): boolean {
+  if (pack === 'all') return true;
+  if (session.pack) {
+    if (pack === 'coding')    return session.pack === 'engineering' || session.pack === 'coding';
+    if (pack === 'research')  return session.pack === 'research';
+    if (pack === 'assistant') return session.pack === 'assistant';
+  }
+  return true;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { id: 'studio', label: 'Studio & Workbenches', icon: MessageSquareCode },
-  { id: 'providers', label: 'API Keys & Providers', icon: KeyRound },
-  { id: 'chains', label: 'OmniRoute Chains', icon: GitFork },
-  { id: 'telemetry', label: 'Logs & Telemetry', icon: Activity },
-  { id: 'cache', label: 'Local KV Cache', icon: Database }
-];
+function PackDot({ pack }: { pack?: string }) {
+  if (!pack) return null;
+  const color =
+    pack === 'engineering' || pack === 'coding' ? '#3fb950' :
+    pack === 'research'  ? '#58a6ff' :
+    pack === 'assistant' ? '#a78bfa' : '#8b949e';
+  return (
+    <span className="font-mono text-[9px] shrink-0" style={{ color }}>
+      ●
+    </span>
+  );
+}
+
+function StatusChip({ status }: { status?: string }) {
+  if (!status) return null;
+  const color =
+    status === 'Active' || status === 'Running' ? '#3fb950' :
+    status === 'Done' ? '#58a6ff' :
+    status === 'Blocked' ? '#d29922' : '#8b949e';
+  return (
+    <span className="font-mono text-[10px] shrink-0" style={{ color }}>
+      {status}
+    </span>
+  );
+}
 
 export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
   currentTab,
@@ -65,296 +98,265 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
   isCollapsed,
   onToggleCollapse,
   onOpenSettings,
-  onShowToast
+  onShowToast,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPack, setSelectedPack] = useState<'all' | 'engineering' | 'research' | 'assistant'>('all');
-  const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
+  const [packFilter, setPackFilter] = useState<PackFilter>('all');
+  const [isProjectOpen, setIsProjectOpen] = useState(false);
+  const [isToolsOpen, setIsToolsOpen] = useState(false);
   const projectDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close project dropdown on outside click
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handler = (e: MouseEvent) => {
       if (projectDropdownRef.current && !projectDropdownRef.current.contains(e.target as Node)) {
-        setIsProjectDropdownOpen(false);
+        setIsProjectOpen(false);
       }
     };
-    document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Filter sessions by search query and pack filter
   const filteredSessions = sessions.filter((s) => {
-    const matchesSearch = 
-      s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      s.preview.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    if (!matchesSearch) return false;
-    if (selectedPack === 'all') return true;
-
-    // Detect pack from session title or metadata
-    const title = s.title.toLowerCase();
-    if (selectedPack === 'engineering') {
-      return title.includes('runtime') || title.includes('code') || title.includes('audit') || title.includes('feat') || title.includes('fix');
-    }
-    if (selectedPack === 'research') {
-      return title.includes('research') || title.includes('paper') || title.includes('arxiv') || title.includes('study');
-    }
-    if (selectedPack === 'assistant') {
-      return title.includes('assistant') || title.includes('agent') || title.includes('fleet') || title.includes('prompt');
-    }
-    return true;
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = !q || s.title.toLowerCase().includes(q) || s.preview.toLowerCase().includes(q);
+    return matchesSearch && sessionMatchesPack(s, packFilter);
   });
 
-  // -------------------------------------------------------------
-  // 1. RENDER COLLAPSED (48px / w-12) ICON-ONLY RAIL (COMPACT MODE)
-  // -------------------------------------------------------------
+  /* ── COLLAPSED RAIL (44px) ── */
   if (isCollapsed) {
     return (
-      <aside className="w-12 bg-[#0c0e14] border-r border-[#1c2130] flex flex-col items-center py-2 justify-between shrink-0 z-20 select-none transition-all duration-200">
-        {/* Top: Expand Button + New Task Button */}
-        <div className="flex flex-col items-center gap-2 w-full px-1">
-          {/* Expand Sidebar Button */}
+      <aside 
+        className="w-11 h-full z-20 select-none flex flex-col items-center justify-between py-2 shrink-0"
+        style={{
+          background: 'var(--color-surface-1, #161b22)',
+          borderRight: '1px solid var(--color-border-default, #30363d)',
+        }}
+      >
+        <div className="flex flex-col items-center gap-1.5 w-full px-1">
           <button
             onClick={onToggleCollapse}
-            className="w-8 h-8 rounded-lg hover:bg-[#181d2c] text-neutral-400 hover:text-white flex items-center justify-center transition border border-transparent hover:border-[#232938]"
-            title="Expand Custos Sidebar (⌘B)"
+            className="p-2 rounded-lg text-[#8b949e] hover:text-white hover:bg-surface-2 transition"
+            title="Expand Sidebar (⌘B)"
           >
             <PanelLeftOpen className="w-4 h-4" />
           </button>
 
-          <div className="w-6 h-[1px] bg-[#1c2130] my-0.5" />
+          <div className="w-6 h-px bg-[#30363d] my-1" />
 
-          {/* New Task / Session Button */}
           <button
             onClick={onOpenNewSessionModal}
-            className="w-8 h-8 rounded-lg bg-[#141824] hover:bg-brand-blue/20 hover:border-brand-blue/50 text-neutral-300 hover:text-white flex items-center justify-center transition border border-[#232938]"
-            title="New Custos Task (⌘N)"
+            className="p-2 rounded-lg text-white hover:bg-surface-2 transition"
+            style={{ background: 'var(--color-surface-2, #1c2128)', border: '1px solid var(--color-border-default, #30363d)' }}
+            title="New Chat (⌘N)"
           >
-            <Plus className="w-4 h-4 text-brand-blue" />
+            <Plus className="w-4 h-4 text-[#a78bfa]" />
           </button>
 
-          <div className="w-6 h-[1px] bg-[#1c2130] my-0.5" />
+          <div className="w-6 h-px bg-[#30363d] my-1" />
 
-          {/* Custos Module Nav Icons */}
-          {NAV_ITEMS.map((item) => {
-            const isSelected = currentTab === item.id;
-            const Icon = item.icon;
-            return (
-              <div key={item.id} className="has-tooltip relative flex items-center justify-center">
-                <button
-                  onClick={() => onSwitchTab(item.id)}
-                  className={`w-8 h-8 rounded-xl flex items-center justify-center transition ${
-                    isSelected
-                      ? 'bg-white text-black shadow-md border border-white font-semibold'
-                      : 'text-neutral-400 hover:text-white hover:bg-[#181d2c] border border-transparent hover:border-[#232938]'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                </button>
-                <span className="tooltip-label absolute left-12 px-2 py-1 bg-[#181d2c] border border-[#232938] text-neutral-200 text-[11px] font-medium rounded-md whitespace-nowrap shadow-xl z-50 pointer-events-none">
-                  {item.label}
-                </span>
-              </div>
-            );
-          })}
+          {/* Core Lens Shortcuts */}
+          <button
+            onClick={() => onSwitchTab('studio')}
+            className={`p-2 rounded-lg transition ${currentTab === 'studio' ? 'bg-surface-2 text-white' : 'text-[#8b949e] hover:text-white'}`}
+            title="Claude Chat (Copilot)"
+          >
+            <MessageSquare className="w-4 h-4 text-[#a78bfa]" />
+          </button>
+
+          <button
+            onClick={() => onSwitchTab('studio')}
+            className="p-2 rounded-lg text-[#8b949e] hover:text-white transition"
+            title="Claude Code (Codex)"
+          >
+            <Terminal className="w-4 h-4 text-[#3fb950]" />
+          </button>
+
+          <button
+            onClick={() => onSwitchTab('studio')}
+            className="p-2 rounded-lg text-[#8b949e] hover:text-white transition"
+            title="Claude Science"
+          >
+            <FlaskConical className="w-4 h-4 text-[#58a6ff]" />
+          </button>
         </div>
 
-        {/* Bottom: Settings & Brand Icon */}
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center gap-1 pb-1">
           <button
-            onClick={() => {
-              if (onOpenSettings) onOpenSettings();
-              else onSwitchTab('settings');
-            }}
-            className="w-8 h-8 rounded-lg text-neutral-400 hover:text-white hover:bg-[#181d2c] flex items-center justify-center transition border border-transparent hover:border-[#232938]"
-            title="Preferences (⌘,)"
+            onClick={() => onOpenSettings ? onOpenSettings() : onSwitchTab('settings')}
+            className="p-2 rounded-lg text-[#8b949e] hover:text-white transition"
+            title="Settings (⌘,)"
           >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <Settings2 className="w-4 h-4" />
           </button>
-
-          <div 
-            onClick={onToggleCollapse}
-            className="w-7 h-7 rounded-full bg-gradient-to-tr from-brand-blue to-purple-600 p-[1.5px] cursor-pointer"
-            title="Custos SADE (Click to expand)"
-          >
-            <div className="w-full h-full rounded-full bg-[#141824] flex items-center justify-center text-[10px] font-bold text-white">
-              C
-            </div>
-          </div>
         </div>
       </aside>
     );
   }
 
-  // -------------------------------------------------------------
-  // 2. RENDER EXPANDED (256px / w-64) CUSTOS SADE SESSIONS SIDEBAR
-  // -------------------------------------------------------------
+  /* ── EXPANDED CLAUDE DESKTOP SIDEBAR (240px) ── */
   return (
-    <aside className="w-64 bg-[#0c0e14] border-r border-[#1c2130] flex flex-col shrink-0 z-20 select-none overflow-hidden transition-all duration-200 h-full font-sans text-xs">
-      {/* 1. Header: Custos SADE Brand + New Task + Collapse Button */}
-      <div className="h-10 px-3 flex items-center justify-between shrink-0 bg-[#090b10] border-b border-[#1c2130]">
+    <aside
+      className="w-60 flex flex-col h-full z-20 select-none overflow-hidden shrink-0 text-xs"
+      style={{
+        background: 'var(--color-surface-1, #161b22)',
+        borderRight: '1px solid var(--color-border-default, #30363d)',
+      }}
+    >
+      {/* ── 1. Brand Header ── */}
+      <div
+        className="h-10 px-3 flex items-center justify-between shrink-0"
+        style={{ borderBottom: '1px solid var(--color-border-muted, #21262d)' }}
+      >
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-md bg-[#141824] border border-[#232938] flex items-center justify-center shrink-0 overflow-hidden">
-            <img 
-              src="/assets/custos-owl.png" 
-              alt="Custos" 
-              className="w-3.5 h-3.5 object-contain"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).src = '/assets/custos-logo.png';
-              }} 
-            />
+          <div className="w-5 h-5 rounded-md bg-[#1c2128] border border-[#30363d] flex items-center justify-center shrink-0">
+            <Sparkles className="w-3.5 h-3.5 text-[#a78bfa]" />
           </div>
-          <span className="font-semibold text-xs text-white tracking-tight">Custos SADE</span>
-          <span className="text-[10px] font-mono text-neutral-500 bg-[#141824] px-1.5 py-0.5 rounded border border-[#232938]">v0.1</span>
+          <span className="font-semibold text-white tracking-tight text-xs">
+            Custos SADE
+          </span>
+          <span className="font-mono text-[9px] text-[#3fb950] px-1 rounded bg-[#3fb950]/10 border border-[#3fb950]/30 font-bold">
+            v0.1
+          </span>
         </div>
 
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onOpenNewSessionModal}
-            className="p-1 rounded-md bg-[#141824] hover:bg-[#1a2030] text-brand-blue border border-[#232938] transition"
-            title="Create Task / Session (⌘N)"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={onToggleCollapse}
-            className="p-1 rounded-md text-neutral-400 hover:text-white hover:bg-[#1a2030] transition"
-            title="Collapse Sidebar (⌘B)"
-          >
-            <PanelLeftClose className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        <button
+          onClick={onToggleCollapse}
+          className="p-1 rounded text-[#8b949e] hover:text-white transition"
+          title="Collapse Sidebar (⌘B)"
+        >
+          <PanelLeftClose className="w-3.5 h-3.5" />
+        </button>
       </div>
 
-      {/* 2. Project Switcher Bar */}
-      <div className="px-3 py-2 border-b border-[#1c2130] bg-[#0c0e14]" ref={projectDropdownRef}>
-        <div className="relative">
-          <button
-            onClick={() => setIsProjectDropdownOpen(!isProjectDropdownOpen)}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#141824] border border-[#232938] hover:border-brand-blue/50 text-neutral-200 transition text-xs"
+      {/* ── 2. Prominent "+ New Chat" Button (Claude Desktop style) ── */}
+      <div className="p-3 pb-2 shrink-0">
+        <button
+          onClick={onOpenNewSessionModal}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition shadow-sm group"
+          style={{
+            background: 'var(--color-surface-2, #1c2128)',
+            border: '1px solid var(--color-border-default, #30363d)',
+            color: '#ffffff'
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <Plus className="w-3.5 h-3.5 text-[#a78bfa] group-hover:scale-110 transition-transform" />
+            <span>New chat</span>
+          </div>
+          <kbd 
+            className="text-[10px] font-mono text-[#8b949e] px-1.5 py-0.2 rounded" 
+            style={{ background: 'var(--color-canvas, #0d1117)', border: '1px solid var(--color-border-muted, #21262d)' }}
           >
-            <div className="flex items-center gap-2 truncate">
-              <FolderGit2 className="w-3.5 h-3.5 text-brand-blue shrink-0" />
-              <span className="font-medium truncate">{currentProject}</span>
-            </div>
-            <ChevronDown className="w-3 h-3 text-neutral-500 shrink-0" />
-          </button>
+            ⌘N
+          </kbd>
+        </button>
+      </div>
 
-          {isProjectDropdownOpen && (
-            <div className="absolute left-0 mt-1 w-full bg-[#0c0e14] border border-[#232938] rounded-xl shadow-2xl p-1 text-xs z-50">
-              <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
-                Switch Project
-              </div>
-              {projectNames.map((proj) => {
-                const isActive = proj === currentProject;
-                return (
-                  <div
-                    key={proj}
-                    onClick={() => {
-                      onSelectProject(proj);
-                      setIsProjectDropdownOpen(false);
-                      onShowToast(`Switched project to ${proj}`);
-                    }}
-                    className={`flex items-center justify-between px-2 py-1 rounded-lg cursor-pointer transition ${
-                      isActive 
-                        ? 'bg-[#1a2030] text-white font-medium' 
-                        : 'text-neutral-400 hover:text-white hover:bg-[#141824]'
-                    }`}
-                  >
-                    <span className="truncate">{proj}</span>
-                    {isActive && <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />}
-                  </div>
-                );
-              })}
-              <div className="h-[1px] bg-[#1c2130] my-1" />
+      {/* ── 3. Workspace Dropdown ── */}
+      <div className="px-3 pb-2 shrink-0 relative" ref={projectDropdownRef}>
+        <button
+          onClick={() => setIsProjectOpen(!isProjectOpen)}
+          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] transition text-[#c9d1d9] hover:text-white"
+          style={{
+            background: 'var(--color-surface-0, #0d1117)',
+            border: '1px solid var(--color-border-default, #30363d)',
+          }}
+        >
+          <span className="flex items-center gap-1.5 truncate">
+            <FolderOpen className="w-3.5 h-3.5 text-[#58a6ff] shrink-0" />
+            <span className="truncate font-medium">{currentProject}</span>
+          </span>
+          <ChevronDown className="w-3 h-3 text-[#6e7681] shrink-0" />
+        </button>
+
+        {isProjectOpen && (
+          <div
+            className="absolute left-3 right-3 mt-1 rounded-xl shadow-2xl p-1.5 text-xs z-50 animate-in fade-in duration-100"
+            style={{
+              background: 'var(--color-surface-2, #1c2128)',
+              border: '1px solid var(--color-border-default, #30363d)',
+            }}
+          >
+            <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#8b949e]">
+              Workspaces
+            </div>
+            {projectNames.map((proj) => (
               <button
+                key={proj}
                 onClick={() => {
-                  setIsProjectDropdownOpen(false);
-                  onNewProjectPrompt();
+                  onSelectProject(proj);
+                  setIsProjectOpen(false);
+                  onShowToast(`Switched workspace to ${proj}`);
                 }}
-                className="w-full text-left px-2 py-1 rounded-lg hover:bg-[#141824] text-brand-blue flex items-center gap-1.5 transition text-[11px]"
+                className={`w-full text-left px-2 py-1 rounded text-xs transition flex items-center justify-between ${
+                  proj === currentProject ? 'bg-surface-elevated text-white font-medium' : 'text-[#8b949e] hover:text-white'
+                }`}
               >
-                <Plus className="w-3 h-3" />
-                <span>New Project...</span>
+                <span>{proj}</span>
+                {proj === currentProject && <CheckCircle2 className="w-3 h-3 text-[#3fb950]" />}
               </button>
-            </div>
-          )}
-        </div>
+            ))}
+            <div className="my-1 border-t border-[#30363d]" />
+            <button
+              onClick={() => { setIsProjectOpen(false); onNewProjectPrompt(); }}
+              className="w-full text-left px-2 py-1 rounded text-[11px] text-[#58a6ff] hover:bg-surface-elevated transition flex items-center gap-1.5"
+            >
+              <Plus className="w-3 h-3" />
+              <span>New Workspace...</span>
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* 3. Custos 3-Packs Filter Chips (Coding / Research / Assistant) */}
-      <div className="px-2 py-1.5 border-b border-[#1c2130] bg-[#0a0c12]">
-        <div className="grid grid-cols-4 gap-1 text-[10.5px] font-medium text-center">
-          <button
-            onClick={() => setSelectedPack('all')}
-            className={`py-1 rounded-md transition ${
-              selectedPack === 'all'
-                ? 'bg-[#1c2234] text-white font-semibold shadow-sm'
-                : 'text-neutral-400 hover:text-white hover:bg-[#141824]'
-            }`}
-          >
-            All
-          </button>
-          <button
-            onClick={() => setSelectedPack('engineering')}
-            className={`py-1 rounded-md flex items-center justify-center gap-1 transition ${
-              selectedPack === 'engineering'
-                ? 'bg-emerald-500/15 text-emerald-300 font-semibold border border-emerald-500/30'
-                : 'text-neutral-400 hover:text-white hover:bg-[#141824]'
-            }`}
-            title="Coding Pack"
-          >
-            <Terminal className="w-3 h-3 shrink-0" />
-            <span>Code</span>
-          </button>
-          <button
-            onClick={() => setSelectedPack('research')}
-            className={`py-1 rounded-md flex items-center justify-center gap-1 transition ${
-              selectedPack === 'research'
-                ? 'bg-purple-500/15 text-purple-300 font-semibold border border-purple-500/30'
-                : 'text-neutral-400 hover:text-white hover:bg-[#141824]'
-            }`}
-            title="Research Pack"
-          >
-            <BookOpen className="w-3 h-3 shrink-0" />
-            <span>Res</span>
-          </button>
-          <button
-            onClick={() => setSelectedPack('assistant')}
-            className={`py-1 rounded-md flex items-center justify-center gap-1 transition ${
-              selectedPack === 'assistant'
-                ? 'bg-amber-500/15 text-amber-300 font-semibold border border-amber-500/30'
-                : 'text-neutral-400 hover:text-white hover:bg-[#141824]'
-            }`}
-            title="Assistant Pack"
-          >
-            <Bot className="w-3 h-3 shrink-0" />
-            <span>Asst</span>
-          </button>
-        </div>
-      </div>
-
-      {/* 4. Search Bar */}
-      <div className="px-3 py-1.5 border-b border-[#1c2130]">
+      {/* ── 4. Search & Filters ── */}
+      <div className="px-3 pb-2 shrink-0 space-y-1.5" style={{ borderBottom: '1px solid var(--color-border-muted, #21262d)' }}>
         <div className="relative">
-          <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-500" />
+          <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6e7681]" />
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search tasks and conversations..."
-            className="w-full bg-[#141824] border border-[#232938] rounded-lg pl-7 pr-2 py-1 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-brand-blue transition font-sans"
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search conversations..."
+            className="w-full pl-7 pr-2 py-1 rounded text-white placeholder-[#6e7681] text-[11px] focus:outline-none font-sans"
+            style={{
+              background: 'var(--color-surface-0, #0d1117)',
+              border: '1px solid var(--color-border-default, #30363d)',
+            }}
           />
+        </div>
+
+        {/* Filter Pills */}
+        <div className="flex items-center gap-1 font-mono text-[10px]">
+          {PACK_FILTERS.map(f => {
+            const active = packFilter === f.id;
+            return (
+              <button
+                key={f.id}
+                onClick={() => setPackFilter(f.id)}
+                className="px-2 py-0.5 rounded transition font-medium"
+                style={{
+                  background: active ? 'var(--color-surface-2, #1c2128)' : 'transparent',
+                  color: active ? '#ffffff' : '#8b949e',
+                  border: `1px solid ${active ? 'var(--color-border-default, #30363d)' : 'transparent'}`
+                }}
+              >
+                {f.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* 5. Scrollable Real Custos Sessions / Tasks List */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1.5 min-w-0">
+      {/* ── 5. Recents Conversation List ── */}
+      <div className="flex-1 overflow-y-auto px-2 py-1.5 space-y-0.5">
+        <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#6e7681]">
+          Recent Tasks
+        </div>
+
         {filteredSessions.length === 0 ? (
-          <div className="p-6 text-center text-neutral-500 text-xs">
-            <Inbox className="w-6 h-6 mx-auto mb-2 opacity-50" />
-            <p>No tasks found</p>
+          <div className="p-6 text-center text-[#6e7681] text-xs">
+            <Inbox className="w-4 h-4 mx-auto mb-1.5 opacity-50" />
+            <p>No recent conversations</p>
           </div>
         ) : (
           filteredSessions.map((session) => {
@@ -362,87 +364,101 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
             return (
               <div
                 key={session.id}
-                onClick={() => onSelectSession(session.id)}
-                className={`p-2.5 rounded-xl cursor-pointer transition border min-w-0 ${
-                  isActive
-                    ? 'bg-[#191e2c] border-brand-blue/60 text-white shadow-md'
-                    : 'bg-[#121520] hover:bg-[#161a28] border-[#1e2332] text-neutral-300'
-                }`}
+                onClick={() => {
+                  onSelectSession(session.id);
+                  onSwitchTab('studio');
+                }}
+                className="w-full px-2.5 py-2 rounded-lg cursor-pointer transition text-left space-y-0.5 group"
+                style={{
+                  background: isActive ? 'var(--color-surface-2, #1c2128)' : 'transparent',
+                  border: `1px solid ${isActive ? 'var(--color-border-default, #30363d)' : 'transparent'}`,
+                  color: isActive ? '#ffffff' : '#8b949e'
+                }}
               >
-                <div className="flex items-center justify-between mb-1 min-w-0">
-                  <span className={`font-semibold truncate text-xs ${isActive ? 'text-white' : 'text-neutral-200'}`}>
-                    {session.title}
-                  </span>
-                  <span className="text-[10px] text-neutral-500 font-mono shrink-0 ml-1.5 bg-[#090b10] px-1 py-0.2 rounded border border-[#1e2332]">
-                    {session.taskStatus || (session.source === 'demo' ? 'Demo' : session.time)}
-                  </span>
+                <div className="flex items-center justify-between gap-1">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <PackDot pack={session.pack} />
+                    <span className="font-semibold text-xs truncate text-[#e6edf3]">
+                      {session.title}
+                    </span>
+                  </div>
+                  <StatusChip status={session.taskStatus} />
                 </div>
-
-                <p className="text-[11px] text-neutral-400 truncate leading-snug">
+                <p className="text-[11px] text-[#6e7681] truncate pl-3">
                   {session.preview}
                 </p>
-
-                <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-[#1e2332]/60 text-[10px] text-neutral-500 font-mono">
-                  <span className="truncate max-w-[120px] text-neutral-400">{session.model}</span>
-                  {session.diffLinesCount && (
-                    <span className="text-emerald-400 font-medium shrink-0 bg-emerald-500/10 px-1 rounded">
-                      {session.diffLinesCount}
-                    </span>
-                  )}
-                </div>
               </div>
             );
           })
         )}
       </div>
 
-      {/* 6. Custos Modules Footer & Provenance */}
-      <div className="border-t border-[#1c2130] bg-[#090b10] p-2 space-y-1">
-        <div className="flex items-center justify-between px-1 text-[10.5px] font-mono text-neutral-400">
-          <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>Zero-IO Invariant Active</span>
+      {/* ── 6. Advanced Tools Drawer & Footer ── */}
+      <div 
+        className="shrink-0 p-2.5 space-y-1.5"
+        style={{
+          borderTop: '1px solid var(--color-border-muted, #21262d)',
+          background: 'var(--color-surface-1, #161b22)',
+        }}
+      >
+        {/* Toggle secondary tools */}
+        <button
+          onClick={() => setIsToolsOpen(!isToolsOpen)}
+          className="w-full flex items-center justify-between px-2 py-1 rounded text-[11px] text-[#8b949e] hover:text-white transition"
+        >
+          <span className="flex items-center gap-1.5 font-medium">
+            <MoreHorizontal className="w-3.5 h-3.5 text-[#6e7681]" />
+            <span>Advanced Tools</span>
+          </span>
+          <ChevronDown className={`w-3 h-3 text-[#6e7681] transition-transform ${isToolsOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {isToolsOpen && (
+          <div className="space-y-0.5 pl-2 font-mono text-[11px]">
+            <button
+              onClick={() => onSwitchTab('providers')}
+              className={`w-full text-left px-2 py-1 rounded transition flex items-center gap-1.5 ${currentTab === 'providers' ? 'text-white font-bold' : 'text-[#8b949e] hover:text-white'}`}
+            >
+              <KeyRound className="w-3 h-3 text-[#d29922]" />
+              <span>Providers & Keys</span>
+            </button>
+            <button
+              onClick={() => onSwitchTab('chains')}
+              className={`w-full text-left px-2 py-1 rounded transition flex items-center gap-1.5 ${currentTab === 'chains' ? 'text-white font-bold' : 'text-[#8b949e] hover:text-white'}`}
+            >
+              <GitFork className="w-3 h-3 text-[#3fb950]" />
+              <span>OmniRoute Cascade</span>
+            </button>
+            <button
+              onClick={() => onSwitchTab('telemetry')}
+              className={`w-full text-left px-2 py-1 rounded transition flex items-center gap-1.5 ${currentTab === 'telemetry' ? 'text-white font-bold' : 'text-[#8b949e] hover:text-white'}`}
+            >
+              <Activity className="w-3 h-3 text-[#58a6ff]" />
+              <span>Telemetry & Logs</span>
+            </button>
+            <button
+              onClick={() => onSwitchTab('cache')}
+              className={`w-full text-left px-2 py-1 rounded transition flex items-center gap-1.5 ${currentTab === 'cache' ? 'text-white font-bold' : 'text-[#8b949e] hover:text-white'}`}
+            >
+              <Database className="w-3 h-3 text-[#a78bfa]" />
+              <span>KV Semantic Cache</span>
+            </button>
           </div>
+        )}
+
+        {/* Footer row */}
+        <div className="flex items-center justify-between pt-1">
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#3fb950] animate-pulse" />
+            <span className="font-mono text-[10px] text-[#3fb950]">Sovereign · Safe</span>
+          </div>
+
           <button
-            onClick={() => {
-              if (onOpenSettings) onOpenSettings();
-              else onSwitchTab('settings');
-            }}
-            className="p-1 rounded hover:bg-[#1a2030] text-neutral-400 hover:text-white transition"
+            onClick={() => onOpenSettings ? onOpenSettings() : onSwitchTab('settings')}
+            className="p-1 rounded text-[#8b949e] hover:text-white transition"
             title="Settings (⌘,)"
           >
-            <SlidersHorizontal className="w-3 h-3" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-4 gap-1 text-[10px] font-medium text-center pt-0.5 text-neutral-400">
-          <button
-            onClick={() => onSwitchTab('providers')}
-            className="py-0.5 rounded hover:bg-[#141824] hover:text-neutral-200 transition truncate"
-            title="API Keys & Gateways"
-          >
-            Providers
-          </button>
-          <button
-            onClick={() => onSwitchTab('chains')}
-            className="py-0.5 rounded hover:bg-[#141824] hover:text-neutral-200 transition truncate"
-            title="OmniRoute Cascade"
-          >
-            OmniRoute
-          </button>
-          <button
-            onClick={() => onSwitchTab('telemetry')}
-            className="py-0.5 rounded hover:bg-[#141824] hover:text-neutral-200 transition truncate"
-            title="Logs & Receipts"
-          >
-            Logs
-          </button>
-          <button
-            onClick={() => onSwitchTab('cache')}
-            className="py-0.5 rounded hover:bg-[#141824] hover:text-neutral-200 transition truncate"
-            title="Local KV Cache"
-          >
-            Cache
+            <Settings2 className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>

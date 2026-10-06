@@ -18,6 +18,7 @@ export const RootLayout: React.FC = () => {
     setIsSessionsCollapsed,
     isSettingsOpen,
     setIsSettingsOpen,
+    settingsTab,
     isNewSessionOpen,
     setIsNewSessionOpen,
     isAddProviderOpen,
@@ -80,7 +81,7 @@ export const RootLayout: React.FC = () => {
   };
 
   return (
-    <div className="bg-[#090a0f] text-[#e2e4ea] font-sans antialiased h-screen w-screen overflow-hidden flex flex-col">
+    <div className="bg-canvas text-editor-fg font-sans antialiased h-screen w-screen overflow-hidden flex flex-col select-none">
       {/* Top Header - Render only on secondary standalone pages; Studio has its own single unified titlebar */}
       {getCurrentTab() !== 'studio' && (
         <Header
@@ -101,29 +102,31 @@ export const RootLayout: React.FC = () => {
       {/* Main Body */}
       <div className="flex-1 flex overflow-hidden min-w-0 relative">
         {/* Left Unified Master Sidebar (Orca style: compact rail when collapsed, full tree when expanded) */}
-        <UnifiedSidebar
-          currentTab={getCurrentTab()}
-          onSwitchTab={handleSwitchTab}
-          currentProject={currentProject}
-          projectNames={Object.keys(projectData)}
-          onSelectProject={(p) => {
-            setCurrentProject(p);
-            const first = (projectData[p] || [])[0];
-            if (first) setActiveSessionId(first.id);
-          }}
-          onNewProjectPrompt={handleNewProjectPrompt}
-          sessions={currentSessions}
-          activeSessionId={activeSessionId}
-          onSelectSession={(id) => {
-            setActiveSessionId(id);
-            navigate(`/studio/${id}`);
-          }}
-          onOpenNewSessionModal={() => setIsNewSessionOpen(true)}
-          isCollapsed={isSessionsCollapsed}
-          onToggleCollapse={() => setIsSessionsCollapsed((prev) => !prev)}
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          onShowToast={showToast}
-        />
+        {getCurrentTab() !== 'studio' && (
+          <UnifiedSidebar
+            currentTab={getCurrentTab()}
+            onSwitchTab={handleSwitchTab}
+            currentProject={currentProject}
+            projectNames={Object.keys(projectData)}
+            onSelectProject={(p) => {
+              setCurrentProject(p);
+              const first = (projectData[p] || [])[0];
+              if (first) setActiveSessionId(first.id);
+            }}
+            onNewProjectPrompt={handleNewProjectPrompt}
+            sessions={currentSessions}
+            activeSessionId={activeSessionId}
+            onSelectSession={(id) => {
+              setActiveSessionId(id);
+              navigate(`/studio/${id}`);
+            }}
+            onOpenNewSessionModal={() => setIsNewSessionOpen(true)}
+            isCollapsed={isSessionsCollapsed}
+            onToggleCollapse={() => setIsSessionsCollapsed((prev) => !prev)}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onShowToast={showToast}
+          />
+        )}
 
         {/* Dynamic Route Content (Studio / Providers / Chains / Telemetry / Cache / Settings) */}
         <div className="flex-1 flex overflow-hidden min-w-0 relative bg-canvas select-text">
@@ -143,8 +146,8 @@ export const RootLayout: React.FC = () => {
       {/* Modals */}
       <SettingsModal
         isOpen={isSettingsOpen}
+        initialTab={settingsTab}
         onClose={() => setIsSettingsOpen(false)}
-        onOpenProviders={() => navigate('/providers')}
         onShowToast={showToast}
       />
 

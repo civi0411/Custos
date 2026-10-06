@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { 
   PanelLeft, 
   ChevronDown, 
@@ -32,7 +32,6 @@ export const Header: React.FC<HeaderProps> = ({
   const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-  const location = useLocation();
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -43,16 +42,6 @@ export const Header: React.FC<HeaderProps> = ({
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
-
-  const navRoutes = [
-    { path: '/studio', label: 'Studio' },
-    { path: '/providers', label: 'Providers' },
-    { path: '/chains', label: 'OmniRoute' },
-    { path: '/telemetry', label: 'Telemetry' },
-    { path: '/cache', label: 'KV Cache' },
-    { path: '/dashboard', label: 'Dashboard' },
-    { path: '/docs', label: 'Docs' }
-  ];
 
   return (
     <header className="h-9 bg-[#0b0d13] border-b border-[#1c2130] flex items-center justify-between px-2.5 shrink-0 z-30 min-w-0 select-none font-sans text-xs">
@@ -178,27 +167,6 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* 3. Right: View Switchers & Preferences */}
       <div className="flex items-center gap-1 shrink-0">
-        {/* Navigation Pills */}
-        <div className="hidden xl:flex items-center gap-0.5 mr-1 font-sans">
-          {navRoutes.map((route) => {
-            const isActive = location.pathname.startsWith(route.path);
-            return (
-              <button
-                key={route.path}
-                onClick={() => navigate(route.path)}
-                className={`px-2 py-0.5 rounded text-[11px] font-medium transition ${
-                  isActive
-                    ? 'bg-[#181d2c] text-white font-semibold'
-                    : 'text-neutral-400 hover:text-white hover:bg-[#141824]'
-                }`}
-              >
-                {route.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="h-3 w-[1px] bg-[#1e2332] hidden sm:block shrink-0"></div>
 
         {/* Preferences / Settings */}
         <button 
