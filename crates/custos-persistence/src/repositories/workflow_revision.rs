@@ -18,7 +18,9 @@ impl WorkflowRevisionRepository {
         placements: &[NodePlacement],
     ) -> Result<(), DomainError> {
         let mut conn = self.db.lock()?;
-        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let nodes_json = serde_json::to_string(&revision.nodes)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -76,7 +78,8 @@ impl WorkflowRevisionRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
         }
 
-        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
     }
 
@@ -91,14 +94,17 @@ impl WorkflowRevisionRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let row = stmt
-            .query_row(params![revision_id], |row| Self::map_revision(row))
+            .query_row(params![revision_id], Self::map_revision)
             .optional()
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         Ok(row)
     }
 
-    pub fn list_revisions_for_task(&self, task_id: &str) -> Result<Vec<WorkflowRevision>, DomainError> {
+    pub fn list_revisions_for_task(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<WorkflowRevision>, DomainError> {
         let reader = self.db.reader()?;
         let mut stmt = reader
             .prepare(
@@ -109,7 +115,7 @@ impl WorkflowRevisionRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let rows = stmt
-            .query_map(params![task_id], |row| Self::map_revision(row))
+            .query_map(params![task_id], Self::map_revision)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let mut list = Vec::new();
@@ -156,12 +162,15 @@ impl WorkflowRevisionRepository {
         let obligations_str: String = row.get(6)?;
         let created_at_str: String = row.get(7)?;
 
-        let nodes: Vec<RevisionNode> = serde_json::from_str(&nodes_str)
-            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(e)))?;
-        let dependencies: Vec<(String, String)> = serde_json::from_str(&deps_str)
-            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(5, rusqlite::types::Type::Text, Box::new(e)))?;
-        let obligations: Vec<String> = serde_json::from_str(&obligations_str)
-            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(6, rusqlite::types::Type::Text, Box::new(e)))?;
+        let nodes: Vec<RevisionNode> = serde_json::from_str(&nodes_str).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(e))
+        })?;
+        let dependencies: Vec<(String, String)> = serde_json::from_str(&deps_str).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(5, rusqlite::types::Type::Text, Box::new(e))
+        })?;
+        let obligations: Vec<String> = serde_json::from_str(&obligations_str).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(6, rusqlite::types::Type::Text, Box::new(e))
+        })?;
 
         let created_at = chrono::DateTime::parse_from_rfc3339(&created_at_str)
             .map(|dt| dt.with_timezone(&chrono::Utc))
@@ -211,7 +220,9 @@ mod tests {
             write_set: vec![],
             required_capabilities: vec!["fs_read".into()],
         });
-        revision.dependencies.push(("start".into(), "node_1".into()));
+        revision
+            .dependencies
+            .push(("start".into(), "node_1".into()));
         revision.obligations.push("ensure_evidence_logged".into());
 
         let placements = vec![NodePlacement {
@@ -232,10 +243,15 @@ mod tests {
         assert_eq!(fetched.dependencies.len(), 1);
         assert_eq!(fetched.obligations[0], "ensure_evidence_logged");
 
-        let fetched_placements = repo.get_placements_for_revision(&revision.revision_id).unwrap();
+        let fetched_placements = repo
+            .get_placements_for_revision(&revision.revision_id)
+            .unwrap();
         assert_eq!(fetched_placements.len(), 1);
         assert_eq!(fetched_placements[0].node_id, "node_1");
-        assert_eq!(fetched_placements[0].workspace_lease_id, Some("lease_01".into()));
+        assert_eq!(
+            fetched_placements[0].workspace_lease_id,
+            Some("lease_01".into())
+        );
 
         // Test list
         let revisions = repo.list_revisions_for_task("task_rev_1").unwrap();
@@ -251,7 +267,9 @@ mod tests {
         }];
         repo.save_revision(&revision, &updated_placements).unwrap();
 
-        let re_fetched = repo.get_placements_for_revision(&revision.revision_id).unwrap();
+        let re_fetched = repo
+            .get_placements_for_revision(&revision.revision_id)
+            .unwrap();
         assert_eq!(re_fetched[0].budget_tokens_slice, 8000);
         assert_eq!(re_fetched[0].workspace_lease_id, Some("lease_02".into()));
     }

@@ -9,11 +9,7 @@ pub fn engineering_repair_fixture() -> TaskContract {
         name: "Fix Workspace Compile & Test Errors".into(),
         description: "Multi-crate workspace repair requiring clean build and passing test suite"
             .into(),
-        required_capabilities: vec![
-            "fs.read".into(),
-            "fs.write".into(),
-            "exec.process".into(),
-        ],
+        required_capabilities: vec!["fs.read".into(), "fs.write".into(), "exec.process".into()],
         evidence_requirements: vec![
             ContractEvidence {
                 kind: EvidenceKind::Diff,
@@ -33,11 +29,7 @@ pub fn engineering_refactor_fixture() -> TaskContract {
         pack_id: "engineering".into(),
         name: "AST-Safe Codebase Refactoring".into(),
         description: "Automated refactoring of public interfaces with worktree isolation".into(),
-        required_capabilities: vec![
-            "fs.read".into(),
-            "fs.write".into(),
-            "ast.index".into(),
-        ],
+        required_capabilities: vec!["fs.read".into(), "fs.write".into(), "ast.index".into()],
         evidence_requirements: vec![
             ContractEvidence {
                 kind: EvidenceKind::FileAnchor,

@@ -26,10 +26,7 @@ pub trait EffectHandler<S, E>: Send + Sync {
 }
 
 pub trait EffectUsage<E>: Send + Sync {
-    fn usage(
-        &self,
-        _effect: &E,
-    ) -> Option<custos_provider::conversation::token_usage::Usage> {
+    fn usage(&self, _effect: &E) -> Option<custos_provider::conversation::token_usage::Usage> {
         None
     }
 }

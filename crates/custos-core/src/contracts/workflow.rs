@@ -12,7 +12,11 @@ pub trait WorkflowPort: Send + Sync {
     async fn start_run(&self, cmd: StartRunCommand) -> Result<RunHandle, DomainError>;
 
     /// Cooperative cancel; MUST leave in-flight effects as `Uncertain`, never silently dropped.
-    async fn request_cancel(&self, run_id: &str, reason: &str) -> Result<CancelReceipt, DomainError>;
+    async fn request_cancel(
+        &self,
+        run_id: &str,
+        reason: &str,
+    ) -> Result<CancelReceipt, DomainError>;
 
     /// Resumes a halted or crashed run. Validates source, approval, and effect states first.
     async fn resume(&self, run_id: &str) -> Result<RunHandle, DomainError>;

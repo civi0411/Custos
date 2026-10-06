@@ -89,7 +89,10 @@ impl Skill for ContactResolveSkill {
                 "confidence": confidence,
             }),
             artifacts: vec![],
-            evidence_hint: Some(format!("contact_resolve '{}' -> {}", query, canonical_email)),
+            evidence_hint: Some(format!(
+                "contact_resolve '{}' -> {}",
+                query, canonical_email
+            )),
             taint: TaintLevel::Clean,
         })
     }

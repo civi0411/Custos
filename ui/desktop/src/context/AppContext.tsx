@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import { ViewMode, MainTab, ProjectData, ProviderItem, ClientApiKey, Session } from '../types';
+import { MainTab, ProjectData, ProviderItem, ClientApiKey, Session } from '../types';
 import { initialProjectData, initialProviders, initialClientKeys } from '../data/mockData';
+import { daemonClient } from '../api/daemon_client';
+import { Task } from '../types/domain';
 
 interface AppContextType {
   // Projects & Sessions
@@ -13,18 +14,16 @@ interface AppContextType {
   setActiveSessionId: (id: string) => void;
   activeSession: Session | null;
   currentSessions: Session[];
+  tasks: Task[];
 
   // Navigation & Layout
   currentTab: MainTab;
   setCurrentTab: (tab: MainTab) => void;
-  viewMode: ViewMode;
-  setViewMode: (mode: ViewMode) => void;
   isSessionsCollapsed: boolean;
   setIsSessionsCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
-  splitPercent: number;
-  setSplitPercent: (percent: number) => void;
-  isDragging: boolean;
-  setIsDragging: (dragging: boolean) => void;
+  isRightExplorerOpen: boolean;
+  setIsRightExplorerOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  toggleRightExplorer: () => void;
 
   // Providers & Keys
   providers: ProviderItem[];
@@ -35,6 +34,9 @@ interface AppContextType {
   // Modals
   isSettingsOpen: boolean;
   setIsSettingsOpen: (open: boolean) => void;
+  settingsTab: string;
+  setSettingsTab: (tab: string) => void;
+  openSettings: (tab?: string) => void;
   isNewSessionOpen: boolean;
   setIsNewSessionOpen: (open: boolean) => void;
   isAddProviderOpen: boolean;
@@ -50,12 +52,12 @@ interface AppContextType {
   showToast: (msg: string) => void;
 
   // Actions
-  handleSendMessage: (text: string) => void;
+  handleSendMessage: (text: string) => Promise<void>;
   handleClearHistory: () => void;
-  handleAcceptAndRun: () => void;
+  handleAcceptAndRun: () => Promise<void>;
   handleRejectDiff: () => void;
   handleCopyDiff: () => void;
-  handleCreateNewSession: (title: string, task: string) => void;
+  handleCreateNewSession: (title: string, pack: 'engineering' | 'research' | 'assistant') => Promise<void>;
   handleNewProjectPrompt: () => void;
   handleSaveProvider: (service: string, apiKey: string) => void;
   handleGenerateClientKey: () => void;
@@ -66,16 +68,22 @@ const AppContext = createContext<AppContextType | null>(null);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Projects & Sessions state
-  const [projectData, setProjectData] = useState<ProjectData>(initialProjectData);
-  const [currentProject, setCurrentProject] = useState<string>('Default project');
+  const [projectData, setProjectData] = useState<ProjectData>(() => daemonClient.isDemoMode
+    ? Object.fromEntries(Object.entries(initialProjectData).map(([name, sessions]) =>
+      [name, sessions.map((session) => ({ ...session, source: 'demo' as const }))]))
+    : { 'VinUni_Codelab_Day02_Template': [], 'Custos OS': [] });
+  const [currentProject, setCurrentProject] = useState<string>('VinUni_Codelab_Day02_Template');
   const [activeSessionId, setActiveSessionId] = useState<string>('auth');
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   // Navigation & Layout state
   const [currentTab, setCurrentTab] = useState<MainTab>('studio');
-  const [viewMode, setViewMode] = useState<ViewMode>('split');
   const [isSessionsCollapsed, setIsSessionsCollapsed] = useState<boolean>(false);
-  const [splitPercent, setSplitPercent] = useState<number>(50);
-  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [isRightExplorerOpen, setIsRightExplorerOpen] = useState<boolean>(true);
+
+  const toggleRightExplorer = useCallback(() => {
+    setIsRightExplorerOpen((prev) => !prev);
+  }, []);
 
   // Providers & Keys state
   const [providers, setProviders] = useState<ProviderItem[]>(initialProviders);
@@ -83,8 +91,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Modals state
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [settingsTab, setSettingsTab] = useState<string>('general');
   const [isNewSessionOpen, setIsNewSessionOpen] = useState<boolean>(false);
   const [isAddProviderOpen, setIsAddProviderOpen] = useState<boolean>(false);
+
+  const openSettings = useCallback((tab?: string) => {
+    if (tab) setSettingsTab(tab);
+    setIsSettingsOpen(true);
+  }, []);
 
   // UI Scale state
   const [uiScale, setUiScale] = useState<number>(() => {
@@ -127,17 +141,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const activeSession: Session | null =
     currentSessions.find((s) => s.id === activeSessionId) || currentSessions[0] || null;
 
-  // Initial Tauri verification & UI Scale
+  // Hydrate state from Custos Daemon on Mount
   useEffect(() => {
     applyUiScale(uiScale);
 
-    invoke<string>('greet', { name: 'Custos UI' })
-      .then((greeting) => {
-        console.log('[Tauri IPC Bridge]', greeting);
-      })
-      .catch((err) => {
-        console.warn('[Tauri IPC]', err);
-      });
+    async function hydrateFromDaemon() {
+      if (daemonClient.isDemoMode) return;
+      try {
+        const [fetchedTasks, fetchedSessions] = await Promise.all([
+          daemonClient.listTasks(),
+          daemonClient.listSessions(),
+        ]);
+
+        if (fetchedTasks.length > 0) {
+          setTasks(fetchedTasks);
+
+          // Project daemon tasks and sessions into UI sessions
+          const projectedSessions: Session[] = fetchedTasks.map((t) => {
+            const domainSession = fetchedSessions.find((s) => s.task_id === t.id);
+            return {
+              id: t.id,
+              source: daemonClient.isDemoMode ? 'demo' : 'daemon',
+              taskStatus: t.status,
+              sessionId: domainSession?.id,
+              pack: t.contract?.pack,
+              title: t.title,
+              time: 'Live',
+              preview: `Status: ${t.status} | Contract: ${t.contract?.pack || 'general'}`,
+              model: 'Model not reported',
+              fileName: '',
+              diffHunk: '',
+              diffLinesCount: '',
+              summary: `Task ${t.id}: ${t.status}`,
+              messages: (domainSession?.journal || []).map((j) => ({
+                id: j.id,
+                role: j.role === 'user' ? 'user' : 'assistant',
+                author: j.role === 'user' ? 'You' : 'Custos Kernel',
+                badge: j.badge,
+                stepName: j.step_name,
+                duration: j.duration,
+                text: j.content,
+              })),
+              diffCode: [],
+            };
+          });
+
+          setProjectData((prev) => ({
+            ...prev,
+            'Custos OS': projectedSessions,
+          }));
+
+          if (projectedSessions.length > 0) {
+            setActiveSessionId(projectedSessions[0].id);
+          }
+        }
+      } catch (err) {
+        console.warn('[DaemonClient] Could not load tasks:', err);
+      }
+    }
+
+    hydrateFromDaemon();
   }, []);
 
   // Global Keyboard Shortcuts
@@ -152,15 +215,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         setIsSessionsCollapsed((prev) => !prev);
-      }
-      // Toggle Split View / Full view (Ctrl+\)
-      if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
-        e.preventDefault();
-        setViewMode((prev) => {
-          if (prev === 'split') return 'chat';
-          if (prev === 'chat') return 'diff';
-          return 'split';
-        });
       }
       // UI Zoom In (Ctrl++ or Ctrl+=)
       if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
@@ -190,45 +244,106 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [uiScale]);
 
   // Actions
-  const handleSendMessage = (text: string) => {
+  const handleSendMessage = async (text: string) => {
     if (!activeSession) return;
     const userMsg = {
       role: 'user' as const,
       author: 'You',
-      text
+      text,
     };
 
-    const assistantMsg = {
-      role: 'assistant' as const,
-      author: 'Custos Agent',
-      badge: 'Autonomous Kernel Engine',
-      stepName: 'Analyzing AST tree & compiling patch',
-      duration: '48ms',
-      text: `Received prompt:\n"${text}"\n\nSynthesizing change set and verifying invariants against Task Kernel...`
-    };
-
+    // Keep the local draft visible while the request is pending.
     setProjectData((prev) => {
       const list = prev[currentProject] || [];
       const updatedList = list.map((s) => {
         if (s.id === activeSession.id) {
           return {
             ...s,
-            messages: [...s.messages, userMsg, assistantMsg]
+            messages: [...s.messages, userMsg],
           };
         }
         return s;
       });
       return {
         ...prev,
-        [currentProject]: updatedList
+        [currentProject]: updatedList,
       };
     });
 
-    showToast('Task submitted to Custos Engine');
+    showToast('Dispatching run to Custos Spine...');
+
+    try {
+      // 1. Append message to backend session journal
+      if (activeSession.sessionId) {
+        await daemonClient.appendSessionMessage(activeSession.sessionId, 'user', text);
+      }
+
+      // 2. Start workflow run
+      const run = await daemonClient.startRun({
+        task_id: activeSession.id,
+        instruction: text,
+        preferred_mode: 'model',
+      });
+
+      const assistantMsg = {
+        role: 'assistant' as const,
+        author: daemonClient.isDemoMode ? 'Demo simulator' : 'Custos runtime',
+        badge: `${daemonClient.isDemoMode ? 'Demo run' : 'Run'} ${run.status}`,
+        stepName: `Run #${run.id.slice(0, 8)}`,
+        text: `Run ${run.id} was accepted with status ${run.status}. The result is not available in this view yet.`,
+      };
+
+      setProjectData((prev) => {
+        const list = prev[currentProject] || [];
+        const updatedList = list.map((s) => {
+          if (s.id === activeSession.id) {
+            return {
+              ...s,
+              messages: [...s.messages, assistantMsg],
+            };
+          }
+          return s;
+        });
+        return {
+          ...prev,
+          [currentProject]: updatedList,
+        };
+      });
+
+      showToast(`Run ${run.id.slice(0, 8)}: ${run.status}`);
+    } catch (err: any) {
+      const errMsg = {
+        role: 'assistant' as const,
+        author: 'Custos Kernel',
+        badge: 'Gate Fenced',
+        text: `Execution notice: ${err?.message || err}`,
+      };
+
+      setProjectData((prev) => {
+        const list = prev[currentProject] || [];
+        const updatedList = list.map((s) => {
+          if (s.id === activeSession.id) {
+            return {
+              ...s,
+              messages: [...s.messages, errMsg],
+            };
+          }
+          return s;
+        });
+        return {
+          ...prev,
+          [currentProject]: updatedList,
+        };
+      });
+    }
   };
 
   const handleClearHistory = () => {
     if (!activeSession) return;
+    if (activeSession.source === 'daemon') {
+      showToast('Clearing saved conversation history is not available yet.');
+      return;
+    }
     setProjectData((prev) => {
       const list = prev[currentProject] || [];
       const updatedList = list.map((s) => {
@@ -239,113 +354,130 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       return { ...prev, [currentProject]: updatedList };
     });
-    showToast('Conversation cleared');
+    showToast('Demo conversation cleared in this window');
   };
 
-  const handleAcceptAndRun = () => {
-    showToast('Code diff accepted and running in sandbox');
+  const handleAcceptAndRun = async () => {
+    if (!activeSession) return;
+    if (activeSession.source === 'demo') {
+      showToast('Demo patch only. No code was applied.');
+      return;
+    }
+    try {
+      await daemonClient.advanceTask(activeSession.id, 'verification', 'Active');
+      showToast('Task advanced to verification. Check the task status for the result.');
+    } catch (error) {
+      showToast(`Could not advance task: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   const handleRejectDiff = () => {
-    showToast('Diff rejected and reverted');
+    showToast('No patch was changed. Rejection is not connected to the daemon yet.');
   };
 
   const handleCopyDiff = () => {
     if (!activeSession) return;
-    const diffText = activeSession.diffCode.map((l) => l.text).join('\n');
+    const diffText = activeSession.diffCode.map((d) => d.text).join('\n');
     navigator.clipboard.writeText(diffText);
-    showToast('Diff copied to clipboard');
+    showToast('Code diff copied to clipboard');
   };
 
-  const handleCreateNewSession = (title: string, task: string) => {
-    const newId = `session-${Date.now()}`;
-    const newSession: Session = {
-      id: newId,
-      title,
-      time: 'Just now',
-      preview: task || 'New session created...',
-      model: 'Claude 3.7 Sonnet',
-      fileName: 'src/main.rs',
-      diffHunk: '@@ -1,5 +1,9 @@ main()',
-      diffLinesCount: '+4 -0 lines',
-      summary: 'Initial draft patch generated by Custos autonomous runtime.',
-      messages: task
-        ? [
-            { role: 'user', author: 'You', text: task },
-            {
-              role: 'assistant',
-              author: 'Custos Agent',
-              badge: 'Session Initialized',
-              text: `Started session "${title}". Preparing plan and context window...`
-            }
-          ]
-        : [],
-      diffCode: [
-        { type: 'context', text: ' fn main() {' },
-        { type: 'add', text: '+    println!("Hello from Custos!");' },
-        { type: 'context', text: ' }' }
-      ]
-    };
+  const handleCreateNewSession = async (title: string, pack: 'engineering' | 'research' | 'assistant') => {
+    try {
+      // 1. Create real Task in Custos Daemon
+      const createdTask = await daemonClient.createTask({
+        title: title || 'New Supervised Task',
+        contract: { pack },
+      });
 
-    setProjectData((prev) => ({
-      ...prev,
-      [currentProject]: [newSession, ...(prev[currentProject] || [])]
-    }));
+      // 2. Create Session in Custos Daemon
+      const createdSession = await daemonClient.createSession('supervised', createdTask.id);
 
-    setActiveSessionId(newId);
-    setIsNewSessionOpen(false);
-    showToast(`Started session: ${title}`);
+      const newSessionItem: Session = {
+        id: createdTask.id,
+        source: daemonClient.isDemoMode ? 'demo' : 'daemon',
+        taskStatus: createdTask.status,
+        sessionId: createdSession.id,
+        pack,
+        title: createdTask.title,
+        time: 'Just now',
+        preview: `${pack} task · ${createdTask.status}`,
+        model: 'Model not reported',
+        fileName: '',
+        diffHunk: '',
+        diffLinesCount: '',
+        summary: `Created task ${createdTask.id}`,
+        messages: [],
+        diffCode: [],
+      };
+
+      setProjectData((prev) => {
+        const currentList = prev[currentProject] || [];
+        return {
+          ...prev,
+          [currentProject]: [newSessionItem, ...currentList],
+        };
+      });
+
+      setActiveSessionId(createdTask.id);
+      setIsNewSessionOpen(false);
+      showToast(`Created Task ${createdTask.id.slice(0, 8)}`);
+
+    } catch (err: any) {
+      console.error('[CreateSession] Error:', err);
+      showToast(`Error creating session: ${err?.message || err}`);
+    }
   };
 
   const handleNewProjectPrompt = () => {
-    const name = window.prompt('Enter new project name:');
+    const name = window.prompt('Enter new Project Name:');
     if (name && name.trim()) {
-      const trimmed = name.trim();
-      if (!projectData[trimmed]) {
-        setProjectData((prev) => ({
+      const cleanName = name.trim();
+      setProjectData((prev) => {
+        if (prev[cleanName]) return prev;
+        return {
           ...prev,
-          [trimmed]: []
-        }));
-      }
-      setCurrentProject(trimmed);
-      showToast(`Switched to project: ${trimmed}`);
+          [cleanName]: [],
+        };
+      });
+      setCurrentProject(cleanName);
+      showToast(`Created project: ${cleanName}`);
     }
   };
 
   const handleSaveProvider = (service: string, apiKey: string) => {
-    const masked = apiKey.length > 8 ? `${apiKey.slice(0, 7)}••••••••${apiKey.slice(-4)}` : '••••••••';
-    const newProvider: ProviderItem = {
-      id: `p-${Date.now()}`,
-      name: service === 'anthropic' ? 'Anthropic' : service === 'openai' ? 'OpenAI' : 'Google Cloud',
-      model: service === 'anthropic' ? 'claude-3-7-sonnet' : 'gpt-4o',
-      status: 'standby',
-      statusLabel: 'Standby Route',
-      badgeColor: 'text-neutral-400 bg-surface-elevated',
-      apiKey: masked,
-      latency: '~200ms',
-      iconType: service as any
-    };
-    setProviders((prev) => [...prev, newProvider]);
+    setProviders((prev) =>
+      prev.map((p) => {
+        if (p.name.toLowerCase().includes(service.toLowerCase())) {
+          return {
+            ...p,
+            apiKey: apiKey.slice(0, 7) + '••••••••',
+            status: 'primary',
+            statusLabel: 'Configured',
+          };
+        }
+        return p;
+      })
+    );
     setIsAddProviderOpen(false);
-    showToast(`Added provider: ${newProvider.name}`);
+    showToast(`Demo provider setting updated for ${service}; no credential was stored.`);
   };
 
   const handleGenerateClientKey = () => {
-    const token = `custos_live_${Math.random().toString(36).substring(2, 6)}••••••••${Math.random().toString(36).substring(2, 6)}`;
     const newKey: ClientApiKey = {
-      id: `k-${Date.now()}`,
-      name: 'Custom Desktop Client',
-      token,
-      created: 'Just now',
-      icon: 'laptop'
+      id: `key-${Date.now()}`,
+      name: 'External Client API Token',
+      token: `custos_live_sec_••••${Math.floor(1000 + Math.random() * 9000)}`,
+      created: new Date().toISOString().split('T')[0],
+      icon: 'terminal',
     };
     setClientKeys((prev) => [newKey, ...prev]);
-    showToast('Generated new client API key');
+    showToast('Demo token added locally; it cannot authenticate clients.');
   };
 
   const handleRevokeClientKey = (id: string) => {
     setClientKeys((prev) => prev.filter((k) => k.id !== id));
-    showToast('Client API key revoked');
+    showToast('Demo token removed locally.');
   };
 
   return (
@@ -359,22 +491,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveSessionId,
         activeSession,
         currentSessions,
+        tasks,
         currentTab,
         setCurrentTab,
-        viewMode,
-        setViewMode,
         isSessionsCollapsed,
         setIsSessionsCollapsed,
-        splitPercent,
-        setSplitPercent,
-        isDragging,
-        setIsDragging,
+        isRightExplorerOpen,
+        setIsRightExplorerOpen,
+        toggleRightExplorer,
         providers,
         setProviders,
         clientKeys,
         setClientKeys,
         isSettingsOpen,
         setIsSettingsOpen,
+        settingsTab,
+        setSettingsTab,
+        openSettings,
         isNewSessionOpen,
         setIsNewSessionOpen,
         isAddProviderOpen,
@@ -393,7 +526,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         handleNewProjectPrompt,
         handleSaveProvider,
         handleGenerateClientKey,
-        handleRevokeClientKey
+        handleRevokeClientKey,
       }}
     >
       {children}
@@ -401,7 +534,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 };
 
-export const useAppContext = (): AppContextType => {
+export const useAppContext = () => {
   const context = useContext(AppContext);
   if (!context) {
     throw new Error('useAppContext must be used within an AppProvider');

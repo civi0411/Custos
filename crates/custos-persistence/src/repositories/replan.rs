@@ -16,8 +16,8 @@ impl ReplanRepository {
         let conn = self.db.lock()?;
         let brief_json = serde_json::to_string(&record.brief)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
-        let trigger_str = serde_json::to_string(&record.brief.trigger)
-            .unwrap_or_else(|_| "unknown".to_string());
+        let trigger_str =
+            serde_json::to_string(&record.brief.trigger).unwrap_or_else(|_| "unknown".to_string());
 
         conn.execute(
             "INSERT INTO replan_records (
@@ -57,7 +57,7 @@ impl ReplanRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let record = stmt
-            .query_row(params![id], |row| Self::map_replan(row))
+            .query_row(params![id], Self::map_replan)
             .optional()
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
@@ -74,7 +74,7 @@ impl ReplanRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let rows = stmt
-            .query_map(params![task_id], |row| Self::map_replan(row))
+            .query_map(params![task_id], Self::map_replan)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let mut list = Vec::new();
@@ -92,8 +92,9 @@ impl ReplanRepository {
             .map(|dt| dt.with_timezone(&chrono::Utc))
             .unwrap_or_else(|_| chrono::Utc::now());
 
-        let brief: ReplanBrief = serde_json::from_str(&brief_str)
-            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(3, rusqlite::types::Type::Text, Box::new(e)))?;
+        let brief: ReplanBrief = serde_json::from_str(&brief_str).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(3, rusqlite::types::Type::Text, Box::new(e))
+        })?;
 
         Ok(ReplanRecord {
             id: row.get(0)?,

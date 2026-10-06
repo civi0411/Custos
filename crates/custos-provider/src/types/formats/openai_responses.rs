@@ -614,8 +614,8 @@ fn is_gpt_5_6_model(model_name: &str) -> bool {
                 .and_then(|index| normalized.as_bytes().get(index));
             let after = normalized.as_bytes().get(start + matched.len());
 
-            before.map_or(true, |byte| matches!(byte, b'-' | b'/'))
-                && after.map_or(true, |byte| matches!(byte, b'-' | b'/'))
+            before.is_none_or(|byte| matches!(byte, b'-' | b'/'))
+                && after.is_none_or(|byte| matches!(byte, b'-' | b'/'))
         })
     })
 }

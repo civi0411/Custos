@@ -17,7 +17,12 @@ impl T2StagedPipelineCoordinator {
         let mut results = Vec::new();
 
         // Stage 1: Analysis
-        let p1 = WorkPacket::new(task_id, "stage_1_analyze", "Analyze workspace", stage_budget);
+        let p1 = WorkPacket::new(
+            task_id,
+            "stage_1_analyze",
+            "Analyze workspace",
+            stage_budget,
+        );
         let r1 = WorkerResult {
             packet_id: p1.packet_id.clone(),
             status: WorkerStatus::Sufficient,
@@ -29,7 +34,12 @@ impl T2StagedPipelineCoordinator {
         results.push(r1);
 
         // Stage 2: Patch
-        let p2 = WorkPacket::new(task_id, "stage_2_execute", "Generate patch from analysis", stage_budget);
+        let p2 = WorkPacket::new(
+            task_id,
+            "stage_2_execute",
+            "Generate patch from analysis",
+            stage_budget,
+        );
         let r2 = WorkerResult {
             packet_id: p2.packet_id.clone(),
             status: WorkerStatus::Sufficient,
@@ -41,11 +51,19 @@ impl T2StagedPipelineCoordinator {
         results.push(r2);
 
         // Stage 3: Verify
-        let p3 = WorkPacket::new(task_id, "stage_3_verify", "Verify patch with test suite", stage_budget);
+        let p3 = WorkPacket::new(
+            task_id,
+            "stage_3_verify",
+            "Verify patch with test suite",
+            stage_budget,
+        );
         let r3 = WorkerResult {
             packet_id: p3.packet_id.clone(),
             status: WorkerStatus::Sufficient,
-            payload: format!("[T2 Verified] Pipeline succeeded under harness '{}'", harness_id),
+            payload: format!(
+                "[T2 Verified] Pipeline succeeded under harness '{}'",
+                harness_id
+            ),
             tokens_used: stage_budget.min(500),
             cost_usd: 0.005,
             evidence_references: vec!["test_suite_passed".into()],

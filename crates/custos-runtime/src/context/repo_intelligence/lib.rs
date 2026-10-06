@@ -2,10 +2,12 @@
 //!
 //! Provides symbol search, references, and dependency analysis across repositories.
 
+pub mod coordinator;
 pub mod graph;
 pub mod llm_view;
 pub mod scanner;
 
+pub use coordinator::*;
 pub use graph::*;
 pub use llm_view::*;
 pub use scanner::*;

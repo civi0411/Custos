@@ -11,6 +11,7 @@
 //! 4. Accurate correlation: All emitted `ActionIntent`s carry the actual `worker_run.task_id`.
 //! 5. Structured parsing: Supports both stream-json (`tool_use`) events and CLI logs.
 
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -19,11 +20,10 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::Mutex;
-use async_trait::async_trait;
 
 use custos_core::contracts::harness::{
-    AgentRuntimePort, CostVisibility, HarnessExecutionResult, HarnessProfile,
-    ToolMediationLevel, WorktreeOwnership,
+    AgentRuntimePort, CostVisibility, HarnessExecutionResult, HarnessProfile, ToolMediationLevel,
+    WorktreeOwnership,
 };
 use custos_domain::{
     new_id, ActionIntent, Assurance, ContextPack, DomainError, RiskLevel, WorkerRun,
@@ -102,24 +102,40 @@ impl ClaudeCodeHarnessAdapter {
                 if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
                     let event_type = val.get("type").and_then(|v| v.as_str()).unwrap_or("");
                     if event_type == "tool_use" {
-                        let tool_name = val.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
+                        let tool_name = val
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("unknown");
                         let input = val.get("input").cloned().unwrap_or(serde_json::Value::Null);
 
                         let (action_name, target, risk) = match tool_name {
                             "bash" | "execute_command" => {
-                                let cmd = input.get("command").and_then(|v| v.as_str()).unwrap_or("");
+                                let cmd =
+                                    input.get("command").and_then(|v| v.as_str()).unwrap_or("");
                                 ("shell_exec", cmd.to_string(), RiskLevel::High)
                             }
                             "write_file" | "create_file" => {
-                                let path = input.get("path").or_else(|| input.get("file_path")).and_then(|v| v.as_str()).unwrap_or("unknown");
+                                let path = input
+                                    .get("path")
+                                    .or_else(|| input.get("file_path"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("unknown");
                                 ("file_write", path.to_string(), RiskLevel::Medium)
                             }
                             "edit_file" | "patch" => {
-                                let path = input.get("path").or_else(|| input.get("file_path")).and_then(|v| v.as_str()).unwrap_or("unknown");
+                                let path = input
+                                    .get("path")
+                                    .or_else(|| input.get("file_path"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("unknown");
                                 ("file_edit", path.to_string(), RiskLevel::Medium)
                             }
                             "view_file" | "read_file" => {
-                                let path = input.get("path").or_else(|| input.get("file_path")).and_then(|v| v.as_str()).unwrap_or("unknown");
+                                let path = input
+                                    .get("path")
+                                    .or_else(|| input.get("file_path"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("unknown");
                                 ("file_read", path.to_string(), RiskLevel::Low)
                             }
                             other => (other, "native_tool".to_string(), RiskLevel::Medium),
@@ -158,7 +174,9 @@ impl ClaudeCodeHarnessAdapter {
                 .with_assurance(Assurance::ProviderGoverned);
 
                 intents.push(intent);
-            } else if trimmed.starts_with("[tool_call:write_file]") || trimmed.contains("Writing file:") {
+            } else if trimmed.starts_with("[tool_call:write_file]")
+                || trimmed.contains("Writing file:")
+            {
                 let file_path = trimmed
                     .trim_start_matches("[tool_call:write_file]")
                     .trim_start_matches("Writing file:")
@@ -194,7 +212,9 @@ impl ClaudeCodeHarnessAdapter {
                 .with_assurance(Assurance::ProviderGoverned);
 
                 intents.push(intent);
-            } else if trimmed.starts_with("[tool_call:view_file]") || trimmed.contains("Reading file:") {
+            } else if trimmed.starts_with("[tool_call:view_file]")
+                || trimmed.contains("Reading file:")
+            {
                 let file_path = trimmed
                     .trim_start_matches("[tool_call:view_file]")
                     .trim_start_matches("Reading file:")
@@ -290,16 +310,20 @@ impl ClaudeCodeHarnessAdapter {
 
         let execution_future = async {
             let (out, err) = tokio::join!(read_stdout, read_stderr);
-            let status = child.wait().await.map_err(|e| DomainError::Validation(format!("Child wait error: {}", e)))?;
+            let status = child
+                .wait()
+                .await
+                .map_err(|e| DomainError::Validation(format!("Child wait error: {}", e)))?;
             Ok::<_, DomainError>((status, out, err))
         };
 
-        let (status, captured_stdout, captured_stderr) = tokio::time::timeout(self.default_timeout, execution_future)
-            .await
-            .map_err(|_| {
-                let _ = child.start_kill();
-                DomainError::BudgetExceeded("Claude Code process timed out".into())
-            })??;
+        let (status, captured_stdout, captured_stderr) =
+            tokio::time::timeout(self.default_timeout, execution_future)
+                .await
+                .map_err(|_| {
+                    let _ = child.start_kill();
+                    DomainError::BudgetExceeded("Claude Code process timed out".into())
+                })??;
 
         let observed_effects = self.normalize_output_to_intents(task_id, &captured_stdout);
 
@@ -425,8 +449,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_claude_code_adapter_profile_and_bypass_labeling() {
-        let adapter = ClaudeCodeHarnessAdapter::new("/tmp/test_workspace")
-            .with_mock_mode();
+        let adapter = ClaudeCodeHarnessAdapter::new("/tmp/test_workspace").with_mock_mode();
 
         let profile = adapter.profile();
         assert_eq!(profile.harness_id, "claude-code");
@@ -452,7 +475,9 @@ All tests green.
             assert_eq!(intent.task_id.as_deref(), Some("task_001"));
             assert_eq!(intent.assurance, Assurance::ProviderGoverned);
             assert_eq!(intent.parameters["assurance"], "provider-governed");
-            profile.validate_intent_assurance(intent).expect("valid provider-governed intent");
+            profile
+                .validate_intent_assurance(intent)
+                .expect("valid provider-governed intent");
         }
 
         assert_eq!(intents[0].name, "shell_exec");

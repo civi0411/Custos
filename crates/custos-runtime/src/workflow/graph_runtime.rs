@@ -3,10 +3,10 @@
 //! Orchestrates the execution of a `DagGraph` by dispatching ready nodes in parallel waves,
 //! cascading failure/skip handling, and generating execution reports.
 
-use std::sync::Arc;
 use async_trait::async_trait;
 use custos_domain::DomainError;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::workflow::dag::{DagGraph, NodeStatus};
@@ -84,7 +84,11 @@ impl GraphRuntime {
                 for id in &ready_node_ids {
                     graph.mark_running(id)?;
                     if let Some(node) = graph.get_node(id) {
-                        nodes_to_run.push((node.id.clone(), node.action_type.clone(), node.inputs.clone()));
+                        nodes_to_run.push((
+                            node.id.clone(),
+                            node.action_type.clone(),
+                            node.inputs.clone(),
+                        ));
                     }
                 }
             }
@@ -177,16 +181,40 @@ mod tests {
     async fn test_graph_runtime_parallel_waves_execution() {
         let mut graph = DagGraph::new("Parallel Waves Test");
         graph
-            .add_node(DagNode::new("start", "Start", "init", serde_json::json!({}), vec![]))
+            .add_node(DagNode::new(
+                "start",
+                "Start",
+                "init",
+                serde_json::json!({}),
+                vec![],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new("task1", "Task 1", "work", serde_json::json!({}), vec!["start".into()]))
+            .add_node(DagNode::new(
+                "task1",
+                "Task 1",
+                "work",
+                serde_json::json!({}),
+                vec!["start".into()],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new("task2", "Task 2", "work", serde_json::json!({}), vec!["start".into()]))
+            .add_node(DagNode::new(
+                "task2",
+                "Task 2",
+                "work",
+                serde_json::json!({}),
+                vec!["start".into()],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new("join", "Join", "merge", serde_json::json!({}), vec!["task1".into(), "task2".into()]))
+            .add_node(DagNode::new(
+                "join",
+                "Join",
+                "merge",
+                serde_json::json!({}),
+                vec!["task1".into(), "task2".into()],
+            ))
             .unwrap();
 
         let executor = Arc::new(MockStepExecutor);
@@ -204,13 +232,31 @@ mod tests {
     async fn test_graph_runtime_failure_and_skip_cascade() {
         let mut graph = DagGraph::new("Failure Test");
         graph
-            .add_node(DagNode::new("root", "Root", "init", serde_json::json!({}), vec![]))
+            .add_node(DagNode::new(
+                "root",
+                "Root",
+                "init",
+                serde_json::json!({}),
+                vec![],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new("fail_step", "Failing Step", "work", serde_json::json!({}), vec!["root".into()]))
+            .add_node(DagNode::new(
+                "fail_step",
+                "Failing Step",
+                "work",
+                serde_json::json!({}),
+                vec!["root".into()],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new("downstream", "Downstream", "merge", serde_json::json!({}), vec!["fail_step".into()]))
+            .add_node(DagNode::new(
+                "downstream",
+                "Downstream",
+                "merge",
+                serde_json::json!({}),
+                vec!["fail_step".into()],
+            ))
             .unwrap();
 
         let executor = Arc::new(MockStepExecutor);
@@ -220,7 +266,7 @@ mod tests {
         assert!(!report.success);
         assert_eq!(report.total_nodes, 3);
         assert_eq!(report.completed_nodes, 1); // root
-        assert_eq!(report.failed_nodes, 1);    // fail_step
-        assert_eq!(report.skipped_nodes, 1);   // downstream
+        assert_eq!(report.failed_nodes, 1); // fail_step
+        assert_eq!(report.skipped_nodes, 1); // downstream
     }
 }

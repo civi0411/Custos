@@ -32,7 +32,9 @@ impl Deref for PooledReader {
     type Target = Connection;
 
     fn deref(&self) -> &Self::Target {
-        self.conn.as_ref().expect("Connection available in PooledReader")
+        self.conn
+            .as_ref()
+            .expect("Connection available in PooledReader")
     }
 }
 
@@ -60,7 +62,9 @@ impl DbConnection {
                 | OpenFlags::SQLITE_OPEN_CREATE
                 | OpenFlags::SQLITE_OPEN_URI,
         )
-        .map_err(|e| DomainError::Validation(format!("Failed to open shared in-memory SQLite: {}", e)))?;
+        .map_err(|e| {
+            DomainError::Validation(format!("Failed to open shared in-memory SQLite: {}", e))
+        })?;
 
         Self::configure_and_init(writer, uri, true)
     }
@@ -75,7 +79,11 @@ impl DbConnection {
     }
 
     /// Configures connection PRAGMAs, runs migrations on writer, and initializes reader pool.
-    fn configure_and_init(writer: Connection, uri: String, is_memory: bool) -> Result<Self, DomainError> {
+    fn configure_and_init(
+        writer: Connection,
+        uri: String,
+        is_memory: bool,
+    ) -> Result<Self, DomainError> {
         // Enforce foreign key constraints and WAL mode
         writer
             .execute_batch(
@@ -86,7 +94,9 @@ impl DbConnection {
                 PRAGMA synchronous = NORMAL;
                 "#,
             )
-            .map_err(|e| DomainError::Validation(format!("Failed to apply SQLite PRAGMAs: {}", e)))?;
+            .map_err(|e| {
+                DomainError::Validation(format!("Failed to apply SQLite PRAGMAs: {}", e))
+            })?;
 
         run_migrations(&writer)
             .map_err(|e| DomainError::Validation(format!("Failed to run migrations: {}", e)))?;
@@ -106,9 +116,9 @@ impl DbConnection {
 
     /// Acquires a lock on the underlying sovereign writer connection.
     pub fn lock(&self) -> Result<MutexGuard<'_, Connection>, DomainError> {
-        self.writer.lock().map_err(|e| {
-            DomainError::Validation(format!("Database writer mutex poisoned: {}", e))
-        })
+        self.writer
+            .lock()
+            .map_err(|e| DomainError::Validation(format!("Database writer mutex poisoned: {}", e)))
     }
 
     /// Acquires a pooled reader connection from the WAL reader pool.
@@ -147,7 +157,9 @@ impl DbConnection {
             PRAGMA query_only = ON;
             "#,
         )
-        .map_err(|e| DomainError::Validation(format!("Failed to configure reader PRAGMAs: {}", e)))?;
+        .map_err(|e| {
+            DomainError::Validation(format!("Failed to configure reader PRAGMAs: {}", e))
+        })?;
 
         Ok(PooledReader {
             conn: Some(conn),
@@ -195,7 +207,9 @@ mod tests {
             let count_clone = success_count.clone();
             handles.push(thread::spawn(move || {
                 let reader = db_clone.reader().expect("acquire reader");
-                let mut stmt = reader.prepare("SELECT title FROM tasks WHERE id = 'task_pool_1'").unwrap();
+                let mut stmt = reader
+                    .prepare("SELECT title FROM tasks WHERE id = 'task_pool_1'")
+                    .unwrap();
                 let title: String = stmt.query_row([], |row| row.get(0)).unwrap();
                 if title == "Pool Test" {
                     count_clone.fetch_add(1, Ordering::SeqCst);
@@ -237,7 +251,9 @@ mod tests {
             let count_clone = success_count.clone();
             handles.push(thread::spawn(move || {
                 let reader = db_clone.reader().expect("acquire reader");
-                let mut stmt = reader.prepare("SELECT title FROM tasks WHERE id = 'task_wal_1'").unwrap();
+                let mut stmt = reader
+                    .prepare("SELECT title FROM tasks WHERE id = 'task_wal_1'")
+                    .unwrap();
                 let title: String = stmt.query_row([], |row| row.get(0)).unwrap();
                 if title == "WAL Test" {
                     count_clone.fetch_add(1, Ordering::SeqCst);

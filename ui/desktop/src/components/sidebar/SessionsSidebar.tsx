@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Layers, Plus, ChevronLeft, Search, Inbox } from 'lucide-react';
-import { Session } from '../types';
-import { Tooltip } from './Tooltip';
+import { Session } from '@/types';
+import { Tooltip } from '@/components/Tooltip';
+
 
 interface SessionsSidebarProps {
   currentProject: string;
@@ -38,7 +39,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({
           : 'w-60 lg:w-64'
       }`}
     >
-      {/* Sessions Column Header */}
+      {/* Task and conversation navigation */}
       <div className="p-3 border-b border-surface-border flex items-center justify-between min-w-0">
         <div className="flex items-center gap-2 min-w-0">
           <Layers className="w-3.5 h-3.5 shrink-0" />
@@ -51,6 +52,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({
             <button 
               onClick={onOpenNewSessionModal} 
               className="w-6 h-6 rounded-md bg-surface-card hover:bg-surface-elevated border border-surface-border flex items-center justify-center text-neutral-400 hover:text-white transition" 
+              title="New Session"
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
@@ -59,6 +61,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({
             <button 
               onClick={onToggleCollapse} 
               className="w-6 h-6 rounded-md hover:bg-surface-elevated text-neutral-500 hover:text-neutral-300 flex items-center justify-center transition" 
+              title="Collapse Sessions"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
@@ -74,7 +77,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({
             type="text" 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search sessions..." 
+            placeholder="Search tasks and conversations..." 
             className="w-full bg-surface-card border border-surface-border/80 rounded-md pl-7 pr-2 py-1 text-[11px] text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-brand-blue transition"
           />
         </div>
@@ -85,7 +88,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({
         {filteredSessions.length === 0 ? (
           <div className="p-6 text-center text-neutral-500 text-xs">
             <Inbox className="w-6 h-6 mx-auto mb-2 opacity-50" />
-            <p>No sessions found</p>
+            <p>No tasks or conversations found</p>
           </div>
         ) : (
           filteredSessions.map((session) => {
@@ -101,19 +104,19 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({
                 }`}
               >
                 <div className="flex items-center justify-between mb-1 min-w-0">
-                  <span className={`font-semibold truncate ${isActive ? 'text-white' : 'text-neutral-200'}`}>
-                    {session.title}
-                  </span>
-                  <span className="text-[10px] text-neutral-500 font-mono shrink-0 ml-1.5">
-                    {session.time}
-                  </span>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className={`font-semibold truncate ${isActive ? 'text-white' : 'text-neutral-200'}`}>
+                      {session.title}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-neutral-500 font-mono shrink-0 ml-1.5">{session.taskStatus || (session.source === 'demo' ? 'Demo' : session.time)}</span>
                 </div>
                 <p className="text-[11px] text-neutral-400 truncate leading-snug">
                   {session.preview}
                 </p>
                 <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-surface-border/50 text-[10px] text-neutral-500 font-mono">
                   <span className="truncate max-w-[120px]">{session.model}</span>
-                  <span className="text-emerald-400 shrink-0">{session.diffLinesCount}</span>
+                  {session.diffLinesCount && <span className="text-emerald-400 shrink-0">{session.diffLinesCount}</span>}
                 </div>
               </div>
             );
@@ -121,13 +124,9 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({
         )}
       </div>
 
-      {/* Sessions Column Footer: Active Gateway Status */}
+      {/* Data provenance */}
       <div className="p-2.5 border-t border-surface-border bg-surface-card/60 flex items-center justify-between text-[11px] font-mono text-neutral-400 shrink-0">
-        <div className="flex items-center gap-1.5 truncate">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse"></span>
-          <span className="truncate">127.0.0.1:8045</span>
-        </div>
-        <span className="text-neutral-400 font-mono shrink-0 ml-1">18ms</span>
+        <span>{sessions.some((session) => session.source === 'daemon') ? 'Custos daemon tasks' : 'Demo conversations'}</span>
       </div>
     </aside>
   );

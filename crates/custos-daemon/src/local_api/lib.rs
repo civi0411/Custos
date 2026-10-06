@@ -24,6 +24,8 @@ pub const METHOD_SESSIONS_PROMOTE: &str = "v1.sessions.promote";
 pub const METHOD_BRIDGE_ATTACH: &str = "v1.bridge.attach";
 pub const METHOD_BRIDGE_STEER: &str = "v1.bridge.steer";
 pub const METHOD_OI_EXPLAIN: &str = "v1.oi.explain";
+pub const METHOD_WORKFLOW_START_RUN: &str = "v1.workflow.start_run";
+pub const METHOD_WORKFLOW_CANCEL_RUN: &str = "v1.workflow.cancel_run";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiRequest {
@@ -148,6 +150,28 @@ pub struct ExplainPlanRequest {
     pub estimated_complexity: Option<u32>,
     #[serde(default)]
     pub budget_limit_tokens: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StartRunRequest {
+    pub task_id: String,
+    #[serde(default)]
+    pub actor: Option<String>,
+    #[serde(default)]
+    pub workflow_revision: Option<String>,
+    #[serde(default)]
+    pub preferred_mode: Option<String>,
+    #[serde(default)]
+    pub harness_id: Option<String>,
+    #[serde(default)]
+    pub workspace_root: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CancelRunRequest {
+    pub run_id: String,
+    #[serde(default)]
+    pub reason: Option<String>,
 }
 
 /// Abstract transport for communicating with the Custos Daemon
@@ -587,8 +611,7 @@ mod tests {
         async fn send_request(&self, req: ApiRequest) -> Result<ApiResponse, String> {
             match req.method.as_str() {
                 METHOD_TASKS_CREATE => {
-                    let task =
-                        Task::new(custos_domain::new_id("task"), "Mock Task".to_string());
+                    let task = Task::new(custos_domain::new_id("task"), "Mock Task".to_string());
                     Ok(ApiResponse::ok(
                         req.id,
                         serde_json::to_value(&task).unwrap(),

@@ -5,10 +5,10 @@
 //! proposes the single-agent sovereign Native Baseline candidate (Claude 3.5 / Governed),
 //! records alternatives considered, measures decision latency overhead, and yields an audit `DecisionRecord`.
 
-use std::time::Instant;
 use custos_domain::{
     DecisionRecord, DecisionSnapshot, DomainError, ExecutionTopology, StrategyProposal,
 };
+use std::time::Instant;
 
 pub struct DumbOiPlanner {
     default_harness_id: String,

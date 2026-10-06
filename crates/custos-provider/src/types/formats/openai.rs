@@ -599,7 +599,7 @@ fn merge_split_tool_call_messages(messages: &mut Vec<Value>) {
                 break;
             }
             let next = &messages[peek];
-            let has_no_content = next.get("content").map_or(true, |c| {
+            let has_no_content = next.get("content").is_none_or(|c| {
                 c.is_null()
                     || c.as_str().is_some_and(|s| s.is_empty())
                     || c.as_array().is_some_and(|a| a.is_empty())

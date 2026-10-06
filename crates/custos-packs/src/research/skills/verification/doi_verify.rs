@@ -141,8 +141,12 @@ mod tests {
 
     #[test]
     fn test_doi_format_validation() {
-        assert!(DoiVerifySkill::is_valid_doi_format("10.1038/s41586-020-2649-2"));
-        assert!(DoiVerifySkill::is_valid_doi_format("10.1145/3297858.3304033"));
+        assert!(DoiVerifySkill::is_valid_doi_format(
+            "10.1038/s41586-020-2649-2"
+        ));
+        assert!(DoiVerifySkill::is_valid_doi_format(
+            "10.1145/3297858.3304033"
+        ));
         assert!(!DoiVerifySkill::is_valid_doi_format("invalid-doi"));
         assert!(!DoiVerifySkill::is_valid_doi_format("https://example.com"));
     }

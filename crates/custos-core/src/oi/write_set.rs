@@ -56,26 +56,28 @@ impl WriteSetConflictChecker {
                 let a = &nodes[i];
                 let b = &nodes[j];
 
-                let a_reaches_b = reachable.get(a.node_id.as_str()).map_or(false, |s| s.contains(b.node_id.as_str()));
-                let b_reaches_a = reachable.get(b.node_id.as_str()).map_or(false, |s| s.contains(a.node_id.as_str()));
+                let a_reaches_b = reachable
+                    .get(a.node_id.as_str())
+                    .is_some_and(|s| s.contains(b.node_id.as_str()));
+                let b_reaches_a = reachable
+                    .get(b.node_id.as_str())
+                    .is_some_and(|s| s.contains(a.node_id.as_str()));
 
                 // Concurrent if neither depends on the other
-                if !a_reaches_b && !b_reaches_a {
-                    if Self::paths_overlap(&a.write_set, &b.write_set) {
-                        let lease_a = lease_map.get(a.node_id.as_str()).copied().flatten();
-                        let lease_b = lease_map.get(b.node_id.as_str()).copied().flatten();
+                if !a_reaches_b && !b_reaches_a && Self::paths_overlap(&a.write_set, &b.write_set) {
+                    let lease_a = lease_map.get(a.node_id.as_str()).copied().flatten();
+                    let lease_b = lease_map.get(b.node_id.as_str()).copied().flatten();
 
-                        let is_isolated = match (lease_a, lease_b) {
-                            (Some(la), Some(lb)) => la != lb,
-                            _ => false,
-                        };
+                    let is_isolated = match (lease_a, lease_b) {
+                        (Some(la), Some(lb)) => la != lb,
+                        _ => false,
+                    };
 
-                        if !is_isolated {
-                            return Err(DomainError::Validation(format!(
+                    if !is_isolated {
+                        return Err(DomainError::Validation(format!(
                                 "Gate 5 Write-Set Conflict: Concurrent nodes '{}' and '{}' write to overlapping paths ({:?}, {:?}) without isolated workspace leases",
                                 a.node_id, b.node_id, a.write_set, b.write_set
                             )));
-                        }
                     }
                 }
             }
@@ -92,7 +94,10 @@ impl WriteSetConflictChecker {
                 }
                 let clean_a = a.trim_end_matches("/**").trim_end_matches("/*");
                 let clean_b = b.trim_end_matches("/**").trim_end_matches("/*");
-                if clean_a == clean_b || clean_a.starts_with(clean_b) || clean_b.starts_with(clean_a) {
+                if clean_a == clean_b
+                    || clean_a.starts_with(clean_b)
+                    || clean_b.starts_with(clean_a)
+                {
                     return true;
                 }
             }
@@ -129,8 +134,12 @@ mod tests {
         };
 
         // Concurrent (no dependencies) without leases -> Conflict!
-        let res = WriteSetConflictChecker::check_conflicts(&[node_a.clone(), node_b.clone()], &[], None);
-        assert!(res.is_err(), "Must reject un-isolated concurrent write-set overlap");
+        let res =
+            WriteSetConflictChecker::check_conflicts(&[node_a.clone(), node_b.clone()], &[], None);
+        assert!(
+            res.is_err(),
+            "Must reject un-isolated concurrent write-set overlap"
+        );
 
         // Isolated with separate leases -> Allowed!
         let placements = vec![
@@ -149,7 +158,11 @@ mod tests {
                 workspace_lease_id: Some("lease_b".into()),
             },
         ];
-        let res_isolated = WriteSetConflictChecker::check_conflicts(&[node_a, node_b], &[], Some(&placements));
-        assert!(res_isolated.is_ok(), "Must allow isolated concurrent write sets");
+        let res_isolated =
+            WriteSetConflictChecker::check_conflicts(&[node_a, node_b], &[], Some(&placements));
+        assert!(
+            res_isolated.is_ok(),
+            "Must allow isolated concurrent write sets"
+        );
     }
 }

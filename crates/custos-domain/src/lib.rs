@@ -12,14 +12,15 @@ pub mod capability;
 pub mod claim;
 pub mod context;
 pub mod continuation;
+pub mod decision;
 pub mod error;
 pub mod evidence;
 pub mod fact;
 pub mod ids;
 pub mod memory;
-pub mod decision;
 pub mod oi;
 pub mod packet;
+pub mod repo;
 pub mod run;
 pub mod session;
 pub mod span;
@@ -44,9 +45,9 @@ pub use claim::Claim;
 pub use context::{ContextItem, ContextPack};
 pub use continuation::ContinuationPacket;
 pub use decision::{
-    Candidate, DecisionRecord, DecisionSnapshot, ExecutionTopology, NodePlacement,
-    RejectionReason, ReplanBrief, ReplanRecord, ReplanTrigger, StrategyProposal, WorkPacket,
-    WorkerResult, WorkerStatus,
+    Candidate, DecisionRecord, DecisionSnapshot, ExecutionTopology, NodePlacement, RejectionReason,
+    ReplanBrief, ReplanRecord, ReplanTrigger, StrategyProposal, WorkPacket, WorkerResult,
+    WorkerStatus,
 };
 pub use error::DomainError;
 pub use evidence::{
@@ -59,7 +60,14 @@ pub use memory::{
     ProposalStatus, RecallQuery, WorkerRunId,
 };
 pub use packet::ContinuationPacket as PacketContinuation;
-pub use run::{CancelReceipt, NodeAttempt, Run, RunHandle, RunStatus, StartRunCommand, WorkerRun};
+pub use repo::{
+    ConfidenceLevel, CoverageMetrics, MissingReason, QueryResult, RepoSnapshotRef, SourceSpan,
+    SymbolMatch,
+};
+pub use run::{
+    CancelReceipt, ClaimStatus, DispatchClaim, NodeAttempt, Run, RunHandle, RunStatus,
+    StartRunCommand, WorkerRun,
+};
 pub use session::{Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus};
 pub use span::{Span, SpanState};
 pub use task::{

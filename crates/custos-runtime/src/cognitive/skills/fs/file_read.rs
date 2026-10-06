@@ -51,11 +51,7 @@ impl Skill for FileReadSkill {
             .canonicalize()
             .map_err(|e| SkillError::SandboxViolation(format!("path canonicalize error: {}", e)))?;
 
-        let offset = ctx
-            .args
-            .get("offset")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as usize;
+        let offset = ctx.args.get("offset").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
 
         let max_bytes = ctx
             .args

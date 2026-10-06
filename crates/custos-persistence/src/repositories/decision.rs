@@ -52,14 +52,17 @@ impl DecisionRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let record = stmt
-            .query_row(params![id], |row| Self::map_decision(row))
+            .query_row(params![id], Self::map_decision)
             .optional()
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         Ok(record)
     }
 
-    pub fn list_decisions_for_task(&self, task_id: &str) -> Result<Vec<DecisionRecord>, DomainError> {
+    pub fn list_decisions_for_task(
+        &self,
+        task_id: &str,
+    ) -> Result<Vec<DecisionRecord>, DomainError> {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
@@ -69,7 +72,7 @@ impl DecisionRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let rows = stmt
-            .query_map(params![task_id], |row| Self::map_decision(row))
+            .query_map(params![task_id], Self::map_decision)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let mut list = Vec::new();
@@ -88,10 +91,12 @@ impl DecisionRepository {
             .map(|dt| dt.with_timezone(&chrono::Utc))
             .unwrap_or_else(|_| chrono::Utc::now());
 
-        let snapshot = serde_json::from_str(&snapshot_str)
-            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(3, rusqlite::types::Type::Text, Box::new(e)))?;
-        let proposal = serde_json::from_str(&proposal_str)
-            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(e)))?;
+        let snapshot = serde_json::from_str(&snapshot_str).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(3, rusqlite::types::Type::Text, Box::new(e))
+        })?;
+        let proposal = serde_json::from_str(&proposal_str).map_err(|e| {
+            rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, Box::new(e))
+        })?;
 
         Ok(DecisionRecord {
             id: row.get(0)?,

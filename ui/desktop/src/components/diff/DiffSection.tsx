@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { FileDiff, Check, FileCode, Copy, Sparkles } from 'lucide-react';
 import { Highlight, themes } from 'prism-react-renderer';
-import { Session } from '../types';
-import { Tooltip } from './Tooltip';
+import { Session } from '@/types';
+import { Tooltip } from '@/components/Tooltip';
 
 interface DiffSectionProps {
   session: Session | null;

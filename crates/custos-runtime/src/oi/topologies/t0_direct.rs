@@ -14,9 +14,10 @@ impl T0DirectCoordinator {
         harness_id: &str,
     ) -> Result<WorkerResult, DomainError> {
         let packet_id = format!("{}_t0_pkt", task_id);
-        
+
         // Pure synthesis turn
-        let payload = format!(
+        let payload =
+            format!(
             "[T0 Direct Synthesis] Processed by harness '{}' for task '{}': prompt length {} chars",
             harness_id, task_id, prompt.len()
         );

@@ -472,7 +472,8 @@ mod tests {
         };
 
         // First insert must succeed
-        repo.record_effect(&effect1).expect("first effect insert succeeds");
+        repo.record_effect(&effect1)
+            .expect("first effect insert succeeds");
 
         let effect2 = EffectAttempt {
             id: "eff_02".into(),
@@ -524,13 +525,16 @@ mod tests {
         repo.enqueue(entry).await.expect("enqueue succeeds");
 
         // 1. Pending -> Dispatching CAS succeeds
-        repo.mark_dispatching(entry_id).await.expect("mark dispatching succeeds");
+        repo.mark_dispatching(entry_id)
+            .await
+            .expect("mark dispatching succeeds");
 
         // 2. Calling mark_dispatching again on already Dispatching entry must fail CAS
         let err_double_dispatch = repo.mark_dispatching(entry_id).await.unwrap_err();
         assert!(
             matches!(err_double_dispatch, DomainError::InvalidStateTransition { ref from, ref to } if from == "dispatching" && to == "dispatching"),
-            "Invalid CAS transition: {}", err_double_dispatch
+            "Invalid CAS transition: {}",
+            err_double_dispatch
         );
 
         // 3. Dispatching -> Receipted CAS succeeds
@@ -547,14 +551,16 @@ mod tests {
             assurance: Assurance::CustosMediated,
         };
 
-        repo.mark_receipted(entry_id, receipt).await.expect("mark receipted succeeds");
+        repo.mark_receipted(entry_id, receipt)
+            .await
+            .expect("mark receipted succeeds");
 
         // 4. Calling mark_uncertain on already Receipted entry must fail CAS
         let err_uncertain_on_receipted = repo.mark_uncertain(entry_id).await.unwrap_err();
         assert!(
             matches!(err_uncertain_on_receipted, DomainError::InvalidStateTransition { ref from, ref to } if from == "receipted" && to == "uncertain"),
-            "Invalid CAS transition: {}", err_uncertain_on_receipted
+            "Invalid CAS transition: {}",
+            err_uncertain_on_receipted
         );
     }
 }
-

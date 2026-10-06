@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::Utc;
+use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use custos_core::contracts::harness::AgentRuntimePort;
@@ -26,6 +26,8 @@ pub struct TaskRuntime {
     outbox: Option<Arc<dyn OutboxPort>>,
     effect_ledger: Option<Arc<dyn EffectLedgerPort>>,
     run_store: Option<Arc<dyn RunPort>>,
+    dispatcher: Arc<super::dispatcher::WorkflowDispatcher>,
+    lease_manager: Option<Arc<super::lease::WorkspaceLeaseManager>>,
     active_runs: Arc<RwLock<HashMap<String, Run>>>,
     active_workers: Arc<RwLock<HashMap<String, WorkerRun>>>,
 }
@@ -40,6 +42,8 @@ impl TaskRuntime {
             outbox: None,
             effect_ledger: None,
             run_store: None,
+            dispatcher: Arc::new(super::dispatcher::WorkflowDispatcher::new()),
+            lease_manager: None,
             active_runs: Arc::new(RwLock::new(HashMap::new())),
             active_workers: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -54,6 +58,8 @@ impl TaskRuntime {
             outbox: None,
             effect_ledger: None,
             run_store: None,
+            dispatcher: Arc::new(super::dispatcher::WorkflowDispatcher::new()),
+            lease_manager: None,
             active_runs: Arc::new(RwLock::new(HashMap::new())),
             active_workers: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -90,8 +96,31 @@ impl TaskRuntime {
     }
 
     pub fn with_run_store(mut self, run_store: Arc<dyn RunPort>) -> Self {
+        self.dispatcher = Arc::new(
+            super::dispatcher::WorkflowDispatcher::new().with_run_store(run_store.clone()),
+        );
         self.run_store = Some(run_store);
         self
+    }
+
+    pub fn with_dispatcher(
+        mut self,
+        dispatcher: Arc<super::dispatcher::WorkflowDispatcher>,
+    ) -> Self {
+        self.dispatcher = dispatcher;
+        self
+    }
+
+    pub fn with_lease_manager(
+        mut self,
+        lease_manager: Arc<super::lease::WorkspaceLeaseManager>,
+    ) -> Self {
+        self.lease_manager = Some(lease_manager);
+        self
+    }
+
+    pub fn lease_manager(&self) -> Option<&Arc<super::lease::WorkspaceLeaseManager>> {
+        self.lease_manager.as_ref()
     }
 
     pub fn kernel(&self) -> Option<&Arc<dyn KernelPort>> {
@@ -117,6 +146,10 @@ impl TaskRuntime {
     pub fn run_store(&self) -> Option<&Arc<dyn RunPort>> {
         self.run_store.as_ref()
     }
+
+    pub fn dispatcher(&self) -> &Arc<super::dispatcher::WorkflowDispatcher> {
+        &self.dispatcher
+    }
 }
 
 impl Default for TaskRuntime {
@@ -128,22 +161,45 @@ impl Default for TaskRuntime {
 #[async_trait]
 impl WorkflowPort for TaskRuntime {
     async fn start_run(&self, cmd: StartRunCommand) -> Result<RunHandle, DomainError> {
-        // 1. Verify and drive Task lifecycle if KernelPort is available
+        // 1. Atomic claim via WorkflowDispatcher (Gate A Fencing & double-dispatch prevention)
+        let claim = self
+            .dispatcher
+            .claim_ready_task(&cmd.task_id, None, &cmd.actor, 1)
+            .await?;
+
+        // 2. Verify and drive Task lifecycle if KernelPort is available
         if let Some(ref kernel) = self.kernel {
-            let task = kernel
-                .get_task(&cmd.task_id)
-                .await?
-                .ok_or_else(|| DomainError::NotFound {
-                    kind: "Task".into(),
-                    id: cmd.task_id.clone(),
-                })?;
+            let task = match kernel.get_task(&cmd.task_id).await {
+                Ok(Some(t)) => t,
+                Ok(None) => {
+                    let _ = self.dispatcher.release_claim(&claim.id).await;
+                    return Err(DomainError::NotFound {
+                        kind: "Task".into(),
+                        id: cmd.task_id.clone(),
+                    });
+                }
+                Err(e) => {
+                    let _ = self.dispatcher.release_claim(&claim.id).await;
+                    return Err(e);
+                }
+            };
 
             if task.status == TaskStatus::Draft {
-                kernel.transition_task(&task.id, TaskStatus::Queued).await?;
-                kernel.transition_task(&task.id, TaskStatus::Running).await?;
+                if let Err(e) = kernel.transition_task(&task.id, TaskStatus::Queued).await {
+                    let _ = self.dispatcher.release_claim(&claim.id).await;
+                    return Err(e);
+                }
+                if let Err(e) = kernel.transition_task(&task.id, TaskStatus::Running).await {
+                    let _ = self.dispatcher.release_claim(&claim.id).await;
+                    return Err(e);
+                }
             } else if task.status == TaskStatus::Queued {
-                kernel.transition_task(&task.id, TaskStatus::Running).await?;
+                if let Err(e) = kernel.transition_task(&task.id, TaskStatus::Running).await {
+                    let _ = self.dispatcher.release_claim(&claim.id).await;
+                    return Err(e);
+                }
             } else if task.status.is_terminal() {
+                let _ = self.dispatcher.release_claim(&claim.id).await;
                 return Err(DomainError::InvalidStateTransition {
                     from: task.status.to_string(),
                     to: "running".into(),
@@ -151,16 +207,68 @@ impl WorkflowPort for TaskRuntime {
             }
         }
 
-        // 2. Instantiate and activate Run
+        // 3. Negotiate execution mode and record in metadata (Orca mode sequencing parity)
+        let requested_mode = cmd
+            .preferred_mode
+            .as_deref()
+            .unwrap_or(if self.harness.is_some() {
+                "native"
+            } else {
+                "model"
+            });
+
+        let (actual_mode, downgraded, reason) = match requested_mode {
+            "native" => {
+                if self.harness.is_some() {
+                    ("native", false, None)
+                } else if self.model.is_some() {
+                    (
+                        "model",
+                        true,
+                        Some("No harness runtime configured, falling back to model"),
+                    )
+                } else {
+                    ("none", true, Some("Neither harness nor model configured"))
+                }
+            }
+            "model" => {
+                if self.model.is_some() {
+                    ("model", false, None)
+                } else if self.harness.is_some() {
+                    (
+                        "native",
+                        true,
+                        Some("No model configured, falling back to harness"),
+                    )
+                } else {
+                    ("none", true, Some("Neither model nor harness configured"))
+                }
+            }
+            other => (other, false, None),
+        };
+
+        // 4. Instantiate and activate Run with mode recording
         let mut run = Run::new(cmd.task_id.clone(), 1);
         run.workflow_revision = cmd.workflow_revision;
         run.transition(RunStatus::Active)?;
+
+        run.metadata["requested_mode"] = serde_json::json!(requested_mode);
+        run.metadata["actual_mode"] = serde_json::json!(actual_mode);
+        if downgraded {
+            run.metadata["mode_downgraded"] = serde_json::json!(true);
+            if let Some(r) = reason {
+                run.metadata["downgrade_reason"] = serde_json::json!(r);
+            }
+        }
+        if let Some(ref root) = cmd.workspace_root {
+            run.metadata["workspace_root"] = serde_json::json!(root);
+        }
 
         if let Some(ref store) = self.run_store {
             store.save_run(&run).await?;
         }
 
-        // 3. Instantiate bounded WorkerRun
+        // 5. Instantiate bounded WorkerRun and mark claim dispatched
         let mut wrun = WorkerRun::new(cmd.task_id.clone(), cmd.actor.clone(), 3);
         wrun.run_id = Some(run.id.clone());
         wrun.transition(RunStatus::Active)?;
@@ -169,116 +277,147 @@ impl WorkflowPort for TaskRuntime {
             store.save_worker_run(&wrun).await?;
         }
 
-        // 4. Execute governed agent turn if Harness is provided
-        if let Some(ref harness) = self.harness {
-            let context_pack = ContextPack::new(
-                new_id("ctx"),
-                Vec::new(),
-                0,
-                "sha256:empty".into(),
-            );
+        let _ = self.dispatcher.mark_dispatched(&claim.id, &wrun.id).await;
 
-            let intents = harness.execute_turn(&wrun, &context_pack).await?;
+        // 6. Allocate isolated workspace lease if lease manager is configured
+        let mut lease = if let Some(ref lm) = self.lease_manager {
+            lm.acquire_lease(&cmd.task_id, &wrun.id).ok()
+        } else {
+            None
+        };
 
-            // Process generated action intents through Gate 4, Kernel, Outbox, and Sandbox
-            for mut intent in intents {
-                // Gate 4: Validate intent assurance against harness profile
-                harness.profile().validate_intent_assurance(&intent)?;
+        if let Some(ref l) = lease {
+            run.metadata["lease_id"] = serde_json::json!(l.lease_id());
+            run.metadata["lease_path"] = serde_json::json!(l.lease_path().display().to_string());
+            if let Some(ref store) = self.run_store {
+                store.save_run(&run).await?;
+            }
+        }
 
-                // If intent is custos-mediated and we have kernel and sandbox:
-                if intent.assurance == Assurance::CustosMediated {
-                    if let Some(ref kernel) = self.kernel {
-                        // Ensure intent is explicitly bound to task
-                        intent.task_id = Some(cmd.task_id.clone());
+        // 6. Execute governed agent turn based on actual_mode
+        let turn_result = async {
+            if actual_mode == "native" {
+                if let Some(ref harness) = self.harness {
+                    let context_pack =
+                        ContextPack::new(new_id("ctx"), Vec::new(), 0, "sha256:empty".into());
 
-                        // Request permit (Gate 1 Budget, Gate 2 Policy, Gate 3 Idempotency)
-                        let permit = kernel.request_permit(&cmd.task_id, &intent, &cmd.actor).await?;
-                        let burned_permit = kernel.consume_permit(&permit.id, &intent).await?;
+                    let intents = harness.execute_turn(&wrun, &context_pack).await?;
 
-                        let idempotency_key = intent
-                            .idempotency_key
-                            .clone()
-                            .unwrap_or_else(|| intent.id.clone());
+                    // Process generated action intents through Gate 4, Kernel, Outbox, and Sandbox
+                    for mut intent in intents {
+                        // Gate 4: Validate intent assurance against harness profile
+                        harness.profile().validate_intent_assurance(&intent)?;
 
-                        // Record effect attempt in effect ledger if available
-                        let effect_id = if let Some(ref ledger) = self.effect_ledger {
-                            let mut effect = custos_domain::EffectAttempt::new(
-                                wrun.id.clone(),
-                                burned_permit.id.clone(),
-                                idempotency_key.clone(),
-                            );
-                            effect.status = custos_domain::EffectStatus::InFlight;
-                            ledger.record_effect(&effect).await?;
-                            Some(effect.id)
-                        } else {
-                            None
-                        };
+                        // If intent is custos-mediated and we have kernel and sandbox:
+                        if intent.assurance == Assurance::CustosMediated {
+                            if let Some(ref kernel) = self.kernel {
+                                // Ensure intent is explicitly bound to task
+                                intent.task_id = Some(cmd.task_id.clone());
 
-                        // T3: Transactional Outbox write BEFORE execution
-                        let outbox_id = new_id("outbox");
-                        if let Some(ref outbox) = self.outbox {
-                            let outbox_entry = OutboxEntry {
-                                id: outbox_id.clone(),
-                                task_id: cmd.task_id.clone(),
-                                action_id: intent.id.clone(),
-                                permit_id: burned_permit.id.clone(),
-                                argument_digest: intent.argument_digest(),
-                                idempotency_key: Some(idempotency_key),
-                                status: OutboxStatus::Pending,
-                                created_at: Utc::now(),
-                                receipt: None,
-                            };
-                            outbox.enqueue(outbox_entry).await?;
-                            outbox.mark_dispatching(&outbox_id).await?;
-                        }
+                                // Request permit (Gate 1 Budget, Gate 2 Policy, Gate 3 Idempotency)
+                                let permit = kernel
+                                    .request_permit(&cmd.task_id, &intent, &cmd.actor)
+                                    .await?;
+                                let burned_permit =
+                                    kernel.consume_permit(&permit.id, &intent).await?;
 
-                        // T4: Execute in Sandbox
-                        if let Some(ref sandbox) = self.sandbox {
-                            let receipt = sandbox.execute(&intent, &burned_permit).await?;
+                                let idempotency_key = intent
+                                    .idempotency_key
+                                    .clone()
+                                    .unwrap_or_else(|| intent.id.clone());
 
-                            // Update Outbox and EffectLedger with verified receipt
-                            if let Some(ref outbox) = self.outbox {
-                                outbox.mark_receipted(&outbox_id, receipt.clone()).await?;
-                            }
-                            if let Some(ref ledger) = self.effect_ledger {
-                                if let Some(eff_id) = effect_id {
-                                    ledger
-                                        .update_effect_status(
-                                            &eff_id,
-                                            custos_domain::EffectStatus::Succeeded,
-                                            Some(&receipt),
-                                        )
-                                        .await?;
+                                // Record effect attempt in effect ledger if available
+                                let effect_id = if let Some(ref ledger) = self.effect_ledger {
+                                    let mut effect = custos_domain::EffectAttempt::new(
+                                        wrun.id.clone(),
+                                        burned_permit.id.clone(),
+                                        idempotency_key.clone(),
+                                    );
+                                    effect.status = custos_domain::EffectStatus::InFlight;
+                                    ledger.record_effect(&effect).await?;
+                                    Some(effect.id)
+                                } else {
+                                    None
+                                };
+
+                                // T3: Transactional Outbox write BEFORE execution
+                                let outbox_id = new_id("outbox");
+                                if let Some(ref outbox) = self.outbox {
+                                    let outbox_entry = OutboxEntry {
+                                        id: outbox_id.clone(),
+                                        task_id: cmd.task_id.clone(),
+                                        action_id: intent.id.clone(),
+                                        permit_id: burned_permit.id.clone(),
+                                        argument_digest: intent.argument_digest(),
+                                        idempotency_key: Some(idempotency_key),
+                                        status: OutboxStatus::Pending,
+                                        created_at: Utc::now(),
+                                        receipt: None,
+                                    };
+                                    outbox.enqueue(outbox_entry).await?;
+                                    outbox.mark_dispatching(&outbox_id).await?;
+                                }
+
+                                // T4: Execute in Sandbox
+                                if let Some(ref sandbox) = self.sandbox {
+                                    let receipt = sandbox.execute(&intent, &burned_permit).await?;
+
+                                    // Update Outbox and EffectLedger with verified receipt
+                                    if let Some(ref outbox) = self.outbox {
+                                        outbox.mark_receipted(&outbox_id, receipt.clone()).await?;
+                                    }
+                                    if let Some(ref ledger) = self.effect_ledger {
+                                        if let Some(eff_id) = effect_id {
+                                            ledger
+                                                .update_effect_status(
+                                                    &eff_id,
+                                                    custos_domain::EffectStatus::Succeeded,
+                                                    Some(&receipt),
+                                                )
+                                                .await?;
+                                        }
+                                    }
                                 }
                             }
+                        } else if let Some(ref ledger) = self.effect_ledger {
+                            // For observe-only or provider-governed effects, record observation in ledger
+                            let idempotency_key = intent
+                                .idempotency_key
+                                .clone()
+                                .unwrap_or_else(|| intent.id.clone());
+                            let mut effect = custos_domain::EffectAttempt::new(
+                                wrun.id.clone(),
+                                "native-unmediated",
+                                idempotency_key,
+                            );
+                            effect.status = custos_domain::EffectStatus::Succeeded;
+                            effect.ended_at = Some(Utc::now());
+                            let _ = ledger.record_effect(&effect).await;
                         }
                     }
-                } else if let Some(ref ledger) = self.effect_ledger {
-                    // For observe-only or provider-governed effects, record observation in ledger
-                    let idempotency_key = intent
-                        .idempotency_key
-                        .clone()
-                        .unwrap_or_else(|| intent.id.clone());
-                    let mut effect = custos_domain::EffectAttempt::new(
-                        wrun.id.clone(),
-                        "native-unmediated",
-                        idempotency_key,
+                }
+            } else if actual_mode == "model" {
+                if let Some(ref model) = self.model {
+                    let req = ProviderRequest::new(
+                        new_id("req"),
+                        &cmd.task_id,
+                        1,
+                        format!("Initial run turn for task {}", cmd.task_id),
+                        model.provider_id(),
                     );
-                    effect.status = custos_domain::EffectStatus::Succeeded;
-                    effect.ended_at = Some(Utc::now());
-                    let _ = ledger.record_effect(&effect).await;
+                    let _ = model.generate(&req).await?;
                 }
             }
-        } else if let Some(ref model) = self.model {
-            // Fallback to legacy/simple ModelPort turn generation
-            let req = ProviderRequest::new(
-                new_id("req"),
-                &cmd.task_id,
-                1,
-                format!("Initial run turn for task {}", cmd.task_id),
-                model.provider_id(),
-            );
-            let _ = model.generate(&req).await?;
+            Ok::<(), DomainError>(())
+        }
+        .await;
+
+        if let Err(e) = turn_result {
+            if let Some(ref mut l) = lease {
+                let _ = l.release();
+            }
+            let _ = self.dispatcher.release_claim(&claim.id).await;
+            return Err(e);
         }
 
         let handle = RunHandle {
@@ -290,22 +429,32 @@ impl WorkflowPort for TaskRuntime {
 
         // 5. Register active executions
         self.active_runs.write().await.insert(run.id.clone(), run);
-        self.active_workers.write().await.insert(wrun.id.clone(), wrun);
+        self.active_workers
+            .write()
+            .await
+            .insert(wrun.id.clone(), wrun);
 
         Ok(handle)
     }
 
-    async fn request_cancel(&self, run_id: &str, reason: &str) -> Result<CancelReceipt, DomainError> {
+    async fn request_cancel(
+        &self,
+        run_id: &str,
+        reason: &str,
+    ) -> Result<CancelReceipt, DomainError> {
         let run = {
             let mut runs = self.active_runs.write().await;
             if let Some(r) = runs.get_mut(run_id) {
                 r.transition(RunStatus::Cancelled)?;
                 r.clone()
             } else if let Some(ref store) = self.run_store {
-                let mut r = store.get_run(run_id).await?.ok_or_else(|| DomainError::NotFound {
-                    kind: "Run".into(),
-                    id: run_id.to_string(),
-                })?;
+                let mut r = store
+                    .get_run(run_id)
+                    .await?
+                    .ok_or_else(|| DomainError::NotFound {
+                        kind: "Run".into(),
+                        id: run_id.to_string(),
+                    })?;
                 r.transition(RunStatus::Cancelled)?;
                 r
             } else {
@@ -325,12 +474,32 @@ impl WorkflowPort for TaskRuntime {
         }
 
         if let Some(ref kernel) = self.kernel {
-            let _ = kernel.transition_task(&run.task_id, TaskStatus::Cancelled).await;
+            let _ = kernel
+                .transition_task(&run.task_id, TaskStatus::Cancelled)
+                .await;
+        }
+
+        // Release active dispatch claim for this task
+        if let Some(claim) = self.dispatcher.get_active_claim(&run.task_id, None).await {
+            let _ = self.dispatcher.release_claim(&claim.id).await;
+        }
+
+        // Release workspace lease if allocated
+        if let Some(lease_id) = run.metadata.get("lease_id").and_then(|v| v.as_str()) {
+            if let Some(ref lm) = self.lease_manager {
+                let _ = lm.release_lease(lease_id);
+            }
         }
 
         let uncertain_count = if let Some(ref outbox) = self.outbox {
-            let uncertain = outbox.list_by_status(OutboxStatus::Uncertain).await.unwrap_or_default();
-            let dispatching = outbox.list_by_status(OutboxStatus::Dispatching).await.unwrap_or_default();
+            let uncertain = outbox
+                .list_by_status(OutboxStatus::Uncertain)
+                .await
+                .unwrap_or_default();
+            let dispatching = outbox
+                .list_by_status(OutboxStatus::Dispatching)
+                .await
+                .unwrap_or_default();
             (uncertain.len() + dispatching.len()) as u32
         } else {
             0
@@ -353,10 +522,13 @@ impl WorkflowPort for TaskRuntime {
                 }
                 r.clone()
             } else if let Some(ref store) = self.run_store {
-                let mut r = store.get_run(run_id).await?.ok_or_else(|| DomainError::NotFound {
-                    kind: "Run".into(),
-                    id: run_id.to_string(),
-                })?;
+                let mut r = store
+                    .get_run(run_id)
+                    .await?
+                    .ok_or_else(|| DomainError::NotFound {
+                        kind: "Run".into(),
+                        id: run_id.to_string(),
+                    })?;
                 if r.status == RunStatus::Suspended {
                     r.transition(RunStatus::Active)?;
                 }
@@ -387,10 +559,13 @@ impl WorkflowPort for TaskRuntime {
             if let Some(r) = runs.get(run_id) {
                 r.clone()
             } else if let Some(ref store) = self.run_store {
-                store.get_run(run_id).await?.ok_or_else(|| DomainError::NotFound {
-                    kind: "Run".into(),
-                    id: run_id.to_string(),
-                })?
+                store
+                    .get_run(run_id)
+                    .await?
+                    .ok_or_else(|| DomainError::NotFound {
+                        kind: "Run".into(),
+                        id: run_id.to_string(),
+                    })?
             } else {
                 return Err(DomainError::NotFound {
                     kind: "Run".into(),
@@ -432,8 +607,63 @@ mod tests {
         assert_eq!(cp.task_id, "task_test_123");
 
         // Cancel
-        let receipt = runtime.request_cancel(&handle.run_id, "user request").await.unwrap();
+        let receipt = runtime
+            .request_cancel(&handle.run_id, "user request")
+            .await
+            .unwrap();
         assert_eq!(receipt.run_id, handle.run_id);
         assert_eq!(receipt.reason, "user request");
+    }
+
+    #[tokio::test]
+    async fn test_task_runtime_double_dispatch_fencing() {
+        let runtime = TaskRuntime::new();
+        let cmd1 = StartRunCommand::new("task_fence_01", "actor_alpha");
+        let handle1 = runtime
+            .start_run(cmd1)
+            .await
+            .expect("First run should start");
+
+        // Second start_run on the SAME task before completion/cancellation must be refused!
+        let cmd2 = StartRunCommand::new("task_fence_01", "actor_beta");
+        let err2 = runtime
+            .start_run(cmd2)
+            .await
+            .expect_err("Double dispatch must be refused");
+
+        match err2 {
+            DomainError::Conflict(msg) => {
+                assert!(msg.contains("task_fence_01"));
+                assert!(msg.contains("actor_alpha"));
+            }
+            other => panic!("Expected Conflict, got {:?}", other),
+        }
+
+        // After cancelling run 1, claiming should succeed again
+        runtime
+            .request_cancel(&handle1.run_id, "cancelled for test")
+            .await
+            .unwrap();
+        let cmd3 = StartRunCommand::new("task_fence_01", "actor_beta");
+        let handle3 = runtime
+            .start_run(cmd3)
+            .await
+            .expect("Run should succeed after cancellation");
+        assert_eq!(handle3.task_id, "task_fence_01");
+    }
+
+    #[tokio::test]
+    async fn test_task_runtime_mode_negotiation_downgrade_metadata() {
+        let runtime = TaskRuntime::new();
+        let cmd = StartRunCommand::new("task_mode_01", "actor_alpha").with_preferred_mode("native");
+
+        let handle = runtime.start_run(cmd).await.unwrap();
+        let runs = runtime.active_runs.read().await;
+        let run = runs.get(&handle.run_id).unwrap();
+
+        // Since no harness was configured on this TaskRuntime, it recorded downgrade
+        assert_eq!(run.metadata["requested_mode"], "native");
+        assert_eq!(run.metadata["actual_mode"], "none");
+        assert_eq!(run.metadata["mode_downgraded"], true);
     }
 }

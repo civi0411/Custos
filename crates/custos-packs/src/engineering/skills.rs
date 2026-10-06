@@ -7,7 +7,7 @@ pub mod ast;
 pub mod git;
 pub mod test;
 
-pub use ast::AstSearchSkill;
+pub use ast::{AstSearchSkill, LexicalSearchSkill};
 pub use git::GitPatchSkill;
 pub use test::CargoTestSkill;
 
@@ -21,6 +21,7 @@ use std::sync::Arc;
 /// Register all engineering skills into the central SkillRegistry
 pub fn register_engineering_skills(registry: &mut SkillRegistry) {
     registry.register(Arc::new(AstSearchSkill));
+    registry.register(Arc::new(LexicalSearchSkill));
     registry.register(Arc::new(GitPatchSkill));
     registry.register(Arc::new(CargoTestSkill));
 

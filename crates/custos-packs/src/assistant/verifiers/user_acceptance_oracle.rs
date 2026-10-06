@@ -48,10 +48,7 @@ impl PackVerifier for UserAcceptanceOracle {
             };
         }
 
-        let approval_token = ctx
-            .metadata
-            .get("approval_token")
-            .and_then(Value::as_str);
+        let approval_token = ctx.metadata.get("approval_token").and_then(Value::as_str);
 
         if approval_token.is_none() || approval_token.unwrap().trim().is_empty() {
             return VerificationResult::Fail {
@@ -59,14 +56,12 @@ impl PackVerifier for UserAcceptanceOracle {
             };
         }
 
-        let payload_digest = ctx
-            .metadata
-            .get("payload_digest")
-            .and_then(Value::as_str);
+        let payload_digest = ctx.metadata.get("payload_digest").and_then(Value::as_str);
 
         if payload_digest.is_none() || payload_digest.unwrap().trim().is_empty() {
             return VerificationResult::Fail {
-                reason: "missing payload_digest: cannot verify stability of approved payload".into(),
+                reason: "missing payload_digest: cannot verify stability of approved payload"
+                    .into(),
             };
         }
 

@@ -1,5 +1,11 @@
 # CUSTOS
 
+**Kiến trúc đích:** Custos là **Supervised Agent Development Environment (SADE) local-first** cho Coding, Research và Assistant: môi trường để human và agent cùng nghiên cứu, xây dựng, kiểm chứng và tự động hóa với chi phí tối ưu trên kết quả đạt yêu cầu. Agent Workspace là hình thức tương tác của SADE, không sản phẩm thứ hai. Tài liệu mô tả hướng muốn xây, không chứng nhận mọi subsystem đã triển khai; code/tests trên checkout cụ thể là bằng chứng hiện trạng.
+
+**Đường đọc:** [workspace và UI](docs/architecture/agent-workspace-and-ui.md) → [capabilities/skills](docs/architecture/capability-catalog-and-skills.md) → [kế hoạch tái cấu trúc](docs/development/workspace-restructuring-plan.md) → [catalog vật lý](docs/development/codebase-architecture.md). Các tài liệu này triển khai quyết định cùng chủ đề trong master, không là kiến trúc song song.
+
+**Bản sắc SADE:** [design và supervision](docs/architecture/sade-design-and-supervision.md) chốt cách kết hợp môi trường ADE, runtime extensible, S1–S2–human và outcome economics. Supervision là khả năng hiểu/steer/stop/verify tại điểm consequential, không bắt human duyệt mọi tool call. Không tuyên bố SADE là chuẩn industry hay ưu thế đã đo.
+
 ---
 
 ## MỤC LỤC TỔNG QUAN
@@ -7,6 +13,7 @@
 - [PHẦN 1 — PRODUCT IDENTITY VÀ PHẠM VI](#phần-1-product-identity-và-phạm-vi)
   - [1.1 Motivation (Tại sao Custos tồn tại)](#11-motivation-tại-sao-custos-tồn-tại)
   - [1.2 Định nghĩa và Quyết định Thiết kế Cốt lõi](#12-định-nghĩa-và-quyết-định-thiết-kế-cốt-lõi)
+  - [1.2a Agent Workspace và ba trải nghiệm chuyên miền](#12a-agent-workspace-và-ba-trải-nghiệm-chuyên-miền)
   - [1.3 Contract và Hệ thống 10 Bất biến (System Invariants)](#13-contract-và-hệ-thống-10-bất-biến-system-invariants)
   - [1.4 Research Foundation và Định vị Thị trường 2026](#14-research-foundation-và-định-vị-thị-trường-2026)
   - [1.5 Ranh giới (Những gì Custos KHÔNG làm)](#15-ranh-giới-những-gì-custos-không-làm)
@@ -147,7 +154,7 @@
   - [14.14 Ranh giới](#1414-ranh-giới)
 - [PHẦN 15 — REPO STRUCTURE VÀ MODULE BOUNDARIES](#phần-15-repo-structure-và-module-boundaries)
   - [15.1 Motivation](#151-motivation)
-  - [15.2 Cây Thư Mục 11 Crates Sản Phẩm Đích](#152-cây-thư-mục-11-crates-sản-phẩm-đích)
+  - [15.2 Cấu trúc đích theo trách nhiệm](#152-cấu-trúc-đích-theo-trách-nhiệm)
   - [15.3 Tháo Gỡ Nợ Kỹ Thuật P0: Xóa Bỏ Cầu Nối Bridge $\rightarrow$ Persistence](#153-tháo-gỡ-nợ-kỹ-thuật-p0-xóa-bỏ-cầu-nối-bridge-$\rightarrow$-persistence)
   - [15.4 Chỉ Mục Mã Nguồn Tự Động (RepoCodeIndex)](#154-chỉ-mục-mã-nguồn-tự-động-repocodeindex)
   - [15.5 Chiến Dịch Lát Cắt Dọc và Mẫu Gói Công Việc RefactorWorkPacket](#155-chiến-dịch-lát-cắt-dọc-và-mẫu-gói-công-việc-refactorworkpacket)
@@ -157,7 +164,7 @@
   - [15.9 Ranh giới](#159-ranh-giới)
 - [PHẦN 16 — COST OPTIMIZATION VÀ BUDGET GOVERNANCE](#phần-16-cost-optimization-và-budget-governance)
   - [16.1 Motivation](#161-motivation)
-  - [16.2 Bảy Đòn Bẩy Độc Lập Kiểm Soát Chi Phí](#162-bảy-đòn-bẩy-độc-lập-kiểm-soát-chi-phí)
+  - [16.2 Đòn bẩy tối ưu theo evidence](#162-đòn-bẩy-tối-ưu-theo-evidence)
   - [16.3 Cơ Chế Quản Trị Ngân Sách (Budget Governor)](#163-cơ-chế-quản-trị-ngân-sách-budget-governor)
   - [16.4 Chính Sách Quản Lý KV Cache của Provider (KVCachePolicy)](#164-chính-sách-quản-lý-kv-cache-của-provider-kvcachepolicy)
   - [16.5 Nén Token Lũy Tiến Kèm Bảo Tồn Nguồn Trích Dẫn (CompactionPolicy)](#165-nén-token-lũy-tiến-kèm-bảo-tồn-nguồn-trích-dẫn-compactionpolicy)
@@ -188,16 +195,15 @@
 
 ## 1.1 Motivation (Tại sao Custos tồn tại)
 
-Làn sóng các công cụ lập trình AI và agentic trợ lý giai đoạn 2024–2026 phần lớn đi theo hai thái cực:
-1. **Chatbot phụ thuộc phiên (Session-bound Chatbots):** Tồn tại hoàn toàn trong ngữ cảnh của một cửa sổ hội thoại. Khi session đóng lại, trạng thái công việc bị phân mảnh, lịch sử can thiệp mất dấu, và không có cơ chế bền vững để tiếp nối một tác vụ dài hơi xuyên suốt nhiều ngày hoặc chuyển giao giữa các model khác nhau.
-2. **Autonomous Black-box Agents (Agent tự trị hộp đen):** Tự động thực thi hàng loạt tool calls, tự biên dịch và tự sửa mã nguồn mà không có sự phân định nghiêm ngặt giữa "đề xuất ý định" và "thực thi hiệu ứng". Hậu quả là mã nguồn bị can thiệp ngoài kiểm soát, chi phí suy luận bùng nổ mà không có cam kết chất lượng, và các rủi ro bảo mật nghiêm trọng (như Indirect Prompt Injection từ dữ liệu bên ngoài dẫn đến mất mát mã hoặc rò rỉ khóa bí mật).
+Developer cần làm việc với code, paper/dataset và công việc cá nhân trong cùng môi trường, thay vì tự nối các đoạn hội thoại, nguồn, patch và bản nháp. Custos giữ mục tiêu và kết quả xuyên phiên, cho người dùng thấy agent đang làm gì, nguồn nào được dùng, tác động nào đã xảy ra và phần nào chưa chắc.
 
-**Custos được sinh ra để giải quyết khoảng trống này bằng cách định nghĩa lại AI Agent:**  
-Custos không phải là một plugin gọi mô hình thông thường, cũng không phải một vỏ bọc giao diện (UI wrapper). Custos là một **Cộng sự AI Local-First có Chủ quyền (Sovereign Local-First AI Collaborator)**:
-- Nắm bắt mục tiêu công việc dài hạn của người dùng.
-- Tự động đánh giá độ phức tạp và chọn phương án phân rã tối ưu (Direct, Single-Worker, hoặc Multi-Worker).
-- Duy trì sự sống của tác vụ xuyên phiên (cross-session), xuyên mô hình (cross-model), và xuyên gói nghiệp vụ (cross-pack).
-- Minh bạch hóa 100% mọi bằng chứng nghiệm thu (evidence), chi phí thực tế (cost tracking), và kiểm soát từng hiệu ứng ngoại biên (side effect) thông qua rào chắn phân quyền nghiêm ngặt.
+**Custos là local-first Agent Workspace cho Coding, Research và Assistant:** hỏi như chat, mở tài nguyên cạnh agent, giao việc có giới hạn, kiểm kết quả rồi tiếp tục. UI là một phần sản phẩm cốt lõi; Task runtime, authority và evidence làm trải nghiệm đó bền vững, không phải một dashboard quản trị thay cho trải nghiệm làm việc.
+
+**Định vị đầy đủ là SADE:** môi trường ADE có editor/terminal/browser/diff/workspaces, agent runtime extensible và native harness integrations; supervision gắn scope, cost, source, criterion và recovery vào công việc thực. Học trải nghiệm từ OrCa và patterns từ Goose nhưng không gộp tên gọi thành kiến trúc, không lấy quyền mặc định của upstream làm authority của Custos.
+
+Triết lý tối ưu: tạo kết quả hữu ích nhất trong ngân sách đã chọn, giữ chất lượng và quyền kiểm soát. Direct/single-worker là lựa chọn đầu tiên; phân rã và multi-worker được dùng khi có lợi và hợp dependency/scope. Không hứa tối ưu toàn cục, minh bạch 100% native hidden state, hay đồng thời mạnh nhất và rẻ nhất với mọi task. Chi phí/hiệu ứng thiếu quan sát được báo unknown cùng assurance của đường thực thi.
+
+**Blueprint triển khai thống nhất:** [Kế hoạch refactor SADE](docs/development/workspace-restructuring-plan.md) nối code hiện có với đường chạy đích, cost core, ba pack và waves nghiệm thu. Budget/usage instrumentation bắt đầu từ single-worker path; S1/routing/multiagent là augmentation đo sau đó. [Domain blueprint](docs/architecture/domain-packs-and-workflows.md) giữ jobs/flows/artifacts/verifiers cụ thể. Plan là deliverable kiến trúc, không đánh dấu những module chưa wired là implemented.
 
 ## 1.2 Định nghĩa và Quyết định Thiết kế Cốt lõi
 
@@ -221,7 +227,7 @@ Custos không phải là một plugin gọi mô hình thông thường, cũng kh
 2. **P2 — Tam phân nghiêm ngặt: Đề xuất / Quyết định / Hiệu ứng (Proposal vs Decision vs Effect):**  
    - Mô hình suy luận (LLM/SLM) **chỉ có quyền đề xuất ý định** (`ActionIntent`).
    - Trusted Kernel và Authority Engine là bên **duy nhất có quyền cấp phép** (`Permit`).
-   - Capability Gateway là nơi **duy nhất thi hành hiệu ứng thực** (`CapabilityAttempt`), lưu vết biên nhận (`Receipt`) và đối soát trạng thái.
+   - Trên đường **custos-mediated**, Capability Gateway chặn trước effect, lưu receipt và reconcile. Native harness có tool execution riêng phải khai báo `provider-governed`/`observe-only` khi không intercept được; một LLM proxy không kiểm soát native file/process effects.
 3. **P3 — Bằng chứng là First-Class và Chấp nhận Trạng thái Không Chắc Chắn:**  
    Một tiêu chí nghiệm thu chỉ được coi là hoàn thành khi có bằng chứng xác thực (`Evidence`) đối soát được. Các trạng thái `Unknown` (chưa biết), `Stale` (dữ liệu cũ/mất hiệu lực), và `Uncertain` (hiệu ứng chưa rõ thành bại sau sự cố) là các trạng thái hạng nhất trong hệ thống, không bao giờ được phép che giấu hoặc giả định là thành công.
 
@@ -237,6 +243,18 @@ Custos không phải là một plugin gọi mô hình thông thường, cũng kh
   - Agent tự hành phân rã công việc, phối hợp các worker chuyên biệt và chỉ dừng lại hỏi người dùng khi gặp ranh giới quyền chưa được cấp hoặc xuất hiện xung đột dữ liệu.
 
 
+### 1.2a Agent Workspace và ba trải nghiệm chuyên miền
+
+Một shell dùng chung Task strip, conversation, artifact panes, inspector và Connections. Coding mở repo/diff/test/browser; Research mở corpus/PDF/claims/dataset/experiments; Assistant mở draft/recipient/calendar/outbox/automations. Preset Focus/Build/Study/Assist/Compare chỉ đổi bố cục, không đổi mode hoặc quyền. Audit/authority details mở theo ngữ cảnh; approval, pending/uncertain effects và egress không bị che.
+
+UI chốt ba **workbench lens**: **Copilot** (chat + Assistant), **Coding** và **Research**. Lens là cách xem cùng Task, không phải ba session hoặc ba sản phẩm. `Continue in Research`/`Continue in Coding` giữ `task_id`, revision, selected source/artifact refs, decisions, criteria, budget và effect state; nó bind turn/artifact được chọn và compile context riêng cho pack đích. Chỉ khi goal/acceptance thực sự tách mới tạo child Task. Grant, permit, secret và hidden state của native harness không được chuyển ngầm.
+
+Workspace chứa tài nguyên và Task; Task liên kết session và runs; pane là view không sở hữu state backend. Repo không bắt buộc cho Assistant. Research experiment cần environment/data/compute constraints, không chỉ Git worktree. Compare nhiều agent là một Task với candidate runs dùng chung baseline/criteria và total budget; lựa chọn candidate không tự cấp quyền merge.
+
+Conversation là lối vào bền vững nhưng không phải source of truth của công việc. Một session có thể bind nhiều Task bằng turn anchors; một Task đi qua nhiều session và workbench. Composer luôn hiển thị `Working on: <Task>` hoặc `No Task`; đổi active Task chỉ định tuyến lượt tiếp theo, không viết lại provenance lượt cũ. Workbench layout là presentation state theo thiết bị/window: restore layout không tự resume run, spawn terminal/notebook hoặc retry effect. Chi tiết contract và acceptance journey nằm trong [workspace/UI spec](docs/architecture/agent-workspace-and-ui.md#42-continuity-model-không-mất-session-khi-đổi-miền).
+
+Model API/local model dùng Custos worker loop để thực hiện tool use/context/verification. Native coding/research/assistant agent dùng AgentRuntimePort để giữ loop và feature riêng của harness. Không đồng nhất inference endpoint với agent, không hứa mọi agent có cùng body/tools/hidden-state continuation. Xem [workspace/UI spec](docs/architecture/agent-workspace-and-ui.md).
+
 ### 1.2b Kiến Trúc Vòng Lặp Cốt Lõi (Adaptive Verified Work Loop)
 Một Task đi trong vòng lặp **observe → choose → work → authorize → verify → continue**. `observe` lấy source/metadata đúng scope; `choose` so direct với DAG/worker/workspace trong policy; `work` để S2 hoặc native harness suy luận và tạo artifact; `authorize` chặn effect ở mức đường thực thi có thể kiểm soát; `verify` nối artifact, source, experiment và receipt với criterion; `continue` giữ quyết định/unknown cho phiên sau. S1 cung cấp phán đoán hẹp trước, trong và sau bước S2 nhưng có `abstain`; OI tổ chức công việc mà không tranh quyền suy luận nội bộ của harness. Các vòng replan chỉ sửa future nodes và không viết lại effect đã xảy ra.
 
@@ -250,7 +268,7 @@ Mọi dòng mã nguồn được viết trong Custos đều phải tuân thủ n
 |---|---|---|
 | **INV-01** | **Actor Attribution** | Mọi biến động trạng thái (state transition), cập nhật schema hoặc sửa đổi dữ liệu đều phải gắn định danh Actor (`User`, `DaemonKernel`, `S2Planner`, `WorkerRun`). Không có hành động nặc danh. |
 | **INV-02** | **Boundary Invariance** | Mô hình suy luận không bao giờ có thể tự nới rộng `Scope`, tự gỡ cờ `LocalOnly`, tự đổi `ModelPin` hoặc tự tăng `BudgetLimit` của tác vụ. |
-| **INV-03** | **Permit Requirement** | Mọi side effect can thiệp hệ thống tệp, tiến trình hoặc mạng đều bắt buộc phải có `Permit` hợp lệ được ký bởi Trusted Kernel với đúng mã băm tham số (`argument_digest`). |
+| **INV-03** | **Permit Requirement** | Trên đường `custos-mediated`, effect cần authorization/permit đúng canonical target/payload/preconditions trước dispatch. Native tools không intercept được giữ `provider-governed`/`observe-only` và coverage/uncertainty; không tuyên bố Kernel đã ký/chặn effect đó. |
 | **INV-04** | **No Untrusted Policy** | Dữ liệu đến từ nguồn không tin cậy (repo bên ngoài, web, email, MCP tool output) mang cờ `Taint::Untrusted` và tuyệt đối không được tự động chuyển hóa thành chỉ thị điều hành (policy instruction). |
 | **INV-05** | **Evidence-Backed Completion** | Tiêu chí nghiệm thu (`Criterion`) chỉ được chuyển sang `Pass` khi có đối tượng `Evidence` hợp lệ, còn hạn và trỏ đúng nguồn lưu trữ CAS hoặc bằng chứng thực nghiệm. |
 | **INV-06** | **Explicit Uncertainty** | Các giá trị `Unknown`, `Stale`, `Uncertain` là kết quả báo cáo hợp lệ và trung thực. Hệ thống cấm việc tự suy đoán thành công khi thiếu dữ liệu kiểm chứng. |
@@ -278,22 +296,29 @@ graph TD
 
 ## 1.4 Research Foundation và Định vị Thị trường 2026
 
-### Đối chiếu Kiến trúc Thực tế với Thị trường (2025–2026)
+### Đối chiếu trải nghiệm OrCa và quyết định Custos
 
-Thị trường trợ lý kỹ thuật năm 2026 ghi nhận các giải pháp tiêu biểu như Cursor Projects, Claude Code (Anthropic), và LangGraph (LangChain). Bảng sau là **so sánh định hướng ở phạm vi đã quan sát, không chứng nhận Custos vượt trội hay mô tả đầy đủ năng lực đối thủ**; mọi claim hiệu quả cần test cùng điều kiện:
+[Orca](https://www.onorca.dev/) công bố workspace kết hợp coding agents, worktrees, terminal/diff/browser và split panes; [repo chính thức](https://github.com/stablyai/orca) là nguồn để nghiên cứu component. Custos học cách tổ chức môi trường làm việc, không chỉ dựng màn hình chat. Không coi Task, parallel agent hay worktree là tính mới riêng của Custos.
 
-| Thuộc Tính Kiến Trúc | Cursor Projects (2026) | Claude Code (2026) | LangGraph (2025–2026) | CUSTOS (Kiến trúc Đích) |
-|---|---|---|---|---|
-| **Cơ chế Bền vững** | Coordinator + Shared Context | Git Worktrees + Subagents | StateGraph + Checkpointers | Canonical SQLite WAL + Event Sourcing + CAS |
-| **Kiểm soát Quyền Hạn** | Yêu cầu phê duyệt theo cấu hình | Phê duyệt quyền theo cấu hình | Interruption points / Human-in-the-loop | Grant/Intent/Permit theo đích; IBCT chỉ là đề xuất optional cho remote delegation |
-| **Tính Chịu Lỗi I/O** | Ghi đè file trực tiếp | Rollback qua git commit | State rollback qua checkpointer | 5 Transaction Boundaries (T1–T5) + Explicit Uncertain |
-| **Xác thực Bằng chứng** | Model tự thông báo xong | Model tự kiểm tra bằng test suite | Custom Evaluator Node | Evidence Engine (Fact/Extraction/Semantic) + REAL |
-| **Phân tầng Bảo mật** | Tin cậy context workspace | Sandbox cấp tiến trình cơ bản | Phụ thuộc ứng dụng người dùng | 3 Vùng Tin cậy + Taint Propagation + Provenance Tracking |
-| **Chi phí / Đánh giá** | Tính phí theo lượt gói cloud | Tính phí theo API token thực | Tự theo dõi qua LangSmith | Chi phí trên mỗi Task được Nghiệm thu (`cost_per_accepted_task`) |
+**Source audit tại checkout OrCa `3f6225deeb08a82448c5f0b0725073401629d462`:** OrCa có runtime và SQLite cho Run/Task/Dispatch, DAG dependencies, decision gates, receipts, mailbox, worker lifecycle, worktree local/SSH, structured Claude/Codex session, automation và UI fleet; vì thế định vị “OrCa chỉ có UI, còn lõi là coding agents khác” là sai. Coordinator loop trong mã yêu cầu Task đã được tạo, còn orchestration skill có thể hướng dẫn agent phân rã goal; không đồng nhất hai đường. Worktree của OrCa và Custos đều không phải OS sandbox. [Bản mổ xẻ source và giới hạn](docs/development/orca-source-study.md) giữ đường dẫn, nhận định và kế hoạch triển khai. Đây là audit ở một SHA, không là claim mọi release giống nhau.
+
+| Ý tưởng tham khảo | Quyết định Custos |
+|---|---|
+| Nhiều agent cạnh tài nguyên làm việc | Một workspace, ba miền chuyên sâu; direct và native harness đều first-class |
+| Worktree/parallel comparison | Candidate runs cùng Task/baseline/criteria/budget, verify rồi integration effect riêng |
+| Browser/design feedback | Observation có origin/version/privacy; inspect khác browser act |
+| Terminal/diff và bố cục split | UI panes composable; runtime giữ process/workspace state |
+| Mang agent/subscription đang có | Adapter conformance theo từng path/version; không hứa mọi feature hay usage đều quan sát được |
+| Durable Run/Task/Dispatch, gates, mailbox và worker recovery | Không sao chép OrCa schema; Custos giữ Task/Workflow/Effect/Evidence semantics riêng, học atomic claim, fencing và `unknown` lifecycle |
+| Terminal và structured native sessions không đồng nhất | Một `AgentRuntimePort` với capability/actual-mode receipt; fallback chỉ khi chứng minh chưa tạo session, không double-launch khi kết quả chưa rõ |
+
+Khác biệt Custos muốn chứng minh là sự kết hợp nguồn, quyền, continuation và criterion-specific outcomes xuyên Coding–Research–Assistant với UX nhẹ. Đây là giả thuyết thiết kế, không tuyên bố đối thủ không có audit, evidence hoặc permission. Chỉ tái sử dụng upstream sau pin SHA/license, dependency/security audit và interface tests.
+
+**Ranh giới triển khai:** Một nhánh công việc có một orchestration owner—Custos OI/scheduler hoặc native harness—không hai auto-planner cùng mở rộng graph. `worker_done`, exit code, terminal liveness và OrCa-style dispatch receipt không tự pass criterion của Custos. Provider CLI có thể thi hành native tools bên ngoài Gateway: assurance phải hạ đúng path. Worktree/host/process/resource đều có owner và trạng thái `unknown` khi không chứng minh được đã bắt đầu/dừng; mất kết nối remote không phải bằng chứng process đã chết.
 
 ### Công thức Định lượng Thành công của Custos
 
-Hệ thống Custos bác bỏ việc đánh giá hiệu năng agent thuần túy bằng tỷ lệ hoàn thành tác vụ do chính mô hình tự xưng. Thước đo duy nhất là **Chi phí trên mỗi Tác vụ được Nghiệm thu Thực tế**:
+Custos không đánh giá completion chỉ bằng lời tự nhận của model. **Chi phí trên mỗi Task được chấp nhận** phải đi cùng accepted rate, quality, safety, latency và human time; không phải thước đo duy nhất:
 
 $$\text{CostPerAcceptedTask} = \frac{\sum_{i=1}^{N} \left( \text{Cost}_{\text{attempt}}(i) + \text{Cost}_{\text{verifier}}(i) + \text{Cost}_{\text{recovery}}(i) \right)}{N_{\text{accepted}}}$$
 
@@ -303,10 +328,12 @@ Trong đó:
 - $\text{Cost}_{\text{verifier}}$: Chi phí chạy mô hình thẩm định độc lập và kiểm thử tĩnh/động.
 - $\text{Cost}_{\text{recovery}}$: Chi phí khắc phục sự cố, hoàn tác hoặc hòa giải hiệu ứng ngoại biên.
 
+Nếu không có accepted task, tỉ số không xác định; báo total spend và failures riêng. Provider billed USD, local compute estimates, human minutes và unknown spend phải tách nhãn. Không bỏ chi phí ứng viên thất bại khi so multi-agent với single-agent.
+
 ## 1.5 Ranh giới (Những gì Custos KHÔNG làm)
 
-Nhằm đảm bảo sự tinh gọn và an toàn tuyệt đối, Custos vạch rõ ranh giới sản phẩm:
-- **KHÔNG trở thành mạng xã hội Agent hoặc Cloud SaaS tập trung:** Mọi dữ liệu người dùng, cơ sở dữ liệu SQLite, kho lưu trữ CAS và khóa bí mật mặc định nằm 100% trên thiết bị cục bộ của người dùng.
+Custos vạch rõ ranh giới sản phẩm, không cam kết an toàn tuyệt đối:
+- **KHÔNG mặc định thành Cloud SaaS tập trung:** canonical DB/CAS local và secrets ở secure store; inference/connector cloud có thể có egress theo consent. Local-first không đồng nghĩa mọi execution offline.
 - **KHÔNG tự động phê duyệt các thay đổi có tính phá hủy (Destructive Mutations):** Khi người dùng vắng mặt (`HumanAvailability::Absent`), agent tuyệt đối không tự ý thực hiện các hành động gửi email, xóa dữ liệu, đẩy mã nguồn lên nhánh chính (main branch) trừ khi có một `StandingGrant` rõ ràng.
 - **KHÔNG dùng suy luận của mô hình để tự chứng minh tính đúng đắn ngữ nghĩa:** Không chấp nhận câu trả lời "tôi đã sửa xong và kiểm tra thấy rất tốt" của LLM như một bằng chứng nghiệm thu. Bằng chứng bắt buộc phải xuất phát từ artifact, log thực thi kiểm thử hoặc biên nhận hệ thống.
 
@@ -1535,7 +1562,7 @@ crates/custos-core/fixtures/security_adversarial/
 └── path_traversal_symlink_trick.txt  # Kỹ thuật vượt rào workspace bằng liên kết mềm
 ```
 
-Mỗi lần chạy kiểm thử (`cargo test --test security_suite`), hệ thống giả lập đưa các nội dung độc hại trên vào đường ống và **khẳng định 100% các cuộc tấn công đều bị chặn đứng** tại các cổng kiểm soát tương ứng.
+Security fixtures phải thử các nội dung độc hại trên từng đường thực thi và báo coverage, failures, platform/isolation profile. Pass một suite chỉ chứng minh các cases đã chạy trong môi trường đó; không chứng minh chặn mọi attack hoặc mediation của mọi native agent. Lệnh test cụ thể phải đối chiếu checkout, không xem tên suite trong thiết kế là test đã tồn tại.
 
 ## 8.6 Quy Trình Xử Lý Sự Cố An Ninh (Security Incident Response Flow)
 
@@ -1765,28 +1792,28 @@ Mỗi tác vụ kỹ thuật đi vào hệ thống đều được phân loại 
 
 ## 10.3 Không Gian Làm Việc Ba Đường Dẫn (ExecutionWorkspace)
 
-Để đảm bảo tính bất biến của mã nguồn và ngăn ngừa việc agent làm bẩn repository của người dùng, Custos thiết lập cấu trúc 3 đường dẫn vật lý:
+ExecutionWorkspace nối source baseline, vùng thực thi và artifact output với host/owner/lifecycle. Reader dùng snapshot; Assist one-writer có thể dùng allowed checkout theo grant/base preconditions; delegated/candidate writers dùng isolated worktree khi cần, parallel writers cần integration gate. HEAD và selected dirty bytes đều thuộc baseline; không tự stash/reset để tạo repo sạch. Mẫu dưới đây minh họa Engineering workspace, **chưa là API đã tồn tại** và không áp cho Research/Assistant:
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionWorkspace {
-    // 1. Thư mục gốc dự án của người dùng (Chỉ Đọc đối với Worker)
+    // Source root; write permission is determined by the execution profile.
     pub root_workspace: std::path::PathBuf,
-    // 2. Git Worktree cô lập cho từng Task (Worker làm việc tại đây)
-    pub isolated_worktree: std::path::PathBuf,
-    // 3. Vùng nhớ đệm tạm thời cho các tệp nhị phân / log / build cache
-    pub sandbox_overlay: std::path::PathBuf,
+    // Optional isolated checkout for delegated or candidate writers.
+    pub isolated_worktree: Option<std::path::PathBuf>,
+    pub artifact_output: std::path::PathBuf,
     pub base_commit_sha: String,
+    pub selected_dirty_manifest_ref: Option<String>,
     pub active_branch: String,
 }
 ```
 
 > **LƯU Ý AN NINH:**  
-> Git Worktree giúp cô lập hệ thống tệp và nhánh git, **nhưng không tự động cô lập mạng hoặc tiến trình**. Khi Worker thực thi lệnh biên dịch (`cargo build`) hoặc chạy test (`npm test`), các lệnh này bắt buộc phải được bọc trong OS Process Sandbox để chặn truy cập ra ngoài thư mục `isolated_worktree`.
+> Git worktree tách checkout và branch, **không chặn file/network/process access bên ngoài**. Sandbox/capability profile phải được kiểm theo OS/path; thiếu primitive cần thiết thì hạ assurance hoặc block job theo policy. Native harness tự quản worktree cần adapter khai báo owner/source/lifecycle, không lồng hai resource managers âm thầm.
 
 ## 10.4 Gói Bản Vá Nguyên Tử (PatchBundle)
 
-Thay vì ghi đè trực tiếp từng tệp tin, Worker phải xuất ra một cấu trúc `PatchBundle`:
+PatchBundle là artifact có integrity/base/write-set rõ. Từ “nguyên tử” ở đây không hứa transaction chung cho filesystem nhiều file, SQLite và shell; partial apply cần adapter recovery/reconciliation. Worker có thể edit trong execution scope và xuất diff; mẫu dữ liệu đích:
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1803,8 +1830,8 @@ pub struct PatchBundle {
 
 ### Nguyên Tắc Áp Bản Vá:
 1. **Kiểm tra Điều Kiện Tiên Quyết (Precondition Check):** Trước khi áp diff, hệ thống kiểm tra xem mã băm của các tệp nguồn trên đĩa có khớp 100% với `file_preconditions` hay không. Nếu người dùng đã tự tay sửa một dòng trong tệp đó $\rightarrow$ Bản vá bị từ chối với lỗi `PreconditionStaleConflict`.
-2. **Áp Thử Nghiệm trong Worktree:** Diff được áp thử trong `isolated_worktree`.
-3. **Chạy Bộ Kiểm Thử:** Hệ thống tự động kích hoạt `test_commands_to_verify`. Nếu toàn bộ bài test vượt qua $\rightarrow$ Gói bản vá mới được trình cho người dùng duyệt để merge vào nhánh chính.
+2. **Kiểm Snapshot Thực Thi:** Diff và verification dùng exact worktree/checkout đã chọn, có scope/base check; delegated/candidate patch có thể apply thử trong isolated worktree.
+3. **Kiểm Theo Criterion:** Chạy behavior/targeted tests và required relevant regression/integration. Agent-authored test cần trusted baseline hoặc review theo rubric; exit 0 không chứng minh mọi feature/bug. Apply/merge vào target là effect riêng theo scope/approval profile, rồi reverify integrated snapshot.
 
 ## 10.5 Thiết Kế Giao Diện Công Cụ Chuẩn SWE-agent (ACI)
 
@@ -1928,7 +1955,7 @@ Nghiên cứu học thuật và khảo sát tri thức kỹ thuật là một tr
 
 ## 11.3 Gói Tái Lập Nghiên Cứu (ReproducibilityBundle)
 
-Một tác vụ thuộc nhóm `paper_to_prototype` hoặc `benchmark_reproduce` không bao giờ được coi là hoàn thành nếu thiếu cấu trúc `ReproducibilityBundle`:
+`paper_to_prototype` hoặc `benchmark_reproduce` cần provenance cho source/code/environment/data/config/compute/result theo criterion. Source QA/PaperCard không bị buộc chạy experiment. Mẫu sau là **schema minh họa đích**, chưa phải type đã hiện thực; các dimensions evidence không tự thành proof cascade:
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1951,17 +1978,18 @@ pub enum ReproductionLevel {
     CitedOnly,          // Đã đối soát DOI tồn tại trên CrossRef/OpenAlex
     EnvironmentReady,   // Môi trường container/conda đã build thành công
     CodeExecutable,     // Mã nguồn chạy được nhưng chưa đối soát số liệu
-    ReproducedExact,    // Tái lập thành công số liệu trong khoảng sai số $\pm 5\%$
-    DivergedDisproved,  // Số liệu thực nghiệm không khớp với tuyên bố bài báo
+    ReproducedWithinProtocol, // Result meets the metric-specific protocol and tolerance.
+    Diverged,                // Result differs; conditions and uncertainty must be reported.
+    Inconclusive,            // Missing data, compute, or comparable evidence.
 }
 ```
 
 > **QUY TẮC BẤT BIẾN:**  
-> Một tác vụ chuyển đổi bài báo thành nguyên mẫu (`paper_to_prototype`) **tuyệt đối không được phép claim trạng thái Succeeded** nếu `reproduction_status` vẫn đang ở mức `CitedOnly`. Nếu mã nguồn không thể chạy được do thiếu dữ liệu hoặc lỗi thư viện, tác vụ bắt buộc phải kết thúc ở trạng thái `Failed` hoặc báo cáo rõ ranh giới `DivergedDisproved`.
+> DOI/source tồn tại không đủ pass criterion “prototype chạy được” hoặc “metric được tái lập”. Missing data/environment có thể blocked/limited/unknown; divergence là finding trong điều kiện thí nghiệm, **không tự bác bỏ paper**. Tolerance/repeats/confidence interval theo protocol đặt trước cho metric/task, không ±5% chung. Task “đánh giá khả năng tái lập” có thể đạt mục tiêu bằng một báo cáo divergence đủ evidence, dù reproduction metric chưa đạt.
 
 ## 11.4 Mẫu Hình Kiểm Chứng Sự Thật Lặp FIRE
 
-Đối với các tác vụ nghiên cứu chuyên sâu (`deep_research`), hệ thống áp dụng mẫu hình **FIRE (Fact-checking Iterative Retrieval & Evaluation)**:
+Đối với `deep_research`, Custos có vòng source rechecking bounded theo missing support/contradiction/freshness. **FIRE** là mnemonic nội bộ ở đây; chưa pin exact nghiên cứu đủ để coi tên đó là formal dependency. Bibliographic locator/freshness khác semantic support; nguồn API unavailable phải ghi unknown. Vòng minh họa:
 
 ```mermaid
 flowchart TD
@@ -2062,10 +2090,12 @@ Trợ lý cá nhân hóa là nơi người dùng trao cho AI các quyền hạn 
 
 ### Năm Nấc Tự Chủ (Autonomy Levels):
 - **L0 (Thụ động):** Chỉ trả lời khi được hỏi trực tiếp. Không chủ động theo dõi hay thông báo.
-- **L1 (Quan sát & Đề xuất):** Quét hòm thư và lịch trình, đưa ra các gợi ý hành động nhưng tuyệt đối không chuẩn bị sẵn các lệnh gửi.
+- **L1 (Quan sát & Đề xuất):** Đọc nguồn/hòm thư/lịch trong scoped grant để gợi ý; không tự cấp read/egress authority.
 - **L2 (Soạn Thảo Sẵn Sàng):** Tự động chuẩn bị sẵn bản nháp email hoặc lịch họp, đặt vào hàng đợi chờ người dùng nhấn nút Phê duyệt.
-- **L3 (Ủy Thác Có Điều Kiện):** Tự động thực thi các hành động gửi thư hoặc đặt lịch nếu nằm trong danh sách đối tác tin cậy (`TrustedContactsAllowlist`) và nội dung phù hợp mẫu chuẩn (`StandingGrant`).
-- **L4 (Tự Trị Đầy Đủ - BỊ KHÓA MẶC ĐỊNH):** Tự động toàn quyền xử lý. **Custos vô hiệu hóa mức này đối với toàn bộ các hiệu ứng tài chính hoặc gửi email quan trọng.**
+- **L3 (Ủy Thác Có Điều Kiện):** Effect trong standing grant với account/recipient/effect/content policy/expiry/budget rõ; trusted contact riêng lẻ không authorize mọi payload.
+- **L4 (Automation Có Giới Hạn):** Recurring/event-triggered runs có occurrence ID, max runs, per-run/aggregate budget, overlap/missed-run policy, expiry và revoke. Effect mỗi run vẫn theo grant/permit và connector conformance.
+
+Không có mức unrestricted execution. Presence và authority độc lập: offline chỉ chạy trong standing grant còn hiệu lực; cấp autonomy level không thay scope hoặc approval policy. [Assistant blueprint](docs/architecture/domain-packs-and-workflows.md#4-assistant-pack-và-automation) định nghĩa jobs và fixtures.
 
 ## 12.3 Chống Mẫu Giải Quyết Danh Tính (Identity Resolution Anti-pattern)
 
@@ -2089,7 +2119,8 @@ Trợ lý cá nhân hóa là nơi người dùng trao cho AI các quyền hạn 
 
 Khi người dùng đã nhìn thấy bản xem trước (Preview) và nhấn nút **Phê Duyệt (Approve)** cho một bức thư hoặc một sự kiện lịch:
 1. Hệ thống tính toán mã băm SHA-256 của toàn bộ nội dung:
-   $$\text{Digest} = \text{SHA256}(\text{Recipient} \parallel \text{Subject} \parallel \text{BodyBytes} \parallel \text{AttachmentDigests})$$
+   $$\text{Digest} = \text{SHA256}(\text{CanonicalSerialize}(\text{Account, From, To, CC, BCC, Subject, BodyBytes, AttachmentDigests}))$$
+   Serialization phải không nhập nhằng, versioned và được canonicalize trước preview; không hash nối các chuỗi không có ranh giới. Calendar có participant/time/timezone/resource fields tương ứng.
 2. Mã băm này được khắc chặt vào `Permit.argument_digest`.
 3. Khi Capability Gateway gửi thư qua SMTP/API, nó tính lại mã băm của payload thực tế. **Nếu sai lệch dù chỉ một khoảng trắng $\rightarrow$ Lệnh gửi bị hủy bỏ ngay lập tức** với lỗi `PermitPayloadTamperedOrDrifted`. Người dùng phải phê duyệt lại từ đầu.
 
@@ -2222,7 +2253,7 @@ flowchart TD
 ```
 
 **Cơ Chế Thực Thi Lõi (OI Architecture Realization & Invariants):**
-Trung tâm của hệ thống là **`OiEngine`** và **`AdmissibilityEvaluator`**. Đầu vào của OI là một **`DecisionSnapshot`** (gồm trạng thái Task, Event và EffectLedger), đầu ra là một bản **`WorkflowRevision`** kế hoạch bất biến. Quá trình này được bảo vệ bởi 3 Gate nền tảng đã được kiểm chứng qua E2E:
+Thiết kế OI dùng **`OiEngine`** và **`AdmissibilityEvaluator`**, nhận **`DecisionSnapshot`** (Task, events, effect state) và đề xuất **`WorkflowRevision`**. Các gate sau là yêu cầu nghiệm thu; chỉ được gọi đã kiểm chứng khi có test report/SHA tương ứng, không suy từ tên struct hoặc đoạn mô tả:
 - **Gate 3 (Idempotency & Crash Recovery):** Hệ thống không bao giờ tự ý thử lại mù quáng (blind retries) khi gặp sự cố tắt đột ngột (crash). Cơ chế đối soát `reconcile_on_startup()` rà soát EffectLedger, giáng cấp các side-effect đang `InFlight` thành `Uncertain`. Hệ thống OI bắt buộc phải giải quyết trạng thái `Uncertain` trước khi lên lịch các bước tiếp theo.
 - **Gate 5 (Graph Runtime & Cycle Detection):** Kế hoạch từ `WorkflowRevision` được biên dịch thành cấu trúc **`DagGraph`**. Động cơ bắt buộc gọi `DagGraph::validate_dag()` để phát hiện và triệt tiêu chu trình phụ thuộc (cyclic dependencies) trước khi giao cho `GraphRuntime` thực thi an toàn theo từng làn sóng song song (parallel waves).
 - **Gate 4 (Harness Assurance & Proof-Closure):** Vòng lặp OI chỉ kết thúc hợp lệ khi một `TaskContract` hoàn thành yêu cầu nghiệm thu (Proof-Closure). Cổng `complete_task` đòi hỏi cung cấp gói **`EvidenceClaim`** toàn vẹn; không mô hình nào có thể tự nhận task "thành công" mà không có bằng chứng hệ thống xác thực.
@@ -2319,6 +2350,10 @@ S1 có thể trả lời intent classification, relevance, candidate ranking, am
 ## 14.9 S1 Micro-Worker Trong Worktree
 **Judge** (typed judgment) và **Scout** (read-only scoped artifact) có thể chạy bên trong hoặc ngoài worktree để giúp worker mạnh tìm symbol, test, log và bằng chứng. **MicroExecutor** là tùy chọn thực nghiệm cho transformation hẹp có output kiểm độc lập; không mặc định “planner mạnh → executor rẻ”. Test do nó viết vẫn là agent-authored evidence, không là oracle acceptance. Worker chính/natural coding harness vẫn giữ quyền tự giải bài toán sâu; OI không tự chia mỗi edit thành micro-task.
 
+Trong SADE, S1 có thể hỗ trợ source/test/log scouts cho Coding, screen/dedup/extract spans cho Research, identity candidates/time preflight cho Assistant. Hint có nguồn/method/omissions và được S2 bác bỏ hoặc đọc lại raw source. Không bắt mọi reasoning qua summary của S1, không dùng confidence để cấp quyền. Bài toán “Task có thể fail?” khác “topology nào đáng thêm cost?”; [nghiên cứu protocol routing](https://arxiv.org/abs/2608.14927) gợi ý phải đánh giá riêng hai việc, chưa chứng minh route cho Custos.
+
+Worker loop, Task orchestration loop và offline improvement loop tách biệt. Mỗi nhánh delegation chỉ có một owner: Custos hoặc native harness; không hai auto-planners cùng phân rã một goal. Children native opaque phải khai báo limits về observation/usage/budget. Xem [SADE design](docs/architecture/sade-design-and-supervision.md).
+
 ## 14.10 Giao Diện Con Người (Human Interface)
 Sự hiện diện (Presence) và thẩm quyền (Authority) là hai trục độc lập.
 - **Present:** Steer từng lượt chat.
@@ -2369,108 +2404,46 @@ Mức độ ưu tiên của hệ thống thông báo:
 
 Một trong những nguyên nhân hàng đầu khiến các dự án phần mềm AI quy mô lớn bị suy thoái thành một "mớ bòng bong" (Big Ball of Mud) là sự vi phạm ranh giới mô-đun. Khi các thành phần hạ tầng (như thư viện HTTP hay driver SQLite) bị import bừa bãi vào trong domain logic, hoặc khi các module gọi chéo lẫn nhau (circular dependencies), việc kiểm thử đơn vị độc lập trở nên bất khả thi và bất kỳ một thay đổi nhỏ nào cũng có thể gây ra lỗi dây chuyền khó kiểm soát.
 
-Custos thiết lập một **Kiến Trúc Đa Crate Phân Tầng Chặt Chẽ (Strict Multi-Crate Architecture)** theo chuẩn mực Clean Architecture và Domain-Driven Design (DDD):
-- 11 product crates với chiều phụ thuộc một chiều tuyệt đối.
-- Tuân thủ nghiêm ngặt 5 nguyên lý SOLID.
-- Nhận diện và loại bỏ triệt để các khoản nợ kỹ thuật (technical debts).
+Custos giữ kiến trúc đa crate theo trách nhiệm domain/core/runtime/pack/adapter/client, tránh circular production imports. Số product crates trong catalog là inventory tại thời điểm kiểm, không là lý do sinh thêm crate. Tái cấu trúc nhắm tới flow chạy thật, module ownership và compatibility tests; không hứa loại bỏ toàn bộ technical debt trong một lần đổi cây thư mục.
 
-## 15.2 Cây Thư Mục 11 Crates Sản Phẩm Đích
+## 15.2 Cấu trúc đích theo trách nhiệm
 
-Cây sau là **đề xuất vị trí theo trách nhiệm, không phải bản sao checkout hiện tại**. Tên crate/file phải đối chiếu `cargo metadata`, `rg --files` và [catalog vật lý](docs/development/codebase-architecture.md) trước khi tạo hoặc di chuyển. Riêng protocol/transport, §7.10 là bản đồ quyết định mới hơn; không tạo `hubs/` chỉ vì sơ đồ này:
+**Blueprint sâu theo crate:** [plan §22](docs/development/workspace-restructuring-plan.md#22-crate-blueprint-và-chuyển-lõi-orca-theo-trách-nhiệm) đối chiếu dependency thực với target, chia OrCa launch/worktree/dispatch/mailbox/lifecycle vào đúng pure values, policy, orchestration, I/O và transaction owner. Core `contracts` giữ canonical ports; runtime giữ coordination; persistence implement narrow atomic operations; daemon inject cả pack registry/verifiers. Resource FS/Git mutations phải qua adapters, không copy trực tiếp trong runtime. Mobile ngoài campaign desktop/headless.
 
-```
-Custos/
-├── Cargo.toml                          # Workspace root cấu hình 11 crates & profile release
-├── schemas/                            # JSON Schemas cho Event, Intent, Permit, State
-│   ├── event_ledger_v1.json
-│   ├── action_intent_v1.json
-│   ├── capability_permit_v1.json
-│   └── task_contract_v1.json
-│
-├── crates/
-│   ├── custos-domain/                  # TẦNG 0: Core Types, Entities, Events (ZERO I/O)
-│   │   ├── src/
-│   │   │   ├── task.rs                 # TaskId, TaskContract, TaskState, Priority
-│   │   │   ├── authority.rs            # Grant, ActionIntent, Permit, ActorId
-│   │   │   ├── evidence.rs             # EvidenceRecord, EvidenceKind, Criterion
-│   │   │   ├── provenance.rs           # DataProvenance, TaintLevel, SourceLocator
-│   │   │   └── events.rs               # DomainEvent variants (Append-only)
-│   │   └── Cargo.toml                  # Không có tokio, reqwest, sqlx, rusqlite!
-│   │
-│   ├── custos-core/                    # TẦNG 1: Pure Business Logic & State Machines
-│   │   ├── src/
-│   │   │   ├── kernel/                 # Task FSM, State Transition Validator
-│   │   │   ├── authority_engine.rs     # Thẩm định Grant, Minting One-use Permit
-│   │   │   ├── evidence_engine.rs      # Completion Gate, REAL & LTL Assertion
-│   │   │   ├── budget_ledger.rs        # Reserve & Settle logic, Budget Governor
-│   │   │   └── ports/                  # Traits (StoragePort, ModelPort, SandboxPort)
-│   │   └── Cargo.toml
-│   │
-│   ├── custos-persistence/             # TẦNG 2A: Lưu trữ Bền Vững & Quản trị Tệp
-│   │   ├── src/
-│   │   │   ├── sqlite/                 # Quản lý connection pool, WAL mode, migrations
-│   │   │   ├── cas/                    # Content-Addressed Storage (.custos/cas/)
-│   │   │   ├── indexes/                # SQLite FTS5 Full-text search
-│   │   │   └── outbox.rs               # Transactional Outbox Pattern Engine
-│   │   └── Cargo.toml
-│   │
-│   ├── custos-provider/                # TẦNG 2B: Trừu Tượng Hóa Nhà Cung Cấp Mô Hình
-│   │   ├── src/
-│   │   │   ├── traits.rs               # ModelProvider trait, StreamingTokenReceiver
-│   │   │   ├── metering.rs             # Đo đếm Token thực tế & Ước tính chi phí
-│   │   │   └── error.rs                # ProviderError variants (RateLimit, Timeout)
-│   │   └── Cargo.toml
-│   │
-│   ├── custos-adapters/                # TẦNG 2C: Triển Khai Hạ Tầng Cụ Thể
-│   │   ├── src/
-│   │   │   ├── models/                 # Anthropic, OpenAI, Ollama, Local Llama.cpp
-│   │   │   ├── harness/                # Claude Code, Codex, Cursor, Goose Adapter
-│   │   │   ├── sandbox/                # OS Process Sandbox (Seatbelt / Landlock)
-│   │   │   └── mcp/                    # MCP client: stdio / Streamable HTTP; legacy riêng
-│   │   └── Cargo.toml
-│   │
-│   ├── custos-runtime/                 # TẦNG 3A: Động Cơ Thực Thi & Điều Phối
-│   │   ├── src/
-│   │   │   ├── s1/                     # System 1 Fast Fabric (Scout, Judge, MicroExec)
-│   │   │   ├── s2/                     # System 2 reasoning/worker (đích, không buộc tách folder)
-│   │   │   ├── oi/                     # OI route/plan/replan (đích, không buộc tạo folder)
-│   │   │   ├── context/                # Context Compiler (8-step pipeline)
-│   │   │   └── meta/                   # Meta Engine Offline Optimizer
-│   │   └── Cargo.toml
-│   │
-│   ├── custos-packs/                   # TẦNG 3B: Gói Nghiệp Vụ Chuyên Sâu
-│   │   ├── src/
-│   │   │   ├── engineering/            # 7 Task Kinds, SWE-agent ACI, Git Worktree
-│   │   │   ├── research/               # 10 Task Kinds, FIRE Pattern, DatasetCard
-│   │   │   └── assistant/              # 6 Work Classes, Stability Contract
-│   │   └── Cargo.toml
-│   │
-│   ├── custos-bridge/                  # TẦNG 3C: Cầu nối phiên và Task, không host transport
-│   │   ├── src/
-│   │   │   ├── session_service.rs      # Quản lý ConversationTurn & EphemeralQuery
-│   │   │   ├── task_mapper.rs          # Ánh xạ SessionTaskBinding
-│   │   │   └── local_api_v1/           # DTO/bridge contract nếu cần; listener thuộc daemon
-│   │   └── Cargo.toml
-│   │
-│   ├── custos-daemon/                  # TẦNG 4: Composition Root & Background Daemon
-│   │   ├── src/
-│   │   │   ├── bootstrap.rs            # Khởi tạo DB, kiểm tra WAL, ráp Ports & Adapters
-│   │   │   ├── local_api/              # Một handler; thêm transport adapter khi có nhu cầu
-│   │   │   ├── lifecycle.rs            # Graceful shutdown, Signal handling, Crash Recovery
-│   │   │   └── main.rs                 # Daemon entrypoint binary
-│   │   └── Cargo.toml
-│   │
-│   ├── custos-cli/                     # TẦNG 5A: Giao Diện Dòng Lệnh Người Dùng
-│   │   ├── src/
-│   │   │   ├── commands/               # start, task, grant, inspect, replay
-│   │   │   ├── tui/                    # Terminal UI hiển thị streaming & diff preview
-│   │   │   └── main.rs                 # CLI entrypoint binary
-│   │   └── Cargo.toml
-│   │
-│   └── custos-gui/                     # TẦNG 5B: Giao Diện Đồ Họa Cục Bộ
-│       ├── src/                        # Web Local / Desktop Shell (Tauri hoặc Actix Web)
-│       └── Cargo.toml
-```
+Giữ crate boundaries hiện hữu; không thêm ADE shell/UI crate hoặc phantom `custos-gui`. `crates/custos-app/{cli,desktop}` là vị trí hosts đang có, `ui/desktop` là frontend sản phẩm chính; `ui/cli` là frontend React riêng cần compatibility audit. Số crate không là tiêu chí đúng kiến trúc. Cây physical phải lấy từ [catalog](docs/development/codebase-architecture.md), không lấy target diagram làm kết quả audit.
+
+| Chủ đề | Địa chỉ chịu trách nhiệm |
+|---|---|
+| Pure types/reference IDs | `crates/custos-domain/src/` |
+| Kernel, scope, authority, budget, completion policy/ports | `crates/custos-core/src/` |
+| Model inference/stream/usage contracts | `crates/custos-provider/src/` |
+| Workers, workflow/OI, context/memory, execution workspace coordination | `crates/custos-runtime/src/` |
+| Engineering/Research/Assistant semantics | `crates/custos-packs/src/{engineering,research,assistant}/` |
+| Manifests, task kinds, recipes, prompts, verifier rubrics | `crates/custos-packs/declarative/<pack>/` |
+| Provider/harness/fs/Git/process/parser/browser/connector implementations | `crates/custos-adapters/src/` |
+| Canonical SQLite/CAS/migrations/rebuildable index repositories | `crates/custos-persistence/` |
+| Session/turn binding and application bridge | `crates/custos-bridge/src/` |
+| API hosting and sole concrete composition | `crates/custos-daemon/src/` |
+| Client API/events | `crates/custos-sdk/src/` |
+| CLI / desktop platform hosts | `crates/custos-app/{cli,desktop}/` |
+| Workspace panes, domain views, shared presentation/API facade | `ui/desktop/src/` |
+| Compatibility/development tools | `tools/`, không là nơi mặc định đặt toàn bộ skills |
+
+Các subfolder trong bảng là địa chỉ đích khi cần code, không yêu cầu tạo rỗng. Public AgentRuntimePort cần một definition canonical sau contract audit; không copy thêm trait vào provider nếu core definition còn tồn tại không có migration.
+
+**Chốt contract cho đợt tái cấu trúc:** giữ `ModelPort` ở `custos-provider/src/port.rs`, `AgentRuntimePort` ở `custos-core/src/contracts/harness.rs`. SDK nhận wire DTO/client transport từ daemon; server dispatch/composition giữ daemon. Không đổi trait location để có folder đối xứng. Client wire report không import runtime implementation.
+
+**Skill ownership:** Repo Intelligence là subsystem dùng source snapshot/index/query/context; `repo_explain` là skill Engineering tiêu thụ nó. Instruction recipe ở declarative pack, domain behavior ở pack Rust, shared coordination ở runtime, I/O ở adapters/persistence, scope/permission ở core. MCP chỉ là exposure; RAG là context consumer. Research và Assistant dùng cùng phân tách. Cost/context/cache optimization đặt ở shared runtime/core với source coverage obligations của pack.
+
+**Frontend ownership:** `app/` giữ shell/routes; feature modules `workspace`, `tasks`, `engineering`, `research`, `assistant`, `connections` giữ views; `shared/api` giữ client/event synchronization và `shared/ui` giữ accessible components. Backend state không nằm trong layout store hay mock fixtures.
+
+Hiện có Python `tools/repo_intelligent` và Rust repo modules đang thay đổi: giữ compatibility đến khi conformance chứng minh replacement. Không xóa folder chỉ vì bảng đích đổi nơi. [Skills/capabilities](docs/architecture/capability-catalog-and-skills.md) quy định cách thêm feature; [restructuring plan](docs/development/workspace-restructuring-plan.md) ghi current→target, gates và migration; [workspace/UI](docs/architecture/agent-workspace-and-ui.md) chốt behavior. §7 giữ protocol boundaries, §14 giữ OI decision boundaries.
+
+**Code migration cụ thể:** [plan §6–10](docs/development/workspace-restructuring-plan.md#6-audit-code-và-quyết-định-giữchuyểnhợp-nhất) ghi source audit, import graph và R0–R10. Thứ tự ưu tiên: baseline → SDK/client-server split → UI state/transport → capability I/O boundary → worker path → context/memory và OI consolidation → execution resources/domain features → compatibility retirement. Mỗi packet có consumers/parity/golden fixtures và integration gate, không một rename toàn repo không kiểm.
+
+**OrCa-informed implementation:** [source study](docs/development/orca-source-study.md) chốt đích `Task/Run/WorkerRun/ExecutionWorkspace` và các capability tracks shell/API, host/workspace, agent launch, interactive resources, SCM, orchestration, automation, remote, ecosystem, operations, UX và secrets. [Chương trình hấp thụ](docs/development/workspace-restructuring-plan.md#20-chương-trình-hấp-thụ-orca-vào-nền-custos) map chúng vào OF0–OF7 và R/P/W hiện hữu. Không port Electron/Node runtime vào Rust chỉ vì code upstream có sẵn; không đưa trạng thái Task canonical vào React store, OrCa DB hoặc một process harness. Nexus hiện chỉ thống kê được TypeScript files của OrCa, chưa có TypeScript AST/call graph; `.git` local của OrCa đã bị xóa sau audit nên SHA chỉ còn là provenance đã ghi, không tái xác minh được tại checkout. Catalog vật lý Custos vẫn phải kiểm bằng code và tests của chính repo.
+
+Metadata trên checkout hiện tại xác nhận 16 workspace packages, trong đó 12 product packages gồm hai app hosts. Daemon đã là member qua path dependency; không liệt kê explicit trong `members` không tự là lỗi. `crates/custos-app/cli` hiện là Tauri terminal-style host; headless CLI là mục tiêu cần audit entrypoints, không capability suy từ tên folder. Các số/tên cũ ở catalog là lịch sử, không thay metadata/code.
 
 ## 15.3 Kiểm Soát Phụ Thuộc Bridge và Persistence
 
@@ -2498,29 +2471,22 @@ Tệp chỉ mục này được cập nhật tự động qua các script phân 
 
 ## 15.5 Chiến Dịch Lát Cắt Dọc và Mẫu Gói Công Việc RefactorWorkPacket
 
-Việc di chuyển hoặc tái cấu trúc một codebase lớn không thể thực hiện tùy tiện mà phải thông qua **Chiến Dịch Lát Cắt Dọc (Vertical Slice Campaign)** với các làn song song (`Lanes`):
+**Kết hợp desktop/headless với OrCa:** [superplan §21](docs/development/workspace-restructuring-plan.md#21-superplan-kết-hợp-custos-và-orca-cho-desktop-và-headless) chốt selective React component ports qua SDK, runtime lifecycle reimplementation theo contracts Custos, migrations và bounded streaming. Nền workspace/native agents/fleet/dispatch được xây đồng thời với fixtures ba pack; automation sử dụng Assistant semantics. Mobile client/push/relay/packaging nằm ngoài campaign hiện tại. Chiến lược nền giữ Rust daemon/Tauri, source reuse có license/digest và conformance, mỗi milestone có flow chạy thật để review.
 
+Chiến dịch có thể refactor lớn trong một đợt, chia packet có write sets/dependencies/compatibility/gates rõ. Baseline giữ base SHA **và dirty manifest**, không buộc reset repo sạch. Contracts, migrations, daemon composition và root lockfiles có một integration owner; agents làm parallel trên interfaces đã chốt và disjoint write sets. Kế hoạch canonical là [R0–R10 và W0–W5](docs/development/workspace-restructuring-plan.md#15-thứ-tự-waves-và-gates-tích-hợp):
+
+```mermaid
+flowchart TD
+    B["Baseline + golden contracts + dirty manifest"] --> L["Live single worker + durable accounting"]
+    L --> N["Native launch + execution workspaces"]
+    N --> D["Standalone Coding / Research / Assistant jobs"]
+    D --> C["Bounded coordination + typed cross-pack"]
+    C --> E["Paired optimization + retire compatibility"]
+    L --> UI["UI projections and domain views alongside backend"]
+    UI --> D
 ```
-Chiến dịch: "Hoàn thiện lát cắt dọc Engineering Pack P0"
-├── Giai đoạn 0: Đóng băng (Freeze)
-│   ├── Khóa commit gốc: base_sha = 8f4e2a...
-│   ├── Khẳng định trạng thái git sạch (zero dirty files)
-│   └── Đóng băng các hợp đồng công cộng (WorkPacket, WorkerResult, CapabilityPort)
-│
-├── Giai đoạn 1: Triển khai các làn song song (Không đụng độ tệp tin)
-│   ├── Làn A (custos-core): Hoàn thiện Task FSM + Permit Generator
-│   ├── Làn B (custos-provider & adapters): Hoàn thiện Anthropic Model Adapter
-│   ├── Làn C (custos-packs): Hoàn thiện khung xương EngineeringPack v0
-│   └── Làn D (custos-persistence): Hoàn thiện SQLite WAL Migrations
-│
-├── Giai đoạn 2: Hợp nhất và Lắp ráp tại Daemon (Composition Root)
-│   ├── Ghép nối các làn tại custos-daemon/src/bootstrap.rs
-│   └── Chạy kiểm thử tích hợp tiến trình thực tế (Daemon Process E2E)
-│
-└── Giai đoạn 3: Kiểm chứng Cổng Nghiệm Thu Gate A
-    ├── Chạy: cargo test --workspace
-    └── Xác nhận: Task repo_explain chạy thành công 100% không lỗi
-```
+
+Budget/usage và verifier instrumentation đi cùng first live path; learned OI/S1/fan-out bật sau baseline. Docs-only plan không đổi Rust paths hay schema. Packet done cần actual output/fixtures và status limitations, không lời agent tự nhận hoặc một tỷ lệ 100% không có sample.
 
 ### Mẫu Gói Công Việc Tái Cấu Trúc (RefactorWorkPacket):
 Khi giao việc cho một agent lập trình, hệ thống đóng gói yêu cầu thành một bản đặc tả có ranh giới cấm nghiêm ngặt:
@@ -2528,19 +2494,20 @@ Khi giao việc cho một agent lập trình, hệ thống đóng gói yêu cầ
 ```yaml
 RefactorWorkPacket:
   packet_id: "RWP-REFACTOR-01"
-  base_commit_sha: "8f4e2a9b1c7d3e5f"
-  objective: "Xóa bỏ liên kết bridge->persistence, chuyển qua core::ports::KernelPort"
+  base_commit_sha: "<actual audited Custos SHA>"
+  dirty_manifest_ref: "<selected user changes and hashes>"
+  objective: "Nối API StartRun vào WorkflowPort đã inject và giữ command/event identity"
   edit_zone_allowed:
-    - "crates/custos-bridge/src/"
-    - "crates/custos-daemon/src/bootstrap.rs"
+    - "crates/custos-daemon/src/api.rs"
+    - "crates/custos-daemon/src/runtime.rs"
   forbidden_zones_strict:
     - "crates/custos-domain/src/"
     - "crates/custos-core/src/kernel/"
     - "schemas/"
   acceptance_tests:
     - "cargo test -p custos-bridge"
-    - "cargo test -p custos-daemon --test e2e_session_task_binding"
-  rollback_command: "git reset --hard 8f4e2a9b1c7d3e5f"
+    - "<existing targeted e2e fixture plus live-worker test introduced by packet>"
+  recovery_strategy: "Review packet diff; reverse only packet-owned changes or roll forward; preserve dirty manifest"
   wall_clock_timeout_minutes: 30
 ```
 
@@ -2654,110 +2621,64 @@ Khi Người dùng và Agent thống nhất bất kỳ thay đổi nào về ki�
 
 ## 16.1 Motivation
 
-Chi phí sử dụng các mô hình ngôn ngữ lớn (Frontier LLMs) là rào cản tài chính lớn nhất khi đưa các hệ thống agentic vào thực tế. Một tác vụ sửa lỗi phức tạp nếu để agent chạy tự do không kiểm soát có thể tiêu tốn từ 5$ đến 20$ chỉ sau vài phút do vòng lặp suy luận vô tận.
+SADE tối ưu **toàn bộ effort để đạt criterion**, không chỉ giá model. Cheap attempt có thể tăng rework/context transfer/verifier cost; strong agent làm thẳng có thể rẻ hơn. Ngược lại, deterministic retrieval và bounded S1 giúp tránh để strong model làm việc phụ. Không gán một mức USD cố định cho mọi bugfix.
 
-Tuy nhiên, **tiết kiệm chi phí một cách mù quáng (ví dụ: luôn luôn dùng mô hình rẻ nhất) sẽ làm sụp đổ hoàn toàn chất lượng công việc**. Mô hình yếu sẽ sinh ra code lỗi, dẫn đến việc phải sửa đi sửa lại nhiều lần, và cuối cùng tổng chi phí còn cao hơn việc gọi một mô hình frontier chất lượng cao ngay từ đầu.
+Objective là giảm cost trong điều kiện quality/safety/latency phù hợp preference, không hứa tối ưu toàn cục. Báo riêng billed USD, estimated compute, human time, unknown usage và accepted rate. Reserve cả verification/recovery, không dùng hết ngân sách vào generation rồi bỏ gate.
 
-Custos giải quyết bài toán kinh tế này bằng **Cơ Chế Quản Trị Ngân Sách Chủ Động (Proactive Budget Governance)** kết hợp 7 đòn bẩy tối ưu hóa độc lập, hướng tới việc giảm thiểu **Chi phí trên mỗi Tác vụ được Nghiệm thu Thực tế** (`CostPerAcceptedTask`).
+## 16.2 Đòn bẩy tối ưu theo evidence
 
-## 16.2 Bảy Đòn Bẩy Độc Lập Kiểm Soát Chi Phí
+| Đòn bẩy | Cách dùng | Gate/giới hạn |
+|---|---|---|
+| Exact/structural retrieval | Chọn source spans + tests với coverage/omissions | Không xóa thông tin semantic cần thiết |
+| Stable provider cache | Reuse cùng model/prefix/privacy/source scope | Pin API/version; switching có thể mất cache |
+| S1 assisted strong worker | Scouts, triage, bounded extraction/transforms | Savings phải gồm cost S1 và rework; S2 đọc lại source |
+| Effort/topology allocation | Direct, sequential, independent readers, disjoint writers, candidates | Không chọn fan-out bằng confidence thấp đơn thuần |
+| Incremental verification/reuse | Tái dùng evidence chưa stale, chạy affected checks | Không bỏ required regression/criterion gate |
+| Bounded repair/continuation | Event-driven replan; artifact refs thay full rereads | Cap iterations; không progress thì limited/human |
+| Async batch/local inference | Khi deadlines/hardware/API phù hợp | Backend-specific experiment; không batch Assist hot path |
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                   BẢY ĐÒN BẨY KIỂM SOÁT CHI PHÍ CUSTOS                 │
-├────────────────────────┬───────────────────────────────────────────────┤
-│ 1. S1 Early Abstention │ Thoát sớm bằng quy tắc cứng hoặc SLM giá rẻ   │
-│ 2. Model Cascading     │ Thử nghiệm mô hình nhỏ trước, nâng cấp khi cần│
-│ 3. Structural Pruning  │ Cắt tỉa ngữ cảnh bằng Tree-sitter AST         │
-│ 4. Deterministic Tools │ Dùng ripgrep/git trực tiếp thay vì nhờ LLM đọc│
-│ 5. Semantic Caching    │ Bộ nhớ đệm suy luận 5 tiêu chí nghiêm ngặt    │
-│ 6. Batch Async API     │ Giảm 50% chi phí cho các tác vụ nghiên cứu đêm │
-│ 7. Speculative Decode  │ Tăng tốc suy luận cục bộ bằng mô hình nháp     │
-└────────────────────────┴───────────────────────────────────────────────┘
-```
+Speculative decoding là tối ưu inference backend nếu implementation hỗ trợ, không thay S1 reasoning hay worker orchestration. Semantic cache chỉ cho read-only equivalence kiểm được; không replay patch/send/approval. Các lever tương tác, savings phải đo kết hợp; không cộng hoặc nhân phần trăm độc lập như một cam kết.
 
-> **LƯU Ý KỸ THUẬT VỀ TÍNH TOÁN HIỆU QUẢ:**  
-> Các đòn bẩy trên là **hoàn toàn độc lập và không được phép cộng dồn hiệu quả theo số học**. Nếu đòn bẩy A giảm 30% và đòn bẩy B giảm 40%, tổng mức tiết kiệm thực tế là $1 - (1 - 0.3) \times (1 - 0.4) = 58\%$, không phải $70\%$. Mọi con số tiết kiệm đều phải được đo kiểm trên production path của Custos, không lấy số liệu quảng cáo của vendor làm cam kết SLA.
+Paired ablation: strong pinned baseline → retrieval/cache → S1 assist → OI topology, giữ tasks/sources/verifier tương đương. Khi không chứng minh giữ quality hoặc policy prediction ngoài calibration, giữ baseline. Xem [SADE economics](docs/architecture/sade-design-and-supervision.md).
 
 ## 16.3 Cơ Chế Quản Trị Ngân Sách (Budget Governor)
 
-Mỗi tác vụ khi khởi tạo đều được cấp một hạn mức ngân sách tối đa (`BudgetLimit`). Trong suốt quá trình thực thi, `BudgetGovernor` trong Kernel đóng vai trò là một viên thủ quỹ nghiêm khắc:
+Cost core có bốn trách nhiệm, không phải bốn service: **policy** trong core quyết định admission; **estimator** trong runtime dự báo cả route; **ledger** trong persistence giữ reservations/usage theo attempt; **projection** đưa billed/estimated/unknown lên API/UI. Nối instrumentation ngay từ worker thật đầu tiên, không đợi hoàn thành OI. [Plan §13](docs/development/workspace-restructuring-plan.md#13-cost-core-policy-estimator-ledger-và-projections) là mapping implementation chi tiết.
 
-```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BudgetGovernor {
-    pub total_allocated: Budget,
-    pub reserved_for_execution: Budget,
-    pub reserved_for_verification: Budget,
-    pub actually_spent: Budget,
-}
+| Bước | Hợp đồng phải giữ |
+|---|---|
+| Reserve | Trong transaction, kiểm spent + outstanding reservations + phần verification/recovery còn cần; giữ identity task/run/node/attempt, pricing version và currency/units. |
+| Dispatch | Chỉ attempt có reservation hợp lệ được admission; call/output/time/worker caps đi cùng. Reservation không là permit cho effect. |
+| Settle | Gỡ **reservation gốc của chính attempt**, ghi actual usage/cost và refund phần chưa dùng; không trừ actual của một attempt khỏi reservation của attempt khác. |
+| Unknown/overage | Usage thiếu giữ `unknown`, không hiển thị `$0` hoặc tự refund theo TTL. Actual vượt estimate vẫn ghi đầy đủ và chặn admission mới theo policy. |
+| Recovery | Retry/fallback có attempt riêng; settle idempotent sau restart; child/parent attribution không cộng trùng billed leaf attempts. |
 
-impl BudgetGovernor {
-    // 1. Tạm giữ ngân sách trước khi gọi mô hình
-    pub fn reserve(&mut self, estimate: Budget) -> Result<ReservationToken, BudgetError> {
-        if self.actually_spent + self.reserved_for_execution + estimate > self.total_allocated {
-            return Err(BudgetError::ExceededCeiling);
-        }
-        self.reserved_for_execution += estimate;
-        Ok(ReservationToken::new(estimate))
-    }
-
-    // 2. Quyết toán chi phí thực tế sau khi nhận Receipt
-    pub fn settle(&mut self, token: ReservationToken, actual_spent: Budget) {
-        self.reserved_for_execution -= token.amount;
-        self.actually_spent += actual_spent;
-    }
-}
-```
+Hiện checkout có `max_cost_cents` nhưng đường reserve/settle trong domain chưa enforce money cap; governor/tracker còn state in-memory. Migration `0004_usage.sql` đã có ledger/reservations để gia cố, không dựng một ledger thứ hai. Đây là gap cần sửa, **không** là claim BudgetGovernor đã đủ bền vững. Money canonical dùng integer fixed units cùng currency, arithmetic checked; UI có thể format decimal. Native harness thiếu usage/cancel telemetry chỉ có enforcement tương ứng mức quan sát, không hứa hard cap hóa đơn khi provider trả usage muộn.
 
 > **BẢO VỆ CHỐNG LẠM DỤNG (ANTI-GAMING INVARIANT):**  
-> Hệ thống **tuyệt đối không để cho mô hình suy luận biết con số ngân sách chính xác còn lại trong tài khoản** (để tránh việc mô hình cố tình kéo dài câu trả lời cho hết tiền hoặc vội vã đưa ra kết luận ẩu khi thấy sắp hết hạn mức). Hệ thống chỉ cung cấp tín hiệu trừu tượng 3 mức: `Headroom::Abundant`, `Headroom::Constrained`, hoặc `Headroom::Critical`.
+> Budget enforcement nằm ngoài model. Worker có thể nhận headroom coarse hoặc resource limit cần cho planning; không có bằng chứng rằng giấu con số là cơ chế chống gaming đủ mạnh. Reserve/settle, call/timeout/fan-out caps và truthful unknown usage mới là kiểm soát thực. UI human thấy ngân sách rõ; native harness không quan sát/chặn đủ thì không claim hard billing cap.
 
 ## 16.4 Chính Sách Quản Lý KV Cache của Provider (KVCachePolicy)
 
-Năm 2026, hầu hết các nhà cung cấp lớn (Anthropic, OpenAI) đều hỗ trợ tính năng lưu bộ nhớ đệm khóa-giá trị (Prompt Caching / KV Cache). Tuy nhiên, việc ghi vào cache thường có phụ phí (Cache Write Surcharge) và chỉ thực sự tiết kiệm khi tỷ lệ tái sử dụng (Cache Hit Rate) đủ cao.
+Tên `KVCachePolicy` là vocabulary lịch sử; ở biên provider, Custos quản lý **prompt-cache policy**, không mặc nhiên đọc/di chuyển KV tensors bên trong backend. Adapter khai báo cache capabilities theo API/model version: prefix constraints, TTL, pricing read/write, usage visibility và unsupported features. Không hardcode một minimum token hoặc surcharge áp dụng cho mọi provider.
 
-```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KVCachePolicy {
-    pub prefix_stability: PrefixStability,
-    pub provider_cache_support: bool,
-    pub min_stable_prefix_tokens: usize, // Ví dụ: tối thiểu 1024 tokens
-    pub cache_ttl_seconds: u64,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PrefixStability {
-    High,    // System prompt + Schema công cụ cố định (Rất nên cache)
-    Medium,  // File map của repo ổn định trong phiên
-    Volatile,// Lịch sử hội thoại liên tục thay đổi (Không nên bật cache write)
-}
-```
-
-Custos cấu trúc prompt sao cho các thành phần tĩnh nhất (System Prompt, Tool Declarations, Architecture Rules) luôn nằm ở phần đầu tiên của context để tối đa hóa khả năng trúng cache giữa các lượt gọi worker khác nhau.
+Prompt projection giữ prefix ổn định khi an toàn: versioned instructions/tool schemas trước, source/context có identity rõ sau. Cache identity gắn account/provider/model, prefix/tool-schema digest, actor/privacy scope và source validity; không chia sẻ cache nhạy cảm xuyên project/user, không hứa cache liên provider. Lịch sử append-only có thể giữ prefix hữu ích; không cấm cache chỉ vì hội thoại thay đổi. Native harness có thể tự quản cache mà Custos không thấy; ghi unknown thay vì tự tính cache savings. Đo **net billed cost** gồm cache writes/misses/retries, không chỉ hit rate.
 
 ## 16.5 Nén Token Lũy Tiến Kèm Bảo Tồn Nguồn Trích Dẫn (CompactionPolicy)
 
-Khi kích thước ngữ cảnh vượt quá ngưỡng tối ưu, hệ thống kích hoạt chính sách nén lũy tiến (`CompactionPolicy`):
-
-```
-Ngưỡng 1 (Nhẹ): Lược bỏ khoảng trắng thừa, xóa chú thích mã nguồn ngoài lề
-Ngưỡng 2 (Vừa): Rút gọn thân hàm của các tệp phụ thuộc, chỉ giữ chữ ký Interface
-Ngưỡng 3 (Mạnh): Tóm tắt lịch sử thử-sai của worker bằng biên bản súc tích
-```
+Compaction thay đổi **prompt projection**, không sửa source bytes, canonical evidence hay receipts. Thứ tự: scoped retrieval/pagination → dedup logs và artifact references → structured working summary → model summarization khi cần. Interface-only excerpts phải giữ locator/omission và cho worker đọc lại implementation; không tự xóa whitespace/comments vì chúng có thể chứa semantics hoặc acceptance constraints.
 
 ### Bất Biến Nén Dữ Liệu:
-Quá trình nén **tuyệt đối không bao giờ được phép xóa bỏ 3 thành phần cốt lõi**:
-1. Các con trỏ định vị tệp nguồn (`SourceLocator` anchors).
-2. Các bằng chứng thực nghiệm đã thẩm định (`EvidenceRecords`).
-3. Các biên nhận hiệu ứng ngoại biên (`CapabilityReceipts`).
 
-Sau mỗi đợt nén, hệ thống phải đo lường **Tỷ lệ Thu hồi Nguồn (Source Recall Rate)**: đảm bảo ít nhất 95% các vị trí mã nguồn quan trọng vẫn có thể được truy vết ngược lại chính xác trên hệ thống tệp.
+Giữ goal/scope/criteria, decisions có actor/source, failed assumptions, caveats, dependency versions, pending approvals và uncertain effects. Source anchors, evidence và receipts còn ở canonical store; ContextPack chỉ chọn phần liên quan và chỉ rõ omissions. S2/native worker có quyền truy hồi source trong scope, không bị ép coi summary S1 là sự thật đầy đủ.
+
+Eval source recall, critical-fact/caveat retention, stale detection và downstream accepted outcomes trước khi bật recipe. Chọn threshold theo task slice trước thí nghiệm; **không** áp một con số 95% cho mọi miền. Tiết kiệm token nhưng tăng unsupported claims/rework là regression.
 
 ## 16.6 Research Foundation
 
-- **FrugalGPT: How to Use Large Language Models While Reducing Cost and Damage (Chen et al., arXiv 2023):** Khung lý thuyết nền tảng về việc xếp tầng mô hình (LLM Cascading) và định tuyến câu hỏi theo độ phức tạp.
-- **Economics of Context Caching in Modern Frontier Models (arXiv 2025):** Phân tích điểm hòa vốn (Break-even Analysis) giữa phụ phí ghi cache và mức chiết khấu khi đọc cache trên hạ tầng cloud.
+- [FrugalGPT](https://arxiv.org/abs/2305.05176) và [RouteLLM](https://arxiv.org/abs/2406.18665v4): giả thuyết cascade/routing cần kiểm lại trên full agent task gồm verification/retry/handoff, không chuyển phần trăm benchmark thành Custos target.
+- [Context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents): scoped retrieval, compaction và artifact handoff; không chứng minh một compression recipe đúng cho mọi repo/corpus.
+- [Research ledger của plan](docs/development/workspace-restructuring-plan.md#18-research-ledger--quyết-định-kiến-trúc) nối nguồn primary với quyết định và giới hạn; nguồn caching chưa xác định chính xác không là dependency.
 
 ## 16.7 Ranh giới
 
@@ -2862,42 +2783,24 @@ Custos thiết lập **Hệ Thống 8 Cổng Nghiệm Thu Sản Phẩm (Eight Pr
 
 ## 18.2 Tám Cổng Nghiệm Thu Sản Phẩm (Product Gates A $\rightarrow$ Optimization)
 
-Toàn bộ các tính năng mới hoặc các bản cập nhật kiến trúc của Custos đều phải vượt qua lần lượt 8 cổng nghiệm thu sau trước khi được phát hành:
+Áp dụng gates **liên quan tới job/path được thay đổi**, không buộc mọi sửa docs/adapter chạy toàn bộ benchmark ba miền. Đây là nghĩa vụ nghiệm thu đích, không phải danh sách đã pass:
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                   TÁM CỔNG NGHIỆM THU CHUẨN MỰC CỦA CUSTOS             │
-├──────────────┬─────────────────────────────────────────────────────────┤
-│ **GATE A**   │ **Local Process E2E:** Chạy từ CLI qua Daemon, gọi một  │
-│              │ model cục bộ giải thích repo, chứng minh cờ LocalOnly.  │
-├──────────────┼─────────────────────────────────────────────────────────┤
-│ **GATE B**   │ **Workspace Assurance:** Delegated/parallel writes dùng  │
-│              │ worktree đã kiểm; Assist direct apply phải có scope/base │
-│              │ hash, diff và assurance đúng đường thực thi.           │
-├──────────────┼─────────────────────────────────────────────────────────┤
-│ **GATE C**   │ **Crash Resilience:** Giả lập SIGKILL giữa T3 và EXT,    │
-│              │ khẳng định hệ thống khởi động lại chuyển sang Uncertain.│
-├──────────────┼─────────────────────────────────────────────────────────┤
-│ **GATE D**   │ **Security Taint Test:** Đưa prompt injection vào file  │
-│              │ PDF/Web, khẳng định 100% không bị chuyển thành Policy.  │
-├──────────────┼─────────────────────────────────────────────────────────┤
-│ **GATE E**   │ **SWE-Bench Baseline:** Giải quyết thành công tập mẫu   │
-│              │ issue chuẩn SWE-Bench Lite mà không cần can thiệp tay.  │
-├──────────────┼─────────────────────────────────────────────────────────┤
-│ **GATE F**   │ **Research Reproducibility:** Tái lập thành công một    │
-│              │ thuật toán từ bài báo khoa học và sinh đủ Bundle.       │
-├──────────────┼─────────────────────────────────────────────────────────┤
-│ **GATE G**   │ **LongMemEval Temporal:** Kiểm tra trí nhớ xuyên phiên, │
-│              │ không bị nhầm lẫn giữa sự thật cũ và sự thật mới.       │
-├──────────────┼─────────────────────────────────────────────────────────┤
-│ **GATE OPT** │ **Economic Non-Inferiority:** Đo lường chi phí thực tế  │
-│              │ CostPerAcceptedTask giảm tối thiểu 20% so với Direct.   │
-└──────────────┴─────────────────────────────────────────────────────────┘
-```
+| Gate | Điều phải chứng minh |
+|---|---|
+| A — Live execution và economics | CLI/API chạy worker thật, output/source anchors thật, local-only không fallback cloud; attempt/usage/reservation có identity và surviving restart. Fake fixture không mở gate này. |
+| B — Native/workspace | Native runtime giữ loop riêng; launch `unknown` không spawn trùng; direct/worktree theo policy; baseline gồm selected dirty bytes, scope/base hash và assurance đúng path. |
+| C — Effects và recovery | Crash windows permit/outbox/dispatch/receipt/evidence; reconcile uncertainty trước retry; không claim file/email/SQLite atomicity. |
+| D — Coding | Repo explain + patch/refactor theo behavior criteria và trusted baseline; test diff được review, source đổi stale; security/symlink/egress fixtures theo path. |
+| E — Research | Source QA/compare đúng passage/version/support status; OCR gap và contradiction rõ; small AI/Data experiment có protocol/environment/data/seed/metrics, divergence không tự là disproved. |
+| F — Assistant | Hai contact trùng tên, exact payload đổi sau approval, timeout sau send, timezone và automation occurrence; receipt/unknown thật, không suy sent từ approval. |
+| G — Continuity và supervised UX | Resume đúng Task/step, source/grants revalidated, cross-pack redaction không chuyển grant; user hiểu cost/approval/uncertain và dừng được. |
+| OPT — Measured advantage | Paired single strong baseline, quality margin chọn trước theo slice, billed/estimated/unknown tách riêng; report retries/failures/human time/cold-warm/native-mediated. Không hứa giảm 20% cho mọi task. |
+
+Chiến dịch W0–W5 và packets R/P trong [refactor plan](docs/development/workspace-restructuring-plan.md#15-thứ-tự-waves-và-gates-tích-hợp) gắn các gate này vào dependency thực. Statistical inconclusive khác smoke-test pass; release chỉ claim phần đã đo.
 
 ## 18.3 Bộ Kịch Bản Phản Chứng Tối Thiểu (Counter-Evidence Fixtures)
 
-Để chống lại việc hệ thống chỉ chạy tốt trên các "bài toán đồ chơi" (toy examples), Custos duy trì bộ kịch bản thử thách khắc nghiệt trong `crates/custos-core/fixtures/adversarial/`:
+Danh sách dưới là **fixture taxonomy cần triển khai**, không khẳng định folder hoặc harness đã tồn tại. Đặt contract/e2e/recovery/security cases vào test packages hiện hữu và evaluation jobs vào `evals/`; pin source/provider/environment của mỗi case:
 
 ```
 adversarial_suite/
@@ -2909,7 +2812,7 @@ adversarial_suite/
 ```
 
 > **BẤT BIẾN CHỐNG GIAN LẬN KIỂM THỬ:**  
-> Nếu một Worker cố tình chỉnh sửa hoặc xóa bỏ các bài kiểm thử có sẵn trong dự án nhằm làm cho bộ test vượt qua một cách giả tạo, hành vi này bị hệ thống phân tích diff phát hiện ngay lập tức và đánh dấu vi phạm nghiêm trọng: **Task bị hủy lập tức với trạng thái `Failed(TestTamperingDetected)`**.
+> Không suy ý định gian lận từ mọi test edit: feature/refactor có thể cần đổi test hợp lệ. Acceptance dùng trusted baseline/hidden harness hoặc reviewer phê duyệt test diff; weakening/deleting assertions không tự làm criterion pass. Khi thiếu oracle độc lập, ghi `unknown`/review; khi xác minh vi phạm, fail criterion/run theo policy và giữ audit. Diff inspection không bảo đảm bắt mọi cách làm sai verifier.
 
 ## 18.4 Phương Pháp Luận Hiệu Chuẩn và Đo Lường S1 (Calibration Methodology)
 
@@ -2944,11 +2847,11 @@ flowchart LR
 ## 18.6 Research Foundation
 
 - **AgentDojo: A Dynamic Environment for Benchmarking Agent Security (arXiv 2024):** Cung cấp các tiêu chuẩn đo kiểm khả năng phòng vệ của agent trước các kịch bản đối kháng tinh vi.
-- **ALCE: Automatic Language Model Citation Evaluation (Gao et al., ACL 2023):** Khung đánh giá tự động đầu tiên trên thế giới phân định rõ ràng giữa việc "có trích dẫn" và "trích dẫn có thực sự hỗ trợ cho khẳng định hay không".
+- [ALCE](https://aclanthology.org/2023.emnlp-main.398/) đánh giá citation quality/support; [MiniCheck](https://aclanthology.org/2024.emnlp-main.499/) hỗ trợ fact checking nhưng automated assessment có sai số, không là oracle duy nhất.
 
 ## 18.7 Ranh giới
 
-- Evaluation Gates **KHÔNG** làm nhiệm vụ chấm điểm thẩm mỹ giao diện người dùng; các đánh giá tập trung hoàn toàn vào tính đúng đắn kỹ thuật, an ninh bảo mật và hiệu quả kinh tế.
+- Evaluation gồm đúng đắn, an toàn, economics **và usability**: accessibility, approval comprehension, task selection/resume, notification interruption, uncertainty visibility. Screenshot đẹp không đủ; technical pass cũng không đủ nếu user không hiểu hoặc không điều khiển được công việc.
 - Evaluation Gates **KHÔNG** hạ thấp tiêu chuẩn nghiệm thu chỉ vì thời gian kiểm thử kéo dài; an toàn và chất lượng luôn là ưu tiên tuyệt đối.
 
 ---

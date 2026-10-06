@@ -1,181 +1,210 @@
-import React, { useRef, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useAppContext } from '../../context/AppContext';
-import { SessionsSidebar } from '../../components/SessionsSidebar';
-import { ChatSection } from '../../components/ChatSection';
-import { DiffSection } from '../../components/DiffSection';
-import { Splitter } from '../../components/Splitter';
+import { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import { useAppContext } from '@/context/AppContext';
+import { AppHeader, type AppWorkspaceMode } from '@/components/shell/AppHeader';
+import { ClaudeChatView } from '@/components/views/ClaudeChatView';
+import { CodexOrcaView } from '@/components/views/CodexOrcaView';
+import { ResearchView } from '@/components/views/ResearchView';
 
-export const StudioPage: React.FC = () => {
+const MODE_STORAGE_KEY = 'custos.workspace.mode.v2';
+
+export function StudioPage() {
   const {
     currentProject,
+    projectData,
+    setCurrentProject,
     currentSessions,
     activeSessionId,
     setActiveSessionId,
-    activeSession,
-    isSessionsCollapsed,
-    setIsSessionsCollapsed,
-    viewMode,
-    setViewMode,
-    splitPercent,
-    setSplitPercent,
-    isDragging,
-    setIsDragging,
     setIsNewSessionOpen,
     handleSendMessage,
     handleClearHistory,
     handleAcceptAndRun,
     handleRejectDiff,
     handleCopyDiff,
-    showToast
+    showToast,
+    openSettings,
   } = useAppContext();
 
   const { sessionId } = useParams<{ sessionId?: string }>();
-  const navigate = useNavigate();
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Sync activeSessionId with route parameter if provided
+  // Mode switcher: 'chat' (Claude Desktop) vs 'code' (Codex / Orca ADE 3-Column)
+  const [mode, setMode] = useState<AppWorkspaceMode>(() => {
+    try {
+      const saved = localStorage.getItem(MODE_STORAGE_KEY);
+      if (saved === 'chat' || saved === 'code') return saved;
+    } catch {}
+    return 'code'; // Default to Code mode as showcased in screenshot 2
+  });
+
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isWebTabOpen, setIsWebTabOpen] = useState(false);
+  const [isWebTabExpanded, setIsWebTabExpanded] = useState(false);
+  const [webTabCount, setWebTabCount] = useState(0);
+
   useEffect(() => {
-    if (sessionId && sessionId !== activeSessionId) {
-      const match = currentSessions.find((s) => s.id === sessionId);
-      if (match) {
-        setActiveSessionId(sessionId);
-      }
+    try {
+      localStorage.setItem(MODE_STORAGE_KEY, mode);
+    } catch {}
+  }, [mode]);
+
+  // Synchronize session ID from URL if present
+  useEffect(() => {
+    if (sessionId && sessionId !== activeSessionId && currentSessions.some((item) => item.id === sessionId)) {
+      setActiveSessionId(sessionId);
     }
-  }, [sessionId, currentSessions, activeSessionId, setActiveSessionId]);
+  }, [sessionId, activeSessionId, currentSessions, setActiveSessionId]);
 
-  const handleSelectSession = (id: string) => {
-    setActiveSessionId(id);
-    navigate(`/studio/${id}`);
-  };
-
-  // Draggable Splitter
-  const handleSplitterDragStart = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-    document.body.classList.add('resizer-active');
-  };
-
+  // Global Keyboard Shortcuts (⌘1 for Chat, ⌘2 for Code)
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging || !containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const offsetX = e.clientX - rect.left;
-      let percent = (offsetX / rect.width) * 100;
-      if (percent < 20) percent = 20;
-      if (percent > 80) percent = 80;
-      setSplitPercent(percent);
-    };
-
-    const handleMouseUp = () => {
-      if (isDragging) {
-        setIsDragging(false);
-        document.body.classList.remove('resizer-active');
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.key === '1') {
+        e.preventDefault();
+        setMode('chat');
+        showToast('Switched to Claude Chat & Cowork mode (⌘1)');
+      } else if (e.key === '2') {
+        e.preventDefault();
+        setMode('code');
+        showToast('Switched to Codex & Orca ADE mode (⌘2)');
+      } else if (e.key === '3') {
+        e.preventDefault();
+        setMode('research');
+        showToast('Switched to Claude Science Lab (⌘3)');
+      } else if (e.key === 'f' && e.shiftKey && e.metaKey) {
+        e.preventDefault();
+        setIsWebTabOpen(true);
+        setIsWebTabExpanded(true);
+      } else if (e.key === 'b' && e.shiftKey && e.metaKey) {
+        e.preventDefault();
+        setIsWebTabOpen(true);
       }
     };
-
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-    }
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, setIsDragging, setSplitPercent]);
-
-  // Window resize handler for responsiveness
-  useEffect(() => {
-    let lastW = window.innerWidth;
-    const handleResize = () => {
-      const w = window.innerWidth;
-      if (w < 768 && viewMode === 'split') {
-        setViewMode('chat');
-      } else if (w >= 1024 && lastW < 768 && viewMode === 'chat') {
-        setViewMode('split');
-      }
-      lastW = w;
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [viewMode, setViewMode]);
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showToast]);
 
   return (
-    <div className="flex-1 flex overflow-hidden min-w-0 h-full relative">
-      {/* Sessions Column */}
-      <SessionsSidebar
-        currentProject={currentProject}
-        sessions={currentSessions}
-        activeSessionId={activeSessionId}
-        onSelectSession={handleSelectSession}
-        onOpenNewSessionModal={() => setIsNewSessionOpen(true)}
-        isCollapsed={isSessionsCollapsed}
-        onToggleCollapse={() => setIsSessionsCollapsed((prev) => !prev)}
+    <div className="flex flex-col h-full w-full bg-[#0d1117] overflow-hidden select-none">
+      {/* ─────────────────────────────────────────────────────────────
+          UNIFIED TOP BAR WITH THE 2 MODE ICONS: [ 💬 Chat ] & [ </> Code ]
+      ───────────────────────────────────────────────────────────── */}
+      <AppHeader
+        mode={mode}
+        onSwitchMode={(newMode) => setMode(newMode)}
+        isSidebarCollapsed={isSidebarCollapsed}
+        onToggleSidebar={() => setIsSidebarCollapsed((prev) => !prev)}
+        onShowToast={showToast}
+        onNewTab={() => {
+          setIsWebTabOpen(true);
+          setIsWebTabExpanded(false);
+        }}
+        onNewTabFullView={() => {
+          setIsWebTabOpen(true);
+          setIsWebTabExpanded(true);
+        }}
+        isWebTabOpen={isWebTabOpen}
+        webTabCount={webTabCount}
+        
+        onToggleWebTab={() => setIsWebTabOpen((prev) => !prev)}
       />
 
-      {/* Main Studio View (Split Chat + Code Diff) */}
-      <main
-        id="viewStudio"
-        ref={containerRef}
-        className="flex-1 flex overflow-hidden bg-canvas min-w-0 relative"
-      >
-        {/* Left Pane: Chat */}
-        <div
-          style={{
-            flex:
-              viewMode === 'diff'
-                ? '0 0 0%'
-                : viewMode === 'chat'
-                ? '1 1 100%'
-                : `0 0 ${splitPercent}%`,
-            display: viewMode === 'diff' ? 'none' : 'flex'
-          }}
-          className="flex-col min-w-0 overflow-hidden"
-        >
-          <ChatSection
-            session={activeSession}
+      {/* ─────────────────────────────────────────────────────────────
+          MAIN WORKSPACE BODY
+      ───────────────────────────────────────────────────────────── */}
+      <div className="flex-1 overflow-hidden min-h-0 relative">
+        {mode === 'chat' && (
+          /* SCREENSHOT 1: CLAUDE DESKTOP CHAT & COWORK */
+          <ClaudeChatView
+            currentProject={currentProject}
+            projectNames={Object.keys(projectData)}
+            onSelectProject={(p) => {
+              setCurrentProject(p);
+              const first = (projectData[p] || [])[0];
+              if (first) setActiveSessionId(first.id);
+            }}
+            sessions={currentSessions}
+            activeSessionId={activeSessionId}
+            onSelectSession={(id) => setActiveSessionId(id)}
+            onNewSession={() => setIsNewSessionOpen(true)}
             onSendMessage={handleSendMessage}
             onClearHistory={handleClearHistory}
             onShowToast={showToast}
-          />
-        </div>
-
-        {/* Draggable Resizer */}
-        {viewMode === 'split' && (
-          <Splitter
-            onDragStart={handleSplitterDragStart}
-            onDoubleClick={() => {
-              setSplitPercent(50);
-              showToast('Reset split layout to 50/50');
-            }}
-            isDragging={isDragging}
+            onOpenSettings={() => openSettings('general')}
+            onSwitchMode={setMode}
+            isSidebarCollapsed={isSidebarCollapsed}
+            isWebTabOpen={isWebTabOpen}
+        
+        
+            isWebTabExpanded={isWebTabExpanded}
+            onToggleExpandWebTab={() => setIsWebTabExpanded(!isWebTabExpanded)}
+            onWebTabCountChange={setWebTabCount}
           />
         )}
-
-        {/* Right Pane: Code Diff */}
-        <div
-          style={{
-            flex:
-              viewMode === 'chat'
-                ? '0 0 0%'
-                : viewMode === 'diff'
-                ? '1 1 100%'
-                : `0 0 ${100 - splitPercent}%`,
-            display: viewMode === 'chat' ? 'none' : 'flex'
-          }}
-          className="flex-col min-w-0 overflow-hidden"
-        >
-          <DiffSection
-            session={activeSession}
+        
+        {mode === 'code' && (
+          /* SCREENSHOT 2: CODEX / ORCA ADE 3-COLUMN WORKSPACE */
+          <CodexOrcaView
+            currentProject={currentProject}
+            projectNames={Object.keys(projectData)}
+            onSelectProject={(p) => {
+              setCurrentProject(p);
+              const first = (projectData[p] || [])[0];
+              if (first) setActiveSessionId(first.id);
+            }}
+            sessions={currentSessions}
+            activeSessionId={activeSessionId}
+            onSelectSession={(id) => setActiveSessionId(id)}
+            onNewSession={() => setIsNewSessionOpen(true)}
+            onSendMessage={handleSendMessage}
+            onClearHistory={handleClearHistory}
             onAcceptAndRun={handleAcceptAndRun}
             onRejectDiff={handleRejectDiff}
             onCopyDiff={handleCopyDiff}
+            onShowToast={showToast}
+            onOpenSettings={() => openSettings('general')}
+            onSwitchMode={setMode}
+            isSidebarCollapsed={isSidebarCollapsed}
+            isWebTabOpen={isWebTabOpen}
+        
+        
+            isWebTabExpanded={isWebTabExpanded}
+            onToggleExpandWebTab={() => setIsWebTabExpanded(!isWebTabExpanded)}
+            onWebTabCountChange={setWebTabCount}
           />
-        </div>
-      </main>
+        )}
+
+        {mode === 'research' && (
+          /* RESEARCH: CLAUDE SCIENCE LAB */
+          <ResearchView
+            currentProject={currentProject}
+            projectNames={Object.keys(projectData)}
+            onSelectProject={(p) => {
+              setCurrentProject(p);
+              const first = (projectData[p] || [])[0];
+              if (first) setActiveSessionId(first.id);
+            }}
+            sessions={currentSessions}
+            activeSessionId={activeSessionId}
+            onSelectSession={(id) => setActiveSessionId(id)}
+            onNewSession={() => setIsNewSessionOpen(true)}
+            onSendMessage={handleSendMessage}
+            onClearHistory={handleClearHistory}
+            onShowToast={showToast}
+            onOpenSettings={() => openSettings('general')}
+            onSwitchMode={setMode}
+            isSidebarCollapsed={isSidebarCollapsed}
+            isWebTabOpen={isWebTabOpen}
+        
+        
+            isWebTabExpanded={isWebTabExpanded}
+            onToggleExpandWebTab={() => setIsWebTabExpanded(!isWebTabExpanded)}
+            onWebTabCountChange={setWebTabCount}
+          />
+        )}
+      </div>
     </div>
   );
-};
+}
 
 export default StudioPage;

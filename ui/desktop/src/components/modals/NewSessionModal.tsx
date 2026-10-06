@@ -4,7 +4,7 @@ import { PlusCircle, X } from 'lucide-react';
 interface NewSessionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateSession: (title: string, task: string) => void;
+  onCreateSession: (title: string, pack: 'engineering' | 'research' | 'assistant') => void;
 }
 
 export const NewSessionModal: React.FC<NewSessionModalProps> = ({
@@ -13,16 +13,15 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
   onCreateSession
 }) => {
   const [title, setTitle] = useState('');
-  const [task, setTask] = useState('');
+  const [pack, setPack] = useState<'engineering' | 'research' | 'assistant'>('engineering');
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
-    onCreateSession(title.trim(), task.trim());
+    onCreateSession(title.trim(), pack);
     setTitle('');
-    setTask('');
   };
 
   return (
@@ -31,7 +30,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
         <div className="h-12 border-b border-surface-border px-5 flex items-center justify-between shrink-0 bg-surface">
           <div className="flex items-center gap-2">
             <PlusCircle className="w-4 h-4 text-brand-blue" />
-            <span className="text-sm font-semibold text-white">Create New Session</span>
+            <span className="text-sm font-semibold text-white">Create Task</span>
           </div>
           <button 
             onClick={onClose} 
@@ -44,7 +43,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
         <form onSubmit={handleSubmit}>
           <div className="p-5 space-y-4 text-xs overflow-y-auto">
             <div className="space-y-1.5">
-              <label className="font-medium text-neutral-300">Session Name</label>
+              <label className="font-medium text-neutral-300">Task name</label>
               <input 
                 type="text" 
                 value={title}
@@ -56,14 +55,13 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <label className="font-medium text-neutral-300">Initial Request / Task</label>
-              <textarea 
-                rows={3} 
-                value={task}
-                onChange={(e) => setTask(e.target.value)}
-                placeholder="What code or task should this session focus on?" 
-                className="w-full bg-surface border border-surface-border rounded-lg p-3 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-blue resize-none"
-              />
+              <label className="font-medium text-neutral-300" htmlFor="task-pack">Workbench</label>
+              <select id="task-pack" value={pack} onChange={(event) => setPack(event.target.value as typeof pack)} className="w-full rounded-lg border border-surface-border bg-surface px-3 py-2 text-white">
+                <option value="engineering">Coding</option>
+                <option value="research">Research</option>
+                <option value="assistant">Assistant</option>
+              </select>
+              <p className="text-[11px] text-neutral-500">Write the first instruction in the conversation after creating the task.</p>
             </div>
           </div>
 
@@ -79,7 +77,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
               type="submit" 
               className="px-3.5 py-1.5 rounded-lg bg-brand-blue hover:bg-blue-600 text-white font-medium transition text-xs"
             >
-              Start Session
+              Create Task
             </button>
           </div>
         </form>

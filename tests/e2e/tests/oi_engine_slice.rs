@@ -5,12 +5,12 @@
 //! - `admissibility_and_compilation`: Validates admissibility gate and DAG loading.
 //! - `graph_runtime_execution`: Validates full execution through GraphRuntime & WorkerExecutor.
 
-use std::sync::Arc;
 use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
 use custos_core::decision::DecisionSnapshotExtractor;
-use custos_domain::task::TaskContract;
 use custos_domain::oi::DecisionSnapshot;
+use custos_domain::task::TaskContract;
 use custos_persistence::SqliteTaskStore;
+use std::sync::Arc;
 
 async fn setup_task_and_snapshot(task_name: &str) -> (DecisionSnapshot, String) {
     let store = Arc::new(SqliteTaskStore::new_in_memory().expect("in-memory sqlite store"));
@@ -29,14 +29,10 @@ async fn setup_task_and_snapshot(task_name: &str) -> (DecisionSnapshot, String) 
         .await
         .expect("create task");
 
-    let snapshot = DecisionSnapshotExtractor::extract_snapshot(
-        &task,
-        Some(store.outbox()),
-        75_000,
-        7.50,
-    )
-    .await
-    .expect("extract snapshot");
+    let snapshot =
+        DecisionSnapshotExtractor::extract_snapshot(&task, Some(store.outbox()), 75_000, 7.50)
+            .await
+            .expect("extract snapshot");
 
     (snapshot, task.id)
 }
@@ -46,10 +42,10 @@ async fn setup_task_and_snapshot(task_name: &str) -> (DecisionSnapshot, String) 
 // ─────────────────────────────────────────────────────────────────────────────
 mod engine_planning_overhead {
     use super::*;
-    use std::time::Instant;
     use custos_core::contracts::oi::OiPlannerPort;
     use custos_domain::oi::ExecutionTopology;
     use custos_runtime::oi::engine::OiEngine;
+    use std::time::Instant;
 
     #[tokio::test]
     async fn test_oi_engine_planning_latency_and_topology() {
@@ -57,7 +53,10 @@ mod engine_planning_overhead {
 
         let start_plan = Instant::now();
         let engine = OiEngine::new();
-        let proposal = engine.plan(&snapshot).await.expect("OiEngine planning failed");
+        let proposal = engine
+            .plan(&snapshot)
+            .await
+            .expect("OiEngine planning failed");
         let planning_time_ms = start_plan.elapsed().as_millis();
 
         assert!(
@@ -85,7 +84,10 @@ mod admissibility_and_compilation {
     async fn test_admissibility_and_dag_compilation() {
         let (snapshot, task_id) = setup_task_and_snapshot("Compile Test Task").await;
         let engine = OiEngine::new();
-        let proposal = engine.plan(&snapshot).await.expect("OiEngine planning failed");
+        let proposal = engine
+            .plan(&snapshot)
+            .await
+            .expect("OiEngine planning failed");
 
         let admit_result = AdmissibilityEvaluator::evaluate(proposal.clone(), &snapshot);
         let admitted_proposal = match admit_result {
@@ -126,7 +128,10 @@ mod graph_runtime_execution {
     async fn test_full_graph_runtime_execution_slice() {
         let (snapshot, task_id) = setup_task_and_snapshot("Execute Test Task").await;
         let engine = OiEngine::new();
-        let proposal = engine.plan(&snapshot).await.expect("OiEngine planning failed");
+        let proposal = engine
+            .plan(&snapshot)
+            .await
+            .expect("OiEngine planning failed");
 
         let mut revision = WorkflowRevision::new(task_id, proposal.id.clone(), 1);
         revision.nodes.push(RevisionNode {
@@ -144,7 +149,10 @@ mod graph_runtime_execution {
         let executor = Arc::new(WorkerExecutor::new());
         let graph_runtime = GraphRuntime::new(dag, executor);
 
-        let report = graph_runtime.execute_all().await.expect("graph execution failed");
+        let report = graph_runtime
+            .execute_all()
+            .await
+            .expect("graph execution failed");
         assert!(report.success, "Graph execution must succeed");
         assert_eq!(report.completed_nodes, 1);
     }

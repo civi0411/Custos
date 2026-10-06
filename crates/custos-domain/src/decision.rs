@@ -3,9 +3,9 @@
 //! Re-exported from `crate::oi` for backward compatibility.
 
 pub use crate::oi::{
-    Candidate, DecisionRecord, DecisionSnapshot, ExecutionTopology, NodePlacement,
-    RejectionReason, ReplanBrief, ReplanRecord, ReplanTrigger, StrategyProposal, WorkPacket,
-    WorkerResult, WorkerStatus,
+    Candidate, DecisionRecord, DecisionSnapshot, ExecutionTopology, NodePlacement, RejectionReason,
+    ReplanBrief, ReplanRecord, ReplanTrigger, StrategyProposal, WorkPacket, WorkerResult,
+    WorkerStatus,
 };
 
 #[cfg(test)]

@@ -17,7 +17,8 @@ impl StructuralExtractor {
 
         let is_rust = file_name.ends_with(".rs");
         let is_python = file_name.ends_with(".py");
-        let is_js_ts = file_name.ends_with(".js") || file_name.ends_with(".ts") || file_name.ends_with(".tsx");
+        let is_js_ts =
+            file_name.ends_with(".js") || file_name.ends_with(".ts") || file_name.ends_with(".tsx");
         let is_go = file_name.ends_with(".go");
 
         let mut outline = Vec::new();
@@ -35,10 +36,15 @@ impl StructuralExtractor {
                 outline.push(line);
                 continue;
             }
-            if trimmed.starts_with("/*") || trimmed.starts_with("/**") || trimmed.starts_with("\"\"\"") {
+            if trimmed.starts_with("/*")
+                || trimmed.starts_with("/**")
+                || trimmed.starts_with("\"\"\"")
+            {
                 in_multiline_doc = true;
                 outline.push(line);
-                if trimmed.ends_with("*/") || (trimmed.len() > 3 && trimmed[3..].ends_with("\"\"\"")) {
+                if trimmed.ends_with("*/")
+                    || (trimmed.len() > 3 && trimmed[3..].ends_with("\"\"\""))
+                {
                     in_multiline_doc = false;
                 }
                 continue;

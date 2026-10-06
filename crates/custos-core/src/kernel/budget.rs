@@ -52,10 +52,12 @@ impl BudgetGovernor {
         actual_tokens: u64,
     ) -> Result<(), DomainError> {
         let mut res_guard = self.active_reservations.write().expect("lock poisoned");
-        let token = res_guard.remove(token_id).ok_or_else(|| DomainError::NotFound {
-            kind: "ReservationToken".into(),
-            id: token_id.into(),
-        })?;
+        let token = res_guard
+            .remove(token_id)
+            .ok_or_else(|| DomainError::NotFound {
+                kind: "ReservationToken".into(),
+                id: token_id.into(),
+            })?;
 
         let mut budget_guard = self.budget.write().expect("lock poisoned");
         // Settle reservation against actuals
@@ -74,10 +76,12 @@ impl BudgetGovernor {
     /// Refunds the entire reservation upon action cancellation or dispatch failure.
     pub fn refund(&self, token_id: &str) -> Result<(), DomainError> {
         let mut res_guard = self.active_reservations.write().expect("lock poisoned");
-        let token = res_guard.remove(token_id).ok_or_else(|| DomainError::NotFound {
-            kind: "ReservationToken".into(),
-            id: token_id.into(),
-        })?;
+        let token = res_guard
+            .remove(token_id)
+            .ok_or_else(|| DomainError::NotFound {
+                kind: "ReservationToken".into(),
+                id: token_id.into(),
+            })?;
 
         let mut budget_guard = self.budget.write().expect("lock poisoned");
         budget_guard.refund(token.reserved_spans, token.reserved_tokens)?;
@@ -113,9 +117,7 @@ mod tests {
         assert_eq!(token.reserved_tokens, 400);
 
         // Settle actual 250 tokens (150 should be automatically refunded)
-        governor
-            .settle(&token.token_id, 1, 250)
-            .expect("Settle ok");
+        governor.settle(&token.token_id, 1, 250).expect("Settle ok");
 
         let snap = governor.snapshot();
         assert_eq!(snap.settled_tokens, 250);

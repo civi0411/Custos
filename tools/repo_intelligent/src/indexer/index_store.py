@@ -106,6 +106,63 @@ class IndexStore:
             conn.execute("DELETE FROM symbols WHERE repo = ?", (repo_key,))
             conn.execute("DELETE FROM files WHERE repo = ?", (repo_key,))
 
+    def swap_from_staging(self, staging_store: "IndexStore", repo: str):
+        """
+        Atomically promotes a completed staging index generation into the active store
+        within a single transaction. Active readers see zero partial-state downtime.
+        """
+        repo_key = repo.lower().strip()
+        staging_path = str(staging_store.db_path.resolve())
+        with self._get_conn() as conn:
+            conn.execute("ATTACH DATABASE ? AS staging_db", (staging_path,))
+            try:
+                # Clear active repo data
+                conn.execute("DELETE FROM symbols_fts WHERE repo = ?", (repo_key,))
+                conn.execute("DELETE FROM chunks WHERE repo = ?", (repo_key,))
+                conn.execute("DELETE FROM symbol_calls WHERE repo = ?", (repo_key,))
+                conn.execute("DELETE FROM file_imports WHERE repo = ?", (repo_key,))
+                conn.execute("DELETE FROM symbols WHERE repo = ?", (repo_key,))
+                conn.execute("DELETE FROM files WHERE repo = ?", (repo_key,))
+
+                # Copy records from staging into active store
+                conn.execute("""
+                    INSERT INTO files (id, repo, path, language, line_count, size_bytes)
+                    SELECT id, repo, path, language, line_count, size_bytes FROM staging_db.files WHERE repo = ?
+                """, (repo_key,))
+
+                conn.execute("""
+                    INSERT INTO symbols (id, file_id, repo, file_path, name, kind, visibility, container, signature, docstring, start_line, end_line)
+                    SELECT id, file_id, repo, file_path, name, kind, visibility, container, signature, docstring, start_line, end_line
+                    FROM staging_db.symbols WHERE repo = ?
+                """, (repo_key,))
+
+                conn.execute("""
+                    INSERT INTO symbol_calls (id, repo, caller_symbol_id, caller_name, caller_file, callee_name)
+                    SELECT id, repo, caller_symbol_id, caller_name, caller_file, callee_name
+                    FROM staging_db.symbol_calls WHERE repo = ?
+                """, (repo_key,))
+
+                conn.execute("""
+                    INSERT INTO file_imports (id, repo, file_path, statement)
+                    SELECT id, repo, file_path, statement
+                    FROM staging_db.file_imports WHERE repo = ?
+                """, (repo_key,))
+
+                conn.execute("""
+                    INSERT INTO chunks (id, repo, file_path, symbol_name, kind, context_header, content, docstring, start_line, end_line)
+                    SELECT id, repo, file_path, symbol_name, kind, context_header, content, docstring, start_line, end_line
+                    FROM staging_db.chunks WHERE repo = ?
+                """, (repo_key,))
+
+                conn.execute("""
+                    INSERT INTO symbols_fts (name, container, signature, docstring, file_path, repo, symbol_id)
+                    SELECT name, container, signature, docstring, file_path, repo, symbol_id
+                    FROM staging_db.symbols_fts WHERE repo = ?
+                """, (repo_key,))
+            finally:
+                conn.execute("DETACH DATABASE staging_db")
+
+
     def insert_file(self, repo: str, path: str, language: str, line_count: int, size_bytes: int) -> int:
         with self._get_conn() as conn:
             cur = conn.execute("""

@@ -45,7 +45,11 @@ impl ProgressiveCompactor {
         }
 
         // Pass 3: Sort by score descending and prune lowest scoring items
-        items.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        items.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let mut compacted = Vec::new();
         let mut accumulated_tokens = 0;

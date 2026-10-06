@@ -3,9 +3,9 @@
 //! Validates directed acyclic graphs, performs cycle detection (Kahn's algorithm),
 //! computes topological execution waves, and orchestrates dependency-gated step advancement.
 
-use std::collections::{HashMap, VecDeque};
 use custos_domain::{new_id, DomainError, WorkflowPlan};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -185,7 +185,9 @@ impl DagGraph {
         if visited_count != self.nodes.len() {
             return Err(DomainError::Validation(format!(
                 "Gate 5 Violation: Cycle detected in workflow graph '{}' (resolved {} of {} nodes)",
-                self.id, visited_count, self.nodes.len()
+                self.id,
+                visited_count,
+                self.nodes.len()
             )));
         }
 
@@ -271,10 +273,13 @@ impl DagGraph {
 
     /// Marks a node as running.
     pub fn mark_running(&mut self, node_id: &str) -> Result<(), DomainError> {
-        let node = self.nodes.get_mut(node_id).ok_or_else(|| DomainError::NotFound {
-            kind: "DagNode".into(),
-            id: node_id.into(),
-        })?;
+        let node = self
+            .nodes
+            .get_mut(node_id)
+            .ok_or_else(|| DomainError::NotFound {
+                kind: "DagNode".into(),
+                id: node_id.into(),
+            })?;
         node.status = NodeStatus::Running;
         Ok(())
     }
@@ -285,23 +290,33 @@ impl DagGraph {
         node_id: &str,
         output: Option<serde_json::Value>,
     ) -> Result<(), DomainError> {
-        let node = self.nodes.get_mut(node_id).ok_or_else(|| DomainError::NotFound {
-            kind: "DagNode".into(),
-            id: node_id.into(),
-        })?;
+        let node = self
+            .nodes
+            .get_mut(node_id)
+            .ok_or_else(|| DomainError::NotFound {
+                kind: "DagNode".into(),
+                id: node_id.into(),
+            })?;
         node.status = NodeStatus::Completed;
         node.output = output;
         Ok(())
     }
 
     /// Marks a node as failed, and cascades `Skipped` status to all downstream dependent nodes.
-    pub fn mark_failed(&mut self, node_id: &str, reason: impl Into<String>) -> Result<(), DomainError> {
+    pub fn mark_failed(
+        &mut self,
+        node_id: &str,
+        reason: impl Into<String>,
+    ) -> Result<(), DomainError> {
         let err_msg = reason.into();
         {
-            let node = self.nodes.get_mut(node_id).ok_or_else(|| DomainError::NotFound {
-                kind: "DagNode".into(),
-                id: node_id.into(),
-            })?;
+            let node = self
+                .nodes
+                .get_mut(node_id)
+                .ok_or_else(|| DomainError::NotFound {
+                    kind: "DagNode".into(),
+                    id: node_id.into(),
+                })?;
             node.status = NodeStatus::Failed;
             node.error = Some(err_msg.clone());
         }
@@ -314,7 +329,10 @@ impl DagGraph {
             for (id, node) in self.nodes.iter_mut() {
                 if node.status == NodeStatus::Pending && node.depends_on.contains(&failed_parent) {
                     node.status = NodeStatus::Skipped;
-                    node.error = Some(format!("Skipped due to upstream failure in node '{}'", failed_parent));
+                    node.error = Some(format!(
+                        "Skipped due to upstream failure in node '{}'",
+                        failed_parent
+                    ));
                     to_skip.push_back(id.clone());
                 }
             }
@@ -331,7 +349,9 @@ impl DagGraph {
 
     /// Returns true if all nodes completed successfully.
     pub fn is_all_completed(&self) -> bool {
-        self.nodes.values().all(|n| n.status == NodeStatus::Completed)
+        self.nodes
+            .values()
+            .all(|n| n.status == NodeStatus::Completed)
     }
 }
 
@@ -349,16 +369,40 @@ mod tests {
         //      D
         let mut graph = DagGraph::new("Diamond Test");
         graph
-            .add_node(DagNode::new("A", "Root", "read", serde_json::json!({}), vec![]))
+            .add_node(DagNode::new(
+                "A",
+                "Root",
+                "read",
+                serde_json::json!({}),
+                vec![],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new("B", "Branch B", "process", serde_json::json!({}), vec!["A".into()]))
+            .add_node(DagNode::new(
+                "B",
+                "Branch B",
+                "process",
+                serde_json::json!({}),
+                vec!["A".into()],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new("C", "Branch C", "process", serde_json::json!({}), vec!["A".into()]))
+            .add_node(DagNode::new(
+                "C",
+                "Branch C",
+                "process",
+                serde_json::json!({}),
+                vec!["A".into()],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new("D", "Join D", "merge", serde_json::json!({}), vec!["B".into(), "C".into()]))
+            .add_node(DagNode::new(
+                "D",
+                "Join D",
+                "merge",
+                serde_json::json!({}),
+                vec!["B".into(), "C".into()],
+            ))
             .unwrap();
 
         assert!(graph.validate_dag().is_ok());
@@ -375,13 +419,31 @@ mod tests {
         // Cycle: A -> B -> C -> A
         let mut graph = DagGraph::new("Cycle Test");
         graph
-            .add_node(DagNode::new("A", "Node A", "exec", serde_json::json!({}), vec!["C".into()]))
+            .add_node(DagNode::new(
+                "A",
+                "Node A",
+                "exec",
+                serde_json::json!({}),
+                vec!["C".into()],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new("B", "Node B", "exec", serde_json::json!({}), vec!["A".into()]))
+            .add_node(DagNode::new(
+                "B",
+                "Node B",
+                "exec",
+                serde_json::json!({}),
+                vec!["A".into()],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new("C", "Node C", "exec", serde_json::json!({}), vec!["B".into()]))
+            .add_node(DagNode::new(
+                "C",
+                "Node C",
+                "exec",
+                serde_json::json!({}),
+                vec!["B".into()],
+            ))
             .unwrap();
 
         let err = graph.validate_dag().unwrap_err();
@@ -393,7 +455,13 @@ mod tests {
     fn test_gate_5_self_dependency_rejected() {
         let mut graph = DagGraph::new("Self Loop Test");
         graph
-            .add_node(DagNode::new("A", "Node A", "exec", serde_json::json!({}), vec!["A".into()]))
+            .add_node(DagNode::new(
+                "A",
+                "Node A",
+                "exec",
+                serde_json::json!({}),
+                vec!["A".into()],
+            ))
             .unwrap();
 
         let err = graph.validate_dag().unwrap_err();
@@ -405,7 +473,13 @@ mod tests {
     fn test_gate_5_missing_dependency_rejected() {
         let mut graph = DagGraph::new("Missing Dep Test");
         graph
-            .add_node(DagNode::new("A", "Node A", "exec", serde_json::json!({}), vec!["non_existent".into()]))
+            .add_node(DagNode::new(
+                "A",
+                "Node A",
+                "exec",
+                serde_json::json!({}),
+                vec!["non_existent".into()],
+            ))
             .unwrap();
 
         let err = graph.validate_dag().unwrap_err();
@@ -419,19 +493,49 @@ mod tests {
         // A -> C -> E
         let mut graph = DagGraph::new("Cascade Test");
         graph
-            .add_node(DagNode::new("A", "A", "exec", serde_json::json!({}), vec![]))
+            .add_node(DagNode::new(
+                "A",
+                "A",
+                "exec",
+                serde_json::json!({}),
+                vec![],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new("B", "B", "exec", serde_json::json!({}), vec!["A".into()]))
+            .add_node(DagNode::new(
+                "B",
+                "B",
+                "exec",
+                serde_json::json!({}),
+                vec!["A".into()],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new("C", "C", "exec", serde_json::json!({}), vec!["A".into()]))
+            .add_node(DagNode::new(
+                "C",
+                "C",
+                "exec",
+                serde_json::json!({}),
+                vec!["A".into()],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new("D", "D", "exec", serde_json::json!({}), vec!["B".into()]))
+            .add_node(DagNode::new(
+                "D",
+                "D",
+                "exec",
+                serde_json::json!({}),
+                vec!["B".into()],
+            ))
             .unwrap();
         graph
-            .add_node(DagNode::new("E", "E", "exec", serde_json::json!({}), vec!["C".into()]))
+            .add_node(DagNode::new(
+                "E",
+                "E",
+                "exec",
+                serde_json::json!({}),
+                vec!["C".into()],
+            ))
             .unwrap();
 
         // 1. Initial ready nodes is just A

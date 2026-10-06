@@ -1,5 +1,7 @@
 # Protocol and Connectivity Boundaries
 
+**Workspace integration:** The [Agent Workspace](agent-workspace-and-ui.md) is a Local API client; terminal/browser/native-harness process owners remain backend services. [Capabilities and skills](capability-catalog-and-skills.md) separate domain operations from MCP exposure and remote A2A delegation. A new skill does not require a new protocol, hub process or agent. Existing transport support must be verified before enabling UI connection profiles.
+
 > **Architecture decision:** [Custos.md, Part 7](../../Custos.md). This document maps the decision to implementation boundaries. A named hub is a logical responsibility, not a required process, crate, or shipped endpoint.
 
 ## 1. Six names, distinct boundaries

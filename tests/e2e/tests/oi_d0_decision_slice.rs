@@ -5,10 +5,10 @@
 //! - `d0_planner_baseline_strategy`: D0 rule-based baseline planning with sub-50ms latency overhead.
 //! - `durable_decision_ledger`: Appending and querying DecisionRecords from SQLite ledger.
 
-use std::sync::Arc;
 use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
 use custos_domain::task::{ContractEvidence, EvidenceKind, TaskContract};
 use custos_persistence::SqliteTaskStore;
+use std::sync::Arc;
 
 fn make_engineering_contract() -> TaskContract {
     TaskContract {
@@ -49,14 +49,10 @@ mod reality_snapshot_extraction {
 
         assert_eq!(task.status, TaskStatus::Draft);
 
-        let snapshot = DecisionSnapshotExtractor::extract_snapshot(
-            &task,
-            Some(store.outbox()),
-            75_000,
-            7.50,
-        )
-        .await
-        .expect("extract snapshot");
+        let snapshot =
+            DecisionSnapshotExtractor::extract_snapshot(&task, Some(store.outbox()), 75_000, 7.50)
+                .await
+                .expect("extract snapshot");
 
         assert_eq!(snapshot.task_id, task.id);
         assert_eq!(snapshot.remaining_budget_tokens, 75_000);
@@ -102,7 +98,9 @@ mod d0_planner_baseline_strategy {
 mod durable_decision_ledger {
     use super::*;
     use custos_core::contracts::storage::DecisionPort;
-    use custos_domain::oi::{DecisionRecord, DecisionSnapshot, ExecutionTopology, StrategyProposal};
+    use custos_domain::oi::{
+        DecisionRecord, DecisionSnapshot, ExecutionTopology, StrategyProposal,
+    };
 
     #[tokio::test]
     async fn test_decision_record_ledger_persistence_and_auditability() {

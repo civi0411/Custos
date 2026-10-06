@@ -1,17 +1,21 @@
 use crate::api::LocalApiDispatcher;
+use custos_adapters::harness::ClaudeCodeHarnessAdapter;
+use custos_adapters::providers::{
+    AntigravityProvider, ClaudeProvider, CodexProvider, FakeProvider, LocalModelProvider,
+};
+use custos_adapters::sandbox::SovereignDeveloperAdapter;
 use custos_bridge::BridgeService;
-use custos_domain::DomainError;
-use custos_core::TaskService;
-use custos_persistence::SqliteTaskStore;
-use custos_runtime::session::SessionManager;
-use std::sync::Arc;
+use custos_core::contracts::harness::AgentRuntimePort;
 use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
 use custos_core::contracts::sandbox::SandboxPort;
 use custos_core::contracts::workflow::WorkflowPort;
+use custos_core::TaskService;
+use custos_domain::DomainError;
+use custos_persistence::SqliteTaskStore;
 use custos_provider::ModelPort;
-use custos_adapters::sandbox::SovereignDeveloperAdapter;
-use custos_adapters::providers::fake::FakeProvider;
+use custos_runtime::session::SessionManager;
 use custos_runtime::workflow::TaskRuntime;
+use std::sync::Arc;
 
 #[allow(dead_code)]
 pub struct CustosRuntime {
@@ -25,7 +29,9 @@ pub struct CustosRuntime {
     pub kernel: Arc<dyn KernelPort>,
     pub sandbox: Arc<dyn SandboxPort>,
     pub model: Arc<dyn ModelPort>,
+    pub harness: Arc<dyn AgentRuntimePort>,
     pub workflow: Arc<dyn WorkflowPort>,
+    pub lease_manager: Arc<custos_runtime::workflow::WorkspaceLeaseManager>,
 }
 
 impl CustosRuntime {
@@ -39,27 +45,49 @@ impl CustosRuntime {
             session_manager.clone(),
             task_service.clone(),
         ));
-        let local_api = Arc::new(LocalApiDispatcher::new(
-            task_service.clone(),
-            session_manager.clone(),
-            bridge_service.clone(),
-        ));
 
         let kernel = Arc::new(TrustedKernel::new(store.clone()));
-        
+
         let workspace_root = std::env::current_dir().unwrap_or_else(|_| ".".into());
-        let sandbox = Arc::new(SovereignDeveloperAdapter::new(workspace_root));
-        
-        let model = Arc::new(FakeProvider::new("fake"));
-        
+        let sandbox = Arc::new(SovereignDeveloperAdapter::new(workspace_root.clone()));
+
+        // Dynamic provider selection from CUSTOS_PROVIDER env, falling back to FakeProvider
+        let provider_name = std::env::var("CUSTOS_PROVIDER").unwrap_or_else(|_| "fake".into());
+        let model: Arc<dyn ModelPort> = match provider_name.to_lowercase().as_str() {
+            "claude" | "anthropic" => Arc::new(ClaudeProvider::new()),
+            "codex" | "openai" => Arc::new(CodexProvider::new()),
+            "antigravity" | "gemini" => Arc::new(AntigravityProvider::new()),
+            "local" => Arc::new(LocalModelProvider::new()),
+            _ => Arc::new(FakeProvider::new("fake")),
+        };
+
+        // Sovereign Coding Harness Adapter (Claude Code CLI / sub-process agent runtime)
+        let lease_manager = Arc::new(custos_runtime::workflow::WorkspaceLeaseManager::new(
+            workspace_root.clone(),
+        ));
+
+        let harness: Arc<dyn AgentRuntimePort> =
+            Arc::new(ClaudeCodeHarnessAdapter::new(workspace_root));
+
         let workflow = Arc::new(
             TaskRuntime::new()
                 .with_kernel(kernel.clone())
                 .with_model(model.clone())
+                .with_harness(harness.clone())
                 .with_sandbox(sandbox.clone())
                 .with_outbox(store.clone())
                 .with_effect_ledger(store.clone())
-                .with_run_store(store.clone()),
+                .with_run_store(store.clone())
+                .with_lease_manager(lease_manager.clone()),
+        );
+
+        let local_api = Arc::new(
+            LocalApiDispatcher::new(
+                task_service.clone(),
+                session_manager.clone(),
+                bridge_service.clone(),
+            )
+            .with_workflow(workflow.clone()),
         );
 
         Ok(Self {
@@ -71,7 +99,9 @@ impl CustosRuntime {
             kernel,
             sandbox,
             model,
+            harness,
             workflow,
+            lease_manager,
         })
     }
 }

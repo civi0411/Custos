@@ -111,7 +111,7 @@ pub fn format_messages(messages: &[Message], nested_function_response_media: boo
             } else {
                 "model"
             };
-            let include_signature = active_loop_start_idx.map_or(true, |start_idx| idx >= start_idx);
+            let include_signature = active_loop_start_idx.is_none_or(|start_idx| idx >= start_idx);
             // Only the first model tool call in a turn is guaranteed to carry
             // a signature for loop continuity.
             let mut needs_synthetic_for_first_model_tool_call =

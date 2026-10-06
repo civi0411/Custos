@@ -35,7 +35,9 @@ mod tests {
     #[tokio::test]
     async fn test_t1_single_worker() {
         let packet = WorkPacket::new("task_t1", "node_1", "Execute work", 5000);
-        let res = T1SingleWorkerCoordinator::execute(&packet, "claude_code").await.unwrap();
+        let res = T1SingleWorkerCoordinator::execute(&packet, "claude_code")
+            .await
+            .unwrap();
         assert_eq!(res.status, WorkerStatus::Sufficient);
         assert_eq!(res.evidence_references.len(), 1);
     }

@@ -1,5 +1,9 @@
 # Cognitive Fabric & Orchestration Intelligence
 
+[SADE design](sade-design-and-supervision.md) defines product supervision and three distinct loops: worker execution, Task coordination, offline improvement. Each delegation branch has one orchestration owner. S1 can contribute bounded domain work, not only routing, while S2/native reasoning is preserved. Predicting failure risk and predicting a collaboration protocol's incremental value require separate evaluation; a low confidence score alone does not justify fan-out.
+
+**Workspace integration:** [UI/runtime behavior](agent-workspace-and-ui.md) and [migration plan](../development/workspace-restructuring-plan.md) map OI decisions to visible runs, candidate comparison, execution workspaces and domain artifacts. OI stays in runtime, not a new ADE shell/client crate. Skill/context adaptation is defined in [capability ownership](capability-catalog-and-skills.md); it must preserve native S2 reasoning and declare unsupported harness features.
+
 > **Classification:** Target architecture, not an implementation claim. **Source of truth:** [Custos.md, Part 14](../../Custos.md#phần-14-orchestration-intelligence-oi-s1-s2-meta). **Physical code map:** [codebase architecture](../development/codebase-architecture.md).
 
 OI chọn **chiến lược thực thi trong TaskContract**, không là LLM planner thường trực. Direct hoặc một worker/native coding harness mạnh là baseline first-class; các graph phức tạp chỉ bật khi có lợi ích và điều kiện kiểm được. S1 đưa typed hint có `abstain`; S2/harness sở hữu reasoning sâu; scheduler chạy theo event; Kernel/Authority giữ quyền; verifier và completion gate sở hữu evidence status. Cảm hứng fast/slow từ [SOFAI-LM](https://arxiv.org/abs/2508.17959) không biến cheap-first cascade thành luật cho mọi Task.
@@ -32,6 +36,8 @@ flowchart TD
 | Meta offline | Đo và đề xuất policy version | Tự áp policy mới lên Task đang chạy. |
 
 Native Codex/Claude/Goose có thể tự sở hữu worktree, tool loop và hidden state. OI chỉ điều phối ở mức adapter quan sát/điều khiển được; native tools ngoài Custos không tự thành `custos-mediated`. Một harness mạnh làm trọn refactor nhiều file là lựa chọn hợp lệ.
+
+**Đối chiếu source OrCa:** [source study](../development/orca-source-study.md) ghi OrCa đã có Run/Task/Dispatch, dependency promotion, atomic worker claim, gates, mailbox và recovery. [`Coordinator.decompose()`](../../../orca/src/main/runtime/orchestration/coordinator.ts) hiện yêu cầu tasks được tạo trước; [orchestration skill](../../../orca/skill-guides/orchestration.md) cho agent coordinator phân rã rồi tạo chúng. Custos không nên gộp semantic decomposition, DAG compilation, scheduling và native-agent child planning thành một “OI agent” mơ hồ. `PlanProposal` do S2/S1/human tạo; deterministic compiler kiểm scope/deps/budget; scheduler nhận graph revision đã accepted; native harness có thể sở hữu toàn bộ reasoning nội bộ của **một** WorkerRun. Điểm khác biệt phải đo là domain verification/cost/effect truth, không chỉ số agent chạy song song.
 
 ---
 
@@ -87,6 +93,10 @@ Scheduler xử lý `node_ready`, `worker_output`, `source_changed`, `verifier_re
 S1 có thể chạy trước/trong/sau worker theo question manifest, source/permission filter, deadline, method/version và `abstain`. `Judge` hỗ trợ relevance, test selection, ambiguity, log clustering; `Scout` tạo locator read-only; `MicroExecutor` chỉ opt-in cho transform hẹp có output kiểm độc lập. S1 không được hỏi mỗi tool call, không dùng risk score làm permit, không tự pass patch do nó sinh ra. Native harness tiếp tục suy luận/tool loop liền mạch; S1 là hint/artifact có thể bác, không phải manager bắt S2 giải thích từng bước.
 
 ## 6. Cost ledger, Meta và gate bật mặc định
+
+**Implementation contract:** cost policy thuộc core; route estimator thuộc runtime; durable reservations/usage thuộc persistence; clients chỉ hiển thị projections. [Plan §13](../development/workspace-restructuring-plan.md#13-cost-core-policy-estimator-ledger-và-projections) xác định identity/currency/unknown/overage/recovery và sequence reserve → dispatch → settle. Nối ledger cùng live baseline từ đầu, không đợi OI tối ưu. Giá thấp của một call không dự báo total accepted-task cost.
+
+**Current-source caveat:** `oi/candidate_builder.rs` còn candidates hardcoded, estimator còn constants và selector chọn first admissible; `workflow/worker_executor.rs` sinh simulated outputs với fixed tokens/cost. Test `oi_engine_slice` xác nhận mechanics, chưa là calibrated optimization. Gia cố capability inventory/pin/constraints và real leaf-attempt measurements trước thay candidate selection bằng utility estimator. Không tự downgrade worker khi lacks data.
 
 Ledger ghi **từng attempt** và attribution `plan|execute|handoff|verify|retry|replan`; tổng USD là actual billed model + paid tools, không cộng lại retry đã nằm trong attempts. Báo local compute estimate, human minutes và unknown usage riêng; p50/p95 time-to-first-useful-output/end-to-end và thời gian chờ approval riêng. Cost per accepted Task lấy **chi phí của mọi attempted Task** chia accepted Tasks, kèm completion rate/failure spend để không che việc khó. Local model có thể billed USD = 0 nhưng compute/latency không bằng 0.
 

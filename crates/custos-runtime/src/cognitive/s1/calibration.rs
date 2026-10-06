@@ -129,12 +129,7 @@ mod tests {
 
     #[test]
     fn test_ece_calculation() {
-        let sample = vec![
-            (0.9, true),
-            (0.85, true),
-            (0.2, false),
-            (0.1, false),
-        ];
+        let sample = vec![(0.9, true), (0.85, true), (0.2, false), (0.1, false)];
         let ece = calculate_ece(&sample, 5);
         assert!(ece >= 0.0 && ece <= 1.0);
     }

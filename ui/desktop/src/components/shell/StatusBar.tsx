@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Scaling } from 'lucide-react';
-import { Tooltip } from './Tooltip';
+import { Tooltip } from '../Tooltip';
 
 interface StatusBarProps {
   activeSessionTitle: string;
@@ -36,8 +36,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     <footer className="h-6 bg-surface border-t border-surface-border px-3 flex items-center justify-between text-[11px] font-mono text-neutral-400 shrink-0 z-30 select-none">
       {/* Active Session Info */}
       <div className="flex items-center gap-3 truncate">
-        <span className="flex items-center gap-1.5 text-neutral-400">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+        <span className="flex items-center gap-1.5 text-neutral-300 font-medium">
           <span className="truncate max-w-[150px] sm:max-w-[250px]">{activeSessionTitle}</span>
         </span>
         <span className="text-neutral-700 hidden sm:inline">|</span>
@@ -46,10 +45,6 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
       {/* Metrics & UI Scale Controller */}
       <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-        <span className="hidden md:inline">Tokens: 1,420 in / 380 out</span>
-        <span className="text-neutral-700 hidden md:inline">|</span>
-        <span>18ms</span>
-        <span className="text-neutral-700">|</span>
 
         {/* UI Scale Popover Trigger */}
         <div className="relative inline-flex items-center" ref={scaleRef}>

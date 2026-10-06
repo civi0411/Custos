@@ -1,6 +1,6 @@
 use async_trait::async_trait;
-use custos_domain::{ContinuationPacket, DomainError};
 use custos_core::TaskStore;
+use custos_domain::{ContinuationPacket, DomainError};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
@@ -218,8 +218,8 @@ impl WorkflowMachine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use custos_domain::{ContinuationPacket, Span, Task};
     use custos_core::TaskEvent;
+    use custos_domain::{ContinuationPacket, Span, Task};
     use std::collections::HashMap;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;

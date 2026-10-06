@@ -5,19 +5,22 @@
 use std::sync::Arc;
 
 pub use crate::custos_local_api::{
-    AdvanceTaskRequest, ApiRequest, ApiResponse, CancelTaskRequest, CompleteTaskRequest,
-    CreateTaskRequest,
+    AdvanceTaskRequest, ApiRequest, ApiResponse, CancelRunRequest, CancelTaskRequest,
+    CompleteTaskRequest, CreateTaskRequest, StartRunRequest, METHOD_WORKFLOW_CANCEL_RUN,
+    METHOD_WORKFLOW_START_RUN,
 };
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
-use custos_domain::{SessionId, SessionMode, TaskContract, TaskStatus};
+use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::{AdvanceTask, CancelTask, CreateTask, TaskService};
+use custos_domain::{SessionId, SessionMode, TaskContract, TaskStatus};
 use custos_runtime::session::SessionManager;
 
-/// Local API Dispatcher wrapping TaskService, SessionManager, and BridgeService for IPC callers.
+/// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, and WorkflowPort for IPC callers.
 pub struct LocalApiDispatcher {
     task_service: Arc<TaskService>,
     session_manager: Arc<SessionManager>,
     bridge_service: Arc<BridgeService>,
+    workflow: Option<Arc<dyn WorkflowPort>>,
 }
 
 impl LocalApiDispatcher {
@@ -30,7 +33,21 @@ impl LocalApiDispatcher {
             task_service,
             session_manager,
             bridge_service,
+            workflow: None,
         }
+    }
+
+    pub fn with_workflow(mut self, workflow: Arc<dyn WorkflowPort>) -> Self {
+        self.workflow = Some(workflow);
+        self
+    }
+
+    pub async fn dispatch_raw(&self, raw: &str) -> String {
+        let response = match serde_json::from_str::<ApiRequest>(raw) {
+            Ok(request) => self.handle_request(request).await,
+            Err(error) => ApiResponse::error("", format!("Invalid request JSON: {error}")),
+        };
+        serde_json::to_string(&response).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
     }
 
     pub async fn handle_request(&self, req: ApiRequest) -> ApiResponse {
@@ -350,12 +367,17 @@ impl LocalApiDispatcher {
                 }
             }
             "v1.oi.explain" => {
-                let params: crate::custos_local_api::ExplainPlanRequest = match serde_json::from_value(req.params) {
-                    Ok(p) => p,
-                    Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
-                };
+                let params: crate::custos_local_api::ExplainPlanRequest =
+                    match serde_json::from_value(req.params) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            return ApiResponse::error(req.id, format!("Invalid params: {e}"))
+                        }
+                    };
 
-                let task_id = params.task_id.unwrap_or_else(|| custos_domain::new_id("task"));
+                let task_id = params
+                    .task_id
+                    .unwrap_or_else(|| custos_domain::new_id("task"));
                 let mut snapshot = custos_domain::oi::DecisionSnapshot::new(&task_id);
                 if let Some(budget) = params.budget_limit_tokens {
                     snapshot.remaining_budget_tokens = budget;
@@ -366,6 +388,66 @@ impl LocalApiDispatcher {
 
                 match custos_runtime::oi::ExplainService::explain(&snapshot) {
                     Ok(report) => match serde_json::to_value(&report) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKFLOW_START_RUN => {
+                let workflow = match self.workflow.as_ref() {
+                    Some(w) => w,
+                    None => {
+                        return ApiResponse::error(req.id, "WorkflowPort not configured on daemon")
+                    }
+                };
+                let params: StartRunRequest = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
+                };
+
+                let mut cmd = custos_domain::StartRunCommand::new(
+                    params.task_id,
+                    params.actor.unwrap_or_else(|| "daemon_user".into()),
+                );
+                if let Some(rev) = params.workflow_revision {
+                    cmd = cmd.with_workflow_revision(rev);
+                }
+                if let Some(mode) = params.preferred_mode {
+                    cmd = cmd.with_preferred_mode(mode);
+                }
+                if let Some(harness) = params.harness_id {
+                    cmd = cmd.with_harness_id(harness);
+                }
+                if let Some(root) = params.workspace_root {
+                    cmd = cmd.with_workspace_root(root);
+                }
+
+                match workflow.start_run(cmd).await {
+                    Ok(handle) => match serde_json::to_value(&handle) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKFLOW_CANCEL_RUN => {
+                let workflow = match self.workflow.as_ref() {
+                    Some(w) => w,
+                    None => {
+                        return ApiResponse::error(req.id, "WorkflowPort not configured on daemon")
+                    }
+                };
+                let params: CancelRunRequest = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
+                };
+                let reason = params
+                    .reason
+                    .unwrap_or_else(|| "User requested cancellation".into());
+
+                match workflow.request_cancel(&params.run_id, &reason).await {
+                    Ok(receipt) => match serde_json::to_value(&receipt) {
                         Ok(val) => ApiResponse::success(req.id, val),
                         Err(e) => ApiResponse::error(req.id, e.to_string()),
                     },
@@ -388,8 +470,8 @@ impl crate::custos_local_api::ApiTransport for LocalApiDispatcher {
 mod tests {
     use super::*;
     use async_trait::async_trait;
-    use custos_domain::{ContinuationPacket, DomainError, Span, Task};
     use custos_core::{TaskEvent, TaskStore};
+    use custos_domain::{ContinuationPacket, DomainError, Span, Task};
     use std::sync::Mutex;
 
     struct MockStore {
@@ -733,5 +815,72 @@ mod tests {
         );
         let completed: Task = serde_json::from_value(success_comp.result.unwrap()).unwrap();
         assert_eq!(completed.status, TaskStatus::Succeeded);
+    }
+
+    #[tokio::test]
+    async fn test_workflow_start_and_cancel_run_api() {
+        let store = Arc::new(MockStore {
+            tasks: Mutex::new(Vec::new()),
+        });
+        let task_service = Arc::new(TaskService::new(store.clone()));
+        let session_manager = Arc::new(SessionManager::new());
+        let bridge_service = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
+        let workflow = Arc::new(custos_runtime::workflow::TaskRuntime::new());
+
+        let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
+            .with_workflow(workflow);
+
+        // 1. Start run via API
+        let start_req = ApiRequest {
+            id: "req_run_1".into(),
+            method: "v1.workflow.start_run".into(),
+            params: serde_json::json!({
+                "task_id": "task_api_workflow_1",
+                "actor": "tester",
+                "preferred_mode": "model"
+            }),
+        };
+        let start_resp = dispatcher.handle_request(start_req).await;
+        assert!(start_resp.error.is_none(), "Error: {:?}", start_resp.error);
+        let handle: custos_domain::RunHandle =
+            serde_json::from_value(start_resp.result.unwrap()).unwrap();
+        assert_eq!(handle.task_id, "task_api_workflow_1");
+        assert_eq!(handle.status, custos_domain::RunStatus::Active);
+
+        // 2. Double-dispatch via API on same task must fail with Conflict
+        let start_dup_req = ApiRequest {
+            id: "req_run_dup".into(),
+            method: "v1.workflow.start_run".into(),
+            params: serde_json::json!({
+                "task_id": "task_api_workflow_1",
+                "actor": "second_caller"
+            }),
+        };
+        let dup_resp = dispatcher.handle_request(start_dup_req).await;
+        assert!(dup_resp.error.is_some());
+        assert!(dup_resp.error.unwrap().contains("already claimed"));
+
+        // 3. Cancel run via API
+        let cancel_req = ApiRequest {
+            id: "req_cancel_1".into(),
+            method: "v1.workflow.cancel_run".into(),
+            params: serde_json::json!({
+                "run_id": handle.run_id,
+                "reason": "Test cancel via API"
+            }),
+        };
+        let cancel_resp = dispatcher.handle_request(cancel_req).await;
+        assert!(
+            cancel_resp.error.is_none(),
+            "Error: {:?}",
+            cancel_resp.error
+        );
+        let receipt: custos_domain::CancelReceipt =
+            serde_json::from_value(cancel_resp.result.unwrap()).unwrap();
+        assert_eq!(receipt.run_id, handle.run_id);
+        assert_eq!(receipt.reason, "Test cancel via API");
     }
 }

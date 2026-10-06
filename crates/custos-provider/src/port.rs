@@ -42,6 +42,3 @@ pub trait ModelProvider: Send + Sync {
 
 /// Canonical Hexagonal Architecture alias for ModelProvider
 pub use ModelProvider as ModelPort;
-
-
-

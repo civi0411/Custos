@@ -5,9 +5,7 @@
 
 use async_trait::async_trait;
 use custos_domain::DomainError;
-use custos_provider::{
-    ModelProvider, ModelResponse, ProviderEvent, ProviderRequest, TokenUsage,
-};
+use custos_provider::{ModelProvider, ModelResponse, ProviderEvent, ProviderRequest, TokenUsage};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
@@ -132,10 +130,7 @@ mod tests {
 
         let mut rx = provider.stream(&req).await.unwrap();
         let chunk = rx.recv().await.unwrap();
-        assert_eq!(
-            chunk.event_type,
-            custos_provider::ProviderEventType::Chunk
-        );
+        assert_eq!(chunk.event_type, custos_provider::ProviderEventType::Chunk);
 
         let completed = rx.recv().await.unwrap();
         assert_eq!(

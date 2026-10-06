@@ -51,7 +51,7 @@ pub fn detect_image_path(text: &str) -> Option<Cow<'_, str>> {
         };
 
         let terminator = text.get(end..).and_then(|rest| rest.chars().next());
-        let terminated = terminator.map_or(true, is_path_terminator);
+        let terminated = terminator.is_none_or(is_path_terminator);
 
         if terminated {
             let mut floor = end.saturating_sub(MAX_PATH_LEN);
@@ -64,7 +64,7 @@ pub fn detect_image_path(text: &str) -> Option<Cow<'_, str>> {
                     let preceded_by_boundary = text
                         .get(..start)
                         .and_then(|prefix| prefix.chars().next_back())
-                        .map_or(true, is_path_leading_boundary);
+                        .is_none_or(is_path_leading_boundary);
                     if !preceded_by_boundary {
                         continue;
                     }

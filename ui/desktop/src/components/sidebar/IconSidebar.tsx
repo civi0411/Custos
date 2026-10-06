@@ -10,13 +10,13 @@ import {
   Settings as SettingsIcon, 
   LogOut 
 } from 'lucide-react';
-import { MainTab } from '../types';
+import { MainTab } from '@/types';
 
 interface IconSidebarProps {
   currentTab: MainTab;
   onSwitchTab: (tab: MainTab) => void;
   onOpenSettings?: () => void;
-  onShowToast: (msg: string) => void;
+  onShowToast?: (msg: string) => void;
 }
 
 interface NavItem {
@@ -116,9 +116,10 @@ export const IconSidebar: React.FC<IconSidebarProps> = ({
               setIsAvatarMenuOpen(!isAvatarMenuOpen);
             }} 
             className="w-7 sm:w-8 h-7 sm:h-8 rounded-full bg-gradient-to-tr from-brand-blue to-purple-600 p-[1.5px] focus:outline-none hover:ring-2 hover:ring-brand-blue/60 transition cursor-pointer" 
+            title="Custos menu"
           >
             <div className="w-full h-full rounded-full bg-surface-elevated flex items-center justify-center text-[10px] sm:text-[11px] font-bold text-white">
-              AS
+              C
             </div>
           </button>
           {!isAvatarMenuOpen && (
@@ -177,7 +178,7 @@ export const IconSidebar: React.FC<IconSidebarProps> = ({
               
               <button 
                 onClick={() => {
-                  onShowToast('Signed out of session');
+                  if (onShowToast) onShowToast('Signed out of session');
                   setIsAvatarMenuOpen(false);
                 }} 
                 className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-red-500/10 text-red-400 hover:text-red-300 flex items-center gap-2.5 transition cursor-pointer font-medium"

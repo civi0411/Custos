@@ -10,10 +10,8 @@
 //! 4. Every effect produces an append-only `ExecutionReceipt` with a Blake3 digest of the output.
 
 use async_trait::async_trait;
-use custos_domain::{
-    digest, new_id, ActionIntent, DomainError, ExecutionReceipt, ReceiptStatus,
-};
-use custos_core::contracts::sandbox::{SandboxPort, verify_permit_binding};
+use custos_core::contracts::sandbox::{verify_permit_binding, SandboxPort};
+use custos_domain::{digest, new_id, ActionIntent, DomainError, ExecutionReceipt, ReceiptStatus};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -68,20 +66,24 @@ impl SovereignDeveloperAdapter {
         }
 
         // Check if within workspace root if workspace root is set and absolute
-        if self.workspace_root.is_absolute() && normalized.is_absolute() {
-            if !normalized.starts_with(&self.workspace_root) {
-                return Err(DomainError::Unauthorized(format!(
-                    "Path traversal violation: target '{}' escapes workspace root '{}'",
-                    rel_or_abs,
-                    self.workspace_root.display()
-                )));
-            }
+        if self.workspace_root.is_absolute()
+            && normalized.is_absolute()
+            && !normalized.starts_with(&self.workspace_root)
+        {
+            return Err(DomainError::Unauthorized(format!(
+                "Path traversal violation: target '{}' escapes workspace root '{}'",
+                rel_or_abs,
+                self.workspace_root.display()
+            )));
         }
 
         Ok(normalized)
     }
 
-    async fn handle_read(&self, params: &serde_json::Value) -> Result<serde_json::Value, DomainError> {
+    async fn handle_read(
+        &self,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, DomainError> {
         let path_str = params
             .get("path")
             .or_else(|| params.get("file"))
@@ -105,7 +107,10 @@ impl SovereignDeveloperAdapter {
         }))
     }
 
-    async fn handle_write(&self, params: &serde_json::Value) -> Result<serde_json::Value, DomainError> {
+    async fn handle_write(
+        &self,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, DomainError> {
         let path_str = params
             .get("path")
             .or_else(|| params.get("file"))
@@ -116,18 +121,28 @@ impl SovereignDeveloperAdapter {
         let content = params
             .get("content")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| DomainError::Validation("Missing 'content' parameter for write".into()))?;
+            .ok_or_else(|| {
+                DomainError::Validation("Missing 'content' parameter for write".into())
+            })?;
 
         let safe_path = self.canonicalize_safe_path(path_str)?;
 
         if let Some(parent) = safe_path.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| {
-                DomainError::InvariantViolation(format!("Failed to create parent dirs for '{}': {}", safe_path.display(), e))
+                DomainError::InvariantViolation(format!(
+                    "Failed to create parent dirs for '{}': {}",
+                    safe_path.display(),
+                    e
+                ))
             })?;
         }
 
         tokio::fs::write(&safe_path, content).await.map_err(|e| {
-            DomainError::InvariantViolation(format!("Failed to write file '{}': {}", safe_path.display(), e))
+            DomainError::InvariantViolation(format!(
+                "Failed to write file '{}': {}",
+                safe_path.display(),
+                e
+            ))
         })?;
 
         Ok(serde_json::json!({
@@ -137,19 +152,27 @@ impl SovereignDeveloperAdapter {
         }))
     }
 
-    async fn handle_list(&self, params: &serde_json::Value) -> Result<serde_json::Value, DomainError> {
-        let path_str = params
-            .get("path")
-            .and_then(|v| v.as_str())
-            .unwrap_or(".");
+    async fn handle_list(
+        &self,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, DomainError> {
+        let path_str = params.get("path").and_then(|v| v.as_str()).unwrap_or(".");
 
         let safe_path = self.canonicalize_safe_path(path_str)?;
         let mut entries = Vec::new();
         let mut read_dir = tokio::fs::read_dir(&safe_path).await.map_err(|e| {
-            DomainError::Validation(format!("Failed to list directory '{}': {}", safe_path.display(), e))
+            DomainError::Validation(format!(
+                "Failed to list directory '{}': {}",
+                safe_path.display(),
+                e
+            ))
         })?;
 
-        while let Some(entry) = read_dir.next_entry().await.map_err(|e| DomainError::InvariantViolation(e.to_string()))? {
+        while let Some(entry) = read_dir
+            .next_entry()
+            .await
+            .map_err(|e| DomainError::InvariantViolation(e.to_string()))?
+        {
             let file_name = entry.file_name().to_string_lossy().to_string();
             let is_dir = entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false);
             entries.push(serde_json::json!({
@@ -165,12 +188,17 @@ impl SovereignDeveloperAdapter {
         }))
     }
 
-    async fn handle_bash(&self, params: &serde_json::Value) -> Result<serde_json::Value, DomainError> {
+    async fn handle_bash(
+        &self,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, DomainError> {
         let command = params
             .get("command")
             .or_else(|| params.get("cmd"))
             .and_then(|v| v.as_str())
-            .ok_or_else(|| DomainError::Validation("Missing 'command' parameter for bash".into()))?;
+            .ok_or_else(|| {
+                DomainError::Validation("Missing 'command' parameter for bash".into())
+            })?;
 
         let timeout_secs = params
             .get("timeout_secs")
@@ -190,7 +218,9 @@ impl SovereignDeveloperAdapter {
         })?;
 
         let output = match tokio::time::timeout(timeout_secs, child.wait_with_output()).await {
-            Ok(res) => res.map_err(|e| DomainError::InvariantViolation(format!("Process error: {}", e)))?,
+            Ok(res) => {
+                res.map_err(|e| DomainError::InvariantViolation(format!("Process error: {}", e)))?
+            }
             Err(_) => {
                 return Err(DomainError::Validation(format!(
                     "Command '{}' timed out after {:?}",
@@ -233,9 +263,13 @@ impl SandboxPort for SovereignDeveloperAdapter {
         // 3. Dispatch specific developer tool based on action name
         let execution_result = match action.name.as_str() {
             "developer__read" | "read_file" | "read" => self.handle_read(&action.parameters).await,
-            "developer__write" | "write_file" | "write" => self.handle_write(&action.parameters).await,
+            "developer__write" | "write_file" | "write" => {
+                self.handle_write(&action.parameters).await
+            }
             "developer__list" | "list_dir" | "ls" => self.handle_list(&action.parameters).await,
-            "developer__bash" | "bash" | "shell" | "exec" => self.handle_bash(&action.parameters).await,
+            "developer__bash" | "bash" | "shell" | "exec" => {
+                self.handle_bash(&action.parameters).await
+            }
             other => Err(DomainError::Validation(format!(
                 "Unknown developer capability action: '{}'",
                 other
@@ -249,7 +283,11 @@ impl SandboxPort for SovereignDeveloperAdapter {
             Ok(output_data) => {
                 let json_bytes = serde_json::to_vec(&output_data).unwrap_or_default();
                 let output_hash = format!("blake3:{}", digest(&json_bytes));
-                let is_failure = output_data.get("exit_code").and_then(|c| c.as_i64()).map(|c| c != 0).unwrap_or(false);
+                let is_failure = output_data
+                    .get("exit_code")
+                    .and_then(|c| c.as_i64())
+                    .map(|c| c != 0)
+                    .unwrap_or(false);
 
                 Ok(ExecutionReceipt {
                     receipt_id: new_id("rcpt"),
@@ -296,7 +334,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_sovereign_developer_adapter_read_write_flow() {
-        let temp_dir = std::env::temp_dir().join(format!("custos_dev_test_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("custos_dev_test_{}", uuid::Uuid::new_v4()));
         tokio::fs::create_dir_all(&temp_dir).await.unwrap();
 
         let adapter = SovereignDeveloperAdapter::new(&temp_dir);
@@ -311,7 +350,8 @@ mod tests {
                 "content": "Sovereign Custos Execution",
             }),
             RiskLevel::Medium,
-        ).with_task_id("task_1");
+        )
+        .with_task_id("task_1");
 
         let write_permit = Permit::new(
             "task_1".into(),
@@ -335,7 +375,8 @@ mod tests {
                 "path": "hello.txt",
             }),
             RiskLevel::Low,
-        ).with_task_id("task_1");
+        )
+        .with_task_id("task_1");
 
         let read_permit = Permit::new(
             "task_1".into(),
@@ -357,7 +398,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_sovereign_developer_adapter_rejects_path_traversal() {
-        let temp_dir = std::env::temp_dir().join(format!("custos_dev_test_{}", uuid::Uuid::new_v4()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("custos_dev_test_{}", uuid::Uuid::new_v4()));
         tokio::fs::create_dir_all(&temp_dir).await.unwrap();
 
         let adapter = SovereignDeveloperAdapter::new(&temp_dir);
@@ -370,7 +412,8 @@ mod tests {
                 "path": "../../../etc/passwd",
             }),
             RiskLevel::High,
-        ).with_task_id("task_1");
+        )
+        .with_task_id("task_1");
 
         let permit = Permit::new(
             "task_1".into(),
@@ -383,9 +426,11 @@ mod tests {
 
         let receipt = adapter.execute(&action, &permit).await.unwrap();
         assert_eq!(receipt.status, ReceiptStatus::Failure);
-        assert!(receipt.error_message.unwrap().contains("Path traversal violation"));
+        assert!(receipt
+            .error_message
+            .unwrap()
+            .contains("Path traversal violation"));
 
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
     }
 }
-
