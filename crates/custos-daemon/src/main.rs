@@ -1,31 +1,108 @@
-use custos_daemon::{ApiRequest, ApiResponse, CustosRuntime};
+use custos_daemon::{
+    ApiRequest, ApiResponse, CustosRuntime, DaemonLock, DaemonLockError, ProfileResolver,
+};
+use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::TcpListener;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let database_path = std::env::var("CUSTOS_DB_PATH").unwrap_or_else(|_| "custos.db".to_string());
-    let runtime = CustosRuntime::bootstrap(&database_path)?;
-    eprintln!("Custos daemon ready; database={database_path}; transport=stdio-jsonl");
+    let profile = ProfileResolver::from_env();
+    let lock_path = profile.lock_path();
 
-    let stdin = BufReader::new(tokio::io::stdin());
-    let mut lines = stdin.lines();
-    let mut stdout = tokio::io::stdout();
-
-    while let Some(line) = lines.next_line().await? {
-        if line.trim().is_empty() {
-            continue;
+    let lock = match DaemonLock::acquire(&lock_path) {
+        Ok(lock) => lock,
+        Err(DaemonLockError::AlreadyRunning { pid, path }) => {
+            eprintln!(
+                "Custos daemon is already running (pid: {pid:?}) on lock file: {}",
+                path.display()
+            );
+            return Ok(());
         }
+        Err(err) => {
+            eprintln!("Failed to acquire daemon process lock: {err}");
+            return Err(Box::<dyn std::error::Error>::from(err));
+        }
+    };
 
-        let response = match serde_json::from_str::<ApiRequest>(&line) {
-            Ok(request) => runtime.local_api.handle_request(request).await,
-            Err(error) => ApiResponse::error("", format!("Invalid request JSON: {error}")),
-        };
+    let runtime = Arc::new(CustosRuntime::bootstrap_profile(&profile)?);
+    let database_path = profile.database_path();
 
-        let mut encoded = serde_json::to_vec(&response)?;
-        encoded.push(b'\n');
-        stdout.write_all(&encoded).await?;
-        stdout.flush().await?;
+    // Bind TCP Listener on loopback
+    let bind_addr = std::env::var("CUSTOS_BIND").unwrap_or_else(|_| "127.0.0.1:0".to_string());
+    let tcp_listener = TcpListener::bind(&bind_addr).await?;
+    let local_port = tcp_listener.local_addr()?.port();
+    profile.write_port(local_port)?;
+
+    eprintln!(
+        "Custos daemon ready; profile={}; database={}; tcp=127.0.0.1:{local_port}; transport=tcp+stdio-jsonl",
+        profile.profile_id(),
+        database_path.display()
+    );
+
+    let local_api = runtime.local_api.clone();
+
+    // Spawn TCP accept loop
+    let tcp_api = local_api.clone();
+    let tcp_task = tokio::spawn(async move {
+        while let Ok((mut socket, _peer)) = tcp_listener.accept().await {
+            let api = tcp_api.clone();
+            tokio::spawn(async move {
+                let (reader, mut writer) = socket.split();
+                let mut lines = BufReader::new(reader).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    if line.trim().is_empty() {
+                        continue;
+                    }
+                    let response = match serde_json::from_str::<ApiRequest>(&line) {
+                        Ok(req) => api.handle_request(req).await,
+                        Err(err) => ApiResponse::error("", format!("Invalid request JSON: {err}")),
+                    };
+                    if let Ok(mut encoded) = serde_json::to_vec(&response) {
+                        encoded.push(b'\n');
+                        if writer.write_all(&encoded).await.is_err() || writer.flush().await.is_err() {
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+    });
+
+    // Stdio handler: processes incoming requests if piped
+    let stdio_api = runtime.local_api.clone();
+    let stdio_task = tokio::spawn(async move {
+        let stdin = BufReader::new(tokio::io::stdin());
+        let mut lines = stdin.lines();
+        let mut stdout = tokio::io::stdout();
+
+        while let Ok(Some(line)) = lines.next_line().await {
+            if line.trim().is_empty() {
+                continue;
+            }
+            let response = match serde_json::from_str::<ApiRequest>(&line) {
+                Ok(request) => stdio_api.handle_request(request).await,
+                Err(error) => ApiResponse::error("", format!("Invalid request JSON: {error}")),
+            };
+            if let Ok(mut encoded) = serde_json::to_vec(&response) {
+                encoded.push(b'\n');
+                if stdout.write_all(&encoded).await.is_err() || stdout.flush().await.is_err() {
+                    break;
+                }
+            }
+        }
+    });
+
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {
+            eprintln!("Custos daemon received interrupt signal, shutting down...");
+        }
+        _ = tcp_task => {}
+        _ = stdio_task => {}
     }
+
+    let _ = profile.remove_port();
+    drop(lock);
 
     Ok(())
 }

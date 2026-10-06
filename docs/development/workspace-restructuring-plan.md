@@ -8,9 +8,11 @@
 
 **Crates và lõi OrCa cần chuyển:** [§22](#22-crate-blueprint-và-chuyển-lõi-orca-theo-trách-nhiệm) là bản chi tiết dependency, chia module, transaction boundaries, mailbox fencing, resource integration và nơi phát triển feature tiếp theo. Đọc §22 trước khi di chuyển runtime/adapters/storage hoặc port orchestration source.
 
+**Cây đích và kế hoạch chuyển source:** [SADE–OrCa implementation plan](sade-orca-integration-plan.md) đưa ra cây module đích, extraction ledger theo file OrCa, host-thinning cho `custos-app`, Local API contracts, các wave và sáu PR mở đầu. Kế hoạch này cụ thể hóa §22–24, không thay các quyết định trong master.
+
 **Thiết kế trải nghiệm:** [§23](#23-implement-plan-ui-chat-và-workbench-linh-hoạt) phân loại UI prototype Custos đang làm, surface Orca cần tái sử dụng có chọn lọc và lộ trình hợp nhất thành một workspace có chat, coding và research.
 
-**SADE alignment:** [Design và supervision](../architecture/sade-design-and-supervision.md) defines the product identity. P1–P7 implement the SADE through the existing workspace/runtime architecture, not by adding another shell crate. Include single-owner nested delegation, source-backed S1 assistance and full-route cost/quality ablations in relevant gates.
+**SADE alignment:** [Design và supervision](../architecture/sade-design-and-supervision.md) defines the product identity. P1–P7 implement the SADE through the existing workspace/runtime architecture, not by adding another shell crate. Include single-owner nested delegation, source-backed S1 assistance and full-route cost/quality ablations in relevant gates. [§24](#24-refactor-lõi-để-custos-thành-sade-và-hấp-thụ-orca-đúng-trách-nhiệm) turns that principle into a core-boundary refactor and OrCa capability map.
 
 **Docs-first implementation plan.** Quyết định sản phẩm nằm ở [master](../../Custos.md); behavior ở [workspace/UI spec](../architecture/agent-workspace-and-ui.md), [skills](../architecture/capability-catalog-and-skills.md), [protocols](../architecture/protocol-and-connectivity-hubs.md), [OI](../architecture/cognitive-fabric-and-orchestration.md). Tài liệu này thay việc suy ra kế hoạch chỉ từ cây folder; chưa chứng nhận code đã di chuyển hoặc runtime đã chạy.
 
@@ -1020,3 +1022,80 @@ Route đích ưu tiên resource identity: `/workspace/:workspaceId`, `/workspace
 10. **UI-09 Compare/attention/polish:** candidate runs, approvals/unknown/conflicts, a11y/narrow window, telemetry truth, retire prototype shims.
 
 Mỗi packet có unit tests state reducer, component interaction tests, contract fixtures và một walkthrough. UI-04 là gate khác biệt cốt lõi: nếu không chuyển được cùng Task từ chat → Research → Coding → Copilot với provenance và quyền đúng, không gọi Custos là workbench ba miền thống nhất.
+
+## 24. Refactor lõi để Custos thành SADE và hấp thụ OrCa đúng trách nhiệm
+
+### 24.1 Kết luận kiến trúc
+
+**Có cần refactor lõi; không cần viết lại mọi crate hoặc tạo một crate “SADE”.** SADE là cách vận hành sản phẩm trên cùng lõi Custos: một Task liên tục qua human, S1, S2/agent runtime, pack, workspace và verifier; policy, evidence và chi phí theo cùng một đường thực thi. Giữ crate boundaries hiện hữu, làm rõ ownership/call paths bên trong, chỉ di chuyển hoặc tách module khi vertical slice chứng minh việc đó cần thiết.
+
+Không bê nguyên OrCa thành lõi thứ hai. Hấp thụ các capability OrCa làm tốt — run/worker lifecycle, workspace/worktree/resource management, launch status, tracked dispatch, mailbox/provenance, recovery và fleet/workbench interactions — dưới contracts và authority của Custos. OrCa không thay canonical Task, domain packs, policy kernel, evidence semantics hay S2 reasoning. Mỗi capability được port/reimplement sau license/SHA/dependency review và contract conformance; không copy database, scheduler và UI state thành nguồn chân lý song song.
+
+**Spine canonical của SADE:** `TaskRevision → Run → WorkerRun → ExecutionWorkspace/Resource → ActionAttempt → Receipt/VerifierRecord → Criterion/Outcome`, được nối với `SessionTaskBinding`, budget/usage ledger, source snapshot và event cursor. Đây là các graph/lifecycle có quan hệ, không một FSM khổng lồ: Session là kênh; Task là ý định/tiêu chí; Run là lần thực thi; WorkerRun là đơn vị agent; workspace/resource là môi trường; authority cho phép effect; evidence xác định mức kết luận.
+
+### 24.2 Ownership target trong các crate hiện có
+
+| Capability | Owner | Ranh giới bắt buộc |
+|---|---|---|
+| IDs, Task/Run/Worker/Workspace refs, source/effect/evidence values | `custos-domain` | Pure values/validation; không filesystem, DB, process, network hoặc model call. |
+| State transitions, scope, grant/permit admission, budget policy, completion/waiver rules | `custos-core` | Trusted decisions thuần; nhận observations từ ports/adapters, không tự tạo chúng bằng I/O. |
+| Worker loop, OI, workflow compile/schedule/replan, context planning, workspace/resource lifecycle coordination | `custos-runtime` | Điều phối qua ports; không mở SQLite connection hoặc trực tiếp tạo worktree/process/file effects. |
+| Model inference và native harness contracts | `custos-provider` + `custos-core/contracts/harness.rs` | Hai semantics khác nhau; không nhân bản trait cho “đẹp” hoặc nhập Task authority vào provider. |
+| Filesystem, Git worktree, subprocess/PTY, browser, MCP/A2A transport, connectors | `custos-adapters` | Mọi effect có target, cancellation/timeout, observed status và capability/assurance declaration. |
+| Canonical transaction, lease/fencing, outbox claim, durable mailbox/event sequence, usage/effect ledger, migrations | `custos-persistence` | Chỉ phép nguyên tử cần thiết; không quyết định topology, pack semantics hoặc policy. |
+| Engineering/Research/Assistant jobs, artifacts, context obligations, domain verifier definitions | `custos-packs` + declarative manifests | Mô tả domain/evidence needs, yêu cầu capability; không tự cấp permit hoặc ghi canonical DB. |
+| Session ↔ turn ↔ Task bindings, client commands/events | `custos-bridge`/`custos-sdk` | UI đổi lens không đổi Task ID hoặc tạo worker; command idempotency/cursor thuộc API contract. |
+| Concrete wiring, worker/provider/pack registry selection, recovery and shutdown | `custos-daemon` | Một composition root; startup recovery errors không được bỏ qua im lặng. |
+| Workspace panes, run timeline, task anchor, approvals and domain views | `ui/desktop` | Projection/commands only; không là Task/permit/evidence source of truth. |
+
+Không chuyển module chỉ để cây nhìn cân đối. Contracts nằm phía consumer/core; concrete implementation nằm ở adapter/persistence; orchestration phụ thuộc ports. `custos-runtime` không nên giữ dependency trực tiếp lên `custos-persistence` nếu consumer audit xác nhận không cần; gỡ edge đó thành packet tương thích riêng.
+
+### 24.3 OrCa capability map vào Custos
+
+| Capability học từ OrCa | Đích Custos | Không nhập nguyên trạng |
+|---|---|---|
+| Native host, launch/boot/reconnect, streaming status | daemon + `AgentRuntimePort` + adapter lifecycle; attempt events gắn `WorkerRun` | Không gộp model provider với coding-agent harness; không báo `started` chỉ vì process được spawn. |
+| Repo worktree, branch, snapshot/diff, cleanup | `ExecutionWorkspace` ref trong domain; runtime lease coordinator; Git/worktree adapter; persistence lifecycle | Directory copy/in-memory lease không được gọi là isolated Git worktree; worktree không tự là sandbox bảo mật. |
+| Orchestration graph, dependency readiness, retries and bounded runs | workflow IR/compiler/scheduler trong runtime; Task/Run transitions trong core; durable claims trong persistence | Không cho OI và native harness cùng tự phân rã một goal; mỗi nested delegation có đúng một planner/loop owner. |
+| Dispatch, mailbox, worker replacement, result handoff | typed messages/attempt records, event sequence, durable delivery/claim, provenance | UI transcript không là mailbox; retry/at-least-once phải lộ idempotency và uncertain states. |
+| Fleet/workbench (runs, attention, review, diff, terminals) | UI panes dựa trên Task/Run/WorkerRun/Resource projection dùng chung với chat | Không tạo task store riêng theo lens; không port Electron shell để thay Tauri. |
+| Automation, schedule, external trigger | Assistant pack tạo child Task/Run dưới standing grant + budget/expiry | Automation không tự thành quyền gửi mail, truy cập personal data hay chạy vô hạn. |
+| Remote host/agent ecosystem | execution-host adapter và protocol adapter khi có deployment need | Không bật A2A/remote chỉ vì upstream có; identity, capability, egress, cancel và receipt vẫn là gate. |
+
+OrCa là nguồn học về ADE operations, không phải AgentRuntimePort thay thế cho Goose/Codex/Claude. Goose-derived worker loop là chủ đề riêng: `runtime/engine` hiện dormant/unmounted theo audit §22; phải so với `runtime/agent` và daemon `TaskRuntime` bằng cùng lifecycle/tool/evidence conformance. Chỉ một loop được chọn cho mỗi execution path. Có thể dùng OrCa-inspired workspace lifecycle cùng Goose-inspired loop nếu contracts khác lớp và không trùng planner; không ghép hai event loop thành “siêu agent” chưa kiểm.
+
+### 24.4 Điểm bất nhất cần xử lý trước khi gọi đây là SADE runtime
+
+Đây là source-audit findings trong checkout được mô tả ở kế hoạch, không phải build/security certification hay khẳng định mọi call path đã được review.
+
+| Điểm hiện tại | Ý nghĩa kiến trúc | Hướng sửa |
+|---|---|---|
+| `custos-core` có một số `std::fs` production paths trong context loader, deterministic capability, evidence verifier/path policy | Trusted policy và quan sát/thi hành filesystem bị dính; khó thay adapter hoặc test policy thuần | Đưa read/write/stat/canonicalization observation qua capability/source/artifact ports; core giữ scope/policy và xử lý observations; adapter thi hành effect, canonicalize/revalidate tại dispatch. |
+| `runtime/src/engine` có Goose-derived code chưa mount; `runtime/src/agent` có code active; daemon compose `TaskRuntime` | Folder presence không xác định production worker loop; mount cả hai có thể tạo loop/provider thứ hai | Trace call paths; kiểm lifecycle/tool/evidence conformance; chọn một active loop hoặc giữ nhánh kia explicit experimental/unreferenced. |
+| `runtime/context` và `context_management` có overlap | Hai module có thể tạo summary/retrieval/policy drift | Audit public symbols/consumers; hợp nhất ownership/API trước, giữ compatibility wrappers tạm; so source coverage/token cost trước khi retire implementation. |
+| Workspace lease thiên về directory copy + in-memory ownership, không phải durable Git worktree | Không đủ branch/base/diff semantics, restart recovery hoặc nhiều writer | `ExecutionWorkspace` ref + Git adapter + persisted lease generation/fencing + observed lifecycle; recovery không xóa resource có owner chưa xác minh. |
+| Daemon composition chưa chứng minh pack-first live path; fake provider tồn tại; startup reconcile error từng bị bỏ qua theo source audit | Demo/mock có thể bị UI hiểu như live capability; crash state bị che | Wire selected provider/harness, pack registry và verifiers rõ ràng; tag demo paths; recovery failure thành visible degraded/blocked state. |
+| Runtime→persistence dependency không có production import được tìm thấy trong consumer search đã ghi | Manifest dependency có thể làm lệch kiến trúc dù chưa chứng minh runtime violation | Kiểm feature/cfg/full consumers rồi gỡ dependency trong packet tương thích riêng, hoặc ghi rõ ngoại lệ nếu có consumer thật. |
+
+### 24.5 Trình tự refactor
+
+| Packet | Thay đổi | Gate |
+|---|---|---|
+| **C0 — Reality map** | Chốt active/unwired/dormant/duplicate cho Task/Session/Run, worker loops, providers, packs, workspace leases, outbox/verifiers; ghi path + caller + feature flag; giữ mọi dirty files | Sequence command→real/stub adapter; không xóa source trước khi parity rõ. |
+| **C1 — Contract spine** | Khóa IDs/references/events cho TaskRevision, Run, WorkerRun, Resource/Workspace, Attempt, Receipt, Outcome và SessionTaskBinding | Golden fixtures; unknown enums explicit; lens switch không tạo Task/Run; replay không lặp mutation. |
+| **C2 — Pure trusted core** | Tách authority/budget/state/evidence decisions khỏi `std::fs`/DB/process/network; ports ở boundary hợp lý, adapters trả observations/receipts | Policy test được với fake ports; stale scope/payload/permit bị từ chối; canonical path kiểm lại tại dispatch; unknown không thành pass. |
+| **C3 — Durable resources & dispatch** | Workspace/host lifecycle, Git worktree, durable lease claim, fencing generation, outbox/mailbox attempts, startup reconcile | Crash giữa prepared/claimed/started/effect-before-receipt không false-success/duplicate; owner mơ hồ thì quarantine, không xóa bừa. |
+| **C4 — One worker/harness path** | Chọn một active loop; tách provider/harness semantics; normalize events/capabilities/steer/cancel/usage/handoff đúng thực tế | Một real path end-to-end; mock không masquerade; attempts/status/assurance/cancel được ghi rõ. |
+| **C5 — Packs and verifier wiring** | Daemon compose manifest registry + ba pack handlers, context obligations, criterion verifiers; typed/redacted cross-pack artifacts | Một Task: Research finding → Coding worktree patch → Copilot draft, giữ provenance, không chuyển grant; từng pack chạy độc lập. |
+| **C6 — Workbench/fleet projection** | Cùng Task/Run stream dựng Copilot, Research, Coding và multi-run review/worktree panes; selection/layout chỉ presentation state | Mở cùng Task ở lens khác không mất chat/turn binding; reload khôi phục event cursor; pending/uncertain luôn hiện. |
+| **C7 — S1/OI efficiency** | Strong direct baseline trước; sau đó deterministic fast paths, source-backed S1 scouts, routing/topology theo domain/resource/quality; Meta chỉ đề xuất versioned policy | Paired same-task evaluation, accepted outcomes, quality margin, billed/estimated/unknown cost, human time, p95; thua baseline thì opt-in/disable. |
+
+C0–C6 ổn định spine/workbench; C7 có thể thử nghiệm riêng nhưng không được tự thay production defaults. Không cần chờ protocol hubs/remote support để làm desktop/headless vertical slice. UI có thể tiến hành trên fixtures được dán nhãn trong khi production gates còn mở.
+
+### 24.6 Definition of done cho lõi SADE
+
+Một vertical slice đạt SADE-ready khi cùng `TaskId` được tạo từ chat, mở ở Research/Coding/Copilot, có session-turn binding bền; chạy đúng một worker/harness path trên declared execution workspace; mọi tool/effect có scope và assurance; restart không nói dối về launch/outbox; verifier cập nhật criterion `pass|fail|unknown|stale`; usage theo attempt; user thấy diff/source/receipt/pending decision; resume không tự dispatch lại effect uncertain.
+
+Fixtures riêng theo miền: Coding dùng Git worktree và base hash; Research dùng source revision/locator và `unknown` cho semantic support chưa đủ; Assistant dùng fake connector trước outbound thật. Nhiều agent mặc định, worktree cho mỗi thought, OI LLM mỗi turn, remote fleet/A2A/MCP đầy đủ và copy toàn bộ OrCa backend/UI không thuộc gate ban đầu.
+
+**Trạng thái:** §24 là target/refactor plan dựa trên source audit đã ghi, không xác nhận C0–C7 đã được code. Thay đổi lượt này chỉ cập nhật tài liệu; không sửa product source.

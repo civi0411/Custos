@@ -8,11 +8,14 @@ import {
   CreateTaskParams,
   StartRunParams,
   CancelRunParams,
+  ExecutionWorkspace,
+  CreateWorkspaceParams,
 } from '../types/domain';
 import { initialProjectData } from '../data/mockData';
 
 export class DaemonClient {
   private isTauri: boolean;
+  private mockWorkspaces?: ExecutionWorkspace[];
 
   constructor() {
     this.isTauri =
@@ -161,11 +164,100 @@ export class DaemonClient {
   }
 
   // ---------------------------------------------------------
+  // ExecutionWorkspace API (RFC 006 / OrCa Integration)
+  // ---------------------------------------------------------
+
+  async createWorkspace(params: CreateWorkspaceParams): Promise<ExecutionWorkspace> {
+    return this.request<ExecutionWorkspace>('v1.workspaces.create', params);
+  }
+
+  async getWorkspace(workspaceId: string): Promise<ExecutionWorkspace> {
+    return this.request<ExecutionWorkspace>('v1.workspaces.get', { workspace_id: workspaceId });
+  }
+
+  async listWorkspaces(): Promise<ExecutionWorkspace[]> {
+    return this.request<ExecutionWorkspace[]>('v1.workspaces.list', {});
+  }
+
+  async archiveWorkspace(workspaceId: string, deletePhysical = false): Promise<void> {
+    return this.request<void>('v1.workspaces.archive', {
+      workspace_id: workspaceId,
+      delete_physical: deletePhysical,
+    });
+  }
+
+  // ---------------------------------------------------------
   // Browser dev / offline fallback simulator
   // ---------------------------------------------------------
 
   private handleWebFallback<T>(method: string, params: any): T {
     switch (method) {
+      case 'v1.workspaces.list': {
+        if (!this.mockWorkspaces) {
+          this.mockWorkspaces = [
+            {
+              id: 'ws-main',
+              name: 'main',
+              kind: { type: 'git', repo_path: '/Users/mac/Project/AgentHub/Custos', branch: 'main' },
+              path: '/Users/mac/Project/AgentHub/Custos',
+              status: 'ready',
+              lineage: {},
+              metadata: { domain: 'engineering', assignedAgent: 'Human (Primary)', modifiedFilesCount: 0 },
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+            {
+              id: 'ws-simd',
+              name: 'feat/simd-dispatch',
+              kind: { type: 'git', repo_path: '/Users/mac/Project/AgentHub/Custos', branch: 'feat/simd-dispatch' },
+              path: '.worktrees/feat-simd-dispatch',
+              status: 'ready',
+              lineage: { base_commit: 'a3f2d1e' },
+              metadata: { domain: 'engineering', assignedAgent: 'Claude Code (S2-Worker)', modifiedFilesCount: 3 },
+              created_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+            {
+              id: 'ws-permits',
+              name: 'fix/permits-race',
+              kind: { type: 'git', repo_path: '/Users/mac/Project/AgentHub/Custos', branch: 'fix/permits-race' },
+              path: '.worktrees/fix-permits-race',
+              status: 'ready',
+              lineage: { base_commit: 'a3f2d1e' },
+              metadata: { domain: 'engineering', assignedAgent: 'Claude 3.7 Sonnet', modifiedFilesCount: 1 },
+              created_at: new Date(Date.now() - 120 * 60 * 1000).toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          ];
+        }
+        return this.mockWorkspaces as unknown as T;
+      }
+      case 'v1.workspaces.create': {
+        const created: ExecutionWorkspace = {
+          id: `ws-${Date.now().toString().slice(-4)}`,
+          name: params.name || 'new-workspace',
+          kind: params.kind,
+          path: params.path,
+          status: 'ready',
+          lineage: params.lineage || {},
+          metadata: params.metadata || { domain: 'engineering', assignedAgent: 'Claude Code' },
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        if (!this.mockWorkspaces) this.mockWorkspaces = [];
+        this.mockWorkspaces.unshift(created);
+        return created as unknown as T;
+      }
+      case 'v1.workspaces.get': {
+        const found = (this.mockWorkspaces || []).find((w) => w.id === params.workspace_id);
+        return (found || this.mockWorkspaces?.[0]) as unknown as T;
+      }
+      case 'v1.workspaces.archive': {
+        if (this.mockWorkspaces) {
+          this.mockWorkspaces = this.mockWorkspaces.filter((w) => w.id !== params.workspace_id);
+        }
+        return {} as T;
+      }
       case 'v1.tasks.list': {
         const mockTasks: Task[] = Object.values(initialProjectData)
           .flat()

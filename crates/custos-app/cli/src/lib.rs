@@ -1,4 +1,5 @@
-use custos_daemon::CustosRuntime;
+use custos_daemon::local_api::LocalApiClient;
+use custos_daemon::{ensure_daemon_client, ProfileResolver};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::State;
@@ -24,16 +25,16 @@ fn greet(name: &str) -> String {
 
 #[tauri::command]
 async fn custos_dispatch(
-    runtime: State<'_, Arc<CustosRuntime>>,
+    client: State<'_, Arc<LocalApiClient>>,
     raw_json: String,
 ) -> Result<String, String> {
-    let resp = runtime.local_api.dispatch_raw(&raw_json).await;
+    let resp = client.dispatch_raw(&raw_json).await;
     Ok(resp)
 }
 
 #[tauri::command]
 async fn custos_request(
-    runtime: State<'_, Arc<CustosRuntime>>,
+    client: State<'_, Arc<LocalApiClient>>,
     method: String,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
@@ -42,7 +43,7 @@ async fn custos_request(
         method,
         params,
     };
-    let resp = runtime.local_api.handle_request(req).await;
+    let resp = client.send_request(req).await.map_err(|e| e.to_string())?;
     if let Some(err) = resp.error {
         Err(err)
     } else {
@@ -51,13 +52,13 @@ async fn custos_request(
 }
 
 #[tauri::command]
-async fn list_tasks(runtime: State<'_, Arc<CustosRuntime>>) -> Result<Vec<serde_json::Value>, String> {
+async fn list_tasks(client: State<'_, Arc<LocalApiClient>>) -> Result<Vec<serde_json::Value>, String> {
     let req = custos_daemon::ApiRequest {
         id: custos_domain::new_id("ipc"),
         method: "v1.tasks.list".into(),
         params: serde_json::json!({}),
     };
-    let resp = runtime.local_api.handle_request(req).await;
+    let resp = client.send_request(req).await.map_err(|e| e.to_string())?;
     if let Some(err) = resp.error {
         Err(err)
     } else if let Some(serde_json::Value::Array(arr)) = resp.result {
@@ -69,7 +70,7 @@ async fn list_tasks(runtime: State<'_, Arc<CustosRuntime>>) -> Result<Vec<serde_
 
 #[tauri::command]
 async fn get_task(
-    runtime: State<'_, Arc<CustosRuntime>>,
+    client: State<'_, Arc<LocalApiClient>>,
     id: String,
 ) -> Result<Option<serde_json::Value>, String> {
     let req = custos_daemon::ApiRequest {
@@ -77,7 +78,7 @@ async fn get_task(
         method: "v1.tasks.get".into(),
         params: serde_json::json!({ "task_id": id }),
     };
-    let resp = runtime.local_api.handle_request(req).await;
+    let resp = client.send_request(req).await.map_err(|e| e.to_string())?;
     if let Some(err) = resp.error {
         if err.contains("not found") {
             Ok(None)
@@ -91,7 +92,7 @@ async fn get_task(
 
 #[tauri::command]
 async fn create_task(
-    runtime: State<'_, Arc<CustosRuntime>>,
+    client: State<'_, Arc<LocalApiClient>>,
     title: String,
     metadata: Option<String>,
 ) -> Result<serde_json::Value, String> {
@@ -104,7 +105,7 @@ async fn create_task(
             "metadata": meta_json,
         }),
     };
-    let resp = runtime.local_api.handle_request(req).await;
+    let resp = client.send_request(req).await.map_err(|e| e.to_string())?;
     if let Some(err) = resp.error {
         Err(err)
     } else {
@@ -114,7 +115,7 @@ async fn create_task(
 
 #[tauri::command]
 async fn advance_task(
-    runtime: State<'_, Arc<CustosRuntime>>,
+    client: State<'_, Arc<LocalApiClient>>,
     id: String,
     status: String,
     rationale: Option<String>,
@@ -128,7 +129,7 @@ async fn advance_task(
             "rationale": rationale,
         }),
     };
-    let resp = runtime.local_api.handle_request(req).await;
+    let resp = client.send_request(req).await.map_err(|e| e.to_string())?;
     if let Some(err) = resp.error {
         Err(err)
     } else {
@@ -138,7 +139,7 @@ async fn advance_task(
 
 #[tauri::command]
 async fn cancel_task(
-    runtime: State<'_, Arc<CustosRuntime>>,
+    client: State<'_, Arc<LocalApiClient>>,
     id: String,
     reason: Option<String>,
 ) -> Result<serde_json::Value, String> {
@@ -150,7 +151,7 @@ async fn cancel_task(
             "reason": reason,
         }),
     };
-    let resp = runtime.local_api.handle_request(req).await;
+    let resp = client.send_request(req).await.map_err(|e| e.to_string())?;
     if let Some(err) = resp.error {
         Err(err)
     } else {
@@ -173,15 +174,13 @@ fn explain_architecture(query: Option<String>) -> String {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let db_path = std::env::var("CUSTOS_DATABASE").unwrap_or_else(|_| "custos.db".into());
-    let runtime = Arc::new(
-        CustosRuntime::bootstrap(&db_path)
-            .expect("Failed to bootstrap CustosRuntime for Tauri CLI app"),
-    );
+    let profile = ProfileResolver::from_env();
+    let client = ensure_daemon_client(&profile)
+        .expect("Failed to connect to custos-daemon for Tauri CLI app");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(runtime)
+        .manage(client)
         .invoke_handler(tauri::generate_handler![
             greet,
             custos_dispatch,

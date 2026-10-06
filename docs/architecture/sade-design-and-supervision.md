@@ -4,6 +4,8 @@
 
 **Plan để xây:** [SADE refactor và cost core](../development/workspace-restructuring-plan.md) nối source audit, module ownership, contracts, ba domain blueprints, W0–W5 và evaluation gates. Đây là một campaign thống nhất, không roadmap cạnh tranh. [Pack/workflow design](domain-packs-and-workflows.md) định nghĩa jobs/artifacts/acceptance riêng từng miền.
 
+**Kế hoạch code theo source:** [SADE–OrCa integration plan](../development/sade-orca-integration-plan.md) xác định cây repo đích, nơi hấp thụ OrCa và cách đưa hai app hosts về một daemon owner.
+
 ## 1. Định nghĩa và lời hứa
 
 **Custos là Supervised Agent Development Environment (SADE) local-first: một môi trường để human và các agent cùng nghiên cứu, xây dựng, kiểm chứng và tự động hóa công việc, với chi phí được tối ưu trên kết quả đạt yêu cầu.**
@@ -109,3 +111,5 @@ Signature demo: nghiên cứu một phương pháp AI → chọn claim có ngu�
 Không thêm service SADE: UI features chứa presentation; runtime giữ worker/OI/context/workspace lifecycle; pack giữ domain obligations; core giữ authority/gates; adapters giữ concrete I/O/protocol; persistence giữ canonical/derived storage; daemon compose. Goose-derived loop được retained qua provenance và conformance, không import cả dormant engine để tuyên bố đã có Goose core.
 
 S1/OI là augmentation opt-in/gradually enabled theo measured slice; human-facing controls và truthful assurance cần từ flow đầu tiên. SADE gate: một job đi từ interaction tới verified/limited outcome, restart/resume, exact approvals, cancel/reconcile và costs có nhãn. “Thế hệ mới” chỉ trở thành claim ưu thế khi demo/benchmark chứng minh kết quả tốt hơn hoặc ít effort hơn ở phạm vi cụ thể.
+
+**Lõi hiện tại cần được làm cho nhất quán trước khi mở rộng SADE:** giữ crate boundaries nhưng sửa ownership bên trong: domain chỉ giữ values; core giữ policy và invariants; runtime giữ điều phối; adapter giữ I/O và process/Git lifecycle; persistence giữ tính nguyên tử/durable; daemon là composition root. OrCa cung cấp nguồn tham khảo cho lifecycle và vận hành workspace/agent, không thay Task Kernel, pack semantics, authority hay worker reasoning của Custos. Thứ tự và source findings nằm trong [refactor plan §24](../development/workspace-restructuring-plan.md#24-refactor-lõi-để-custos-thành-sade-và-hấp-thụ-orca-đúng-trách-nhiệm).

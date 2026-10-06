@@ -129,3 +129,43 @@ export interface CancelRunParams {
   run_id: string;
   reason?: string;
 }
+
+// ---------------------------------------------------------
+// ExecutionWorkspace Types (RFC 006 / OrCa Integration)
+// ---------------------------------------------------------
+
+export type WorkspaceKind =
+  | { type: 'git'; repo_path: string; branch: string; base_commit?: string }
+  | { type: 'folder'; path: string }
+  | { type: 'remote_ssh'; host: string; remote_path: string; user?: string; port?: number };
+
+export type WorkspaceStatus = 'initializing' | 'ready' | 'setup_failed' | 'archived';
+
+export interface WorkspaceLineage {
+  parent_workspace_id?: string;
+  base_commit?: string;
+  target_branch?: string;
+  head_commit?: string;
+}
+
+export interface ExecutionWorkspace {
+  id: string;
+  name: string;
+  kind: WorkspaceKind;
+  path: string;
+  status: WorkspaceStatus;
+  status_reason?: string;
+  lineage: WorkspaceLineage;
+  metadata: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateWorkspaceParams {
+  name: string;
+  kind: WorkspaceKind;
+  path: string;
+  lineage?: WorkspaceLineage;
+  metadata?: Record<string, any>;
+  setup_script?: string;
+}

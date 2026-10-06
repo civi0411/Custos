@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   X, 
   GitBranch, 
@@ -9,8 +9,11 @@ import {
   ShieldCheck, 
   Server, 
   Terminal,
-  GitMerge
+  GitMerge,
+  Loader2
 } from 'lucide-react';
+import { daemonClient } from '@/api/daemon_client';
+import { ExecutionWorkspace } from '@/types/domain';
 
 export interface ManagedWorktree {
   id: string;
@@ -32,59 +35,43 @@ interface WorktreeManagerModalProps {
   onSelectWorktree: (worktree: ManagedWorktree) => void;
 }
 
+const mapToManagedWorktree = (ws: ExecutionWorkspace): ManagedWorktree => {
+  const branch = ws.kind.type === 'git' ? ws.kind.branch : ws.name;
+  const isMain = branch === 'main';
+  const host = ws.kind.type === 'remote_ssh' ? 'remote-ssh' : 'local';
+
+  let status: ManagedWorktree['status'] = 'work';
+  if (ws.status === 'initializing') status = 'create';
+  else if (ws.status === 'archived') status = 'cleanup';
+
+  return {
+    id: ws.id,
+    branch,
+    path: ws.path,
+    baseCommit: ws.lineage?.base_commit || 'a3f2d1e',
+    host,
+    status,
+    modifiedFilesCount: ws.metadata?.modifiedFilesCount ?? 0,
+    assignedAgent: ws.metadata?.assignedAgent ?? 'Claude Code',
+    createdAt: isMain
+      ? 'Main Checkout'
+      : ws.created_at
+      ? new Date(ws.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : 'Just now',
+    isMain,
+  };
+};
+
 export const WorktreeManagerModal: React.FC<WorktreeManagerModalProps> = ({
   isOpen,
   onClose,
   activeWorktreeId,
-  onSelectWorktree
+  onSelectWorktree,
 }) => {
-  const [worktrees, setWorktrees] = useState<ManagedWorktree[]>([
-    {
-      id: 'wt-main',
-      branch: 'main',
-      path: '/Users/mac/Project/AgentHub/Custos',
-      baseCommit: 'a3f2d1e',
-      host: 'local',
-      status: 'work',
-      modifiedFilesCount: 0,
-      assignedAgent: 'Human (Primary)',
-      createdAt: 'Main Checkout',
-      isMain: true
-    },
-    {
-      id: 'wt-simd',
-      branch: 'feat/simd-dispatch',
-      path: '.worktrees/feat-simd-dispatch',
-      baseCommit: 'a3f2d1e',
-      host: 'local',
-      status: 'work',
-      modifiedFilesCount: 3,
-      assignedAgent: 'Claude Code (S2-Worker)',
-      createdAt: '45m ago'
-    },
-    {
-      id: 'wt-permits',
-      branch: 'fix/permits-race',
-      path: '.worktrees/fix-permits-race',
-      baseCommit: 'a3f2d1e',
-      host: 'local',
-      status: 'review',
-      modifiedFilesCount: 1,
-      assignedAgent: 'Claude 3.7 Sonnet',
-      createdAt: '2h ago'
-    },
-    {
-      id: 'wt-claim',
-      branch: 'refactor/claim-matrix',
-      path: '.worktrees/refactor-claim-matrix',
-      baseCommit: 'a3f2d1e',
-      host: 'remote-ssh',
-      status: 'ship',
-      modifiedFilesCount: 4,
-      assignedAgent: 'Custos OI Estimator',
-      createdAt: '3h ago'
-    }
-  ]);
+  const [worktrees, setWorktrees] = useState<ManagedWorktree[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [isCreating, setIsCreating] = useState(false);
   const [newBranch, setNewBranch] = useState('');
@@ -92,33 +79,88 @@ export const WorktreeManagerModal: React.FC<WorktreeManagerModalProps> = ({
   const [newHost, setNewHost] = useState<'local' | 'remote-ssh'>('local');
   const [runSetupScript, setRunSetupScript] = useState(true);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    let isMounted = true;
+    setIsLoading(true);
+    setErrorMsg(null);
+    daemonClient
+      .listWorkspaces()
+      .then((list) => {
+        if (!isMounted) return;
+        if (list && list.length > 0) {
+          setWorktrees(list.map(mapToManagedWorktree));
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load workspaces from daemon:', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  const handleCreateWorktree = (e: React.FormEvent) => {
+  const handleCreateWorktree = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newBranch.trim()) return;
+    if (!newBranch.trim() || isSubmitting) return;
 
     const sanitizedBranch = newBranch.trim().toLowerCase().replace(/\s+/g, '-');
-    const created: ManagedWorktree = {
-      id: `wt-${Date.now().toString().slice(-4)}`,
-      branch: sanitizedBranch,
-      path: `.worktrees/${sanitizedBranch.replace(/\//g, '-')}`,
-      baseCommit: newBaseCommit.trim() || 'a3f2d1e',
-      host: newHost,
-      status: 'work',
-      modifiedFilesCount: 0,
-      assignedAgent: 'Claude Code',
-      createdAt: 'Just now'
-    };
+    setIsSubmitting(true);
+    setErrorMsg(null);
 
-    setWorktrees(prev => [created, ...prev]);
-    onSelectWorktree(created);
-    setIsCreating(false);
-    setNewBranch('');
+    try {
+      const created = await daemonClient.createWorkspace({
+        name: sanitizedBranch,
+        kind:
+          newHost === 'remote-ssh'
+            ? {
+                type: 'remote_ssh',
+                host: 'ssh.server',
+                remote_path: `.worktrees/${sanitizedBranch}`,
+              }
+            : {
+                type: 'git',
+                repo_path: '/Users/mac/Project/AgentHub/Custos',
+                branch: sanitizedBranch,
+                base_commit: newBaseCommit.trim() || undefined,
+              },
+        path: `.worktrees/${sanitizedBranch.replace(/\//g, '-')}`,
+        lineage: {
+          base_commit: newBaseCommit.trim() || undefined,
+          target_branch: sanitizedBranch,
+        },
+        metadata: {
+          domain: 'engineering',
+          assignedAgent: 'Claude Code',
+        },
+        setup_script: runSetupScript ? 'echo "Provisioned worktree"' : undefined,
+      });
+
+      const managed = mapToManagedWorktree(created);
+      setWorktrees((prev) => [managed, ...prev]);
+      onSelectWorktree(managed);
+      setIsCreating(false);
+      setNewBranch('');
+    } catch (err: any) {
+      console.error('Failed to create execution workspace:', err);
+      setErrorMsg(err.message || 'Failed to create execution workspace');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handlePruneWorktree = (id: string) => {
-    setWorktrees(prev => prev.filter(w => w.id !== id));
+  const handlePruneWorktree = async (id: string) => {
+    try {
+      await daemonClient.archiveWorkspace(id, true);
+    } catch (err) {
+      console.warn('Archive workspace error:', err);
+    }
+    setWorktrees((prev) => prev.filter((w) => w.id !== id));
   };
 
   const getStatusBadge = (status: ManagedWorktree['status']) => {
@@ -310,14 +352,25 @@ export const WorktreeManagerModal: React.FC<WorktreeManagerModalProps> = ({
                 </label>
               </div>
 
+              {errorMsg && (
+                <div className="mt-2 text-xs px-2.5 py-1.5 rounded bg-red-950/40 text-red-400 border border-red-500/30">
+                  {errorMsg}
+                </div>
+              )}
+
               <div className="flex justify-end pt-2">
                 <button
                   type="submit"
-                  className="px-4 py-1.5 rounded-md text-white font-medium text-xs flex items-center gap-1.5 transition"
+                  disabled={isSubmitting}
+                  className="px-4 py-1.5 rounded-md text-white font-medium text-xs flex items-center gap-1.5 transition disabled:opacity-50"
                   style={{ background: 'var(--color-coding, #3fb950)' }}
                 >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Provision Worktree & Terminal</span>
+                  {isSubmitting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Check className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isSubmitting ? 'Provisioning...' : 'Provision Worktree & Terminal'}</span>
                 </button>
               </div>
             </form>
@@ -343,8 +396,14 @@ export const WorktreeManagerModal: React.FC<WorktreeManagerModalProps> = ({
           )}
 
           {/* Worktree Cards List */}
-          <div className="space-y-2.5">
-            {worktrees.map((wt) => {
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-12 text-neutral-400 gap-2.5 text-xs">
+              <Loader2 className="w-5 h-5 animate-spin text-[#3fb950]" />
+              <span className="font-mono text-[11px]">Syncing workspaces with custos-daemon...</span>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {worktrees.map((wt) => {
               const isActive = wt.id === activeWorktreeId || (wt.isMain && !activeWorktreeId);
               return (
                 <div
@@ -444,6 +503,7 @@ export const WorktreeManagerModal: React.FC<WorktreeManagerModalProps> = ({
               );
             })}
           </div>
+          )}
         </div>
 
         {/* Footer */}

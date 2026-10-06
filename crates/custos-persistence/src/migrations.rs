@@ -39,6 +39,9 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../migrations/0013_workflow_revisions.sql"))?;
     conn.execute_batch(include_str!("../migrations/0014_node_placements.sql"))?;
     conn.execute_batch(include_str!("../migrations/0015_replan_records.sql"))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0016_execution_workspaces.sql"
+    ))?;
 
     Ok(())
 }

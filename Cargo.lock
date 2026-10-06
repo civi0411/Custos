@@ -1551,8 +1551,12 @@ dependencies = [
  "custos-persistence",
  "custos-provider",
  "custos-runtime",
+ "dirs 5.0.1",
+ "fs2",
  "serde",
  "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
  "tokio",
  "tracing",
 ]

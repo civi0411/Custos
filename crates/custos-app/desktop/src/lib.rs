@@ -1,4 +1,5 @@
-use custos_daemon::CustosRuntime;
+use custos_daemon::local_api::LocalApiClient;
+use custos_daemon::{ensure_daemon_client, ProfileResolver};
 use std::sync::Arc;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -9,16 +10,16 @@ fn greet(name: &str) -> String {
 
 #[tauri::command]
 async fn custos_dispatch(
-    runtime: tauri::State<'_, Arc<CustosRuntime>>,
+    client: tauri::State<'_, Arc<LocalApiClient>>,
     raw_json: String,
 ) -> Result<String, String> {
-    let resp = runtime.local_api.dispatch_raw(&raw_json).await;
+    let resp = client.dispatch_raw(&raw_json).await;
     Ok(resp)
 }
 
 #[tauri::command]
 async fn custos_request(
-    runtime: tauri::State<'_, Arc<CustosRuntime>>,
+    client: tauri::State<'_, Arc<LocalApiClient>>,
     method: String,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
@@ -27,7 +28,7 @@ async fn custos_request(
         method,
         params,
     };
-    let resp = runtime.local_api.handle_request(req).await;
+    let resp = client.send_request(req).await.map_err(|e| e.to_string())?;
     if let Some(err) = resp.error {
         Err(err)
     } else {
@@ -37,15 +38,13 @@ async fn custos_request(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let db_path = std::env::var("CUSTOS_DATABASE").unwrap_or_else(|_| "custos.db".into());
-    let runtime = Arc::new(
-        CustosRuntime::bootstrap(&db_path)
-            .expect("Failed to bootstrap CustosRuntime for Tauri desktop"),
-    );
+    let profile = ProfileResolver::from_env();
+    let client = ensure_daemon_client(&profile)
+        .expect("Failed to connect to custos-daemon for Tauri desktop");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .manage(runtime)
+        .manage(client)
         .invoke_handler(tauri::generate_handler![
             greet,
             custos_dispatch,

@@ -82,13 +82,9 @@ function checkRemoteVersion() {
 }
 
 function cleanupConflictingCargoBin() {
-  const cargoBin = path.join(os.homedir(), '.cargo', 'bin', os.platform() === 'win32' ? 'custos.exe' : 'custos');
-  if (fs.existsSync(cargoBin)) {
-    try {
-      fs.unlinkSync(cargoBin);
-    } catch {}
-  }
+  // Disabled: preserve legitimate Cargo installs during host migration
 }
+
 
 function cleanupOldVersions(currentVer) {
   const binParent = path.join(cacheDir, 'bin');

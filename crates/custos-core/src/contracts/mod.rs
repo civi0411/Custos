@@ -24,6 +24,7 @@ pub mod oi;
 pub mod sandbox;
 pub mod storage;
 pub mod workflow;
+pub mod workspace;
 
 pub use harness::{
     AgentRuntimePort, CostVisibility, HarnessExecutionResult, HarnessProfile, ToolMediationLevel,
@@ -39,3 +40,4 @@ pub use storage::{
     RunPort, StoragePort, WorkflowRevisionPort,
 };
 pub use workflow::WorkflowPort;
+pub use workspace::{WorkspaceProvider, WorkspaceRepository};
