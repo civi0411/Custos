@@ -27,6 +27,7 @@ pub mod span;
 pub mod task;
 pub mod types;
 pub mod workflow;
+pub mod workspace;
 
 // Explicit re-exports of public domain surface (No glob *)
 pub use action::{
@@ -76,4 +77,7 @@ pub use task::{
 };
 pub use workflow::{
     RevisionNode, WorkflowIR, WorkflowNodeIR, WorkflowPlan, WorkflowRevision, WorkflowStep,
+};
+pub use workspace::{
+    ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceLineage, WorkspaceStatus,
 };

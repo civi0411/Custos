@@ -11,6 +11,7 @@ pub mod mcp;
 pub mod providers;
 pub mod roaming;
 pub mod sandbox;
+pub mod workspace;
 
 pub mod model {
     pub use crate::local_inference::model::*;
@@ -37,3 +38,4 @@ pub use mcp::*;
 pub use providers::*;
 pub use roaming::*;
 pub use sandbox::*;
+pub use workspace::*;

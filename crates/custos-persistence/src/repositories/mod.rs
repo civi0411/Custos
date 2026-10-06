@@ -7,6 +7,7 @@ pub mod session;
 pub mod span;
 pub mod task;
 pub mod workflow_revision;
+pub mod workspace;
 
 pub use continuation::*;
 pub use decision::*;
@@ -17,3 +18,4 @@ pub use session::*;
 pub use span::*;
 pub use task::*;
 pub use workflow_revision::*;
+pub use workspace::*;

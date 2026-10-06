@@ -12,6 +12,7 @@ pub mod memory_service;
 pub mod oi;
 pub mod session;
 pub mod workflow;
+pub mod workspace;
 
 // Compatibility shims for intra-crate modules and engine integration
 pub use cognitive as custos_cognitive;
@@ -27,3 +28,4 @@ pub use cognitive::*;
 pub use context::*;
 pub use session::*;
 pub use workflow::*;
+pub use workspace::{CreateWorkspaceRequest, WorkspaceCoordinator};

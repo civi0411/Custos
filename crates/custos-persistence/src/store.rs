@@ -2,16 +2,19 @@ use crate::connection::DbConnection;
 use crate::repositories::{
     ContinuationRepository, DecisionRepository, OutboxRepository, ReplanRepository, RunRepository,
     SessionRepository, SpanRepository, TaskRepository, WorkflowRevisionRepository,
+    WorkspaceRepository,
 };
 use async_trait::async_trait;
 use custos_core::contracts::storage::{
     DecisionPort, EffectLedgerPort, OutboxEntry, OutboxPort, OutboxStatus, ReplanPort, RunPort,
     WorkflowRevisionPort,
 };
+use custos_core::contracts::workspace::WorkspaceRepository as WorkspaceRepoPort;
 use custos_core::kernel::{SessionStore, TaskEvent, TaskStore};
 use custos_domain::{
-    ContinuationPacket, DecisionRecord, DomainError, ExecutionReceipt, NodePlacement, ReplanRecord,
-    Run, Session, SessionId, SessionJournalEntry, Span, Task, WorkerRun, WorkflowRevision,
+    ContinuationPacket, DecisionRecord, DomainError, ExecutionReceipt, ExecutionWorkspace,
+    NodePlacement, ReplanRecord, Run, Session, SessionId, SessionJournalEntry, Span, Task,
+    WorkerRun, WorkflowRevision, WorkspaceId, WorkspaceStatus,
 };
 
 /// SQLite-backed persistent storage implementing TaskStore, SessionStore, OutboxPort, RunPort,
@@ -30,6 +33,7 @@ pub struct SqliteTaskStore {
     decision_repo: DecisionRepository,
     workflow_repo: WorkflowRevisionRepository,
     replan_repo: ReplanRepository,
+    workspace_repo: WorkspaceRepository,
 }
 
 impl SqliteTaskStore {
@@ -45,6 +49,7 @@ impl SqliteTaskStore {
         let decision_repo = DecisionRepository::new(db.clone());
         let workflow_repo = WorkflowRevisionRepository::new(db.clone());
         let replan_repo = ReplanRepository::new(db.clone());
+        let workspace_repo = WorkspaceRepository::new(db.clone());
         Ok(Self {
             db,
             task_repo,
@@ -56,6 +61,7 @@ impl SqliteTaskStore {
             decision_repo,
             workflow_repo,
             replan_repo,
+            workspace_repo,
         })
     }
 
@@ -71,6 +77,7 @@ impl SqliteTaskStore {
         let decision_repo = DecisionRepository::new(db.clone());
         let workflow_repo = WorkflowRevisionRepository::new(db.clone());
         let replan_repo = ReplanRepository::new(db.clone());
+        let workspace_repo = WorkspaceRepository::new(db.clone());
         Ok(Self {
             db,
             task_repo,
@@ -82,6 +89,7 @@ impl SqliteTaskStore {
             decision_repo,
             workflow_repo,
             replan_repo,
+            workspace_repo,
         })
     }
 
@@ -123,6 +131,10 @@ impl SqliteTaskStore {
 
     pub fn replans(&self) -> &ReplanRepository {
         &self.replan_repo
+    }
+
+    pub fn workspaces(&self) -> &WorkspaceRepository {
+        &self.workspace_repo
     }
 
     /// Lists all tasks ordered by creation time descending.
@@ -370,6 +382,36 @@ impl ReplanPort for SqliteTaskStore {
 
     async fn list_replans_for_task(&self, task_id: &str) -> Result<Vec<ReplanRecord>, DomainError> {
         self.replan_repo.list_replans_for_task(task_id)
+    }
+}
+
+#[async_trait]
+impl WorkspaceRepoPort for SqliteTaskStore {
+    async fn save_workspace(&self, workspace: &ExecutionWorkspace) -> Result<(), DomainError> {
+        self.workspace_repo.save_workspace(workspace)
+    }
+
+    async fn get_workspace(
+        &self,
+        id: &WorkspaceId,
+    ) -> Result<Option<ExecutionWorkspace>, DomainError> {
+        self.workspace_repo.get_workspace(id)
+    }
+
+    async fn list_workspaces(&self) -> Result<Vec<ExecutionWorkspace>, DomainError> {
+        self.workspace_repo.list_workspaces()
+    }
+
+    async fn update_workspace_status(
+        &self,
+        id: &WorkspaceId,
+        status: WorkspaceStatus,
+    ) -> Result<(), DomainError> {
+        self.workspace_repo.update_workspace_status(id, status)
+    }
+
+    async fn delete_workspace(&self, id: &WorkspaceId) -> Result<(), DomainError> {
+        self.workspace_repo.delete_workspace(id)
     }
 }
 
@@ -733,5 +775,58 @@ mod tests {
         let replans = store.list_replans_for_task(&task.id).await.unwrap();
         assert_eq!(replans.len(), 1);
         assert_eq!(replans[0].id, replan.id);
+    }
+
+    #[tokio::test]
+    async fn test_execution_workspace_persistence() {
+        use custos_core::contracts::workspace::WorkspaceRepository as _;
+        use custos_domain::{ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceStatus};
+
+        let store = SqliteTaskStore::new_in_memory().unwrap();
+        let ws_id = WorkspaceId::generate();
+
+        let ws = ExecutionWorkspace::new(
+            ws_id.clone(),
+            "orca-worktree-feat",
+            WorkspaceKind::Git {
+                repo_path: "/workspace/custos".into(),
+                branch: "feat/orca".into(),
+                base_commit: Some("c0ffee".into()),
+            },
+            "/workspace/custos/.worktrees/orca",
+        )
+        .with_metadata(serde_json::json!({
+            "domain": "engineering",
+            "workbench": "coding"
+        }));
+
+        // 1. Save workspace
+        store.save_workspace(&ws).await.unwrap();
+
+        // 2. Get workspace
+        let loaded = store.get_workspace(&ws_id).await.unwrap().unwrap();
+        assert_eq!(loaded.id, ws_id);
+        assert_eq!(loaded.name, "orca-worktree-feat");
+        assert_eq!(loaded.status, WorkspaceStatus::Initializing);
+        assert_eq!(loaded.metadata["domain"], "engineering");
+
+        // 3. Update status
+        store
+            .update_workspace_status(&ws_id, WorkspaceStatus::Ready)
+            .await
+            .unwrap();
+
+        let updated = store.get_workspace(&ws_id).await.unwrap().unwrap();
+        assert_eq!(updated.status, WorkspaceStatus::Ready);
+
+        // 4. List workspaces
+        let list = store.list_workspaces().await.unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, ws_id);
+
+        // 5. Delete workspace
+        store.delete_workspace(&ws_id).await.unwrap();
+        let deleted = store.get_workspace(&ws_id).await.unwrap();
+        assert!(deleted.is_none());
     }
 }
