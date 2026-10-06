@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Key, X } from 'lucide-react';
+import { CustomSelect, CustomSelectOption } from './CustomSelect';
 
 interface AddProviderModalProps {
   isOpen: boolean;
@@ -7,21 +8,34 @@ interface AddProviderModalProps {
   onSaveProvider: (provider: string, apiKey: string) => void;
 }
 
-const getProviderLogo = (service: string): string | null => {
-  switch (service) {
-    case 'anthropic':
-      return '/assets/provider-logo/anthropic.jpg';
-    case 'openai':
-      return '/assets/provider-logo/openai.jpg';
-    case 'google':
-    case 'gemini':
-      return '/assets/provider-logo/gemini.jpg';
-    case 'deepseek':
-      return '/assets/provider-logo/deepseek.jpg';
-    default:
-      return null;
-  }
-};
+const providerOptions: CustomSelectOption[] = [
+  { 
+    value: 'anthropic', 
+    label: 'Anthropic (Claude 3.7 / 3.5)', 
+    icon: <img src="/assets/provider-logo/anthropic.jpg" alt="Anthropic" className="w-4 h-4 rounded object-cover" /> 
+  },
+  { 
+    value: 'openai', 
+    label: 'OpenAI (GPT-4o, o3-mini)', 
+    icon: <img src="/assets/provider-logo/openai.jpg" alt="OpenAI" className="w-4 h-4 rounded object-cover" /> 
+  },
+  { 
+    value: 'google', 
+    label: 'Google Cloud / Gemini', 
+    icon: <img src="/assets/provider-logo/gemini.jpg" alt="Google" className="w-4 h-4 rounded object-cover" /> 
+  },
+  { 
+    value: 'deepseek', 
+    label: 'DeepSeek (Local / Cloud)', 
+    icon: <img src="/assets/provider-logo/deepseek.jpg" alt="DeepSeek" className="w-4 h-4 rounded object-cover" /> 
+  },
+];
+
+const priorityOptions: CustomSelectOption[] = [
+  { value: 'primary', label: 'Primary Provider (Route 1)' },
+  { value: 'fallback', label: 'Fallback on HTTP 429 (Route 2)' },
+  { value: 'cache', label: 'Offline Local Cache (Route 3)' },
+];
 
 export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   isOpen,
@@ -29,6 +43,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   onSaveProvider
 }) => {
   const [providerService, setProviderService] = useState('anthropic');
+  const [routingPriority, setRoutingPriority] = useState('primary');
   const [apiKey, setApiKey] = useState('');
 
   if (!isOpen) return null;
@@ -40,45 +55,42 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
     setApiKey('');
   };
 
-  const currentLogo = getProviderLogo(providerService);
+  const selectedOption = providerOptions.find((opt) => opt.value === providerService);
 
   return (
     <div className="fixed inset-0 bg-canvas/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 select-none">
-      <div className="w-full max-w-lg bg-surface-card border border-surface-border rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[90vh]">
-        <div className="h-12 border-b border-surface-border px-5 flex items-center justify-between shrink-0 bg-surface">
+      <div className="w-full max-w-lg bg-surface-card border border-surface-border rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
+        <div className="h-12 border-b border-surface-border px-5 flex items-center justify-between shrink-0 bg-surface rounded-t-2xl">
           <div className="flex items-center gap-2">
             <Key className="w-4 h-4 text-brand-blue" />
             <span className="text-sm font-semibold text-white">Add Provider Key</span>
           </div>
           <button 
             onClick={onClose} 
-            className="p-1 hover:bg-surface-elevated rounded-md text-neutral-400 hover:text-white transition"
+            className="p-1 hover:bg-surface-elevated rounded-md text-neutral-400 hover:text-white transition cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="p-5 space-y-4 text-xs overflow-y-auto">
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-visible">
+          <div className="p-5 space-y-4 text-xs overflow-visible">
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="font-medium text-neutral-300">Provider Service</label>
-                {currentLogo && (
+                {selectedOption?.icon && (
                   <div className="w-5 h-5 rounded-md overflow-hidden shrink-0 shadow-sm">
-                    <img src={currentLogo} alt={providerService} className="w-full h-full object-cover" />
+                    {selectedOption.icon}
                   </div>
                 )}
               </div>
-              <select 
+              <CustomSelect 
                 value={providerService}
-                onChange={(e) => setProviderService(e.target.value)}
-                className="w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-white focus:outline-none focus:border-brand-blue"
-              >
-                <option value="anthropic">Anthropic (Claude 3.7 / 3.5)</option>
-                <option value="openai">OpenAI (GPT-4o, o3-mini)</option>
-                <option value="google">Google Cloud / Gemini</option>
-                <option value="deepseek">DeepSeek (Local / Cloud)</option>
-              </select>
+                onChange={setProviderService}
+                options={providerOptions}
+                headerTitle="Available Providers"
+                headerBadge="4 Active"
+              />
             </div>
 
             <div className="space-y-1.5">
@@ -95,11 +107,12 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
 
             <div className="space-y-1.5">
               <label className="font-medium text-neutral-300">Routing Priority</label>
-              <select className="w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-white focus:outline-none focus:border-brand-blue">
-                <option>Primary Provider (Route 1)</option>
-                <option>Fallback on HTTP 429 (Route 2)</option>
-                <option>Offline Local Cache (Route 3)</option>
-              </select>
+              <CustomSelect
+                value={routingPriority}
+                onChange={setRoutingPriority}
+                options={priorityOptions}
+                headerTitle="Priority Tier"
+              />
             </div>
           </div>
 

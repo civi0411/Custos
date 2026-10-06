@@ -50,6 +50,7 @@ export function useTerminalCommands({ currentMode, onModeChange }: UseTerminalCo
   };
 
   const resetToCustos = () => {
+    onModeChange('Custos');
     setShowModeSelector(false);
     addLine('system', '✔ Đã quay lại chế độ [custos].');
   };
@@ -190,15 +191,36 @@ export function useTerminalCommands({ currentMode, onModeChange }: UseTerminalCo
     }
 
     const parts = trimmed.split(/\s+/);
-    const firstWord = parts[0].toLowerCase();
+    let firstWord = parts[0].toLowerCase();
+    if (firstWord.startsWith('/')) {
+      firstWord = firstWord.slice(1);
+    }
     const command = firstWord === 'custos' ? (parts[1] || '').toLowerCase() : firstWord;
+    const cleanCommand = command.startsWith('/') ? command.slice(1) : command;
     const args = firstWord === 'custos' ? parts.slice(2) : parts.slice(1);
 
-    switch (command) {
+    switch (cleanCommand) {
       case 'clear':
       case 'cls':
         clearTerminal();
         break;
+
+      case 'permit':
+      case 'p': {
+        const pending = CustosApi.getPendingPermits();
+        if (pending.length === 0) {
+          addLine('info', 'Hiện không có Giấy phép Thực thi (ExecutionPermit) nào đang chờ duyệt.');
+        } else {
+          const p = pending[0];
+          addLine('warning', `[${p.risk.toUpperCase()} RISK] ${p.actionType}`);
+          addLine('info', `Tệp mục tiêu: ${p.filePath}`);
+          addLine('prompt', 'Phê duyệt giấy phép thực thi này? [Y/n] (hoặc bấm nút bên dưới):', {
+            permitId: p.id,
+            showControls: true,
+          });
+        }
+        break;
+      }
 
       case 'help':
       case '?':
@@ -292,7 +314,8 @@ export function useTerminalCommands({ currentMode, onModeChange }: UseTerminalCo
       }
 
       default: {
-        const isSpecialized = currentMode && currentMode !== 'standard' && currentMode !== 'custos';
+        const normalizedMode = String(currentMode).toLowerCase();
+        const isSpecialized = normalizedMode !== 'standard' && normalizedMode !== 'custos';
         if (isSpecialized) {
           await runVibeExecution(trimmed, currentMode as OperationalMode);
         } else {

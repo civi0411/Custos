@@ -2381,12 +2381,15 @@ kbd {
   position: absolute;
   bottom: calc(100% + 8px);
   left: 12px;
-  width: 220px;
-  background: #212121;
+  width: 360px;
+  max-height: 380px;
+  background: #1c1c1f;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.06);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08);
   padding: 6px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   z-index: 70;
   animation: slashAppear 0.14s cubic-bezier(0.16, 1, 0.3, 1);
@@ -2403,9 +2406,36 @@ kbd {
   }
 }
 
-.slash-palette-item {
+.slash-palette-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #71717a;
+  text-transform: uppercase;
+}
+
+.slash-palette-count {
+  font-size: 0.68rem;
+  color: #52525b;
+}
+
+.slash-palette-list {
+  overflow-y: auto;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.slash-palette-item {
+  display: flex;
+  align-items: flex-start;
   gap: 10px;
   padding: 8px 10px;
   border-radius: 8px;
@@ -2416,7 +2446,7 @@ kbd {
 
 .slash-palette-item:hover,
 .slash-palette-item.active {
-  background: #2f2f2f;
+  background: #2a2a2e;
 }
 
 .slash-item-icon {
@@ -2424,17 +2454,50 @@ kbd {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.slash-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.slash-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .slash-item-name {
   font-family: var(--font-mono);
   font-weight: 600;
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   white-space: nowrap;
 }
 
+.slash-item-category {
+  font-size: 0.65rem;
+  color: #71717a;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.slash-item-description {
+  font-size: 0.75rem;
+  color: #a1a1aa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .slash-palette-empty {
-  padding: 12px;
+  padding: 14px;
   font-size: 0.8rem;
   color: #a1a1aa;
   text-align: center;

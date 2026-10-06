@@ -3,15 +3,30 @@ import React from 'react';
 interface SplitterProps {
   onDragStart: (e: React.MouseEvent) => void;
   onDoubleClick: () => void;
+  isDragging?: boolean;
 }
 
-export const Splitter: React.FC<SplitterProps> = ({ onDragStart, onDoubleClick }) => {
+export const Splitter: React.FC<SplitterProps> = ({ onDragStart, onDoubleClick, isDragging }) => {
   return (
     <div 
       onMouseDown={onDragStart}
       onDoubleClick={onDoubleClick}
-      className="w-1 hover:w-1.5 bg-surface-border hover:bg-brand-blue cursor-col-resize transition-all shrink-0 z-10 hidden md:block select-none" 
-      title="Drag to resize panels (Double click to reset 50/50)"
-    />
+      className={`has-tooltip relative cursor-col-resize transition-all shrink-0 z-20 hover:z-30 hidden md:block select-none group ${
+        isDragging 
+          ? 'w-1 bg-brand-blue' 
+          : 'w-px hover:w-1 bg-surface-border hover:bg-brand-blue'
+      }`} 
+    >
+      {/* Invisible wider hit target padding for easy grabbing */}
+      <div className="absolute inset-y-0 -left-1.5 -right-1.5 cursor-col-resize pointer-events-auto" />
+      {!isDragging && (
+        <span
+          role="tooltip"
+          className="tooltip-label absolute top-4 left-3 px-2 py-1 bg-surface-elevated border border-surface-border text-neutral-200 text-[11px] font-medium rounded-md whitespace-nowrap shadow-xl z-[9999] pointer-events-none"
+        >
+          Drag to resize · Double-click to reset
+        </span>
+      )}
+    </div>
   );
 };

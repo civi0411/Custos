@@ -197,27 +197,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Toggle settings (⌘,)
+      // Toggle settings (Ctrl+,)
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault();
         setIsSettingsOpen((prev) => !prev);
       }
-      // Toggle Sessions Sidebar (⌘B)
+      // Toggle Sessions Sidebar (Ctrl+B)
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         setIsSessionsCollapsed((prev) => !prev);
       }
-      // UI Zoom In (⌘+ or ⌘=)
+      // Toggle Split View / Full view (Ctrl+\)
+      if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
+        e.preventDefault();
+        setViewMode((prev) => {
+          if (prev === 'split') return 'chat';
+          if (prev === 'chat') return 'diff';
+          return 'split';
+        });
+      }
+      // UI Zoom In (Ctrl++ or Ctrl+=)
       if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
         e.preventDefault();
         handleStepUiScale(10);
       }
-      // UI Zoom Out (⌘-)
+      // UI Zoom Out (Ctrl+-)
       if ((e.metaKey || e.ctrlKey) && (e.key === '-' || e.key === '_')) {
         e.preventDefault();
         handleStepUiScale(-10);
       }
-      // Reset UI Scale (⌘0)
+      // Reset UI Scale (Ctrl+0)
       if ((e.metaKey || e.ctrlKey) && e.key === '0') {
         e.preventDefault();
         handleSetUiScale(100);

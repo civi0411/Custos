@@ -11,7 +11,7 @@ import { CustosApi, subscribeToApi } from './services/custosApi';
 import './App.css';
 
 export function App() {
-  const [currentMode, setCurrentMode] = useState<OperationalMode>('Code');
+  const [currentMode, setCurrentMode] = useState<OperationalMode>('Custos');
   const [viewMode, setViewMode] = useState<ViewMode>('split');
   const [crtEffect, setCrtEffect] = useState<boolean>(false);
   const [termWidth, setTermWidth] = useState<number>(100);

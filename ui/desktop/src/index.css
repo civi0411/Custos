@@ -82,6 +82,151 @@ button {
   font-size: inherit;
 }
 
+
+/* Ensure all clickable buttons and interactive triggers have pointer cursor */
+button,
+[role="button"],
+[role="tab"],
+[role="menuitem"],
+[role="switch"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+summary,
+label:has(input[type="checkbox"]),
+label:has(input[type="radio"]),
+label[for] {
+  cursor: pointer;
+}
+
+button:disabled,
+button[disabled],
+[role="button"][aria-disabled="true"],
+[role="tab"][aria-disabled="true"],
+[role="menuitem"][aria-disabled="true"],
+[role="switch"][aria-disabled="true"],
+input[type="button"]:disabled,
+input[type="submit"]:disabled,
+input[type="reset"]:disabled {
+  cursor: not-allowed;
+}
+
+
+/* Custom styled dropdown select element */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: var(--color-surface-elevated);
+  border: 1px solid rgba(46, 48, 61, 0.7);
+  border-radius: 0.5rem;
+  color: #f1f2f6;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%238c92a4' stroke-width='2'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e");
+  background-position: right 0.75rem center;
+  background-repeat: no-repeat;
+  background-size: 0.95rem 0.95rem;
+  padding-right: 2.25rem !important;
+  cursor: pointer;
+  transition: all 0.15s ease-in-out;
+}
+
+select:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-surface-border);
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23ffffff' stroke-width='2'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3e%3c/svg%3e");
+}
+
+select:focus {
+  outline: none;
+  border-color: #0070f3 !important;
+  box-shadow: 0 0 0 1px rgba(0, 112, 243, 0.4);
+}
+
+select option {
+  background-color: #1f2029;
+  color: #e2e4ea;
+  padding: 8px 12px;
+}
+
+select option:checked {
+  background-color: #252732;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+/* Clean & Minimal Checkbox */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.25rem;
+  background-color: var(--color-surface-elevated);
+  border: 1px solid var(--color-surface-border);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  position: relative;
+  vertical-align: middle;
+}
+
+input[type="checkbox"]:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-surface-border-hover);
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: 1px solid var(--color-brand-blue);
+  outline-offset: 1px;
+}
+
+input[type="checkbox"]:checked {
+  background-color: var(--color-brand-blue);
+  border-color: var(--color-brand-blue);
+  background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M3.5 8.5l3 3 6-6'/%3e%3c/svg%3e");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 70% 70%;
+}
+
+input[type="checkbox"]:checked:hover {
+  background-color: #0060df;
+  border-color: #0060df;
+}
+
+/* Emerald Accent Checkbox (simple flat style, no glow) */
+input[type="checkbox"].accent-emerald-500:checked,
+input[type="checkbox"].accent-emerald:checked {
+  background-color: #10b981;
+  border-color: #10b981;
+}
+
+input[type="checkbox"].accent-emerald-500:checked:hover,
+input[type="checkbox"].accent-emerald:checked:hover {
+  background-color: #059669;
+  border-color: #059669;
+}
+
+/* Purple Accent Checkbox (simple flat style, no glow) */
+input[type="checkbox"].accent-purple-500:checked,
+input[type="checkbox"].accent-purple:checked {
+  background-color: #a855f7;
+  border-color: #a855f7;
+}
+
+input[type="checkbox"].accent-purple-500:checked:hover,
+input[type="checkbox"].accent-purple:checked:hover {
+  background-color: #9333ea;
+  border-color: #9333ea;
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  border-color: var(--color-surface-border);
+}
+
 /* Custom dark sleek scrollbars */
 ::-webkit-scrollbar {
   width: 5px;
@@ -106,17 +251,88 @@ button {
   position: relative;
 }
 
+.has-tooltip:hover {
+  z-index: 60;
+}
+
 .has-tooltip:hover .tooltip-label {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(0);
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 .tooltip-label {
   opacity: 0;
   visibility: hidden;
-  transform: translateX(-4px);
+  z-index: 9999;
   transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Default / Right positioning (used in IconSidebar) */
+.tooltip-label:not(.tooltip-top):not(.tooltip-bottom):not(.tooltip-left):not(.tooltip-right) {
+  transform: translateX(-4px);
+}
+.has-tooltip:hover .tooltip-label:not(.tooltip-top):not(.tooltip-bottom):not(.tooltip-left):not(.tooltip-right) {
+  transform: translateX(0) !important;
+}
+
+.tooltip-label.tooltip-right {
+  transform: translateY(-50%) translateX(-4px);
+}
+.has-tooltip:hover .tooltip-label.tooltip-right {
+  transform: translateY(-50%) translateX(0) !important;
+}
+.tooltip-label.tooltip-right.tooltip-align-start,
+.tooltip-label.tooltip-right.tooltip-align-end {
+  transform: translateX(-4px);
+}
+.has-tooltip:hover .tooltip-label.tooltip-right.tooltip-align-start,
+.has-tooltip:hover .tooltip-label.tooltip-right.tooltip-align-end {
+  transform: translateX(0) !important;
+}
+
+.tooltip-label.tooltip-left {
+  transform: translateY(-50%) translateX(4px);
+}
+.has-tooltip:hover .tooltip-label.tooltip-left {
+  transform: translateY(-50%) translateX(0) !important;
+}
+.tooltip-label.tooltip-left.tooltip-align-start,
+.tooltip-label.tooltip-left.tooltip-align-end {
+  transform: translateX(4px);
+}
+.has-tooltip:hover .tooltip-label.tooltip-left.tooltip-align-start,
+.has-tooltip:hover .tooltip-label.tooltip-left.tooltip-align-end {
+  transform: translateX(0) !important;
+}
+
+.tooltip-label.tooltip-bottom {
+  transform: translateX(-50%) translateY(-4px);
+}
+.has-tooltip:hover .tooltip-label.tooltip-bottom {
+  transform: translateX(-50%) translateY(0) !important;
+}
+.tooltip-label.tooltip-bottom.tooltip-align-start,
+.tooltip-label.tooltip-bottom.tooltip-align-end {
+  transform: translateY(-4px);
+}
+.has-tooltip:hover .tooltip-label.tooltip-bottom.tooltip-align-start,
+.has-tooltip:hover .tooltip-label.tooltip-bottom.tooltip-align-end {
+  transform: translateY(0) !important;
+}
+
+.tooltip-label.tooltip-top {
+  transform: translateX(-50%) translateY(4px);
+}
+.has-tooltip:hover .tooltip-label.tooltip-top {
+  transform: translateX(-50%) translateY(0) !important;
+}
+.tooltip-label.tooltip-top.tooltip-align-start,
+.tooltip-label.tooltip-top.tooltip-align-end {
+  transform: translateY(4px);
+}
+.has-tooltip:hover .tooltip-label.tooltip-top.tooltip-align-start,
+.has-tooltip:hover .tooltip-label.tooltip-top.tooltip-align-end {
+  transform: translateY(0) !important;
 }
 
 *:focus-visible {
@@ -206,4 +422,35 @@ button {
 .markdown-body a:hover {
   text-decoration: underline;
   text-shadow: 0 0 8px var(--color-brand-blue-glow);
+}
+
+/* Smooth fade mask for chat scroll views */
+.chat-scroll-mask {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0px,
+    rgba(0, 0, 0, 0.08) 6px,
+    rgba(0, 0, 0, 0.35) 16px,
+    rgba(0, 0, 0, 0.8) 28px,
+    black 40px,
+    black calc(100% - 40px),
+    rgba(0, 0, 0, 0.8) calc(100% - 28px),
+    rgba(0, 0, 0, 0.35) calc(100% - 16px),
+    rgba(0, 0, 0, 0.08) calc(100% - 6px),
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0px,
+    rgba(0, 0, 0, 0.08) 6px,
+    rgba(0, 0, 0, 0.35) 16px,
+    rgba(0, 0, 0, 0.8) 28px,
+    black 40px,
+    black calc(100% - 40px),
+    rgba(0, 0, 0, 0.8) calc(100% - 28px),
+    rgba(0, 0, 0, 0.35) calc(100% - 16px),
+    rgba(0, 0, 0, 0.08) calc(100% - 6px),
+    transparent 100%
+  );
+}
 }

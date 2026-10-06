@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Layers, Plus, ChevronLeft, Search, Inbox } from 'lucide-react';
 import { Session } from '@/types';
+import { Tooltip } from '@/components/Tooltip';
+
 
 interface SessionsSidebarProps {
   currentProject: string;
@@ -46,20 +48,24 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({
           </span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <button 
-            onClick={onOpenNewSessionModal} 
-            className="w-6 h-6 rounded-md bg-surface-card hover:bg-surface-elevated border border-surface-border flex items-center justify-center text-neutral-400 hover:text-white transition" 
-            title="Create task"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-          <button 
-            onClick={onToggleCollapse} 
-            className="w-6 h-6 rounded-md hover:bg-surface-elevated text-neutral-500 hover:text-neutral-300 flex items-center justify-center transition lg:hidden" 
-            title="Collapse Sessions"
-          >
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </button>
+          <Tooltip content="New Session" position="bottom" align="end">
+            <button 
+              onClick={onOpenNewSessionModal} 
+              className="w-6 h-6 rounded-md bg-surface-card hover:bg-surface-elevated border border-surface-border flex items-center justify-center text-neutral-400 hover:text-white transition" 
+              title="New Session"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
+          <Tooltip content="Collapse Sessions" position="bottom" align="end" className="lg:hidden">
+            <button 
+              onClick={onToggleCollapse} 
+              className="w-6 h-6 rounded-md hover:bg-surface-elevated text-neutral-500 hover:text-neutral-300 flex items-center justify-center transition" 
+              title="Collapse Sessions"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
