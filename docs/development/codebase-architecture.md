@@ -19,6 +19,8 @@
 
 > **Workspace restructuring index:** [Master Part 1/15](../../Custos.md), [workspace/UI](../architecture/agent-workspace-and-ui.md), [skills/capabilities](../architecture/capability-catalog-and-skills.md) and [migration plan](workspace-restructuring-plan.md) define the current target. `ui/desktop` is the main product frontend; `ui/cli` is an existing React frontend, distinct from the Rust CLI at `crates/custos-app/cli`. Hosts remain under `crates/custos-app`; no ADE/UI crate or `custos-gui` was created. Domain features stay in packs; shared orchestration in runtime; I/O in adapters/persistence. This docs-first change adds documentation only: source paths and historical catalog counts are not migration results. Current uncommitted Repo Intelligence changes are preserved and require their own catalog/build audit.
 
+> **SADE–OrCa migration index:** [Implementation plan](sade-orca-integration-plan.md) and Host Thinning refactor completed Waves H0-H5: [`daemon/src/profile.rs`](../../crates/custos-daemon/src/profile.rs) provides canonical profile directory resolution (`~/.custos/profiles/<profile_id>`) and singleton process file lock (`daemon.lock`); [`daemon/src/main.rs`](../../crates/custos-daemon/src/main.rs) acts as the sole backend owner hosting loopback TCP (`daemon.port`) and stdio JSONL; both [`desktop/src/lib.rs`](../../crates/custos-app/desktop/src/lib.rs) and [`cli/src/lib.rs`](../../crates/custos-app/cli/src/lib.rs) are now thin clients holding `Arc<LocalApiClient>`.
+
 > **Runtime audit note:** File presence and catalog inclusion do not prove compilation or daemon composition. At commit `3e4dac4`, `crates/custos-runtime/src/engine/` contains Goose-derived source but is not mounted from `runtime/src/lib.rs`; `runtime/src/agent/` is compiled but its state machine is not composed by `custos-daemon`. `ModelProvider` and the Goose-derived `Provider` coexist; Codex/Claude/Antigravity model-named adapters are stubs. An adapter's assurance must be established by call-path and effect-interception tests, not this index.
 
 > **Protocol-boundary index:** [Part 7](../../Custos.md#phần-7-protocol-và-hub-layer) owns the decisions; [protocol and connectivity boundaries](../architecture/protocol-and-connectivity-hubs.md) owns the implementation plan. The current [daemon main](../../crates/custos-daemon/src/main.rs) serves stdio JSONL, not socket/pipe/HTTP. [Bridge](../../crates/custos-bridge/src/lib.rs) imports SQLite persistence only in tests via a dev-dependency, not the production bridge path. The [MCP client](../../crates/custos-adapters/src/mcp/adapters/client.rs) fabricates a mock success; [roaming A2A](../../crates/custos-adapters/src/roaming/a2a.rs) simulates dispatch. ACP, CAP, real A2A and extra Local API listeners are target/optional work, not active protocols. No new physical files were created for these target bindings by the protocol decision.
@@ -878,19 +880,21 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-daemon`
 - **Chủ sở hữu chính (Owner):** **Vĩ (Chief Architect)**
 - **Quy tắc ranh giới:** File main.rs duy nhất được phép ráp nối storage, runtime, adapters.
-- **Tổng số file:** 6 files | **Tổng số dòng mã:** 1,410 lines
-- **Mô tả chức năng:** Tiến trình dịch vụ chạy ngầm của Custos: Lắng nghe Unix Domain Socket, khởi tạo SQLite pool, điều phối Local API dispatcher và bảo đảm tính bền vững.
+- **Tổng số file:** 7 files | **Tổng số dòng mã:** 1,760 lines
+- **Mô tả chức năng:** Tiến trình dịch vụ chạy ngầm của Custos: Lắng nghe Unix Domain Socket / TCP loopback, khởi tạo SQLite pool, điều phối Local API dispatcher và bảo đảm tính bền vững.
 
 #### Danh mục các file bên trong `crates/custos-daemon/`:
 
 | Tập tin | Số dòng | Vai trò & Trách nhiệm kiến trúc | Các Struct / Trait / Hàm cốt lõi |
 |---|:---:|---|---|
-| [`Cargo.toml`](../../crates/custos-daemon/Cargo.toml) | 32 | Module Cargo: phục vụ các cấu trúc và chức năng liên quan | None |
+| [`Cargo.toml`](../../crates/custos-daemon/Cargo.toml) | 39 | Module Cargo: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/api.rs`](../../crates/custos-daemon/src/api.rs) | 714 | Local API Dispatcher wrapping TaskService, SessionManager, and BridgeService for IPC callers. | `struct LocalApiDispatcher`, `fn new`, `struct MockStore` |
-| [`src/lib.rs`](../../crates/custos-daemon/src/lib.rs) | 13 | Module lib: phục vụ các cấu trúc và chức năng liên quan | None |
-| [`src/local_api/lib.rs`](../../crates/custos-daemon/src/local_api/lib.rs) | 579 | Abstract transport for communicating with the Custos Daemon | `struct ApiRequest`, `struct ApiResponse`, `fn new`, `fn ok` |
-| [`src/main.rs`](../../crates/custos-daemon/src/main.rs) | 31 | Điểm khởi đầu thực thi duy nhất của daemon (Composition Root) | None |
-| [`src/runtime.rs`](../../crates/custos-daemon/src/runtime.rs) | 41 | Khởi tạo và cấu hình runtime ngầm | `struct CustosRuntime`, `fn bootstrap` |
+| [`src/lib.rs`](../../crates/custos-daemon/src/lib.rs) | 16 | Module lib: export api, profile, runtime, và local_api | None |
+| [`src/local_api/lib.rs`](../../crates/custos-daemon/src/local_api/lib.rs) | 680 | Abstract transport for communicating with the Custos Daemon | `struct ApiRequest`, `struct ApiResponse`, `struct TcpTransport`, `struct LocalApiClient` |
+| [`src/main.rs`](../../crates/custos-daemon/src/main.rs) | 108 | Điểm khởi đầu thực thi duy nhất của daemon (Composition Root, Singleton Lock, TCP/stdio server) | None |
+| [`src/profile.rs`](../../crates/custos-daemon/src/profile.rs) | 291 | Profile directory resolver, singleton file lock (`daemon.lock`), và auto-connect helper | `struct ProfileResolver`, `struct DaemonLock`, `fn ensure_daemon_client` |
+| [`src/runtime.rs`](../../crates/custos-daemon/src/runtime.rs) | 48 | Khởi tạo và cấu hình runtime ngầm | `struct CustosRuntime`, `fn bootstrap`, `fn bootstrap_profile` |
+
 
 ### 3.10. Crate `custos-sdk` — Layer 4: Client Bindings
 
