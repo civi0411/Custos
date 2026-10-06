@@ -4,9 +4,11 @@
 
 use async_trait::async_trait;
 use custos_domain::{
-    Session, SessionJournalEntry, Task, TaskContract, TaskStatus, VerificationClaim,
+    ExecutionWorkspace, Session, SessionJournalEntry, Task, TaskContract, TaskStatus,
+    VerificationClaim, WorkspaceKind, WorkspaceLineage,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 pub const METHOD_TASKS_CREATE: &str = "v1.tasks.create";
 pub const METHOD_TASKS_GET: &str = "v1.tasks.get";
@@ -26,6 +28,10 @@ pub const METHOD_BRIDGE_STEER: &str = "v1.bridge.steer";
 pub const METHOD_OI_EXPLAIN: &str = "v1.oi.explain";
 pub const METHOD_WORKFLOW_START_RUN: &str = "v1.workflow.start_run";
 pub const METHOD_WORKFLOW_CANCEL_RUN: &str = "v1.workflow.cancel_run";
+pub const METHOD_WORKSPACES_CREATE: &str = "v1.workspaces.create";
+pub const METHOD_WORKSPACES_GET: &str = "v1.workspaces.get";
+pub const METHOD_WORKSPACES_LIST: &str = "v1.workspaces.list";
+pub const METHOD_WORKSPACES_ARCHIVE: &str = "v1.workspaces.archive";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiRequest {
@@ -174,6 +180,31 @@ pub struct CancelRunRequest {
     pub reason: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateWorkspaceApiRequest {
+    pub name: String,
+    pub kind: WorkspaceKind,
+    pub path: String,
+    #[serde(default)]
+    pub lineage: Option<WorkspaceLineage>,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    pub setup_script: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetWorkspaceApiRequest {
+    pub workspace_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArchiveWorkspaceApiRequest {
+    pub workspace_id: String,
+    #[serde(default)]
+    pub delete_physical: bool,
+}
+
 /// Abstract transport for communicating with the Custos Daemon
 #[async_trait]
 pub trait ApiTransport: Send + Sync {
@@ -273,15 +304,104 @@ impl ApiTransport for ProcessTransport {
     }
 }
 
+/// TCP socket transport communicating with custos-daemon local API server
+pub struct TcpTransport {
+    addr: String,
+}
+
+impl TcpTransport {
+    pub fn new(addr: impl Into<String>) -> Self {
+        Self { addr: addr.into() }
+    }
+}
+
+#[async_trait]
+impl ApiTransport for TcpTransport {
+    async fn send_request(&self, req: ApiRequest) -> Result<ApiResponse, String> {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+        let stream = tokio::net::TcpStream::connect(&self.addr)
+            .await
+            .map_err(|e| format!("Failed to connect to daemon at {}: {e}", self.addr))?;
+        let (reader, mut writer) = stream.into_split();
+
+        let mut encoded = serde_json::to_vec(&req).map_err(|e| e.to_string())?;
+        encoded.push(b'\n');
+
+        writer.write_all(&encoded).await.map_err(|e| e.to_string())?;
+        writer.flush().await.map_err(|e| e.to_string())?;
+
+        let mut lines = BufReader::new(reader).lines();
+        while let Some(line) = lines.next_line().await.map_err(|e| e.to_string())? {
+            if line.trim().is_empty() {
+                continue;
+            }
+            return serde_json::from_str::<ApiResponse>(&line)
+                .map_err(|e| format!("Invalid JSON response: {e}"));
+        }
+        Err("Daemon closed TCP connection without response".to_string())
+    }
+}
+
 /// Strongly-typed client for the Custos Local API
+#[derive(Clone)]
 pub struct LocalApiClient {
-    transport: Box<dyn ApiTransport>,
+    transport: Arc<dyn ApiTransport>,
 }
 
 impl LocalApiClient {
     pub fn new(transport: Box<dyn ApiTransport>) -> Self {
+        Self {
+            transport: Arc::from(transport),
+        }
+    }
+
+    pub fn with_arc_transport(transport: Arc<dyn ApiTransport>) -> Self {
         Self { transport }
     }
+
+    pub fn from_tcp(addr: impl Into<String>) -> Self {
+        Self::with_arc_transport(Arc::new(TcpTransport::new(addr)))
+    }
+
+    pub fn from_profile(profile: &crate::profile::ProfileResolver) -> Result<Self, String> {
+        let port = profile
+            .read_port()
+            .ok_or_else(|| "Daemon port file not found or daemon not running".to_string())?;
+        Ok(Self::from_tcp(format!("127.0.0.1:{port}")))
+    }
+
+    pub async fn ping(&self) -> Result<(), String> {
+        let req = ApiRequest::new("ping", "v1.ping", serde_json::json!({}));
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            Err(err)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub async fn send_request(&self, req: ApiRequest) -> Result<ApiResponse, String> {
+        self.transport.send_request(req).await
+    }
+
+    pub async fn dispatch_raw(&self, raw: &str) -> String {
+        let req: ApiRequest = match serde_json::from_str(raw) {
+            Ok(r) => r,
+            Err(e) => {
+                let err_resp = ApiResponse::error("", format!("Invalid JSON request: {e}"));
+                return serde_json::to_string(&err_resp).unwrap_or_else(|_| "{}".to_string());
+            }
+        };
+        match self.transport.send_request(req).await {
+            Ok(resp) => serde_json::to_string(&resp).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}")),
+            Err(err) => {
+                let err_resp = ApiResponse::error("", err);
+                serde_json::to_string(&err_resp).unwrap_or_else(|_| "{}".to_string())
+            }
+        }
+    }
+
 
     pub async fn create_task(
         &self,
@@ -598,6 +718,76 @@ impl LocalApiClient {
         let result = resp.result.ok_or("Empty result in response")?;
         serde_json::from_value(result).map_err(|e| format!("Failed to parse ExplainReport: {e}"))
     }
+
+    pub async fn create_workspace(
+        &self,
+        req_id: &str,
+        req: CreateWorkspaceApiRequest,
+    ) -> Result<ExecutionWorkspace, String> {
+        let params = serde_json::to_value(req).map_err(|e| e.to_string())?;
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACES_CREATE, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse ExecutionWorkspace: {e}"))
+    }
+
+    pub async fn get_workspace(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+    ) -> Result<ExecutionWorkspace, String> {
+        let params = serde_json::json!({ "workspace_id": workspace_id });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACES_GET, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse ExecutionWorkspace: {e}"))
+    }
+
+    pub async fn list_workspaces(
+        &self,
+        req_id: &str,
+    ) -> Result<Vec<ExecutionWorkspace>, String> {
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACES_LIST, serde_json::json!({}));
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse Vec<ExecutionWorkspace>: {e}"))
+    }
+
+    pub async fn archive_workspace(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        delete_physical: bool,
+    ) -> Result<(), String> {
+        let params = serde_json::to_value(ArchiveWorkspaceApiRequest {
+            workspace_id: workspace_id.to_string(),
+            delete_physical,
+        })
+        .map_err(|e| e.to_string())?;
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACES_ARCHIVE, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -632,4 +822,36 @@ mod tests {
         assert_eq!(task.title, "Mock Task");
         assert_eq!(task.status, TaskStatus::Draft);
     }
+
+    #[tokio::test]
+    async fn test_tcp_transport_roundtrip() {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+        use tokio::net::TcpListener;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        tokio::spawn(async move {
+            if let Ok((mut socket, _)) = listener.accept().await {
+                let (reader, mut writer) = socket.split();
+                let mut lines = BufReader::new(reader).lines();
+                if let Ok(Some(line)) = lines.next_line().await {
+                    let req: ApiRequest = serde_json::from_str(&line).unwrap();
+                    assert_eq!(req.method, "v1.ping");
+                    let resp = ApiResponse::success(req.id, serde_json::json!({ "status": "pong" }));
+                    let mut data = serde_json::to_vec(&resp).unwrap();
+                    data.push(b'\n');
+                    let _ = writer.write_all(&data).await;
+                    let _ = writer.flush().await;
+                }
+            }
+        });
+
+        let client = LocalApiClient::from_tcp(format!("127.0.0.1:{port}"));
+        let req = ApiRequest::new("ping_1", "v1.ping", serde_json::json!({}));
+        let resp = client.send_request(req).await.unwrap();
+        assert!(resp.is_success());
+        assert_eq!(resp.result.unwrap(), serde_json::json!({ "status": "pong" }));
+    }
 }
+

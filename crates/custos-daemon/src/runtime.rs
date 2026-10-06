@@ -32,11 +32,18 @@ pub struct CustosRuntime {
     pub harness: Arc<dyn AgentRuntimePort>,
     pub workflow: Arc<dyn WorkflowPort>,
     pub lease_manager: Arc<custos_runtime::workflow::WorkspaceLeaseManager>,
+    pub workspace_coordinator: Arc<custos_runtime::workspace::WorkspaceCoordinator>,
 }
 
 impl CustosRuntime {
+    pub fn bootstrap_profile(profile: &crate::profile::ProfileResolver) -> Result<Self, DomainError> {
+        let db_path = profile.database_path();
+        Self::bootstrap(&db_path.to_string_lossy())
+    }
+
     pub fn bootstrap(database_path: &str) -> Result<Self, DomainError> {
         let store = Arc::new(SqliteTaskStore::new(database_path)?);
+
         // Crash Recovery Reconcile (Gate 3): transition any InFlight effects to Uncertain on startup
         let _ = store.outbox().reconcile_on_startup();
         let task_service = Arc::new(TaskService::new(store.clone()));
@@ -81,13 +88,20 @@ impl CustosRuntime {
                 .with_lease_manager(lease_manager.clone()),
         );
 
+        let workspace_provider = Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new());
+        let workspace_coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
+            store.clone(),
+            workspace_provider,
+        ));
+
         let local_api = Arc::new(
             LocalApiDispatcher::new(
                 task_service.clone(),
                 session_manager.clone(),
                 bridge_service.clone(),
             )
-            .with_workflow(workflow.clone()),
+            .with_workflow(workflow.clone())
+            .with_workspace(workspace_coordinator.clone()),
         );
 
         Ok(Self {
@@ -102,6 +116,7 @@ impl CustosRuntime {
             harness,
             workflow,
             lease_manager,
+            workspace_coordinator,
         })
     }
 }

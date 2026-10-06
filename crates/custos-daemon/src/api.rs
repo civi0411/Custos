@@ -5,15 +5,18 @@
 use std::sync::Arc;
 
 pub use crate::custos_local_api::{
-    AdvanceTaskRequest, ApiRequest, ApiResponse, CancelRunRequest, CancelTaskRequest,
-    CompleteTaskRequest, CreateTaskRequest, StartRunRequest, METHOD_WORKFLOW_CANCEL_RUN,
-    METHOD_WORKFLOW_START_RUN,
+    AdvanceTaskRequest, ApiRequest, ApiResponse, ArchiveWorkspaceApiRequest, CancelRunRequest,
+    CancelTaskRequest, CompleteTaskRequest, CreateTaskRequest, CreateWorkspaceApiRequest,
+    GetWorkspaceApiRequest, StartRunRequest, METHOD_WORKFLOW_CANCEL_RUN, METHOD_WORKFLOW_START_RUN,
+    METHOD_WORKSPACES_ARCHIVE, METHOD_WORKSPACES_CREATE, METHOD_WORKSPACES_GET,
+    METHOD_WORKSPACES_LIST,
 };
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
 use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::{AdvanceTask, CancelTask, CreateTask, TaskService};
 use custos_domain::{SessionId, SessionMode, TaskContract, TaskStatus};
 use custos_runtime::session::SessionManager;
+use custos_runtime::workspace::{CreateWorkspaceRequest, WorkspaceCoordinator};
 
 /// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, and WorkflowPort for IPC callers.
 pub struct LocalApiDispatcher {
@@ -21,6 +24,7 @@ pub struct LocalApiDispatcher {
     session_manager: Arc<SessionManager>,
     bridge_service: Arc<BridgeService>,
     workflow: Option<Arc<dyn WorkflowPort>>,
+    workspace: Option<Arc<WorkspaceCoordinator>>,
 }
 
 impl LocalApiDispatcher {
@@ -34,11 +38,17 @@ impl LocalApiDispatcher {
             session_manager,
             bridge_service,
             workflow: None,
+            workspace: None,
         }
     }
 
     pub fn with_workflow(mut self, workflow: Arc<dyn WorkflowPort>) -> Self {
         self.workflow = Some(workflow);
+        self
+    }
+
+    pub fn with_workspace(mut self, workspace: Arc<WorkspaceCoordinator>) -> Self {
+        self.workspace = Some(workspace);
         self
     }
 
@@ -52,7 +62,11 @@ impl LocalApiDispatcher {
 
     pub async fn handle_request(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
+            "v1.ping" | "v1.health" => {
+                ApiResponse::success(req.id, serde_json::json!({ "status": "ok" }))
+            }
             "v1.tasks.create" => {
+
                 let params: CreateTaskRequest = match serde_json::from_value(req.params) {
                     Ok(p) => p,
                     Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
@@ -451,6 +465,100 @@ impl LocalApiDispatcher {
                         Ok(val) => ApiResponse::success(req.id, val),
                         Err(e) => ApiResponse::error(req.id, e.to_string()),
                     },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKSPACES_CREATE => {
+                let coordinator = match self.workspace.as_ref() {
+                    Some(c) => c,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "WorkspaceCoordinator not configured on daemon",
+                        )
+                    }
+                };
+                let params: CreateWorkspaceApiRequest = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
+                };
+                let create_req = CreateWorkspaceRequest {
+                    name: params.name,
+                    kind: params.kind,
+                    path: params.path,
+                    lineage: params.lineage,
+                    metadata: params.metadata,
+                    setup_script: params.setup_script,
+                };
+                match coordinator.create_workspace(create_req).await {
+                    Ok(ws) => match serde_json::to_value(&ws) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKSPACES_GET => {
+                let coordinator = match self.workspace.as_ref() {
+                    Some(c) => c,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "WorkspaceCoordinator not configured on daemon",
+                        )
+                    }
+                };
+                let ws_id = match req.params.get("workspace_id").and_then(|v| v.as_str()) {
+                    Some(id) => custos_domain::WorkspaceId::new(id),
+                    None => return ApiResponse::error(req.id, "Missing workspace_id param"),
+                };
+                match coordinator.get_workspace(&ws_id).await {
+                    Ok(Some(ws)) => match serde_json::to_value(&ws) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Ok(None) => ApiResponse::error(req.id, format!("Workspace {ws_id} not found")),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKSPACES_LIST => {
+                let coordinator = match self.workspace.as_ref() {
+                    Some(c) => c,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "WorkspaceCoordinator not configured on daemon",
+                        )
+                    }
+                };
+                match coordinator.list_workspaces().await {
+                    Ok(list) => match serde_json::to_value(&list) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKSPACES_ARCHIVE => {
+                let coordinator = match self.workspace.as_ref() {
+                    Some(c) => c,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "WorkspaceCoordinator not configured on daemon",
+                        )
+                    }
+                };
+                let params: ArchiveWorkspaceApiRequest = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
+                };
+                let ws_id = custos_domain::WorkspaceId::new(params.workspace_id);
+                match coordinator
+                    .archive_workspace(&ws_id, params.delete_physical)
+                    .await
+                {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "archived": true })),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
@@ -882,5 +990,96 @@ mod tests {
             serde_json::from_value(cancel_resp.result.unwrap()).unwrap();
         assert_eq!(receipt.run_id, handle.run_id);
         assert_eq!(receipt.reason, "Test cancel via API");
+    }
+
+    #[tokio::test]
+    async fn test_workspace_api_dispatch_lifecycle() {
+        use custos_adapters::workspace::LocalWorkspaceProvider;
+        use custos_domain::{ExecutionWorkspace, WorkspaceStatus};
+        use custos_persistence::SqliteTaskStore;
+        use custos_runtime::workspace::WorkspaceCoordinator;
+
+        let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+        let task_service = Arc::new(TaskService::new(store.clone()));
+        let session_manager = Arc::new(SessionManager::new());
+        let bridge_service = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
+        let workspace_provider = Arc::new(LocalWorkspaceProvider::new());
+        let coordinator = Arc::new(WorkspaceCoordinator::new(
+            store.clone(),
+            workspace_provider,
+        ));
+
+        let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
+            .with_workspace(coordinator);
+
+        let tmp = tempfile::tempdir().unwrap();
+        let ws_path = tmp.path().join("api_test_ws");
+        let path_str = ws_path.to_str().unwrap().to_string();
+
+        // 1. Create Workspace
+        let create_req = ApiRequest {
+            id: "req_ws_1".into(),
+            method: METHOD_WORKSPACES_CREATE.into(),
+            params: serde_json::json!({
+                "name": "api-workspace",
+                "kind": {
+                    "type": "folder",
+                    "path": path_str
+                },
+                "path": path_str,
+                "metadata": {
+                    "domain": "assistant"
+                }
+            }),
+        };
+        let create_resp = dispatcher.handle_request(create_req).await;
+        assert!(create_resp.error.is_none(), "Error: {:?}", create_resp.error);
+        let created_ws: ExecutionWorkspace =
+            serde_json::from_value(create_resp.result.unwrap()).unwrap();
+        assert_eq!(created_ws.name, "api-workspace");
+        assert_eq!(created_ws.status, WorkspaceStatus::Ready);
+        assert!(ws_path.exists());
+
+        // 2. Get Workspace
+        let get_req = ApiRequest {
+            id: "req_ws_2".into(),
+            method: METHOD_WORKSPACES_GET.into(),
+            params: serde_json::json!({
+                "workspace_id": created_ws.id.as_str()
+            }),
+        };
+        let get_resp = dispatcher.handle_request(get_req).await;
+        assert!(get_resp.error.is_none());
+        let loaded_ws: ExecutionWorkspace =
+            serde_json::from_value(get_resp.result.unwrap()).unwrap();
+        assert_eq!(loaded_ws.id, created_ws.id);
+
+        // 3. List Workspaces
+        let list_req = ApiRequest {
+            id: "req_ws_3".into(),
+            method: METHOD_WORKSPACES_LIST.into(),
+            params: serde_json::json!({}),
+        };
+        let list_resp = dispatcher.handle_request(list_req).await;
+        assert!(list_resp.error.is_none());
+        let workspaces: Vec<ExecutionWorkspace> =
+            serde_json::from_value(list_resp.result.unwrap()).unwrap();
+        assert_eq!(workspaces.len(), 1);
+
+        // 4. Archive Workspace (with delete_physical: true)
+        let archive_req = ApiRequest {
+            id: "req_ws_4".into(),
+            method: METHOD_WORKSPACES_ARCHIVE.into(),
+            params: serde_json::json!({
+                "workspace_id": created_ws.id.as_str(),
+                "delete_physical": true
+            }),
+        };
+        let archive_resp = dispatcher.handle_request(archive_req).await;
+        assert!(archive_resp.error.is_none());
+        assert!(!ws_path.exists());
     }
 }
