@@ -7,24 +7,32 @@ use std::sync::Arc;
 pub use crate::custos_local_api::{
     AdvanceTaskRequest, ApiRequest, ApiResponse, ArchiveWorkspaceApiRequest, CancelRunRequest,
     CancelTaskRequest, CompleteTaskRequest, CreateTaskRequest, CreateWorkspaceApiRequest,
-    GetWorkspaceApiRequest, StartRunRequest, METHOD_WORKFLOW_CANCEL_RUN, METHOD_WORKFLOW_START_RUN,
-    METHOD_WORKSPACES_ARCHIVE, METHOD_WORKSPACES_CREATE, METHOD_WORKSPACES_GET,
-    METHOD_WORKSPACES_LIST,
+    GetWorkspaceApiRequest, StartRunRequest, METHOD_RESEARCH_ANCHORS_LIST,
+    METHOD_RESEARCH_ANCHORS_SAVE, METHOD_RESEARCH_CLAIMS_LIST, METHOD_RESEARCH_CLAIMS_SAVE,
+    METHOD_RESEARCH_HANDOFF_CODING, METHOD_RESEARCH_LINEAGE_LIST, METHOD_RESEARCH_RUNS_LIST,
+    METHOD_RESEARCH_RUNS_SAVE, METHOD_RESEARCH_SOURCES_LIST, METHOD_RESEARCH_SOURCES_SAVE,
+    METHOD_WORKFLOW_CANCEL_RUN, METHOD_WORKFLOW_START_RUN, METHOD_WORKSPACES_ARCHIVE,
+    METHOD_WORKSPACES_CREATE, METHOD_WORKSPACES_GET, METHOD_WORKSPACES_LIST,
 };
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
 use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::{AdvanceTask, CancelTask, CreateTask, TaskService};
-use custos_domain::{SessionId, SessionMode, TaskContract, TaskStatus};
+use custos_domain::{
+    PassageAnchor, ResearchClaim, ResearchExperimentRun, SessionId, SessionMode, SourceRecord,
+    TaskContract, TaskStatus,
+};
+use custos_persistence::ResearchRepository;
 use custos_runtime::session::SessionManager;
 use custos_runtime::workspace::{CreateWorkspaceRequest, WorkspaceCoordinator};
 
-/// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, and WorkflowPort for IPC callers.
+/// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, WorkflowPort, and ResearchRepository for IPC callers.
 pub struct LocalApiDispatcher {
     task_service: Arc<TaskService>,
     session_manager: Arc<SessionManager>,
     bridge_service: Arc<BridgeService>,
     workflow: Option<Arc<dyn WorkflowPort>>,
     workspace: Option<Arc<WorkspaceCoordinator>>,
+    research: Option<Arc<ResearchRepository>>,
 }
 
 impl LocalApiDispatcher {
@@ -39,6 +47,7 @@ impl LocalApiDispatcher {
             bridge_service,
             workflow: None,
             workspace: None,
+            research: None,
         }
     }
 
@@ -49,6 +58,11 @@ impl LocalApiDispatcher {
 
     pub fn with_workspace(mut self, workspace: Arc<WorkspaceCoordinator>) -> Self {
         self.workspace = Some(workspace);
+        self
+    }
+
+    pub fn with_research(mut self, research: Arc<ResearchRepository>) -> Self {
+        self.research = Some(research);
         self
     }
 
@@ -559,6 +573,236 @@ impl LocalApiDispatcher {
                     .await
                 {
                     Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "archived": true })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_RESEARCH_SOURCES_LIST => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "ResearchRepository not configured on daemon",
+                        )
+                    }
+                };
+                match research.list_sources() {
+                    Ok(sources) => match serde_json::to_value(&sources) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_RESEARCH_SOURCES_SAVE => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "ResearchRepository not configured on daemon",
+                        )
+                    }
+                };
+                let src: SourceRecord = match serde_json::from_value(req.params) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        return ApiResponse::error(req.id, format!("Invalid source payload: {e}"))
+                    }
+                };
+                match research.save_source(&src) {
+                    Ok(()) => ApiResponse::success(
+                        req.id,
+                        serde_json::json!({ "saved": true, "id": src.id }),
+                    ),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_RESEARCH_ANCHORS_LIST => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "ResearchRepository not configured on daemon",
+                        )
+                    }
+                };
+                let source_id = match req.params.get("source_id").and_then(|v| v.as_str()) {
+                    Some(id) => id,
+                    None => return ApiResponse::error(req.id, "Missing source_id parameter"),
+                };
+                match research.list_anchors_for_source(source_id) {
+                    Ok(anchors) => match serde_json::to_value(&anchors) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_RESEARCH_ANCHORS_SAVE => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "ResearchRepository not configured on daemon",
+                        )
+                    }
+                };
+                let anchor: PassageAnchor = match serde_json::from_value(req.params) {
+                    Ok(a) => a,
+                    Err(e) => {
+                        return ApiResponse::error(req.id, format!("Invalid anchor payload: {e}"))
+                    }
+                };
+                match research.save_anchor(&anchor) {
+                    Ok(()) => ApiResponse::success(
+                        req.id,
+                        serde_json::json!({ "saved": true, "id": anchor.id }),
+                    ),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_RESEARCH_CLAIMS_LIST => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "ResearchRepository not configured on daemon",
+                        )
+                    }
+                };
+                match research.list_claims() {
+                    Ok(claims) => match serde_json::to_value(&claims) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_RESEARCH_CLAIMS_SAVE => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "ResearchRepository not configured on daemon",
+                        )
+                    }
+                };
+                let claim: ResearchClaim = match serde_json::from_value(req.params) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        return ApiResponse::error(req.id, format!("Invalid claim payload: {e}"))
+                    }
+                };
+                match research.save_claim(&claim) {
+                    Ok(()) => ApiResponse::success(
+                        req.id,
+                        serde_json::json!({ "saved": true, "id": claim.id }),
+                    ),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_RESEARCH_RUNS_LIST => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "ResearchRepository not configured on daemon",
+                        )
+                    }
+                };
+                match research.list_runs() {
+                    Ok(runs) => match serde_json::to_value(&runs) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_RESEARCH_RUNS_SAVE => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "ResearchRepository not configured on daemon",
+                        )
+                    }
+                };
+                let run: ResearchExperimentRun = match serde_json::from_value(req.params) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        return ApiResponse::error(req.id, format!("Invalid run payload: {e}"))
+                    }
+                };
+                match research.save_run(&run) {
+                    Ok(()) => ApiResponse::success(
+                        req.id,
+                        serde_json::json!({ "saved": true, "run_id": run.run_id }),
+                    ),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_RESEARCH_LINEAGE_LIST => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "ResearchRepository not configured on daemon",
+                        )
+                    }
+                };
+                let artifact_path = match req.params.get("artifact_path").and_then(|v| v.as_str()) {
+                    Some(path) => path,
+                    None => return ApiResponse::error(req.id, "Missing artifact_path parameter"),
+                };
+                match research.list_artifact_lineage(artifact_path) {
+                    Ok(lineage) => match serde_json::to_value(&lineage) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_RESEARCH_HANDOFF_CODING => {
+                let claim_id = match req.params.get("claim_id").and_then(|v| v.as_str()) {
+                    Some(id) => id,
+                    None => return ApiResponse::error(req.id, "Missing claim_id parameter"),
+                };
+                let statement = req
+                    .params
+                    .get("statement")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(claim_id);
+                let title = format!("Implement & Ground Research Claim: {statement}");
+
+                let cmd = CreateTask {
+                    title,
+                    metadata: Some(serde_json::json!({
+                        "source": "research_workbench",
+                        "claim_id": claim_id,
+                        "grounding_target": "L2Verified",
+                    })),
+                    contract: None,
+                };
+
+                match self.task_service.execute_create(cmd).await {
+                    Ok((task, _event)) => match serde_json::to_value(&task) {
+                        Ok(val) => ApiResponse::success(
+                            req.id,
+                            serde_json::json!({
+                                "handoff_status": "task_created",
+                                "task": val,
+                            }),
+                        ),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
@@ -1081,5 +1325,138 @@ mod tests {
         let archive_resp = dispatcher.handle_request(archive_req).await;
         assert!(archive_resp.error.is_none());
         assert!(!ws_path.exists());
+    }
+
+    #[tokio::test]
+    async fn test_research_api_dispatch_lifecycle() {
+        use custos_persistence::SqliteTaskStore;
+
+        let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+        let task_service = Arc::new(TaskService::new(store.clone()));
+        let session_manager = Arc::new(SessionManager::with_store(store.clone()));
+        let bridge_service = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
+
+        let dispatcher = LocalApiDispatcher::new(
+            task_service.clone(),
+            session_manager.clone(),
+            bridge_service.clone(),
+        )
+        .with_research(Arc::new(store.research().clone()));
+
+        // 1. Save & List Source
+        let save_src_req = ApiRequest {
+            id: "req_s1".into(),
+            method: METHOD_RESEARCH_SOURCES_SAVE.into(),
+            params: serde_json::json!({
+                "id": "src_paper_01",
+                "source_type": "paper",
+                "title": "Quantum Error Mitigation",
+                "doi": "10.1038/s41586-023-06096-3",
+                "authors": ["Kim et al."],
+                "year": 2023,
+                "content_hash": "hash_qem",
+                "local_path": "/papers/qem.pdf",
+                "verified": true,
+                "abstract_text": "Evidence for the utility of quantum computing before fault tolerance.",
+                "created_at": 1700000000
+            }),
+        };
+        let save_src_resp = dispatcher.handle_request(save_src_req).await;
+        assert!(save_src_resp.is_success(), "Failed to save source: {:?}", save_src_resp.error);
+
+        let list_src_req = ApiRequest {
+            id: "req_s2".into(),
+            method: METHOD_RESEARCH_SOURCES_LIST.into(),
+            params: serde_json::json!({}),
+        };
+        let list_src_resp = dispatcher.handle_request(list_src_req).await;
+        assert!(list_src_resp.is_success());
+        let sources: Vec<SourceRecord> = serde_json::from_value(list_src_resp.result.unwrap()).unwrap();
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].title, "Quantum Error Mitigation");
+
+        // 2. Save & List Passage Anchor
+        let save_anc_req = ApiRequest {
+            id: "req_a1".into(),
+            method: METHOD_RESEARCH_ANCHORS_SAVE.into(),
+            params: serde_json::json!({
+                "id": "anc_01",
+                "source_id": "src_paper_01",
+                "source_title": "Quantum Error Mitigation",
+                "section_title": "Zero-Noise Extrapolation",
+                "page_number": 4,
+                "start_offset": 500,
+                "end_offset": 620,
+                "exact_text": "ZNE scales circuit noise artificially by pulse stretching.",
+                "passage_hash": "hash_anchor_zne"
+            }),
+        };
+        let save_anc_resp = dispatcher.handle_request(save_anc_req).await;
+        assert!(save_anc_resp.is_success());
+
+        let list_anc_req = ApiRequest {
+            id: "req_a2".into(),
+            method: METHOD_RESEARCH_ANCHORS_LIST.into(),
+            params: serde_json::json!({ "source_id": "src_paper_01" }),
+        };
+        let list_anc_resp = dispatcher.handle_request(list_anc_req).await;
+        assert!(list_anc_resp.is_success());
+        let anchors: Vec<PassageAnchor> = serde_json::from_value(list_anc_resp.result.unwrap()).unwrap();
+        assert_eq!(anchors.len(), 1);
+        assert_eq!(anchors[0].exact_text, "ZNE scales circuit noise artificially by pulse stretching.");
+
+        // 3. Save & List Claims
+        let save_claim_req = ApiRequest {
+            id: "req_c1".into(),
+            method: METHOD_RESEARCH_CLAIMS_SAVE.into(),
+            params: serde_json::json!({
+                "id": "claim_zne_01",
+                "statement": "Zero noise extrapolation bounds expectation value bias within 2%",
+                "level": "l1_cited",
+                "confidence_score": 0.92,
+                "invariants": ["abs(bias) <= 0.02"],
+                "evidence_links": [{
+                    "passage_anchor_id": "anc_01",
+                    "source_title": "Quantum Error Mitigation",
+                    "exact_text": "ZNE scales circuit noise artificially by pulse stretching.",
+                    "relation": "supports",
+                    "rationale": "Empirical curve fitting verified",
+                    "verified_by": "expert_review"
+                }],
+                "created_at": 1700000100,
+                "sealed_proof_uri": null
+            }),
+        };
+        let save_claim_resp = dispatcher.handle_request(save_claim_req).await;
+        assert!(save_claim_resp.is_success(), "Failed to save claim: {:?}", save_claim_resp.error);
+
+        let list_claim_req = ApiRequest {
+            id: "req_c2".into(),
+            method: METHOD_RESEARCH_CLAIMS_LIST.into(),
+            params: serde_json::json!({}),
+        };
+        let list_claim_resp = dispatcher.handle_request(list_claim_req).await;
+        assert!(list_claim_resp.is_success());
+        let claims: Vec<ResearchClaim> = serde_json::from_value(list_claim_resp.result.unwrap()).unwrap();
+        assert_eq!(claims.len(), 1);
+        assert_eq!(claims[0].id, "claim_zne_01");
+
+        // 4. Handoff Claim to Coding Task
+        let handoff_req = ApiRequest {
+            id: "req_h1".into(),
+            method: METHOD_RESEARCH_HANDOFF_CODING.into(),
+            params: serde_json::json!({
+                "claim_id": "claim_zne_01",
+                "statement": claims[0].statement
+            }),
+        };
+        let handoff_resp = dispatcher.handle_request(handoff_req).await;
+        assert!(handoff_resp.is_success(), "Failed handoff: {:?}", handoff_resp.error);
+        let handoff_val = handoff_resp.result.unwrap();
+        assert_eq!(handoff_val["handoff_status"], "task_created");
+        assert!(handoff_val["task"]["id"].is_string());
     }
 }

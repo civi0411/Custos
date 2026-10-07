@@ -7,10 +7,18 @@ import {
   SessionMode,
   CreateTaskParams,
   StartRunParams,
+  AttachSessionParams,
   CancelRunParams,
   ExecutionWorkspace,
   CreateWorkspaceParams,
 } from '../types/domain';
+import {
+  SourceRecord,
+  PassageAnchor,
+  ResearchClaim,
+  ResearchExperimentRun,
+  ArtifactLineageNode,
+} from '../types/research';
 import { initialProjectData } from '../data/mockData';
 
 export class DaemonClient {
@@ -65,18 +73,18 @@ export class DaemonClient {
     return this.request<Task>('v1.tasks.cancel', { task_id: taskId, reason });
   }
 
-  async advanceTask(taskId: string, phase: string, status?: string): Promise<Task> {
+  async advanceTask(taskId: string, status: Task['status']): Promise<Task> {
     return this.request<Task>('v1.tasks.advance', {
       task_id: taskId,
-      phase,
-      status,
+      target_status: status,
     });
   }
 
-  async completeTask(taskId: string, evidence?: any): Promise<Task> {
+  async completeTask(taskId: string, summary?: string, evidenceClaims: any[] = []): Promise<Task> {
     return this.request<Task>('v1.tasks.complete', {
       task_id: taskId,
-      evidence,
+      summary,
+      evidence_claims: evidenceClaims,
     });
   }
 
@@ -96,8 +104,13 @@ export class DaemonClient {
   // Sessions & Chat Journal API
   // ---------------------------------------------------------
 
-  async createSession(mode: SessionMode = 'supervised', taskId?: string): Promise<Session> {
-    return this.request<Session>('v1.sessions.create', { mode, task_id: taskId });
+  async createSession(mode: SessionMode = 'assisted'): Promise<Session> {
+    const wireMode = mode === 'supervised' || mode === 'interactive' ? 'assisted' : mode === 'autonomous' || mode === 'headless' ? 'bare' : mode;
+    return this.request<Session>('v1.sessions.create', { mode: wireMode });
+  }
+
+  async attachSession(params: AttachSessionParams): Promise<void> {
+    await this.request<void>('v1.sessions.attach', params);
   }
 
   async getSession(sessionId: string): Promise<Session> {
@@ -183,6 +196,53 @@ export class DaemonClient {
     return this.request<void>('v1.workspaces.archive', {
       workspace_id: workspaceId,
       delete_physical: deletePhysical,
+    });
+  }
+
+  // ---------------------------------------------------------
+  // Research Workbench API (Sovereign Open Science)
+  // ---------------------------------------------------------
+
+  async listResearchSources(): Promise<SourceRecord[]> {
+    return this.request<SourceRecord[]>('v1.research.sources.list', {});
+  }
+
+  async saveResearchSource(source: SourceRecord): Promise<{ saved: boolean; id: string }> {
+    return this.request<{ saved: boolean; id: string }>('v1.research.sources.save', source);
+  }
+
+  async listResearchAnchors(sourceId: string): Promise<PassageAnchor[]> {
+    return this.request<PassageAnchor[]>('v1.research.anchors.list', { source_id: sourceId });
+  }
+
+  async saveResearchAnchor(anchor: PassageAnchor): Promise<{ saved: boolean; id: string }> {
+    return this.request<{ saved: boolean; id: string }>('v1.research.anchors.save', anchor);
+  }
+
+  async listResearchClaims(): Promise<ResearchClaim[]> {
+    return this.request<ResearchClaim[]>('v1.research.claims.list', {});
+  }
+
+  async saveResearchClaim(claim: ResearchClaim): Promise<{ saved: boolean; id: string }> {
+    return this.request<{ saved: boolean; id: string }>('v1.research.claims.save', claim);
+  }
+
+  async listResearchRuns(): Promise<ResearchExperimentRun[]> {
+    return this.request<ResearchExperimentRun[]>('v1.research.runs.list', {});
+  }
+
+  async saveResearchRun(run: ResearchExperimentRun): Promise<{ saved: boolean; run_id: string }> {
+    return this.request<{ saved: boolean; run_id: string }>('v1.research.runs.save', run);
+  }
+
+  async listResearchArtifactLineage(artifactPath: string): Promise<ArtifactLineageNode[]> {
+    return this.request<ArtifactLineageNode[]>('v1.research.lineage.list', { artifact_path: artifactPath });
+  }
+
+  async handoffClaimToCoding(claimId: string, statement: string): Promise<{ handoff_status: string; task: Task }> {
+    return this.request<{ handoff_status: string; task: Task }>('v1.research.handoff_coding', {
+      claim_id: claimId,
+      statement,
     });
   }
 
@@ -339,6 +399,151 @@ export class DaemonClient {
         };
         return run as unknown as T;
       }
+
+      // Research Workbench Fallbacks
+      case 'v1.research.sources.list': {
+        const mockSources: SourceRecord[] = [
+          {
+            id: 'src_nature_2024_01',
+            sourceType: 'paper',
+            title: 'Self-Organizing Invariant Architectures in Deterministic Multi-Agent Swarms',
+            doi: '10.1038/s41586-024-07821-x',
+            authors: ['V. Pham', 'M. Chen', 'E. Vance'],
+            year: 2024,
+            contentHash: 'blake3_9941a8e2f7b11c',
+            verified: true,
+            abstract:
+              'We present a zero-trust consensus mechanism that bounds stochastic agent divergence using Merkle-sealed invariant contracts. In empirical evaluations across 10,000 runs, phantom state execution was reduced by 99.8% while maintaining zero I/O leakages.',
+          },
+          {
+            id: 'src_arxiv_2025_02',
+            sourceType: 'paper',
+            title: 'On the Convergence Rates of Cryptographic Capability Tickets under Asymmetric Latency',
+            doi: '10.48550/arXiv.2501.09912',
+            authors: ['T. Lindholm', 'K. S. Rao'],
+            year: 2025,
+            contentHash: 'blake3_7718c091ad4e22',
+            verified: true,
+            abstract:
+              'This study provides lower bounds for atomic ticket acquisition across distributed authority gates. When latency jitter exceeds 15ms, optimistic scheduling incurs double-dispatch vulnerability unless fenced by invariant CAS certificates.',
+          },
+          {
+            id: 'src_dataset_card_03',
+            sourceType: 'dataset',
+            title: 'OmniBench-ZeroIO: 50,000 Verifiable Execution Traces for Multi-Agent Safety',
+            doi: '10.5281/zenodo.1089221',
+            authors: ['Custos Research Lab'],
+            year: 2024,
+            contentHash: 'blake3_3312e778bc099f',
+            verified: true,
+            abstract:
+              'Curated dataset of sandboxed runtime executions with complete stdout/stderr logs, container Merkle snapshots, and invariant assertions.',
+          },
+        ];
+        return mockSources as unknown as T;
+      }
+      case 'v1.research.sources.save': {
+        return { saved: true, id: params.id || `src_${Date.now()}` } as unknown as T;
+      }
+      case 'v1.research.anchors.list': {
+        const mockAnchors: PassageAnchor[] = [
+          {
+            id: 'anc_01',
+            sourceId: params.source_id || 'src_nature_2024_01',
+            sourceTitle: 'Self-Organizing Invariant Architectures',
+            sectionTitle: 'Section 4.2 Invariant Bounding',
+            pageNumber: 8,
+            startOffset: 1240,
+            endOffset: 1485,
+            exactText: 'Phantom state execution was reduced by 99.8% across 10,000 runs.',
+            passageHash: 'blake3_anc_4491c',
+          },
+        ];
+        return mockAnchors as unknown as T;
+      }
+      case 'v1.research.anchors.save': {
+        return { saved: true, id: params.id || `anc_${Date.now()}` } as unknown as T;
+      }
+      case 'v1.research.claims.list': {
+        const mockClaims: ResearchClaim[] = [
+          {
+            id: 'claim_01',
+            statement: 'Phantom state execution in unconstrained LLM loops can be reduced by 99.8% using Merkle-sealed state invariants.',
+            level: 'L3_SEALED',
+            confidenceScore: 0.99,
+            invariants: ['INV-PHANTOM-STATE-BOUND', 'INV-CAS-SEALED'],
+            createdAt: Date.now() - 3600000,
+            sealedProofUri: 'cas://bafy2bzace4v3k99a77x1198',
+            evidenceLinks: [
+              {
+                passageAnchorId: 'anc_01',
+                sourceTitle: 'Self-Organizing Invariant Architectures in Swarms',
+                exactText: 'Phantom state execution was reduced by 99.8% across 10,000 runs.',
+                relation: 'SUPPORTS',
+                rationale: 'Empirically proven with deterministic clean-room replays across 10,000 runs.',
+                verifiedBy: 'deterministic_engine',
+              },
+            ],
+          },
+        ];
+        return mockClaims as unknown as T;
+      }
+      case 'v1.research.claims.save': {
+        return { saved: true, id: params.id || `claim_${Date.now()}` } as unknown as T;
+      }
+      case 'v1.research.runs.list': {
+        const mockRuns: ResearchExperimentRun[] = [
+          {
+            runId: 'run_bench_001',
+            sessionId: 'sess_exp_991',
+            command: 'python scripts/benchmark_fencing.py --epochs 100 --seed 42',
+            cwd: '/workspaces/custos-bench',
+            status: 'ok',
+            wallMs: 42150,
+            surface: 'modal',
+            reproducibility: 'deterministic',
+            inputMerkleRoot: 'merkle_in_77a91',
+            outputMerkleRoot: 'merkle_out_b34c2',
+            envSnapshot: {
+              pythonVersion: '3.11.8',
+              lockfileHash: 'sha256_lock_9901aa',
+              packageCount: 142,
+              hardware: '8x NVIDIA A100-SXM4-80GB (PCIe gen4)',
+              platform: 'Linux 6.5.0-x86_64-aws-ec2',
+            },
+            sadePermitId: 'pmt_modal_exec_883',
+            casLogUri: 'cas://bafy2bzace4v3k99a_run001_logs',
+            ts: Date.now() - 7200000,
+          },
+        ];
+        return mockRuns as unknown as T;
+      }
+      case 'v1.research.runs.save': {
+        return { saved: true, run_id: params.run_id || `run_${Date.now()}` } as unknown as T;
+      }
+      case 'v1.research.lineage.list': {
+        const mockLineage: ArtifactLineageNode[] = [
+          {
+            artifactPath: params.artifact_path || 'artifacts/output.csv',
+            version: 1,
+            contentHash: 'hash_csv_v1',
+            producedByRunId: 'run_bench_001',
+            timestamp: Date.now() - 3600000,
+          },
+        ];
+        return mockLineage as unknown as T;
+      }
+      case 'v1.research.handoff_coding': {
+        const task: Task = {
+          id: `task-research-${Date.now().toString(36)}`,
+          title: `Implement & Verify Research Claim: ${params.statement || params.claim_id}`,
+          status: 'Draft',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        return { handoff_status: 'task_created', task } as unknown as T;
+      }
+
       default:
         return {} as T;
     }

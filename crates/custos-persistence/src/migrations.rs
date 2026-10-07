@@ -42,6 +42,9 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!(
         "../migrations/0016_execution_workspaces.sql"
     ))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0017_research_lineage_and_claims.sql"
+    ))?;
 
     Ok(())
 }

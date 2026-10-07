@@ -33,6 +33,17 @@ pub const METHOD_WORKSPACES_GET: &str = "v1.workspaces.get";
 pub const METHOD_WORKSPACES_LIST: &str = "v1.workspaces.list";
 pub const METHOD_WORKSPACES_ARCHIVE: &str = "v1.workspaces.archive";
 
+pub const METHOD_RESEARCH_SOURCES_LIST: &str = "v1.research.sources.list";
+pub const METHOD_RESEARCH_SOURCES_SAVE: &str = "v1.research.sources.save";
+pub const METHOD_RESEARCH_ANCHORS_SAVE: &str = "v1.research.anchors.save";
+pub const METHOD_RESEARCH_ANCHORS_LIST: &str = "v1.research.anchors.list";
+pub const METHOD_RESEARCH_CLAIMS_LIST: &str = "v1.research.claims.list";
+pub const METHOD_RESEARCH_CLAIMS_SAVE: &str = "v1.research.claims.save";
+pub const METHOD_RESEARCH_RUNS_LIST: &str = "v1.research.runs.list";
+pub const METHOD_RESEARCH_RUNS_SAVE: &str = "v1.research.runs.save";
+pub const METHOD_RESEARCH_LINEAGE_LIST: &str = "v1.research.lineage.list";
+pub const METHOD_RESEARCH_HANDOFF_CODING: &str = "v1.research.handoff_coding";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiRequest {
     pub id: String,

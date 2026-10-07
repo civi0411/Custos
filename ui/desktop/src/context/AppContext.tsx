@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { MainTab, ProjectData, ProviderItem, ClientApiKey, Session } from '../types';
 import { initialProjectData, initialProviders, initialClientKeys } from '../data/mockData';
 import { daemonClient } from '../api/daemon_client';
-import { Task } from '../types/domain';
+import { Task, SessionJournalEntry } from '../types/domain';
 
 interface AppContextType {
   // Projects & Sessions
@@ -153,18 +153,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           daemonClient.listSessions(),
         ]);
 
+        const journals = await Promise.all(
+          fetchedSessions.map(async (session) => {
+            try {
+              return [session.id, await daemonClient.getSessionJournal(session.id)] as const;
+            } catch {
+              return [session.id, [] as SessionJournalEntry[]] as const;
+            }
+          })
+        );
+        const journalBySession = new Map(journals);
+
         if (fetchedTasks.length > 0) {
           setTasks(fetchedTasks);
 
           // Project daemon tasks and sessions into UI sessions
           const projectedSessions: Session[] = fetchedTasks.map((t) => {
-            const domainSession = fetchedSessions.find((s) => s.task_id === t.id);
+            const domainSession = fetchedSessions.find((s) => (s.task_id || s.attached_to) === t.id);
+            const taskId = t.id;
+            const sessionId = domainSession?.id;
             return {
-              id: t.id,
+              id: sessionId || `unbound:${taskId}`,
+              taskId,
               source: daemonClient.isDemoMode ? 'demo' : 'daemon',
-              taskStatus: t.status,
-              sessionId: domainSession?.id,
-              pack: t.contract?.pack,
+              taskStatus: String(t.status),
+              sessionId,
+              pack: t.contract?.pack_id || t.contract?.pack,
               title: t.title,
               time: 'Live',
               preview: `Status: ${t.status} | Contract: ${t.contract?.pack || 'general'}`,
@@ -173,14 +187,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               diffHunk: '',
               diffLinesCount: '',
               summary: `Task ${t.id}: ${t.status}`,
-              messages: (domainSession?.journal || []).map((j) => ({
-                id: j.id,
-                role: j.role === 'user' ? 'user' : 'assistant',
-                author: j.role === 'user' ? 'You' : 'Custos Kernel',
+              messages: (journalBySession.get(domainSession?.id || '') || domainSession?.journal || []).map((j) => ({
+                id: j.id || String(j.entry_id || `${sessionId}-${j.occurred_at}`),
+                role: (j.role || j.entry_type) === 'user' ? 'user' : 'assistant',
+                author: (j.role || j.entry_type) === 'user' ? 'You' : 'Custos Kernel',
                 badge: j.badge,
                 stepName: j.step_name,
                 duration: j.duration,
-                text: j.content,
+                text: j.content || j.entry_data || '',
               })),
               diffCode: [],
             };
@@ -192,6 +206,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }));
 
           if (projectedSessions.length > 0) {
+            setCurrentProject('Custos OS');
             setActiveSessionId(projectedSessions[0].id);
           }
         }
@@ -280,8 +295,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 2. Start workflow run
       const run = await daemonClient.startRun({
-        task_id: activeSession.id,
-        instruction: text,
+        task_id: activeSession.taskId || activeSession.id,
         preferred_mode: 'model',
       });
 
@@ -364,8 +378,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
     try {
-      await daemonClient.advanceTask(activeSession.id, 'verification', 'Active');
-      showToast('Task advanced to verification. Check the task status for the result.');
+      await daemonClient.advanceTask(activeSession.taskId || activeSession.id, 'queued');
+      showToast('Task queued. The daemon will report the run state when it starts.');
     } catch (error) {
       showToast(`Could not advance task: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -387,14 +401,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // 1. Create real Task in Custos Daemon
       const createdTask = await daemonClient.createTask({
         title: title || 'New Supervised Task',
-        contract: { pack },
+        contract: { pack_id: pack },
       });
 
       // 2. Create Session in Custos Daemon
-      const createdSession = await daemonClient.createSession('supervised', createdTask.id);
+      const createdSession = await daemonClient.createSession('assisted');
+      await daemonClient.attachSession({ session_id: createdSession.id, task_id: createdTask.id });
 
       const newSessionItem: Session = {
-        id: createdTask.id,
+        id: createdSession.id,
+        taskId: createdTask.id,
         source: daemonClient.isDemoMode ? 'demo' : 'daemon',
         taskStatus: createdTask.status,
         sessionId: createdSession.id,
@@ -419,7 +435,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
       });
 
-      setActiveSessionId(createdTask.id);
+      setActiveSessionId(createdSession.id);
       setIsNewSessionOpen(false);
       showToast(`Created Task ${createdTask.id.slice(0, 8)}`);
 

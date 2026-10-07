@@ -98,7 +98,7 @@ interface WorkspaceTabBarProps {
   onOpenSettings?: () => void;
   activeLens?: WorkbenchLens;
   onSwitchLens?: (lens: WorkbenchLens) => void;
-  activeTask?: { title: string; status: string; model?: string; budget?: string } | null;
+  activeTask?: { title: string; status: string; model?: string; budget?: string; workspace?: string; assurance?: string } | null;
   onOpenTaskDetailsModal?: () => void;
 
   // Legacy compat — unused but kept to avoid prop errors in parent
@@ -117,7 +117,7 @@ function TaskStrip({
   task,
   onOpenDetails,
 }: {
-  task?: { title: string; status: string; model?: string; budget?: string } | null;
+  task?: { title: string; status: string; model?: string; budget?: string; workspace?: string; assurance?: string } | null;
   onOpenDetails?: () => void;
 }) {
   const statusColor =
@@ -192,31 +192,17 @@ function TaskStrip({
       </div>
 
       <div className="flex items-center gap-2 shrink-0 ml-auto">
-        {/* Orca Managed Worktree Chip */}
-        <span 
-          className="font-mono text-[10px] px-1.5 py-0.2 rounded hidden lg:inline"
-          style={{
-            background: 'var(--color-surface-2, #1c2128)',
-            color: 'var(--color-editor-fg, #e6edf3)',
-            border: '1px solid var(--color-border-default, #30363d)'
-          }}
-          title="Orca Managed Worktree: feat/simd-dispatch (#a3f2d1e)"
-        >
-          🌳 feat/simd-dispatch <span className="text-[#8b949e]">#a3f2d1e</span>
-        </span>
+        {task.workspace && (
+          <span className="font-mono text-[10px] px-1.5 py-0.2 rounded hidden lg:inline text-[#e6edf3]" style={{ background: 'var(--color-surface-2, #1c2128)', border: '1px solid var(--color-border-default, #30363d)' }}>
+            {task.workspace}
+          </span>
+        )}
 
-        {/* SADE Assurance Level Badge */}
-        <span 
-          className="font-mono text-[10px] px-1.5 py-0.2 rounded hidden sm:inline"
-          style={{
-            background: 'rgba(63, 185, 80, 0.12)',
-            color: '#3fb950',
-            border: '1px solid rgba(63, 185, 80, 0.3)'
-          }}
-          title="Assurance Level: Mediated Authority under PermitGate contracts"
-        >
-          🛡️ Mediated Authority
-        </span>
+        {task.assurance && (
+          <span className="font-mono text-[10px] px-1.5 py-0.2 rounded hidden sm:inline text-[#3fb950]" style={{ background: 'rgba(63, 185, 80, 0.12)', border: '1px solid rgba(63, 185, 80, 0.3)' }}>
+            {task.assurance}
+          </span>
+        )}
 
         {task.budget && (
           <span

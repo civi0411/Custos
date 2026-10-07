@@ -42,7 +42,10 @@ pub use authority::{
 };
 pub use budget::{Budget, Headroom, ReservationToken};
 pub use capability::CapabilityManifest;
-pub use claim::Claim;
+pub use claim::{
+    ArtifactLineageNode, Claim, ClaimEvidenceLink, ClaimGroundingLevel, EnvSnapshot,
+    EvidenceRelation, PassageAnchor, ResearchClaim, ResearchExperimentRun, SourceRecord,
+};
 pub use context::{ContextItem, ContextPack};
 pub use continuation::ContinuationPacket;
 pub use decision::{

@@ -19,6 +19,7 @@ export interface DiffLine {
 
 export interface Session {
   id: string;
+  taskId?: string;
   source?: 'demo' | 'daemon';
   taskStatus?: string;
   sessionId?: string;
@@ -64,3 +65,5 @@ export interface ClientApiKey {
   created: string;
   icon: 'laptop' | 'terminal';
 }
+
+export * from './research';

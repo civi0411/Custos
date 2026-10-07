@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -8,7 +8,7 @@ import {
   ArrowRight,
   Maximize2,
   Minimize2,
-  Columns2,
+  MessageSquare,
   MoreHorizontal,
   FileDiff,
   Terminal as TerminalIcon,
@@ -30,14 +30,28 @@ import { Session } from '@/types';
 import { WorktreeManagerModal, TaskDetailsModal } from '@/components/modals';
 import { BrowserWorkspace } from '@/components/workspaces/browser/BrowserWorkspace';
 import { MarkdownWorkspace } from '@/components/workspaces/markdown/MarkdownWorkspace';
+import {
+  LiteraturePane,
+  ClaimsMatrixPane,
+  NotebookWorkspacePane,
+  RunsLedgerPane,
+  DeepInspectorPane,
+} from '@/components/research';
 
 
-export type OrcaTabId = 'tools' | 'changes' | 'terminal' | 'files' | 'worktrees' | 'kanban' | 'evidence' | 'dag' | 'browser' | 'notes' | 'artifacts' | 'knowledge' | 'literature';
+export type OrcaTabId = 'tools' | 'changes' | 'terminal' | 'files' | 'worktrees' | 'kanban' | 'evidence' | 'dag' | 'browser' | 'notes' | 'artifacts' | 'knowledge' | 'literature' | 'claims' | 'experiments' | 'synthesis';
 
 export interface OrcaTab {
   id: OrcaTabId;
   title: string;
   url: string;
+}
+
+export interface ResourceTabsState {
+  tabs: OrcaTab[];
+  activeTabId: OrcaTabId;
+  setTabs: React.Dispatch<React.SetStateAction<OrcaTab[]>>;
+  setActiveTabId: React.Dispatch<React.SetStateAction<OrcaTabId>>;
 }
 
 interface RepoFile {
@@ -200,6 +214,8 @@ pub enum Action {
 ];
 
 interface OrcaTabbedContainerProps {
+  resourceTabs: ResourceTabsState;
+  isPaneOpen: boolean;
   session?: Session | null;
   onAcceptAndRun?: () => void;
   onRejectDiff?: () => void;
@@ -208,10 +224,14 @@ interface OrcaTabbedContainerProps {
   isExpanded?: boolean;
   onToggleExpand?: () => void;
   mode?: 'chat' | 'code' | 'research';
-  onTabsCountChange?: (count: number) => void;
+  onAskAgent?: (draftText: string) => void;
+  onHandoffToCoding?: (claims: any[]) => void;
+  splitPercent?: number;
 }
 
 export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
+  resourceTabs,
+  isPaneOpen,
   session,
   onAcceptAndRun,
   onRejectDiff,
@@ -220,19 +240,14 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   isExpanded = false,
   onToggleExpand,
   mode = 'code',
-  onTabsCountChange
+  onAskAgent,
+  onHandoffToCoding,
+  splitPercent = 45,
 }) => {
   
   // Tabs management
-  const [tabs, setTabs] = useState<OrcaTab[]>([
-    { id: 'tools', title: 'New tab', url: 'orca://tools' }
-  ]);
-  const [activeTabId, setActiveTabId] = useState<OrcaTabId>('tools');
+  const { tabs, setTabs, activeTabId, setActiveTabId } = resourceTabs;
   
-  useEffect(() => {
-    onTabsCountChange?.(tabs.length);
-  }, [tabs.length, onTabsCountChange]);
-
   const [urlInput, setUrlInput] = useState<string>('');
   const [isUrlEditing, setIsUrlEditing] = useState<boolean>(false);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
@@ -316,7 +331,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   const handleCloseTab = (e: React.MouseEvent, tabId: OrcaTabId) => {
     e.stopPropagation();
     if (tabs.length <= 1) {
-      setTabs([{ id: 'tools', title: 'New tab', url: 'orca://tools' }]);
+      setTabs([{ id: 'tools', title: 'Resources', url: 'custos://resources' }]);
       setActiveTabId('tools');
       setUrlInput('');
       return;
@@ -329,12 +344,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   };
 
   const handleAddNewTab = () => {
-    const newTab: OrcaTab = {
-      id: 'tools',
-      title: 'New tab',
-      url: 'orca://tools'
-    };
-    setTabs((prev) => [...prev, newTab]);
+    setTabs((prev) => prev.some((tab) => tab.id === 'tools') ? prev : [...prev, { id: 'tools', title: 'Resources', url: 'custos://resources' }]);
     setActiveTabId('tools');
     setUrlInput('');
   };
@@ -386,88 +396,112 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
 
   const portalTarget = typeof document !== 'undefined' ? document.getElementById('app-header-tabs-portal') : null;
   const tabStrip = (
-    <div className="h-full flex items-center justify-between px-2 gap-1 w-full overflow-hidden">
-      {/* Tabs Row */}
-      <div className="flex items-center gap-1 min-w-0 flex-1 h-full overflow-x-auto no-scrollbar">
-        {tabs.map((tab) => {
-          const isActive = tab.id === activeTabId;
-          return (
-            <div
-              key={tab.id}
-              onClick={() => {
-                setActiveTabId(tab.id);
-                setUrlInput(tab.url);
-              }}
-              className={`group flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer transition max-w-[180px] shrink-0 text-[12px] h-7 ${
-                isActive
-                  ? 'bg-[#21262d] text-white font-medium shadow-sm'
-                  : 'bg-transparent text-[#8b949e] hover:text-[#c9d1d9] hover:bg-[#161b22]'
-              }`}
-            >
-              <div className="flex items-center gap-1.5 truncate">
-                {tab.id === 'tools' && <Globe className="w-3.5 h-3.5 text-[#58a6ff]" />}
-                {tab.id === 'changes' && <FileDiff className="w-3.5 h-3.5 text-[#3fb950]" />}
-                {tab.id === 'terminal' && <TerminalIcon className="w-3.5 h-3.5 text-[#e3b341]" />}
-                {tab.id === 'files' && <FolderTree className="w-3.5 h-3.5 text-[#58a6ff]" />}
-                {tab.id === 'worktrees' && <GitBranch className="w-3.5 h-3.5 text-[#a371f7]" />}
-                {tab.id === 'kanban' && <Bot className="w-3.5 h-3.5 text-[#bc8cff]" />}
-                {tab.id === 'evidence' && <ShieldCheck className="w-3.5 h-3.5 text-[#3fb950]" />}
-                {tab.id === 'dag' && <Activity className="w-3.5 h-3.5 text-[#58a6ff]" />}
-                {tab.id === 'browser' && <Globe className="w-3.5 h-3.5 text-[#58a6ff]" />}
-                {tab.id === 'notes' && <FileCode className="w-3.5 h-3.5 text-[#e3b341]" />}
-                <span className="truncate">{tab.title}</span>
-              </div>
-              <button
-                onClick={(e) => handleCloseTab(e, tab.id)}
-                className="opacity-0 group-hover:opacity-100 hover:text-white p-0.5 rounded transition text-[#8b949e] shrink-0"
-                title="Close tab"
+    <div className="h-full flex w-full overflow-hidden">
+      {/* ── LEFT: CHAT HEADER (Matches Chat Column Width) ── */}
+      {!isExpanded && isPaneOpen && (
+        <div style={{ width: `${splitPercent}%` }} className="h-full flex items-center px-4 border-r border-[#21262d] shrink-0 bg-[#090d13]">
+          <div className="flex items-center gap-2 text-[12px] text-[#8b949e] hover:text-[#c9d1d9] transition cursor-pointer">
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span className="truncate font-medium">{session?.title || (mode === 'code' ? 'Engineering Copilot' : 'Research Assistant')}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── RIGHT: TABS ROW ── */}
+      <div style={{ width: isExpanded || !isPaneOpen ? '100%' : `${100 - splitPercent}%` }} className="h-full flex items-center justify-between px-2 gap-1 overflow-hidden shrink-0">
+        <div className="flex items-center gap-1 min-w-0 flex-1 h-full overflow-x-auto no-scrollbar pl-1">
+          {/* Chat Tab (Only visible when expanded, clicking it un-expands) */}
+          {isExpanded && (
+            <>
+              <div
+                onClick={onToggleExpand}
+                className="group flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer transition max-w-[180px] shrink-0 text-[12px] h-7 bg-transparent text-[#8b949e] hover:text-white hover:bg-[#161b22]"
+                title="Back to Chat"
               >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          );
-        })}
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span className="truncate font-medium">{session?.title || 'Chat'}</span>
+              </div>
+              <div className="w-px h-4 bg-[#30363d] mx-1 shrink-0" />
+            </>
+          )}
 
-        {/* Plus Add Tab Button */}
-        <button
-          onClick={handleAddNewTab}
-          className="p-1 rounded-md text-[#8b949e] hover:text-white hover:bg-[#21262d] transition ml-1 shrink-0"
-          title="New tab"
-        >
-          <Plus className="w-3.5 h-3.5" />
-        </button>
-      </div>
+          {tabs.map((tab) => {
+            const isActive = tab.id === activeTabId;
+            return (
+              <div
+                key={tab.id}
+                onClick={() => {
+                  setActiveTabId(tab.id);
+                  setUrlInput(tab.url);
+                }}
+                className={`group flex items-center gap-2 px-3 py-1.5 rounded-md cursor-pointer transition max-w-[180px] shrink-0 text-[12px] h-7 ${
+                  isActive
+                    ? 'bg-[#21262d] text-white font-medium shadow-sm'
+                    : 'bg-transparent text-[#8b949e] hover:text-[#c9d1d9] hover:bg-[#161b22]'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 truncate">
+                  {tab.id === 'tools' && <Globe className="w-3.5 h-3.5 text-[#58a6ff]" />}
+                  {tab.id === 'changes' && <FileDiff className="w-3.5 h-3.5 text-[#3fb950]" />}
+                  {tab.id === 'terminal' && <TerminalIcon className="w-3.5 h-3.5 text-[#e3b341]" />}
+                  {tab.id === 'files' && <FolderTree className="w-3.5 h-3.5 text-[#58a6ff]" />}
+                  {tab.id === 'worktrees' && <GitBranch className="w-3.5 h-3.5 text-[#a371f7]" />}
+                  {tab.id === 'kanban' && <Bot className="w-3.5 h-3.5 text-[#bc8cff]" />}
+                  {tab.id === 'evidence' && <ShieldCheck className="w-3.5 h-3.5 text-[#3fb950]" />}
+                  {tab.id === 'dag' && <Activity className="w-3.5 h-3.5 text-[#58a6ff]" />}
+                  {tab.id === 'browser' && <Globe className="w-3.5 h-3.5 text-[#58a6ff]" />}
+                  {tab.id === 'notes' && <FileCode className="w-3.5 h-3.5 text-[#e3b341]" />}
+                  {tab.id === 'literature' && <FolderTree className="w-3.5 h-3.5 text-[#a371f7]" />}
+                  {tab.id === 'claims' && <ShieldCheck className="w-3.5 h-3.5 text-[#a371f7]" />}
+                  {tab.id === 'experiments' && <Activity className="w-3.5 h-3.5 text-[#a371f7]" />}
+                  {tab.id === 'synthesis' && <FileCode className="w-3.5 h-3.5 text-[#a371f7]" />}
+                  <span className="truncate">{tab.title}</span>
+                </div>
+                <button
+                  onClick={(e) => handleCloseTab(e, tab.id)}
+                  className="opacity-0 group-hover:opacity-100 hover:text-white p-0.5 rounded transition text-[#8b949e] shrink-0"
+                  title="Close tab"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })}
 
-      {/* Tab Right Controls */}
-      <div className="flex items-center gap-1 shrink-0 text-[#8b949e] pl-2 border-l border-[#21262d]">
-        {onToggleExpand && (
           <button
-            onClick={onToggleExpand}
-            className="p-1 rounded-md hover:text-white hover:bg-[#21262d] transition"
-            title={isExpanded ? 'Restore pane' : 'Maximize tab pane'}
+            onClick={handleAddNewTab}
+            className="p-1 rounded-md text-[#8b949e] hover:text-white hover:bg-[#21262d] transition ml-1 shrink-0"
+            title="New tab"
           >
-            {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            <Plus className="w-3.5 h-3.5" />
           </button>
-        )}
-        <button
-          onClick={() => {
-            if (onShowToast) onShowToast('Split view enabled');
-          }}
-          className="p-1 rounded-md hover:text-white hover:bg-[#21262d] transition"
-          title="Split view"
-        >
-          <Columns2 className="w-3.5 h-3.5" />
-        </button>
+        </div>
+
+        {/* Tab Right Controls */}
+        <div className="flex items-center gap-1 shrink-0 text-[#8b949e] pl-2 border-l border-[#21262d]">
+          {onToggleExpand && (
+            <button
+              onClick={onToggleExpand}
+              className="p-1 rounded-md hover:text-white hover:bg-[#21262d] transition"
+              title={isExpanded ? 'Restore pane' : 'Maximize tab pane'}
+            >
+              {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#0d1117] border-l border-[#21262d] overflow-hidden select-none font-sans text-xs">
-      {portalTarget && createPortal(tabStrip, portalTarget)}
+    <div className="flex flex-col h-full w-full bg-[#04080F] border-l border-[#1e2430] overflow-hidden select-none font-sans text-xs">
+      {isPaneOpen && portalTarget && createPortal(tabStrip, portalTarget)}
 
       {/* 2. Sub-navigation Address Bar (Screenshot 2 Sub-header) */}
-      <div className="h-9 bg-[#161b22] border-b border-[#21262d] flex items-center px-2.5 gap-2 shrink-0">
+      <div className="h-9 bg-[#080d16] border-b border-[#1e2430] flex items-center px-2.5 gap-2 shrink-0">
+        {activeTabId !== 'tools' && !['literature', 'claims', 'experiments', 'synthesis'].includes(activeTabId) && (
+          <span className="shrink-0 rounded border border-amber-600/40 px-1.5 py-0.5 text-[10px] text-amber-300" title="This resource view still contains prototype fixtures">Demo preview</span>
+        )}
         <div className="flex items-center gap-0.5 text-[#8b949e]">
           <button
             onClick={() => setActiveTabId('tools')}
@@ -545,7 +579,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
       </div>
 
       {/* 3. Tab Body Container */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 bg-[#0d1117]">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 bg-[#04080F]">
         {/* VIEW A: TOOLS HOME PAGE (Exact Screenshot 2 Tools Page) */}
         {activeTabId === 'tools' && (
           <div className="px-6 py-4 max-w-3xl mx-auto space-y-1 select-text">
@@ -578,7 +612,9 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                 <>
                   <ToolCard title="Browser Preview" shortcut="⌘⌥B" icon={Globe} onClick={() => handleOpenTool('browser', 'Browser Preview', 'https://')} />
                   <ToolCard title="Literature" shortcut="⌘⌥L" icon={FolderTree} onClick={() => handleOpenTool('literature', 'Literature', 'orca://literature')} />
-                  <ToolCard title="Evidence & Permits" shortcut="⌘⌥E" icon={ShieldCheck} onClick={() => handleOpenTool('evidence', 'Evidence & Permits', 'orca://evidence')} />
+                  <ToolCard title="Claims" icon={ShieldCheck} onClick={() => handleOpenTool('claims', 'Claims', 'custos://research/claims')} />
+                  <ToolCard title="Experiments" icon={Activity} onClick={() => handleOpenTool('experiments', 'Experiments', 'custos://research/experiments')} />
+                  <ToolCard title="Synthesis" icon={FileCode} onClick={() => handleOpenTool('synthesis', 'Synthesis', 'custos://research/synthesis')} />
                 </>
               )}
             </div>
@@ -1128,6 +1164,63 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
         {activeTabId === 'notes' && (
           <div className="h-full flex flex-col overflow-hidden">
             <MarkdownWorkspace />
+          </div>
+        )}
+
+        {/* VIEW K: RESEARCH - LITERATURE & CORPUS */}
+        {activeTabId === 'literature' && (
+          <div className="h-full flex flex-col overflow-hidden">
+            <LiteraturePane
+              onExtractClaim={(anchor) => {
+                if (onShowToast) onShowToast(`Extracted claim from ${anchor.sourceTitle || 'source'}`);
+              }}
+              onShowToast={onShowToast}
+            />
+          </div>
+        )}
+
+        {/* VIEW L: RESEARCH - CLAIMS & INVARIANT MATRIX */}
+        {activeTabId === 'claims' && (
+          <div className="h-full flex flex-col overflow-hidden">
+            <ClaimsMatrixPane
+              onHandoffToCoding={(selectedClaims) => {
+                if (onHandoffToCoding) onHandoffToCoding(selectedClaims);
+                else if (onShowToast) onShowToast(`Handed off ${selectedClaims.length} claim(s) to Coding Workbench`);
+              }}
+              onShowToast={onShowToast}
+            />
+          </div>
+        )}
+
+        {/* VIEW M: RESEARCH - COMPUTATIONAL NOTEBOOK */}
+        {activeTabId === 'experiments' && (
+          <div className="h-full flex flex-col overflow-hidden">
+            <NotebookWorkspacePane
+              onAskAgent={(draft) => {
+                if (onAskAgent) onAskAgent(draft);
+                else if (onShowToast) onShowToast('Drafted cell into Research Chat');
+              }}
+              onShowToast={onShowToast}
+            />
+          </div>
+        )}
+
+        {/* VIEW N: RESEARCH - EXPERIMENT RUNS LEDGER & ARTIFACTS */}
+        {activeTabId === 'synthesis' && (
+          <div className="h-full flex flex-col overflow-hidden">
+            <RunsLedgerPane
+              onReproduce={(run) => {
+                if (onAskAgent) onAskAgent(`Reproduce run ${run.runId}:\n\`${run.command}\``);
+                else if (onShowToast) onShowToast(`Drafted reproduction prompt for ${run.runId}`);
+              }}
+              onShowToast={onShowToast}
+            />
+          </div>
+        )}
+
+        {activeTabId === 'artifacts' && (
+          <div className="h-full flex flex-col overflow-hidden">
+            <DeepInspectorPane onShowToast={onShowToast} />
           </div>
         )}
       </div>

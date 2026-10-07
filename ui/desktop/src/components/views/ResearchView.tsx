@@ -1,5 +1,5 @@
 /**
- * ResearchView — Claude Science Workbench
+ * ResearchView — Custos Research Workbench
  *
  * 3-Column layout mirroring CodexOrcaView:
  *   Col 1: Unified Chat-style Sidebar (w-64)
@@ -11,7 +11,6 @@ import {
   Send,
   Mic,
   AudioWaveform,
-  RotateCcw,
   Sparkles,
   Activity,
   ShieldCheck,
@@ -20,11 +19,11 @@ import {
   Plus,
   BookOpen,
   FlaskConical,
-  MessageSquare,
   Code,
-  Download
+  TerminalSquare
 } from 'lucide-react';
-import { Session } from '@/types';import { OrcaTabbedContainer } from './OrcaTabbedContainer';
+import { Session } from '@/types';
+import { OrcaTabbedContainer, type OrcaTabId, type ResourceTabsState } from './OrcaTabbedContainer';
 import { WorkspaceSidebar } from '@/components/shell/WorkspaceSidebar';
 import { ClaudeIcon } from '@/components/common/AgentIcons';
 import { useAppContext } from '@/context/AppContext';
@@ -32,6 +31,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 interface ResearchViewProps {
+  resourceTabs: ResourceTabsState;
+  onOpenResourcePane: () => void;
   currentProject: string;
   projectNames: string[];
   onSelectProject: (name: string) => void;
@@ -48,10 +49,11 @@ interface ResearchViewProps {
   isWebTabOpen?: boolean;
   isWebTabExpanded?: boolean;
   onToggleExpandWebTab?: () => void;
-  onWebTabCountChange?: (count: number) => void;
 }
 
 export const ResearchView: React.FC<ResearchViewProps> = ({
+  resourceTabs,
+  onOpenResourcePane,
   currentProject,
   projectNames,
   onSelectProject,
@@ -60,15 +62,14 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
   onSelectSession,
   onNewSession,
   onSendMessage,
-  onClearHistory,
+  onClearHistory: _onClearHistory,
   onShowToast,
   onOpenSettings: _onOpenSettings,
   onSwitchMode,
   isSidebarCollapsed,
   isWebTabOpen,
   isWebTabExpanded,
-  onToggleExpandWebTab,
-  onWebTabCountChange
+  onToggleExpandWebTab
 }) => {
   const { openSettings } = useAppContext();
   const [inputText, setInputText] = useState('');
@@ -79,6 +80,13 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
   const isDragging = useRef(false);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId) ?? sessions[0] ?? null;
+  const openResearchResource = (id: OrcaTabId, title: string) => {
+    resourceTabs.setTabs((previous) => previous.some((tab) => tab.id === id)
+      ? previous
+      : [...previous, { id, title, url: `custos://research/${id}` }]);
+    resourceTabs.setActiveTabId(id);
+    onOpenResourcePane();
+  };
   const hasMessages = (activeSession?.messages?.length ?? 0) > 0;
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -99,20 +107,7 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
     }
   };
 
-  const exportConversation = () => {
-    if (!activeSession) return;
-    const md = activeSession.messages
-      .map(m => `## ${m.role === 'user' ? 'User (Chí Vĩ)' : (m.author || 'Claude Science')}\n\n${m.text}`)
-      .join('\n\n---\n\n');
-    const blob = new Blob([`# ${activeSession.title}\n\n${md}\n`], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${activeSession.title.replace(/[^a-z0-9-_]+/gi, '-').toLowerCase()}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-    if (onShowToast) onShowToast('Conversation exported to Markdown');
-  };
+
 
   // Drag handler for split resizer
   useEffect(() => {
@@ -132,16 +127,16 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
   }, []);
 
   const RESEARCH_STARTERS = [
-    { icon: BookOpen, label: 'Summarize literature', prompt: 'Summarize the key findings from the SADE research corpus on non-repudiation permit gating.' },
-    { icon: ShieldCheck, label: 'Verify a claim', prompt: 'Verify CLM-01: "Atomic ticket acquisition prevents phantom double-dispatches in multi-agent turns." against evidence in arXiv:2403.1189.' },
-    { icon: Activity, label: 'Run experiment', prompt: 'Run PermitGate Fencing Stress Test with 1000 concurrent agents. Log reproducibility score and duration.' },
-    { icon: FileText, label: 'Synthesize notes', prompt: 'Synthesize verified claims CLM-01 and CLM-02 into a structured invariant specification for the Engineering workbench.' },
-    { icon: FlaskConical, label: 'Extract claims', prompt: 'Extract empirical claims from the Custos Technical Monograph (custos://doi/2025.01.sade).' },
-    { icon: Sparkles, label: 'Literature search', prompt: 'Search for recent arXiv papers on multi-agent supervisor architectures with formal safety invariants, published 2024-2025.' }
+    { icon: BookOpen, label: 'Read a source', prompt: 'Help me analyze a paper or URL that I provide. Separate what the source says from your inference.', color: 'text-blue-400', bg: 'bg-blue-400/10' },
+    { icon: ShieldCheck, label: 'Check a claim', prompt: 'Help me evaluate a claim against sources I provide. Mark unsupported or unavailable evidence as unknown.', color: 'text-purple-400', bg: 'bg-purple-400/10' },
+    { icon: Activity, label: 'Plan an experiment', prompt: 'Design a reproducible experiment plan with dataset, baseline, environment, metrics, cost, and stop conditions.', color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
+    { icon: FileText, label: 'Synthesize findings', prompt: 'Help me synthesize selected findings into a brief. Keep the source and uncertainty of each conclusion visible.', color: 'text-amber-400', bg: 'bg-amber-400/10' },
+    { icon: FlaskConical, label: 'Extract claims', prompt: 'From a source I provide, identify atomic claims and the passages needed to evaluate them.', color: 'text-indigo-400', bg: 'bg-indigo-400/10' },
+    { icon: Sparkles, label: 'Compare approaches', prompt: 'Help me compare two approaches using the same evaluation criteria and note what evidence is missing.', color: 'text-rose-400', bg: 'bg-rose-400/10' }
   ];
 
   return (
-    <div className="flex h-full w-full text-[#c9d1d9] font-sans overflow-hidden select-none" style={{ background: '#0d1117' }}>
+    <div className="flex h-full w-full text-[#c9d1d9] font-sans overflow-hidden select-none bg-[#04080F]">
       <WorkspaceSidebar
         currentProject={currentProject}
         projectNames={projectNames}
@@ -151,23 +146,33 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
         onSelectSession={onSelectSession}
         newTaskLabel="New Research Task"
         newTaskIcon={Plus}
-        newTaskIconColor="text-[#a371f7]"
+        newTaskIconColor="text-indigo-400"
         onNewSession={onNewSession}
         tools={[
           {
             icon: BookOpen,
             label: 'Corpus & Sources',
-            onClick: () => onShowToast?.('Search Literature Corpus')
-          },
-          {
-            icon: Activity,
-            label: 'Experiments',
-            onClick: () => onShowToast?.('Experiment Results')
+            onClick: () => openResearchResource('literature', 'Literature')
           },
           {
             icon: ShieldCheck,
             label: 'Claims Matrix',
-            onClick: () => onShowToast?.('Verified Claim Matrix')
+            onClick: () => openResearchResource('claims', 'Claims')
+          },
+          {
+            icon: TerminalSquare,
+            label: 'Notebook & Compute',
+            onClick: () => openResearchResource('experiments', 'Experiments')
+          },
+          {
+            icon: FlaskConical,
+            label: 'Runs Ledger',
+            onClick: () => openResearchResource('synthesis', 'Runs Ledger')
+          },
+          {
+            icon: Code,
+            label: 'Deep Inspector',
+            onClick: () => openResearchResource('artifacts', 'Artifacts')
           },
           {
             icon: Settings2,
@@ -177,8 +182,8 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
         ]}
         sessionsTitle="Research Sessions"
         emptySessionsMessage="No sessions yet"
-        projectActiveColor="bg-[#a371f7]"
-        avatarColor="bg-[#a371f7]"
+        projectActiveColor="bg-gradient-to-r from-indigo-500 to-purple-500"
+        avatarColor="bg-indigo-500"
         avatarText="CV"
         onShowToast={onShowToast}
         onOpenAppGrid={() => onShowToast?.('App Switcher')}
@@ -193,93 +198,43 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
             COLUMN 2: RESEARCH CHAT (AI Science Assistant)
         ───────────────────────────────────────────────────────────── */}
         <div
-          className="flex flex-col h-full overflow-hidden relative select-text"
-          style={{ width: isWebTabExpanded ? '0%' : (isWebTabOpen ? `${splitPercent}%` : '100%'), display: isWebTabExpanded ? 'none' : 'flex', background: '#0d1117' }}
+          className="flex flex-col h-full overflow-hidden relative select-text bg-[#04080F]"
+          style={{ width: isWebTabExpanded ? '0%' : (isWebTabOpen ? `${splitPercent}%` : '100%'), display: isWebTabExpanded ? 'none' : 'flex' }}
         >
-          {/* Chat Header */}
-          <div className="h-10 px-4 border-b border-[#21262d] flex items-center justify-between shrink-0 bg-[#090d13]">
-            <div className="flex items-center gap-2">
-              <FlaskConical className="w-3.5 h-3.5 text-[#a371f7]" />
-              <span className="font-semibold text-white text-[13px]">Research Assistant</span>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              {/* Context Transfer Buttons (Send to Chat & Send to Code) */}
-              {onSwitchMode && (
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => {
-                      onSwitchMode('chat');
-                      if (onShowToast) onShowToast('Transferred research context to Claude Chat');
-                    }}
-                    className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded bg-[#21262d] text-[#8b949e] hover:text-white transition"
-                    title="Take this research context and discuss in Chat"
-                  >
-                    <MessageSquare className="w-3 h-3 text-[#3fb950]" />
-                    <span>Send to Chat</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      onSwitchMode('code');
-                      if (onShowToast) onShowToast('Transferred knowledge context to Codex & Orca ADE');
-                    }}
-                    className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded bg-[#21262d] text-[#8b949e] hover:text-white transition"
-                    title="Take this research context and write code"
-                  >
-                    <Code className="w-3 h-3 text-[#58a6ff]" />
-                    <span>Send to Code</span>
-                  </button>
-                </div>
-              )}
-              {hasMessages && (
-                <>
-                  <button
-                    onClick={exportConversation}
-                    className="flex items-center gap-1 text-[11px] text-[#8b949e] hover:text-white transition"
-                    title="Export conversation as Markdown"
-                  >
-                    <Download className="w-3 h-3 text-[#a371f7]" />
-                    <span>Export .md</span>
-                  </button>
-                  <button
-                    onClick={onClearHistory}
-                    className="flex items-center gap-1 text-[11px] text-[#8b949e] hover:text-white transition"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Clear</span>
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
+          {/* Subtle chat background glow */}
+          <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-indigo-500/5 blur-[120px] rounded-full pointer-events-none" />
 
           {/* Messages Canvas */}
-          <div className="flex-1 overflow-y-auto px-6 pb-44 pt-6 space-y-6">
+          <div className="flex-1 overflow-y-auto px-6 pb-44 pt-8 space-y-8 relative z-0 scroll-smooth">
             {!hasMessages ? (
               /* Empty State */
               <div className="h-full flex flex-col items-center justify-center text-center pb-12">
-                <div className="w-14 h-14 rounded-2xl bg-[#161b22] border border-[#21262d] flex items-center justify-center mb-5 shadow">
-                  <FlaskConical className="w-7 h-7 text-[#a371f7]" />
+                <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-[#111722] to-[#080d16] border border-[#1e2430] flex items-center justify-center mb-6 shadow-[0_0_40px_rgba(99,102,241,0.1)] relative">
+                  <div className="absolute inset-0 bg-indigo-500/10 blur-xl rounded-3xl" />
+                  <FlaskConical className="w-10 h-10 text-indigo-400 relative z-10" />
                 </div>
-                <h1 className="text-xl font-semibold text-white mb-2 tracking-tight">
-                  Claude Science Lab
+                <h1 className="text-2xl font-black text-white mb-3 tracking-tight">
+                  Research Workbench
                 </h1>
-                <p className="text-[12px] text-[#8b949e] max-w-xs mb-6">
-                  Research, verify claims, run experiments. The Evidence Lab is on the right.
+                <p className="text-[13px] text-[#8b949e] max-w-md mb-10 leading-relaxed">
+                  Discuss sources, design verifiable experiments, and extract grounded claims. Open Literature, Claims or Experiments for structured work.
                 </p>
+                
                 {/* Quick prompt grid */}
-                <div className="grid grid-cols-2 gap-2 w-full max-w-sm">
+                <div className="grid grid-cols-2 gap-3 w-full max-w-lg">
                   {RESEARCH_STARTERS.map((s) => {
                     const Icon = s.icon;
                     return (
                       <button
                         key={s.label}
                         onClick={() => setInputText(s.prompt)}
-                        className="text-left p-3 rounded-xl bg-[#161b22] border border-[#21262d] hover:border-[#a371f7]/40 hover:bg-[#1c2128] transition"
+                        className="group text-left p-4 rounded-2xl bg-[#080d16]/80 border border-[#1e2430] hover:border-indigo-500/40 hover:bg-[#0d131f] transition-all hover:shadow-lg hover:-translate-y-0.5"
                       >
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <Icon className="w-3.5 h-3.5 text-[#a371f7]" />
-                          <span className="font-semibold text-[11.5px] text-white">{s.label}</span>
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className={`p-1.5 rounded-lg ${s.bg}`}>
+                            <Icon className={`w-4 h-4 ${s.color}`} />
+                          </div>
+                          <span className="font-bold text-[13px] text-white tracking-wide">{s.label}</span>
                         </div>
                       </button>
                     );
@@ -288,26 +243,26 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
               </div>
             ) : (
               /* Message Thread */
-              <div className="space-y-6 max-w-2xl mx-auto w-full">
+              <div className="space-y-8 max-w-3xl mx-auto w-full">
                 {activeSession!.messages.map((msg, i) => {
                   const isUser = msg.role === 'user';
                   return (
-                    <div key={msg.id || i} className="space-y-2">
-                      <div className="flex items-center gap-2 text-xs">
+                    <div key={msg.id || i} className="space-y-3 group">
+                      <div className="flex items-center gap-3 text-sm">
                         <div
-                          className="w-6 h-6 rounded-full flex items-center justify-center text-white font-bold text-[10px] shrink-0 p-1"
-                          style={{ background: isUser ? '#a371f7' : '#161b22', border: '1px solid #30363d' }}
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[11px] shrink-0 shadow-sm"
+                          style={{ background: isUser ? 'linear-gradient(135deg, #6366f1, #a855f7)' : '#111722', border: isUser ? 'none' : '1px solid #2d3342' }}
                         >
-                          {isUser ? 'CV' : <ClaudeIcon size={13} />}
+                          {isUser ? 'CV' : <ClaudeIcon size={16} />}
                         </div>
-                        <span className="font-semibold text-white">{isUser ? 'Chí Vĩ' : msg.author || 'Claude Science'}</span>
+                        <span className="font-bold text-[#e0e6ed]">{isUser ? 'You' : msg.author || 'Assistant'}</span>
                         {msg.badge && (
-                          <span className="px-1.5 py-0.2 rounded text-[10px] bg-[#161b22] text-[#8b949e] border border-[#30363d]">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-mono font-bold uppercase tracking-wider">
                             {msg.badge}
                           </span>
                         )}
                       </div>
-                      <div className="text-[13px] leading-relaxed text-[#c9d1d9] ml-8">
+                      <div className={`text-[14.5px] leading-[1.8] ml-11 ${isUser ? 'text-[#c9d1d9]' : 'text-[#e0e6ed]'}`}>
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
                           components={{
@@ -315,13 +270,15 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
                               const match = /language-(\w+)/.exec(className || '');
                               if (match) {
                                 return (
-                                  <div className="my-3 rounded-xl overflow-hidden bg-[#141414] border border-[#21262d] font-mono text-[12px]">
-                                    <div className="px-3 py-1.5 bg-[#161b22] text-[10px] uppercase font-semibold text-[#a371f7]">{match[1]}</div>
-                                    <pre className="p-3.5 overflow-x-auto text-[#e0e0e0]"><code>{String(children).replace(/\n$/, '')}</code></pre>
+                                  <div className="my-4 rounded-xl overflow-hidden bg-[#04080F] border border-[#1e2430] font-mono text-[13px] shadow-lg">
+                                    <div className="px-4 py-2 bg-[#080d16] border-b border-[#1e2430] text-[11px] uppercase font-bold tracking-widest text-[#8b949e] flex justify-between items-center">
+                                      <span>{match[1]}</span>
+                                    </div>
+                                    <pre className="p-4 overflow-x-auto text-[#e6edf3]"><code>{String(children).replace(/\n$/, '')}</code></pre>
                                   </div>
                                 );
                               }
-                              return <code className="px-1.5 py-0.5 rounded bg-[#161b22] text-[#a371f7] font-mono text-[12px]" {...props}>{children}</code>;
+                              return <code className="px-1.5 py-0.5 rounded-md bg-[#1e2430] text-indigo-300 font-mono text-[13px] border border-[#2d3342]" {...props}>{children}</code>;
                             }
                           }}
                         >
@@ -336,54 +293,59 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
             )}
           </div>
 
-          {/* Composer */}
-          <div className={`absolute pointer-events-none flex justify-center z-50 transition-all duration-300 ${isWebTabExpanded ? 'bottom-6 left-1/2 -translate-x-1/2 w-[600px]' : 'bottom-4 left-4 right-4'}`}>
-            <div
-              className="w-full bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl p-3 pointer-events-auto transition focus-within:border-[#a371f7]/50"
-            >
-              <textarea
-                rows={2}
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask Claude Science to search, verify, or synthesize research..."
-                className="w-full bg-transparent border-none outline-none text-[#ececec] placeholder-[#6e7681] text-[13px] resize-none leading-relaxed px-1"
-              />
-              <div className="flex items-center justify-between pt-2 border-t border-[#21262d] mt-1">
-                <div className="flex items-center gap-1.5">
+        </div>
+
+        {/* Composer - Moved out to float over both columns */}
+        <div className={`absolute z-[60] pointer-events-none flex justify-center transition-all duration-500 ease-out ${
+          isWebTabExpanded ? 'bottom-6 right-6 w-[360px]' : 'bottom-6 left-6 w-[calc(100%-48px)] max-w-[calc(100vw-300px)]'
+        }`}
+        style={{ width: isWebTabExpanded ? '360px' : (isWebTabOpen ? `calc(${splitPercent}% - 48px)` : 'calc(100% - 48px)'), left: isWebTabExpanded ? 'calc(100% - 360px - 1.5rem)' : '1.5rem' }}
+        >
+          <div
+            className="w-full max-w-4xl bg-[#080d16]/90 backdrop-blur-2xl border border-[#2d3342] rounded-3xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)] p-2 pointer-events-auto transition-all focus-within:border-indigo-500/50 focus-within:shadow-[0_0_30px_rgba(99,102,241,0.15)] group"
+          >
+            <textarea
+              rows={isWebTabExpanded ? 1 : 2}
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Ask about a source, claim, dataset, or experiment..."
+              className="w-full bg-transparent border-none outline-none text-[#e0e6ed] placeholder-[#6e7681] text-[14px] resize-none leading-relaxed px-3 py-2"
+            />
+            <div className="flex items-center justify-between pt-2 px-1">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onShowToast?.('Attach paper / file / URL')}
+                  className="p-2 rounded-xl text-[#8b949e] hover:text-white hover:bg-[#1e2430] transition-colors"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+                <span className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-inner">
+                  Research Tool
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onShowToast?.('Voice input active')}
+                  className="p-2 rounded-xl text-[#8b949e] hover:text-white hover:bg-[#1e2430] transition-colors"
+                >
+                  <Mic className="w-5 h-5" />
+                </button>
+                {inputText.trim() ? (
                   <button
-                    onClick={() => onShowToast?.('Attach paper / file / URL')}
-                    className="p-1.5 rounded-lg text-[#8b949e] hover:text-white hover:bg-[#21262d] transition"
+                    onClick={handleSend}
+                    className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:shadow-[0_0_15px_rgba(99,102,241,0.4)] transition-all hover:scale-105 active:scale-95"
                   >
-                    <Plus className="w-4 h-4" />
+                    <Send className="w-5 h-5" />
                   </button>
-                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-[#0d1117] text-[#a371f7] border border-[#30363d]">
-                    Claude Science
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
+                ) : (
                   <button
-                    onClick={() => onShowToast?.('Voice input active')}
-                    className="p-1.5 rounded-lg text-[#8b949e] hover:text-white hover:bg-[#21262d] transition"
+                    onClick={() => onShowToast?.('Voice synthesis')}
+                    className="p-2 rounded-xl text-[#8b949e] hover:text-white hover:bg-[#1e2430] transition-colors"
                   >
-                    <Mic className="w-4 h-4" />
+                    <AudioWaveform className="w-5 h-5" />
                   </button>
-                  {inputText.trim() ? (
-                    <button
-                      onClick={handleSend}
-                      className="p-1.5 rounded-lg bg-[#a371f7] text-white hover:bg-[#8957e5] transition shadow-sm"
-                    >
-                      <Send className="w-4 h-4" />
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => onShowToast?.('Voice synthesis')}
-                      className="p-1.5 rounded-lg text-[#8b949e] hover:text-white hover:bg-[#21262d] transition"
-                    >
-                      <AudioWaveform className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
             </div>
           </div>
@@ -392,7 +354,7 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
         {/* ── DRAG HANDLE ── */}
         {isWebTabOpen && !isWebTabExpanded && (
           <div
-            className="w-1 bg-[#21262d] hover:bg-[#a371f7]/60 cursor-col-resize shrink-0 z-30 transition-colors"
+            className="w-1.5 bg-[#111722] hover:bg-indigo-500/60 cursor-col-resize shrink-0 z-30 transition-colors border-x border-[#1e2430]"
             onMouseDown={() => { isDragging.current = true; }}
             title="Drag to resize"
           />
@@ -402,16 +364,26 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
             COLUMN 3: WEB TAB (OrcaTabbedContainer)
         ───────────────────────────────────────────────────────────── */}
         <div 
-            className="h-full shrink-0 border-l border-[#21262d] bg-[#0d1117] relative z-20"
+            className="h-full shrink-0 bg-[#04080F] relative z-20"
             style={{ display: isWebTabOpen ? 'block' : 'none', width: isWebTabExpanded ? '100%' : `${100 - splitPercent}%`, position: isWebTabExpanded ? 'absolute' : 'relative', right: 0 }}
           >
             <OrcaTabbedContainer
+              resourceTabs={resourceTabs}
+              isPaneOpen={Boolean(isWebTabOpen)}
               session={sessions.find(s => s.id === activeSessionId)}
               onShowToast={onShowToast}
               isExpanded={isWebTabExpanded}
               onToggleExpand={onToggleExpandWebTab}
               mode="research"
-              onTabsCountChange={onWebTabCountChange}
+              splitPercent={splitPercent}
+              onAskAgent={(draft) => {
+                setInputText((prev) => (prev ? `${prev}\n\n${draft}` : draft));
+                if (onShowToast) onShowToast('Drafted into Research Composer');
+              }}
+              onHandoffToCoding={(claims) => {
+                if (onSwitchMode) onSwitchMode('code');
+                if (onShowToast) onShowToast(`Handed off ${claims.length} verified claim(s) to Coding Workbench!`);
+              }}
             />
           </div>
       </div>

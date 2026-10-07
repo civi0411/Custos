@@ -102,12 +102,12 @@ flowchart LR
     V --> CW["Coding lens"]
 ```
 
-Khi user bấm **Continue in Research** hoặc **Continue in Coding**, backend không clone toàn transcript. Command thực hiện bốn việc có thể kiểm:
+Khi user bấm **Continue in Research** hoặc **Continue in Coding**, UI trước hết hỏi đó là mở cùng chat, tạo linked chat hay thêm bước công việc. Chỉ **linked continuation/Add pack step**, không phải `Open lens`, mới có backend command mang ngữ cảnh. Command đó thực hiện bốn việc có thể kiểm:
 
 1. xác định Task hiện hành hoặc cho user chọn `same Task`, `child Task`, `new Task` khi goal khác;
 2. bind các turn/source/artifact được user chọn bằng stable references và revision;
 3. tạo/revise obligation của pack đích cùng acceptance cần thiết, không tự biến finding thành requirement;
-4. compile ContextPack cho worker đích từ references, decisions và omissions; layout mở lens đích sau khi command được ack.
+4. compile ContextPack cho worker đích từ references, decisions và omissions **nếu user thực sự khởi chạy worker**; layout có thể mở lens đích sau khi continuation được ack mà không tự dispatch.
 
 Transcript gốc vẫn ở session; workbench mới nhìn thấy summary có nguồn, selected artifacts, decisions và unresolved questions. Grant, permit, secret, native hidden state và toàn bộ raw transcript **không được kế thừa ngầm**. Native agent không hỗ trợ resume tương đương thì tạo WorkerRun mới, ghi rõ phần context đã chuyển và phần không chuyển được.
 
@@ -263,3 +263,237 @@ Hiện `StudioPage`, `AppContext`, `WorkspaceTabBar` và các prototype workspac
 6. Đóng/mở app: Task, session bindings, artifacts và evidence phục hồi từ backend; layout phục hồi riêng; pending/uncertain effect được reconcile trước mọi retry.
 
 Journey chỉ pass khi không copy grant, không mất turn/source provenance, không đánh worker completion thành Task success, và mọi lens cho thấy cùng task/revision/budget truth.
+
+## 11. Kiểm tra desktop hiện hành và quyết định hoàn thiện
+
+Phần này là **kiểm tra checkout hiện tại**, không thay thế đích ở §1–10. `ui/desktop` build được bằng `npm run build`; desktop host đã dùng `ensure_daemon_client` và chuyển `custos_request` qua `LocalApiClient`, nên bước host mỏng đã có thật. Build chỉ kiểm tra TypeScript/bundle, không xác nhận giao diện dùng đúng DTO Rust hoặc một journey ba miền chạy end-to-end. Browser dev hiện dùng simulator trong `daemon_client.ts`; ảnh browser không phải bằng chứng cho native Tauri/live daemon.
+
+| Bề mặt | Đã hiện hữu | Khoảng cách tới UX đích |
+|---|---|---|
+| Shell | Header chuyển Chat/Code/Research bằng nút và phím; ba view có sidebar, transcript, composer; right tab container có nhiều loại resource. | `StudioPage` mount ba view riêng và chỉ lưu lens vào `localStorage`; shell chưa có Task strip, inspector, pane state và resource identity dùng chung. |
+| Data/continuity | Desktop host gọi daemon; `AppContext` thử hydrate Tasks và Sessions. | UI projection dùng `Task.id` làm `Session.id`, ghép session theo `task_id` đơn; không có turn binding, selected references hoặc backend ack khi bấm `Send to Code/Research`. Toast `Transferred context` hiện chỉ là đổi lens. |
+| Coding | Có chat, worktree modal và tab file/diff/terminal/changes. | Khi right tab đóng, chat vẫn chiếm khoảng 45% canvas và phần còn lại trống. Branch `wt-simd`, repo files, terminal/evidence trong OrCa tab là fixture; không được hiện như trạng thái live. |
+| Research | Có Research chat và chỗ mở source/claim/experiment. | Nút corpus/experiment/claim hiện chủ yếu ra toast; một transcript Engineering có thể hiện y nguyên ở Research mà không có corpus/claim handoff, provenance hoặc acceptance Research. |
+| Copilot/Assistant | Chat, action chuyển lens, prototype assistant/fleet. | Assistant effect/draft/identity/outbox chưa gắn Task/effect projections; tên model và mode ở một số view bị hard-code theo thương hiệu khác, không phản ánh executor thực. |
+| Contract | Local API đã có Task, Session, Run, Workspace endpoints. | `types/domain.ts` còn là bản viết tay không khớp Rust: Task/Run status casing và variants, `TaskContract.pack` so với `pack_id`, `SessionMode`, cấu trúc journal/run/workspace status. `advanceTask` gửi `phase,status` thay vì `target_status`; `completeTask` gửi `evidence` thay vì `summary,evidence_claims`; `createSession('supervised', taskId)` không tạo attached session theo server. |
+| Truth | Demo simulator giúp thử hình dáng nhanh. | Fixture khẳng định `Verified`, CAS proof, “Mediated Authority”, worktree/agent cụ thể mà không có receipt tương ứng. Mọi dữ liệu này phải mang nhãn `Demo` rõ tại nguồn và tại widget; live mode không được fallback sang fixture. |
+
+### 11.1. Quyết định cấu trúc UI sau khi kiểm tra
+
+Không cần thay Tauri, viết lại React, hay mở thêm một desktop product. **Giữ visual assets và các view hiện có như presentation prototypes**, nhưng chuyển quyền sở hữu state theo các ranh giới sau:
+
+1. `WorkspaceShell` sở hữu route, rail, Task/sidebar selection, lens, pane layout và inspector placement. Nó không giữ Task/Run truth.
+2. `ConversationSurface` sở hữu transcript, composer, turn selection và `Working on: Task | No Task`. Chỉ một conversation model dùng chung; Chat, Coding và Research có thể đổi bố cục/composer affordance, không tạo ba bản copy journal.
+3. `ResourcePaneHost` nhận `resource_ref`, `workspace_id`, `task_id?`, `run_id?` và render file/diff/terminal, PDF/source, claims, experiment, draft, calendar hoặc outbox qua feature view. Pane đóng/mở chỉ đổi presentation state.
+4. `TaskProjection` giữ Task/criterion/evidence/attention từ daemon. `SessionProjection` giữ transcript và binding. `RunProjection` giữ worker/attempt/usage. `WorkspaceProjection` giữ checkout/corpus/account resources. Mọi ID có type riêng; không dùng một `Session` UI object kiêm cả Task.
+5. `LocalApiFacade` chứa DTO sinh hoặc kiểm bằng golden fixtures Rust–TS, command IDs, capability negotiation và event cursor. Tauri invoke là transport, không là business model. Browser demo có adapter riêng với `data_origin=demo`; không silently thay live failure bằng giả lập.
+
+Đây là **ranh giới trách nhiệm**, chưa yêu cầu tạo đủ năm folder ngay. `StudioPage` có thể được rút từng phần qua facade và component adapter, giữ route hoạt động giữa các packet. `WorkspaceTabBar` hiện không phải thanh điều hướng đang render trong `StudioPage`; đừng tiếp tục polish nó như live Task strip trước khi gắn vào shell thật.
+
+### 11.2. Hình dạng tương tác cuối cùng
+
+| Vùng | Khi chưa có Task | Khi đang làm Task | Khi cần human |
+|---|---|---|---|
+| Header/Task strip | `No active Task`, provider/egress thực và action tạo/attach | Goal, revision, pack obligations, source baseline, actual executor/assurance theo action, spend known/estimated/unknown | Attention count và trạng thái pending/uncertain luôn thấy được, kể cả inspector đóng |
+| Sidebar | Recent conversations và workspace resources, không đổ toàn bộ demo vào live | Task liên quan, sessions bind, runs và nguồn; filter theo ID/pack thật | Approval/conflict/stale/disconnected đứng đầu danh sách |
+| Canvas | Copilot chat chiếm chiều rộng hữu ích; không có vùng rỗng vô cớ | Coding: chat + file/diff/test/terminal; Research: chat + source/claims/experiment; Copilot: chat + draft/calendar/outbox | Giữ selection/pane, mở preview exact effect hoặc evidence liên quan |
+| Inspector | Thu gọn; không giả `Verified` | Context, criteria, evidence, activity, permission, cost trên cùng Task | Tự mở đúng tab nhưng không tự approve, retry hay gửi effect |
+
+Open lens chỉ đổi view và được phép tức thì. `Add Research/Coding/Assistant step` phải chọn turn/artifact refs, hiển thị obligation/criteria/egress diff, chờ Task revision ack rồi mới toast thành công. `Fork child Task` tạo goal/budget/scope riêng, không copy grant. Nếu API chưa hỗ trợ các command này, action phải ghi `Chưa hỗ trợ trong live mode` và giữ selection; tuyệt đối không báo “đã chuyển context” chỉ vì `setMode`.
+
+**Wide window:** khi không có pane phải, conversation dùng toàn vùng sau sidebar với max readable text width ở giữa, không giữ một cột chat cố định 45%. Khi mở pane, splitter cho hai vùng có min-width; dưới ngưỡng desktop hẹp chỉ một vùng chính cùng tab/drawer để tránh text/code bị ép dưới chiều rộng đọc được. Tab `New tab` không được mang tên một resource đã tồn tại, còn pane rỗng phải cho thấy chọn file/source/diff hoặc đóng pane. Pane layout có thể lưu local theo user/window, nhưng restore không mở process/agent hay đánh thức effect.
+
+**Tab tài nguyên do Studio shell sở hữu:** thứ tự, tab được chọn và thao tác đóng/mở nằm trên ba lens. Đổi lens dùng lại một tab strip, không remount ba tab store độc lập. `New tab` là một resource picker có một identity, không tạo thêm tab trùng ID. Đóng pane không để tab strip mồ côi trên header. Research có Literature, Claims, Experiments và Synthesis; mỗi tab hiện trạng thái chưa kết nối cho tới khi API cung cấp nguồn, claim hoặc run có version. Provenance của artifact nghiên cứu cần nối tới nguồn, code, environment và run khi có dữ liệu; đây là điều học từ [Claude Science](https://www.anthropic.com/news/claude-science-ai-workbench), không phải claim Custos đã có scientific backend.
+
+### 11.3. Chi tiết bắt buộc theo lens
+
+| Lens | Header và primary action | Main resources | Completion nhìn thấy được |
+|---|---|---|---|
+| Copilot | `Chat`, `Create/attach Task`, provider/model thực; Assistant action xuất hiện theo intent | Transcript, selected context, draft, recipient, calendar, outbox/automation | Draft khác sent; exact recipient/payload, receipt hoặc `uncertain`; không gắn Assistant với fleet dashboard |
+| Coding | `Coding`, repo/branch/worktree/dirty baseline, actual harness và assurance | File/symbol, terminal theo owner, diff theo run/base hash, test matrix, browser preview, candidate compare | Run done khác Task pass; apply/merge cần precondition, approvals và verifier sau integration |
+| Research | `Research`, corpus/scope/freshness và source coverage | Passage/PDF/web, claim support/contradiction, notes, dataset/experiment logs | Locator/version, parse gaps, support method và claim `unknown` ngay cạnh synthesis |
+
+Branding của Custos giữ ổn định ở shell; `Codex`, `Claude`, local coder hoặc agent khác là **executor được chọn/thực chạy** hiển thị bằng tên thật từ attempt. Không đặt tên toàn lens là “Claude Science” hoặc “Codex 3-Column”, vì đổi provider không được làm mất ý nghĩa của workbench. Có thể giữ logo provider trong message/run card khi attribution thực sự có dữ liệu.
+
+### 11.4. Thứ tự chuyển từ prototype sang sản phẩm
+
+1. **Truth pass:** làm `Demo` rõ ở cả shell và resource widgets; ẩn/disable fixture proof, worktree, badge, commands trên live path; sửa khung Coding trống và action toast sai. Đây là việc UI độc lập, không cần backend mới.
+2. **Contract pass:** golden fixtures từ Rust cho Task/Session/Run/Workspace/commands; sửa DTO, enum, `createSession`, `advanceTask`, `completeTask`; test deserialize/error. Nếu API thiếu instruction trong `StartRunRequest`, đừng gửi `instruction` rồi giả nó được worker dùng; thiết kế command/journal contract trước.
+3. **Identity pass:** tách Task/Session/Run/Workspace projections và active IDs. Hydrate Task và Session độc lập; không ép một Task có đúng một Session. Chưa có binding API thì hiện `Unbound` thay vì ghép theo `task_id` không chắc chắn.
+4. **Continuity pass:** cùng Task chuyển Chat → Research → Coding → Copilot qua `Open lens`/`Add step`/`Fork`, selected refs và backend revision ack; transcript không biến thành policy, không sao chép quyền.
+5. **Pane/feature pass:** gắn file/diff/test, source/claim/experiment, draft/outbox vào resource APIs theo từng vertical slice. Những pane còn thiếu hiện empty/unsupported state trung thực.
+6. **Hardening pass:** reconnect/replay, stale resource, run-start unknown, accessibility/focus/keyboard, narrow windows, reduced motion, provider switch, restart, native Tauri smoke test.
+
+**Gate phát hành UI:** một fixture có một session chứa hai Task; một Task trải nhiều sessions/lenses; taskless chat; daemon disconnect/restart; Research→Coding giữ selected claim IDs; Coding→Copilot chỉ đưa accepted/redacted artifact; fake mail timeout hiện `uncertain`; fixture claim sai không thành verified; viewport hẹp không có vùng rỗng/cắt composer. Build xanh là điều kiện nền, không thay các gate này.
+
+### 11.5. Những sửa code đã áp dụng trong packet hiện tại
+
+Packet hiện tại đã thực hiện phần truth/layout/contract có thể làm mà không phát minh API mới: `Task` và `Session` có ID riêng trong UI projection (session chưa bind được đánh dấu `unbound`), journal được đọc từ endpoint journal riêng, session mới được tạo ở chế độ `assisted` rồi attach qua `v1.sessions.attach`, `advance` gửi `target_status` hợp lệ và `complete` dùng `summary/evidence_claims`. Lens actions đổi tên thành `Open ...` và nói rõ chúng chưa tạo handoff; Coding dùng 100% canvas khi pane phải đóng; browser fixtures có banner Demo và transcript không còn tự nhận là proof. Đây chưa phải continuity hoàn chỉnh: `BindTurnsToTask`, `AddPackObligation` và event cursor vẫn cần API/vertical slice riêng trước khi bật hành động handoff thật.
+
+## 12. Lịch sử hội thoại và chuyển workbench
+
+### 12.1. Điều học từ desktop hiện hữu, không suy đoán mã nội bộ
+
+[Tài liệu lệnh ChatGPT desktop](https://learn.chatgpt.com/docs/reference/commands) mô tả chuyển Chat/Work/Codex, đi giữa chat/tab, mở review/file/browser và bố cục split/full. [Tài liệu projects/chats](https://learn.chatgpt.com/docs/projects) xác nhận Work history tách với Codex history và người dùng có thể đưa một ChatGPT chat hiện có vào Codex chat. Đó là bằng chứng về **hành vi sản phẩm công khai**, không cho phép suy ra schema, React state hay implementation nội bộ. Custos nên giữ cảm giác điều hướng rõ như vậy nhưng chủ động giải quyết vấn đề Research → Coding → Assistant bằng session lineage có provenance; không ép ba kho lịch sử vật lý riêng.
+
+| Thành phần | Chủ sở hữu sự thật | Cách hiện trong UI |
+|---|---|---|
+| `ConversationSession` + journal | Session service/persistence, ID và turn IDs bền vững | Transcript có thể mở từ nhiều lens; turn giữ lens/actor/attempt attribution gốc |
+| `home_lens`/workbench membership | Projection tổ chức, sửa được, không là quyền | Sidebar Copilot/Coding/Research lọc mặc định theo lens; Global search tìm tất cả |
+| `Task` và session–task bindings | Kernel + bridge, nhiều–nhiều theo turn/interval ở target | Task chip và criterion chung; session mới không tự nhận grant |
+| `ResourceTab` | Client presentation state theo workspace/session/window | File, source, claim, notebook, diff có stable ref; không đồng nghĩa một chat |
+| `LinkedConversation`/transfer manifest | Canonical provenance cho session đích | Chip “Continued from Research”, mở transcript gốc và danh sách phần đã đưa vào model |
+
+**Ba thao tác khác nhau:**
+
+1. `Open in another workbench`: giữ `session_id`, Task và journal; chỉ đổi lens/layout, có thể thêm membership trong sidebar. Đây là mặc định khi user muốn nhìn cùng cuộc trò chuyện bên cạnh file, paper hoặc notebook. Không gọi model, không chạy notebook và không phát sinh quyền.
+2. `Continue as linked chat`: tạo `destination_session_id` mới, chọn `target_lens`/executor, liên kết nguồn đến `source_session_id` và checkpoint turn. Cùng Task nếu goal/criteria không đổi; tạo pack obligation bằng revision riêng khi thật sự cần. UI hiển thị lịch sử gốc dưới dạng read-only linked timeline (có thể chọn **toàn bộ lịch sử hiển thị**), còn model nhận `ContextReceipt` ghi chính xác selected turns, source/artifact versions, summary, omissions, redactions và token count. Không tuyên bố đã chuyển native hidden state của Codex/Claude/Colab.
+3. `Fork child Task`: khi outcome mới tách acceptance/budget/scope; chọn refs và decisions đưa sang Task con, tạo session đích mới. Grant/permit không copy, source untrusted không thành instruction. Parent vẫn nguyên.
+
+Menu chuyển từ Research nên hiện `Mở Coding với chat này`, `Tiếp tục bằng chat Coding mới`, `Tạo Task coding riêng`. Từ Coding sang Research/Copilot dùng cùng ba nghĩa. Preview của lựa chọn thứ hai hiện số turn, nguồn, notebook/code, claim statuses, egress/provider, phần không thể chuyển và chi phí context dự kiến. Action `Chuyển toàn bộ lịch sử` nghĩa là **cho phép truy cập/hiển thị transcript nguyên bản theo ref**; không đồng nghĩa nhét toàn bộ vào một prompt. Người dùng có thể tăng phạm vi model-visible khi consent/budget cho phép. Composer đích hiện `Working on Task …`, `Linked from …` và `Model received: N turns + M source refs`; nếu thiếu API thì button disabled với lý do, không toast thành công giả.
+
+```mermaid
+flowchart TD
+    R["Research session + immutable turn/source refs"] --> P["Transfer preview: selection, privacy, budget"]
+    P -->|"Open lens"| S["Same session, different resource layout"]
+    P -->|"Linked continuation"| L["New session + lineage manifest"]
+    P -->|"Different goal"| F["Child Task + new session"]
+    L --> C["Context compiler: selected refs, freshness, redaction"]
+    C --> X["Destination worker/model with context receipt"]
+    R --> V["Read-only original timeline in destination"]
+    L --> V
+```
+
+**Atomicity và recovery:** client gửi `command_id`, source journal checkpoint/`expected_revision`, destination lens, selected stable IDs và transfer policy. Backend tạo destination session + provenance link + Task binding trong một canonical transaction; sau commit mới compile context/start run. Retry cùng command trả cùng destination ID, không nhân đôi chat. Nếu provider/context compilation fail, linked chat vẫn tồn tại ở trạng thái `needs_context` với manifest và lỗi; không giả message đầu tiên đã được model đọc. Source bị xóa/hết quyền/stale → `omitted/blocked`, không copy cache cũ. UI reload lấy server projection; local tab layout không là nguồn sự thật.
+
+**Gap của checkout hiện tại:** `crates/custos-domain/src/session.rs` chỉ có `attached_to: Option<TaskId>`; `v1.sessions.attach` nhận một Task và journal entry chỉ có `entry_type/entry_data`, chưa có typed turn-to-task/lens/source binding. `ui/desktop/src/app/studio/page.tsx` đang giữ resource-tab state trong React memory theo project/session, nên đổi lens giữ tab nhưng restart sẽ mất layout. Không dùng `ContinuationPacket` hiện tại (`task_summary` + free-form `current_state`) như hợp đồng transcript transfer hoàn chỉnh. Cần migration/versioned DTO và golden fixtures trước khi bật nút `Continue as linked chat`; không nên chỉ ghép hai transcript trong frontend.
+
+### 12.2. Research có code như Colab nhưng không là Coding checkout
+
+Research Workbench có bốn surface cùng Task: **Library** (paper/web/dataset/version/parse gaps), **Claims** (atomic claim ↔ passage/support/contradiction/unknown), **Experiments** (notebook/code/data/environment/metrics/negative runs), **Synthesis** (brief/figure/report với lineage). Nút `Run cell` mở compute request có environment, dataset scope, network, CPU/GPU, time/cost cap và approval profile; kernel output là `ExperimentArtifact`, không tự thành verified claim. `Open code in Coding` tạo artifact reference + snapshot/env/seed/data caveat; agent coding kiểm repo/branch và requirements trước patch. Worktree repo, notebook kernel và remote GPU là ba loại execution workspace khác nhau.
+
+[Claude Science](https://www.anthropic.com/news/claude-science-ai-workbench) là tham chiếu cho artifact gắn code/environment/message history, reviewer citation/calculation và compute consent, **không có mã desktop công khai để chép toàn bộ**. Lựa chọn public components nên thử theo ranh giới sau, mỗi repo cần pin SHA/license/dependencies và đo latency/quality trước khi tích hợp:
+
+| Nguồn chính thức | Học/thử | Ranh giới trong Custos |
+|---|---|---|
+| [PaperQA2](https://github.com/future-house/paper-qa) | PDF corpus, evidence retrieval, answer citations, fast/high-quality profiles | Optional research adapter/sidecar; Custos giữ SourceRecord, claim status, budget và provider routing. Không nhận citation text của library là criterion pass. |
+| [OpenScholar](https://github.com/akariasai/openscholar) | Literature retrieval/synthesis/evaluation pattern | Benchmark/reference hoặc optional retrieval backend; không nhập toàn bộ training stack vào hot path. |
+| [marimo](https://github.com/marimo-team/marimo) | Reactive Python/SQL notebook, source dạng `.py`, stale/dependency behavior | Optional managed compute/viewer; notebook không sở hữu Task, grant, evidence gate hay repo mutation. |
+| [OpenAlex API](https://help.openalex.org/api/) + [Crossref REST](https://www.crossref.org/documentation/retrieve-metadata/rest-api/access-and-authentication/) | Discovery, metadata, DOI/version matching | Connector I/O có rate/egress/license policy; metadata không phải full text hay claim support. |
+
+MCP phù hợp để nối công cụ ngoài khi có connector thực; in-process/direct API là hợp lý cho ingestion hot path. Không buộc PaperQA2 hoặc notebook qua MCP chỉ để gọi là “hub”. Chọn domain AI/Data/Software trước: paper + repo source + dataset card + notebook/experiment; biology viewers hay HPC chỉ thêm khi có user job và verification profile cụ thể.
+
+### 12.3. Thứ tự triển khai và gate
+
+1. **History projection:** sidebar lọc theo `home_lens` + `shared`, global search; mỗi session có một journal canonical, stable turn IDs. Đổi lens cùng chat không đẻ session mới. Test một Research session xuất hiện ở Coding sau `Open in Coding` mà journal ID không đổi.
+2. **Linked continuation:** thêm manifest/binding transaction và `ContextReceipt`; preview selection toàn bộ/đoạn/brief, egress và omissions. Test Research 100-turn → Coding thấy toàn timeline nhưng model chỉ nhận 5 turns + 2 claim refs đã chọn; không mất nguồn gốc.
+3. **Research vertical slice:** ingest một PDF/source version, mở passage, tạo claim có `unknown` và code/notebook artifact; chuyển selected claim + experiment caveat sang EngineeringBrief; source đổi thành stale ở cả hai lens.
+4. **Compute boundary:** fake kernel trước; run/timeout/cancel/restart có receipt và cost, không chạy lại cell chỉ do reopen tab; sau đó mới thử marimo/Jupyter hoặc remote compute.
+5. **Native harness:** khi Codex/Claude/agent khác được chọn ở chat đích, hiển thị `linked context delivered` hoặc `unsupported`; không nói đã resume internal state. So cùng pinned model baseline, đo handoff recall, unsupported claims, token/context cost, time-to-first-useful-output và user effort.
+
+### 12.4. Hợp đồng danh tính và lịch sử
+
+Thiết kế này phân biệt **lịch sử nhìn thấy** với **ngữ cảnh đã giao cho executor**. Một session có một journal canonical, được đọc theo cursor; Copilot/Coding/Research chỉ là các truy vấn và bố cục khác nhau trên journal đó. Không nhân bản message để tạo ba lịch sử. Mỗi lượt có `turn_id` ổn định, actor, lens lúc tạo, model/harness attempt nếu có, resource refs và privacy label. Sửa/xóa theo retention tạo event hoặc tombstone có audit, không viết lại turn cũ rồi để các liên kết trở thành sai.
+
+| ID/record đích | Sở hữu | Bất biến |
+|---|---|---|
+| `session_id`, `turn_id` | Session service; journal canonical | Một turn thuộc đúng một session nguồn; linked session chỉ tham chiếu, không đổi tác giả/nguồn. |
+| `task_id`, `task_revision` | Kernel | Một Task có thể trải nhiều session; một session có thể chứa turn của nhiều Task; binding theo khoảng turn hoặc từng turn. |
+| `lens_membership` | Session projection | `home_lens` là cách sắp xếp; thêm Coding membership không thêm quyền hay tạo Task. |
+| `source_ref`, `artifact_ref` | Registry/CAS + pack | Luôn mang version/digest, sensitivity và trạng thái freshness; không suy ra support từ việc có ref. |
+| `transfer_id`, `source_checkpoint` | Bridge/persistence | Liên kết bất biến từ session/turn gốc tới session đích; không biến link thành bản sao transcript. |
+| `context_receipt_id`, `model_attempt_id` | Runtime/provider attempt ledger | Chứng minh **input đã chuẩn bị/gửi theo mức quan sát được**, không chứng minh model đọc/hiểu hết hoặc giữ hidden state. |
+
+Lịch sử từng workbench là filter `membership OR home_lens`, thêm Task/project/updated_at để điều hướng; global search tìm toàn bộ session mà actor được phép đọc. Một session có thể hiện ở hai sidebar, nhưng chỉ một `session_id`. Khi người dùng chọn Task khác trong cùng chat, turn mới bind Task mới; các turn cũ giữ nguyên binding. Trường hợp imported Codex/Claude transcript cần lưu origin/harness cùng độ tin cậy của timestamp/tool receipt, không giả nó là journal native đầy đủ.
+
+### 12.5. Lệnh chuyển và state machine
+
+`OpenLens(session_id, target_lens, command_id)` là presentation command: sau ack, có thể persist membership/layout riêng nhưng không tạo message, Task revision hay model attempt. `PreviewContinuation` là read-only, chụp `source_checkpoint`, refs được chọn, source/Task versions và policy của destination. Preview là **estimate**, không phải permit. `CommitContinuation` là command có actor, `command_id`, `expected_source_checkpoint`, `expected_task_revision`, `target_lens`, `destination_task_kind` (`same` hoặc `child`), selected refs, transfer policy và privacy/egress consent; server tự kiểm lại mọi điều kiện đã preview. Không nhận raw path/recipient/model pin từ client như authority.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Previewed
+    Previewed --> Invalidated: source, scope, budget or Task revision changed
+    Previewed --> Committed: idempotent canonical transaction
+    Committed --> NeedsContext: destination session exists
+    NeedsContext --> Ready: context compiled and policy checked
+    NeedsContext --> Blocked: stale, denied or unavailable
+    Ready --> Delivered: attempt transport acknowledged
+    Ready --> Blocked: provider or capability unavailable
+    Delivered --> [*]
+    Blocked --> NeedsContext: explicit retry after correction
+```
+
+`Committed` là điểm duy nhất tạo session đích, lineage record và Task binding trong một SQLite transaction; unique `command_id` trả cùng `destination_session_id` khi retry. Context compilation và model dispatch ở ngoài transaction. Trạng thái `Ready` chỉ nghĩa là context đã được dựng; `Delivered` chỉ được dùng khi adapter chứng minh transport nhận request, không phải assurance rằng model đã sử dụng mọi byte. Nếu crash sau commit, startup/projector khôi phục `NeedsContext` và **không tự gọi model** trừ khi command chạy tiếp đã được user/standing scope cho phép. Nếu crash sau dispatch mà receipt chưa rõ, attempt ở `unknown/reconciling`; không tạo attempt mới mù. Không được cấp lại grant, permit, budget hoặc provider pin cho child Task từ session nguồn.
+
+**Hợp đồng dữ liệu đề xuất, chưa là struct đã có:**
+
+```text
+ContinuationManifest {
+  transfer_id, source_session_id, source_checkpoint_entry_id,
+  destination_session_id, source_task_id?, destination_task_id?,
+  target_lens, actor_id, command_id, created_at,
+  selected_turn_ids[], selected_source_refs[], selected_artifact_refs[],
+  display_scope, requested_model_scope, privacy_decision,
+  source_task_revision?, manifest_version
+}
+ContextReceipt {
+  transfer_id, model_attempt_id?, compiler_version, input_digest,
+  included_turn_ids[], included_source_refs[], included_artifact_refs[],
+  omitted_refs_with_reason[], redaction_digest, token_estimate,
+  destination_provider, destination_model, delivery_state, recorded_at
+}
+```
+
+`display_scope=full_source_timeline` chỉ cho UI fetch lượt gốc mà actor **hiện vẫn có quyền đọc**. `requested_model_scope` có thể là `selected`, `summary_plus_selected`, hoặc `bounded_full`; kể cả `bounded_full` vẫn qua privacy filter và context limit, phải báo phần bị bỏ. Manifest không chứa secrets, raw credential, executable permit hoặc native harness checkpoint. Nếu người dùng xóa/hạn chế nguồn sau khi link, UI hiển thị tombstone thay vì bản cached; ContextReceipt cũ vẫn là audit metadata nhưng bytes nhạy cảm tuân retention policy.
+
+### 12.6. Context compiler của lượt chuyển
+
+Compiler không tóm tắt toàn bộ transcript rồi gọi đó là continuity. Nó lấy manifest và Task revision tại checkpoint, xác thực quyền đọc/egress, kiểm source version/freshness, rồi xây ContextPack có ngân sách rõ. Thứ tự ưu tiên mặc định: (1) goal và acceptance hiện hành, (2) quyết định của human và unresolved/uncertain effects, (3) selected claim/experiment/patch với caveat và source version, (4) các turn được chọn, (5) recent-turn window, (6) source excerpts cần mở lại. Long raw transcript chỉ là phần tùy chọn sau khi đã giữ các mục bắt buộc. Mọi phần cắt, stale hoặc bị redacted xuất hiện trong `omitted_refs_with_reason` và UI `Model received`.
+
+Source text, PDF, web và transcript import là dữ liệu bất tín: không được nâng chúng thành system instruction, Task grant hoặc acceptance criterion. Summary do model tạo có `generator/version/input refs` và nhãn *derived*, không thay thế user decision. Provider/harness switch phải kiểm capability, token window, privacy/local-only, cache invalidation và chi phí; nếu harness chỉ hỗ trợ prompt đầu vào mà không hỗ trợ checkpoint, nói rõ `new run with supplied context`. Chỉ khi attempt thực được ghi mới hiển thị cost/usage; thiếu usage báo `unknown`, không `$0`. Với session cực dài, preview nêu số turn **hiển thị**, số turn **sẽ gửi**, token estimate và những nguồn loại bỏ theo nhóm; cho user xem/edit selection trước khi chạy.
+
+### 12.7. Research Workbench chuyên sâu cho software, AI và data
+
+Research không chỉ là danh sách paper và một ô chat. Cùng Task spine, canvas có năm resource views có thể ghim hoặc tách pane:
+
+| View | Dữ liệu có nguồn | Tương tác chủ đạo | Không được ngụ ý |
+|---|---|---|---|
+| `Library` | Corpus ledger, DOI/URL/version, inclusion, license, fetched_at, parse coverage | Search/filter, dedup, mở bản gốc | Metadata là full text hoặc claim support. |
+| `Reader` | PDF/page/span, table/figure/OCR status, code repo/dataset links | Highlight → ask/claim, đối chiếu version | OCR hoặc link còn sống nghĩa là extraction đúng. |
+| `Claims` | Atomic proposition, units/conditions, support/contradict/unknown links | So sánh nguồn và reviewer notes | Một citation là semantic proof. |
+| `Experiments` | Notebook/code cells, dataset card, env/seed/config, logs/metrics/output digests | Run/stop/compare, inspect negative results | Cell chạy xanh nghĩa là hypothesis được chứng minh. |
+| `Synthesis` | Brief, comparison matrix, figures, limits, selected claims | Review, export, handoff sang Coding | Brief tự trở thành Engineering requirement. |
+
+`ExperimentArtifact` đích gồm `code_digest`, `environment_lock_ref`, `dataset_version/split`, `seed` khi có, `run_id`, `compute_profile`, `input/output digests`, `metrics_with_units`, `logs_ref`, `source_claim_refs`, `reproducibility_status` và `limitations`. Nếu notebook phụ thuộc trạng thái ẩn, remote dataset hoặc nondeterministic GPU, gắn `reproducibility_status=partial/unknown`; không ghi “reproducible” chỉ vì có file `.ipynb`. Figures phải mở được code/config/run sinh ra chúng. Review citation/calculation là verifier riêng có method/version và `unknown` khi không thể đánh giá; không buộc hai agent cho mọi câu hỏi.
+
+Compute có contract `PreviewCompute → Approve/Grant → StartRun → Observe/Cancel → Receipt → Assess`. Local kernel, managed marimo hoặc Jupyter adapter, SSH/HPC và cloud GPU là execution backends **khác nhau**; chọn theo user job và khả năng sandbox/observability, không coi Jupyter message protocol là authority boundary. Output cell là artifact trong CAS; kernel process không viết canonical Task DB. Auto-rerun của reactive notebook không được vô tình chạy network/write/expensive cells ngoài scope đã duyệt; phân loại side effects và cap từng run. Mở lại tab không tự chạy lại. `Open in Coding` chỉ chuyển selected experiment/code refs + caveats; patch vào repo là effect Engineering riêng với base snapshot, diff và tests.
+
+Research stack mặc định nên bắt đầu bằng local PDF/source inventory, lexical retrieval và versioned passage anchors; thêm metadata qua OpenAlex/Crossref theo egress policy; semantic rerank, PaperQA2/OpenScholar, notebook UI hay remote compute chỉ khi fixture chứng minh lợi ích. [Claude Science](https://www.anthropic.com/news/claude-science-ai-workbench) cho ví dụ artifact trace tới code/environment/message history và consent trước khi dùng tài nguyên mới; [marimo](https://docs.marimo.io/getting_started/key_concepts/) gợi ý notebook có dependency/reactivity; [Jupyter messaging](https://jupyter-client.readthedocs.io/en/stable/messaging.html) mô tả transport kernel. Chúng là tham chiếu kỹ thuật, không phải bằng chứng các adapter Custos đã có hoặc notebook được sandbox tự động.
+
+[Mổ xẻ source Open Science Desktop tại SHA đã pin](../development/open-science-source-study.md) bổ sung một tham chiếu open-source có code: chat cạnh notebook/artifact, run và file-version provenance, reviewer findings và curated connectors. Custos chọn UX/lineage patterns, không thay core bằng OpenCode sidecar hay JSONL riêng. Đặc biệt, một run output quan sát theo mtime/hash thiếu không được gắn nhãn bằng chứng hoàn chỉnh; reviewer citation/figure chỉ xác nhận mức traceability đã kiểm, không tự hoàn thành semantic criterion.
+
+### 12.8. Bản đồ triển khai vào repo hiện tại
+
+Không tạo crate `workbench`, `science` hay `chat-history` mới. Đây là **địa chỉ thay đổi dự kiến**, phải cập nhật catalog vật lý khi code thật xuất hiện:
+
+| Ranh giới | Đường hiện có cần mở rộng | Hợp đồng/gap cần đóng |
+|---|---|---|
+| Domain | `crates/custos-domain/src/session.rs`, `continuation.rs`, `context.rs` | Typed turn/lineage/context receipt và validation thuần; giữ compatibility decode với `attached_to` trong thời gian migration. |
+| Kernel/bridge | `crates/custos-core/` ports/policy, `crates/custos-bridge/` session–Task commands | Check actor/scope/revision/consent; một session nhiều Task theo turn range, không lấy `active_task_id` làm quyền. |
+| Persistence | migration sau `0016_execution_workspaces.sql`, `crates/custos-persistence/src/repositories/session.rs` | Tables/index cho membership, binding, lineage, manifest/receipt và idempotent command; journal hiện có là nguồn transcript duy nhất. |
+| Runtime | `crates/custos-runtime/` context/session orchestration | Compile selected refs, freshness/redaction/omission, attach attempt, crash reconciliation; không I/O trực tiếp từ domain. |
+| Research pack/adapters | `crates/custos-packs/src/research/`, `crates/custos-adapters/` | Source/claim/experiment semantics ở pack; PDF/metadata/kernel/SSH/network I/O ở adapters; không đưa notebook process vào core. |
+| Composition/API | `crates/custos-daemon/src/api.rs`, SDK DTOs | Preview/commit/get transfer, list history by lens, watch cursor, typed error/retry; daemon vẫn là host backend duy nhất. |
+| Desktop | `ui/desktop/src/app/studio/page.tsx`, `ResearchView.tsx`, shared resource tabs | Sidebar projections, transfer preview, linked timeline, context receipt, research panes; local layout cache chỉ là preference. |
+
+Migration không xoá/sửa `sessions.attached_to` ngay: thêm binding table canonical, backfill những attachment có thể xác thực, dual-read trong giai đoạn chuyển và chỉ ngừng legacy field sau fixtures/replay. `session_journal.entry_id` hiện là stable cursor nội bộ; nếu public turn ID cần tính ổn định xuyên import/export, tạo ID riêng hoặc mapping versioned, không dùng số rowid để suy ra quyền. `session_messages` và `session_journal` hiện cùng tồn tại; trước khi thêm record phải chốt một nguồn canonical cho transcript và biến bảng kia thành projection có test rebuild, tránh hai lịch sử lệch nhau. Schema cụ thể/foreign keys phải đối chiếu `tasks(id)` và migrations thực tế trước khi viết SQL; bảng trên không phải migration chạy sẵn.
+
+### 12.9. Gate nghiệm thu theo lát cắt
+
+1. **History:** một session hai Task và một Task hai sessions; sidebar mỗi lens + global search trả đúng ID, không duplicate journal; restart giữ provenance và quyền đọc.
+2. **Same-session lens:** Research → Coding → Copilot giữ `session_id`, cursor, selected Task và mở lại source/notebook refs; không phát sinh model call hoặc approval do đổi lens.
+3. **Linked chat:** 100 turns gốc vẫn xem được theo quyền; preview chọn 5 turns + 2 claims; receipt ghi đúng input/omissions; double-click/retry cùng `command_id` chỉ tạo một session đích; crash sau commit không mất link hoặc auto-dispatch.
+4. **Boundaries:** child Task không kế thừa grant; local-only chặn cloud context; secret trong paper/chat không tới provider; user sửa recipient/payload làm approval cũ vô hiệu; native harness không được gắn nhãn resumed khi chỉ có prompt mới.
+5. **Research:** paper đổi version làm claim phụ thuộc stale; OCR sai bảng để `unknown`; negative experiment vẫn lưu cost/outputs; notebook auto-rerun không lặp network write; code/figure mở đúng run/env; `Open in Coding` chỉ chuyển selected artifacts.
+6. **Quality/UX:** so cùng task/model với manual copy/paste và chat-only: handoff recall, unsupported claims, user correction time, billed + unknown cost, p95 time-to-first-useful-output, accessibility/focus và viewport hẹp. Build xanh chưa chứng minh các gate này.

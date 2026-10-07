@@ -101,7 +101,8 @@ impl CustosRuntime {
                 bridge_service.clone(),
             )
             .with_workflow(workflow.clone())
-            .with_workspace(workspace_coordinator.clone()),
+            .with_workspace(workspace_coordinator.clone())
+            .with_research(Arc::new(store.research().clone())),
         );
 
         Ok(Self {
