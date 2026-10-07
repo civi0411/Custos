@@ -1750,6 +1750,8 @@ Khi người dùng ra lệnh xóa một dự án hoặc xóa một ký ức:
 ## 9.6 Cơ Chế ContinuationPacket và Resume An Toàn
 `ContinuationPacket` là bản chiếu versioned, chứa: goal/revision, current criterion statuses, decisions có actor/source, artifacts, budget còn lại, active workflow cursor, pending approval/uncertain effects. Nó chứa references đến grants chứ không chứa reusable permits hoặc plaintext secrets. Mở lại Task cần: xác thực actor/workspace → resolve Task candidate → kiểm source, policy → reconcile effect chưa rõ trước bất kỳ retry → compile context → tiếp tục node hợp lệ.
 
+Layer 0 chuẩn hóa thêm các value object thuần cho Task spine: turn và session–Task binding có định danh ổn định; continuation manifest chỉ mang selected turn/source/artifact references; context receipt phân biệt `ready`, `delivered`, `blocked` và phần bị loại; handoff artifact không mang grant/permit; usage của từng attempt biểu diễn `known|estimated|unknown`; verifier record và outcome giữ trạng thái `pass|fail|unknown|stale` theo từng criterion. Các value object này không tự tạo session, cấp quyền, gọi model, ghi persistence hoặc quyết định Task completion; các hành vi đó vẫn thuộc bridge/core/runtime/persistence theo ranh giới crate.
+
 ## 9.7 Điều Kiện Caching và Tái Sử Dụng
 Cache key bind chặt với provider/model/version, source digests, schema, privacy scope, policy. Prefix cache là tối ưu theo provider, không hứa chuyển cache giữa các model. File watcher chỉ là signal; read mới tại thời điểm sử dụng mới chốt freshness.
 

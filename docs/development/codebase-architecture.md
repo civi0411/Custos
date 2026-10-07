@@ -172,7 +172,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-domain`
 - **Chủ sở hữu chính (Owner):** **Vĩ (Chief Architect)**
 - **Quy tắc ranh giới:** Bất biến Zero-I/O tuyệt đối. Không tokio, rusqlite, reqwest, std::fs.
-- **Tổng số file:** 22 files | **Tổng số dòng mã:** 1,721 lines
+- **Tổng số file Rust:** 37 files | **Tổng số dòng Rust:** 5,105 lines
 - **Mô tả chức năng:** Trái tim của hệ thống: Chứa toàn bộ thực thể thuần khiết, định danh (TaskId, SessionId), các bất biến miền, máy trạng thái tác vụ thuần túy và các khế ước sự kiện (Event Sourcing).
 
 #### Danh mục các file bên trong `crates/custos-domain/`:
@@ -180,25 +180,25 @@ Custos/
 | Tập tin | Số dòng | Vai trò & Trách nhiệm kiến trúc | Các Struct / Trait / Hàm cốt lõi |
 |---|:---:|---|---|
 | [`Cargo.toml`](../../crates/custos-domain/Cargo.toml) | 16 | Module Cargo: phục vụ các cấu trúc và chức năng liên quan | None |
-| [`src/action.rs`](../../crates/custos-domain/src/action.rs) | 163 | Core Invariant 3: Uncertain actions must never be blind retried. | `enum RiskLevel`, `enum ActionLifecycleState`, `fn can_transition_to`, `fn allows_blind_retry` |
-| [`src/approval.rs`](../../crates/custos-domain/src/approval.rs) | 101 | Định nghĩa quy trình duyệt ApprovalRequest, ApprovalDecision và ApprovalStatus | `enum ApprovalStatus`, `struct ApprovalRequest`, `fn new`, `struct ApprovalDecision` |
-| [`src/artifact.rs`](../../crates/custos-domain/src/artifact.rs) | 47 | Định danh và tham chiếu ArtifactRef, ArtifactKind trong hệ thống | `enum ArtifactKind`, `struct ArtifactRef`, `fn new` |
+| [`src/action.rs`](../../crates/custos-domain/src/action.rs) | 369 | Action intent/effect lifecycle, assurance và bất biến không retry mù khi uncertain | `enum RiskLevel`, `enum ActionLifecycleState`, `enum Assurance`, `struct Action`, `struct EffectAttempt` |
+| [`src/approval.rs`](../../crates/custos-domain/src/approval.rs) | 167 | Approval request/decision có identity, expiry và single-resolution validation | `enum ApprovalStatus`, `struct ApprovalRequest`, `struct ApprovalDecision`, `fn apply_to` |
+| [`src/artifact.rs`](../../crates/custos-domain/src/artifact.rs) | 211 | Artifact reference và selected cross-pack handoff không mang authority | `enum ArtifactKind`, `struct ArtifactRef`, `enum HandoffConsent`, `struct ArtifactHandoff` |
 | [`src/authority.rs`](../../crates/custos-domain/src/authority.rs) | 154 | A Grant endows an agent/session with authority to perform certain capabilities. | `enum RiskClass`, `fn fmt`, `struct Grant`, `fn new` |
-| [`src/budget.rs`](../../crates/custos-domain/src/budget.rs) | 52 | Quản trị ngân sách token và tài nguyên Budget (reserve, settle) | `struct Budget`, `fn new`, `fn reserve`, `fn settle` |
+| [`src/budget.rs`](../../crates/custos-domain/src/budget.rs) | 203 | Hạch toán reserve/settle/refund span và token với checked arithmetic | `struct Budget`, `struct ReservationToken`, `fn reserve`, `fn settle`, `fn refund` |
 | [`src/capability.rs`](../../crates/custos-domain/src/capability.rs) | 14 | Khai báo CapabilityManifest và năng lực thực thi của công cụ | `struct CapabilityManifest` |
-| [`src/claim.rs`](../../crates/custos-domain/src/claim.rs) | 11 | Thực thể Claim đại diện cho khẳng định của tác vụ | `struct Claim` |
-| [`src/context.rs`](../../crates/custos-domain/src/context.rs) | 22 | Cấu trúc ContextItem và ContextPack đóng gói ngữ cảnh | `struct ContextItem`, `struct ContextPack` |
-| [`src/continuation.rs`](../../crates/custos-domain/src/continuation.rs) | 106 | Gói tiếp tục ContinuationPacket kèm mã băm SHA-256 bảo đảm an toàn khi tiếp tục | `struct ContinuationPacket`, `fn compute_hash`, `fn create`, `fn verify` |
+| [`src/claim.rs`](../../crates/custos-domain/src/claim.rs) | 291 | Research source/passage/claim/experiment values; tách client proposal khỏi trusted hash/verification status | `struct SourceProposal`, `struct PassageAnchorProposal`, `struct ResearchClaimProposal`, `struct ResearchClaim`, `struct ResearchExperimentRun` |
+| [`src/context.rs`](../../crates/custos-domain/src/context.rs) | 205 | ContextPack và receipt ghi included/omitted refs, redaction, token estimate và delivery state | `struct ContextItem`, `struct ContextPack`, `struct ContextReceipt`, `enum OmittedContextReason` |
+| [`src/continuation.rs`](../../crates/custos-domain/src/continuation.rs) | 290 | Integrity packet và linked-continuation manifest/state không mang permit hoặc secret | `struct ContinuationPacket`, `struct ContinuationManifest`, `enum ContinuationState`, `fn verify` |
 | [`src/error.rs`](../../crates/custos-domain/src/error.rs) | 33 | Phân loại lỗi hệ thống DomainError thuần khiết | `enum DomainError` |
-| [`src/evidence.rs`](../../crates/custos-domain/src/evidence.rs) | 175 | An EvidenceRecord captures a deterministic verification artifact or execution proof. | `enum EvidenceStatus`, `fn fmt`, `struct EvidenceRequirement`, `struct EvidenceRecord` |
+| [`src/evidence.rs`](../../crates/custos-domain/src/evidence.rs) | 351 | Evidence, per-criterion verifier record và Task outcome projection với unknown/stale first-class | `enum EvidenceStatus`, `struct EvidenceRecord`, `struct CriterionVerificationRecord`, `struct TaskOutcome` |
 | [`src/fact.rs`](../../crates/custos-domain/src/fact.rs) | 13 | Thực thể sự thật Fact trích xuất từ môi trường | `struct Fact` |
 | [`src/ids.rs`](../../crates/custos-domain/src/ids.rs) | 46 | Generates a prefixed unique ID: `{prefix}_{uuidv4_simple}` | `fn new_id`, `type TaskId`, `fn digest`, `fn canonical_json` |
-| [`src/lib.rs`](../../crates/custos-domain/src/lib.rs) | 51 | Module lib: phục vụ các cấu trúc và chức năng liên quan | None |
+| [`src/lib.rs`](../../crates/custos-domain/src/lib.rs) | 98 | Explicit module declarations và re-export bề mặt domain canonical | Domain public exports |
 | [`src/packet.rs`](../../crates/custos-domain/src/packet.rs) | 3 | Module packet: phục vụ các cấu trúc và chức năng liên quan | None |
-| [`src/run.rs`](../../crates/custos-domain/src/run.rs) | 174 | Vòng đời thực thi Run, WorkerRun, RunStatus | `enum RunStatus`, `fn fmt`, `fn is_terminal`, `fn can_transition_to` |
-| [`src/session.rs`](../../crates/custos-domain/src/session.rs) | 81 | Thực thể Session, SessionId, SessionStatus, nhật ký SessionJournalEntry | `struct SessionId`, `fn new`, `fn generate`, `fn fmt` |
+| [`src/run.rs`](../../crates/custos-domain/src/run.rs) | 644 | Run/WorkerRun/dispatch lifecycle, launch truth và per-attempt usage không đổi unknown thành zero | `struct Run`, `struct WorkerRun`, `struct LaunchAttempt`, `struct UsageRecord`, `enum UsageExecutorKind`, `enum UsageMeasurement` |
+| [`src/session.rs`](../../crates/custos-domain/src/session.rs) | 260 | Session compatibility model, canonical typed turn và session–Task attribution | `struct Session`, `struct ConversationTurn`, `struct SessionTaskBinding`, `enum WorkbenchLens` |
 | [`src/span.rs`](../../crates/custos-domain/src/span.rs) | 90 | Quản lý phân đoạn thực thi Span, SpanState | `enum SpanState`, `fn fmt`, `struct Span`, `fn new` |
-| [`src/task.rs`](../../crates/custos-domain/src/task.rs) | 228 | Version 1 Canonical Contract alias for SSOT. | `enum EvidenceKind`, `struct ContractEvidence`, `struct TaskContract`, `type TaskContractV1` |
+| [`src/task.rs`](../../crates/custos-domain/src/task.rs) | 309 | Task/contract/revision lifecycle với checked epoch và state-version arithmetic | `enum EvidenceKind`, `struct TaskContract`, `struct TaskRevision`, `struct Task`, `fn create_revision` |
 | [`src/decision.rs`](../../crates/custos-domain/src/decision.rs) | 35 | Re-export tương thích ngược cho mô hình quyết định OI | `type DecisionRecord`, `type StrategyProposal`, `type ExecutionTopology` |
 | [`src/oi/candidate.rs`](../../crates/custos-domain/src/oi/candidate.rs) | 48 | Cấu trúc Candidate và phân loại lý do từ chối RejectionReason | `struct Candidate`, `enum RejectionReason` |
 | [`src/oi/mod.rs`](../../crates/custos-domain/src/oi/mod.rs) | 20 | Module khai báo và re-export toàn bộ từ vựng miền OI | None |

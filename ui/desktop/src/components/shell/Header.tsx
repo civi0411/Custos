@@ -54,12 +54,9 @@ export const Header: React.FC<HeaderProps> = ({
           title="Custos AIDE — Return to Studio"
         >
           <img 
-            src="/assets/custos-owl.png" 
+            src="/assets/custos-logo.png" 
             alt="Custos" 
             className="w-4 h-4 object-contain group-hover:scale-105 transition"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).src = '/assets/custos-logo.png';
-            }}
           />
           <span className="font-semibold text-white tracking-tight hidden sm:inline text-[11.5px]">
             Custos

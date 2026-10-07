@@ -150,7 +150,12 @@ impl Action {
 
     pub fn with_assurance(mut self, assurance: Assurance) -> Self {
         self.assurance = assurance;
-        self.parameters["assurance"] = serde_json::json!(assurance.as_str());
+        if let Some(parameters) = self.parameters.as_object_mut() {
+            parameters.insert(
+                "assurance".into(),
+                serde_json::Value::String(assurance.as_str().into()),
+            );
+        }
         self
     }
 
@@ -345,5 +350,20 @@ mod tests {
         assert!(action
             .transition(ActionLifecycleState::Dispatching)
             .is_err());
+    }
+
+    #[test]
+    fn assurance_update_accepts_non_object_parameters_without_panicking() {
+        let action = Action::new(
+            "act_scalar".into(),
+            "opaque_action".into(),
+            "opaque_target".into(),
+            serde_json::json!("opaque payload"),
+            RiskLevel::Low,
+        )
+        .with_assurance(Assurance::ObserveOnly);
+
+        assert_eq!(action.assurance, Assurance::ObserveOnly);
+        assert_eq!(action.parameters, serde_json::json!("opaque payload"));
     }
 }

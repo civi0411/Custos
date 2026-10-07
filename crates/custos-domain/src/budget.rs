@@ -51,28 +51,71 @@ impl Budget {
     }
 
     pub fn reserve(&mut self, spans: u32, tokens: u64) -> Result<(), DomainError> {
-        if self.settled_spans + self.reserved_spans + spans > self.max_spans {
+        let committed_spans = self
+            .settled_spans
+            .checked_add(self.reserved_spans)
+            .and_then(|value| value.checked_add(spans))
+            .ok_or_else(|| DomainError::BudgetExceeded("Span quota overflow".into()))?;
+        if committed_spans > self.max_spans {
             return Err(DomainError::BudgetExceeded("Span quota exceeded".into()));
         }
-        if self.settled_tokens + self.reserved_tokens + tokens > self.max_tokens {
+        let committed_tokens = self
+            .settled_tokens
+            .checked_add(self.reserved_tokens)
+            .and_then(|value| value.checked_add(tokens))
+            .ok_or_else(|| DomainError::BudgetExceeded("Token quota overflow".into()))?;
+        if committed_tokens > self.max_tokens {
             return Err(DomainError::BudgetExceeded("Token quota exceeded".into()));
         }
-        self.reserved_spans += spans;
-        self.reserved_tokens += tokens;
+        self.reserved_spans = self
+            .reserved_spans
+            .checked_add(spans)
+            .ok_or_else(|| DomainError::BudgetExceeded("Reserved span counter overflow".into()))?;
+        self.reserved_tokens = self
+            .reserved_tokens
+            .checked_add(tokens)
+            .ok_or_else(|| DomainError::BudgetExceeded("Reserved token counter overflow".into()))?;
         Ok(())
     }
 
     pub fn settle(&mut self, actual_spans: u32, actual_tokens: u64) -> Result<(), DomainError> {
-        self.reserved_spans = self.reserved_spans.saturating_sub(actual_spans);
-        self.reserved_tokens = self.reserved_tokens.saturating_sub(actual_tokens);
-        self.settled_spans += actual_spans;
-        self.settled_tokens += actual_tokens;
+        if actual_spans > self.reserved_spans || actual_tokens > self.reserved_tokens {
+            return Err(DomainError::InvariantViolation(format!(
+                "Cannot settle {actual_spans} spans and {actual_tokens} tokens from reservation of {} spans and {} tokens",
+                self.reserved_spans, self.reserved_tokens
+            )));
+        }
+
+        let settled_spans = self
+            .settled_spans
+            .checked_add(actual_spans)
+            .ok_or_else(|| DomainError::BudgetExceeded("Settled span counter overflow".into()))?;
+        let settled_tokens = self
+            .settled_tokens
+            .checked_add(actual_tokens)
+            .ok_or_else(|| DomainError::BudgetExceeded("Settled token counter overflow".into()))?;
+        if settled_spans > self.max_spans || settled_tokens > self.max_tokens {
+            return Err(DomainError::BudgetExceeded(
+                "Settlement would exceed the configured budget".into(),
+            ));
+        }
+
+        self.reserved_spans -= actual_spans;
+        self.reserved_tokens -= actual_tokens;
+        self.settled_spans = settled_spans;
+        self.settled_tokens = settled_tokens;
         Ok(())
     }
 
     pub fn refund(&mut self, spans: u32, tokens: u64) -> Result<(), DomainError> {
-        self.reserved_spans = self.reserved_spans.saturating_sub(spans);
-        self.reserved_tokens = self.reserved_tokens.saturating_sub(tokens);
+        if spans > self.reserved_spans || tokens > self.reserved_tokens {
+            return Err(DomainError::InvariantViolation(format!(
+                "Cannot refund {spans} spans and {tokens} tokens from reservation of {} spans and {} tokens",
+                self.reserved_spans, self.reserved_tokens
+            )));
+        }
+        self.reserved_spans -= spans;
+        self.reserved_tokens -= tokens;
         Ok(())
     }
 
@@ -82,7 +125,7 @@ impl Budget {
         if total == 0 {
             return Headroom::Critical;
         }
-        let used = self.settled_tokens + self.reserved_tokens;
+        let used = self.settled_tokens.saturating_add(self.reserved_tokens);
         if used >= total {
             return Headroom::Critical;
         }
@@ -119,5 +162,42 @@ mod tests {
         // Refund 300 -> back to Constrained
         assert!(budget.refund(1, 300).is_ok());
         assert_eq!(budget.headroom(), Headroom::Constrained);
+    }
+
+    #[test]
+    fn settlement_and_refund_reject_amounts_above_reservation_atomically() {
+        let mut budget = Budget::new(10, 1_000, 100);
+        assert!(budget.reserve(2, 400).is_ok());
+        let before = budget.clone();
+
+        assert!(matches!(
+            budget.settle(3, 400),
+            Err(DomainError::InvariantViolation(_))
+        ));
+        assert_eq!(budget.reserved_spans, before.reserved_spans);
+        assert_eq!(budget.reserved_tokens, before.reserved_tokens);
+        assert_eq!(budget.settled_spans, before.settled_spans);
+        assert_eq!(budget.settled_tokens, before.settled_tokens);
+
+        assert!(matches!(
+            budget.refund(2, 401),
+            Err(DomainError::InvariantViolation(_))
+        ));
+        assert_eq!(budget.reserved_spans, before.reserved_spans);
+        assert_eq!(budget.reserved_tokens, before.reserved_tokens);
+    }
+
+    #[test]
+    fn reserve_rejects_counter_overflow_without_mutation() {
+        let mut budget = Budget::new(u32::MAX, u64::MAX, 0);
+        budget.settled_spans = u32::MAX;
+        budget.settled_tokens = u64::MAX;
+
+        assert!(matches!(
+            budget.reserve(1, 1),
+            Err(DomainError::BudgetExceeded(_))
+        ));
+        assert_eq!(budget.reserved_spans, 0);
+        assert_eq!(budget.reserved_tokens, 0);
     }
 }

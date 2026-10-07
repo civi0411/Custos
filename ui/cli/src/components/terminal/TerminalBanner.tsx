@@ -8,20 +8,6 @@ interface TerminalBannerProps {
 export const TerminalBanner: React.FC<TerminalBannerProps> = ({ onOpenModeSelector }) => {
   return (
     <div className="terminal-hero-banner">
-      <div className="banner-owl-column">
-        <div className="banner-big-owl-wrapper">
-          <img
-            src="/assets/owl.png"
-            alt="Custos Big Snowy Owl Guardian"
-            className="banner-big-owl-img"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.opacity = '0.5';
-            }}
-          />
-          <div className="owl-ambient-glow" />
-        </div>
-      </div>
-
       <div className="banner-content-column">
         <div className="banner-ascii-logo">
           <pre>

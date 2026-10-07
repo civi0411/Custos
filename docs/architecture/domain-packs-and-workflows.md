@@ -168,6 +168,8 @@ sequenceDiagram
 
 Handoff giữ Task/node/producer/consumer, artifact type/version/digest, source dependencies, selected content/redaction/privacy, intent/consent và caveats. Child budget allocation thuộc shared ceiling, không copy balance. Grant/permit không tự đi theo artifact; stale/schema mismatch cần refresh/migrate/block.
 
+Hợp đồng Layer 0 dùng `ArtifactHandoff` để giữ các trường provenance/selection trên dưới dạng references và digest. Struct này cố ý không có grant, permit hoặc executable secret; authority và việc commit handoff vẫn do core/bridge/persistence kiểm soát.
+
 Parent completion kiểm obligations từng miền: paper supported không tự authorize requirement; patch accepted không authorize email. Partial/unknown/stale/uncertain hiện theo criterion, không gộp thành done của cuối pipeline.
 
 ## 7. Acceptance và falsification
