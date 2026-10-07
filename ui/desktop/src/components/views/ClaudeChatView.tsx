@@ -48,6 +48,7 @@ interface ClaudeChatViewProps {
   isWebTabOpen?: boolean;
   isWebTabExpanded?: boolean;
   onToggleExpandWebTab?: () => void;
+  onToggleWebTab?: () => void;
 }
 
 export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
@@ -67,7 +68,8 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
   isSidebarCollapsed,
   isWebTabOpen,
   isWebTabExpanded,
-  onToggleExpandWebTab
+  onToggleExpandWebTab,
+  onToggleWebTab
 }) => {
   const { openSettings } = useAppContext();
   // Chat vs Cowork mode toggle in composer
@@ -246,51 +248,35 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
           className="flex flex-col min-w-0 h-full relative overflow-hidden bg-[#1e1e1e]" 
           style={{ width: isWebTabExpanded ? '0%' : (isWebTabOpen ? `${splitPercent}%` : '100%'), display: isWebTabExpanded ? 'none' : 'flex' }}
         >
-        {/* Top mini header */}
-        <div className="h-11 px-6 flex items-center justify-between shrink-0 z-10 border-b border-[#2b2b2b]">
-          <div className="flex items-center gap-2">
-            {composerMode === 'cowork' ? (
-              <div className="flex items-center gap-2">
-                <span className="flex items-center gap-1.5 text-xs text-[#cc785c] font-medium bg-[#cc785c]/10 border border-[#cc785c]/20 px-2 py-0.5 rounded-full">
-                  <Bot className="w-3 h-3" />
-                  <span>Cowork Mode</span>
-                </span>
-                <button
-                  onClick={() => setIsDelegateModalOpen(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#cc785c] hover:bg-[#b8694f] text-white text-[11.5px] font-medium transition shadow-sm"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Delegate Task</span>
-                </button>
-                <button
-                  onClick={() => setShowFleetWorkbench(!showFleetWorkbench)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11.5px] font-medium transition ${
-                    showFleetWorkbench
-                      ? 'bg-[#383838] border-[#555] text-white'
-                      : 'bg-[#252525] border-[#383838] text-[#b3b3b3] hover:text-white'
-                  }`}
-                >
-                  <LayoutGrid className="w-3.5 h-3.5 text-[#cc785c]" />
-                  <span>{showFleetWorkbench ? 'Hide Fleet Lab' : 'Fleet Workbench'}</span>
-                </button>
-              </div>
-            ) : (
-              <span className="text-xs text-[#8a8a8a]">Claude Desktop • Assistant</span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3 text-xs">
-            <span className="text-[#9c9c9c]">
-              Free plan ·{' '}
+        {/* Cowork mode toolbar (only shown in cowork mode) */}
+        {composerMode === 'cowork' && (
+          <div className="h-10 px-6 flex items-center justify-between shrink-0 z-10 border-b border-[#262c36]/60 bg-[#161b22]/40">
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 text-xs text-[#e6edf3] font-medium bg-[#21262d] border border-[#262c36] px-2 py-0.5 rounded-full">
+                <Bot className="w-3 h-3 text-[#8b949e]" />
+                <span>Cowork Mode</span>
+              </span>
               <button
-                onClick={() => { if (onShowToast) onShowToast('Upgrade to Claude Pro / Custos Enterprise'); }}
-                className="text-white underline hover:text-[#cc785c] transition font-medium"
+                onClick={() => setIsDelegateModalOpen(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white text-black hover:bg-neutral-200 text-[11.5px] font-medium transition shadow-sm"
               >
-                Upgrade
+                <Plus className="w-3.5 h-3.5" />
+                <span>Delegate Task</span>
               </button>
-            </span>
+              <button
+                onClick={() => setShowFleetWorkbench(!showFleetWorkbench)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11.5px] font-medium transition ${
+                  showFleetWorkbench
+                    ? 'bg-[#2d333b] border-[#384252] text-white'
+                    : 'bg-[#1c2128] border-[#262c36] text-[#8b949e] hover:text-white'
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>{showFleetWorkbench ? 'Hide Fleet Lab' : 'Fleet Workbench'}</span>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Collapsible Fleet Workbench (Vinh's AssistantWorkspace) */}
         {composerMode === 'cowork' && showFleetWorkbench && (
@@ -515,7 +501,7 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
 
         {/* ── Floating Composer Box (Screenshot 1 Bottom) ── */}
         <div 
-          className={`absolute pointer-events-none flex justify-center z-50 transition-all duration-500 ease-out ${
+          className={`absolute pointer-events-none flex justify-center z-20 transition-all duration-500 ease-out ${
             isWebTabExpanded ? 'bottom-6 right-6 w-[360px] px-0' : 'bottom-4 left-0 right-0 px-4 md:px-8'
           }`}
           style={{
@@ -523,7 +509,7 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
             left: isWebTabExpanded ? 'calc(100% - 360px - 1.5rem)' : '0px'
           }}
         >
-          <div className="w-full max-w-2xl bg-[#262626]/90 backdrop-blur-xl border border-[#3a3a3a] rounded-2xl shadow-2xl p-3 pointer-events-auto transition focus-within:border-[#555555]">
+          <div className="w-full max-w-2xl bg-[#1c2128]/95 backdrop-blur-xl border border-[#262c36] rounded-2xl shadow-2xl p-3 pointer-events-auto transition focus-within:border-[#384252]">
             <textarea
               ref={textareaRef}
               rows={isWebTabExpanded ? 1 : 2}
@@ -535,22 +521,22 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
                   ? 'Delegate autonomous multi-agent task (Custos SADE)...'
                   : 'How can I help you today?'
               }
-              className="w-full bg-transparent border-none outline-none text-[#ececec] placeholder-[#808080] text-[14px] resize-none leading-relaxed px-1"
+              className="w-full bg-transparent border-none outline-none text-[#ececec] placeholder-[#6e7681] text-[13px] resize-none leading-relaxed px-1"
             />
 
-            <div className="flex items-center justify-between pt-2 border-t border-[#333333] mt-1 select-none">
+            <div className="flex items-center justify-between pt-2 border-t border-[#262c36]/60 mt-1 select-none">
               {/* Left: Plus + Pill [ Chat | Cowork ] */}
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { if (onShowToast) onShowToast('File upload attached'); }}
-                  className="p-1.5 rounded-lg text-[#9c9c9c] hover:text-white hover:bg-[#333333] transition"
+                  className="p-1.5 rounded-lg text-[#8b949e] hover:text-white hover:bg-[#22272e] transition"
                   title="Attach file or context"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
 
                 {/* THE PILL [ Chat | Cowork ] */}
-                <div className="flex items-center p-0.5 rounded-full bg-[#1c1c1c] border border-[#383838] text-[12px]">
+                <div className="flex items-center p-0.5 rounded-full bg-[#161b22] border border-[#262c36] text-[12px]">
                   <button
                     onClick={() => {
                       setComposerMode('chat');
@@ -558,8 +544,8 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
                     }}
                     className={`px-3 py-1 rounded-full font-medium transition ${
                       composerMode === 'chat'
-                        ? 'bg-[#383838] text-white shadow-sm'
-                        : 'text-[#8a8a8a] hover:text-[#e0e0e0]'
+                        ? 'bg-[#22272e] text-white shadow-sm'
+                        : 'text-[#8b949e] hover:text-[#e0e0e0]'
                     }`}
                   >
                     Chat
@@ -571,8 +557,8 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
                     }}
                     className={`px-3 py-1 rounded-full font-medium transition flex items-center gap-1.5 ${
                       composerMode === 'cowork'
-                        ? 'bg-[#cc785c] text-white shadow-sm'
-                        : 'text-[#8a8a8a] hover:text-[#e0e0e0]'
+                        ? 'bg-[#2d333b] text-white shadow-sm border border-[#384252]'
+                        : 'text-[#8b949e] hover:text-[#e0e0e0]'
                     }`}
                   >
                     <Bot className="w-3.5 h-3.5" />
@@ -586,14 +572,14 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
                 <div className="relative">
                   <button
                     onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-                    className="flex items-center gap-1 text-[12px] font-medium text-[#b3b3b3] hover:text-white px-2 py-1 rounded-lg hover:bg-[#333333] transition"
+                    className="flex items-center gap-1 text-[12px] font-medium text-[#8b949e] hover:text-white px-2 py-1 rounded-lg hover:bg-[#22272e] transition"
                   >
                     <span>{selectedModel}</span>
-                    <ChevronDown className="w-3 h-3 text-[#7d7d7d]" />
+                    <ChevronDown className="w-3 h-3 text-[#6e7681]" />
                   </button>
 
                   {isModelDropdownOpen && (
-                    <div className="absolute right-0 bottom-8 w-52 rounded-xl bg-[#262626] border border-[#383838] shadow-2xl p-1.5 text-xs z-50">
+                    <div className="absolute right-0 bottom-8 w-52 rounded-xl bg-[#1c2128] border border-[#262c36] shadow-2xl p-1.5 text-xs z-50">
                       {['Sonnet 5.5 Medium', 'Claude 3.7 Sonnet', 'Custos SADE Sovereign', 'GPT-6 Luna Light', 'DeepSeek V3'].map((m) => (
                         <div
                           key={m}
@@ -604,8 +590,8 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
                           }}
                           className={`px-2.5 py-1.5 rounded-lg cursor-pointer transition ${
                             selectedModel === m
-                              ? 'bg-[#cc785c] text-white font-medium'
-                              : 'text-[#b3b3b3] hover:text-white hover:bg-[#333333]'
+                              ? 'bg-[#2d333b] text-white font-medium'
+                              : 'text-[#8b949e] hover:text-white hover:bg-[#22272e]'
                           }`}
                         >
                           {m}
@@ -617,7 +603,7 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
 
                 <button
                   onClick={() => { if (onShowToast) onShowToast('Voice recording active'); }}
-                  className="p-1.5 rounded-lg text-[#9c9c9c] hover:text-white hover:bg-[#333333] transition"
+                  className="p-1.5 rounded-lg text-[#8b949e] hover:text-white hover:bg-[#22272e] transition"
                   title="Voice input"
                 >
                   <Mic className="w-4 h-4" />
@@ -626,7 +612,7 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
                 {inputText.trim() ? (
                   <button
                     onClick={handleSend}
-                    className="p-1.5 rounded-lg bg-[#cc785c] text-white hover:bg-[#b8694f] transition shadow-sm"
+                    className="p-1.5 rounded-lg bg-neutral-200 text-neutral-900 hover:bg-white transition shadow-sm"
                     title="Send message (Enter)"
                   >
                     <Send className="w-4 h-4" />
@@ -634,7 +620,7 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
                 ) : (
                   <button
                     onClick={() => { if (onShowToast) onShowToast('Voice synthesis active'); }}
-                    className="p-1.5 rounded-lg text-[#9c9c9c] hover:text-white hover:bg-[#333333] transition"
+                    className="p-1.5 rounded-lg text-[#8b949e] hover:text-white hover:bg-[#22272e] transition"
                     title="Voice synthesis"
                   >
                     <AudioWaveform className="w-4 h-4" />
@@ -647,14 +633,14 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
 
         {isWebTabOpen && !isWebTabExpanded && (
           <div
-            className="w-1 bg-[#21262d] hover:bg-[#58a6ff]/60 cursor-col-resize shrink-0 z-30 transition-colors"
+            className="w-1 bg-[#262c36]/60 hover:bg-[#384252] cursor-col-resize shrink-0 z-30 transition-colors"
             onMouseDown={() => { isDragging.current = true; }}
             title="Drag to resize"
           />
         )}
         
         <div 
-            className="h-full shrink-0 border-l border-[#21262d] bg-[#0d1117] relative z-20"
+            className="h-full shrink-0 border-l border-[#262c36] bg-[#0d1117] relative z-10"
             style={{ display: isWebTabOpen ? 'block' : 'none', width: isWebTabExpanded ? '100%' : `${100 - splitPercent}%`, position: isWebTabExpanded ? 'absolute' : 'relative', right: 0 }}
           >
             <OrcaTabbedContainer
@@ -666,6 +652,7 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
               onToggleExpand={onToggleExpandWebTab}
               mode="chat"
               splitPercent={splitPercent}
+              onToggleWebTab={onToggleWebTab}
             />
           </div>
       </div>

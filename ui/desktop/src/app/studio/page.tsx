@@ -156,6 +156,7 @@ export function StudioPage() {
 
             isWebTabExpanded={isWebTabExpanded}
             onToggleExpandWebTab={() => setIsWebTabExpanded(!isWebTabExpanded)}
+            onToggleWebTab={() => setIsWebTabOpen((prev) => !prev)}
             resourceTabs={resourceTabs}
           />
         )}
@@ -184,10 +185,9 @@ export function StudioPage() {
             onSwitchMode={setMode}
             isSidebarCollapsed={isSidebarCollapsed}
             isWebTabOpen={isWebTabOpen}
-
-
             isWebTabExpanded={isWebTabExpanded}
             onToggleExpandWebTab={() => setIsWebTabExpanded(!isWebTabExpanded)}
+            onToggleWebTab={() => setIsWebTabOpen((prev) => !prev)}
             resourceTabs={resourceTabs}
           />
         )}
@@ -214,10 +214,9 @@ export function StudioPage() {
             onSwitchMode={setMode}
             isSidebarCollapsed={isSidebarCollapsed}
             isWebTabOpen={isWebTabOpen}
-
-
             isWebTabExpanded={isWebTabExpanded}
             onToggleExpandWebTab={() => setIsWebTabExpanded(!isWebTabExpanded)}
+            onToggleWebTab={() => setIsWebTabOpen((prev) => !prev)}
             resourceTabs={resourceTabs}
           />
         )}

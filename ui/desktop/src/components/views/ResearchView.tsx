@@ -49,6 +49,7 @@ interface ResearchViewProps {
   isWebTabOpen?: boolean;
   isWebTabExpanded?: boolean;
   onToggleExpandWebTab?: () => void;
+  onToggleWebTab?: () => void;
 }
 
 export const ResearchView: React.FC<ResearchViewProps> = ({
@@ -69,7 +70,8 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
   isSidebarCollapsed,
   isWebTabOpen,
   isWebTabExpanded,
-  onToggleExpandWebTab
+  onToggleExpandWebTab,
+  onToggleWebTab
 }) => {
   const { openSettings } = useAppContext();
   const [inputText, setInputText] = useState('');
@@ -295,14 +297,14 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
 
         </div>
 
-        {/* Composer - Moved out to float over both columns */}
-        <div className={`absolute z-[60] pointer-events-none flex justify-center transition-all duration-500 ease-out ${
+        {/* Composer - Floating with controlled z-index */}
+        <div className={`absolute z-20 pointer-events-none flex justify-center transition-all duration-500 ease-out ${
           isWebTabExpanded ? 'bottom-6 right-6 w-[360px]' : 'bottom-6 left-6 w-[calc(100%-48px)] max-w-[calc(100vw-300px)]'
         }`}
         style={{ width: isWebTabExpanded ? '360px' : (isWebTabOpen ? `calc(${splitPercent}% - 48px)` : 'calc(100% - 48px)'), left: isWebTabExpanded ? 'calc(100% - 360px - 1.5rem)' : '1.5rem' }}
         >
           <div
-            className="w-full max-w-4xl bg-[#080d16]/90 backdrop-blur-2xl border border-[#2d3342] rounded-3xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)] p-2 pointer-events-auto transition-all focus-within:border-indigo-500/50 focus-within:shadow-[0_0_30px_rgba(99,102,241,0.15)] group"
+            className="w-full max-w-4xl bg-[#1c2128]/95 backdrop-blur-xl border border-[#262c36] rounded-2xl shadow-2xl p-2.5 pointer-events-auto transition-all focus-within:border-[#384252] group"
           >
             <textarea
               rows={isWebTabExpanded ? 1 : 2}
@@ -310,40 +312,40 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask about a source, claim, dataset, or experiment..."
-              className="w-full bg-transparent border-none outline-none text-[#e0e6ed] placeholder-[#6e7681] text-[14px] resize-none leading-relaxed px-3 py-2"
+              className="w-full bg-transparent border-none outline-none text-[#ececec] placeholder-[#6e7681] text-[13px] resize-none leading-relaxed px-3 py-1.5"
             />
-            <div className="flex items-center justify-between pt-2 px-1">
+            <div className="flex items-center justify-between pt-1.5 px-1 border-t border-[#262c36]/60">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => onShowToast?.('Attach paper / file / URL')}
-                  className="p-2 rounded-xl text-[#8b949e] hover:text-white hover:bg-[#1e2430] transition-colors"
+                  className="p-1.5 rounded-lg text-[#8b949e] hover:text-white hover:bg-[#22272e] transition-colors"
                 >
-                  <Plus className="w-5 h-5" />
+                  <Plus className="w-4 h-4" />
                 </button>
-                <span className="text-[11px] font-mono font-bold px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 shadow-inner">
+                <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-md bg-white/5 text-neutral-300 border border-white/10">
                   Research Tool
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => onShowToast?.('Voice input active')}
-                  className="p-2 rounded-xl text-[#8b949e] hover:text-white hover:bg-[#1e2430] transition-colors"
+                  className="p-1.5 rounded-lg text-[#8b949e] hover:text-white hover:bg-[#22272e] transition-colors"
                 >
-                  <Mic className="w-5 h-5" />
+                  <Mic className="w-4 h-4" />
                 </button>
                 {inputText.trim() ? (
                   <button
                     onClick={handleSend}
-                    className="p-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white hover:shadow-[0_0_15px_rgba(99,102,241,0.4)] transition-all hover:scale-105 active:scale-95"
+                    className="p-1.5 rounded-lg bg-neutral-200 text-neutral-900 hover:bg-white transition shadow-sm"
                   >
-                    <Send className="w-5 h-5" />
+                    <Send className="w-4 h-4" />
                   </button>
                 ) : (
                   <button
                     onClick={() => onShowToast?.('Voice synthesis')}
-                    className="p-2 rounded-xl text-[#8b949e] hover:text-white hover:bg-[#1e2430] transition-colors"
+                    className="p-1.5 rounded-lg text-[#8b949e] hover:text-white hover:bg-[#22272e] transition-colors"
                   >
-                    <AudioWaveform className="w-5 h-5" />
+                    <AudioWaveform className="w-4 h-4" />
                   </button>
                 )}
               </div>
@@ -354,7 +356,7 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
         {/* ── DRAG HANDLE ── */}
         {isWebTabOpen && !isWebTabExpanded && (
           <div
-            className="w-1.5 bg-[#111722] hover:bg-indigo-500/60 cursor-col-resize shrink-0 z-30 transition-colors border-x border-[#1e2430]"
+            className="w-1 bg-[#262c36]/60 hover:bg-[#384252] cursor-col-resize shrink-0 z-30 transition-colors"
             onMouseDown={() => { isDragging.current = true; }}
             title="Drag to resize"
           />
@@ -364,7 +366,7 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
             COLUMN 3: WEB TAB (OrcaTabbedContainer)
         ───────────────────────────────────────────────────────────── */}
         <div 
-            className="h-full shrink-0 bg-[#04080F] relative z-20"
+            className="h-full shrink-0 border-l border-[#262c36] bg-[#04080F] relative z-10"
             style={{ display: isWebTabOpen ? 'block' : 'none', width: isWebTabExpanded ? '100%' : `${100 - splitPercent}%`, position: isWebTabExpanded ? 'absolute' : 'relative', right: 0 }}
           >
             <OrcaTabbedContainer
@@ -376,6 +378,7 @@ export const ResearchView: React.FC<ResearchViewProps> = ({
               onToggleExpand={onToggleExpandWebTab}
               mode="research"
               splitPercent={splitPercent}
+              onToggleWebTab={onToggleWebTab}
               onAskAgent={(draft) => {
                 setInputText((prev) => (prev ? `${prev}\n\n${draft}` : draft));
                 if (onShowToast) onShowToast('Drafted into Research Composer');

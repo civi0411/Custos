@@ -23,6 +23,7 @@ import {
 import { ClaudeIcon, GeminiIcon, OpenAIIcon, DeepSeekIcon } from '../../components/common/AgentIcons';
 import { useAppContext } from '../../context/AppContext';
 import { CustomSelect } from '../../components/CustomSelect';
+import { getModifierKey, isMacOS } from '@/lib/utils';
 
 type SettingsTab = 
   | 'general' 
@@ -46,6 +47,9 @@ export const SettingsPage: React.FC = () => {
     handleRevokeClientKey,
     showToast 
   } = useAppContext();
+
+  const modKey = getModifierKey();
+  const altKey = isMacOS() ? '⌥' : 'Alt+';
 
   // Tab State
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -360,20 +364,20 @@ export const SettingsPage: React.FC = () => {
 
                   <input
                     type="range"
-                    min="75"
+                    min="70"
                     max="150"
-                    step="5"
+                    step="10"
                     value={uiScale}
                     onChange={(e) => handleSetUiScale(parseInt(e.target.value, 10))}
                     className="w-full h-1.5 bg-[#0d1117] rounded-lg appearance-none cursor-pointer accent-[#58a6ff]"
                   />
 
-                  <div className="flex items-center gap-2 pt-1">
-                    {[85, 90, 100, 110, 125].map((preset) => (
+                  <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                    {[70, 80, 90, 100, 110, 120, 130, 140, 150].map((preset) => (
                       <button
                         key={preset}
                         onClick={() => handleSetUiScale(preset)}
-                        className={`px-2.5 py-1 rounded text-[11px] font-mono transition ${
+                        className={`px-2 py-0.5 rounded text-[11px] font-mono transition ${
                           uiScale === preset
                             ? 'bg-[#21262d] text-white border border-[#30363d] font-medium'
                             : 'bg-[#0d1117] hover:bg-[#21262d] text-[#8b949e] hover:text-white border border-[#21262d]'
@@ -774,16 +778,16 @@ export const SettingsPage: React.FC = () => {
                 <div className="p-4 rounded-xl bg-[#161b22] border border-[#21262d] space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 font-mono text-xs">
                     {[
-                      { action: 'Open Settings', key: '⌘, / Ctrl+,' },
-                      { action: 'API Keys & Models', key: '⌘⌥A / Ctrl+Alt+A' },
-                      { action: 'Toggle Orca Tools', key: '⌘⌥O / Ctrl+Alt+O' },
-                      { action: 'Switch to Chat', key: '⌘1 / Ctrl+1' },
-                      { action: 'Switch to Code ADE', key: '⌘2 / Ctrl+2' },
-                      { action: 'Switch to Research', key: '⌘3 / Ctrl+3' },
-                      { action: 'New Session', key: '⌘N / Ctrl+N' },
-                      { action: 'Toggle Sidebar', key: '⌘B / Ctrl+B' },
-                      { action: 'Toggle Diff Split', key: '⌘\\ / Ctrl+\\' },
-                      { action: 'Quick Command Palette', key: '⌘K / Ctrl+K' },
+                      { action: 'Open Settings', key: `${modKey},` },
+                      { action: 'API Keys & Models', key: `${modKey}${altKey}A` },
+                      { action: 'Toggle Orca Tools', key: `${modKey}${altKey}O` },
+                      { action: 'Switch to Chat', key: `${modKey}1` },
+                      { action: 'Switch to Code ADE', key: `${modKey}2` },
+                      { action: 'Switch to Research', key: `${modKey}3` },
+                      { action: 'New Session', key: `${modKey}N` },
+                      { action: 'Toggle Sidebar', key: `${modKey}B` },
+                      { action: 'Toggle Diff Split', key: `${modKey}\\` },
+                      { action: 'Quick Command Palette', key: `${modKey}K` },
                     ].map((s, idx) => (
                       <div key={idx} className="flex items-center justify-between p-2.5 rounded-lg bg-[#0d1117] border border-[#21262d]">
                         <span className="text-[#c9d1d9] font-sans text-xs">{s.action}</span>

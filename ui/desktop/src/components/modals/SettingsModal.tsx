@@ -26,6 +26,7 @@ import { ClaudeIcon, GeminiIcon, OpenAIIcon, DeepSeekIcon } from '../common/Agen
 import { useAppContext } from '../../context/AppContext';
 import { CustomSelect } from '../CustomSelect';
 import { Tooltip } from '../Tooltip';
+import { getModifierKey } from '@/lib/utils';
 
 export interface SettingsModalProps {
   isOpen: boolean;
@@ -62,6 +63,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setIsAddProviderOpen,
     handleGenerateClientKey 
   } = useAppContext();
+
+  const modKey = getModifierKey();
 
   // Tab State
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -411,20 +414,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   <input
                     type="range"
-                    min="75"
+                    min="70"
                     max="150"
-                    step="5"
+                    step="10"
                     value={uiScale}
                     onChange={(e) => handleSetUiScale(parseInt(e.target.value, 10))}
                     className="w-full h-1.5 bg-[#0d1117] rounded-lg appearance-none cursor-pointer accent-[#58a6ff]"
                   />
 
-                  <div className="flex items-center gap-2 pt-1">
-                    {[85, 90, 100, 110, 125].map((preset) => (
+                  <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                    {[70, 80, 90, 100, 110, 120, 130, 140, 150].map((preset) => (
                       <button
                         key={preset}
                         onClick={() => handleSetUiScale(preset)}
-                        className={`px-2.5 py-1 rounded text-[11px] font-mono transition ${
+                        className={`px-2 py-0.5 rounded text-[11px] font-mono transition ${
                           uiScale === preset
                             ? 'bg-[#21262d] text-white border border-[#30363d] font-medium'
                             : 'bg-[#0d1117] hover:bg-[#21262d] text-[#8b949e] hover:text-white border border-[#21262d]'
@@ -961,16 +964,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div className="border border-[#21262d] rounded-xl overflow-hidden bg-[#161b22] divide-y divide-surface-border/60">
                   {[
-                    { action: 'Open Preferences / Settings', key: 'Ctrl+,' },
-                    { action: 'Toggle Sessions Sidebar', key: 'Ctrl+B' },
-                    { action: 'Toggle Split / Chat View', key: 'Ctrl+\\' },
-                    { action: 'Create New Session', key: 'Ctrl+N' },
-                    { action: 'Accept & Apply Code Diff', key: 'Ctrl+Enter' },
-                    { action: 'Clear Current History', key: 'Ctrl+K' },
-                    { action: 'Zoom Interface In', key: 'Ctrl++' },
-                    { action: 'Zoom Interface Out', key: 'Ctrl+-' },
-                    { action: 'Reset Zoom (100%)', key: 'Ctrl+0' },
-                    { action: 'Focus Chat Input', key: 'Ctrl+/' },
+                    { action: 'Open Preferences / Settings', key: `${modKey},` },
+                    { action: 'Toggle Sessions Sidebar', key: `${modKey}B` },
+                    { action: 'Toggle Split / Chat View', key: `${modKey}\\` },
+                    { action: 'Create New Session', key: `${modKey}N` },
+                    { action: 'Accept & Apply Code Diff', key: `${modKey}Enter` },
+                    { action: 'Clear Current History', key: `${modKey}K` },
+                    { action: 'Zoom Interface In', key: `${modKey}+` },
+                    { action: 'Zoom Interface Out', key: `${modKey}-` },
+                    { action: 'Reset Zoom (100%)', key: `${modKey}0` },
+                    { action: 'Focus Chat Input', key: `${modKey}/` },
                   ].map((s) => (
                     <div key={s.action} className="flex items-center justify-between px-4 py-2.5 hover:bg-[#0d1117]/50 transition">
                       <span className="text-[#c9d1d9] font-medium">{s.action}</span>

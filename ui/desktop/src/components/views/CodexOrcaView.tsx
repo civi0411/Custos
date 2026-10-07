@@ -38,6 +38,7 @@ interface CodexOrcaViewProps {
   isWebTabOpen?: boolean;
   isWebTabExpanded?: boolean;
   onToggleExpandWebTab?: () => void;
+  onToggleWebTab?: () => void;
 }
 
 export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
@@ -60,7 +61,8 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
   isSidebarCollapsed,
   isWebTabOpen,
   isWebTabExpanded,
-  onToggleExpandWebTab
+  onToggleExpandWebTab,
+  onToggleWebTab
 }) => {
   const { openSettings } = useAppContext();
   const [inputText, setInputText] = useState('');
@@ -239,12 +241,12 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
         </div>
 
         {/* Chat Composer Input - Moved out to float over both columns */}
-        <div className={`absolute z-[60] transition-all duration-500 ease-in-out flex justify-center pointer-events-none ${
+        <div className={`absolute z-20 transition-all duration-500 ease-in-out flex justify-center pointer-events-none ${
           isWebTabExpanded ? 'bottom-6 right-6 w-[360px]' : 'bottom-6 left-6 w-[calc(100%-48px)] max-w-[calc(100vw-300px)]'
         }`}
         style={{ width: isWebTabExpanded ? '360px' : (isWebTabOpen ? `calc(${splitPercent}% - 48px)` : 'calc(100% - 48px)'), left: isWebTabExpanded ? 'calc(100% - 360px - 1.5rem)' : '1.5rem' }}
         >
-          <div className="bg-[#161b22]/90 backdrop-blur-xl border border-[#30363d] rounded-2xl p-3 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)] pointer-events-auto transition focus-within:border-[#58a6ff]/50 w-full group">
+          <div className="bg-[#161b22]/95 backdrop-blur-xl border border-[#262c36] rounded-2xl p-3 shadow-xl pointer-events-auto transition focus-within:border-white/30 w-full group">
             <textarea
               rows={isWebTabExpanded ? 1 : 2}
               value={inputText}
@@ -253,10 +255,10 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
               placeholder="Message Codex to write code or run terminal tasks..."
               className="w-full bg-transparent border-none outline-none text-[#c9d1d9] placeholder-[#8b949e] text-[13px] resize-none"
             />
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#21262d]">
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#262c36]/60">
               <div className="flex items-center gap-2 text-[#8b949e]">
                 <button className="p-1 hover:text-white transition rounded"><Plus className="w-4 h-4" /></button>
-                <span className="text-[11px] font-mono border border-[#30363d] bg-[#0d1117] px-2 py-0.5 rounded text-[#58a6ff]">
+                <span className="text-[11px] font-mono border border-[#262c36] bg-[#0d1117] px-2 py-0.5 rounded text-[#c9d1d9]">
                   SADE Copilot
                 </span>
               </div>
@@ -265,7 +267,7 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
                   onClick={handleSend}
                   disabled={!inputText.trim()}
                   className={`p-1.5 rounded-lg transition ${
-                    inputText.trim() ? 'bg-[#58a6ff] text-white hover:bg-[#3182ce]' : 'text-[#8b949e] bg-[#21262d]'
+                    inputText.trim() ? 'bg-white text-black hover:bg-neutral-200 shadow-sm' : 'text-[#8b949e] bg-[#21262d]'
                   }`}
                 >
                   <Send className="w-4 h-4" />
@@ -278,7 +280,7 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
         {/* ── DRAG HANDLE ── */}
         {isWebTabOpen && !isWebTabExpanded && (
         <div
-          className="w-1 bg-[#21262d] hover:bg-[#58a6ff]/60 cursor-col-resize shrink-0 z-30 transition-colors"
+          className="w-1 bg-[#262c36]/60 hover:bg-[#384252] cursor-col-resize shrink-0 z-30 transition-colors"
           onMouseDown={() => { isDragging.current = true; }}
           title="Drag to resize"
         />
@@ -289,7 +291,7 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
         ───────────────────────────────────────────────────────────── */}
         
         <div 
-            className="h-full shrink-0 border-l border-[#21262d] bg-[#0d1117] relative z-20"
+            className="h-full shrink-0 border-l border-[#262c36] bg-[#0d1117] relative z-10"
             style={{ display: isWebTabOpen ? 'block' : 'none', width: isWebTabExpanded ? '100%' : `${100 - splitPercent}%`, position: isWebTabExpanded ? 'absolute' : 'relative', right: 0 }}
           >
             <OrcaTabbedContainer
@@ -304,6 +306,7 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
               onToggleExpand={onToggleExpandWebTab}
               mode="code"
               splitPercent={splitPercent}
+              onToggleWebTab={onToggleWebTab}
             />
           </div>
       </div>

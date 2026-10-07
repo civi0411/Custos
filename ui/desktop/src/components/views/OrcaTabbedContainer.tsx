@@ -24,7 +24,8 @@ import {
   Check,
   FileCode,
   Sliders,
-  Sparkles
+  Sparkles,
+  PanelRight
 } from 'lucide-react';
 import { Session } from '@/types';
 import { WorktreeManagerModal, TaskDetailsModal } from '@/components/modals';
@@ -227,6 +228,7 @@ interface OrcaTabbedContainerProps {
   onAskAgent?: (draftText: string) => void;
   onHandoffToCoding?: (claims: any[]) => void;
   splitPercent?: number;
+  onToggleWebTab?: () => void;
 }
 
 export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
@@ -243,6 +245,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   onAskAgent,
   onHandoffToCoding,
   splitPercent = 45,
+  onToggleWebTab,
 }) => {
   
   // Tabs management
@@ -399,7 +402,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     <div className="h-full flex w-full overflow-hidden">
       {/* ── LEFT: CHAT HEADER (Matches Chat Column Width) ── */}
       {!isExpanded && isPaneOpen && (
-        <div style={{ width: `${splitPercent}%` }} className="h-full flex items-center px-4 border-r border-[#21262d] shrink-0 bg-[#090d13]">
+        <div style={{ width: `${splitPercent}%` }} className="h-full flex items-center px-4 border-r border-[#262c36] shrink-0 bg-[#090d13]">
           <div className="flex items-center gap-2 text-[12px] text-[#8b949e] hover:text-[#c9d1d9] transition cursor-pointer">
             <MessageSquare className="w-3.5 h-3.5" />
             <span className="truncate font-medium">{session?.title || (mode === 'code' ? 'Engineering Copilot' : 'Research Assistant')}</span>
@@ -478,7 +481,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
         </div>
 
         {/* Tab Right Controls */}
-        <div className="flex items-center gap-1 shrink-0 text-[#8b949e] pl-2 border-l border-[#21262d]">
+        <div className="flex items-center gap-1 shrink-0 text-[#8b949e] px-2 border-l border-[#262c36]/60">
           {onToggleExpand && (
             <button
               onClick={onToggleExpand}
@@ -488,17 +491,26 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
               {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
             </button>
           )}
+          {onToggleWebTab && (
+            <button
+              onClick={onToggleWebTab}
+              className="p-1 rounded-md hover:text-white hover:bg-[#21262d] transition"
+              title="Close resource pane"
+            >
+              <PanelRight className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#04080F] border-l border-[#1e2430] overflow-hidden select-none font-sans text-xs">
+    <div className="flex flex-col h-full w-full bg-[#04080F] border-l border-[#262c36] overflow-hidden select-none font-sans text-xs">
       {isPaneOpen && portalTarget && createPortal(tabStrip, portalTarget)}
 
       {/* 2. Sub-navigation Address Bar (Screenshot 2 Sub-header) */}
-      <div className="h-9 bg-[#080d16] border-b border-[#1e2430] flex items-center px-2.5 gap-2 shrink-0">
+      <div className="h-9 bg-[#080d16] border-b border-[#262c36]/60 flex items-center px-2.5 gap-2 shrink-0">
         {activeTabId !== 'tools' && !['literature', 'claims', 'experiments', 'synthesis'].includes(activeTabId) && (
           <span className="shrink-0 rounded border border-amber-600/40 px-1.5 py-0.5 text-[10px] text-amber-300" title="This resource view still contains prototype fixtures">Demo preview</span>
         )}

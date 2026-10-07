@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Scaling } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
+import { getModifierKey } from '@/lib/utils';
 
 interface StatusBarProps {
   activeSessionTitle: string;
@@ -19,6 +20,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 }) => {
   const [isScaleMenuOpen, setIsScaleMenuOpen] = useState(false);
   const scaleRef = useRef<HTMLDivElement>(null);
+  const modKey = getModifierKey();
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -30,10 +32,10 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const presets = [85, 90, 100, 110, 120, 130, 140, 150];
+  const presets = [70, 80, 90, 100, 110, 120, 130, 140, 150];
 
   return (
-    <footer className="h-6 bg-surface border-t border-surface-border px-3 flex items-center justify-between text-[11px] font-mono text-neutral-400 shrink-0 z-30 select-none">
+    <footer className="h-6 bg-surface border-t border-surface-border px-3 flex items-center justify-between text-[11px] font-mono text-neutral-400 shrink-0 z-40 select-none">
       {/* Active Session Info */}
       <div className="flex items-center gap-3 truncate">
         <span className="flex items-center gap-1.5 text-neutral-300 font-medium">
@@ -48,7 +50,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
         {/* UI Scale Popover Trigger */}
         <div className="relative inline-flex items-center" ref={scaleRef}>
-          <Tooltip content="Scale: Fonts & Components (Ctrl++ / Ctrl+-)" position="top" align="end">
+          <Tooltip content={`Scale: Fonts & Components (${modKey}++ / ${modKey}+-)`} position="top" align="end">
             <button 
               onClick={(e) => {
                 e.stopPropagation();
@@ -73,7 +75,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
                   <Scaling className="w-3.5 h-3.5 text-brand-blue" />
                   <span className="font-semibold text-white">Scale UI & Components</span>
                 </div>
-                <Tooltip content="Reset to 100% (Ctrl+0)" position="top">
+                <Tooltip content={`Reset to 100% (${modKey}+0)`} position="top">
                   <button 
                     onClick={() => onSetUiScale(100)} 
                     className="text-neutral-400 hover:text-white font-mono bg-surface-elevated hover:bg-surface-hover px-1.5 py-0.5 rounded text-[10px] border border-surface-border/60 transition cursor-pointer"
@@ -93,9 +95,9 @@ export const StatusBar: React.FC<StatusBarProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2 pt-0.5">
-                  <Tooltip content="Zoom Out (Ctrl+-)" position="top">
+                  <Tooltip content={`Zoom Out (${modKey}+-)`} position="top">
                     <button 
-                      onClick={() => onStepUiScale(-5)} 
+                      onClick={() => onStepUiScale(-10)} 
                       className="w-6 h-6 rounded-md bg-surface-card hover:bg-surface-hover hover:text-white text-neutral-300 border border-surface-border flex items-center justify-center font-mono text-xs transition cursor-pointer"
                     >
                       -
@@ -103,16 +105,16 @@ export const StatusBar: React.FC<StatusBarProps> = ({
                   </Tooltip>
                   <input 
                     type="range" 
-                    min="75" 
+                    min="70" 
                     max="150" 
-                    step="5" 
+                    step="10" 
                     value={uiScale} 
                     onChange={(e) => onSetUiScale(Number(e.target.value))}
                     className="flex-1 accent-brand-blue h-1.5 bg-neutral-800 rounded-lg cursor-pointer"
                   />
-                  <Tooltip content="Zoom In (Ctrl++)" position="top">
+                  <Tooltip content={`Zoom In (${modKey}++)`} position="top">
                     <button 
-                      onClick={() => onStepUiScale(5)} 
+                      onClick={() => onStepUiScale(10)} 
                       className="w-6 h-6 rounded-md bg-surface-card hover:bg-surface-hover hover:text-white text-neutral-300 border border-surface-border flex items-center justify-center font-mono text-xs transition cursor-pointer"
                     >
                       +
@@ -124,7 +126,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
               {/* Presets Grid */}
               <div className="space-y-1 mb-1.5 px-1">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-400">Presets</div>
-                <div className="grid grid-cols-4 gap-1 font-mono text-[11px]">
+                <div className="grid grid-cols-3 gap-1 font-mono text-[11px]">
                   {presets.map((s) => (
                     <button
                       key={s}
@@ -147,7 +149,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50"></span>
                   <span>Fonts & Components</span>
                 </span>
-                <span className="text-neutral-500 font-mono">Ctrl++ / Ctrl+-</span>
+                <span className="text-neutral-500 font-mono">{modKey}++ / {modKey}+-</span>
               </div>
             </div>
           )}
