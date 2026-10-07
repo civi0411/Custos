@@ -12,6 +12,7 @@ import {
   X
 } from 'lucide-react';
 import { Session } from '@/types';
+import { formatKeyCombo } from '@/lib/utils';
 
 export interface SidebarTool {
   icon: React.ElementType;
@@ -153,7 +154,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   if (isSidebarCollapsed) return null;
 
   return (
-    <aside className="w-64 bg-[#181818] border-r border-[#2d2d2d] flex flex-col shrink-0 z-20 relative">
+    <aside className="w-64 bg-[#161b22] border-r border-[#262c36] flex flex-col shrink-0 z-20 relative">
       <div className="flex flex-col min-h-0 flex-1 p-3">
         {sessions.some((session) => session.source === 'demo') && (
           <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[10px] leading-snug text-amber-200">
@@ -163,7 +164,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         {/* + New Button */}
         <button
           onClick={onNewSession}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-[#2b2b2b] hover:bg-[#343434] text-white text-[13px] font-medium transition shadow-sm border border-[#383838] mb-3 group"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-[#21262d] hover:bg-[#2d333b] text-white text-[13px] font-medium transition shadow-sm border border-[#262c36]/60 mb-3 group"
         >
           <NewTaskIcon className={`w-4 h-4 ${newTaskIconColor} group-hover:text-white transition`} />
           <span>{newTaskLabel}</span>
@@ -171,7 +172,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
         {/* Tools Nav Links */}
         {tools.length > 0 && (
-          <nav className="space-y-0.5 mb-4 border-b border-[#2d2d2d] pb-4">
+          <nav className="space-y-0.5 mb-4 border-b border-[#262c36]/60 pb-4">
             {tools.map((tool, idx) => {
               const Icon = tool.icon;
               return (
@@ -221,8 +222,8 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                   onClick={() => onSelectSession(s.id)}
                   className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg cursor-pointer transition group ${
                     isActive
-                      ? 'bg-[#2b2b2b] text-white font-medium'
-                      : 'text-[#9c9c9c] hover:text-[#e0e0e0] hover:bg-[#222222]'
+                      ? 'bg-[#21262d] text-white font-medium'
+                      : 'text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#1c2128]'
                   }`}
                 >
                   <span
@@ -232,7 +233,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                   <span className="truncate">{s.title}</span>
                   {s.taskStatus && s.taskStatus !== 'draft' && (
                     <span
-                      className="shrink-0 text-[9.5px] px-1 py-0.2 rounded font-mono hidden group-hover:block"
+                      className="shrink-0 text-[9.5px] px-1 py-0.2 rounded font-sans hidden group-hover:block"
                       style={{ background: '#1c1c1c', color: packColor, border: `1px solid ${packColor}33` }}
                     >
                       {s.taskStatus}
@@ -246,7 +247,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
         {/* Project switcher */}
         {projectNames.length > 1 && (
-          <div className="mt-3 pt-3 border-t border-[#2d2d2d]">
+          <div className="mt-3 pt-3 border-t border-[#262c36]/60">
             <div className="text-[10px] font-semibold text-[#5a5a5a] px-2 mb-1">Switch Project</div>
             {projectNames.map((pName) => (
               <button
@@ -254,8 +255,8 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                 onClick={() => onSelectProject(pName)}
                 className={`w-full flex items-center gap-2 px-2.5 py-1 rounded-lg text-[11.5px] text-left transition ${
                   pName === currentProject
-                    ? 'bg-[#2b2b2b] text-white font-medium'
-                    : 'text-[#7d7d7d] hover:text-[#e0e0e0] hover:bg-[#222222]'
+                    ? 'bg-[#21262d] text-white font-medium'
+                    : 'text-[#7d7d7d] hover:text-[#e0e0e0] hover:bg-[#1c2128]'
                 }`}
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${pName === currentProject ? projectActiveColor : 'bg-neutral-600'}`} />
@@ -267,7 +268,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       </div>
 
       {/* Bottom Profile Footer */}
-      <div className="p-3 border-t border-[#2d2d2d] flex items-center justify-between relative shrink-0">
+      <div className="p-3 border-t border-[#262c36]/60 flex items-center justify-between relative shrink-0">
         <div ref={profileRef} className="relative">
           <div
             onClick={() => {
@@ -315,14 +316,14 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                   className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[#c9d1d9] hover:text-white hover:bg-[#2d333b] transition"
                 >
                   <Settings className="w-3.5 h-3.5 text-[#8b949e]" />
-                  <span>Preferences & Settings (⌘,)</span>
+                  <span>Preferences & Settings ({formatKeyCombo({ ctrlOrCmd: true, key: ',' })})</span>
                 </button>
               </div>
 
               {/* Footer status */}
               <div className="mt-2 pt-2 border-t border-[#30363d]/70 px-2.5 py-1 flex items-center justify-between text-[10.5px] text-[#8b949e]">
                 <span>Daemon 127.0.0.1:4140</span>
-                <span className="flex items-center gap-1 text-emerald-400 font-mono">
+                <span className="flex items-center gap-1 text-emerald-400 font-sans">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                   online
                 </span>

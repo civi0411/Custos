@@ -26,6 +26,7 @@ import { ClaudeIcon, GeminiIcon, OpenAIIcon, DeepSeekIcon } from '../common/Agen
 import { useAppContext } from '../../context/AppContext';
 import { CustomSelect } from '../CustomSelect';
 import { Tooltip } from '../Tooltip';
+import { formatKeyCombo } from '@/lib/utils';
 
 export interface SettingsModalProps {
   isOpen: boolean;
@@ -62,6 +63,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setIsAddProviderOpen,
     handleGenerateClientKey 
   } = useAppContext();
+
 
   // Tab State
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -155,7 +157,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Header */}
         <div className="h-13 border-b border-[#21262d] px-5 flex items-center justify-between shrink-0 bg-[#0d1117]">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#30363d] flex items-center justify-center text-[#58a6ff]">
+            <div className="w-7 h-7 rounded-lg bg-[#21262d] border border-[#30363d] flex items-center justify-center text-[#c9d1d9]">
               <SlidersHorizontal className="w-4 h-4" />
             </div>
             <div>
@@ -211,7 +213,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {/* Workspace Directory */}
                 <div className="p-4 rounded-xl bg-[#161b22] border border-[#21262d] space-y-3">
                   <div className="flex items-center gap-2 text-white font-medium">
-                    <Folder className="w-4 h-4 text-[#58a6ff]" />
+                    <Folder className="w-4 h-4 text-[#c9d1d9]" />
                     <span>Default Workspace Directory</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -219,7 +221,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       type="text"
                       value={defaultWorkspace}
                       onChange={(e) => setDefaultWorkspace(e.target.value)}
-                      className="flex-1 bg-[#0d1117] border border-[#21262d] rounded-lg px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-[#58a6ff]"
+                      className="flex-1 bg-[#0d1117] border border-[#21262d] rounded-lg px-3 py-2 text-xs text-white font-sans focus:outline-none"
                     />
                     <button 
                       onClick={() => onShowToast('Workspace folder path selected')}
@@ -316,7 +318,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {/* Notifications */}
                 <label className="flex items-center justify-between p-3.5 rounded-xl bg-[#161b22] border border-[#21262d] cursor-pointer hover:border-[#384252] transition select-none">
                   <div className="flex items-center gap-2.5">
-                    <Bell className="w-4 h-4 text-[#58a6ff]" />
+                    <Bell className="w-4 h-4 text-[#c9d1d9]" />
                     <div>
                       <div className="font-medium text-white">Desktop System Notifications</div>
                       <div className="text-[11px] text-[#6e7681]">Notify when autonomous tasks, agent execution, or long commands finish</div>
@@ -363,7 +365,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             className="w-5 h-5 rounded-full border border-white/20 shadow-sm"
                             style={{ backgroundColor: t.bg }}
                           />
-                          {theme === t.id && <Check className="w-3.5 h-3.5 text-[#58a6ff]" />}
+                          {theme === t.id && <Check className="w-3.5 h-3.5 text-[#c9d1d9]" />}
                         </div>
                         <span className="text-xs font-medium text-white">{t.label}</span>
                       </button>
@@ -404,27 +406,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <span className="font-medium text-white block">Interface Zoom & Scale</span>
                       <span className="text-[11px] text-[#6e7681]">Scale the desktop interface smoothly across high-DPI displays</span>
                     </div>
-                    <span className="font-mono text-[#58a6ff] bg-[#21262d] px-2 py-0.5 rounded border border-[#30363d] text-xs font-semibold">
+                    <span className="font-sans text-[#c9d1d9] bg-[#21262d] px-2 py-0.5 rounded border border-[#30363d] text-xs font-semibold">
                       {uiScale}%
                     </span>
                   </div>
 
                   <input
                     type="range"
-                    min="75"
+                    min="70"
                     max="150"
-                    step="5"
+                    step="10"
                     value={uiScale}
                     onChange={(e) => handleSetUiScale(parseInt(e.target.value, 10))}
                     className="w-full h-1.5 bg-[#0d1117] rounded-lg appearance-none cursor-pointer accent-[#58a6ff]"
                   />
 
-                  <div className="flex items-center gap-2 pt-1">
-                    {[85, 90, 100, 110, 125].map((preset) => (
+                  <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                    {[70, 80, 90, 100, 110, 120, 130, 140, 150].map((preset) => (
                       <button
                         key={preset}
                         onClick={() => handleSetUiScale(preset)}
-                        className={`px-2.5 py-1 rounded text-[11px] font-mono transition ${
+                        className={`px-2 py-0.5 rounded text-[11px] font-sans transition ${
                           uiScale === preset
                             ? 'bg-[#21262d] text-white border border-[#30363d] font-medium'
                             : 'bg-[#0d1117] hover:bg-[#21262d] text-[#8b949e] hover:text-white border border-[#21262d]'
@@ -512,24 +514,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               {p.iconType === 'gemini' && <GeminiIcon size={16} />}
                               {p.iconType === 'deepseek' && <DeepSeekIcon size={16} />}
                               {p.iconType === 'openai' && <OpenAIIcon size={16} />}
-                              {!['anthropic', 'gemini', 'deepseek', 'openai'].includes(p.iconType) && <Cpu className="w-4 h-4 text-purple-400" />}
+                              {!['anthropic', 'gemini', 'deepseek', 'openai'].includes(p.iconType) && <Cpu className="w-4 h-4 text-[#8b949e]" />}
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
                                 <span className="font-semibold text-white text-xs">{p.name}</span>
-                                <span className={`text-[10px] px-2 py-0.2 rounded-full font-mono ${
+                                <span className={`text-[10px] px-2 py-0.2 rounded-full font-sans ${
                                   isPrimary ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' :
-                                  isStandby ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30' :
-                                  'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                                  isStandby ? 'bg-[#21262d] text-[#8b949e] border border-[#30363d]' :
+                                  'bg-[#21262d] text-[#c9d1d9] border border-[#30363d]'
                                 }`}>
                                   {p.statusLabel}
                                 </span>
                               </div>
-                              <span className="text-[11px] text-[#8b949e] font-mono">{p.model}</span>
+                              <span className="text-[11px] text-[#8b949e] font-sans">{p.model}</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-[10px] text-[#8b949e]">{p.latency}</span>
+                            <span className="font-sans text-[10px] text-[#8b949e]">{p.latency}</span>
                             <span className="w-2 h-2 rounded-full bg-emerald-400" />
                           </div>
                         </div>
@@ -537,9 +539,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div className="flex items-center justify-between pt-2 border-t border-[#21262d]/50 text-[11px]">
                           <div className="flex items-center gap-2">
                             <span className="text-[#6e7681]">Key:</span>
-                            <span className="font-mono text-[#c9d1d9] bg-[#0d1117] px-2 py-0.5 rounded border border-[#21262d]/60">{p.apiKey}</span>
+                            <span className="font-sans text-[#c9d1d9] bg-[#0d1117] px-2 py-0.5 rounded border border-[#21262d]/60">{p.apiKey}</span>
                           </div>
-                          <div className="flex items-center gap-3 text-[#8b949e] font-mono text-[10.5px]">
+                          <div className="flex items-center gap-3 text-[#8b949e] font-sans text-[10.5px]">
                             <span>Quota: {p.quotaUsed} / {p.quotaTotal}</span>
                             <span>Limit: {p.rateLimit}</span>
                           </div>
@@ -559,9 +561,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-white text-xs">Local Ollama Runtime</span>
-                          <span className="text-[10px] px-2 py-0.2 rounded-full font-mono bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">Offline Local</span>
+                          <span className="text-[10px] px-2 py-0.2 rounded-full font-sans bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">Offline Local</span>
                         </div>
-                        <span className="text-[11px] text-[#8b949e] font-mono">http://localhost:11434 • DeepSeek R1, Llama 3.3</span>
+                        <span className="text-[11px] text-[#8b949e] font-sans">http://localhost:11434 • DeepSeek R1, Llama 3.3</span>
                       </div>
                     </div>
                     <span className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -587,7 +589,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </button>
                   </div>
                   {clientKeys.map((k) => (
-                    <div key={k.id} className="flex items-center justify-between p-2.5 rounded-lg bg-[#0d1117] border border-[#21262d] text-xs font-mono">
+                    <div key={k.id} className="flex items-center justify-between p-2.5 rounded-lg bg-[#0d1117] border border-[#21262d] text-xs font-sans">
                       <div>
                         <span className="text-white block font-sans font-medium text-[11.5px]">{k.name}</span>
                         <span className="text-[#8b949e] text-[10.5px]">{k.token}</span>
@@ -623,7 +625,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <span className="font-medium text-white block">Default Agent Model</span>
                       <span className="text-[11px] text-[#6e7681]">Primary model assigned when creating new sessions</span>
                     </div>
-                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    <Sparkles className="w-4 h-4 text-[#8b949e]" />
                   </div>
                   <CustomSelect
                     value={defaultModel}
@@ -660,7 +662,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="p-4 rounded-xl bg-[#161b22] border border-[#21262d] space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-white">Reasoning Temperature</span>
-                      <span className="font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20 text-xs">
+                      <span className="font-sans text-[#8b949e] bg-[#21262d] px-2 py-0.5 rounded border border-[#30363d] text-xs">
                         {temperature}
                       </span>
                     </div>
@@ -671,9 +673,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       step="0.05"
                       value={temperature}
                       onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-[#0d1117] rounded-lg appearance-none cursor-pointer accent-purple-500"
+                      className="w-full h-1.5 bg-[#0d1117] rounded-lg appearance-none cursor-pointer accent-neutral-300"
                     />
-                    <div className="flex justify-between text-[10px] text-[#6e7681] font-mono">
+                    <div className="flex justify-between text-[10px] text-[#6e7681] font-sans">
                       <span>0.0 (Strict / Code)</span>
                       <span>1.0 (Creative)</span>
                     </div>
@@ -702,7 +704,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     rows={3}
                     value={systemPrompt}
                     onChange={(e) => setSystemPrompt(e.target.value)}
-                    className="w-full bg-[#0d1117] border border-[#21262d] rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-[#58a6ff] resize-none font-mono"
+                    className="w-full bg-[#0d1117] border border-[#21262d] rounded-lg p-2.5 text-xs text-white focus:outline-none resize-none font-sans"
                     placeholder="Custom rules for coding style, test frameworks, or language constraints..."
                   />
                   <p className="text-[11px] text-[#6e7681]">Injected into the system prompt of all coding sessions.</p>
@@ -735,21 +737,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {/* Routing Chain Topology Table */}
                 <div className="border border-[#21262d] rounded-xl overflow-x-auto bg-[#161b22]">
                   <div className="min-w-[420px]">
-                    <div className="grid grid-cols-12 px-3 py-2 border-b border-[#21262d] text-[11px] font-mono text-[#6e7681] bg-[#0d1117]">
+                    <div className="grid grid-cols-12 px-3 py-2 border-b border-[#21262d] text-[11px] font-sans text-[#6e7681] bg-[#0d1117]">
                       <span className="col-span-1">PRI</span>
                       <span className="col-span-4">ALIAS</span>
                       <span className="col-span-5">TARGET MODEL</span>
                       <span className="col-span-2 text-right">STATUS</span>
                     </div>
-                    <div className="grid grid-cols-12 px-3 py-2.5 items-center border-b border-[#21262d]/50 font-mono text-[11px]">
-                      <span className="col-span-1 text-[#58a6ff] font-bold">1</span>
+                    <div className="grid grid-cols-12 px-3 py-2.5 items-center border-b border-[#21262d]/50 font-sans text-[11px]">
+                      <span className="col-span-1 text-[#c9d1d9] font-bold">1</span>
                       <span className="col-span-4 text-white">default-agent</span>
                       <span className="col-span-5 text-[#c9d1d9]">claude-3-7-sonnet</span>
                       <div className="col-span-2 text-right">
                         <span className="text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded text-[10px]">Active</span>
                       </div>
                     </div>
-                    <div className="grid grid-cols-12 px-3 py-2.5 items-center font-mono text-[11px]">
+                    <div className="grid grid-cols-12 px-3 py-2.5 items-center font-sans text-[11px]">
                       <span className="col-span-1 text-[#6e7681] font-bold">2</span>
                       <span className="col-span-4 text-[#8b949e]">fallback-rate-limit</span>
                       <span className="col-span-5 text-[#c9d1d9]">gpt-4o</span>
@@ -767,7 +769,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="font-medium text-white">Auto Failover Latency Trigger</div>
                       <div className="text-[11px] text-[#6e7681]">Route to secondary standby provider if primary latency exceeds target</div>
                     </div>
-                    <span className="text-[#c9d1d9] font-mono bg-[#0d1117] px-2 py-1 rounded border border-[#21262d] text-xs">
+                    <span className="text-[#c9d1d9] font-sans bg-[#0d1117] px-2 py-1 rounded border border-[#21262d] text-xs">
                       {latencyThreshold}ms
                     </span>
                   </div>
@@ -822,7 +824,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         type="text"
                         value={localOllamaUrl}
                         onChange={(e) => setLocalOllamaUrl(e.target.value)}
-                        className="w-full bg-[#161b22] border border-[#21262d] rounded-lg px-3 py-1.5 font-mono text-xs text-white focus:outline-none"
+                        className="w-full bg-[#161b22] border border-[#21262d] rounded-lg px-3 py-1.5 font-sans text-xs text-white focus:outline-none"
                       />
                     </div>
                   )}
@@ -900,22 +902,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    <span className="font-mono text-xs text-emerald-400">Daemon PID 4120 • 200 OK</span>
+                    <span className="font-sans text-xs text-emerald-400">Daemon PID 4120 • 200 OK</span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="p-3.5 rounded-xl bg-[#161b22] border border-[#21262d]">
                     <span className="text-[11px] text-[#8b949e] block">Uptime</span>
-                    <span className="text-sm font-mono font-bold text-white">4h 12m 38s</span>
+                    <span className="text-sm font-sans font-bold text-white">4h 12m 38s</span>
                   </div>
                   <div className="p-3.5 rounded-xl bg-[#161b22] border border-[#21262d]">
                     <span className="text-[11px] text-[#8b949e] block">Avg Event Latency</span>
-                    <span className="text-sm font-mono font-bold text-emerald-400">14.2 ms</span>
+                    <span className="text-sm font-sans font-bold text-emerald-400">14.2 ms</span>
                   </div>
                   <div className="p-3.5 rounded-xl bg-[#161b22] border border-[#21262d]">
                     <span className="text-[11px] text-[#8b949e] block">AST Mutations Checked</span>
-                    <span className="text-sm font-mono font-bold text-[#58a6ff]">1,428 passes</span>
+                    <span className="text-sm font-sans font-bold text-[#c9d1d9]">1,428 passes</span>
                   </div>
                 </div>
 
@@ -924,7 +926,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span className="font-semibold text-white">Live Execution Spans</span>
                     <button
                       onClick={() => onShowToast('Telemetry spans flushed')}
-                      className="text-[#58a6ff] hover:underline text-[11px]"
+                      className="text-[#c9d1d9] hover:underline text-[11px]"
                     >
                       Flush Spans
                     </button>
@@ -961,20 +963,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div className="border border-[#21262d] rounded-xl overflow-hidden bg-[#161b22] divide-y divide-surface-border/60">
                   {[
-                    { action: 'Open Preferences / Settings', key: 'Ctrl+,' },
-                    { action: 'Toggle Sessions Sidebar', key: 'Ctrl+B' },
-                    { action: 'Toggle Split / Chat View', key: 'Ctrl+\\' },
-                    { action: 'Create New Session', key: 'Ctrl+N' },
-                    { action: 'Accept & Apply Code Diff', key: 'Ctrl+Enter' },
-                    { action: 'Clear Current History', key: 'Ctrl+K' },
-                    { action: 'Zoom Interface In', key: 'Ctrl++' },
-                    { action: 'Zoom Interface Out', key: 'Ctrl+-' },
-                    { action: 'Reset Zoom (100%)', key: 'Ctrl+0' },
-                    { action: 'Focus Chat Input', key: 'Ctrl+/' },
+                    { action: 'Open Preferences / Settings', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "," })}` },
+                    { action: 'Toggle Sessions Sidebar', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "B" })}` },
+                    { action: 'Toggle Split / Chat View', key: formatKeyCombo({ ctrlOrCmd: true, key: '\\' }) },
+                    { action: 'Create New Session', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "N" })}` },
+                    { action: 'Accept & Apply Code Diff', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "Enter" })}` },
+                    { action: 'Clear Current History', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "K" })}` },
+                    { action: 'Zoom Interface In', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "+" })}` },
+                    { action: 'Zoom Interface Out', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "-" })}` },
+                    { action: 'Reset Zoom (100%)', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "0" })}` },
+                    { action: 'Focus Chat Input', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "/" })}` },
                   ].map((s) => (
                     <div key={s.action} className="flex items-center justify-between px-4 py-2.5 hover:bg-[#0d1117]/50 transition">
                       <span className="text-[#c9d1d9] font-medium">{s.action}</span>
-                      <kbd className="px-2 py-1 rounded bg-[#0d1117] border border-[#21262d] font-mono text-[11px] text-white shadow-sm">
+                      <kbd className="px-2 py-1 rounded bg-[#0d1117] border border-[#21262d] font-sans text-[11px] text-white shadow-sm">
                         {s.key}
                       </kbd>
                     </div>
@@ -994,15 +996,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="p-4 rounded-xl bg-[#161b22] border border-[#21262d] space-y-3">
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-[#8b949e]">Total Cache Footprint:</span>
-                    <span className="font-mono text-white font-medium">12.4 MB (420 entries)</span>
+                    <span className="font-sans text-white font-medium">12.4 MB (420 entries)</span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-[#8b949e]">SQLite Database Path:</span>
-                    <span className="font-mono text-[#8b949e] text-[11px]">~/.custos/store.db</span>
+                    <span className="font-sans text-[#8b949e] text-[11px]">~/.custos/store.db</span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
                     <span className="text-[#8b949e]">Session Storage:</span>
-                    <span className="font-mono text-[#8b949e] text-[11px]">Active in memory & disk sync</span>
+                    <span className="font-sans text-[#8b949e] text-[11px]">Active in memory & disk sync</span>
                   </div>
                 </div>
 
@@ -1034,7 +1036,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div>
                     <h3 className="text-base font-bold text-white tracking-tight">Custos Desktop</h3>
                     <p className="text-xs text-[#8b949e]">Autonomous Pair-Programming Engine & OmniRoute LLM Gateway</p>
-                    <div className="flex items-center gap-2 mt-1.5 font-mono text-[11px] text-[#6e7681]">
+                    <div className="flex items-center gap-2 mt-1.5 font-sans text-[11px] text-[#6e7681]">
                       <span>Version 0.3.1-beta</span>
                       <span>•</span>
                       <span className="text-emerald-400">Up to date</span>
@@ -1045,19 +1047,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="border border-[#21262d] rounded-xl p-4 bg-[#161b22] space-y-2 text-xs">
                   <div className="flex justify-between">
                     <span className="text-[#8b949e]">Tauri Runtime</span>
-                    <span className="font-mono text-[#c9d1d9]">v2.12.1 (Rust 1.85)</span>
+                    <span className="font-sans text-[#c9d1d9]">v2.12.1 (Rust 1.85)</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[#8b949e]">Webview Engine</span>
-                    <span className="font-mono text-[#c9d1d9]">Microsoft Edge WebView2 (Chromium)</span>
+                    <span className="font-sans text-[#c9d1d9]">Microsoft Edge WebView2 (Chromium)</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[#8b949e]">Platform</span>
-                    <span className="font-mono text-[#c9d1d9]">Windows 11 (x86_64)</span>
+                    <span className="font-sans text-[#c9d1d9]">Windows 11 (x86_64)</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[#8b949e]">License</span>
-                    <span className="font-mono text-[#c9d1d9]">Apache 2.0 / MIT</span>
+                    <span className="font-sans text-[#c9d1d9]">Apache 2.0 / MIT</span>
                   </div>
                 </div>
 

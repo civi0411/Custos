@@ -474,7 +474,7 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
 
           {/* Floating Pill Container */}
           <div 
-            className="rounded-2xl shadow-xl transition focus-within:border-accent"
+            className="rounded-2xl shadow-xl transition"
             style={{
               background: 'var(--color-surface-1, #161b22)',
               border: '1px solid var(--color-border-default, #30363d)',

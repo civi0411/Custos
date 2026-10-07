@@ -78,7 +78,7 @@ export const SessionsSidebar: React.FC<SessionsSidebarProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search tasks and conversations..." 
-            className="w-full bg-surface-card border border-surface-border/80 rounded-md pl-7 pr-2 py-1 text-[11px] text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-brand-blue transition"
+            className="w-full bg-surface-card border border-surface-border/80 rounded-md pl-7 pr-2 py-1 text-[11px] text-neutral-200 placeholder-neutral-500 focus:outline-none transition"
           />
         </div>
       </div>

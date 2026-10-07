@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import {
   X,
@@ -24,9 +24,11 @@ import {
   Check,
   FileCode,
   Sliders,
-  Sparkles
+  Sparkles,
+  PanelRight
 } from 'lucide-react';
 import { Session } from '@/types';
+import { formatShortcut } from '@/lib/utils';
 import { WorktreeManagerModal, TaskDetailsModal } from '@/components/modals';
 import { BrowserWorkspace } from '@/components/workspaces/browser/BrowserWorkspace';
 import { MarkdownWorkspace } from '@/components/workspaces/markdown/MarkdownWorkspace';
@@ -39,20 +41,40 @@ import {
 } from '@/components/research';
 
 
-export type OrcaTabId = 'tools' | 'changes' | 'terminal' | 'files' | 'worktrees' | 'kanban' | 'evidence' | 'dag' | 'browser' | 'notes' | 'artifacts' | 'knowledge' | 'literature' | 'claims' | 'experiments' | 'synthesis';
+export type ResourceTabId =
+  | 'tools'
+  | 'changes'
+  | 'terminal'
+  | 'files'
+  | 'worktrees'
+  | 'kanban'
+  | 'evidence'
+  | 'dag'
+  | 'browser'
+  | 'notes'
+  | 'artifacts'
+  | 'knowledge'
+  | 'literature'
+  | 'claims'
+  | 'experiments'
+  | 'synthesis';
 
-export interface OrcaTab {
-  id: OrcaTabId;
+export interface ResourceTab {
+  id: ResourceTabId;
   title: string;
   url: string;
 }
 
 export interface ResourceTabsState {
-  tabs: OrcaTab[];
-  activeTabId: OrcaTabId;
-  setTabs: React.Dispatch<React.SetStateAction<OrcaTab[]>>;
-  setActiveTabId: React.Dispatch<React.SetStateAction<OrcaTabId>>;
+  tabs: ResourceTab[];
+  activeTabId: ResourceTabId;
+  setTabs: React.Dispatch<React.SetStateAction<ResourceTab[]>>;
+  setActiveTabId: React.Dispatch<React.SetStateAction<ResourceTabId>>;
 }
+
+// Backward-compatibility aliases
+export type OrcaTabId = ResourceTabId;
+export type OrcaTab = ResourceTab;
 
 interface RepoFile {
   path: string;
@@ -213,7 +235,7 @@ pub enum Action {
   }
 ];
 
-interface OrcaTabbedContainerProps {
+export interface ResourceTabbedPaneProps {
   resourceTabs: ResourceTabsState;
   isPaneOpen: boolean;
   session?: Session | null;
@@ -227,9 +249,12 @@ interface OrcaTabbedContainerProps {
   onAskAgent?: (draftText: string) => void;
   onHandoffToCoding?: (claims: any[]) => void;
   splitPercent?: number;
+  onToggleWebTab?: () => void;
 }
 
-export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
+export type OrcaTabbedContainerProps = ResourceTabbedPaneProps;
+
+export const ResourceTabbedPane: React.FC<ResourceTabbedPaneProps> = ({
   resourceTabs,
   isPaneOpen,
   session,
@@ -243,6 +268,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   onAskAgent,
   onHandoffToCoding,
   splitPercent = 45,
+  onToggleWebTab,
 }) => {
   
   // Tabs management
@@ -367,7 +393,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   }) => (
     <div
       onClick={onClick}
-      className="flex items-center justify-between p-3.5 rounded-xl border border-[#21262d] bg-[#161b22]/70 hover:bg-[#21262d] hover:border-[#384252] cursor-pointer transition group shadow-sm"
+      className="flex flex-wrap gap-2 items-center justify-between p-3.5 rounded-xl border border-[#21262d] bg-[#161b22]/70 hover:bg-[#21262d] hover:border-[#384252] cursor-pointer transition group shadow-sm"
     >
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded-lg bg-[#0d1117] border border-[#30363d] flex items-center justify-center text-[#8b949e] group-hover:text-white group-hover:border-[#58a6ff] transition">
@@ -384,8 +410,8 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
       </div>
       <div className="flex items-center gap-2">
         {shortcut && (
-          <kbd className="px-1.5 py-0.5 rounded bg-[#0d1117] border border-[#30363d] text-[10px] font-mono text-[#8b949e]">
-            {shortcut}
+          <kbd className="px-1.5 py-0.5 rounded bg-[#0d1117] border border-[#30363d] text-[10px] font-sans text-[#8b949e]">
+            {formatShortcut(shortcut)}
           </kbd>
         )}
         <MoreHorizontal className="w-4 h-4 text-[#484f58] group-hover:text-[#8b949e]" />
@@ -394,12 +420,23 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   );
 
 
-  const portalTarget = typeof document !== 'undefined' ? document.getElementById('app-header-tabs-portal') : null;
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(() => {
+    return typeof document !== 'undefined' ? document.getElementById('app-header-tabs-portal') : null;
+  });
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      const el = document.getElementById('app-header-tabs-portal');
+      if (el) setPortalTarget(el);
+    }
+  }, [isPaneOpen]);
+
+  const activePortalTarget = portalTarget || (typeof document !== 'undefined' ? document.getElementById('app-header-tabs-portal') : null);
   const tabStrip = (
     <div className="h-full flex w-full overflow-hidden">
       {/* ── LEFT: CHAT HEADER (Matches Chat Column Width) ── */}
       {!isExpanded && isPaneOpen && (
-        <div style={{ width: `${splitPercent}%` }} className="h-full flex items-center px-4 border-r border-[#21262d] shrink-0 bg-[#090d13]">
+        <div style={{ width: `${splitPercent}%` }} className="h-full flex items-center px-4 border-r border-[#262c36] shrink-0 bg-[#090d13]">
           <div className="flex items-center gap-2 text-[12px] text-[#8b949e] hover:text-[#c9d1d9] transition cursor-pointer">
             <MessageSquare className="w-3.5 h-3.5" />
             <span className="truncate font-medium">{session?.title || (mode === 'code' ? 'Engineering Copilot' : 'Research Assistant')}</span>
@@ -441,20 +478,20 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                 }`}
               >
                 <div className="flex items-center gap-1.5 truncate">
-                  {tab.id === 'tools' && <Globe className="w-3.5 h-3.5 text-[#58a6ff]" />}
-                  {tab.id === 'changes' && <FileDiff className="w-3.5 h-3.5 text-[#3fb950]" />}
-                  {tab.id === 'terminal' && <TerminalIcon className="w-3.5 h-3.5 text-[#e3b341]" />}
-                  {tab.id === 'files' && <FolderTree className="w-3.5 h-3.5 text-[#58a6ff]" />}
-                  {tab.id === 'worktrees' && <GitBranch className="w-3.5 h-3.5 text-[#a371f7]" />}
-                  {tab.id === 'kanban' && <Bot className="w-3.5 h-3.5 text-[#bc8cff]" />}
-                  {tab.id === 'evidence' && <ShieldCheck className="w-3.5 h-3.5 text-[#3fb950]" />}
-                  {tab.id === 'dag' && <Activity className="w-3.5 h-3.5 text-[#58a6ff]" />}
-                  {tab.id === 'browser' && <Globe className="w-3.5 h-3.5 text-[#58a6ff]" />}
-                  {tab.id === 'notes' && <FileCode className="w-3.5 h-3.5 text-[#e3b341]" />}
-                  {tab.id === 'literature' && <FolderTree className="w-3.5 h-3.5 text-[#a371f7]" />}
-                  {tab.id === 'claims' && <ShieldCheck className="w-3.5 h-3.5 text-[#a371f7]" />}
-                  {tab.id === 'experiments' && <Activity className="w-3.5 h-3.5 text-[#a371f7]" />}
-                  {tab.id === 'synthesis' && <FileCode className="w-3.5 h-3.5 text-[#a371f7]" />}
+                  {tab.id === 'tools' && <Globe className="w-3.5 h-3.5 text-[#8b949e] group-hover:text-white" />}
+                  {tab.id === 'changes' && <FileDiff className="w-3.5 h-3.5 text-[#8b949e] group-hover:text-white" />}
+                  {tab.id === 'terminal' && <TerminalIcon className="w-3.5 h-3.5 text-[#8b949e] group-hover:text-white" />}
+                  {tab.id === 'files' && <FolderTree className="w-3.5 h-3.5 text-[#8b949e] group-hover:text-white" />}
+                  {tab.id === 'worktrees' && <GitBranch className="w-3.5 h-3.5 text-[#8b949e] group-hover:text-white" />}
+                  {tab.id === 'kanban' && <Bot className="w-3.5 h-3.5 text-[#8b949e] group-hover:text-white" />}
+                  {tab.id === 'evidence' && <ShieldCheck className="w-3.5 h-3.5 text-[#8b949e] group-hover:text-white" />}
+                  {tab.id === 'dag' && <Activity className="w-3.5 h-3.5 text-[#8b949e] group-hover:text-white" />}
+                  {tab.id === 'browser' && <Globe className="w-3.5 h-3.5 text-[#8b949e] group-hover:text-white" />}
+                  {tab.id === 'notes' && <FileCode className="w-3.5 h-3.5 text-[#8b949e] group-hover:text-white" />}
+                  {tab.id === 'literature' && <FolderTree className="w-3.5 h-3.5 text-[#8b949e] group-hover:text-white" />}
+                  {tab.id === 'claims' && <ShieldCheck className="w-3.5 h-3.5 text-[#8b949e] group-hover:text-white" />}
+                  {tab.id === 'experiments' && <Activity className="w-3.5 h-3.5 text-[#8b949e] group-hover:text-white" />}
+                  {tab.id === 'synthesis' && <FileCode className="w-3.5 h-3.5 text-[#8b949e] group-hover:text-white" />}
                   <span className="truncate">{tab.title}</span>
                 </div>
                 <button
@@ -478,7 +515,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
         </div>
 
         {/* Tab Right Controls */}
-        <div className="flex items-center gap-1 shrink-0 text-[#8b949e] pl-2 border-l border-[#21262d]">
+        <div className="flex items-center gap-1 shrink-0 text-[#8b949e] px-2 border-l border-[#262c36]/60">
           {onToggleExpand && (
             <button
               onClick={onToggleExpand}
@@ -488,17 +525,26 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
               {isExpanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
             </button>
           )}
+          {onToggleWebTab && (
+            <button
+              onClick={onToggleWebTab}
+              className="p-1 rounded-md hover:text-white hover:bg-[#21262d] transition"
+              title="Close resource pane"
+            >
+              <PanelRight className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#04080F] border-l border-[#1e2430] overflow-hidden select-none font-sans text-xs">
-      {isPaneOpen && portalTarget && createPortal(tabStrip, portalTarget)}
+    <div className="flex flex-col h-full w-full bg-[#04080F] border-l border-[#262c36] overflow-hidden select-none font-sans text-xs">
+      {isPaneOpen && activePortalTarget && createPortal(tabStrip, activePortalTarget)}
 
       {/* 2. Sub-navigation Address Bar (Screenshot 2 Sub-header) */}
-      <div className="h-9 bg-[#080d16] border-b border-[#1e2430] flex items-center px-2.5 gap-2 shrink-0">
+      <div className="min-h-9 py-1 flex-wrap bg-[#080d16] border-b border-[#262c36]/60 flex items-center px-2.5 gap-2 shrink-0">
         {activeTabId !== 'tools' && !['literature', 'claims', 'experiments', 'synthesis'].includes(activeTabId) && (
           <span className="shrink-0 rounded border border-amber-600/40 px-1.5 py-0.5 text-[10px] text-amber-300" title="This resource view still contains prototype fixtures">Demo preview</span>
         )}
@@ -531,7 +577,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
         </div>
 
         {/* Address / Search Bar */}
-        <div className="flex-1 flex items-center h-6 px-2.5 rounded-lg bg-[#0d1117] border border-[#30363d] focus-within:border-[#58a6ff] transition">
+        <div className="flex-1 min-w-0 basis-32 flex items-center h-6 px-2.5 rounded-lg bg-[#0d1117] border border-[#30363d] transition">
           <Search className="w-3 h-3 text-[#484f58] mr-2 shrink-0" />
           <input
             type="text"
@@ -630,7 +676,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                   <span className="font-semibold text-white text-[13px]">
                     {session?.fileName || 'crates/custos-runtime/src/workflow/dispatcher.rs'}
                   </span>
-                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 font-mono">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 font-sans">
                     {session?.diffLinesCount || '+34 -2 lines'}
                   </span>
                 </div>
@@ -795,7 +841,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                     <button
                       key={file.path}
                       onClick={() => setSelectedFile(file)}
-                      className={`flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-mono transition ${
+                      className={`flex items-center gap-2 px-2.5 py-1 rounded-lg text-xs font-sans transition ${
                         isSelected
                           ? 'bg-[#21262d] text-white shadow-sm border border-[#30363d]'
                           : 'text-[#8b949e] hover:text-white hover:bg-[#21262d]/50'
@@ -859,7 +905,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                       }
                     }}
                     placeholder={`Instruct Codex on ${selectedFile.name} (e.g. "Add strict zero-IO permit check")...`}
-                    className="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-2.5 py-1 text-xs text-white placeholder-[#8b949e] outline-none focus:border-[#58a6ff]"
+                    className="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-2.5 py-1 text-xs text-white placeholder-[#8b949e] outline-none focus:outline-none"
                   />
                   <button
                     onClick={() => {
@@ -941,7 +987,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                     }`}
                   >
                     <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2 font-mono text-[12px] font-semibold text-white">
+                      <div className="flex items-center gap-2 font-sans text-[12px] font-semibold text-white">
                         <GitBranch className="w-3.5 h-3.5 text-[#a371f7]" />
                         <span>{wt.branch}</span>
                         {isActive && (
@@ -953,7 +999,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                       </span>
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-[#8b949e]">
-                      <span className="font-mono text-[10px]">{wt.path}</span>
+                      <span className="font-sans text-[10px]">{wt.path}</span>
                       <span>{wt.commits}</span>
                     </div>
                   </div>
@@ -974,7 +1020,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
               <span className="text-[11px] text-[#8b949e]">5 Agents active</span>
             </div>
 
-            <div className="grid grid-cols-4 gap-3 flex-1 overflow-auto min-h-[300px]">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3 flex-1 overflow-auto min-h-[300px]">
               {[
                 { title: 'Needs You', filter: 'needs_you', color: 'border-amber-500/40 text-amber-400' },
                 { title: 'Working', filter: 'working', color: 'border-emerald-500/40 text-emerald-400' },
@@ -995,7 +1041,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                         <div key={agent.id} className="p-2.5 rounded-lg bg-[#161b22] border border-[#30363d] space-y-1">
                           <div className="font-medium text-white text-[12px]">{agent.name}</div>
                           <div className="text-[10.5px] text-[#8b949e] line-clamp-2">{agent.role}</div>
-                          <div className="flex items-center justify-between text-[9.5px] font-mono text-[#58a6ff] pt-1 border-t border-[#21262d]">
+                          <div className="flex items-center justify-between text-[9.5px] font-sans text-[#58a6ff] pt-1 border-t border-[#21262d]">
                             <span>{agent.model}</span>
                             <span>{agent.tokens} tokens</span>
                           </div>
@@ -1056,13 +1102,13 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                     <div key={p.id} className="p-3 rounded-xl bg-[#161b22] border border-[#21262d] flex items-center justify-between">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-[10.5px] px-1.5 py-0.2 rounded bg-[#21262d] text-[#58a6ff]">
+                          <span className="font-sans text-[10.5px] px-1.5 py-0.2 rounded bg-[#21262d] text-[#58a6ff]">
                             {p.action}
                           </span>
                           <span className="text-xs font-semibold text-white">{p.actor}</span>
                           <span className="text-[10px] text-[#8b949e]">({p.timestamp})</span>
                         </div>
-                        <div className="font-mono text-[10.5px] text-[#8b949e] truncate max-w-md">
+                        <div className="font-sans text-[10.5px] text-[#8b949e] truncate max-w-md">
                           {p.target}
                         </div>
                       </div>
@@ -1090,7 +1136,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                             </button>
                           </>
                         ) : (
-                          <span className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-medium ${
+                          <span className={`px-2 py-0.5 rounded text-[10.5px] font-sans font-medium ${
                             isApproved ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
                           }`}>
                             {p.status.toUpperCase()}
@@ -1117,12 +1163,12 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                 <div key={gate.inv} className="p-3.5 rounded-xl bg-[#161b22] border border-[#21262d] flex items-center justify-between">
                   <div>
                     <div className="font-medium text-white text-[12.5px] flex items-center gap-2">
-                      <span className="font-mono text-[11px] text-[#58a6ff]">{gate.inv}</span>
+                      <span className="font-sans text-[11px] text-[#58a6ff]">{gate.inv}</span>
                       <span>{gate.name}</span>
                     </div>
-                    <div className="font-mono text-[10px] text-[#8b949e] mt-1">{gate.proof}</div>
+                    <div className="font-sans text-[10px] text-[#8b949e] mt-1">{gate.proof}</div>
                   </div>
-                  <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-mono text-[10px] font-semibold">
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-sans text-[10px] font-semibold">
                     {gate.status}
                   </span>
                 </div>
@@ -1139,7 +1185,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
               <Activity className="w-4 h-4 text-[#58a6ff]" />
               Run → Task → Dispatch Attempt DAG Epochs
             </h3>
-            <div className="p-4 rounded-xl bg-[#161b22] border border-[#21262d] space-y-3 font-mono text-[11px]">
+            <div className="p-4 rounded-xl bg-[#161b22] border border-[#21262d] space-y-3 font-sans text-[11px]">
               <div className="flex items-center gap-2 text-[#58a6ff]">
                 <span>[Epoch 4]</span>
                 <span className="text-white font-semibold">Run ID: rn_9921_sovereign</span>
@@ -1245,3 +1291,5 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     </div>
   );
 };
+
+export const OrcaTabbedContainer = ResourceTabbedPane;

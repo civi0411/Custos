@@ -23,6 +23,7 @@ import {
 import { ClaudeIcon, GeminiIcon, OpenAIIcon, DeepSeekIcon } from '../../components/common/AgentIcons';
 import { useAppContext } from '../../context/AppContext';
 import { CustomSelect } from '../../components/CustomSelect';
+import { formatKeyCombo } from '@/lib/utils';
 
 type SettingsTab = 
   | 'general' 
@@ -46,6 +47,7 @@ export const SettingsPage: React.FC = () => {
     handleRevokeClientKey,
     showToast 
   } = useAppContext();
+
 
   // Tab State
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -135,7 +137,7 @@ export const SettingsPage: React.FC = () => {
           </button>
           <div className="h-4 w-[1px] bg-[#21262d]" />
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-[#161b22] border border-[#30363d] flex items-center justify-center text-[#58a6ff]">
+            <div className="w-7 h-7 rounded-lg bg-[#161b22] border border-[#30363d] flex items-center justify-center text-[#c9d1d9]">
               <SlidersHorizontal className="w-4 h-4" />
             </div>
             <div>
@@ -180,7 +182,7 @@ export const SettingsPage: React.FC = () => {
                     : 'text-[#8b949e] hover:text-white hover:bg-[#161b22] border border-transparent'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-[#58a6ff]' : 'text-[#8b949e]'}`} />
+                <Icon className={`w-4 h-4 ${isActive ? 'text-[#c9d1d9]' : 'text-[#8b949e]'}`} />
                 <span>{tab.label}</span>
               </button>
             );
@@ -207,7 +209,7 @@ export const SettingsPage: React.FC = () => {
                         type="text"
                         value={defaultWorkspace}
                         onChange={(e) => setDefaultWorkspace(e.target.value)}
-                        className="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-[#c9d1d9] font-mono focus:outline-none focus:border-[#58a6ff]"
+                        className="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-[#c9d1d9] font-sans focus:outline-none"
                       />
                       <button
                         onClick={() => showToast('Selected default directory')}
@@ -260,7 +262,7 @@ export const SettingsPage: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                     <label className="flex items-center justify-between p-3 rounded-lg bg-[#0d1117] border border-[#21262d] cursor-pointer hover:border-[#30363d] transition">
                       <div className="flex items-center gap-2">
-                        <Bell className="w-3.5 h-3.5 text-[#58a6ff]" />
+                        <Bell className="w-3.5 h-3.5 text-[#c9d1d9]" />
                         <span className="text-xs text-[#c9d1d9]">Desktop Notifications</span>
                       </div>
                       <input
@@ -320,7 +322,7 @@ export const SettingsPage: React.FC = () => {
                           <span className="w-3.5 h-3.5 rounded-full border border-white/20" style={{ backgroundColor: t.color }} />
                           <span>{t.label}</span>
                         </span>
-                        {theme === t.id && <Check className="w-3.5 h-3.5 text-[#58a6ff]" />}
+                        {theme === t.id && <Check className="w-3.5 h-3.5 text-[#c9d1d9]" />}
                       </button>
                     ))}
                   </div>
@@ -353,27 +355,27 @@ export const SettingsPage: React.FC = () => {
                       <span className="font-medium text-white block text-xs">Interface Scale & Zoom</span>
                       <span className="text-[11px] text-[#6e7681]">Scale the desktop interface smoothly across high-DPI displays</span>
                     </div>
-                    <span className="font-mono text-[#58a6ff] bg-[#21262d] px-2 py-0.5 rounded border border-[#30363d] text-xs font-semibold">
+                    <span className="font-sans text-[#c9d1d9] bg-[#21262d] px-2 py-0.5 rounded border border-[#30363d] text-xs font-semibold">
                       {uiScale}%
                     </span>
                   </div>
 
                   <input
                     type="range"
-                    min="75"
+                    min="70"
                     max="150"
-                    step="5"
+                    step="10"
                     value={uiScale}
                     onChange={(e) => handleSetUiScale(parseInt(e.target.value, 10))}
                     className="w-full h-1.5 bg-[#0d1117] rounded-lg appearance-none cursor-pointer accent-[#58a6ff]"
                   />
 
-                  <div className="flex items-center gap-2 pt-1">
-                    {[85, 90, 100, 110, 125].map((preset) => (
+                  <div className="flex items-center gap-1.5 pt-1 flex-wrap">
+                    {[70, 80, 90, 100, 110, 120, 130, 140, 150].map((preset) => (
                       <button
                         key={preset}
                         onClick={() => handleSetUiScale(preset)}
-                        className={`px-2.5 py-1 rounded text-[11px] font-mono transition ${
+                        className={`px-2 py-0.5 rounded text-[11px] font-sans transition ${
                           uiScale === preset
                             ? 'bg-[#21262d] text-white border border-[#30363d] font-medium'
                             : 'bg-[#0d1117] hover:bg-[#21262d] text-[#8b949e] hover:text-white border border-[#21262d]'
@@ -460,24 +462,24 @@ export const SettingsPage: React.FC = () => {
                               {p.iconType === 'gemini' && <GeminiIcon size={18} />}
                               {p.iconType === 'deepseek' && <DeepSeekIcon size={18} />}
                               {p.iconType === 'openai' && <OpenAIIcon size={18} />}
-                              {!['anthropic', 'gemini', 'deepseek', 'openai'].includes(p.iconType) && <Cpu className="w-4 h-4 text-purple-400" />}
+                              {!['anthropic', 'gemini', 'deepseek', 'openai'].includes(p.iconType) && <Cpu className="w-4 h-4 text-[#8b949e]" />}
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
                                 <span className="font-semibold text-white text-xs">{p.name}</span>
-                                <span className={`text-[10px] px-2 py-0.2 rounded-full font-mono ${
+                                <span className={`text-[10px] px-2 py-0.2 rounded-full font-sans ${
                                   isPrimary ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' :
-                                  isStandby ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30' :
-                                  'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                                  isStandby ? 'bg-[#21262d] text-[#8b949e] border border-[#30363d]' :
+                                  'bg-[#21262d] text-[#c9d1d9] border border-[#30363d]'
                                 }`}>
                                   {p.statusLabel}
                                 </span>
                               </div>
-                              <span className="text-[11px] text-[#8b949e] font-mono">{p.model}</span>
+                              <span className="text-[11px] text-[#8b949e] font-sans">{p.model}</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-[10px] text-[#8b949e]">{p.latency}</span>
+                            <span className="font-sans text-[10px] text-[#8b949e]">{p.latency}</span>
                             <span className="w-2 h-2 rounded-full bg-emerald-400" />
                           </div>
                         </div>
@@ -485,9 +487,9 @@ export const SettingsPage: React.FC = () => {
                         <div className="flex items-center justify-between pt-2 border-t border-[#21262d]/50 text-[11px]">
                           <div className="flex items-center gap-2">
                             <span className="text-[#6e7681]">Key:</span>
-                            <span className="font-mono text-[#c9d1d9] bg-[#0d1117] px-2 py-0.5 rounded border border-[#21262d]/60">{p.apiKey}</span>
+                            <span className="font-sans text-[#c9d1d9] bg-[#0d1117] px-2 py-0.5 rounded border border-[#21262d]/60">{p.apiKey}</span>
                           </div>
-                          <div className="flex items-center gap-3 text-[#8b949e] font-mono text-[10.5px]">
+                          <div className="flex items-center gap-3 text-[#8b949e] font-sans text-[10.5px]">
                             <span>Quota: {p.quotaUsed} / {p.quotaTotal}</span>
                             <span>Limit: {p.rateLimit}</span>
                           </div>
@@ -507,9 +509,9 @@ export const SettingsPage: React.FC = () => {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-white text-xs">Local Ollama Runtime</span>
-                          <span className="text-[10px] px-2 py-0.2 rounded-full font-mono bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">Offline Local</span>
+                          <span className="text-[10px] px-2 py-0.2 rounded-full font-sans bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">Offline Local</span>
                         </div>
-                        <span className="text-[11px] text-[#8b949e] font-mono">{localOllamaUrl} • DeepSeek R1, Llama 3.3</span>
+                        <span className="text-[11px] text-[#8b949e] font-sans">{localOllamaUrl} • DeepSeek R1, Llama 3.3</span>
                       </div>
                     </div>
                     <span className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -535,7 +537,7 @@ export const SettingsPage: React.FC = () => {
                     </button>
                   </div>
                   {clientKeys.map((k) => (
-                    <div key={k.id} className="flex items-center justify-between p-2.5 rounded-lg bg-[#0d1117] border border-[#21262d] text-xs font-mono">
+                    <div key={k.id} className="flex items-center justify-between p-2.5 rounded-lg bg-[#0d1117] border border-[#21262d] text-xs font-sans">
                       <div>
                         <span className="text-white block font-sans font-medium text-[11.5px]">{k.name}</span>
                         <span className="text-[#8b949e] text-[10.5px]">{k.token}</span>
@@ -608,7 +610,7 @@ export const SettingsPage: React.FC = () => {
                   <div>
                     <div className="flex justify-between text-xs text-[#8b949e] mb-1.5">
                       <span>Reasoning Temperature:</span>
-                      <span className="font-mono text-white font-medium">{temperature}</span>
+                      <span className="font-sans text-white font-medium">{temperature}</span>
                     </div>
                     <input
                       type="range"
@@ -617,7 +619,7 @@ export const SettingsPage: React.FC = () => {
                       step="0.05"
                       value={temperature}
                       onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-[#0d1117] rounded-lg appearance-none cursor-pointer accent-purple-400"
+                      className="w-full h-1.5 bg-[#0d1117] rounded-lg appearance-none cursor-pointer accent-neutral-300"
                     />
                   </div>
 
@@ -637,14 +639,14 @@ export const SettingsPage: React.FC = () => {
 
                   <label className="flex items-center justify-between p-3 rounded-lg bg-[#0d1117] border border-[#21262d] cursor-pointer hover:border-[#30363d] transition">
                     <div className="flex items-center gap-2">
-                      <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                      <Sparkles className="w-3.5 h-3.5 text-[#8b949e]" />
                       <span className="text-xs text-[#c9d1d9]">Stream Token Output</span>
                     </div>
                     <input
                       type="checkbox"
                       checked={streamResponse}
                       onChange={(e) => setStreamResponse(e.target.checked)}
-                      className="accent-purple-400"
+                      className="accent-neutral-300"
                     />
                   </label>
 
@@ -654,7 +656,7 @@ export const SettingsPage: React.FC = () => {
                       rows={3}
                       value={systemPrompt}
                       onChange={(e) => setSystemPrompt(e.target.value)}
-                      className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-2.5 text-xs text-[#c9d1d9] focus:outline-none focus:border-[#58a6ff] font-mono resize-none leading-relaxed"
+                      className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-2.5 text-xs text-[#c9d1d9] focus:outline-none font-sans resize-none leading-relaxed"
                     />
                   </div>
                 </div>
@@ -673,7 +675,7 @@ export const SettingsPage: React.FC = () => {
                   <div>
                     <div className="flex justify-between text-xs text-[#8b949e] mb-1.5">
                       <span>Auto Failover Trigger Latency:</span>
-                      <span className="font-mono text-emerald-400 font-medium">{latencyThreshold}ms</span>
+                      <span className="font-sans text-emerald-400 font-medium">{latencyThreshold}ms</span>
                     </div>
                     <input
                       type="range"
@@ -705,7 +707,7 @@ export const SettingsPage: React.FC = () => {
                       type="text"
                       value={localOllamaUrl}
                       onChange={(e) => setLocalOllamaUrl(e.target.value)}
-                      className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-[#c9d1d9] font-mono focus:outline-none focus:border-emerald-500"
+                      className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-xs text-[#c9d1d9] font-sans focus:outline-none"
                     />
                   </div>
                 </div>
@@ -772,22 +774,22 @@ export const SettingsPage: React.FC = () => {
                 </div>
 
                 <div className="p-4 rounded-xl bg-[#161b22] border border-[#21262d] space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 font-mono text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 font-sans text-xs">
                     {[
-                      { action: 'Open Settings', key: '⌘, / Ctrl+,' },
-                      { action: 'API Keys & Models', key: '⌘⌥A / Ctrl+Alt+A' },
-                      { action: 'Toggle Orca Tools', key: '⌘⌥O / Ctrl+Alt+O' },
-                      { action: 'Switch to Chat', key: '⌘1 / Ctrl+1' },
-                      { action: 'Switch to Code ADE', key: '⌘2 / Ctrl+2' },
-                      { action: 'Switch to Research', key: '⌘3 / Ctrl+3' },
-                      { action: 'New Session', key: '⌘N / Ctrl+N' },
-                      { action: 'Toggle Sidebar', key: '⌘B / Ctrl+B' },
-                      { action: 'Toggle Diff Split', key: '⌘\\ / Ctrl+\\' },
-                      { action: 'Quick Command Palette', key: '⌘K / Ctrl+K' },
+                      { action: 'Open Settings', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "," })}` },
+                      { action: 'API Keys & Models', key: `${formatKeyCombo({ ctrlOrCmd: true, altOrOpt: true, key: "A" })}` },
+                      { action: 'Toggle Orca Tools', key: `${formatKeyCombo({ ctrlOrCmd: true, altOrOpt: true, key: "O" })}` },
+                      { action: 'Switch to Chat', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "1" })}` },
+                      { action: 'Switch to Code ADE', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "2" })}` },
+                      { action: 'Switch to Research', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "3" })}` },
+                      { action: 'New Session', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "N" })}` },
+                      { action: 'Toggle Sidebar', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "B" })}` },
+                      { action: 'Toggle Diff Split', key: formatKeyCombo({ ctrlOrCmd: true, key: '\\' }) },
+                      { action: 'Quick Command Palette', key: `${formatKeyCombo({ ctrlOrCmd: true, key: "K" })}` },
                     ].map((s, idx) => (
                       <div key={idx} className="flex items-center justify-between p-2.5 rounded-lg bg-[#0d1117] border border-[#21262d]">
                         <span className="text-[#c9d1d9] font-sans text-xs">{s.action}</span>
-                        <kbd className="px-2 py-0.5 rounded bg-[#21262d] text-[#58a6ff] border border-[#30363d] text-[11px] font-mono">
+                        <kbd className="px-2 py-0.5 rounded bg-[#21262d] text-[#c9d1d9] border border-[#30363d] text-[11px] font-sans">
                           {s.key}
                         </kbd>
                       </div>
@@ -826,7 +828,7 @@ export const SettingsPage: React.FC = () => {
                   </div>
 
                   <div className="flex items-center justify-between pt-2 border-t border-[#21262d]">
-                    <span className="text-xs text-[#6e7681] font-mono">Build 2026.10 • Apache 2.0 / MIT</span>
+                    <span className="text-xs text-[#6e7681] font-sans">Build 2026.10 • Apache 2.0 / MIT</span>
                     <button
                       onClick={() => showToast('Custos is already up to date')}
                       className="px-3 py-1.5 bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] rounded-lg text-xs text-[#c9d1d9] font-medium transition flex items-center gap-1.5"

@@ -135,34 +135,33 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
 
   return (
     <div className="flex flex-col h-full w-full bg-[#04080F] text-[#e0e6ed] overflow-hidden select-none font-sans relative">
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-500/5 blur-[150px] rounded-full pointer-events-none" />
       
       {/* 32px Standard Pane Header */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-[#1e2430] bg-[#080d16]/80 backdrop-blur-md px-5 relative z-10">
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-[#1e2430] bg-[#080d16]/80  px-5 relative z-10">
         <div className="flex items-center gap-3">
-          <div className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20">
+          <div className="p-1.5 rounded-lg bg-[#21262d] shadow-lg ">
             <FlaskConical className="w-4 h-4 text-white" />
           </div>
           <span className="text-[14px] font-bold text-white tracking-wide">
             Experiment Ledger
           </span>
-          <span className="text-[11px] text-emerald-400 font-mono font-semibold bg-emerald-400/10 px-2 py-0.5 rounded-md border border-emerald-400/20 ml-2">
+          <span className="text-[11px] text-[#8b949e] font-sans font-semibold bg-[#21262d] px-2 py-0.5 rounded-md border border-[#30363d] ml-2">
             {runs.length} recorded runs
           </span>
         </div>
       </header>
 
       {/* Filter Toolbar */}
-      <div className="p-4 border-b border-[#1e2430] bg-gradient-to-b from-transparent to-[#080d16]/50 flex flex-wrap items-center gap-4 text-xs relative z-10">
+      <div className="p-4 border-b border-[#1e2430] bg-[#21262d] flex flex-wrap items-center gap-4 text-xs relative z-10">
         {/* Search */}
         <div className="relative min-w-[250px] flex-1 group">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#6e7681] group-focus-within:text-emerald-400 transition-colors" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#6e7681] group-focus-within:text-white transition-colors" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search commands, run IDs..."
-            className="w-full bg-[#111722] border border-[#2d3342] rounded-xl py-2 pl-9 pr-3 text-sm text-[#e0e6ed] placeholder-[#6e7681] outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 transition-all shadow-inner"
+            className="w-full bg-[#111722] border border-[#2d3342] rounded-xl py-2 pl-9 pr-3 text-sm text-[#e0e6ed] placeholder-[#6e7681] outline-none focus:outline-none transition-all shadow-inner"
           />
         </div>
 
@@ -172,11 +171,11 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
             onClick={() => setStatusFilter(statusFilter === 'ok' ? 'all' : 'ok')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11.5px] font-bold transition-all ${
               statusFilter === 'ok'
-                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400 '
                 : 'bg-[#111722] border-[#2d3342] text-[#8b949e] hover:bg-[#161c28] hover:text-white'
             }`}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'ok' ? 'bg-emerald-400 shadow-[0_0_5px_rgba(16,185,129,1)]' : 'bg-[#6e7681]'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'ok' ? 'bg-emerald-400 ' : 'bg-[#6e7681]'}`} />
             <span>Success</span>
           </button>
 
@@ -184,11 +183,11 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
             onClick={() => setStatusFilter(statusFilter === 'failed' ? 'all' : 'failed')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11.5px] font-bold transition-all ${
               statusFilter === 'failed'
-                ? 'bg-rose-500/10 border-rose-500/40 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)]'
+                ? 'bg-rose-500/10 border-rose-500/40 text-rose-400 '
                 : 'bg-[#111722] border-[#2d3342] text-[#8b949e] hover:bg-[#161c28] hover:text-white'
             }`}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'failed' ? 'bg-rose-400 shadow-[0_0_5px_rgba(244,63,94,1)]' : 'bg-[#6e7681]'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'failed' ? 'bg-rose-400 ' : 'bg-[#6e7681]'}`} />
             <span>Failed</span>
           </button>
         </div>
@@ -212,7 +211,7 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
               {/* Row Header Button */}
               <div
                 onClick={() => setExpandedId(isExpanded ? null : run.runId)}
-                className={`p-4 flex items-center justify-between gap-4 cursor-pointer transition select-none ${isExpanded ? `bg-${isOk ? 'emerald-500' : 'rose-500'}/5` : 'hover:bg-white/5'}`}
+                className={`p-4 flex flex-wrap items-center justify-between gap-2 gap-4 cursor-pointer transition select-none ${isExpanded ? `bg-${isOk ? 'emerald-500' : 'rose-500'}/5` : 'hover:bg-white/5'}`}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className={`p-1 rounded-md ${isExpanded ? (isOk ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400') : 'bg-[#1e2430] text-[#8b949e]'}`}>
@@ -220,19 +219,19 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                   </div>
                   <span
                     className={`w-2.5 h-2.5 rounded-full shrink-0 shadow-sm ${
-                      isOk ? 'bg-emerald-400 shadow-emerald-400/50' : 'bg-rose-400 shadow-rose-400/50'
+                      isOk ? 'bg-emerald-400 ' : 'bg-rose-400 '
                     }`}
                   />
-                  <span className="font-mono text-[13px] text-white font-medium truncate tracking-tight">
+                  <span className="font-sans text-[13px] text-white font-medium truncate tracking-tight">
                     {run.command}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-4 shrink-0 text-[11px] text-[#8b949e] font-mono">
+                <div className="flex items-center gap-4 shrink-0 text-[11px] text-[#8b949e] font-sans">
                   {run.surface && (
                     <span className={`px-2 py-0.5 rounded-md uppercase font-bold text-[10px] ${
-                      run.surface === 'sandbox' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 
-                      run.surface === 'hpc' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 
+                      run.surface === 'sandbox' ? 'bg-[#21262d] text-neutral-300 border border-[#30363d]' : 
+                      run.surface === 'hpc' ? 'bg-[#21262d] text-neutral-300 border border-[#30363d]' : 
                       'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                     }`}>
                       {run.surface}
@@ -248,11 +247,11 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                 <div className="border-t border-[#1e2430] p-6 bg-[#080d16]/50 space-y-6">
                   
                   {/* Action Bar */}
-                  <div className="flex items-center justify-between text-[11.5px]">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-[11.5px]">
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => handleReproduce(run)}
-                        className="group flex items-center gap-2 px-4 py-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold hover:shadow-[0_0_15px_rgba(99,102,241,0.4)] transition-all hover:scale-105 active:scale-95"
+                        className="group flex items-center gap-2 px-4 py-1.5 rounded-lg bg-[#21262d] text-white font-bold  transition-all  "
                         title="Generate verification prompt with exact environment & lockfile"
                       >
                         <RotateCcw size={14} className="group-hover:-rotate-90 transition-transform duration-500" />
@@ -272,25 +271,25 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                       </button>
                     </div>
 
-                    <div className="font-mono text-[11px] text-[#6e7681] bg-[#111722] px-3 py-1.5 rounded-lg border border-[#1e2430]">
-                      Merkle Hash: <span className="text-blue-400 ml-1 font-semibold">{run.outputMerkleRoot}</span>
+                    <div className="font-sans text-[11px] text-[#6e7681] bg-[#111722] px-3 py-1.5 rounded-lg border border-[#1e2430]">
+                      Merkle Hash: <span className="text-neutral-300 ml-1 font-semibold">{run.outputMerkleRoot}</span>
                     </div>
                   </div>
 
                   {/* Hardware & Env Chips */}
-                  <div className="flex flex-wrap items-center gap-3 font-mono text-[11px]">
+                  <div className="flex flex-wrap items-center gap-3 font-sans text-[11px]">
                     <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d131f] text-[#c9d1d9] border border-[#1e2430] shadow-inner">
-                      <Cpu size={12} className="text-blue-400" />
+                      <Cpu size={12} className="text-neutral-300" />
                       <span className="font-semibold">{run.envSnapshot.hardware}</span>
                     </span>
 
                     <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d131f] text-[#c9d1d9] border border-[#1e2430] shadow-inner">
-                      <Package size={12} className="text-emerald-400" />
+                      <Package size={12} className="text-[#8b949e]" />
                       <span className="font-semibold">Python {run.envSnapshot.pythonVersion}</span>
                       <span className="text-[#6e7681]">({run.envSnapshot.packageCount} pkgs)</span>
                     </span>
 
-                    <span className="px-3 py-1.5 rounded-lg bg-indigo-500/5 text-indigo-300 border border-indigo-500/20 font-semibold shadow-inner">
+                    <span className="px-3 py-1.5 rounded-lg bg-[#21262d] text-neutral-300 border border-[#30363d] font-semibold shadow-inner">
                       Lockfile: {run.envSnapshot.lockfileHash.slice(0, 16)}...
                     </span>
                   </div>
@@ -300,12 +299,12 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                     {run.codeFiles && (
                       <div className="p-4 rounded-xl bg-[#0d131f]/80 border border-[#1e2430] space-y-3">
                         <div className="text-[10px] text-[#6e7681] font-bold uppercase tracking-wider flex items-center gap-1.5">
-                          <FileCode2 size={12} className="text-indigo-400" /> 
+                          <FileCode2 size={12} className="text-neutral-300" /> 
                           Code Inputs
                         </div>
                         <div className="space-y-2">
                           {run.codeFiles.map((f) => (
-                            <div key={f.path} className="font-mono text-[#e0e6ed] flex justify-between items-center bg-[#111722] p-2 rounded-lg border border-[#2d3342]">
+                            <div key={f.path} className="font-sans text-[#e0e6ed] flex justify-between items-center bg-[#111722] p-2 rounded-lg border border-[#2d3342]">
                               <span>{f.path}</span>
                               <span className="text-[#6e7681] text-[10px]">{f.hash}</span>
                             </div>
@@ -317,14 +316,14 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                     {run.outputFiles && (
                       <div className="p-4 rounded-xl bg-[#0d131f]/80 border border-[#1e2430] space-y-3">
                         <div className="text-[10px] text-[#6e7681] font-bold uppercase tracking-wider flex items-center gap-1.5">
-                          <FileOutput size={12} className="text-emerald-400" /> 
+                          <FileOutput size={12} className="text-[#8b949e]" /> 
                           Captured Outputs
                         </div>
                         <div className="space-y-2">
                           {run.outputFiles.map((f) => (
-                            <div key={f.path} className="font-mono text-[#e0e6ed] flex justify-between items-center bg-[#111722] p-2 rounded-lg border border-[#2d3342]">
+                            <div key={f.path} className="font-sans text-[#e0e6ed] flex justify-between items-center bg-[#111722] p-2 rounded-lg border border-[#2d3342]">
                               <span>{f.path}</span>
-                              <span className="text-emerald-400 font-bold bg-emerald-400/10 px-1.5 py-0.5 rounded text-[10px]">{(f.size / 1024).toFixed(1)} KB</span>
+                              <span className="text-[#8b949e] font-bold bg-[#21262d] px-1.5 py-0.5 rounded text-[10px]">{(f.size / 1024).toFixed(1)} KB</span>
                             </div>
                           ))}
                         </div>
@@ -335,7 +334,7 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                   {/* Stdout / Stderr Log */}
                   {run.logText && (
                     <div className="rounded-xl bg-[#04080F] border border-[#1e2430] overflow-hidden shadow-inner">
-                      <div className="bg-[#080d16] px-4 py-2 border-b border-[#1e2430] text-[10px] text-blue-400 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                      <div className="bg-[#080d16] px-4 py-2 border-b border-[#1e2430] text-[10px] text-neutral-300 font-bold uppercase tracking-widest flex items-center gap-1.5">
                         <Terminal size={12} /> 
                         Execution Trace
                       </div>
@@ -345,7 +344,7 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                             let colorClass = 'text-[#8b949e]';
                             if (line.includes('[FATAL]') || line.includes('Violation')) colorClass = 'text-rose-400 font-bold';
                             else if (line.includes('[Result]') || line.includes('verified')) colorClass = 'text-emerald-400';
-                            else if (line.includes('[SADE]')) colorClass = 'text-indigo-400';
+                            else if (line.includes('[SADE]')) colorClass = 'text-neutral-300';
                             
                             return (
                               <div key={i} className={colorClass}>{line}</div>

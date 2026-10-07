@@ -81,7 +81,7 @@ export const RootLayout: React.FC = () => {
   };
 
   return (
-    <div className="bg-canvas text-editor-fg font-sans antialiased h-screen w-screen overflow-hidden flex flex-col select-none">
+    <div className="bg-canvas text-editor-fg font-sans antialiased h-full w-full min-w-[960px] min-h-[640px] overflow-hidden flex flex-col select-none">
       {/* Top Header - Render only on secondary standalone pages; Studio has its own single unified titlebar */}
       {getCurrentTab() !== 'studio' && (
         <Header

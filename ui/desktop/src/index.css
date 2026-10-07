@@ -8,7 +8,7 @@
 
 @theme {
   /* ── Typography ─────────────────────────────────────────── */
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono", "Menlo", "Consolas", "DejaVu Sans Mono", monospace;
 
   --font-size-2xs: 0.6875rem;  /* 11px */
@@ -30,11 +30,11 @@
   --color-surface-3:       #22272e;   /* menus, tooltips */
   --color-surface-overlay: #2d333b;   /* dropdowns, popovers */
 
-  /* ── Border system ────────────────────────────────────────*/
-  --color-border-default:  #30363d;
-  --color-border-muted:    #21262d;
-  --color-border-subtle:   #1c2128;
-  --color-border-emphasis: #6e7681;
+  /* ── Border system — softened, subtle borders ──────────────*/
+  --color-border-default:  #262c36;
+  --color-border-muted:    #1c2128;
+  --color-border-subtle:   #161b22;
+  --color-border-emphasis: #484f58;
 
   /* ── Foreground ───────────────────────────────────────────*/
   --color-editor-fg:       #e6edf3;   /* primary text — warm white */
@@ -124,12 +124,18 @@
   box-sizing: border-box;
 }
 
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  min-width: 960px;
+  min-height: 640px;
+  overflow: hidden;
+}
+
 body {
   font-family: var(--font-sans);
   font-size: 0.8125rem;      /* 13px — same as VS Code */
   line-height: 1.5;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";  /* Inter optical features */
-  font-variation-settings: normal;
   background-color: var(--color-canvas);
   color: var(--color-editor-fg);
   -webkit-font-smoothing: antialiased;
@@ -177,6 +183,17 @@ button[disabled],
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
   border-radius: 2px;
+}
+
+/* Eliminate focus border and rings across all inputs and textareas globally */
+input:not([type="checkbox"]):not([type="radio"]):focus,
+input:not([type="checkbox"]):not([type="radio"]):focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* ============================================================
@@ -236,8 +253,6 @@ select:hover {
 
 select:focus {
   outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-subtle);
 }
 
 select option {
@@ -792,9 +807,6 @@ input[type="checkbox"]:disabled {
   transition: border-color 0.15s;
 }
 
-.composer-wrapper:focus-within {
-  border-color: var(--color-accent);
-}
 
 .composer-textarea {
   background: transparent;
