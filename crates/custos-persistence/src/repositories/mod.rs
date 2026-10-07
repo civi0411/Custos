@@ -8,6 +8,7 @@ pub mod span;
 pub mod task;
 pub mod workflow_revision;
 pub mod workspace;
+pub mod research;
 
 pub use continuation::*;
 pub use decision::*;
@@ -19,3 +20,4 @@ pub use span::*;
 pub use task::*;
 pub use workflow_revision::*;
 pub use workspace::*;
+pub use research::*;

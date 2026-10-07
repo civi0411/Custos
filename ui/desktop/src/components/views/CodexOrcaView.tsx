@@ -1,20 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Send,
-  RotateCcw,
   Terminal,
-  Code2,
   FolderGit2,
   GitBranch,
   Orbit,
   Settings2,
-  Plus,
-  FlaskConical,
-  Download,
-  MessageSquare
+  Plus
 } from 'lucide-react';
 import { Session } from '@/types';
-import { OrcaTabbedContainer } from './OrcaTabbedContainer';
+import { OrcaTabbedContainer, type ResourceTabsState } from './OrcaTabbedContainer';
 import { WorkspaceSidebar } from '@/components/shell/WorkspaceSidebar';
 import { WorktreeManagerModal, type ManagedWorktree } from '@/components/modals';
 import { OpenAIIcon } from '@/components/common/AgentIcons';
@@ -23,6 +18,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 interface CodexOrcaViewProps {
+  resourceTabs: ResourceTabsState;
   currentProject: string;
   projectNames: string[];
   onSelectProject: (name: string) => void;
@@ -42,10 +38,10 @@ interface CodexOrcaViewProps {
   isWebTabOpen?: boolean;
   isWebTabExpanded?: boolean;
   onToggleExpandWebTab?: () => void;
-  onWebTabCountChange?: (count: number) => void;
 }
 
 export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
+  resourceTabs,
   currentProject,
   projectNames,
   onSelectProject,
@@ -54,7 +50,7 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
   onSelectSession,
   onNewSession,
   onSendMessage,
-  onClearHistory,
+  onClearHistory: _onClearHistory,
   onAcceptAndRun,
   onRejectDiff,
   onCopyDiff,
@@ -64,8 +60,7 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
   isSidebarCollapsed,
   isWebTabOpen,
   isWebTabExpanded,
-  onToggleExpandWebTab,
-  onWebTabCountChange
+  onToggleExpandWebTab
 }) => {
   const { openSettings } = useAppContext();
   const [inputText, setInputText] = useState('');
@@ -107,20 +102,6 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
     }
   };
 
-  const exportConversation = () => {
-    if (!activeSession) return;
-    const md = activeSession.messages
-      .map(m => `## ${m.role === 'user' ? 'User (Chí Vĩ)' : (m.author || 'Codex')}\n\n${m.text}`)
-      .join('\n\n---\n\n');
-    const blob = new Blob([`# ${activeSession.title}\n\n${md}\n`], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${activeSession.title.replace(/[^a-z0-9-_]+/gi, '-').toLowerCase()}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-    if (onShowToast) onShowToast('Conversation exported to Markdown');
-  };
 
   return (
     <div className="flex h-full w-full bg-[#0d1117] text-[#c9d1d9] font-sans overflow-hidden select-none">
@@ -179,65 +160,8 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
         ───────────────────────────────────────────────────────────── */}
         <div
           className="flex flex-col h-full overflow-hidden bg-[#0d1117] relative select-text"
-          style={{ width: `${splitPercent}%` }}
+          style={{ width: isWebTabOpen ? `${splitPercent}%` : '100%' }}
         >
-          {/* Header */}
-          <div className="h-10 px-4 border-b border-[#21262d] flex items-center justify-between shrink-0 bg-[#090d13]">
-            <div className="flex items-center gap-2 text-[13px] font-semibold text-white">
-              <Code2 className="w-4 h-4 text-[#58a6ff]" />
-              <span>Engineering Copilot</span>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              {/* Context Transfer Buttons */}
-              {onSwitchMode && (
-                <>
-                  <button
-                    onClick={() => {
-                      onSwitchMode('chat');
-                      if (onShowToast) onShowToast('Transferred context to Claude Chat Workspace');
-                    }}
-                    className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded bg-[#21262d] text-[#8b949e] hover:text-white transition"
-                    title="Take this session to Claude Chat"
-                  >
-                    <MessageSquare className="w-3 h-3 text-[#cc785c]" />
-                    <span>Send to Chat</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      onSwitchMode('research');
-                      if (onShowToast) onShowToast('Transferred context to Claude Science Lab');
-                    }}
-                    className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded bg-[#21262d] text-[#8b949e] hover:text-white transition"
-                    title="Take this session to Science Lab"
-                  >
-                    <FlaskConical className="w-3 h-3 text-[#a371f7]" />
-                    <span>Send to Research</span>
-                  </button>
-                </>
-              )}
-              {hasMessages && (
-                <>
-                  <button
-                    onClick={exportConversation}
-                    className="flex items-center gap-1 text-[11px] text-[#8b949e] hover:text-white transition"
-                    title="Export conversation as Markdown"
-                  >
-                    <Download className="w-3 h-3 text-[#58a6ff]" />
-                    <span>Export .md</span>
-                  </button>
-                  <button
-                    onClick={onClearHistory}
-                    className="flex items-center gap-1 text-[11px] text-[#8b949e] hover:text-white transition"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Clear</span>
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
           {/* Dialogue Messages Canvas */}
           <div className="flex-1 overflow-y-auto px-6 pb-44 pt-6 space-y-6">
             {!hasMessages ? (
@@ -312,35 +236,40 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
             )}
           </div>
 
-          {/* Chat Composer Input */}
-          <div className={`absolute z-50 pointer-events-none transition-all duration-300 ${isWebTabExpanded ? 'bottom-6 left-1/2 -translate-x-1/2 w-[600px]' : 'bottom-6 left-6 right-6'}`}>
-            <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-3 shadow-2xl pointer-events-auto transition focus-within:border-[#58a6ff]/50">
-              <textarea
-                rows={2}
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Message Codex to write code or run terminal tasks..."
-                className="w-full bg-transparent border-none outline-none text-[#c9d1d9] placeholder-[#8b949e] text-[13px] resize-none"
-              />
-              <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#21262d]">
-                <div className="flex items-center gap-2 text-[#8b949e]">
-                  <button className="p-1 hover:text-white transition rounded"><Plus className="w-4 h-4" /></button>
-                  <span className="text-[11px] font-mono border border-[#30363d] bg-[#0d1117] px-2 py-0.5 rounded text-[#58a6ff]">
-                    SADE Copilot
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleSend}
-                    disabled={!inputText.trim()}
-                    className={`p-1.5 rounded-lg transition ${
-                      inputText.trim() ? 'bg-[#58a6ff] text-white hover:bg-[#3182ce]' : 'text-[#8b949e] bg-[#21262d]'
-                    }`}
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
-                </div>
+        </div>
+
+        {/* Chat Composer Input - Moved out to float over both columns */}
+        <div className={`absolute z-[60] transition-all duration-500 ease-in-out flex justify-center pointer-events-none ${
+          isWebTabExpanded ? 'bottom-6 right-6 w-[360px]' : 'bottom-6 left-6 w-[calc(100%-48px)] max-w-[calc(100vw-300px)]'
+        }`}
+        style={{ width: isWebTabExpanded ? '360px' : (isWebTabOpen ? `calc(${splitPercent}% - 48px)` : 'calc(100% - 48px)'), left: isWebTabExpanded ? 'calc(100% - 360px - 1.5rem)' : '1.5rem' }}
+        >
+          <div className="bg-[#161b22]/90 backdrop-blur-xl border border-[#30363d] rounded-2xl p-3 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.8)] pointer-events-auto transition focus-within:border-[#58a6ff]/50 w-full group">
+            <textarea
+              rows={isWebTabExpanded ? 1 : 2}
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Message Codex to write code or run terminal tasks..."
+              className="w-full bg-transparent border-none outline-none text-[#c9d1d9] placeholder-[#8b949e] text-[13px] resize-none"
+            />
+            <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#21262d]">
+              <div className="flex items-center gap-2 text-[#8b949e]">
+                <button className="p-1 hover:text-white transition rounded"><Plus className="w-4 h-4" /></button>
+                <span className="text-[11px] font-mono border border-[#30363d] bg-[#0d1117] px-2 py-0.5 rounded text-[#58a6ff]">
+                  SADE Copilot
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleSend}
+                  disabled={!inputText.trim()}
+                  className={`p-1.5 rounded-lg transition ${
+                    inputText.trim() ? 'bg-[#58a6ff] text-white hover:bg-[#3182ce]' : 'text-[#8b949e] bg-[#21262d]'
+                  }`}
+                >
+                  <Send className="w-4 h-4" />
+                </button>
               </div>
             </div>
           </div>
@@ -364,6 +293,8 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
             style={{ display: isWebTabOpen ? 'block' : 'none', width: isWebTabExpanded ? '100%' : `${100 - splitPercent}%`, position: isWebTabExpanded ? 'absolute' : 'relative', right: 0 }}
           >
             <OrcaTabbedContainer
+              resourceTabs={resourceTabs}
+              isPaneOpen={Boolean(isWebTabOpen)}
               session={activeSession}
               onAcceptAndRun={onAcceptAndRun}
               onRejectDiff={onRejectDiff}
@@ -372,7 +303,7 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
               isExpanded={isWebTabExpanded}
               onToggleExpand={onToggleExpandWebTab}
               mode="code"
-              onTabsCountChange={onWebTabCountChange}
+              splitPercent={splitPercent}
             />
           </div>
       </div>

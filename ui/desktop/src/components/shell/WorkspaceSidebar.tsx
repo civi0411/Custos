@@ -155,6 +155,11 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   return (
     <aside className="w-64 bg-[#181818] border-r border-[#2d2d2d] flex flex-col shrink-0 z-20 relative">
       <div className="flex flex-col min-h-0 flex-1 p-3">
+        {sessions.some((session) => session.source === 'demo') && (
+          <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[10px] leading-snug text-amber-200">
+            Demo data · actions are not connected to the live daemon
+          </div>
+        )}
         {/* + New Button */}
         <button
           onClick={onNewSession}

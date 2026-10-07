@@ -2,6 +2,13 @@
 // Strictly mirrors crates/custos-domain and crates/custos-daemon API
 
 export type TaskStatus =
+  | 'draft'
+  | 'queued'
+  | 'running'
+  | 'blocked'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
   | 'Draft'
   | 'Active'
   | 'Blocked'
@@ -10,12 +17,21 @@ export type TaskStatus =
   | 'Cancelled';
 
 export type SessionMode =
+  | 'bare'
+  | 'assisted'
+  | { attached: { task_id: string } }
   | 'autonomous'
   | 'supervised'
   | 'interactive'
   | 'headless';
 
 export type RunStatus =
+  | 'pending'
+  | 'active'
+  | 'suspended'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
   | 'Pending'
   | 'Running'
   | 'Completed'
@@ -32,6 +48,12 @@ export interface Criterion {
 }
 
 export interface TaskContract {
+  pack_id?: string;
+  name?: string;
+  description?: string;
+  required_capabilities?: string[];
+  evidence_requirements?: unknown[];
+  /** Legacy presentation alias; never send this to the daemon. */
   pack?: string;
   criteria?: Criterion[];
   invariants?: string[];
@@ -50,10 +72,15 @@ export interface Task {
 }
 
 export interface SessionJournalEntry {
-  id: string;
-  role: 'user' | 'assistant' | 'system' | 'kernel';
-  content: string;
-  timestamp: string;
+  id?: string;
+  entry_id?: number;
+  session_id?: string;
+  entry_type?: string;
+  entry_data?: string;
+  role?: 'user' | 'assistant' | 'system' | 'kernel';
+  content?: string;
+  timestamp?: string;
+  occurred_at?: string;
   badge?: string;
   step_name?: string;
   duration?: string;
@@ -62,6 +89,11 @@ export interface SessionJournalEntry {
 
 export interface Session {
   id: string;
+  status?: 'active' | 'paused' | 'closed' | { promoted: { task_id: string } };
+  current_goal?: string;
+  promotion_score?: number;
+  attached_to?: string;
+  promoted_to?: string;
   task_id?: string;
   mode: SessionMode;
   created_at: string;
@@ -123,6 +155,11 @@ export interface StartRunParams {
   preferred_mode?: 'model' | 'native' | 'terminal';
   workspace_root?: string;
   harness_id?: string;
+}
+
+export interface AttachSessionParams {
+  session_id: string;
+  task_id: string;
 }
 
 export interface CancelRunParams {

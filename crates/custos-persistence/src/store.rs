@@ -1,8 +1,8 @@
 use crate::connection::DbConnection;
 use crate::repositories::{
-    ContinuationRepository, DecisionRepository, OutboxRepository, ReplanRepository, RunRepository,
-    SessionRepository, SpanRepository, TaskRepository, WorkflowRevisionRepository,
-    WorkspaceRepository,
+    ContinuationRepository, DecisionRepository, OutboxRepository, ReplanRepository,
+    ResearchRepository, RunRepository, SessionRepository, SpanRepository, TaskRepository,
+    WorkflowRevisionRepository, WorkspaceRepository,
 };
 use async_trait::async_trait;
 use custos_core::contracts::storage::{
@@ -34,6 +34,7 @@ pub struct SqliteTaskStore {
     workflow_repo: WorkflowRevisionRepository,
     replan_repo: ReplanRepository,
     workspace_repo: WorkspaceRepository,
+    research_repo: ResearchRepository,
 }
 
 impl SqliteTaskStore {
@@ -50,6 +51,7 @@ impl SqliteTaskStore {
         let workflow_repo = WorkflowRevisionRepository::new(db.clone());
         let replan_repo = ReplanRepository::new(db.clone());
         let workspace_repo = WorkspaceRepository::new(db.clone());
+        let research_repo = ResearchRepository::new(db.clone());
         Ok(Self {
             db,
             task_repo,
@@ -62,6 +64,7 @@ impl SqliteTaskStore {
             workflow_repo,
             replan_repo,
             workspace_repo,
+            research_repo,
         })
     }
 
@@ -78,6 +81,7 @@ impl SqliteTaskStore {
         let workflow_repo = WorkflowRevisionRepository::new(db.clone());
         let replan_repo = ReplanRepository::new(db.clone());
         let workspace_repo = WorkspaceRepository::new(db.clone());
+        let research_repo = ResearchRepository::new(db.clone());
         Ok(Self {
             db,
             task_repo,
@@ -90,6 +94,7 @@ impl SqliteTaskStore {
             workflow_repo,
             replan_repo,
             workspace_repo,
+            research_repo,
         })
     }
 
@@ -135,6 +140,10 @@ impl SqliteTaskStore {
 
     pub fn workspaces(&self) -> &WorkspaceRepository {
         &self.workspace_repo
+    }
+
+    pub fn research(&self) -> &ResearchRepository {
+        &self.research_repo
     }
 
     /// Lists all tasks ordered by creation time descending.

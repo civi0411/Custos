@@ -23,7 +23,7 @@ import {
 import { Session } from '@/types';
 import { WorkspaceSidebar } from '@/components/shell/WorkspaceSidebar';
 import { DelegateTaskModal, type DelegateTaskData } from '@/components/modals';
-import { OrcaTabbedContainer } from './OrcaTabbedContainer';
+import { OrcaTabbedContainer, type ResourceTabsState } from './OrcaTabbedContainer';
 import { AssistantWorkspace } from '@/components/workspaces';
 import { ClaudeIcon } from '@/components/common/AgentIcons';
 import { useAppContext } from '@/context/AppContext';
@@ -31,6 +31,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 interface ClaudeChatViewProps {
+  resourceTabs: ResourceTabsState;
   currentProject: string;
   projectNames: string[];
   onSelectProject: (name: string) => void;
@@ -47,10 +48,10 @@ interface ClaudeChatViewProps {
   isWebTabOpen?: boolean;
   isWebTabExpanded?: boolean;
   onToggleExpandWebTab?: () => void;
-  onWebTabCountChange?: (count: number) => void;
 }
 
 export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
+  resourceTabs,
   currentProject,
   projectNames,
   onSelectProject,
@@ -66,8 +67,7 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
   isSidebarCollapsed,
   isWebTabOpen,
   isWebTabExpanded,
-  onToggleExpandWebTab,
-  onWebTabCountChange
+  onToggleExpandWebTab
 }) => {
   const { openSettings } = useAppContext();
   // Chat vs Cowork mode toggle in composer
@@ -362,24 +362,24 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
                     <button
                       onClick={() => {
                         onSwitchMode('code');
-                        if (onShowToast) onShowToast('Context transferred to Code Workspace');
+                        if (onShowToast) onShowToast('Opened Coding lens. Select context to create an implementation step.');
                       }}
                       className="flex items-center gap-1.5 text-[11px] text-[#58a6ff] hover:text-white transition"
-                      title="Take this conversation to Code"
+                      title="Open this conversation in Coding"
                     >
                       <Terminal className="w-3 h-3" />
-                      <span>Send to Code</span>
+                      <span>Open Coding</span>
                     </button>
                     <button
                       onClick={() => {
                         onSwitchMode('research');
-                        if (onShowToast) onShowToast('Context transferred to Research Workspace');
+                        if (onShowToast) onShowToast('Opened Research lens. Select context to create a research step.');
                       }}
                       className="flex items-center gap-1.5 text-[11px] text-[#a371f7] hover:text-white transition"
-                      title="Take this conversation to Research"
+                      title="Open this conversation in Research"
                     >
                       <FlaskConical className="w-3 h-3" />
-                      <span>Send to Research</span>
+                      <span>Open Research</span>
                     </button>
                   </>
                 )}
@@ -511,12 +511,22 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
           )}
         </div>
 
+        </main>
+
         {/* ── Floating Composer Box (Screenshot 1 Bottom) ── */}
-        <div className={`absolute pointer-events-none flex justify-center z-50 transition-all duration-300 ${isWebTabExpanded ? 'bottom-6 left-1/2 -translate-x-1/2 w-[600px] px-0' : 'bottom-4 left-0 right-0 px-4 md:px-8'}`}>
-          <div className="w-full max-w-2xl bg-[#262626] border border-[#3a3a3a] rounded-2xl shadow-2xl p-3 pointer-events-auto transition focus-within:border-[#555555]">
+        <div 
+          className={`absolute pointer-events-none flex justify-center z-50 transition-all duration-500 ease-out ${
+            isWebTabExpanded ? 'bottom-6 right-6 w-[360px] px-0' : 'bottom-4 left-0 right-0 px-4 md:px-8'
+          }`}
+          style={{
+            width: isWebTabExpanded ? '360px' : (isWebTabOpen ? `calc(${splitPercent}% - 32px)` : '100%'),
+            left: isWebTabExpanded ? 'calc(100% - 360px - 1.5rem)' : '0px'
+          }}
+        >
+          <div className="w-full max-w-2xl bg-[#262626]/90 backdrop-blur-xl border border-[#3a3a3a] rounded-2xl shadow-2xl p-3 pointer-events-auto transition focus-within:border-[#555555]">
             <textarea
               ref={textareaRef}
-              rows={2}
+              rows={isWebTabExpanded ? 1 : 2}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -634,7 +644,6 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
             </div>
           </div>
         </div>
-        </main>
 
         {isWebTabOpen && !isWebTabExpanded && (
           <div
@@ -649,12 +658,14 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
             style={{ display: isWebTabOpen ? 'block' : 'none', width: isWebTabExpanded ? '100%' : `${100 - splitPercent}%`, position: isWebTabExpanded ? 'absolute' : 'relative', right: 0 }}
           >
             <OrcaTabbedContainer
+              resourceTabs={resourceTabs}
+              isPaneOpen={Boolean(isWebTabOpen)}
               session={sessions.find(s => s.id === activeSessionId)}
               onShowToast={onShowToast}
               isExpanded={isWebTabExpanded}
               onToggleExpand={onToggleExpandWebTab}
               mode="chat"
-              onTabsCountChange={onWebTabCountChange}
+              splitPercent={splitPercent}
             />
           </div>
       </div>

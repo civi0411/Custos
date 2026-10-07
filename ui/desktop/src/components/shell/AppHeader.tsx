@@ -16,6 +16,7 @@ export type AppWorkspaceMode = 'chat' | 'code' | 'research';
 
 interface AppHeaderProps {
   mode: AppWorkspaceMode;
+  workspaceTitle?: string;
   onSwitchMode: (mode: AppWorkspaceMode) => void;
 
   isSidebarCollapsed: boolean;
@@ -30,6 +31,7 @@ interface AppHeaderProps {
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
   mode,
+  workspaceTitle: _workspaceTitle,
   onSwitchMode,
   isSidebarCollapsed: _isSidebarCollapsed,
   onToggleSidebar,
@@ -49,7 +51,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       icon: MessageSquare,
       color: '#cc785c',
       shortcut: '⌘1',
-      description: 'Claude Desktop — Chat & Cowork assistant'
+      description: 'Custos Copilot workspace'
     },
     {
       id: 'code',
@@ -57,7 +59,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       icon: Code2,
       color: '#58a6ff',
       shortcut: '⌘2',
-      description: 'Codex 3-Column — Engineering ADE + Orca tools'
+      description: 'Custos Coding workspace'
     },
     {
       id: 'research',
@@ -65,14 +67,14 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       icon: FlaskConical,
       color: '#a371f7',
       shortcut: '⌘3',
-      description: 'Claude Science — Literature, Claims & Experiments'
+      description: 'Custos Research workspace'
     }
   ];
 
   return (
     <header className="h-10 bg-[#090d13] flex items-center select-none z-30 shrink-0 font-sans text-xs transition-all">
       {/* ── LEFT: Nav Controls + Sidebar + Mode Switcher ── */}
-      <div className={`flex items-center justify-between shrink-0 h-full transition-all duration-300 ${!_isSidebarCollapsed ? 'w-64 pr-3 border-r border-[#2d2d2d] bg-[#181818]' : 'w-auto pr-3 bg-transparent border-transparent'}`}>
+      <div className={`flex items-center justify-between shrink-0 h-full transition-all duration-300 ${!_isSidebarCollapsed ? 'w-[260px] pr-3 border-r border-[#2d2d2d] bg-[#181818]' : 'w-auto pr-3 bg-transparent border-transparent'}`}>
         <div className="flex items-center gap-1.5 pl-3">
           {/* Nav arrows */}
           <div className="flex items-center gap-0.5 text-[#8b949e]">
@@ -150,7 +152,9 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         ) : (
           <>
             <button
+              onClick={onToggleWebTab}
               className="p-1 rounded-lg text-[#8b949e] hover:text-white hover:bg-[#161b22] transition"
+              title="Open resource pane"
             >
               {webTabCount > 0 ? (
                 <div className="w-4 h-4 flex items-center justify-center border border-[#8b949e] rounded-[3px] text-[10px] font-bold group-hover:text-white group-hover:border-white transition-colors">
