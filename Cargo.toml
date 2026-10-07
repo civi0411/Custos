@@ -8,6 +8,7 @@ members = [
     "crates/custos-bridge",
     "crates/custos-runtime",
     "crates/custos-adapters",
+    "crates/custos-daemon",
     "crates/custos-sdk",
     "crates/custos-app/cli",
     "crates/custos-app/desktop",
