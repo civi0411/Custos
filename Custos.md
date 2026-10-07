@@ -402,6 +402,28 @@ graph TD
     gui --> daemon
 ```
 
+### Backend responsibility map
+
+The backend architecture may be presented with logical names such as Core, Provider,
+Router, Runtime, Gateway, MCP, A2A, ACP, Policy, Storage, and Observability. These names
+do not create additional Rust crates. Their canonical physical ownership is:
+
+| Logical responsibility | Canonical location |
+|---|---|
+| Shared data model and invariants | `crates/custos-domain`, `crates/custos-core` |
+| Provider contracts and model routing | `crates/custos-provider`, `crates/custos-runtime` |
+| Provider implementations | `crates/custos-adapters/src/providers` |
+| Runtime orchestration and session lifecycle | `crates/custos-runtime` |
+| Gateway and Local API | `crates/custos-daemon`, `crates/custos-bridge` |
+| MCP, A2A, and ACP integrations | `crates/custos-adapters` |
+| Authority and policy enforcement | `crates/custos-core` |
+| SQLite, migrations, outbox, and CAS | `crates/custos-persistence` |
+| Logs, metrics, and client telemetry | the owning crate, composed by `crates/custos-daemon` |
+| CLI and desktop entrypoints | `crates/custos-app/cli`, `crates/custos-app/desktop` |
+
+This mapping is the backend folder contract. New source must be added to the owning
+canonical crate instead of creating a parallel crate with a logical subsystem name.
+
 ### Các Quy Tắc Cấm Kỵ Cấp Kiến Trúc (Architectural Invariants)
 
 1. **`custos-domain` tuyệt đối không có I/O:** Không chứa logic đọc ghi tệp, không kết nối SQLite, không gọi HTTP, không phụ thuộc vào bất kỳ thư viện async runtime nào (như Tokio). Chỉ chứa các cấu trúc dữ liệu thuần túy (Entities, Value Objects, Domain Events).

@@ -1,5 +1,15 @@
 # Monorepo Topology, Crate Boundaries & Deep Codebase Map
 
+> **Backend folder setup index:** Logical architecture labels are mapped onto the
+> canonical crates rather than implemented as parallel crates. Core maps to
+> `custos-domain`/`custos-core`; Provider and Router to
+> `custos-provider`/`custos-runtime` with implementations in `custos-adapters`;
+> Gateway to `custos-daemon`/`custos-bridge`; MCP, A2A and ACP to
+> `custos-adapters`; Policy to `custos-core`; Storage to `custos-persistence`;
+> and applications to `custos-app/{cli,desktop}`. `custos-daemon` is an explicit
+> root workspace member and remains the sole composition root. See
+> [protocol and connectivity boundaries](../architecture/protocol-and-connectivity-hubs.md#4-physical-ownership-and-current-state-map).
+
 > **Crate blueprint audit:** [Plan §22](workspace-restructuring-plan.md#22-crate-blueprint-và-chuyển-lõi-orca-theo-trách-nhiệm) records production Cargo edges and mounted exports. Runtime retains a persistence manifest edge (no concrete imports found in the inspected source search); bridge persistence is dev-only; daemon currently has no packs dependency. [`workflow/lease.rs`](../../crates/custos-runtime/src/workflow/lease.rs) implements directory creation/file copying with in-memory ownership, not Git worktree allocation; [`workflow/dispatcher.rs`](../../crates/custos-runtime/src/workflow/dispatcher.rs) is a skeletal struct. These are source findings, not migrations. Current [`harness/claude_code.rs`](../../crates/custos-adapters/src/harness/claude_code.rs) has subprocess functionality to retain and verify. Proposed workspace/mailbox/atomic repository contracts remain target until implemented; no source counts change in this documentation pass.
 
 > **Desktop/headless integration index:** [Superplan §21](workspace-restructuring-plan.md#21-superplan-kết-hợp-custos-và-orca-cho-desktop-và-headless) defines concrete reuse/rewrites, current-source evidence, target module owners, packet write zones, migrations and stream/projection contracts. Mobile is excluded. Nexus read-only inventory counted 1,076 Custos files and 32,534 OrCa files under its ignore rules; these are inventory counts, not production-source coverage or fresh AST verification. This documentation update creates no runtime module, migration or frontend port; source catalog rows remain subject to per-packet regeneration.
