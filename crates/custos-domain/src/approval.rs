@@ -85,10 +85,26 @@ impl ApprovalDecision {
     }
 
     pub fn apply_to(&self, request: &mut ApprovalRequest) -> Result<(), DomainError> {
+        if self.request_id != request.id {
+            return Err(DomainError::Conflict(format!(
+                "Approval decision for {} cannot resolve request {}",
+                self.request_id, request.id
+            )));
+        }
         if request.status != ApprovalStatus::Pending {
             return Err(DomainError::Conflict(format!(
                 "Approval request {} is already resolved as {:?}",
                 request.id, request.status
+            )));
+        }
+        if request
+            .expires_at
+            .is_some_and(|expires_at| self.decided_at >= expires_at)
+        {
+            request.status = ApprovalStatus::TimedOut;
+            return Err(DomainError::Conflict(format!(
+                "Approval request {} expired before the decision was recorded",
+                request.id
             )));
         }
         request.status = if self.approved {
@@ -97,5 +113,55 @@ impl ApprovalDecision {
             ApprovalStatus::Rejected
         };
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pending_request(expires_at: Option<DateTime<Utc>>) -> ApprovalRequest {
+        ApprovalRequest::new(
+            "task_1".into(),
+            "action_1".into(),
+            "Write a file".into(),
+            "workspace.write".into(),
+            "high".into(),
+            expires_at,
+        )
+    }
+
+    #[test]
+    fn decision_must_match_request_identity() {
+        let mut request = pending_request(None);
+        let decision = ApprovalDecision::approve("appr_other".into(), "operator".into(), None);
+
+        assert!(matches!(
+            decision.apply_to(&mut request),
+            Err(DomainError::Conflict(_))
+        ));
+        assert_eq!(request.status, ApprovalStatus::Pending);
+    }
+
+    #[test]
+    fn expired_request_cannot_be_approved() {
+        let mut request = pending_request(Some(Utc::now() - chrono::Duration::seconds(1)));
+        let decision = ApprovalDecision::approve(request.id.clone(), "operator".into(), None);
+
+        assert!(matches!(
+            decision.apply_to(&mut request),
+            Err(DomainError::Conflict(_))
+        ));
+        assert_eq!(request.status, ApprovalStatus::TimedOut);
+    }
+
+    #[test]
+    fn matching_unexpired_decision_resolves_request_once() {
+        let mut request = pending_request(Some(Utc::now() + chrono::Duration::minutes(1)));
+        let decision = ApprovalDecision::approve(request.id.clone(), "operator".into(), None);
+
+        assert!(decision.apply_to(&mut request).is_ok());
+        assert_eq!(request.status, ApprovalStatus::Approved);
+        assert!(decision.apply_to(&mut request).is_err());
     }
 }

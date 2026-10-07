@@ -1029,7 +1029,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-6">
                 <div className="flex items-center gap-4 p-5 rounded-2xl bg-[#161b22] border border-[#21262d]">
                   <div className="w-14 h-14 rounded-2xl bg-[#0d1117] border border-[#21262d] flex items-center justify-center p-2 shadow-inner">
-                    <img src="/assets/custos-owl.png" alt="Custos" className="w-full h-full object-contain" />
+                    <img src="/assets/custos-logo.png" alt="Custos" className="w-full h-full object-contain" />
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-white tracking-tight">Custos Desktop</h3>

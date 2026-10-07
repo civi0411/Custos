@@ -17,18 +17,6 @@ const __dirname = path.dirname(__filename);
 
 const VERSION = '0.1.1';
 
-function loadMascots() {
-  const cachePath = path.join(__dirname, 'mascots-cache.json');
-  try {
-    if (fs.existsSync(cachePath)) {
-      return JSON.parse(fs.readFileSync(cachePath, 'utf8'));
-    }
-  } catch {}
-  return { guardian: [], coder: [], inspector: [], steward: [] };
-}
-
-const MASCOTS = loadMascots();
-
 function getTerminalWidth() {
   return process.stdout.columns || 100;
 }
@@ -53,32 +41,10 @@ function getBannerLines(version) {
 }
 
 export function printMainBanner() {
-  const termW = getTerminalWidth();
   const bannerLines = getBannerLines(VERSION);
-  const owlLines = MASCOTS.guardian || [];
-  const owlWidth = 38;
-  const blankOwl = ' '.repeat(owlWidth);
-
   console.log();
-
-  if (termW >= 85 && owlLines.length > 0) {
-    const leftPadN = 1;
-    const padStr = ' '.repeat(leftPadN);
-    const maxLines = Math.max(owlLines.length, bannerLines.length);
-    const maxRightW = Math.max(20, termW - owlWidth - leftPadN - 4);
-
-    for (let i = 0; i < maxLines; i++) {
-      const left = i < owlLines.length ? owlLines[i] : blankOwl;
-      let right = i < bannerLines.length ? bannerLines[i] : '';
-      if (stripAnsi(right).length > maxRightW) {
-        right = right.slice(0, maxRightW);
-      }
-      console.log(`${padStr}${left}   ${right}`);
-    }
-  } else {
-    for (const line of bannerLines) {
-      console.log(line);
-    }
+  for (const line of bannerLines) {
+    console.log(line);
   }
   console.log();
 }

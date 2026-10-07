@@ -35,7 +35,7 @@ pub use action::{
     EffectStatus, RiskLevel,
 };
 pub use approval::{ApprovalDecision, ApprovalRequest, ApprovalStatus};
-pub use artifact::{ArtifactKind, ArtifactRef};
+pub use artifact::{ArtifactHandoff, ArtifactKind, ArtifactRef, HandoffConsent};
 pub use authority::{
     ExecutionPermit, ExecutionReceipt, Grant, Permit, PermitId, PermitV1, Receipt, ReceiptStatus,
     RiskClass,
@@ -44,10 +44,17 @@ pub use budget::{Budget, Headroom, ReservationToken};
 pub use capability::CapabilityManifest;
 pub use claim::{
     ArtifactLineageNode, Claim, ClaimEvidenceLink, ClaimGroundingLevel, EnvSnapshot,
-    EvidenceRelation, PassageAnchor, ResearchClaim, ResearchExperimentRun, SourceRecord,
+    EvidenceRelation, PassageAnchor, PassageAnchorProposal, ResearchClaim, ResearchClaimProposal,
+    ResearchExperimentRun, SourceProposal, SourceRecord,
 };
-pub use context::{ContextItem, ContextPack};
-pub use continuation::ContinuationPacket;
+pub use context::{
+    ContextDeliveryState, ContextItem, ContextPack, ContextReceipt, OmittedContextReason,
+    OmittedContextRef,
+};
+pub use continuation::{
+    ContinuationDisplayScope, ContinuationManifest, ContinuationPacket, ContinuationState,
+    RequestedModelScope, TransferPrivacyDecision,
+};
 pub use decision::{
     Candidate, DecisionRecord, DecisionSnapshot, ExecutionTopology, NodePlacement, RejectionReason,
     ReplanBrief, ReplanRecord, ReplanTrigger, StrategyProposal, WorkPacket, WorkerResult,
@@ -55,7 +62,8 @@ pub use decision::{
 };
 pub use error::DomainError;
 pub use evidence::{
-    EvidenceRecord, EvidenceRecordV1, EvidenceRequirement, EvidenceStatus, VerificationClaim,
+    CriterionVerificationRecord, EvidenceRecord, EvidenceRecordV1, EvidenceRequirement,
+    EvidenceStatus, OutcomeStatus, TaskOutcome, VerificationClaim,
 };
 pub use fact::Fact;
 pub use ids::{canonical_json, digest, new_id, TaskId};
@@ -69,10 +77,14 @@ pub use repo::{
     SymbolMatch,
 };
 pub use run::{
-    CancelReceipt, ClaimStatus, DispatchClaim, NodeAttempt, Run, RunHandle, RunStatus,
-    StartRunCommand, WorkerRun,
+    CancelReceipt, ClaimStatus, DispatchClaim, LaunchAttempt, LaunchStatus, NodeAttempt, Run,
+    RunHandle, RunStatus, StartRunCommand, UsageExecutorKind, UsageMeasurement, UsageRecord,
+    WorkerRun,
 };
-pub use session::{Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus};
+pub use session::{
+    ConversationTurn, Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus,
+    SessionTaskBinding, TurnActorKind, WorkbenchLens,
+};
 pub use span::{Span, SpanState};
 pub use task::{
     ContractEvidence, CriterionSpec, EvidenceKind, Task, TaskContract, TaskContractRevision,

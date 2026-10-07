@@ -426,7 +426,7 @@ stateDiagram-v2
 
 `Committed` là điểm duy nhất tạo session đích, lineage record và Task binding trong một SQLite transaction; unique `command_id` trả cùng `destination_session_id` khi retry. Context compilation và model dispatch ở ngoài transaction. Trạng thái `Ready` chỉ nghĩa là context đã được dựng; `Delivered` chỉ được dùng khi adapter chứng minh transport nhận request, không phải assurance rằng model đã sử dụng mọi byte. Nếu crash sau commit, startup/projector khôi phục `NeedsContext` và **không tự gọi model** trừ khi command chạy tiếp đã được user/standing scope cho phép. Nếu crash sau dispatch mà receipt chưa rõ, attempt ở `unknown/reconciling`; không tạo attempt mới mù. Không được cấp lại grant, permit, budget hoặc provider pin cho child Task từ session nguồn.
 
-**Hợp đồng dữ liệu đề xuất, chưa là struct đã có:**
+**Hợp đồng dữ liệu Layer 0:** `custos-domain` định nghĩa các value object tương ứng để validation/serialization dùng chung. Việc commit idempotent, persistence, context compilation và dispatch vẫn là công việc của bridge/persistence/runtime; sự hiện diện của struct không chứng nhận flow xuyên layer đã hoàn thành.
 
 ```text
 ContinuationManifest {
@@ -479,7 +479,7 @@ Không tạo crate `workbench`, `science` hay `chat-history` mới. Đây là **
 
 | Ranh giới | Đường hiện có cần mở rộng | Hợp đồng/gap cần đóng |
 |---|---|---|
-| Domain | `crates/custos-domain/src/session.rs`, `continuation.rs`, `context.rs` | Typed turn/lineage/context receipt và validation thuần; giữ compatibility decode với `attached_to` trong thời gian migration. |
+| Domain | `crates/custos-domain/src/session.rs`, `continuation.rs`, `context.rs`, `artifact.rs`, `run.rs`, `evidence.rs` | Typed turn/binding, lineage manifest, context receipt, selected-artifact handoff, launch/usage attempt và verifier/outcome values với validation thuần; giữ compatibility decode với `attached_to` trong thời gian migration. |
 | Kernel/bridge | `crates/custos-core/` ports/policy, `crates/custos-bridge/` session–Task commands | Check actor/scope/revision/consent; một session nhiều Task theo turn range, không lấy `active_task_id` làm quyền. |
 | Persistence | migration sau `0016_execution_workspaces.sql`, `crates/custos-persistence/src/repositories/session.rs` | Tables/index cho membership, binding, lineage, manifest/receipt và idempotent command; journal hiện có là nguồn transcript duy nhất. |
 | Runtime | `crates/custos-runtime/` context/session orchestration | Compile selected refs, freshness/redaction/omission, attach attempt, crash reconciliation; không I/O trực tiếp từ domain. |
