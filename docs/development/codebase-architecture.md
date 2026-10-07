@@ -1,5 +1,15 @@
 # Monorepo Topology, Crate Boundaries & Deep Codebase Map
 
+> **Backend folder setup index:** Logical architecture labels are mapped onto the
+> canonical crates rather than implemented as parallel crates. Core maps to
+> `custos-domain`/`custos-core`; Provider and Router to
+> `custos-provider`/`custos-runtime` with implementations in `custos-adapters`;
+> Gateway to `custos-daemon`/`custos-bridge`; MCP, A2A and ACP to
+> `custos-adapters`; Policy to `custos-core`; Storage to `custos-persistence`;
+> and applications to `custos-app/{cli,desktop}`. `custos-daemon` is an explicit
+> root workspace member and remains the sole composition root. See
+> [protocol and connectivity boundaries](../architecture/protocol-and-connectivity-hubs.md#4-physical-ownership-and-current-state-map).
+
 > **Desktop resource-tab ownership:** [`ui/desktop/src/app/studio/page.tsx`](../../ui/desktop/src/app/studio/page.tsx) owns selected resource tabs above all three lens views; [`OrcaTabbedContainer.tsx`](../../ui/desktop/src/components/views/OrcaTabbedContainer.tsx) renders resource picker and content; [`ClaudeChatView.tsx`](../../ui/desktop/src/components/views/ClaudeChatView.tsx), [`CodexOrcaView.tsx`](../../ui/desktop/src/components/views/CodexOrcaView.tsx), and [`ResearchView.tsx`](../../ui/desktop/src/components/views/ResearchView.tsx) host that same pane. Research resources show explicit unconnected states until versioned backend APIs exist. This changes frontend presentation ownership only; no crate, schema, or backend authority moves. Historical file counts below remain unchanged.
 
 > **Conversation continuity/research target, not implemented:** [UI architecture §12](../architecture/agent-workspace-and-ui.md#12-lịch-sử-hội-thoại-và-chuyển-workbench) specifies one canonical session journal with per-lens history projections, plus optional linked continuation manifest/context receipt. Current [`domain/session.rs`](../../crates/custos-domain/src/session.rs) has one `attached_to` Task and untyped journal entry content; [`daemon/api.rs`](../../crates/custos-daemon/src/api.rs) exposes create/get/list/journal/message/attach but no cross-workbench continuation transaction. Future contracts belong in domain/core or bridge, transactional records/migrations in persistence, orchestration/context compilation in runtime, Research semantics in packs, provider/compute I/O in adapters, and DTO/API composition in daemon/SDK. [`StudioPage`](../../ui/desktop/src/app/studio/page.tsx) can change lens and preserve in-memory resource tabs but cannot truthfully transfer model-visible history or native harness state today. Do not treat this target index as a migration result.

@@ -58,6 +58,25 @@ On the modern revision, server-provided sampling/elicitation/roots requests are 
 
 This table assigns a place to investigate and eventually build; it does **not** order the creation of empty folders. Update the [physical catalog](../development/codebase-architecture.md) with a verified file/entrypoint/call-path before marking an implementation active.
 
+The backend folder layout uses canonical crates rather than one crate per box in a
+logical architecture diagram. The physical mapping is:
+
+| Diagram label | Physical owner |
+|---|---|
+| Core | `custos-domain`, `custos-core` |
+| Provider | `custos-provider`, with concrete providers in `custos-adapters/src/providers` |
+| Router | routing modules in `custos-runtime` |
+| Runtime | `custos-runtime` |
+| Gateway | `custos-daemon` and `custos-bridge` |
+| MCP / A2A / ACP | protocol adapters in `custos-adapters` |
+| Policy | authority and capability modules in `custos-core` |
+| Storage | `custos-persistence` |
+| Observability | instrumentation remains beside its owner and is composed by `custos-daemon` |
+| Applications | `custos-app/cli` and `custos-app/desktop` |
+
+This arrangement keeps protocol code at the untrusted adapter boundary and prevents
+gateway or client code from bypassing Kernel authority and persistence ports.
+
 | Responsibility | Current location and evidence | Target location if the feature is built |
 |---|---|---|
 | Local API handler and transport | `custos-daemon/src/{api.rs,main.rs,local_api/}`; `main.rs` says `transport=stdio-jsonl` | Add IPC socket/pipe or HTTP listener **in daemon**, reusing the same handler; client DTOs in `custos-sdk` |
