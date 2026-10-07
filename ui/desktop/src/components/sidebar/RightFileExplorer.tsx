@@ -431,7 +431,7 @@ export const RightFileExplorer: React.FC<RightFileExplorerProps> = ({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={fileSearchMode === 'names' ? "Find files... (⌘P)" : "Search in files... (⌘⇧F)"}
-                className="w-full bg-[#0d1117] border border-[#30363d] rounded pl-7 pr-2 py-1 text-[11px] text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-[#3fb950] font-mono transition"
+                className="w-full bg-[#0d1117] border border-[#30363d] rounded pl-7 pr-2 py-1 text-[11px] text-neutral-200 placeholder-neutral-500 focus:outline-none font-mono transition"
               />
             </div>
           </div>

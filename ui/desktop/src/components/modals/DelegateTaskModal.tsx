@@ -135,7 +135,7 @@ export const DelegateTaskModal: React.FC<DelegateTaskModalProps> = ({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Implement Invariant Gate Ticket Verification"
-                className="w-full bg-[#151926] border border-[#252c40] rounded-xl px-3.5 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-blue font-sans text-xs transition"
+                className="w-full bg-[#151926] border border-[#252c40] rounded-xl px-3.5 py-2 text-white placeholder-neutral-500 focus:outline-none font-sans text-xs transition"
                 required
               />
             </div>
@@ -149,7 +149,7 @@ export const DelegateTaskModal: React.FC<DelegateTaskModalProps> = ({
                 onChange={(e) => setGoal(e.target.value)}
                 rows={3}
                 placeholder="Describe what the agent should accomplish..."
-                className="w-full bg-[#151926] border border-[#252c40] rounded-xl p-3 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-blue font-sans text-xs resize-none transition"
+                className="w-full bg-[#151926] border border-[#252c40] rounded-xl p-3 text-white placeholder-neutral-500 focus:outline-none font-sans text-xs resize-none transition"
                 required
               />
             </div>
@@ -222,7 +222,7 @@ export const DelegateTaskModal: React.FC<DelegateTaskModalProps> = ({
                 <select
                   value={selectedModel}
                   onChange={(e) => setSelectedModel(e.target.value)}
-                  className="w-full bg-[#151926] border border-[#252c40] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand-blue"
+                  className="w-full bg-[#151926] border border-[#252c40] rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none"
                 >
                   <option value="claude-3-7-sonnet">Claude 3.7 Sonnet</option>
                   <option value="o3-mini">OpenAI o3-mini</option>
@@ -244,7 +244,7 @@ export const DelegateTaskModal: React.FC<DelegateTaskModalProps> = ({
                     max="50"
                     value={budgetUsd}
                     onChange={(e) => setBudgetUsd(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-[#151926] border border-[#252c40] rounded-lg pl-7 pr-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand-blue font-mono"
+                    className="w-full bg-[#151926] border border-[#252c40] rounded-lg pl-7 pr-2.5 py-1.5 text-xs text-white focus:outline-none font-mono"
                   />
                 </div>
               </div>
@@ -261,7 +261,7 @@ export const DelegateTaskModal: React.FC<DelegateTaskModalProps> = ({
                     max="50"
                     value={maxTurns}
                     onChange={(e) => setMaxTurns(parseInt(e.target.value, 10) || 1)}
-                    className="w-full bg-[#151926] border border-[#252c40] rounded-lg pl-7 pr-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-brand-blue font-mono"
+                    className="w-full bg-[#151926] border border-[#252c40] rounded-lg pl-7 pr-2.5 py-1.5 text-xs text-white focus:outline-none font-mono"
                   />
                 </div>
               </div>
@@ -309,7 +309,7 @@ export const DelegateTaskModal: React.FC<DelegateTaskModalProps> = ({
                 onChange={(e) => setNewCriterion(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddCriterion(); } }}
                 placeholder="Add verification criterion (e.g., 'Integration test passes with CAS receipt')..."
-                className="flex-1 bg-[#151926] border border-[#252c40] rounded-lg px-3 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none focus:border-brand-blue"
+                className="flex-1 bg-[#151926] border border-[#252c40] rounded-lg px-3 py-1.5 text-xs text-white placeholder-neutral-500 focus:outline-none"
               />
               <button
                 type="button"

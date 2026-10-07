@@ -6,10 +6,12 @@ import {
   GitBranch,
   Orbit,
   Settings2,
-  Plus
+  Plus,
+  Mic,
+  AudioWaveform
 } from 'lucide-react';
 import { Session } from '@/types';
-import { OrcaTabbedContainer, type ResourceTabsState } from './OrcaTabbedContainer';
+import { ResourceTabbedPane, type ResourceTabsState } from './ResourceTabbedPane';
 import { WorkspaceSidebar } from '@/components/shell/WorkspaceSidebar';
 import { WorktreeManagerModal, type ManagedWorktree } from '@/components/modals';
 import { OpenAIIcon } from '@/components/common/AgentIcons';
@@ -128,17 +130,12 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
             icon: GitBranch,
             label: 'Active Branch',
             onClick: () => setIsWorktreeModalOpen(true),
-            rightElement: <span className="text-[10px] bg-[#21262d] text-[#58a6ff] px-1.5 py-0.5 rounded font-mono">{activeBranch}</span>
+            rightElement: <span className="text-[10px] bg-[#21262d] text-[#58a6ff] px-1.5 py-0.5 rounded font-sans">{activeBranch}</span>
           },
           {
             icon: Orbit,
             label: 'Automations',
             onClick: () => onShowToast?.('SADE Orbits & Automations')
-          },
-          {
-            icon: Settings2,
-            label: 'Preferences & Settings',
-            onClick: () => openSettings('general')
           }
         ]}
         sessionsTitle="Engineering Sessions"
@@ -169,7 +166,7 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
             {!hasMessages ? (
               <div className="h-full flex flex-col items-center justify-center text-center my-auto pb-12">
                 <div className="w-16 h-16 rounded-2xl bg-[#161b22] border border-[#30363d] flex items-center justify-center text-[#8b949e] mb-4 shadow-sm">
-                  <span className="font-mono text-2xl text-[#8b949e] select-none">&#123; _ &#125;</span>
+                  <span className="font-sans text-2xl text-[#8b949e] select-none">&#123; _ &#125;</span>
                 </div>
                 <h1 className="text-xl md:text-2xl font-semibold text-white tracking-tight max-w-md">
                   What should we build in{' '}
@@ -241,37 +238,59 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
         </div>
 
         {/* Chat Composer Input - Moved out to float over both columns */}
-        <div className={`absolute z-20 transition-all duration-500 ease-in-out flex justify-center pointer-events-none ${
-          isWebTabExpanded ? 'bottom-6 right-6 w-[360px]' : 'bottom-6 left-6 w-[calc(100%-48px)] max-w-[calc(100vw-300px)]'
+        <div className={`absolute z-10 transition-all duration-100 ease-out flex justify-center pointer-events-none ${
+          isWebTabExpanded ? 'bottom-6 right-6 w-[360px] px-0' : 'bottom-4 left-0 right-0 px-4'
         }`}
-        style={{ width: isWebTabExpanded ? '360px' : (isWebTabOpen ? `calc(${splitPercent}% - 48px)` : 'calc(100% - 48px)'), left: isWebTabExpanded ? 'calc(100% - 360px - 1.5rem)' : '1.5rem' }}
+        style={{ width: isWebTabExpanded ? '360px' : (isWebTabOpen ? `${splitPercent}%` : '100%'), left: isWebTabExpanded ? 'calc(100% - 360px - 1.5rem)' : '0px' }}
         >
-          <div className="bg-[#161b22]/95 backdrop-blur-xl border border-[#262c36] rounded-2xl p-3 shadow-xl pointer-events-auto transition focus-within:border-white/30 w-full group">
+          <div className="w-full max-w-3xl bg-[#1c2128]/95 backdrop-blur-xl border border-[#262c36] rounded-2xl shadow-2xl p-2.5 pointer-events-auto transition-all group">
             <textarea
               rows={isWebTabExpanded ? 1 : 2}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Message Codex to write code or run terminal tasks..."
-              className="w-full bg-transparent border-none outline-none text-[#c9d1d9] placeholder-[#8b949e] text-[13px] resize-none"
+              className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent text-[#ececec] placeholder-[#6e7681] text-[13px] resize-none leading-relaxed px-3 py-1.5"
             />
-            <div className="flex items-center justify-between mt-2 pt-2 border-t border-[#262c36]/60">
-              <div className="flex items-center gap-2 text-[#8b949e]">
-                <button className="p-1 hover:text-white transition rounded"><Plus className="w-4 h-4" /></button>
-                <span className="text-[11px] font-mono border border-[#262c36] bg-[#0d1117] px-2 py-0.5 rounded text-[#c9d1d9]">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1.5 px-1 border-t border-[#262c36]/60">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onShowToast?.('Attach file or symbol')}
+                  className="p-1.5 rounded-lg text-[#8b949e] hover:text-white hover:bg-[#22272e] transition-colors"
+                  title="Attach context"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+                <span className="text-[10px] font-sans font-medium px-2 py-0.5 rounded-md bg-white/5 text-neutral-300 border border-white/10">
                   SADE Copilot
                 </span>
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={handleSend}
-                  disabled={!inputText.trim()}
-                  className={`p-1.5 rounded-lg transition ${
-                    inputText.trim() ? 'bg-white text-black hover:bg-neutral-200 shadow-sm' : 'text-[#8b949e] bg-[#21262d]'
-                  }`}
+                  onClick={() => onShowToast?.('Voice input active')}
+                  className="p-1.5 rounded-lg text-[#8b949e] hover:text-white hover:bg-[#22272e] transition-colors"
+                  title="Voice input"
                 >
-                  <Send className="w-4 h-4" />
+                  <Mic className="w-4 h-4" />
                 </button>
+                {inputText.trim() ? (
+                  <button
+                    onClick={handleSend}
+                    disabled={!inputText.trim()}
+                    className="p-1.5 rounded-lg bg-neutral-200 text-neutral-900 hover:bg-white transition shadow-sm"
+                    title="Send message"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => onShowToast?.('Voice synthesis')}
+                    className="p-1.5 rounded-lg text-[#8b949e] hover:text-white hover:bg-[#22272e] transition-colors"
+                    title="Voice synthesis"
+                  >
+                    <AudioWaveform className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -294,7 +313,7 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
             className="h-full shrink-0 border-l border-[#262c36] bg-[#0d1117] relative z-10"
             style={{ display: isWebTabOpen ? 'block' : 'none', width: isWebTabExpanded ? '100%' : `${100 - splitPercent}%`, position: isWebTabExpanded ? 'absolute' : 'relative', right: 0 }}
           >
-            <OrcaTabbedContainer
+            <ResourceTabbedPane
               resourceTabs={resourceTabs}
               isPaneOpen={Boolean(isWebTabOpen)}
               session={activeSession}
@@ -324,3 +343,6 @@ export const CodexOrcaView: React.FC<CodexOrcaViewProps> = ({
     </div>
   );
 };
+
+export const CodeView = CodexOrcaView;
+export type CodeViewProps = CodexOrcaViewProps;

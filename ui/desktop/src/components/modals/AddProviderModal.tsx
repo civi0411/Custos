@@ -100,7 +100,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="sk-..." 
-                className="w-full bg-[#0d1117] border border-[#30363d] focus:border-[#58a6ff] rounded-lg px-3 py-2 text-white placeholder-[#6e7681] focus:outline-none font-mono text-xs transition"
+                className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-3 py-2 text-white placeholder-[#6e7681] focus:outline-none font-mono text-xs transition"
                 autoFocus
               />
             </div>

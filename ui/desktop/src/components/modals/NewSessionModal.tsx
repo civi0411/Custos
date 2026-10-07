@@ -49,7 +49,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Optimize SQL Query, Cache Token Handler..." 
-                className="w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-white placeholder-neutral-500 focus:outline-none focus:border-brand-blue"
+                className="w-full bg-surface border border-surface-border rounded-lg px-3 py-2 text-white placeholder-neutral-500 focus:outline-none"
                 autoFocus
               />
             </div>

@@ -119,19 +119,19 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({
 
   return (
     <div className="flex h-full w-full bg-[#04080F] text-[#e0e6ed] overflow-hidden select-none font-sans">
-      {/* ── LEFT: SOURCE LIST (w-80) ── */}
-      <div className="w-80 border-r border-[#1e2430] flex flex-col bg-[#080d16] shrink-0 relative z-10 shadow-[4px_0_24px_-10px_rgba(0,0,0,0.5)]">
+      {/* ── LEFT: SOURCE LIST (w-72) ── */}
+      <div className="w-72 min-w-[260px] shrink-0 border-r border-[#1e2430] flex flex-col bg-[#080d16] relative z-10">
         {/* Source List Header */}
-        <div className="h-14 px-5 border-b border-[#1e2430] flex items-center justify-between shrink-0 bg-[#080d16]/80 backdrop-blur-md">
+        <div className="min-h-14 py-2 px-5 border-b border-[#1e2430] flex flex-wrap items-center justify-between gap-2 shrink-0 bg-[#080d16]/80 ">
           <div className="flex items-center gap-2 font-semibold text-white tracking-wide">
-            <div className="p-1.5 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/20">
+            <div className="p-1.5 rounded-lg bg-[#21262d] shadow-lg ">
               <BookOpen className="w-4 h-4 text-white" />
             </div>
             <span className="text-[13px]">Corpus</span>
           </div>
           <button
             onClick={() => onShowToast?.('Add Source via DOI or PDF upload')}
-            className="p-1.5 rounded-lg text-[#8b949e] hover:text-white hover:bg-[#1e2430] transition-all hover:scale-110 active:scale-95"
+            className="p-1.5 rounded-lg text-[#8b949e] hover:text-white hover:bg-[#1e2430] transition-all hover:scale-110 "
             title="Add Source (DOI / URL / PDF)"
           >
             <Plus size={16} />
@@ -139,15 +139,15 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({
         </div>
 
         {/* Search Input */}
-        <div className="p-4 border-b border-[#1e2430] bg-gradient-to-b from-transparent to-[#080d16]/50">
+        <div className="p-4 border-b border-[#1e2430] bg-[#21262d]">
           <div className="relative group">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#6e7681] group-focus-within:text-indigo-400 transition-colors" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#6e7681] group-focus-within:text-neutral-300 transition-colors" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by title, DOI..."
-              className="w-full bg-[#111722] border border-[#2d3342] rounded-xl py-2 pl-9 pr-3 text-sm text-[#e0e6ed] placeholder-[#6e7681] outline-none focus:border-indigo-500/60 focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-inner"
+              className="w-full bg-[#111722] border border-[#2d3342] rounded-xl py-2 pl-9 pr-3 text-sm text-[#e0e6ed] placeholder-[#6e7681] outline-none focus:outline-none transition-all shadow-inner"
             />
           </div>
         </div>
@@ -162,20 +162,17 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({
                 onClick={() => setSelectedSourceId(source.id)}
                 className={`group p-3.5 rounded-2xl border cursor-pointer transition-all duration-300 ease-out relative overflow-hidden ${
                   isSelected
-                    ? 'bg-gradient-to-br from-[#1c2333] to-[#111722] border-indigo-500/40 shadow-[0_8px_20px_-6px_rgba(99,102,241,0.15)]'
+                    ? 'bg-[#21262d] border-[#30363d] '
                     : 'bg-[#0d131f] border-transparent hover:bg-[#161c28] hover:border-[#2d3342] hover:shadow-lg hover:-translate-y-0.5'
                 }`}
               >
-                {isSelected && (
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-indigo-400 to-purple-500" />
-                )}
                 
                 <div className="flex items-start justify-between gap-1 mb-2">
-                  <span className="font-mono text-[10px] uppercase px-2 py-0.5 rounded-md bg-[#1e2430] text-indigo-400 font-bold tracking-wider">
+                  <span className="font-sans text-[10px] uppercase px-2 py-0.5 rounded-md bg-[#1e2430] text-neutral-300 font-bold tracking-wider">
                     {source.sourceType}
                   </span>
                   {source.verified && (
-                    <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-mono font-medium bg-emerald-400/10 px-2 py-0.5 rounded-md border border-emerald-400/20">
+                    <span className="flex items-center gap-1 text-[10px] text-[#8b949e] font-sans font-medium bg-[#21262d] px-2 py-0.5 rounded-md border border-[#30363d]">
                       <ShieldCheck size={12} /> CAS Verified
                     </span>
                   )}
@@ -185,7 +182,7 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({
                   {source.title}
                 </h4>
                 
-                <div className="flex items-center justify-between text-[11px] text-[#8b949e]">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-[#8b949e]">
                   <span className="truncate max-w-[160px] font-medium">
                     {source.authors?.join(', ') || 'Unknown'}
                   </span>
@@ -200,10 +197,10 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({
       {/* ── RIGHT: DOCUMENT READER & PASSAGE ANCHORING ── */}
       <div className="flex-1 flex flex-col min-w-0 bg-[#04080F] overflow-hidden relative">
         {/* Document Header */}
-        <div className="h-14 px-6 border-b border-[#1e2430] bg-[#080d16]/90 backdrop-blur-xl flex items-center justify-between shrink-0 z-20">
+        <div className="min-h-14 py-2 px-6 border-b border-[#1e2430] bg-[#080d16]/90  flex flex-wrap items-center justify-between gap-2 shrink-0 z-20">
           <div className="flex items-center gap-3 truncate">
-            <div className="w-8 h-8 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
-              <FileText className="w-4 h-4 text-blue-400" />
+            <div className="w-8 h-8 rounded-full bg-[#21262d] border border-[#30363d] flex items-center justify-center shrink-0">
+              <FileText className="w-4 h-4 text-neutral-300" />
             </div>
             <span className="font-bold text-white text-[15px] truncate tracking-tight">
               {activeSource.title}
@@ -216,7 +213,7 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({
                 href={`https://doi.org/${activeSource.doi}`}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-1.5 text-xs font-mono text-blue-400 hover:text-blue-300 transition-colors px-3 py-1.5 rounded-lg bg-blue-400/5 hover:bg-blue-400/10 border border-blue-400/10"
+                className="flex items-center gap-1.5 text-xs font-sans text-neutral-300 hover:text-neutral-300 transition-colors px-3 py-1.5 rounded-lg bg-[#21262d] hover:bg-[#21262d] border border-[#30363d]"
               >
                 <span>doi:{activeSource.doi}</span>
                 <ExternalLink size={12} />
@@ -227,19 +224,19 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({
 
         {/* Selected Passage Floating Banner */}
         <div className={`absolute top-14 left-0 right-0 z-30 transition-all duration-300 ease-in-out origin-top ${selectedText ? 'scale-y-100 opacity-100' : 'scale-y-0 opacity-0'}`}>
-          <div className="px-6 py-3 bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-transparent border-b border-indigo-500/20 backdrop-blur-md flex items-center justify-between gap-4 shadow-xl">
+          <div className="px-6 py-3 bg-[#21262d] border-b border-[#30363d]  flex flex-wrap items-center justify-between gap-2 gap-4 shadow-xl">
             <div className="flex items-center gap-3 min-w-0 flex-1">
-              <div className="p-1.5 rounded-md bg-indigo-500/20 shrink-0">
-                <Highlighter className="w-4 h-4 text-indigo-400" />
+              <div className="p-1.5 rounded-md bg-[#21262d] shrink-0">
+                <Highlighter className="w-4 h-4 text-neutral-300" />
               </div>
-              <div className="text-[13px] text-[#e0e6ed] truncate border-l-2 border-indigo-500/40 pl-3">
-                <span className="text-indigo-400 font-bold uppercase tracking-wider text-[10px] mr-2">Selection:</span>
+              <div className="text-[13px] text-[#e0e6ed] truncate border-l-2 border-[#30363d] pl-3">
+                <span className="text-neutral-300 font-bold uppercase tracking-wider text-[10px] mr-2">Selection:</span>
                 <span className="italic">"{selectedText}"</span>
               </div>
             </div>
             <button
               onClick={handleCreateClaim}
-              className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white text-xs font-bold hover:shadow-[0_0_20px_rgba(99,102,241,0.4)] transition-all shrink-0 hover:scale-105 active:scale-95"
+              className="group flex items-center gap-2 px-4 py-2 rounded-xl bg-[#21262d] text-white text-xs font-bold  transition-all shrink-0  "
             >
               <Sparkles size={14} className="group-hover:animate-pulse" />
               <span>Anchor to Matrix</span>
@@ -251,14 +248,13 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({
         {/* Document Content Viewport */}
         <div className="flex-1 overflow-y-auto relative">
           {/* Subtle background glow */}
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] bg-indigo-500/5 blur-[120px] rounded-full pointer-events-none" />
           
           <div
             onMouseUp={handleTextSelect}
             className="p-10 select-text max-w-4xl mx-auto w-full space-y-10 relative z-10"
           >
             {/* Metadata Card */}
-            <div className="p-5 rounded-2xl bg-[#0d131f]/80 backdrop-blur-md border border-[#1e2430] shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="p-5 rounded-2xl bg-[#0d131f]/80  border border-[#1e2430] shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="space-y-1">
                 <div className="text-[11px] font-bold uppercase tracking-widest text-[#6e7681]">Authors</div>
                 <div className="text-[14px] text-[#e0e6ed] font-medium">
@@ -267,7 +263,7 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({
               </div>
               <div className="space-y-1 md:text-right">
                 <div className="text-[11px] font-bold uppercase tracking-widest text-[#6e7681]">Content Hash (BLAKE3)</div>
-                <div className="text-[13px] font-mono text-indigo-400 bg-indigo-400/5 px-3 py-1 rounded-lg border border-indigo-400/10 inline-block">
+                <div className="text-[13px] font-sans text-neutral-300 bg-[#21262d] px-3 py-1 rounded-lg border border-[#30363d] inline-block">
                   {activeSource.contentHash}
                 </div>
               </div>
@@ -276,16 +272,15 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({
             {/* Abstract Section */}
             <section className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="h-px bg-gradient-to-r from-transparent to-[#2d3342] flex-1" />
-                <h3 className="text-[13px] font-black uppercase tracking-[0.2em] text-indigo-400">
+                <div className="h-px bg-[#21262d] flex-1" />
+                <h3 className="text-[13px] font-black uppercase tracking-[0.2em] text-neutral-300">
                   Abstract
                 </h3>
-                <div className="h-px bg-gradient-to-l from-transparent to-[#2d3342] flex-1" />
+                <div className="h-px bg-[#21262d] flex-1" />
               </div>
               
               <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 rounded-2xl blur-md transition-opacity opacity-0 group-hover:opacity-100" />
-                <p className="relative text-[16px] leading-[1.8] text-[#c9d1d9] font-serif bg-[#0d131f]/60 backdrop-blur-sm p-6 rounded-2xl border border-[#1e2430] shadow-inner selection:bg-indigo-500/30 selection:text-white">
+                <p className="relative text-[16px] leading-[1.8] text-[#c9d1d9] font-serif bg-[#0d131f]/60  p-6 rounded-2xl border border-[#1e2430] shadow-inner selection:bg-[#21262d] selection:text-white">
                   {activeSource.abstract}
                 </p>
               </div>
@@ -294,20 +289,20 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({
             {/* Mock Deep Sections */}
             <section className="space-y-4">
               <h3 className="text-[14px] font-bold tracking-wide text-white flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#21262d]" />
                 1. Invariant Formulation & Non-Repudiation Gates
               </h3>
               <div className="space-y-4 text-[15.5px] leading-[1.8] text-[#a1abb7] font-serif pl-3.5 border-l border-[#1e2430]">
-                <p className="selection:bg-indigo-500/30 selection:text-white">
+                <p className="selection:bg-[#21262d] selection:text-white">
                   In sovereign execution topologies, an agent cannot claim a task outcome
                   without attaching a cryptographic receipt. When verifying invariant closures,
                   the state transition Merkle tree must match the pre-condition predicate exactly.
-                  <span className="text-[#e0e6ed] bg-indigo-500/10 px-1 mx-1 rounded border border-indigo-500/20">Select any sentence in this passage</span>
+                  <span className="text-[#e0e6ed] bg-[#21262d] px-1 mx-1 rounded border border-[#30363d]">Select any sentence in this passage</span>
                   to extract it directly into the Claims & Verification Matrix.
                 </p>
-                <p className="selection:bg-indigo-500/30 selection:text-white">
-                  Formally, let <code className="font-mono text-[14px] text-blue-300 bg-blue-400/10 px-1.5 py-0.5 rounded">S_0</code> be the initial workspace snapshot and <code className="font-mono text-[14px] text-blue-300 bg-blue-400/10 px-1.5 py-0.5 rounded">S_1</code> be the post-execution
-                  state. The invariant verifier computes <code className="font-mono text-[14px] text-pink-300 bg-pink-400/10 px-1.5 py-0.5 rounded">\Delta = H(S_1) \oplus H(S_0)</code>. If <code className="font-mono text-[14px] text-pink-300 bg-pink-400/10 px-1.5 py-0.5 rounded">\Delta</code>
+                <p className="selection:bg-[#21262d] selection:text-white">
+                  Formally, let <code className="font-mono text-[14px] text-neutral-300 bg-[#21262d] px-1.5 py-0.5 rounded">S_0</code> be the initial workspace snapshot and <code className="font-mono text-[14px] text-neutral-300 bg-[#21262d] px-1.5 py-0.5 rounded">S_1</code> be the post-execution
+                  state. The invariant verifier computes <code className="font-mono text-[14px] text-neutral-300 bg-[#21262d] px-1.5 py-0.5 rounded">\Delta = H(S_1) \oplus H(S_0)</code>. If <code className="font-mono text-[14px] text-neutral-300 bg-[#21262d] px-1.5 py-0.5 rounded">\Delta</code>
                   contains unpermitted mutations, the execution ticket is revoked with zero latency.
                 </p>
               </div>
@@ -315,14 +310,14 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({
 
             <section className="space-y-4">
               <h3 className="text-[14px] font-bold tracking-wide text-white flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                <span className="w-1.5 h-1.5 rounded-full bg-[#8b949e]" />
                 2. Empirical Reproducibility Benchmarks
               </h3>
               <div className="space-y-4 text-[15.5px] leading-[1.8] text-[#a1abb7] font-serif pl-3.5 border-l border-[#1e2430]">
-                <p className="selection:bg-indigo-500/30 selection:text-white">
+                <p className="selection:bg-[#21262d] selection:text-white">
                   Across 5,000 synthetic trials under high-jitter networks (10ms to 80ms latency),
                   the proposed zero-trust capability protocol eliminated double-dispatch anomalies
-                  entirely <strong className="font-bold text-[#e0e6ed] underline decoration-emerald-500/50 decoration-2 underline-offset-4">(0 occurrences)</strong>, whereas optimistic state sharing failed in <strong className="font-bold text-[#e0e6ed] underline decoration-red-500/50 decoration-2 underline-offset-4">14.2%</strong> of executions.
+                  entirely <strong className="font-bold text-[#e0e6ed] underline decoration-[#30363d] decoration-2 underline-offset-4">(0 occurrences)</strong>, whereas optimistic state sharing failed in <strong className="font-bold text-[#e0e6ed] underline decoration-red-500/50 decoration-2 underline-offset-4">14.2%</strong> of executions.
                 </p>
               </div>
             </section>

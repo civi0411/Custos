@@ -1,11 +1,16 @@
 import { useState, useEffect, type SetStateAction } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
+import { formatKeyCombo } from '@/lib/utils';
 import { AppHeader, type AppWorkspaceMode } from '@/components/shell/AppHeader';
-import { ClaudeChatView } from '@/components/views/ClaudeChatView';
-import { CodexOrcaView } from '@/components/views/CodexOrcaView';
-import { ResearchView } from '@/components/views/ResearchView';
-import { type OrcaTab, type OrcaTabId, type ResourceTabsState } from '@/components/views/OrcaTabbedContainer';
+import {
+  ChatView,
+  CodeView,
+  ResearchView,
+  type ResourceTab,
+  type ResourceTabId,
+  type ResourceTabsState
+} from '@/components/views';
 
 const MODE_STORAGE_KEY = 'custos.workspace.mode.v2';
 
@@ -41,18 +46,18 @@ export function StudioPage() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isWebTabOpen, setIsWebTabOpen] = useState(false);
   const [isWebTabExpanded, setIsWebTabExpanded] = useState(false);
-  const [tabStates, setTabStates] = useState<Record<string, { tabs: OrcaTab[]; activeTabId: OrcaTabId }>>({});
+  const [tabStates, setTabStates] = useState<Record<string, { tabs: ResourceTab[]; activeTabId: ResourceTabId }>>({});
   const tabScope = `${currentProject}:${activeSessionId || 'no-session'}`;
   const currentTabState = tabStates[tabScope] ?? {
     tabs: [{ id: 'tools' as const, title: 'Resources', url: 'custos://resources' }],
     activeTabId: 'tools' as const,
   };
-  const setTabs = (update: SetStateAction<OrcaTab[]>) => setTabStates((previous) => {
+  const setTabs = (update: SetStateAction<ResourceTab[]>) => setTabStates((previous) => {
     const current = previous[tabScope] ?? currentTabState;
     const tabs = typeof update === 'function' ? update(current.tabs) : update;
     return { ...previous, [tabScope]: { ...current, tabs } };
   });
-  const setActiveTabId = (update: SetStateAction<OrcaTabId>) => setTabStates((previous) => {
+  const setActiveTabId = (update: SetStateAction<ResourceTabId>) => setTabStates((previous) => {
     const current = previous[tabScope] ?? currentTabState;
     const activeTabId = typeof update === 'function' ? update(current.activeTabId) : update;
     return { ...previous, [tabScope]: { ...current, activeTabId } };
@@ -85,15 +90,15 @@ export function StudioPage() {
       if (e.key === '1') {
         e.preventDefault();
         setMode('chat');
-        showToast('Opened Copilot view (⌘1)');
+        showToast(`Opened Copilot view ${formatKeyCombo({ ctrlOrCmd: true, key: '1' })}`);
       } else if (e.key === '2') {
         e.preventDefault();
         setMode('code');
-        showToast('Opened Coding view (⌘2)');
+        showToast(`Opened Coding view ${formatKeyCombo({ ctrlOrCmd: true, key: '2' })}`);
       } else if (e.key === '3') {
         e.preventDefault();
         setMode('research');
-        showToast('Opened Research view (⌘3)');
+        showToast(`Opened Research view ${formatKeyCombo({ ctrlOrCmd: true, key: '3' })}`);
       } else if (e.key === 'f' && e.shiftKey && e.metaKey) {
         e.preventDefault();
         setIsWebTabOpen(true);
@@ -133,7 +138,7 @@ export function StudioPage() {
       <div className="flex-1 overflow-hidden min-h-0 relative">
         {mode === 'chat' && (
           /* SCREENSHOT 1: CLAUDE DESKTOP CHAT & COWORK */
-          <ClaudeChatView
+          <ChatView
             currentProject={currentProject}
             projectNames={Object.keys(projectData)}
             onSelectProject={(p) => {
@@ -152,8 +157,6 @@ export function StudioPage() {
             onSwitchMode={setMode}
             isSidebarCollapsed={isSidebarCollapsed}
             isWebTabOpen={isWebTabOpen}
-
-
             isWebTabExpanded={isWebTabExpanded}
             onToggleExpandWebTab={() => setIsWebTabExpanded(!isWebTabExpanded)}
             onToggleWebTab={() => setIsWebTabOpen((prev) => !prev)}
@@ -163,7 +166,7 @@ export function StudioPage() {
 
         {mode === 'code' && (
           /* SCREENSHOT 2: CODEX / ORCA ADE 3-COLUMN WORKSPACE */
-          <CodexOrcaView
+          <CodeView
             currentProject={currentProject}
             projectNames={Object.keys(projectData)}
             onSelectProject={(p) => {
@@ -195,7 +198,6 @@ export function StudioPage() {
         {mode === 'research' && (
           /* RESEARCH: CLAUDE SCIENCE LAB */
           <ResearchView
-            onOpenResourcePane={() => setIsWebTabOpen(true)}
             currentProject={currentProject}
             projectNames={Object.keys(projectData)}
             onSelectProject={(p) => {

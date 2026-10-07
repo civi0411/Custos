@@ -12,6 +12,7 @@ import {
   X
 } from 'lucide-react';
 import { Session } from '@/types';
+import { formatKeyCombo } from '@/lib/utils';
 
 export interface SidebarTool {
   icon: React.ElementType;
@@ -232,7 +233,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                   <span className="truncate">{s.title}</span>
                   {s.taskStatus && s.taskStatus !== 'draft' && (
                     <span
-                      className="shrink-0 text-[9.5px] px-1 py-0.2 rounded font-mono hidden group-hover:block"
+                      className="shrink-0 text-[9.5px] px-1 py-0.2 rounded font-sans hidden group-hover:block"
                       style={{ background: '#1c1c1c', color: packColor, border: `1px solid ${packColor}33` }}
                     >
                       {s.taskStatus}
@@ -315,14 +316,14 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                   className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[#c9d1d9] hover:text-white hover:bg-[#2d333b] transition"
                 >
                   <Settings className="w-3.5 h-3.5 text-[#8b949e]" />
-                  <span>Preferences & Settings (⌘,)</span>
+                  <span>Preferences & Settings ({formatKeyCombo({ ctrlOrCmd: true, key: ',' })})</span>
                 </button>
               </div>
 
               {/* Footer status */}
               <div className="mt-2 pt-2 border-t border-[#30363d]/70 px-2.5 py-1 flex items-center justify-between text-[10.5px] text-[#8b949e]">
                 <span>Daemon 127.0.0.1:4140</span>
-                <span className="flex items-center gap-1 text-emerald-400 font-mono">
+                <span className="flex items-center gap-1 text-emerald-400 font-sans">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                   online
                 </span>

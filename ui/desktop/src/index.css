@@ -185,6 +185,17 @@ button[disabled],
   border-radius: 2px;
 }
 
+/* Eliminate focus border and rings across all inputs and textareas globally */
+input:not([type="checkbox"]):not([type="radio"]):focus,
+input:not([type="checkbox"]):not([type="radio"]):focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 /* ============================================================
    SCROLLBARS — minimal, Claude Code style
    ============================================================ */
@@ -242,8 +253,6 @@ select:hover {
 
 select:focus {
   outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-subtle);
 }
 
 select option {
@@ -798,9 +807,6 @@ input[type="checkbox"]:disabled {
   transition: border-color 0.15s;
 }
 
-.composer-wrapper:focus-within {
-  border-color: var(--color-accent);
-}
 
 .composer-textarea {
   background: transparent;

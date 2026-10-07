@@ -23,7 +23,7 @@ import {
 import { Session } from '@/types';
 import { WorkspaceSidebar } from '@/components/shell/WorkspaceSidebar';
 import { DelegateTaskModal, type DelegateTaskData } from '@/components/modals';
-import { OrcaTabbedContainer, type ResourceTabsState } from './OrcaTabbedContainer';
+import { ResourceTabbedPane, type ResourceTabsState } from './ResourceTabbedPane';
 import { AssistantWorkspace } from '@/components/workspaces';
 import { ClaudeIcon } from '@/components/common/AgentIcons';
 import { useAppContext } from '@/context/AppContext';
@@ -200,7 +200,7 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
         sessions={sessions}
         activeSessionId={activeSessionId}
         onSelectSession={onSelectSession}
-        newTaskLabel="New"
+        newTaskLabel="New Conversation"
         newTaskIcon={Plus}
         onNewSession={onNewSession}
         tools={[
@@ -219,15 +219,10 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
             label: 'Delegate Task',
             onClick: () => setIsDelegateModalOpen(true),
             rightElement: (
-              <span className="text-[10px] bg-[#cc785c]/20 text-[#cc785c] px-1.5 py-0.5 rounded font-mono">
+              <span className="text-[10px] bg-[#cc785c]/20 text-[#cc785c] px-1.5 py-0.5 rounded font-sans">
                 SADE
               </span>
             )
-          },
-          {
-            icon: Settings2,
-            label: 'Preferences & Settings',
-            onClick: () => openSettings('general'),
           }
         ]}
         sessionsTitle="Chats and tasks"
@@ -422,7 +417,7 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
                             <ChevronRight className={`w-3.5 h-3.5 transition-transform ${isTraceExpanded ? 'rotate-90' : ''}`} />
                             <span>{msg.stepName}</span>
                           </div>
-                          {msg.duration && <span className="font-mono text-[10.5px]">{msg.duration}</span>}
+                          {msg.duration && <span className="font-sans text-[10.5px]">{msg.duration}</span>}
                         </div>
                       </div>
                     )}
@@ -501,15 +496,15 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
 
         {/* ── Floating Composer Box (Screenshot 1 Bottom) ── */}
         <div 
-          className={`absolute pointer-events-none flex justify-center z-20 transition-all duration-500 ease-out ${
-            isWebTabExpanded ? 'bottom-6 right-6 w-[360px] px-0' : 'bottom-4 left-0 right-0 px-4 md:px-8'
+          className={`absolute pointer-events-none flex justify-center z-10 transition-all duration-100 ease-out ${
+            isWebTabExpanded ? 'bottom-6 right-6 w-[360px] px-0' : 'bottom-4 left-0 right-0 px-4'
           }`}
           style={{
-            width: isWebTabExpanded ? '360px' : (isWebTabOpen ? `calc(${splitPercent}% - 32px)` : '100%'),
+            width: isWebTabExpanded ? '360px' : (isWebTabOpen ? `${splitPercent}%` : '100%'),
             left: isWebTabExpanded ? 'calc(100% - 360px - 1.5rem)' : '0px'
           }}
         >
-          <div className="w-full max-w-2xl bg-[#1c2128]/95 backdrop-blur-xl border border-[#262c36] rounded-2xl shadow-2xl p-3 pointer-events-auto transition focus-within:border-[#384252]">
+          <div className="w-full max-w-3xl bg-[#1c2128]/95 backdrop-blur-xl border border-[#262c36] rounded-2xl shadow-2xl p-3 pointer-events-auto transition">
             <textarea
               ref={textareaRef}
               rows={isWebTabExpanded ? 1 : 2}
@@ -521,7 +516,7 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
                   ? 'Delegate autonomous multi-agent task (Custos SADE)...'
                   : 'How can I help you today?'
               }
-              className="w-full bg-transparent border-none outline-none text-[#ececec] placeholder-[#6e7681] text-[13px] resize-none leading-relaxed px-1"
+              className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 focus:border-transparent text-[#ececec] placeholder-[#6e7681] text-[13px] resize-none leading-relaxed px-1"
             />
 
             <div className="flex items-center justify-between pt-2 border-t border-[#262c36]/60 mt-1 select-none">
@@ -643,7 +638,7 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
             className="h-full shrink-0 border-l border-[#262c36] bg-[#0d1117] relative z-10"
             style={{ display: isWebTabOpen ? 'block' : 'none', width: isWebTabExpanded ? '100%' : `${100 - splitPercent}%`, position: isWebTabExpanded ? 'absolute' : 'relative', right: 0 }}
           >
-            <OrcaTabbedContainer
+            <ResourceTabbedPane
               resourceTabs={resourceTabs}
               isPaneOpen={Boolean(isWebTabOpen)}
               session={sessions.find(s => s.id === activeSessionId)}
@@ -668,3 +663,6 @@ export const ClaudeChatView: React.FC<ClaudeChatViewProps> = ({
     </div>
   );
 };
+
+export const ChatView = ClaudeChatView;
+export type ChatViewProps = ClaudeChatViewProps;

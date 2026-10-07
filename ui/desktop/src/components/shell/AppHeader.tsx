@@ -11,7 +11,7 @@ import {
   Maximize2
 } from 'lucide-react';
 
-import { getModifierKey } from '@/lib/utils';
+import { formatKeyCombo } from '@/lib/utils';
 
 // 3 primary workspace modes
 export type AppWorkspaceMode = 'chat' | 'code' | 'research';
@@ -44,7 +44,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onToggleWebTab,
   webTabCount = 0
 }) => {
-  const modKey = getModifierKey();
 
   const modes: { id: AppWorkspaceMode; label: string; icon: React.ElementType; color: string; shortcut: string; description: string }[] = [
     {
@@ -52,7 +51,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       label: 'Chat',
       icon: MessageSquare,
       color: '#e6edf3',
-      shortcut: `${modKey}1`,
+      shortcut: `${formatKeyCombo({ ctrlOrCmd: true, key: "1" })}`,
       description: 'Custos Copilot workspace'
     },
     {
@@ -60,7 +59,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       label: 'Code',
       icon: Code2,
       color: '#e6edf3',
-      shortcut: `${modKey}2`,
+      shortcut: `${formatKeyCombo({ ctrlOrCmd: true, key: "2" })}`,
       description: 'Custos Coding workspace'
     },
     {
@@ -68,7 +67,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       label: 'Research',
       icon: FlaskConical,
       color: '#e6edf3',
-      shortcut: `${modKey}3`,
+      shortcut: `${formatKeyCombo({ ctrlOrCmd: true, key: "3" })}`,
       description: 'Custos Research workspace'
     }
   ];
@@ -99,7 +98,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           <button
             onClick={onToggleSidebar}
             className={`p-1 rounded transition ${!_isSidebarCollapsed ? 'text-[#8b949e] hover:text-white hover:bg-[#22272e]' : 'text-white bg-[#22272e]'}`}
-            title={`Toggle Sidebar (${modKey}B)`}
+            title={`Toggle Sidebar (${formatKeyCombo({ ctrlOrCmd: true, key: "B" })})`}
           >
             <PanelLeft className="w-3.5 h-3.5" />
           </button>
@@ -135,11 +134,11 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       </div>
 
       {/* ── CENTER & RIGHT: Spans the exact rest of workspace ── */}
-      {isWebTabOpen ? (
-        <div className="flex-1 flex items-center min-w-0 h-full overflow-hidden border-b border-[#262c36]/60">
-          <div id="app-header-tabs-portal" className="w-full h-full flex items-center" />
-        </div>
-      ) : (
+      <div className={`flex-1 flex items-center min-w-0 h-full overflow-hidden border-b border-[#262c36]/60 ${isWebTabOpen ? '' : 'hidden'}`}>
+        <div id="app-header-tabs-portal" className="w-full h-full flex items-center" />
+      </div>
+
+      {!isWebTabOpen && (
         <div className="flex-1 flex items-center justify-between min-w-0 h-full px-4 border-b border-[#262c36]/60">
           <div className="flex items-center gap-2 text-[12px] text-[#8b949e] min-w-0">
             <MessageSquare className="w-3.5 h-3.5 text-[#8b949e] shrink-0" />
@@ -174,7 +173,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                   <PlusSquare className="w-3.5 h-3.5 text-[#8b949e] group-hover/btn:text-white transition" />
                   <span>New tab</span>
                 </div>
-                <span className="text-[10px] text-[#8b949e] font-sans tracking-widest">{`⇧${modKey}B`}</span>
+                <span className="text-[10px] text-[#8b949e] font-sans tracking-widest">{`${formatKeyCombo({ ctrlOrCmd: true, shift: true, key: "B" })}`}</span>
               </button>
               
               <button
@@ -185,7 +184,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                   <Maximize2 className="w-3.5 h-3.5 text-[#8b949e] group-hover/btn:text-white transition" />
                   <span>New tab in full view</span>
                 </div>
-                <span className="text-[10px] text-[#8b949e] font-sans tracking-widest">{`⇧${modKey}F`}</span>
+                <span className="text-[10px] text-[#8b949e] font-sans tracking-widest">{`${formatKeyCombo({ ctrlOrCmd: true, shift: true, key: "F" })}`}</span>
               </button>
             </div>
           </div>

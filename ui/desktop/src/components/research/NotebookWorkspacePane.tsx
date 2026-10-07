@@ -162,7 +162,7 @@ export const NotebookWorkspacePane: React.FC<NotebookWorkspacePaneProps> = ({
           return (
             <div
               key={cell.id}
-              className="rounded-xl border border-[#21262d] bg-[#161b22] overflow-hidden focus-within:border-[#a371f7]/60 transition"
+              className="rounded-xl border border-[#21262d] bg-[#161b22] overflow-hidden transition"
             >
               {/* Cell Toolbar Header */}
               <div className="h-7 px-3 bg-[#090d13] border-b border-[#21262d] flex items-center justify-between text-[11px] font-mono text-[#8b949e]">
