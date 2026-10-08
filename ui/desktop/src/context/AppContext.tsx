@@ -161,11 +161,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // UI Scale applicator - zoom the entire document root so the full screen/window scales uniformly
   const applyUiScale = useCallback((scaleVal: number) => {
-    const clamped = Math.min(150, Math.max(75, scaleVal));
+    const rounded = Math.round(scaleVal / 10) * 10;
+    const clamped = Math.min(150, Math.max(70, rounded));
     setUiScale(clamped);
     localStorage.setItem('custos_ui_scale', clamped.toString());
-    document.documentElement.style.zoom = (clamped / 100).toFixed(2);
-    document.body.style.zoom = '1';
+    document.documentElement.style.zoom = `${clamped / 100}`;
+    document.body.style.zoom = '';
   }, []);
 
   const handleSetUiScale = (val: number) => {
