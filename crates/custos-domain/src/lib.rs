@@ -28,6 +28,7 @@ pub mod annotation;
 pub mod execution_record;
 pub mod provider_config;
 pub mod recipe;
+pub mod review;
 pub mod session;
 pub mod span;
 pub mod task;
@@ -44,6 +45,10 @@ pub use note::{NoteRecord, NoteVersionRecord};
 pub use notebook::{
     CellExecutionStatus, ExecuteCellParams, ExecuteCellResult, KernelStatus, NotebookCell,
     NotebookCellType, NotebookKernelState,
+};
+pub use review::{
+    FindingSeverity, RecordReviewParams, ReviewFinding, ReviewMethod, ReviewStatus,
+    ReviewTargetType, ReviewerRecord,
 };
 pub use provider_config::{ClientApiKeyRecord, ProviderConfig};
 pub use recipe::{EnvironmentSpec, Recipe, RecipeInput};

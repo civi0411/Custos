@@ -22,6 +22,7 @@ import { TerminalWorkbenchPane } from '@/components/workspaces/engineering/Termi
 import { FilesWorkbenchPane } from '@/components/workspaces/engineering/FilesWorkbenchPane';
 import { ChangesWorkbenchPane } from '@/components/workspaces/engineering/ChangesWorkbenchPane';
 import { AgentsWorkbenchPane } from '@/components/workspaces/engineering/AgentsWorkbenchPane';
+import { EvidenceWorkbenchPane } from '@/components/workspaces/engineering/EvidenceWorkbenchPane';
 import { NotesWorkbenchPane } from '@/components/workspaces/NotesWorkbenchPane';
 import {
   ClaimsMatrixPane,
@@ -96,7 +97,7 @@ const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'terminal', title: 'Terminal', description: 'Bounded PTY streams scoped to an execution workspace.', icon: Terminal, group: 'Engineering', status: 'available', supportedOperations: ['spawn', 'write', 'resize', 'read', 'terminate', 'list', 'get'] },
   { id: 'worktrees', title: 'Workspaces', description: 'Inspect daemon-owned folder and Git execution workspaces.', icon: GitBranch, group: 'Engineering', status: 'available' },
   { id: 'kanban', title: 'Agents', description: 'Worker runs, native coding harnesses (Claude Code, Codex, Goose), and agent loop dispatch.', icon: Bot, group: 'Engineering', status: 'available', supportedOperations: ['list_harnesses', 'get_harness', 'run_native', 'dispatch', 'cancel', 'steer'] },
-  { id: 'evidence', title: 'Evidence', description: 'Criteria, receipts, verifier records and stale status.', icon: ShieldCheck, group: 'Engineering', status: 'unavailable', reason: 'Criteria verifier records and receipts scheduled in Roadmap Step 8.' },
+  { id: 'evidence', title: 'Evidence', description: 'Criteria, receipts, verifier records and stale status.', icon: ShieldCheck, group: 'Engineering', status: 'available', supportedOperations: ['reviews.list', 'reviews.record', 'reviews.get', 'reviews.mark_stale'] },
   { id: 'dag', title: 'Workflow', description: 'Execution graph, dependencies, budgets and run state.', icon: Activity, group: 'Engineering', status: 'available' },
   { id: 'literature', title: 'Sources', description: 'Versioned literature, passages and corpus coverage.', icon: BookOpen, group: 'Research', status: 'available' },
   { id: 'claims', title: 'Claims', description: 'Atomic claims and support, contradiction or unknown evidence.', icon: ShieldCheck, group: 'Research', status: 'available' },
@@ -309,6 +310,10 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
 
   if (activeId === 'kanban') {
     return <AgentsWorkbenchPane />;
+  }
+
+  if (activeId === 'evidence') {
+    return <EvidenceWorkbenchPane onShowToast={onShowToast} />;
   }
 
   if (activeId === 'synthesis') {

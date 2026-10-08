@@ -30,6 +30,7 @@ pub use crate::custos_local_api::{
     METHOD_NOTES_LIST, METHOD_NOTES_SAVE,
     METHOD_NOTEBOOK_CELLS_LIST, METHOD_NOTEBOOK_CELLS_SAVE, METHOD_NOTEBOOK_EXECUTE,
     METHOD_NOTEBOOK_INTERRUPT, METHOD_NOTEBOOK_RESET, METHOD_NOTEBOOK_STATUS,
+    METHOD_REVIEWS_LIST, METHOD_REVIEWS_GET, METHOD_REVIEWS_RECORD, METHOD_REVIEWS_MARK_STALE,
 };
 use custos_adapters::harness::HarnessRegistry;
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
@@ -42,6 +43,7 @@ use custos_domain::{
     ResearchClaim, ResearchExperimentRun, SessionId, SessionMode, SourceRecord, TaskContract,
     TaskStatus,
     ExecuteCellParams, NotebookCell,
+    RecordReviewParams, ReviewerRecord,
 };
 use custos_persistence::{ProviderRepository, ResearchRepository};
 use custos_runtime::session::SessionManager;
@@ -346,14 +348,25 @@ impl LocalApiDispatcher {
                     "PythonKernelCoordinator is not configured on this daemon instance.",
                 )
             },
-            CapabilityDescriptor::unavailable(
-                "evidence.criteria",
-                "Evidence",
-                CapabilityGroup::Evidence,
-                "Criteria, receipts, verifier records, and freshness status.",
-                Some("evidence"),
-                "Criteria verifier records and receipts scheduled in Roadmap Step 8.",
-            ),
+            if self.research.is_some() {
+                CapabilityDescriptor::available(
+                    "evidence.criteria",
+                    "Evidence",
+                    CapabilityGroup::Evidence,
+                    "Criteria, receipts, verifier records, and freshness status.",
+                    Some("evidence"),
+                    vec!["reviews.list", "reviews.record", "reviews.get", "reviews.mark_stale"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "evidence.criteria",
+                    "Evidence",
+                    CapabilityGroup::Evidence,
+                    "Criteria, receipts, verifier records, and freshness status.",
+                    Some("evidence"),
+                    "ResearchRepository is not configured on this daemon instance.",
+                )
+            },
             CapabilityDescriptor::available(
                 "coordination.kanban",
                 "Agents",
@@ -1732,6 +1745,83 @@ impl LocalApiDispatcher {
                         Ok(val) => ApiResponse::success(req.id, val),
                         Err(e) => ApiResponse::error(req.id, e.to_string()),
                     },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_REVIEWS_LIST => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
+                };
+                let target_type = req.params.get("target_type").and_then(|v| serde_json::from_value(v.clone()).ok());
+                let target_id = req.params.get("target_id").and_then(|v| v.as_str());
+                match research.list_reviews(target_type, target_id) {
+                    Ok(reviews) => match serde_json::to_value(&reviews) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_REVIEWS_GET => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
+                };
+                let id = match req.params.get("id").or_else(|| req.params.get("review_id")).and_then(|v| v.as_str()) {
+                    Some(i) if !i.trim().is_empty() => i,
+                    _ => return ApiResponse::error(req.id, "Missing or empty id parameter"),
+                };
+                match research.get_review(id) {
+                    Ok(Some(rev)) => match serde_json::to_value(&rev) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Ok(None) => ApiResponse::success(req.id, serde_json::Value::Null),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_REVIEWS_RECORD => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
+                };
+                let params: RecordReviewParams = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid record review params: {e}")),
+                };
+                let record = match ReviewerRecord::new(
+                    params.target_type,
+                    params.target_id,
+                    params.reviewer,
+                    params.method,
+                    params.status,
+                    params.evidence_summary,
+                    params.evidence_digest,
+                    params.findings.unwrap_or_default(),
+                ) {
+                    Ok(r) => r,
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                if let Err(e) = research.save_review(&record) {
+                    return ApiResponse::error(req.id, e.to_string());
+                }
+                match serde_json::to_value(&record) {
+                    Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_REVIEWS_MARK_STALE => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
+                };
+                let id = match req.params.get("id").or_else(|| req.params.get("review_id")).and_then(|v| v.as_str()) {
+                    Some(i) if !i.trim().is_empty() => i,
+                    _ => return ApiResponse::error(req.id, "Missing or empty id parameter"),
+                };
+                match research.mark_review_stale(id) {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "marked_stale": true })),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
@@ -3230,6 +3320,11 @@ mod tests {
         assert!(notebook_cap.supported_operations.contains(&"execute".to_string()));
         assert!(notebook_cap.supported_operations.contains(&"reset".to_string()));
 
+        // Evidence criteria verifier capability is truthfully unavailable without ResearchRepository
+        let evidence_cap = caps.iter().find(|c| c.id == "evidence.criteria").unwrap();
+        assert!(!evidence_cap.status.is_available());
+        assert_eq!(evidence_cap.status.reason(), Some("ResearchRepository is not configured on this daemon instance."));
+
         // 2. Query capability by capability_id
         let get_resp = dispatcher
             .handle_request(ApiRequest {
@@ -3646,5 +3741,104 @@ mod tests {
         let reset_state: NotebookKernelState = serde_json::from_value(reset_resp.result.unwrap()).unwrap();
         assert_eq!(reset_state.epoch, 2);
         assert_eq!(reset_state.execution_counter, 0);
+    }
+
+    #[tokio::test]
+    async fn test_reviewer_records_api_lifecycle() {
+        let store = Arc::new(MockStore {
+            tasks: Mutex::new(Vec::new()),
+        });
+        let task_service = Arc::new(TaskService::new(store));
+        let session_manager = Arc::new(SessionManager::new());
+        let bridge_service = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
+        let mem_conn = custos_persistence::DbConnection::open_in_memory().expect("open memory db");
+        let research_repo = Arc::new(custos_persistence::ResearchRepository::new(mem_conn));
+        let dispatcher = LocalApiDispatcher::new(
+            task_service,
+            session_manager,
+            bridge_service,
+        ).with_research(research_repo);
+
+        // 1. Record a review
+        let record_req = ApiRequest {
+            id: "rev_record_1".into(),
+            method: METHOD_REVIEWS_RECORD.into(),
+            params: serde_json::json!({
+                "target_type": "artifact",
+                "target_id": "artifacts/report.md",
+                "reviewer": "custos-verifier",
+                "method": "automated_verifier",
+                "status": "approved",
+                "evidence_summary": "Verified markdown schema and signatures",
+                "evidence_digest": "sha256:5678",
+                "findings": [
+                    {
+                        "severity": "info",
+                        "criterion": "schema_conformant",
+                        "message": "Valid schema",
+                        "file_path": "artifacts/report.md",
+                        "line_number": 1
+                    }
+                ]
+            }),
+        };
+        let record_resp = dispatcher.handle_request(record_req).await;
+        assert!(record_resp.is_success(), "Failed to record review: {:?}", record_resp.error);
+        let record: ReviewerRecord = serde_json::from_value(record_resp.result.unwrap()).unwrap();
+        assert_eq!(record.reviewer, "custos-verifier");
+        assert_eq!(record.status, custos_domain::ReviewStatus::Approved);
+        assert!(record.is_fresh);
+        assert_eq!(record.findings.len(), 1);
+
+        // 2. Get review by id
+        let get_req = ApiRequest {
+            id: "rev_get_1".into(),
+            method: METHOD_REVIEWS_GET.into(),
+            params: serde_json::json!({ "review_id": record.id }),
+        };
+        let get_resp = dispatcher.handle_request(get_req).await;
+        assert!(get_resp.is_success());
+        let fetched: Option<ReviewerRecord> = serde_json::from_value(get_resp.result.unwrap()).unwrap();
+        assert!(fetched.is_some());
+        assert_eq!(fetched.unwrap().id, record.id);
+
+        // 3. List reviews by target
+        let list_req = ApiRequest {
+            id: "rev_list_1".into(),
+            method: METHOD_REVIEWS_LIST.into(),
+            params: serde_json::json!({
+                "target_type": "artifact",
+                "target_id": "artifacts/report.md"
+            }),
+        };
+        let list_resp = dispatcher.handle_request(list_req).await;
+        assert!(list_resp.is_success());
+        let list: Vec<ReviewerRecord> = serde_json::from_value(list_resp.result.unwrap()).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, record.id);
+
+        // 4. Mark review stale
+        let stale_req = ApiRequest {
+            id: "rev_stale_1".into(),
+            method: METHOD_REVIEWS_MARK_STALE.into(),
+            params: serde_json::json!({ "review_id": record.id }),
+        };
+        let stale_resp = dispatcher.handle_request(stale_req).await;
+        assert!(stale_resp.is_success());
+        assert_eq!(stale_resp.result.unwrap().get("marked_stale").and_then(|v| v.as_bool()), Some(true));
+
+        // 5. Verify fetched record is now stale
+        let verify_get_req = ApiRequest {
+            id: "rev_get_2".into(),
+            method: METHOD_REVIEWS_GET.into(),
+            params: serde_json::json!({ "review_id": record.id }),
+        };
+        let verify_get_resp = dispatcher.handle_request(verify_get_req).await;
+        assert!(verify_get_resp.is_success());
+        let verified: Option<ReviewerRecord> = serde_json::from_value(verify_get_resp.result.unwrap()).unwrap();
+        assert!(!verified.unwrap().is_fresh);
     }
 }

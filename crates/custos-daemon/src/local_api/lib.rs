@@ -5,6 +5,7 @@
 use async_trait::async_trait;
 use custos_domain::{
     ExecutionWorkspace, ExecuteCellParams, ExecuteCellResult, NotebookCell, NotebookKernelState,
+    RecordReviewParams, ReviewerRecord, ReviewTargetType,
     Session, SessionJournalEntry, Task, TaskContract, TaskStatus,
     VerificationClaim, WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff,
     WorkspaceFileTree, WorkspaceKind, WorkspaceLineage,
@@ -87,6 +88,11 @@ pub const METHOD_NOTEBOOK_EXECUTE: &str = "v1.notebook.execute";
 pub const METHOD_NOTEBOOK_INTERRUPT: &str = "v1.notebook.interrupt";
 pub const METHOD_NOTEBOOK_RESET: &str = "v1.notebook.reset";
 pub const METHOD_NOTEBOOK_STATUS: &str = "v1.notebook.status";
+
+pub const METHOD_REVIEWS_LIST: &str = "v1.reviews.list";
+pub const METHOD_REVIEWS_GET: &str = "v1.reviews.get";
+pub const METHOD_REVIEWS_RECORD: &str = "v1.reviews.record";
+pub const METHOD_REVIEWS_MARK_STALE: &str = "v1.reviews.mark_stale";
 
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1331,6 +1337,78 @@ impl LocalApiClient {
         }
         let result = resp.result.ok_or("Empty result in response")?;
         serde_json::from_value(result).map_err(|e| format!("Failed to parse kernel state: {e}"))
+    }
+
+    pub async fn list_reviews(
+        &self,
+        req_id: &str,
+        target_type: Option<ReviewTargetType>,
+        target_id: Option<&str>,
+    ) -> Result<Vec<ReviewerRecord>, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_REVIEWS_LIST,
+            serde_json::json!({
+                "target_type": target_type,
+                "target_id": target_id,
+            }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse reviews: {e}"))
+    }
+
+    pub async fn get_review(
+        &self,
+        req_id: &str,
+        id: &str,
+    ) -> Result<Option<ReviewerRecord>, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_REVIEWS_GET,
+            serde_json::json!({ "id": id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse review: {e}"))
+    }
+
+    pub async fn record_review(
+        &self,
+        req_id: &str,
+        params: RecordReviewParams,
+    ) -> Result<ReviewerRecord, String> {
+        let val = serde_json::to_value(params).map_err(|e| e.to_string())?;
+        let req = ApiRequest::new(req_id, METHOD_REVIEWS_RECORD, val);
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse recorded review: {e}"))
+    }
+
+    pub async fn mark_review_stale(
+        &self,
+        req_id: &str,
+        id: &str,
+    ) -> Result<(), String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_REVIEWS_MARK_STALE,
+            serde_json::json!({ "id": id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        Ok(())
     }
 }
 

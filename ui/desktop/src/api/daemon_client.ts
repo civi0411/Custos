@@ -34,6 +34,10 @@ import {
   NotebookKernelState,
   ExecuteCellParams,
   ExecuteCellResult,
+  ReviewerRecord,
+  RecordReviewParams,
+  ReviewTargetType,
+  ReviewStatus,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -685,6 +689,29 @@ export class DaemonClient {
     return this.request<NotebookKernelState>('v1.notebook.status', {
       session_id: sessionId,
     });
+  }
+
+  // Evidence & Criteria Reviewer Records
+  async listReviews(params?: {
+    target_type?: ReviewTargetType;
+    target_id?: string;
+    reviewer?: string;
+    status?: ReviewStatus;
+    fresh_only?: boolean;
+  }): Promise<ReviewerRecord[]> {
+    return this.request<ReviewerRecord[]>('v1.reviews.list', params ?? {});
+  }
+
+  async getReview(id: string): Promise<ReviewerRecord | null> {
+    return this.request<ReviewerRecord | null>('v1.reviews.get', { id });
+  }
+
+  async recordReview(params: RecordReviewParams): Promise<ReviewerRecord> {
+    return this.request<ReviewerRecord>('v1.reviews.record', params);
+  }
+
+  async markReviewStale(id: string): Promise<{ marked_stale: boolean }> {
+    return this.request<{ marked_stale: boolean }>('v1.reviews.mark_stale', { id });
   }
 }
 

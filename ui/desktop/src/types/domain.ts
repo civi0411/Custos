@@ -676,6 +676,54 @@ export interface ExecuteCellResult {
   epoch: number;
 }
 
+export type ReviewTargetType = 'task' | 'artifact' | 'diff' | 'run' | 'note' | 'workspace';
+export type ReviewMethod = 'automated_verifier' | 'peer_review' | 'model_evaluation' | 'contract_proof' | 'runtime_inspection';
+export type ReviewStatus = 'approved' | 'rejected' | 'degraded' | 'pending';
+export type FindingSeverity = 'info' | 'warning' | 'error' | 'blocker';
+
+export interface ReviewFinding {
+  severity: FindingSeverity;
+  criterion: string;
+  message: string;
+  file_path?: string;
+  filePath?: string;
+  line_number?: number;
+  lineNumber?: number;
+}
+
+export interface ReviewerRecord {
+  id: string;
+  target_type: ReviewTargetType;
+  targetType?: ReviewTargetType;
+  target_id: string;
+  targetId?: string;
+  reviewer: string;
+  method: ReviewMethod;
+  status: ReviewStatus;
+  evidence_summary: string;
+  evidenceSummary?: string;
+  evidence_digest?: string | null;
+  evidenceDigest?: string | null;
+  findings: ReviewFinding[];
+  is_fresh: boolean;
+  isFresh?: boolean;
+  created_at: number;
+  createdAt?: number;
+  updated_at: number;
+  updatedAt?: number;
+}
+
+export interface RecordReviewParams {
+  target_type: ReviewTargetType;
+  target_id: string;
+  reviewer: string;
+  method: ReviewMethod;
+  status: ReviewStatus;
+  evidence_summary: string;
+  evidence_digest?: string | null;
+  findings?: ReviewFinding[];
+}
+
 
 
 
