@@ -33,6 +33,13 @@ pub use crate::custos_local_api::{
     METHOD_REVIEWS_LIST, METHOD_REVIEWS_GET, METHOD_REVIEWS_RECORD, METHOD_REVIEWS_MARK_STALE,
     METHOD_SYNTHESIS_PROPOSALS_LIST, METHOD_SYNTHESIS_PROPOSALS_GET,
     METHOD_SYNTHESIS_PROPOSALS_SAVE, METHOD_SYNTHESIS_HANDOFF_EXECUTE,
+    METHOD_BROWSER_SESSIONS_LIST, METHOD_BROWSER_SESSIONS_CREATE,
+    METHOD_BROWSER_TABS_LIST, METHOD_BROWSER_TABS_CREATE,
+    METHOD_BROWSER_TABS_NAVIGATE, METHOD_BROWSER_TABS_SNAPSHOT,
+    METHOD_BROWSER_TABS_CLOSE, METHOD_FLEET_HOSTS_LIST,
+    METHOD_FLEET_HOSTS_REGISTER, METHOD_FLEET_HOSTS_PING,
+    METHOD_FLEET_EXEC, METHOD_AUTOMATION_JOBS_LIST,
+    METHOD_AUTOMATION_JOBS_CREATE, METHOD_AUTOMATION_JOBS_RUN,
 };
 use custos_adapters::harness::HarnessRegistry;
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
@@ -49,8 +56,10 @@ use custos_domain::{
     ClaimGroundingLevel, ClaimHandoffSummary, HandoffToCodingParams, HandoffToCodingResult,
     Recipe, RecipeHandoffSummary, ResearchSynthesisProposal, ReviewStatus,
     SaveSynthesisProposalParams,
+    BrowserSession, BrowserTab, CreateHeadlessJobParams, HeadlessAutomationJob,
+    HeadlessJobStatus, RegisterHostParams, RemoteHostNode, SshAuthMethod,
 };
-use custos_persistence::{ProviderRepository, ResearchRepository};
+use custos_persistence::{ProviderRepository, ResearchRepository, FleetAutomationRepository};
 use custos_runtime::session::SessionManager;
 use custos_runtime::workspace::{CreateWorkspaceRequest, WorkspaceCoordinator, WorkspaceFilesCoordinator};
 use custos_runtime::{PythonKernelCoordinator, TerminalCoordinator};
@@ -68,6 +77,7 @@ pub struct LocalApiDispatcher {
     files: Arc<dyn WorkspaceFilesPort>,
     harnesses: Arc<HarnessRegistry>,
     python_kernel: Option<Arc<PythonKernelCoordinator>>,
+    fleet_automation: Option<Arc<FleetAutomationRepository>>,
 }
 
 impl LocalApiDispatcher {
@@ -88,6 +98,7 @@ impl LocalApiDispatcher {
             files: Arc::new(WorkspaceFilesCoordinator::new()),
             harnesses: Arc::new(HarnessRegistry::new()),
             python_kernel: Some(Arc::new(PythonKernelCoordinator::new())),
+            fleet_automation: None,
         }
     }
 
@@ -128,6 +139,11 @@ impl LocalApiDispatcher {
 
     pub fn with_providers(mut self, providers: Arc<ProviderRepository>) -> Self {
         self.providers = Some(providers);
+        self
+    }
+
+    pub fn with_fleet_automation(mut self, fleet_automation: Arc<FleetAutomationRepository>) -> Self {
+        self.fleet_automation = Some(fleet_automation);
         self
     }
 
@@ -399,14 +415,66 @@ impl LocalApiDispatcher {
                     "ResearchRepository is not configured on this daemon instance.",
                 )
             },
-            CapabilityDescriptor::unavailable(
-                "browser.tabs",
-                "Browser",
-                CapabilityGroup::Browser,
-                "Scoped browsing, DOM snapshots, network inspector, and page capture.",
-                Some("browser"),
-                "Scoped browsing and page capture scheduled in Roadmap Step 10.",
-            ),
+            if self.fleet_automation.is_some() {
+                CapabilityDescriptor::degraded(
+                    "browser.tabs",
+                    "Browser",
+                    CapabilityGroup::Browser,
+                    "Persisted browser session and tab intents.",
+                    Some("browser"),
+                    "Browser execution adapter is not connected; navigation and snapshots are refused.",
+                    vec!["sessions.list", "sessions.create", "tabs.list", "tabs.create", "tabs.close"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "browser.tabs",
+                    "Browser",
+                    CapabilityGroup::Browser,
+                    "Scoped browsing, DOM snapshots, network inspector, and page capture.",
+                    Some("browser"),
+                    "FleetAutomationRepository is not configured on this daemon instance.",
+                )
+            },
+            if self.fleet_automation.is_some() {
+                CapabilityDescriptor::degraded(
+                    "remote.fleet",
+                    "Remote Fleet",
+                    CapabilityGroup::Compute,
+                    "Persisted SSH host inventory.",
+                    Some("fleet"),
+                    "SSH transport is not connected; probes and remote execution are refused.",
+                    vec!["hosts.list", "hosts.register"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "remote.fleet",
+                    "Remote Fleet",
+                    CapabilityGroup::Compute,
+                    "SSH remote host inventory, ping latency probes, and distributed node execution.",
+                    Some("fleet"),
+                    "FleetAutomationRepository is not configured on this daemon instance.",
+                )
+            },
+            if self.fleet_automation.is_some() {
+                CapabilityDescriptor::degraded(
+                    "automation.headless",
+                    "Automation",
+                    CapabilityGroup::Coordination,
+                    "Persisted headless job definitions.",
+                    Some("automation"),
+                    "Automation executor and standing-grant checks are not connected; job execution is refused.",
+                    vec!["jobs.list", "jobs.create"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "automation.headless",
+                    "Automation",
+                    CapabilityGroup::Coordination,
+                    "Headless job schedules, batch tasks, and verification execution receipts.",
+                    Some("automation"),
+                    "FleetAutomationRepository is not configured on this daemon instance.",
+                )
+            },
             if self.research.is_some() {
                 CapabilityDescriptor::available(
                     "personal.notes",
@@ -2779,6 +2847,213 @@ impl LocalApiDispatcher {
                     Err(err) => ApiResponse::error(req.id, format!("Failed to steer harness: {err}")),
                 }
             }
+            METHOD_BROWSER_SESSIONS_LIST => {
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                let ws_id = req.params.get("workspace_id").and_then(|v| v.as_str());
+                match fleet.list_browser_sessions() {
+                    Ok(sessions) => {
+                        let filtered = if let Some(ws) = ws_id {
+                            sessions.into_iter().filter(|s| s.workspace_id.as_deref() == Some(ws)).collect()
+                        } else {
+                            sessions
+                        };
+                        match serde_json::to_value(&filtered) {
+                            Ok(val) => ApiResponse::success(req.id, val),
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_BROWSER_SESSIONS_CREATE => {
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                let name = req.params.get("name").and_then(|v| v.as_str()).unwrap_or("Default Session");
+                let ws_id = req.params.get("workspace_id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let session = BrowserSession::new(name, ws_id);
+                match fleet.save_browser_session(&session) {
+                    Ok(()) => match serde_json::to_value(&session) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_BROWSER_TABS_LIST => {
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                let session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
+                    Some(s) => s,
+                    None => return ApiResponse::error(req.id, "Missing session_id parameter"),
+                };
+                match fleet.list_browser_tabs(Some(session_id)) {
+                    Ok(tabs) => match serde_json::to_value(&tabs) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_BROWSER_TABS_CREATE => {
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                let session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
+                    Some(s) => s,
+                    None => return ApiResponse::error(req.id, "Missing session_id parameter"),
+                };
+                let url = req.params.get("url").and_then(|v| v.as_str()).unwrap_or("");
+                let tab = match BrowserTab::new(session_id, url) {
+                    Ok(t) => t,
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                match fleet.save_browser_tab(&tab) {
+                    Ok(()) => match serde_json::to_value(&tab) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_BROWSER_TABS_NAVIGATE => {
+                ApiResponse::error(
+                    req.id,
+                    "Browser navigation is unavailable until a scoped browser adapter is connected",
+                )
+            }
+            METHOD_BROWSER_TABS_SNAPSHOT => {
+                ApiResponse::error(
+                    req.id,
+                    "Browser snapshots are unavailable until an authenticated browser adapter supplies them",
+                )
+            }
+            METHOD_BROWSER_TABS_CLOSE => {
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                let tab_id = match req.params.get("tab_id").and_then(|v| v.as_str()) {
+                    Some(t) => t,
+                    None => return ApiResponse::error(req.id, "Missing tab_id parameter"),
+                };
+                match fleet.delete_browser_tab(tab_id) {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "closed": true, "tab_id": tab_id })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_FLEET_HOSTS_LIST => {
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                match fleet.list_remote_hosts() {
+                    Ok(hosts) => match serde_json::to_value(&hosts) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_FLEET_HOSTS_REGISTER => {
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                let params: RegisterHostParams = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid register host params: {e}")),
+                };
+                let auth_method = if let Some(key_path) = &params.private_key_path {
+                    SshAuthMethod::KeyPair {
+                        private_key_path: key_path.clone(),
+                        passphrase: None,
+                    }
+                } else {
+                    SshAuthMethod::Agent
+                };
+                let mut node = match RemoteHostNode::new(params.name, params.host, params.port, params.user, auth_method) {
+                    Ok(n) => n,
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                node.labels = params.labels;
+                match fleet.save_remote_host(&node) {
+                    Ok(()) => match serde_json::to_value(&node) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_FLEET_HOSTS_PING => {
+                ApiResponse::error(
+                    req.id,
+                    "Remote host probing is unavailable until a fleet transport adapter is connected",
+                )
+            }
+            METHOD_FLEET_EXEC => {
+                ApiResponse::error(
+                    req.id,
+                    "Remote execution is unavailable until transport, authority and receipt verification are connected",
+                )
+            }
+            METHOD_AUTOMATION_JOBS_LIST => {
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                let status_filter = req.params.get("status")
+                    .and_then(|v| serde_json::from_value::<HeadlessJobStatus>(v.clone()).ok());
+                match fleet.list_headless_jobs() {
+                    Ok(jobs) => {
+                        let filtered: Vec<HeadlessAutomationJob> = if let Some(filter) = status_filter {
+                            jobs.into_iter().filter(|j| j.status == filter).collect()
+                        } else {
+                            jobs
+                        };
+                        match serde_json::to_value(&filtered) {
+                            Ok(val) => ApiResponse::success(req.id, val),
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_AUTOMATION_JOBS_CREATE => {
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                let params: CreateHeadlessJobParams = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid job parameters: {e}")),
+                };
+                let trigger = params.trigger.unwrap_or(custos_domain::HeadlessTrigger::Manual);
+                let job = match HeadlessAutomationJob::new(params.name, params.spec, trigger) {
+                    Ok(j) => j,
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                match fleet.save_headless_job(&job) {
+                    Ok(()) => match serde_json::to_value(&job) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_AUTOMATION_JOBS_RUN => {
+                ApiResponse::error(
+                    req.id,
+                    "Headless execution is unavailable until an executor and scoped authority checks are connected",
+                )
+            }
             unknown => ApiResponse::error(req.id, format!("Unknown method: {unknown}")),
         }
     }
@@ -4303,5 +4578,169 @@ mod tests {
         let check_resp = dispatcher.handle_request(check_prop_req).await;
         let completed_prop: Option<custos_domain::ResearchSynthesisProposal> = serde_json::from_value(check_resp.result.unwrap()).unwrap();
         assert_eq!(completed_prop.unwrap().status, custos_domain::SynthesisProposalStatus::HandoffCompleted);
+    }
+
+    #[tokio::test]
+    async fn test_browser_fleet_automation_api() {
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let task_service = Arc::new(TaskService::new(store.clone()));
+        let session_manager = Arc::new(SessionManager::with_store(store.clone()));
+        let bridge_service = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
+        let fleet_repo = Arc::new(store.fleet_automation().clone());
+        let dispatcher = LocalApiDispatcher::new(
+            task_service.clone(),
+            session_manager.clone(),
+            bridge_service.clone(),
+        )
+        .with_fleet_automation(fleet_repo);
+
+        // 1. Browser metadata is durable, but effectful adapter operations fail closed.
+        let s_req = ApiRequest {
+            id: "bs_1".into(),
+            method: METHOD_BROWSER_SESSIONS_CREATE.into(),
+            params: serde_json::json!({ "name": "Test Session", "workspace_id": "ws_1" }),
+        };
+        let s_res = dispatcher.handle_request(s_req).await;
+        assert!(s_res.is_success());
+        let session: BrowserSession = serde_json::from_value(s_res.result.unwrap()).unwrap();
+        assert_eq!(session.name, "Test Session");
+
+        let t_req = ApiRequest {
+            id: "bt_1".into(),
+            method: METHOD_BROWSER_TABS_CREATE.into(),
+            params: serde_json::json!({ "session_id": session.id, "url": "https://example.com" }),
+        };
+        let t_res = dispatcher.handle_request(t_req).await;
+        assert!(t_res.is_success());
+        let tab: BrowserTab = serde_json::from_value(t_res.result.unwrap()).unwrap();
+        assert_eq!(tab.url, "https://example.com");
+        assert_eq!(tab.status, custos_domain::BrowserTabStatus::Idle);
+
+        let list_tabs_req = ApiRequest {
+            id: "bt_list_1".into(),
+            method: METHOD_BROWSER_TABS_LIST.into(),
+            params: serde_json::json!({ "session_id": session.id }),
+        };
+        let list_tabs_res = dispatcher.handle_request(list_tabs_req).await;
+        assert!(list_tabs_res.is_success());
+        let tabs: Vec<BrowserTab> = serde_json::from_value(list_tabs_res.result.unwrap()).unwrap();
+        assert_eq!(tabs.len(), 1);
+
+        let nav_req = ApiRequest {
+            id: "bt_nav_1".into(),
+            method: METHOD_BROWSER_TABS_NAVIGATE.into(),
+            params: serde_json::json!({ "tab_id": tab.id, "url": "https://example.com/docs" }),
+        };
+        let nav_res = dispatcher.handle_request(nav_req).await;
+        assert!(!nav_res.is_success());
+        assert!(nav_res.error.unwrap().contains("browser adapter"));
+
+        let snap_req = ApiRequest {
+            id: "bt_snap_1".into(),
+            method: METHOD_BROWSER_TABS_SNAPSHOT.into(),
+            params: serde_json::json!({
+                "tab_id": tab.id,
+                "url": "https://example.com/docs",
+                "title": "Example Docs",
+                "dom_tree_summary": "<main><h1>Documentation</h1></main>",
+                "text_content": "Documentation contents",
+                "links": ["https://example.com/about"],
+                "viewport_width": 1280,
+                "viewport_height": 800,
+                "screenshot_uri": null,
+                "timestamp": chrono::Utc::now().timestamp_millis()
+            }),
+        };
+        let snap_res = dispatcher.handle_request(snap_req).await;
+        assert!(!snap_res.is_success());
+        assert!(snap_res.error.unwrap().contains("browser adapter"));
+
+        let close_req = ApiRequest {
+            id: "bt_close_1".into(),
+            method: METHOD_BROWSER_TABS_CLOSE.into(),
+            params: serde_json::json!({ "tab_id": tab.id }),
+        };
+        let close_res = dispatcher.handle_request(close_req).await;
+        assert!(close_res.is_success());
+
+        // 2. Fleet inventory is durable, while probe/exec require a real transport.
+        let reg_host_req = ApiRequest {
+            id: "host_reg_1".into(),
+            method: METHOD_FLEET_HOSTS_REGISTER.into(),
+            params: serde_json::json!({
+                "name": "Cluster Node 01",
+                "host": "127.0.0.1",
+                "port": 22,
+                "user": "ubuntu",
+                "labels": { "gpu": "h100" }
+            }),
+        };
+        let reg_host_res = dispatcher.handle_request(reg_host_req).await;
+        assert!(reg_host_res.is_success());
+        let host: RemoteHostNode = serde_json::from_value(reg_host_res.result.unwrap()).unwrap();
+        assert_eq!(host.name, "Cluster Node 01");
+
+        let ping_req = ApiRequest {
+            id: "host_ping_1".into(),
+            method: METHOD_FLEET_HOSTS_PING.into(),
+            params: serde_json::json!({ "host_id": host.id }),
+        };
+        let ping_res = dispatcher.handle_request(ping_req).await;
+        assert!(!ping_res.is_success());
+        assert!(ping_res.error.unwrap().contains("transport adapter"));
+
+        let exec_fleet_req = ApiRequest {
+            id: "fleet_exec_1".into(),
+            method: METHOD_FLEET_EXEC.into(),
+            params: serde_json::json!({
+                "host_id": host.id,
+                "command": "nvidia-smi --query-gpu=name --format=csv"
+            }),
+        };
+        let exec_fleet_res = dispatcher.handle_request(exec_fleet_req).await;
+        assert!(!exec_fleet_res.is_success());
+        assert!(exec_fleet_res.error.unwrap().contains("Remote execution"));
+
+        // 3. Automation definitions are durable, while running needs an executor.
+        let create_job_req = ApiRequest {
+            id: "job_create_1".into(),
+            method: METHOD_AUTOMATION_JOBS_CREATE.into(),
+            params: serde_json::json!({
+                "name": "Nightly Regression Invariants",
+                "spec": {
+                    "target_type": "local_process",
+                    "command_or_script": "cargo test --workspace --offline",
+                    "timeout_secs": 600,
+                    "env": {},
+                    "required_evidence": ["INV-STABILITY-01"]
+                },
+                "trigger": { "type": "manual" }
+            }),
+        };
+        let create_job_res = dispatcher.handle_request(create_job_req).await;
+        assert!(create_job_res.is_success());
+        let job: HeadlessAutomationJob = serde_json::from_value(create_job_res.result.unwrap()).unwrap();
+        assert_eq!(job.name, "Nightly Regression Invariants");
+        assert_eq!(job.status, HeadlessJobStatus::Pending);
+
+        let run_job_req = ApiRequest {
+            id: "job_run_1".into(),
+            method: METHOD_AUTOMATION_JOBS_RUN.into(),
+            params: serde_json::json!({ "job_id": job.id }),
+        };
+        let run_job_res = dispatcher.handle_request(run_job_req).await;
+        assert!(!run_job_res.is_success());
+        assert!(run_job_res.error.unwrap().contains("executor"));
+
+        let persisted = store
+            .fleet_automation()
+            .get_headless_job(&job.id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(persisted.status, HeadlessJobStatus::Pending);
+        assert_eq!(persisted.exit_code, None);
     }
 }

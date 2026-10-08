@@ -99,6 +99,23 @@ pub const METHOD_SYNTHESIS_PROPOSALS_GET: &str = "v1.synthesis.proposals.get";
 pub const METHOD_SYNTHESIS_PROPOSALS_SAVE: &str = "v1.synthesis.proposals.save";
 pub const METHOD_SYNTHESIS_HANDOFF_EXECUTE: &str = "v1.synthesis.handoff.execute";
 
+pub const METHOD_BROWSER_SESSIONS_LIST: &str = "v1.browser.sessions.list";
+pub const METHOD_BROWSER_SESSIONS_CREATE: &str = "v1.browser.sessions.create";
+pub const METHOD_BROWSER_TABS_LIST: &str = "v1.browser.tabs.list";
+pub const METHOD_BROWSER_TABS_CREATE: &str = "v1.browser.tabs.create";
+pub const METHOD_BROWSER_TABS_NAVIGATE: &str = "v1.browser.tabs.navigate";
+pub const METHOD_BROWSER_TABS_SNAPSHOT: &str = "v1.browser.tabs.snapshot";
+pub const METHOD_BROWSER_TABS_CLOSE: &str = "v1.browser.tabs.close";
+
+pub const METHOD_FLEET_HOSTS_LIST: &str = "v1.fleet.hosts.list";
+pub const METHOD_FLEET_HOSTS_REGISTER: &str = "v1.fleet.hosts.register";
+pub const METHOD_FLEET_HOSTS_PING: &str = "v1.fleet.hosts.ping";
+pub const METHOD_FLEET_EXEC: &str = "v1.fleet.exec";
+
+pub const METHOD_AUTOMATION_JOBS_LIST: &str = "v1.automation.jobs.list";
+pub const METHOD_AUTOMATION_JOBS_CREATE: &str = "v1.automation.jobs.create";
+pub const METHOD_AUTOMATION_JOBS_RUN: &str = "v1.automation.jobs.run";
+
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiRequest {
@@ -359,7 +376,12 @@ impl ProcessTransport {
         let mut cmd = tokio::process::Command::new(daemon_binary);
         if let Some(db) = db_path {
             cmd.env("CUSTOS_DB_PATH", db);
+            if let Some(parent) = std::path::Path::new(db).parent() {
+                cmd.env("CUSTOS_PROFILE_DIR", parent);
+            }
         }
+        cmd.env("CUSTOS_BIND", "127.0.0.1:0");
+        cmd.env("CUSTOS_HTTP_BIND", "127.0.0.1:0");
         cmd.stdin(std::process::Stdio::piped());
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::inherit());

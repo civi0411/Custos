@@ -126,6 +126,7 @@ impl CustosRuntime {
             .with_python_kernel(python_coordinator.clone())
             .with_research(Arc::new(store.research().clone()))
             .with_providers(Arc::new(store.providers().clone()))
+            .with_fleet_automation(Arc::new(store.fleet_automation().clone()))
             .with_harnesses(harnesses.clone()),
         );
 

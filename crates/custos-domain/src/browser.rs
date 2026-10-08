@@ -1,7 +1,7 @@
 //! Scoped Browser Domain Models
 //!
-//! Provides safe, isolated browser sessions, tabs, and page snapshots scoped to
-//! execution workspaces. Enforces fail-closed URL validation and SSRF boundary policies.
+//! Provides browser session, tab, and snapshot contracts scoped to execution
+//! workspaces. Network isolation and DNS-aware SSRF enforcement remain adapter duties.
 
 use serde::{Deserialize, Serialize};
 use crate::error::DomainError;
@@ -73,7 +73,7 @@ impl BrowserTab {
             session_id: session_id.into(),
             url: url.clone(),
             title: if url.is_empty() { "New Tab".to_string() } else { url },
-            status: BrowserTabStatus::Ready,
+            status: BrowserTabStatus::Idle,
             active: true,
             last_snapshot: None,
             console_logs: Vec::new(),
@@ -133,8 +133,8 @@ pub struct CreateTabParams {
     pub workspace_id: Option<String>,
 }
 
-/// Fail-closed URL sandbox validator.
-/// Strictly blocks non-HTTP/HTTPS schemes, dangerous pseudoprotocols, and loopback/private IP bypasses.
+/// Rejects unsupported schemes and obvious local/private-network destinations.
+/// A browser adapter must additionally resolve DNS and enforce egress policy at dispatch time.
 pub fn validate_browser_url(raw_url: &str) -> Result<(), DomainError> {
     let trimmed = raw_url.trim();
     if trimmed.is_empty() {
@@ -164,9 +164,29 @@ pub fn validate_browser_url(raw_url: &str) -> Result<(), DomainError> {
     }
 
     let lower = host.to_lowercase();
-    if lower == "169.254.169.254" || lower == "metadata.google.internal" || lower == "metadata" {
+    let private_ipv4 = lower == "0.0.0.0"
+        || lower.starts_with("127.")
+        || lower.starts_with("10.")
+        || lower.starts_with("192.168.")
+        || lower.starts_with("169.254.")
+        || lower
+            .strip_prefix("172.")
+            .and_then(|tail| tail.split('.').next())
+            .and_then(|octet| octet.parse::<u8>().ok())
+            .is_some_and(|octet| (16..=31).contains(&octet));
+    let private_name = lower == "localhost"
+        || lower.ends_with(".localhost")
+        || lower.ends_with(".local")
+        || lower == "metadata.google.internal"
+        || lower == "metadata";
+    let private_ipv6 = lower == "[::1]"
+        || lower.starts_with("[fc")
+        || lower.starts_with("[fd")
+        || lower.starts_with("[fe80:");
+
+    if private_ipv4 || private_name || private_ipv6 {
         return Err(DomainError::Validation(format!(
-            "Access to cloud metadata endpoint '{}' is rejected by egress boundary.",
+            "Access to local or private destination '{}' is rejected by the browser contract.",
             lower
         )));
     }
@@ -186,6 +206,11 @@ mod tests {
         assert!(validate_browser_url("file:///etc/passwd").is_err());
         assert!(validate_browser_url("javascript:alert(1)").is_err());
         assert!(validate_browser_url("http://169.254.169.254/latest/meta-data").is_err());
+        assert!(validate_browser_url("http://localhost:8080").is_err());
+        assert!(validate_browser_url("http://127.0.0.1").is_err());
+        assert!(validate_browser_url("http://10.0.0.1").is_err());
+        assert!(validate_browser_url("http://172.16.1.2").is_err());
+        assert!(validate_browser_url("http://192.168.1.2").is_err());
     }
 
     #[test]
@@ -195,7 +220,7 @@ mod tests {
 
         let tab = BrowserTab::new(&session.id, "https://docs.rs").unwrap();
         assert!(tab.id.starts_with("tab_"));
-        assert_eq!(tab.status, BrowserTabStatus::Ready);
+        assert_eq!(tab.status, BrowserTabStatus::Idle);
         assert_eq!(tab.url, "https://docs.rs");
     }
 }

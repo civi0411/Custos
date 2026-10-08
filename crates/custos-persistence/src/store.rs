@@ -1,8 +1,8 @@
 use crate::connection::DbConnection;
 use crate::repositories::{
-    ContinuationRepository, DecisionRepository, OutboxRepository, ProviderRepository,
-    ReplanRepository, ResearchRepository, RunRepository, SessionRepository, SpanRepository,
-    TaskRepository, WorkflowRevisionRepository, WorkspaceRepository,
+    ContinuationRepository, DecisionRepository, FleetAutomationRepository, OutboxRepository,
+    ProviderRepository, ReplanRepository, ResearchRepository, RunRepository, SessionRepository,
+    SpanRepository, TaskRepository, WorkflowRevisionRepository, WorkspaceRepository,
 };
 use async_trait::async_trait;
 use custos_core::contracts::storage::{
@@ -36,6 +36,7 @@ pub struct SqliteTaskStore {
     workspace_repo: WorkspaceRepository,
     research_repo: ResearchRepository,
     provider_repo: ProviderRepository,
+    fleet_automation_repo: FleetAutomationRepository,
 }
 
 impl SqliteTaskStore {
@@ -54,6 +55,7 @@ impl SqliteTaskStore {
         let workspace_repo = WorkspaceRepository::new(db.clone());
         let research_repo = ResearchRepository::new(db.clone());
         let provider_repo = ProviderRepository::new(db.clone());
+        let fleet_automation_repo = FleetAutomationRepository::new(db.clone());
         let store = Self {
             db,
             task_repo,
@@ -68,6 +70,7 @@ impl SqliteTaskStore {
             workspace_repo,
             research_repo,
             provider_repo,
+            fleet_automation_repo,
         };
         Ok(store)
     }
@@ -87,6 +90,7 @@ impl SqliteTaskStore {
         let workspace_repo = WorkspaceRepository::new(db.clone());
         let research_repo = ResearchRepository::new(db.clone());
         let provider_repo = ProviderRepository::new(db.clone());
+        let fleet_automation_repo = FleetAutomationRepository::new(db.clone());
         let store = Self {
             db,
             task_repo,
@@ -101,6 +105,7 @@ impl SqliteTaskStore {
             workspace_repo,
             research_repo,
             provider_repo,
+            fleet_automation_repo,
         };
         store.seed_canonical_data_if_empty()?;
         Ok(store)
@@ -156,6 +161,10 @@ impl SqliteTaskStore {
 
     pub fn providers(&self) -> &ProviderRepository {
         &self.provider_repo
+    }
+
+    pub fn fleet_automation(&self) -> &FleetAutomationRepository {
+        &self.fleet_automation_repo
     }
 
     pub fn seed_canonical_data_if_empty(&self) -> Result<(), DomainError> {

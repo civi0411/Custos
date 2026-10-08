@@ -42,6 +42,14 @@ import {
   SaveSynthesisProposalParams,
   HandoffToCodingParams,
   HandoffToCodingResult,
+  BrowserSession,
+  BrowserTab,
+  BrowserPageSnapshot,
+  RemoteHostNode,
+  RegisterHostParams,
+  FleetExecReceipt,
+  HeadlessAutomationJob,
+  CreateHeadlessJobParams,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -733,6 +741,95 @@ export class DaemonClient {
 
   async executeSynthesisHandoff(params: HandoffToCodingParams): Promise<HandoffToCodingResult> {
     return this.request<HandoffToCodingResult>('v1.synthesis.handoff.execute', params);
+  }
+
+  // ==========================================
+  // Step 10: Scoped Browser Workbench API
+  // ==========================================
+  async listBrowserSessions(workspaceId?: string): Promise<BrowserSession[]> {
+    return this.request<BrowserSession[]>('v1.browser.sessions.list', {
+      workspace_id: workspaceId,
+    });
+  }
+
+  async createBrowserSession(name: string, workspaceId?: string): Promise<BrowserSession> {
+    return this.request<BrowserSession>('v1.browser.sessions.create', {
+      name,
+      workspace_id: workspaceId,
+    });
+  }
+
+  async listBrowserTabs(sessionId: string): Promise<BrowserTab[]> {
+    return this.request<BrowserTab[]>('v1.browser.tabs.list', {
+      session_id: sessionId,
+    });
+  }
+
+  async createBrowserTab(sessionId: string, url: string): Promise<BrowserTab> {
+    return this.request<BrowserTab>('v1.browser.tabs.create', {
+      session_id: sessionId,
+      url,
+    });
+  }
+
+  async navigateBrowserTab(tabId: string, url: string): Promise<BrowserTab> {
+    return this.request<BrowserTab>('v1.browser.tabs.navigate', {
+      tab_id: tabId,
+      url,
+    });
+  }
+
+  async snapshotBrowserTab(snapshot: BrowserPageSnapshot): Promise<{ saved: boolean; tab_id: string }> {
+    return this.request<{ saved: boolean; tab_id: string }>('v1.browser.tabs.snapshot', snapshot);
+  }
+
+  async closeBrowserTab(tabId: string): Promise<{ closed: boolean; tab_id: string }> {
+    return this.request<{ closed: boolean; tab_id: string }>('v1.browser.tabs.close', {
+      tab_id: tabId,
+    });
+  }
+
+  // ==========================================
+  // Step 10: Remote SSH Fleet API
+  // ==========================================
+  async listRemoteHosts(): Promise<RemoteHostNode[]> {
+    return this.request<RemoteHostNode[]>('v1.fleet.hosts.list', {});
+  }
+
+  async registerRemoteHost(params: RegisterHostParams): Promise<RemoteHostNode> {
+    return this.request<RemoteHostNode>('v1.fleet.hosts.register', params);
+  }
+
+  async pingRemoteHost(hostId: string): Promise<{ host_id: string; status: string; ping_ms?: number }> {
+    return this.request<{ host_id: string; status: string; ping_ms?: number }>('v1.fleet.hosts.ping', {
+      host_id: hostId,
+    });
+  }
+
+  async execFleet(hostId: string, command: string): Promise<FleetExecReceipt> {
+    return this.request<FleetExecReceipt>('v1.fleet.exec', {
+      host_id: hostId,
+      command,
+    });
+  }
+
+  // ==========================================
+  // Step 10: Headless Automation API
+  // ==========================================
+  async listHeadlessJobs(status?: string): Promise<HeadlessAutomationJob[]> {
+    return this.request<HeadlessAutomationJob[]>('v1.automation.jobs.list', {
+      status,
+    });
+  }
+
+  async createHeadlessJob(params: CreateHeadlessJobParams): Promise<HeadlessAutomationJob> {
+    return this.request<HeadlessAutomationJob>('v1.automation.jobs.create', params);
+  }
+
+  async runHeadlessJob(jobId: string): Promise<HeadlessAutomationJob> {
+    return this.request<HeadlessAutomationJob>('v1.automation.jobs.run', {
+      job_id: jobId,
+    });
   }
 }
 

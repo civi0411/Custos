@@ -24,7 +24,8 @@ import {
   FileCode,
   BookOpen,
   NotebookTabs,
-  Layers
+  Layers,
+  Server
 } from 'lucide-react';
 import type { OrcaTabId, ResourceTabsState } from '@/components/views/OrcaTabbedContainer';
 import { formatKeyCombo } from '@/lib/utils';
@@ -128,6 +129,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       case 'runs': return <FlaskConical className={cls} />;
       case 'synthesis': return <Layers className={cls} />;
       case 'artifacts': return <FileCode className={cls} />;
+      case 'fleet': return <Server className={cls} />;
       default: return <Globe className={cls} />;
     }
   };
