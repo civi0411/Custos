@@ -18,30 +18,77 @@ pub mod evidence;
 pub mod fact;
 pub mod ids;
 pub mod memory;
+pub mod note;
+pub mod notebook;
 pub mod oi;
 pub mod packet;
 pub mod repo;
 pub mod run;
+pub mod annotation;
+pub mod execution_record;
+pub mod provider_config;
+pub mod automation;
+pub mod browser;
+pub mod recipe;
+pub mod remote_fleet;
+pub mod review;
 pub mod session;
 pub mod span;
+pub mod synthesis;
 pub mod task;
+pub mod terminal;
 pub mod types;
 pub mod workflow;
 pub mod workspace;
+pub mod workspace_files;
 
 // Explicit re-exports of public domain surface (No glob *)
+pub use automation::{
+    CreateHeadlessJobParams, HeadlessAutomationJob, HeadlessJobStatus, HeadlessTaskSpec,
+    HeadlessTrigger, RunHeadlessJobResult,
+};
+pub use browser::{
+    validate_browser_url, BrowserConsoleEntry, BrowserNetworkRequest, BrowserPageSnapshot,
+    BrowserSession, BrowserTab, BrowserTabStatus, CaptureSnapshotParams, CreateTabParams,
+    NavigateTabParams,
+};
+pub use remote_fleet::{
+    FleetExecParams, FleetExecReceipt, FleetExecResult, RegisterHostParams, RemoteHostNode,
+    RemoteHostStatus, SshAuthMethod,
+};
+pub use annotation::{AnnotationRecord, AnnotationStatus, AnnotationTarget};
+pub use execution_record::{ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus};
+pub use note::{NoteRecord, NoteVersionRecord};
+pub use notebook::{
+    CellExecutionStatus, ExecuteCellParams, ExecuteCellResult, KernelStatus, NotebookCell,
+    NotebookCellType, NotebookKernelState,
+};
+pub use review::{
+    FindingSeverity, RecordReviewParams, ReviewFinding, ReviewMethod, ReviewStatus,
+    ReviewTargetType, ReviewerRecord,
+};
+pub use synthesis::{
+    ClaimHandoffSummary, HandoffToCodingParams, HandoffToCodingResult,
+    RecipeHandoffSummary, ResearchSynthesisProposal, SaveSynthesisProposalParams,
+    SynthesisProposalStatus,
+};
+pub use provider_config::{ClientApiKeyRecord, ProviderConfig};
+pub use recipe::{EnvironmentSpec, Recipe, RecipeInput};
 pub use action::{
     Action, ActionIntent, ActionIntentV1, ActionLifecycleState, Assurance, EffectAttempt,
     EffectStatus, RiskLevel,
 };
 pub use approval::{ApprovalDecision, ApprovalRequest, ApprovalStatus};
-pub use artifact::{ArtifactHandoff, ArtifactKind, ArtifactRef, HandoffConsent};
+pub use artifact::{
+    ArtifactHandoff, ArtifactKind, ArtifactLineageGraph, ArtifactRef, ArtifactSummary,
+    HandoffConsent, LineageGraphEdge, LineageGraphNode,
+};
 pub use authority::{
     ExecutionPermit, ExecutionReceipt, Grant, Permit, PermitId, PermitV1, Receipt, ReceiptStatus,
     RiskClass,
 };
 pub use budget::{Budget, Headroom, ReservationToken};
-pub use capability::CapabilityManifest;
+pub use capability::{CapabilityDescriptor, CapabilityGroup, CapabilityManifest, CapabilityStatus};
 pub use claim::{
     ArtifactLineageNode, Claim, ClaimEvidenceLink, ClaimGroundingLevel, EnvSnapshot,
     EvidenceRelation, PassageAnchor, PassageAnchorProposal, ResearchClaim, ResearchClaimProposal,
@@ -90,9 +137,18 @@ pub use task::{
     ContractEvidence, CriterionSpec, EvidenceKind, Task, TaskContract, TaskContractRevision,
     TaskContractV1, TaskRevision, TaskStatus,
 };
+pub use terminal::{
+    TerminalOutputChunk, TerminalSession, TerminalSessionId, TerminalSessionStatus,
+};
 pub use workflow::{
     RevisionNode, WorkflowIR, WorkflowNodeIR, WorkflowPlan, WorkflowRevision, WorkflowStep,
 };
 pub use workspace::{
-    ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceLineage, WorkspaceStatus,
+    DirtyManifest, ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceLineage,
+    WorkspaceStatus,
 };
+pub use workspace_files::{
+    WorkspaceDiffEntry, WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff,
+    WorkspaceFileEntry, WorkspaceFileTree, WriteWorkspaceFileParams,
+};
+

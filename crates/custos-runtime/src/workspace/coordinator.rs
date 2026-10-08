@@ -14,7 +14,8 @@ use tracing::{error, info, warn};
 
 use custos_core::contracts::workspace::{WorkspaceProvider, WorkspaceRepository};
 use custos_domain::{
-    DomainError, ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceLineage, WorkspaceStatus,
+    DirtyManifest, DomainError, ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceLineage,
+    WorkspaceStatus,
 };
 
 /// Request parameters for creating an ExecutionWorkspace
@@ -25,6 +26,8 @@ pub struct CreateWorkspaceRequest {
     pub path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lineage: Option<WorkspaceLineage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_task_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -76,6 +79,9 @@ impl WorkspaceCoordinator {
 
         if let Some(lineage) = req.lineage {
             ws = ws.with_lineage(lineage);
+        }
+        if let Some(owner) = req.owner_task_id {
+            ws = ws.with_owner_task(owner);
         }
         if let Some(metadata) = req.metadata {
             ws = ws.with_metadata(metadata);
@@ -133,11 +139,15 @@ impl WorkspaceCoordinator {
             }
         }
 
-        // Step 5: Mark Ready and persist
+        // Step 5: Capture initial Git / host baseline and mark Ready
+        let dirty = self.provider.inspect_dirty(&ws).await.unwrap_or_default();
+        if let Some(head) = dirty.head_commit.as_ref() {
+            ws = ws.with_base_commit_hash(head);
+        }
+        ws = ws.with_dirty_manifest(dirty);
+
         ws.transition_to(WorkspaceStatus::Ready)?;
-        self.repository
-            .update_workspace_status(&ws_id, WorkspaceStatus::Ready)
-            .await?;
+        self.repository.save_workspace(&ws).await?;
 
         info!(workspace_id = %ws_id, "ExecutionWorkspace successfully provisioned and Ready");
         Ok(ws)
@@ -156,13 +166,92 @@ impl WorkspaceCoordinator {
         self.repository.list_workspaces().await
     }
 
+    /// Inspects the dirty status and uncommitted changes of a workspace.
+    pub async fn inspect_dirty(
+        &self,
+        id: &WorkspaceId,
+    ) -> Result<DirtyManifest, DomainError> {
+        let ws = self.repository.get_workspace(id).await?.ok_or_else(|| {
+            DomainError::NotFound {
+                kind: "ExecutionWorkspace".into(),
+                id: id.to_string(),
+            }
+        })?;
+        self.provider.inspect_dirty(&ws).await
+    }
+
+    /// Recovers a workspace by verifying its host environment and reconciling status.
+    pub async fn recover_workspace(
+        &self,
+        id: &WorkspaceId,
+    ) -> Result<ExecutionWorkspace, DomainError> {
+        let mut ws = self.repository.get_workspace(id).await?.ok_or_else(|| {
+            DomainError::NotFound {
+                kind: "ExecutionWorkspace".into(),
+                id: id.to_string(),
+            }
+        })?;
+
+        let is_valid = self.provider.recover(&ws).await.unwrap_or(false);
+        if is_valid {
+            let dirty = self.provider.inspect_dirty(&ws).await.unwrap_or_default();
+            ws = ws.with_dirty_manifest(dirty);
+            if matches!(
+                ws.status,
+                WorkspaceStatus::Initializing | WorkspaceStatus::SetupFailed { .. }
+            ) {
+                ws.transition_to(WorkspaceStatus::Ready)?;
+                self.repository
+                    .update_workspace_status(id, WorkspaceStatus::Ready)
+                    .await?;
+            }
+            self.repository.save_workspace(&ws).await?;
+            info!(workspace_id = %id, "ExecutionWorkspace successfully recovered to Ready");
+        } else {
+            let failed_status = WorkspaceStatus::SetupFailed {
+                reason: "Physical directory or Git worktree is missing or corrupt".to_string(),
+            };
+            ws.status = failed_status.clone();
+            self.repository
+                .update_workspace_status(id, failed_status)
+                .await?;
+            warn!(workspace_id = %id, "ExecutionWorkspace recovery failed: host path invalid");
+        }
+        Ok(ws)
+    }
+
+    /// Reconciles all active workspaces against their physical host state.
+    pub async fn reconcile_all(&self) -> Result<Vec<ExecutionWorkspace>, DomainError> {
+        let all = self.repository.list_workspaces().await?;
+        let mut recovered = Vec::new();
+        for ws in all {
+            if !ws.is_archived() {
+                if let Ok(rec) = self.recover_workspace(&ws.id).await {
+                    recovered.push(rec);
+                }
+            }
+        }
+        Ok(recovered)
+    }
+
     /// Archives a workspace, optionally tearing down physical directories / worktrees.
     pub async fn archive_workspace(
         &self,
         id: &WorkspaceId,
         delete_physical: bool,
     ) -> Result<(), DomainError> {
-        info!(workspace_id = %id, delete_physical, "Archiving ExecutionWorkspace");
+        self.archive_workspace_with_force(id, delete_physical, false).await
+    }
+
+    /// Archives a workspace with dirty protection: if delete_physical is true and workspace is dirty,
+    /// returns an error unless force is explicitly true.
+    pub async fn archive_workspace_with_force(
+        &self,
+        id: &WorkspaceId,
+        delete_physical: bool,
+        force: bool,
+    ) -> Result<(), DomainError> {
+        info!(workspace_id = %id, delete_physical, force, "Archiving ExecutionWorkspace");
         let ws = self.repository.get_workspace(id).await?.ok_or_else(|| {
             DomainError::NotFound {
                 kind: "ExecutionWorkspace".into(),
@@ -171,6 +260,19 @@ impl WorkspaceCoordinator {
         })?;
 
         if delete_physical {
+            if !force {
+                let dirty = self.provider.inspect_dirty(&ws).await.unwrap_or_default();
+                if dirty.is_dirty {
+                    return Err(DomainError::Conflict(format!(
+                        "Workspace '{}' contains uncommitted changes ({} modified, {} untracked, {} deleted). Set force=true to discard.",
+                        ws.name,
+                        dirty.modified_files.len(),
+                        dirty.untracked_files.len(),
+                        dirty.deleted_files.len()
+                    )));
+                }
+            }
+
             if let Err(e) = self.provider.teardown(&ws).await {
                 warn!(
                     workspace_id = %id,
@@ -198,6 +300,8 @@ mod tests {
     struct MockWorkspaceProvider {
         should_fail_provision: bool,
         should_fail_setup: bool,
+        is_dirty: bool,
+        recover_result: bool,
         provision_calls: Mutex<usize>,
         teardown_calls: Mutex<usize>,
     }
@@ -207,6 +311,8 @@ mod tests {
             Self {
                 should_fail_provision: false,
                 should_fail_setup: false,
+                is_dirty: false,
+                recover_result: true,
                 provision_calls: Mutex::new(0),
                 teardown_calls: Mutex::new(0),
             }
@@ -241,6 +347,28 @@ mod tests {
             Ok(())
         }
 
+        async fn inspect_dirty(
+            &self,
+            _workspace: &ExecutionWorkspace,
+        ) -> Result<DirtyManifest, DomainError> {
+            Ok(DirtyManifest {
+                is_dirty: self.is_dirty,
+                modified_files: if self.is_dirty {
+                    vec!["crates/lib.rs".to_string()]
+                } else {
+                    vec![]
+                },
+                untracked_files: vec![],
+                deleted_files: vec![],
+                head_commit: Some("commit_abc123".to_string()),
+                checked_at: 1000,
+            })
+        }
+
+        async fn recover(&self, _workspace: &ExecutionWorkspace) -> Result<bool, DomainError> {
+            Ok(self.recover_result)
+        }
+
         async fn teardown(&self, _workspace: &ExecutionWorkspace) -> Result<(), DomainError> {
             *self.teardown_calls.lock().unwrap() += 1;
             Ok(())
@@ -260,6 +388,7 @@ mod tests {
             },
             path: "/tmp/exp-alpha".into(),
             lineage: None,
+            owner_task_id: None,
             metadata: Some(serde_json::json!({ "domain": "research" })),
             setup_script: Some("echo hello".into()),
         };
@@ -290,6 +419,7 @@ mod tests {
             },
             path: "/tmp/fail".into(),
             lineage: None,
+            owner_task_id: None,
             metadata: None,
             setup_script: None,
         };
@@ -321,6 +451,7 @@ mod tests {
             },
             path: "/tmp/archive-me".into(),
             lineage: None,
+            owner_task_id: None,
             metadata: None,
             setup_script: None,
         };
@@ -331,5 +462,74 @@ mod tests {
         let updated = coordinator.get_workspace(&ws.id).await.unwrap().unwrap();
         assert_eq!(updated.status, WorkspaceStatus::Archived);
         assert_eq!(*provider.teardown_calls.lock().unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_coordinator_dirty_protection_on_archive() {
+        let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+        let mut mock = MockWorkspaceProvider::new();
+        mock.is_dirty = true;
+        let provider = Arc::new(mock);
+        let coordinator = WorkspaceCoordinator::new(store.clone(), provider.clone());
+
+        let req = CreateWorkspaceRequest {
+            name: "dirty-worktree".into(),
+            kind: WorkspaceKind::Folder {
+                path: "/tmp/dirty-ws".into(),
+            },
+            path: "/tmp/dirty-ws".into(),
+            lineage: None,
+            owner_task_id: Some("task_123".into()),
+            metadata: None,
+            setup_script: None,
+        };
+
+        let ws = coordinator.create_workspace(req).await.unwrap();
+        assert_eq!(ws.owner_task_id.as_deref(), Some("task_123"));
+
+        // Archiving with delete_physical = true must be rejected when workspace has uncommitted changes
+        let err = coordinator.archive_workspace(&ws.id, true).await;
+        assert!(err.is_err());
+        assert!(err.unwrap_err().to_string().contains("contains uncommitted changes"));
+
+        // Passing force = true explicitly bypasses dirty guard and archives
+        let res = coordinator
+            .archive_workspace_with_force(&ws.id, true, true)
+            .await;
+        assert!(res.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_coordinator_recovery_and_reconciliation() {
+        let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+        let provider = Arc::new(MockWorkspaceProvider::new());
+        let coordinator = WorkspaceCoordinator::new(store.clone(), provider.clone());
+
+        let req = CreateWorkspaceRequest {
+            name: "recovering-ws".into(),
+            kind: WorkspaceKind::Folder {
+                path: "/tmp/rec-ws".into(),
+            },
+            path: "/tmp/rec-ws".into(),
+            lineage: None,
+            owner_task_id: None,
+            metadata: None,
+            setup_script: None,
+        };
+
+        let ws = coordinator.create_workspace(req).await.unwrap();
+
+        // 1. Inspect dirty manifest
+        let manifest = coordinator.inspect_dirty(&ws.id).await.unwrap();
+        assert_eq!(manifest.head_commit.as_deref(), Some("commit_abc123"));
+
+        // 2. Recover workspace
+        let recovered = coordinator.recover_workspace(&ws.id).await.unwrap();
+        assert_eq!(recovered.status, WorkspaceStatus::Ready);
+        assert!(recovered.dirty_manifest.is_some());
+
+        // 3. Reconcile all
+        let all_recovered = coordinator.reconcile_all().await.unwrap();
+        assert_eq!(all_recovered.len(), 1);
     }
 }

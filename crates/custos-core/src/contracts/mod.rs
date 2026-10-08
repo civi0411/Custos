@@ -23,8 +23,10 @@ pub mod memory;
 pub mod oi;
 pub mod sandbox;
 pub mod storage;
+pub mod terminal;
 pub mod workflow;
 pub mod workspace;
+pub mod workspace_files;
 
 pub use harness::{
     AgentRuntimePort, CostVisibility, HarnessExecutionResult, HarnessProfile, ToolMediationLevel,
@@ -39,5 +41,7 @@ pub use storage::{
     CasPort, DecisionPort, EffectLedgerPort, OutboxEntry, OutboxPort, OutboxStatus, ReplanPort,
     RunPort, StoragePort, WorkflowRevisionPort,
 };
+pub use terminal::TerminalPort;
 pub use workflow::WorkflowPort;
 pub use workspace::{WorkspaceProvider, WorkspaceRepository};
+pub use workspace_files::WorkspaceFilesPort;

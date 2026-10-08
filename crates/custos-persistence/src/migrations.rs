@@ -45,6 +45,27 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!(
         "../migrations/0017_research_lineage_and_claims.sql"
     ))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0018_research_recipes_and_annotations.sql"
+    ))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0019_providers_and_keys.sql"
+    ))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0020_notes_and_artifact_registry.sql"
+    ))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0021_notebook_cells_and_kernels.sql"
+    ))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0022_reviewer_records.sql"
+    ))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0023_research_synthesis_proposals.sql"
+    ))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0024_browser_fleet_automation.sql"
+    ))?;
 
     Ok(())
 }

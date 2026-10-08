@@ -40,6 +40,8 @@ lru = { workspace = true }
 rand = { workspace = true }
 bytes = { workspace = true }
 minijinja = "2.7"
+libc = { workspace = true }
+tempfile = { workspace = true }
 
 [dev-dependencies]
-tempfile.workspace = true
+

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { BookOpen, Copy, Check } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { BookOpen, Copy, Check, ArrowLeft } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 
 interface ApiEndpoint {
@@ -45,6 +46,7 @@ const endpoints: ApiEndpoint[] = [
 ];
 
 export const DocsPage: React.FC = () => {
+  const navigate = useNavigate();
   const { showToast } = useAppContext();
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
@@ -56,68 +58,76 @@ export const DocsPage: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-canvas overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
+    <div className="flex-1 flex flex-col h-full bg-canvas overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 text-fg-editor font-sans">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-surface-border">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-muted">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/studio')}
+            className="p-1.5 rounded-lg bg-surface-2 hover:bg-surface-3 border border-border-default text-fg-muted hover:text-fg-editor transition flex items-center gap-1.5 text-xs"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Studio</span>
+          </button>
+          <div className="h-4 w-[1px] bg-border-muted" />
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-brand-blue/10 border border-brand-blue/30 text-brand-blue">
+            <div className="w-9 h-9 rounded-xl bg-surface-2 border border-border-default flex items-center justify-center workbench-accent">
               <BookOpen className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-white tracking-tight">Custos Local API Documentation</h1>
-              <p className="text-xs text-neutral-400">REST & IPC specification for local IDE agents, CLI, and desktop clients</p>
+              <h1 className="text-base sm:text-lg font-semibold tracking-[-0.02em] text-fg-editor">Custos Local API Documentation</h1>
+              <p className="text-xs text-fg-muted mt-0.5">REST & IPC specification for local IDE agents, CLI, and desktop clients</p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono text-neutral-400 bg-surface-card px-3 py-1.5 rounded-lg border border-surface-border">
+        <div className="flex items-center gap-2 text-xs font-mono text-fg-muted bg-surface-1 px-3 py-1.5 rounded-lg border border-border-default">
           <span>Base URL:</span>
-          <span className="text-brand-cyan">http://127.0.0.1:4140</span>
+          <span className="workbench-accent font-semibold">http://127.0.0.1:4140</span>
         </div>
       </div>
 
       {/* Endpoints List */}
       <div className="space-y-4">
         {endpoints.map((ep, idx) => (
-          <div key={ep.path} className="p-5 bg-surface-card border border-surface-border rounded-xl space-y-3">
+          <div key={ep.path} className="p-5 bg-surface-1 border border-border-default rounded-xl space-y-3 shadow-xs">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2.5">
                 <span
-                  className={`text-[11px] font-mono font-bold px-2 py-0.5 rounded ${
+                  className={`text-[11px] font-mono font-semibold px-2 py-0.5 rounded border ${
                     ep.method === 'GET'
-                      ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30'
-                      : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                      ? 'bg-surface-2 text-fg-editor border-border-default'
+                      : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30'
                   }`}
                 >
                   {ep.method}
                 </span>
-                <span className="font-mono text-sm font-semibold text-white">{ep.path}</span>
+                <span className="font-mono text-sm font-semibold text-fg-editor">{ep.path}</span>
               </div>
 
               <button
                 onClick={() => handleCopy(ep.curl, idx)}
-                className="px-2.5 py-1 bg-surface-elevated hover:bg-surface-hover border border-surface-border rounded-md text-xs text-neutral-300 transition flex items-center gap-1.5"
+                className="px-2.5 py-1 bg-surface-2 hover:bg-surface-3 border border-border-default rounded-md text-xs text-fg-editor transition flex items-center gap-1.5"
               >
-                {copiedIndex === idx ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedIndex === idx ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5 text-fg-muted" />}
                 <span>{copiedIndex === idx ? 'Copied' : 'Copy cURL'}</span>
               </button>
             </div>
 
-            <p className="text-xs text-neutral-300">{ep.desc}</p>
+            <p className="text-xs text-fg-muted">{ep.desc}</p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
               {ep.requestBody && (
                 <div>
-                  <span className="text-[11px] font-mono text-neutral-500 block mb-1">Request Payload</span>
-                  <pre className="bg-canvas/60 p-3 rounded-lg border border-surface-border text-[11px] font-mono text-neutral-300 overflow-x-auto">
+                  <span className="text-[11px] font-mono text-fg-subtle block mb-1">Request Payload</span>
+                  <pre className="bg-surface-0 p-3 rounded-lg border border-border-muted text-[11px] font-mono text-fg-editor overflow-x-auto">
                     {ep.requestBody}
                   </pre>
                 </div>
               )}
               <div className={ep.requestBody ? '' : 'md:col-span-2'}>
-                <span className="text-[11px] font-mono text-neutral-500 block mb-1">Response (200 OK)</span>
-                <pre className="bg-canvas/60 p-3 rounded-lg border border-surface-border text-[11px] font-mono text-emerald-400/90 overflow-x-auto">
+                <span className="text-[11px] font-mono text-fg-subtle block mb-1">Response (200 OK)</span>
+                <pre className="bg-surface-0 p-3 rounded-lg border border-border-muted text-[11px] font-mono text-emerald-500/90 overflow-x-auto">
                   {ep.response}
                 </pre>
               </div>

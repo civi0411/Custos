@@ -1,18 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useAppContext } from '@/context/AppContext';
 import {
   SlidersHorizontal,
   ChevronDown,
-  LayoutGrid,
   Settings,
-  ShieldCheck,
-  MessageSquare,
-  Code2,
-  FlaskConical,
-  X
+  ShieldCheck
 } from 'lucide-react';
 import { Session } from '@/types';
-import { formatKeyCombo } from '@/lib/utils';
 
 export interface SidebarTool {
   icon: React.ElementType;
@@ -66,126 +60,73 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   onSelectSession,
   newTaskLabel,
   newTaskIcon: NewTaskIcon,
-  newTaskIconColor = 'text-[#9e9e9e]',
+  newTaskIconColor = 'text-fg-muted',
   onNewSession,
   tools,
   sessionsTitle,
   emptySessionsMessage,
-  projectActiveColor = 'bg-[#cc785c]',
+  projectActiveColor = 'bg-accent',
   avatarColor,
   avatarText,
-  avatarTextColor = 'text-white',
+  avatarTextColor = 'text-fg-on-emphasis',
   onShowToast,
   onOpenSettings,
-  onOpenAppGrid: _onOpenAppGrid,
-  onSwitchMode,
   isSidebarCollapsed
 }) => {
-  const navigate = useNavigate();
+  const { openSettings } = useAppContext();
+  const handleOpenSettings = () => {
+    setIsProfileDropdownOpen(false);
+    if (onOpenSettings) {
+      onOpenSettings();
+    } else {
+      openSettings('general');
+    }
+  };
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
-  const [isAppGridOpen, setIsAppGridOpen] = useState(false);
-
   const profileRef = useRef<HTMLDivElement>(null);
-  const appGridRef = useRef<HTMLDivElement>(null);
 
-  // Close popovers on outside click
+  // Close popover on outside click
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as Node;
       if (profileRef.current && !profileRef.current.contains(target)) {
         setIsProfileDropdownOpen(false);
       }
-      if (appGridRef.current && !appGridRef.current.contains(target)) {
-        setIsAppGridOpen(false);
-      }
     };
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  const apps = [
-    {
-      title: 'Claude Chat',
-      desc: 'Cowork & conversation',
-      icon: MessageSquare,
-      color: 'text-[#cc785c]',
-      bg: 'bg-[#cc785c]/10',
-      action: () => {
-        onSwitchMode ? onSwitchMode('chat') : navigate('/studio');
-        setIsAppGridOpen(false);
-      }
-    },
-    {
-      title: 'Codex ADE',
-      desc: 'Orca engineering copilot',
-      icon: Code2,
-      color: 'text-[#58a6ff]',
-      bg: 'bg-[#58a6ff]/10',
-      action: () => {
-        onSwitchMode ? onSwitchMode('code') : navigate('/studio');
-        setIsAppGridOpen(false);
-      }
-    },
-    {
-      title: 'Science Lab',
-      desc: 'Literature & claim evidence',
-      icon: FlaskConical,
-      color: 'text-[#a371f7]',
-      bg: 'bg-[#a371f7]/10',
-      action: () => {
-        onSwitchMode ? onSwitchMode('research') : navigate('/studio');
-        setIsAppGridOpen(false);
-      }
-    },
-    {
-      title: 'Preferences & Settings',
-      desc: 'API keys, models, security & cache',
-      icon: Settings,
-      color: 'text-[#8b949e]',
-      bg: 'bg-[#30363d]/50',
-      action: () => {
-        if (onOpenSettings) onOpenSettings();
-        else navigate('/settings');
-        setIsAppGridOpen(false);
-      }
-    }
-  ];
-
   if (isSidebarCollapsed) return null;
 
   return (
-    <aside className="w-64 bg-[#161b22] border-r border-[#262c36] flex flex-col shrink-0 z-20 relative">
+    <aside className="w-64 bg-surface-1 border-r border-border-muted flex flex-col shrink-0 z-20 relative select-none">
       <div className="flex flex-col min-h-0 flex-1 p-3">
-        {sessions.some((session) => session.source === 'demo') && (
-          <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[10px] leading-snug text-amber-200">
-            Demo data · actions are not connected to the live daemon
-          </div>
-        )}
-        {/* + New Button */}
+        {/* + New Task Button */}
         <button
           onClick={onNewSession}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl bg-[#21262d] hover:bg-[#2d333b] text-white text-[13px] font-medium transition shadow-sm border border-[#262c36]/60 mb-3 group"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-2 hover:bg-surface-3 text-fg-editor text-[13px] font-medium transition border border-border-default mb-3 group"
         >
-          <NewTaskIcon className={`w-4 h-4 ${newTaskIconColor} group-hover:text-white transition`} />
+          <NewTaskIcon className={`w-4 h-4 ${newTaskIconColor} group-hover:text-fg-editor transition`} />
           <span>{newTaskLabel}</span>
         </button>
 
         {/* Tools Nav Links */}
         {tools.length > 0 && (
-          <nav className="space-y-0.5 mb-4 border-b border-[#262c36]/60 pb-4">
+          <nav className="space-y-0.5 mb-3 border-b border-border-muted pb-3">
             {tools.map((tool, idx) => {
               const Icon = tool.icon;
               return (
                 <button
                   key={idx}
                   onClick={tool.onClick}
-                  className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[13px] text-[#b3b3b3] hover:text-white hover:bg-[#262626] transition"
+                  className="w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[12.5px] text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <Icon className={`w-4 h-4 ${tool.iconColor || 'text-[#8a8a8a]'}`} />
-                    <span>{tool.label}</span>
+                  <div className="flex items-center gap-2.5 truncate min-w-0">
+                    <Icon className={`w-4 h-4 shrink-0 ${tool.iconColor || 'text-fg-muted'}`} />
+                    <span className="truncate">{tool.label}</span>
                   </div>
-                  {tool.rightElement && tool.rightElement}
+                  {tool.rightElement && <span className="shrink-0 ml-1">{tool.rightElement}</span>}
                 </button>
               );
             })}
@@ -193,11 +134,11 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         )}
 
         {/* Section: Sessions */}
-        <div className="flex items-center justify-between px-3 py-1 text-[11px] font-medium text-[#7d7d7d] mb-1">
+        <div className="flex items-center justify-between px-3 py-1 text-[11px] font-medium text-fg-subtle mb-1">
           <span>{sessionsTitle}</span>
           <button
             onClick={() => { if (onShowToast) onShowToast('Filter sessions'); }}
-            className="p-1 hover:text-[#b3b3b3] transition rounded"
+            className="p-1 hover:text-fg-editor transition rounded text-fg-muted"
             title="Filter"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -206,39 +147,71 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-0.5 pr-1 no-scrollbar min-h-0 text-[12.5px]">
           {sessions.length === 0 ? (
-            <div className="px-3 py-4 text-center text-[#5a5a5a] text-[12px]">
+            <div className="px-3 py-4 text-center text-fg-subtle text-[12px]">
               {emptySessionsMessage}
             </div>
           ) : (
             sessions.map((s) => {
               const isActive = s.id === activeSessionId;
+              const isChild = (s as any).isChild || (s as any).parentSessionId;
+              const worktreeBranch = (s as any).worktreeBranch || null;
+              const isRunning = s.taskStatus === 'running' || s.taskStatus === 'active';
+              const needsAttention = (s as any).needsAttention || s.taskStatus === 'blocked';
+
               const packColor =
-                s.pack === 'engineering' || s.pack === 'coding' ? '#3fb950' :
+                s.pack === 'engineering' || s.pack === 'coding' ? '#58a6ff' :
                 s.pack === 'research' ? '#a371f7' :
-                s.pack === 'assistant' ? '#cc785c' : '#58a6ff';
+                s.pack === 'assistant' ? '#cc785c' : '#3fb950';
+
               return (
                 <div
                   key={s.id}
                   onClick={() => onSelectSession(s.id)}
-                  className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg cursor-pointer transition group ${
+                  className={`flex items-center justify-between px-3 py-1.5 rounded-lg cursor-pointer transition group ${
+                    isChild ? 'ml-3 pl-4 border-l border-border-muted text-[11.5px]' : ''
+                  } ${
                     isActive
-                      ? 'bg-[#21262d] text-white font-medium'
-                      : 'text-[#8b949e] hover:text-[#e6edf3] hover:bg-[#1c2128]'
+                      ? 'bg-surface-2 text-fg-editor font-medium border border-border-default shadow-xs'
+                      : 'text-fg-muted hover:text-fg-editor hover:bg-surface-2'
                   }`}
                 >
-                  <span
-                    className="w-1.5 h-1.5 rounded-full shrink-0"
-                    style={{ background: isActive ? packColor : '#555555' }}
-                  />
-                  <span className="truncate">{s.title}</span>
-                  {s.taskStatus && s.taskStatus !== 'draft' && (
-                    <span
-                      className="shrink-0 text-[9.5px] px-1 py-0.2 rounded font-sans hidden group-hover:block"
-                      style={{ background: '#1c1c1c', color: packColor, border: `1px solid ${packColor}33` }}
-                    >
-                      {s.taskStatus}
+                  <div className="flex items-center gap-2 min-w-0">
+                    {/* Status Dot */}
+                    <span className="relative flex h-2 w-2 shrink-0">
+                      {isRunning ? (
+                        <>
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                        </>
+                      ) : needsAttention ? (
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400" />
+                      ) : (
+                        <span
+                          className="relative inline-flex rounded-full h-1.5 w-1.5"
+                          style={{ background: isActive ? packColor : 'var(--color-fg-subtle)' }}
+                        />
+                      )}
                     </span>
-                  )}
+
+                    {isChild && <span className="text-fg-subtle text-[10px] font-mono">↳</span>}
+                    <span className="truncate">{s.title}</span>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                    {worktreeBranch && (
+                      <span className="text-[9px] font-mono px-1 py-0.2 rounded bg-canvas-inset text-blue-500 border border-border-muted opacity-80 group-hover:opacity-100">
+                        {worktreeBranch}
+                      </span>
+                    )}
+                    {s.taskStatus && s.taskStatus !== 'draft' && (
+                      <span
+                        className="text-[9.5px] px-1 py-0.2 rounded font-mono hidden group-hover:block"
+                        style={{ background: 'var(--color-canvas-inset)', color: packColor, border: `1px solid ${packColor}33` }}
+                      >
+                        {s.taskStatus}
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })
@@ -247,19 +220,19 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
         {/* Project switcher */}
         {projectNames.length > 1 && (
-          <div className="mt-3 pt-3 border-t border-[#262c36]/60">
-            <div className="text-[10px] font-semibold text-[#5a5a5a] px-2 mb-1">Switch Project</div>
+          <div className="mt-3 pt-3 border-t border-border-muted">
+            <div className="text-[10px] font-semibold text-fg-subtle px-2 mb-1 uppercase tracking-wider">Switch Project</div>
             {projectNames.map((pName) => (
               <button
                 key={pName}
                 onClick={() => onSelectProject(pName)}
                 className={`w-full flex items-center gap-2 px-2.5 py-1 rounded-lg text-[11.5px] text-left transition ${
                   pName === currentProject
-                    ? 'bg-[#21262d] text-white font-medium'
-                    : 'text-[#7d7d7d] hover:text-[#e0e0e0] hover:bg-[#1c2128]'
+                    ? 'bg-surface-2 text-fg-editor font-medium border border-border-default'
+                    : 'text-fg-muted hover:text-fg-editor hover:bg-surface-2'
                 }`}
               >
-                <span className={`w-1.5 h-1.5 rounded-full ${pName === currentProject ? projectActiveColor : 'bg-neutral-600'}`} />
+                <span className={`w-1.5 h-1.5 rounded-full ${pName === currentProject ? projectActiveColor : 'bg-neutral-500'}`} />
                 <span className="truncate">{pName}</span>
               </button>
             ))}
@@ -267,37 +240,34 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         )}
       </div>
 
-      {/* Bottom Profile Footer */}
-      <div className="p-3 border-t border-[#262c36]/60 flex items-center justify-between relative shrink-0">
+      {/* Bottom Profile & Settings Footer */}
+      <div className="p-2.5 border-t border-border-muted flex items-center justify-between relative shrink-0">
         <div ref={profileRef} className="relative">
           <div
-            onClick={() => {
-              setIsProfileDropdownOpen(!isProfileDropdownOpen);
-              setIsAppGridOpen(false);
-            }}
-            className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition"
+            onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
+            className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition p-1 rounded-md hover:bg-surface-2"
           >
-            <div className={`w-7 h-7 rounded-full ${avatarColor} ${avatarTextColor} font-bold text-[11px] flex items-center justify-center`}>
+            <div className={`w-6 h-6 rounded-full ${avatarColor} ${avatarTextColor} font-bold text-[10px] flex items-center justify-center shrink-0`}>
               {avatarText}
             </div>
-            <div className="flex items-center gap-1">
-              <span className="text-[13px] font-medium text-[#e0e0e0]">Chí Vĩ</span>
-              <ChevronDown className={`w-3 h-3 text-[#7d7d7d] transition-transform ${isProfileDropdownOpen ? 'rotate-180' : ''}`} />
+            <div className="flex items-center gap-1 min-w-0">
+              <span className="text-[12.5px] font-medium text-fg-editor truncate max-w-[120px]">Chí Vĩ</span>
+              <ChevronDown className={`w-3 h-3 text-fg-subtle transition-transform ${isProfileDropdownOpen ? 'rotate-180' : ''}`} />
             </div>
           </div>
 
           {/* Profile Popover Menu */}
           {isProfileDropdownOpen && (
-            <div className="absolute left-0 bottom-full mb-2 w-64 rounded-2xl bg-[#1c2128] border border-[#30363d] shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-100">
+            <div className="absolute left-0 bottom-full mb-2 w-64 rounded-xl bg-surface-1 border border-border-default shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-100">
               {/* User Header */}
-              <div className="p-2 border-b border-[#30363d]/70 mb-1.5">
+              <div className="p-2 border-b border-border-muted mb-1.5">
                 <div className="flex items-center gap-2.5">
                   <div className={`w-8 h-8 rounded-full ${avatarColor} ${avatarTextColor} font-bold text-xs flex items-center justify-center shrink-0`}>
                     {avatarText}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-xs font-semibold text-white truncate">Chí Vĩ</div>
-                    <div className="text-[11px] text-[#8b949e] truncate">Lead Architect • Sovereign</div>
+                    <div className="text-xs font-semibold text-fg-editor truncate">Chí Vĩ</div>
+                    <div className="text-[11px] text-fg-muted truncate">Lead Architect • Sovereign</div>
                   </div>
                 </div>
                 <div className="mt-2 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10.5px]">
@@ -309,21 +279,18 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               {/* Action Links */}
               <div className="space-y-0.5 text-xs">
                 <button
-                  onClick={() => {
-                    setIsProfileDropdownOpen(false);
-                    onOpenSettings ? onOpenSettings() : navigate('/settings');
-                  }}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[#c9d1d9] hover:text-white hover:bg-[#2d333b] transition"
+                  onClick={handleOpenSettings}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
                 >
-                  <Settings className="w-3.5 h-3.5 text-[#8b949e]" />
-                  <span>Preferences & Settings ({formatKeyCombo({ ctrlOrCmd: true, key: ',' })})</span>
+                  <Settings className="w-3.5 h-3.5 text-fg-muted" />
+                  <span>Preferences & Settings (⌘,)</span>
                 </button>
               </div>
 
               {/* Footer status */}
-              <div className="mt-2 pt-2 border-t border-[#30363d]/70 px-2.5 py-1 flex items-center justify-between text-[10.5px] text-[#8b949e]">
-                <span>Daemon 127.0.0.1:4140</span>
-                <span className="flex items-center gap-1 text-emerald-400 font-sans">
+              <div className="mt-2 pt-2 border-t border-border-muted px-2.5 py-1 flex items-center justify-between text-[10.5px] text-fg-muted">
+                <span>Daemon 127.0.0.1:3000</span>
+                <span className="flex items-center gap-1 text-emerald-400 font-mono">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                   online
                 </span>
@@ -331,66 +298,15 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             </div>
           )}
         </div>
-        
-        {/* App Grid Launcher */}
-        <div ref={appGridRef} className="relative">
-          <button
-            onClick={() => {
-              setIsAppGridOpen(!isAppGridOpen);
-              setIsProfileDropdownOpen(false);
-            }}
-            className={`p-1.5 rounded-lg transition ${
-              isAppGridOpen
-                ? 'bg-[#2b2b2b] text-white shadow-sm'
-                : 'text-[#7d7d7d] hover:text-white hover:bg-[#2b2b2b]'
-            }`}
-            title="Custos App Launcher"
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </button>
 
-          {/* App Grid Popover */}
-          {isAppGridOpen && (
-            <div className="absolute right-0 bottom-full mb-2 w-72 rounded-2xl bg-[#1c2128] border border-[#30363d] shadow-2xl p-3 z-50 animate-in fade-in zoom-in-95 duration-100">
-              <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#30363d]/70">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-white">
-                  <LayoutGrid className="w-3.5 h-3.5 text-[#58a6ff]" />
-                  <span>Custos SADE Suite</span>
-                </div>
-                <button
-                  onClick={() => setIsAppGridOpen(false)}
-                  className="p-1 text-[#8b949e] hover:text-white rounded"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* Apps 3x3 Grid */}
-              <div className="grid grid-cols-3 gap-2">
-                {apps.map((app) => {
-                  const Icon = app.icon;
-                  return (
-                    <div
-                      key={app.title}
-                      onClick={app.action}
-                      className="p-2 rounded-xl bg-[#22272e] hover:bg-[#2d333b] border border-transparent hover:border-[#444c56] cursor-pointer transition flex flex-col items-center text-center group"
-                    >
-                      <div className={`w-8 h-8 rounded-lg ${app.bg} flex items-center justify-center mb-1.5 group-hover:scale-105 transition-transform`}>
-                        <Icon className={`w-4 h-4 ${app.color}`} />
-                      </div>
-                      <span className="text-[11px] font-medium text-white truncate w-full">{app.title}</span>
-                      <span className="text-[9.5px] text-[#8b949e] truncate w-full mt-0.5">{app.desc}</span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-2.5 pt-2 border-t border-[#30363d]/70 text-center">
-                <span className="text-[10px] text-[#8b949e]">Custos Sovereign Workbenches</span>
-              </div>
-            </div>
-          )}
-        </div>
+        {/* Direct Settings Trigger */}
+        <button
+          onClick={handleOpenSettings}
+          className="p-1.5 rounded-md text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
+          title="Preferences & Settings (⌘,)"
+        >
+          <Settings className="w-3.5 h-3.5" />
+        </button>
       </div>
     </aside>
   );

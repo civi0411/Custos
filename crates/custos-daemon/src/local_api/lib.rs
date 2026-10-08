@@ -4,8 +4,11 @@
 
 use async_trait::async_trait;
 use custos_domain::{
-    ExecutionWorkspace, Session, SessionJournalEntry, Task, TaskContract, TaskStatus,
-    VerificationClaim, WorkspaceKind, WorkspaceLineage,
+    ExecutionWorkspace, ExecuteCellParams, ExecuteCellResult, NotebookCell, NotebookKernelState,
+    RecordReviewParams, ReviewerRecord, ReviewTargetType,
+    Session, SessionJournalEntry, Task, TaskContract, TaskStatus,
+    VerificationClaim, WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff,
+    WorkspaceFileTree, WorkspaceKind, WorkspaceLineage,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -32,6 +35,17 @@ pub const METHOD_WORKSPACES_CREATE: &str = "v1.workspaces.create";
 pub const METHOD_WORKSPACES_GET: &str = "v1.workspaces.get";
 pub const METHOD_WORKSPACES_LIST: &str = "v1.workspaces.list";
 pub const METHOD_WORKSPACES_ARCHIVE: &str = "v1.workspaces.archive";
+pub const METHOD_WORKSPACES_INSPECT_DIRTY: &str = "v1.workspaces.inspect_dirty";
+pub const METHOD_WORKSPACES_RECOVER: &str = "v1.workspaces.recover";
+
+pub const METHOD_WORKSPACE_FILES_TREE: &str = "v1.workspace.files.tree";
+pub const METHOD_WORKSPACE_FILES_READ: &str = "v1.workspace.files.read";
+pub const METHOD_WORKSPACE_FILES_WRITE: &str = "v1.workspace.files.write";
+pub const METHOD_WORKSPACE_DIFF: &str = "v1.workspace.diff";
+pub const METHOD_WORKSPACE_FILE_DIFF: &str = "v1.workspace.diff.file";
+pub const METHOD_WORKSPACE_GIT_STAGE: &str = "v1.workspace.git.stage";
+pub const METHOD_WORKSPACE_GIT_UNSTAGE: &str = "v1.workspace.git.unstage";
+pub const METHOD_WORKSPACE_GIT_DISCARD: &str = "v1.workspace.git.discard";
 
 pub const METHOD_RESEARCH_SOURCES_LIST: &str = "v1.research.sources.list";
 pub const METHOD_RESEARCH_SOURCES_SAVE: &str = "v1.research.sources.save";
@@ -43,6 +57,65 @@ pub const METHOD_RESEARCH_RUNS_LIST: &str = "v1.research.runs.list";
 pub const METHOD_RESEARCH_RUNS_SAVE: &str = "v1.research.runs.save";
 pub const METHOD_RESEARCH_LINEAGE_LIST: &str = "v1.research.lineage.list";
 pub const METHOD_RESEARCH_HANDOFF_CODING: &str = "v1.research.handoff_coding";
+pub const METHOD_CAPABILITIES_LIST: &str = "v1.capabilities.list";
+pub const METHOD_CAPABILITIES_GET: &str = "v1.capabilities.get";
+pub const METHOD_TERMINAL_SPAWN: &str = "v1.terminal.spawn";
+pub const METHOD_TERMINAL_WRITE: &str = "v1.terminal.write";
+pub const METHOD_TERMINAL_RESIZE: &str = "v1.terminal.resize";
+pub const METHOD_TERMINAL_READ: &str = "v1.terminal.read";
+pub const METHOD_TERMINAL_TERMINATE: &str = "v1.terminal.terminate";
+pub const METHOD_TERMINAL_LIST: &str = "v1.terminal.list";
+pub const METHOD_TERMINAL_GET: &str = "v1.terminal.get";
+
+pub const METHOD_HARNESS_LIST: &str = "v1.harness.list";
+pub const METHOD_HARNESS_GET: &str = "v1.harness.get";
+pub const METHOD_HARNESS_RUN_NATIVE: &str = "v1.harness.run_native";
+pub const METHOD_HARNESS_CANCEL: &str = "v1.harness.cancel";
+pub const METHOD_HARNESS_STEER: &str = "v1.harness.steer";
+
+pub const METHOD_ARTIFACTS_LIST: &str = "v1.artifacts.list";
+pub const METHOD_ARTIFACTS_GET: &str = "v1.artifacts.get";
+pub const METHOD_ARTIFACTS_RECORD_LINEAGE: &str = "v1.artifacts.record_lineage";
+pub const METHOD_ARTIFACTS_LINEAGE_GRAPH: &str = "v1.artifacts.lineage_graph";
+pub const METHOD_NOTES_LIST: &str = "v1.notes.list";
+pub const METHOD_NOTES_GET: &str = "v1.notes.get";
+pub const METHOD_NOTES_SAVE: &str = "v1.notes.save";
+pub const METHOD_NOTES_HISTORY: &str = "v1.notes.history";
+
+pub const METHOD_NOTEBOOK_CELLS_LIST: &str = "v1.notebook.cells.list";
+pub const METHOD_NOTEBOOK_CELLS_SAVE: &str = "v1.notebook.cells.save";
+pub const METHOD_NOTEBOOK_EXECUTE: &str = "v1.notebook.execute";
+pub const METHOD_NOTEBOOK_INTERRUPT: &str = "v1.notebook.interrupt";
+pub const METHOD_NOTEBOOK_RESET: &str = "v1.notebook.reset";
+pub const METHOD_NOTEBOOK_STATUS: &str = "v1.notebook.status";
+
+pub const METHOD_REVIEWS_LIST: &str = "v1.reviews.list";
+pub const METHOD_REVIEWS_GET: &str = "v1.reviews.get";
+pub const METHOD_REVIEWS_RECORD: &str = "v1.reviews.record";
+pub const METHOD_REVIEWS_MARK_STALE: &str = "v1.reviews.mark_stale";
+
+pub const METHOD_SYNTHESIS_PROPOSALS_LIST: &str = "v1.synthesis.proposals.list";
+pub const METHOD_SYNTHESIS_PROPOSALS_GET: &str = "v1.synthesis.proposals.get";
+pub const METHOD_SYNTHESIS_PROPOSALS_SAVE: &str = "v1.synthesis.proposals.save";
+pub const METHOD_SYNTHESIS_HANDOFF_EXECUTE: &str = "v1.synthesis.handoff.execute";
+
+pub const METHOD_BROWSER_SESSIONS_LIST: &str = "v1.browser.sessions.list";
+pub const METHOD_BROWSER_SESSIONS_CREATE: &str = "v1.browser.sessions.create";
+pub const METHOD_BROWSER_TABS_LIST: &str = "v1.browser.tabs.list";
+pub const METHOD_BROWSER_TABS_CREATE: &str = "v1.browser.tabs.create";
+pub const METHOD_BROWSER_TABS_NAVIGATE: &str = "v1.browser.tabs.navigate";
+pub const METHOD_BROWSER_TABS_SNAPSHOT: &str = "v1.browser.tabs.snapshot";
+pub const METHOD_BROWSER_TABS_CLOSE: &str = "v1.browser.tabs.close";
+
+pub const METHOD_FLEET_HOSTS_LIST: &str = "v1.fleet.hosts.list";
+pub const METHOD_FLEET_HOSTS_REGISTER: &str = "v1.fleet.hosts.register";
+pub const METHOD_FLEET_HOSTS_PING: &str = "v1.fleet.hosts.ping";
+pub const METHOD_FLEET_EXEC: &str = "v1.fleet.exec";
+
+pub const METHOD_AUTOMATION_JOBS_LIST: &str = "v1.automation.jobs.list";
+pub const METHOD_AUTOMATION_JOBS_CREATE: &str = "v1.automation.jobs.create";
+pub const METHOD_AUTOMATION_JOBS_RUN: &str = "v1.automation.jobs.run";
+
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiRequest {
@@ -214,9 +287,56 @@ pub struct ArchiveWorkspaceApiRequest {
     pub workspace_id: String,
     #[serde(default)]
     pub delete_physical: bool,
+    #[serde(default)]
+    pub force: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct InspectWorkspaceDirtyApiRequest {
+    pub workspace_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RecoverWorkspaceApiRequest {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GetCapabilityApiRequest {
+    pub capability_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetHarnessRequest {
+    pub harness_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunNativeHarnessRequest {
+    pub harness_id: String,
+    pub instruction: String,
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+    #[serde(default)]
+    pub cwd: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CancelHarnessRunRequest {
+    pub harness_id: String,
+    pub run_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SteerHarnessRunRequest {
+    pub harness_id: String,
+    pub run_id: String,
+    pub guidance: String,
 }
 
 /// Abstract transport for communicating with the Custos Daemon
+
 #[async_trait]
 pub trait ApiTransport: Send + Sync {
     async fn send_request(&self, req: ApiRequest) -> Result<ApiResponse, String>;
@@ -256,7 +376,12 @@ impl ProcessTransport {
         let mut cmd = tokio::process::Command::new(daemon_binary);
         if let Some(db) = db_path {
             cmd.env("CUSTOS_DB_PATH", db);
+            if let Some(parent) = std::path::Path::new(db).parent() {
+                cmd.env("CUSTOS_PROFILE_DIR", parent);
+            }
         }
+        cmd.env("CUSTOS_BIND", "127.0.0.1:0");
+        cmd.env("CUSTOS_HTTP_BIND", "127.0.0.1:0");
         cmd.stdin(std::process::Stdio::piped());
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::inherit());
@@ -788,6 +913,7 @@ impl LocalApiClient {
         let params = serde_json::to_value(ArchiveWorkspaceApiRequest {
             workspace_id: workspace_id.to_string(),
             delete_physical,
+            force: false,
         })
         .map_err(|e| e.to_string())?;
         let req = ApiRequest::new(req_id, METHOD_WORKSPACES_ARCHIVE, params);
@@ -799,6 +925,599 @@ impl LocalApiClient {
 
         Ok(())
     }
+
+    pub async fn get_workspace_file_tree(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        relative_dir: Option<&str>,
+        max_depth: Option<usize>,
+    ) -> Result<WorkspaceFileTree, String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "relative_dir": relative_dir,
+            "max_depth": max_depth,
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_FILES_TREE, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse WorkspaceFileTree: {e}"))
+    }
+
+    pub async fn read_workspace_file(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        path: &str,
+        max_bytes: Option<usize>,
+    ) -> Result<WorkspaceFileContent, String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "path": path,
+            "max_bytes": max_bytes,
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_FILES_READ, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse WorkspaceFileContent: {e}"))
+    }
+
+    pub async fn write_workspace_file(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        path: &str,
+        content: &str,
+        create_parents: Option<bool>,
+        overwrite: Option<bool>,
+    ) -> Result<WorkspaceFileContent, String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "path": path,
+            "content": content,
+            "create_parents": create_parents.unwrap_or(true),
+            "overwrite": overwrite.unwrap_or(true),
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_FILES_WRITE, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse WorkspaceFileContent: {e}"))
+    }
+
+    pub async fn get_workspace_diff(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        staged: Option<bool>,
+    ) -> Result<WorkspaceDiffSummary, String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "staged": staged,
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_DIFF, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse WorkspaceDiffSummary: {e}"))
+    }
+
+    pub async fn get_workspace_file_diff(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        path: &str,
+        staged: Option<bool>,
+    ) -> Result<WorkspaceFileDiff, String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "path": path,
+            "staged": staged,
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_FILE_DIFF, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse WorkspaceFileDiff: {e}"))
+    }
+
+    pub async fn stage_workspace_file(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        path: &str,
+    ) -> Result<(), String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "path": path,
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_GIT_STAGE, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        Ok(())
+    }
+
+    pub async fn unstage_workspace_file(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        path: &str,
+    ) -> Result<(), String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "path": path,
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_GIT_UNSTAGE, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        Ok(())
+    }
+
+    pub async fn discard_workspace_file(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        path: &str,
+    ) -> Result<(), String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "path": path,
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_GIT_DISCARD, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        Ok(())
+    }
+
+    pub async fn list_harnesses(
+        &self,
+        req_id: &str,
+    ) -> Result<Vec<custos_core::contracts::harness::HarnessDescriptor>, String> {
+        let req = ApiRequest::new(req_id, METHOD_HARNESS_LIST, serde_json::json!({}));
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse harnesses list: {e}"))
+    }
+
+    pub async fn get_harness(
+        &self,
+        req_id: &str,
+        harness_id: &str,
+    ) -> Result<custos_core::contracts::harness::HarnessDescriptor, String> {
+        let params = serde_json::json!({ "harness_id": harness_id });
+        let req = ApiRequest::new(req_id, METHOD_HARNESS_GET, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse harness descriptor: {e}"))
+    }
+
+    pub async fn run_native_harness(
+        &self,
+        req_id: &str,
+        request: RunNativeHarnessRequest,
+    ) -> Result<custos_core::contracts::harness::HarnessExecutionResult, String> {
+        let params = serde_json::to_value(request).map_err(|e| e.to_string())?;
+        let req = ApiRequest::new(req_id, METHOD_HARNESS_RUN_NATIVE, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse run native result: {e}"))
+    }
+
+    pub async fn list_artifacts(
+        &self,
+        req_id: &str,
+    ) -> Result<Vec<custos_domain::ArtifactSummary>, String> {
+        let req = ApiRequest::new(req_id, METHOD_ARTIFACTS_LIST, serde_json::json!({}));
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse artifact list: {e}"))
+    }
+
+    pub async fn get_artifact(
+        &self,
+        req_id: &str,
+        path: &str,
+    ) -> Result<ArtifactDetailResponse, String> {
+        let req = ApiRequest::new(req_id, METHOD_ARTIFACTS_GET, serde_json::json!({ "artifact_path": path }));
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse artifact detail: {e}"))
+    }
+
+    pub async fn get_artifact_lineage_graph(
+        &self,
+        req_id: &str,
+        filter_path: Option<&str>,
+    ) -> Result<custos_domain::ArtifactLineageGraph, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_ARTIFACTS_LINEAGE_GRAPH,
+            serde_json::json!({ "artifact_path": filter_path }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse lineage graph: {e}"))
+    }
+
+    pub async fn list_notes(
+        &self,
+        req_id: &str,
+        session_id: Option<&str>,
+    ) -> Result<Vec<custos_domain::NoteRecord>, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_NOTES_LIST,
+            serde_json::json!({ "session_id": session_id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse notes list: {e}"))
+    }
+
+    pub async fn get_note(
+        &self,
+        req_id: &str,
+        id: &str,
+    ) -> Result<Option<custos_domain::NoteRecord>, String> {
+        let req = ApiRequest::new(req_id, METHOD_NOTES_GET, serde_json::json!({ "id": id }));
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse note: {e}"))
+    }
+
+    pub async fn save_note(
+        &self,
+        req_id: &str,
+        params: SaveNoteParams,
+    ) -> Result<custos_domain::NoteRecord, String> {
+        let val = serde_json::to_value(params).map_err(|e| e.to_string())?;
+        let req = ApiRequest::new(req_id, METHOD_NOTES_SAVE, val);
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse saved note: {e}"))
+    }
+
+    pub async fn list_note_versions(
+        &self,
+        req_id: &str,
+        note_id: &str,
+    ) -> Result<Vec<custos_domain::NoteVersionRecord>, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_NOTES_HISTORY,
+            serde_json::json!({ "note_id": note_id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse note versions: {e}"))
+    }
+
+    pub async fn list_notebook_cells(
+        &self,
+        req_id: &str,
+        session_id: &str,
+    ) -> Result<Vec<NotebookCell>, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_NOTEBOOK_CELLS_LIST,
+            serde_json::json!({ "session_id": session_id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse notebook cells: {e}"))
+    }
+
+    pub async fn save_notebook_cells(
+        &self,
+        req_id: &str,
+        session_id: &str,
+        cells: Vec<NotebookCell>,
+    ) -> Result<(), String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_NOTEBOOK_CELLS_SAVE,
+            serde_json::json!({ "session_id": session_id, "cells": cells }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        Ok(())
+    }
+
+    pub async fn execute_notebook_cell(
+        &self,
+        req_id: &str,
+        params: ExecuteCellParams,
+    ) -> Result<ExecuteCellResult, String> {
+        let val = serde_json::to_value(params).map_err(|e| e.to_string())?;
+        let req = ApiRequest::new(req_id, METHOD_NOTEBOOK_EXECUTE, val);
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse execution result: {e}"))
+    }
+
+    pub async fn interrupt_notebook_kernel(
+        &self,
+        req_id: &str,
+        session_id: &str,
+    ) -> Result<(), String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_NOTEBOOK_INTERRUPT,
+            serde_json::json!({ "session_id": session_id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        Ok(())
+    }
+
+    pub async fn reset_notebook_kernel(
+        &self,
+        req_id: &str,
+        session_id: &str,
+    ) -> Result<NotebookKernelState, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_NOTEBOOK_RESET,
+            serde_json::json!({ "session_id": session_id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse kernel state: {e}"))
+    }
+
+    pub async fn get_notebook_kernel_status(
+        &self,
+        req_id: &str,
+        session_id: &str,
+    ) -> Result<NotebookKernelState, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_NOTEBOOK_STATUS,
+            serde_json::json!({ "session_id": session_id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse kernel state: {e}"))
+    }
+
+    pub async fn list_reviews(
+        &self,
+        req_id: &str,
+        target_type: Option<ReviewTargetType>,
+        target_id: Option<&str>,
+    ) -> Result<Vec<ReviewerRecord>, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_REVIEWS_LIST,
+            serde_json::json!({
+                "target_type": target_type,
+                "target_id": target_id,
+            }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse reviews: {e}"))
+    }
+
+    pub async fn get_review(
+        &self,
+        req_id: &str,
+        id: &str,
+    ) -> Result<Option<ReviewerRecord>, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_REVIEWS_GET,
+            serde_json::json!({ "id": id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse review: {e}"))
+    }
+
+    pub async fn record_review(
+        &self,
+        req_id: &str,
+        params: RecordReviewParams,
+    ) -> Result<ReviewerRecord, String> {
+        let val = serde_json::to_value(params).map_err(|e| e.to_string())?;
+        let req = ApiRequest::new(req_id, METHOD_REVIEWS_RECORD, val);
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse recorded review: {e}"))
+    }
+
+    pub async fn mark_review_stale(
+        &self,
+        req_id: &str,
+        id: &str,
+    ) -> Result<(), String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_REVIEWS_MARK_STALE,
+            serde_json::json!({ "id": id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        Ok(())
+    }
+
+    pub async fn list_synthesis_proposals(
+        &self,
+        req_id: &str,
+    ) -> Result<Vec<custos_domain::ResearchSynthesisProposal>, String> {
+        let req = ApiRequest::new(req_id, METHOD_SYNTHESIS_PROPOSALS_LIST, serde_json::json!({}));
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse proposals: {e}"))
+    }
+
+    pub async fn get_synthesis_proposal(
+        &self,
+        req_id: &str,
+        id: &str,
+    ) -> Result<Option<custos_domain::ResearchSynthesisProposal>, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_SYNTHESIS_PROPOSALS_GET,
+            serde_json::json!({ "id": id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse proposal: {e}"))
+    }
+
+    pub async fn save_synthesis_proposal(
+        &self,
+        req_id: &str,
+        params: custos_domain::SaveSynthesisProposalParams,
+    ) -> Result<custos_domain::ResearchSynthesisProposal, String> {
+        let val = serde_json::to_value(params).map_err(|e| e.to_string())?;
+        let req = ApiRequest::new(req_id, METHOD_SYNTHESIS_PROPOSALS_SAVE, val);
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse saved proposal: {e}"))
+    }
+
+    pub async fn execute_synthesis_handoff(
+        &self,
+        req_id: &str,
+        params: custos_domain::HandoffToCodingParams,
+    ) -> Result<custos_domain::HandoffToCodingResult, String> {
+        let val = serde_json::to_value(params).map_err(|e| e.to_string())?;
+        let req = ApiRequest::new(req_id, METHOD_SYNTHESIS_HANDOFF_EXECUTE, val);
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse handoff result: {e}"))
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtifactDetailResponse {
+    pub artifact_path: String,
+    pub latest_version: u32,
+    pub latest_content_hash: String,
+    pub versions: Vec<custos_domain::ArtifactLineageNode>,
+    pub annotations: Vec<custos_domain::AnnotationRecord>,
+    pub content: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SaveNoteParams {
+    pub id: Option<String>,
+    pub title: String,
+    pub content: String,
+    pub session_id: Option<String>,
+    pub task_id: Option<String>,
+    pub tags: Option<Vec<String>>,
 }
 
 #[cfg(test)]

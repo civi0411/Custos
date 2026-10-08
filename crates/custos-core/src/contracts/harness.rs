@@ -125,6 +125,18 @@ pub struct HarnessExecutionResult {
     pub mediation_level: ToolMediationLevel,
 }
 
+/// Descriptive metadata and capability profile of a registered agent harness.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HarnessDescriptor {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub binary_path: String,
+    pub is_available: bool,
+    pub profile: HarnessProfile,
+}
+
+
 /// Agent Runtime Port (Deep Dissection of Agent Loop & Native Harnesses)
 ///
 /// Dissects the legacy upstream execution loop into a strictly governed contract.

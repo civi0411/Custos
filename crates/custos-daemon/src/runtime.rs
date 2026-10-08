@@ -1,5 +1,5 @@
 use crate::api::LocalApiDispatcher;
-use custos_adapters::harness::ClaudeCodeHarnessAdapter;
+use custos_adapters::harness::{ClaudeCodeHarnessAdapter, HarnessRegistry};
 use custos_adapters::providers::{
     AntigravityProvider, ClaudeProvider, CodexProvider, FakeProvider, LocalModelProvider,
 };
@@ -30,9 +30,12 @@ pub struct CustosRuntime {
     pub sandbox: Arc<dyn SandboxPort>,
     pub model: Arc<dyn ModelPort>,
     pub harness: Arc<dyn AgentRuntimePort>,
+    pub harnesses: Arc<HarnessRegistry>,
     pub workflow: Arc<dyn WorkflowPort>,
     pub lease_manager: Arc<custos_runtime::workflow::WorkspaceLeaseManager>,
     pub workspace_coordinator: Arc<custos_runtime::workspace::WorkspaceCoordinator>,
+    pub terminal_coordinator: Arc<custos_runtime::TerminalCoordinator>,
+    pub python_coordinator: Arc<custos_runtime::PythonKernelCoordinator>,
 }
 
 impl CustosRuntime {
@@ -45,7 +48,8 @@ impl CustosRuntime {
         let store = Arc::new(SqliteTaskStore::new(database_path)?);
 
         // Crash Recovery Reconcile (Gate 3): transition any InFlight effects to Uncertain on startup
-        let _ = store.outbox().reconcile_on_startup();
+        store.outbox().reconcile_on_startup()?;
+        store.seed_canonical_data_if_empty()?;
         let task_service = Arc::new(TaskService::new(store.clone()));
         let session_manager = Arc::new(SessionManager::with_store(store.clone()));
         let bridge_service = Arc::new(BridgeService::new(
@@ -68,13 +72,27 @@ impl CustosRuntime {
             _ => Arc::new(FakeProvider::new("fake")),
         };
 
-        // Sovereign Coding Harness Adapter (Claude Code CLI / sub-process agent runtime)
+        // Sovereign Coding Harness Adapter & Multi-Harness Registry
         let lease_manager = Arc::new(custos_runtime::workflow::WorkspaceLeaseManager::new(
             workspace_root.clone(),
         ));
 
-        let harness: Arc<dyn AgentRuntimePort> =
-            Arc::new(ClaudeCodeHarnessAdapter::new(workspace_root));
+        let mut harness_reg = HarnessRegistry::default_with_workspace(workspace_root.clone());
+        let governed = Arc::new(custos_runtime::agent::runtime_port::GovernedAgentRuntime::new(
+            model.clone(),
+            "Custos Governed Agent Runtime",
+            vec![],
+        ));
+        harness_reg.register(
+            governed,
+            "Governed Agent Runtime",
+            "Custos kernel-mediated autonomous agent runtime with ExecutionPermits.",
+            "internal",
+        );
+        let harnesses = Arc::new(harness_reg);
+        let harness = harnesses
+            .get("claude-code")
+            .unwrap_or_else(|| Arc::new(ClaudeCodeHarnessAdapter::new(workspace_root)));
 
         let workflow = Arc::new(
             TaskRuntime::new()
@@ -93,6 +111,8 @@ impl CustosRuntime {
             store.clone(),
             workspace_provider,
         ));
+        let terminal_coordinator = Arc::new(custos_runtime::TerminalCoordinator::new());
+        let python_coordinator = Arc::new(custos_runtime::PythonKernelCoordinator::new());
 
         let local_api = Arc::new(
             LocalApiDispatcher::new(
@@ -102,7 +122,12 @@ impl CustosRuntime {
             )
             .with_workflow(workflow.clone())
             .with_workspace(workspace_coordinator.clone())
-            .with_research(Arc::new(store.research().clone())),
+            .with_terminal(terminal_coordinator.clone())
+            .with_python_kernel(python_coordinator.clone())
+            .with_research(Arc::new(store.research().clone()))
+            .with_providers(Arc::new(store.providers().clone()))
+            .with_fleet_automation(Arc::new(store.fleet_automation().clone()))
+            .with_harnesses(harnesses.clone()),
         );
 
         Ok(Self {
@@ -115,9 +140,12 @@ impl CustosRuntime {
             sandbox,
             model,
             harness,
+            harnesses,
             workflow,
             lease_manager,
             workspace_coordinator,
+            terminal_coordinator,
+            python_coordinator,
         })
     }
 }

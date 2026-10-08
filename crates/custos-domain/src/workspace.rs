@@ -116,6 +116,18 @@ pub struct WorkspaceLineage {
     pub head_commit: Option<String>,
 }
 
+/// Detailed manifest of uncommitted changes and HEAD status in a workspace.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct DirtyManifest {
+    pub is_dirty: bool,
+    pub modified_files: Vec<String>,
+    pub untracked_files: Vec<String>,
+    pub deleted_files: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_commit: Option<String>,
+    pub checked_at: i64,
+}
+
 /// Sovereign ExecutionWorkspace entity
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExecutionWorkspace {
@@ -126,6 +138,12 @@ pub struct ExecutionWorkspace {
     pub path: String,
     pub status: WorkspaceStatus,
     pub lineage: WorkspaceLineage,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner_task_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_commit_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dirty_manifest: Option<DirtyManifest>,
     pub metadata: serde_json::Value,
     pub created_at: String,
     pub updated_at: String,
@@ -146,6 +164,9 @@ impl ExecutionWorkspace {
             path: path.into(),
             status: WorkspaceStatus::Initializing,
             lineage: WorkspaceLineage::default(),
+            owner_task_id: None,
+            base_commit_hash: None,
+            dirty_manifest: None,
             metadata: serde_json::json!({}),
             created_at: now.clone(),
             updated_at: now,
@@ -154,6 +175,21 @@ impl ExecutionWorkspace {
 
     pub fn with_lineage(mut self, lineage: WorkspaceLineage) -> Self {
         self.lineage = lineage;
+        self
+    }
+
+    pub fn with_owner_task(mut self, task_id: impl Into<String>) -> Self {
+        self.owner_task_id = Some(task_id.into());
+        self
+    }
+
+    pub fn with_base_commit_hash(mut self, hash: impl Into<String>) -> Self {
+        self.base_commit_hash = Some(hash.into());
+        self
+    }
+
+    pub fn with_dirty_manifest(mut self, manifest: DirtyManifest) -> Self {
+        self.dirty_manifest = Some(manifest);
         self
     }
 
