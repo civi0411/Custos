@@ -63,6 +63,9 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!(
         "../migrations/0023_research_synthesis_proposals.sql"
     ))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0024_browser_fleet_automation.sql"
+    ))?;
 
     Ok(())
 }

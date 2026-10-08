@@ -1193,3 +1193,45 @@ Cross-profile không copy transcript mặc định. `Open resource in…` giữ 
 6. Fleet/remote/automation: bounded multi-worker, SSH/server và schedule sau local crash/recovery gates.
 
 Mỗi packet có headless API test và Desktop projection test trên cùng IDs. Không merge pane nếu backend chỉ có timer/mock. Không merge backend capability nếu UI không hiện offline/degraded/unknown. “Đủ lõi” được đo bằng end-to-end jobs và recovery, không bằng số folder copy từ upstream.
+
+## 26. Interaction fidelity và hòa giải `origin/dev`
+
+### 26.1. Phạm vi kiểm chứng, không đồng nhất file với tính năng
+
+Đối chiếu trực tiếp checkout OrCa trong `../orca` và Open Science Desktop tại `../open-science` (`04b64817c12e7fdbe0e052bfa1aeaf8802feecde`). OrCa local không còn `.git`; SHA trong source study là provenance ghi trước khi xóa, không tái kiểm được tại checkout này. Inventory hoặc có component trên đĩa không chứng minh user journey chạy được trong Custos. Mọi nguồn bên ngoài chỉ cung cấp pattern; Custos phải có API, policy, persistence, UI và failure fixture của chính mình. Đối chiếu `origin/dev` là remote-tracking ref đã fetch trong lượt audit này; trước merge thực tế phải fetch lại.
+
+| Interaction từ mã nguồn | Hành vi đáng học | Mapping Custos | Trạng thái/gate hiện tại |
+|---|---|---|---|
+| OrCa `AgentSessionContinuationDialog` + `launch-agent-session-continuation` | Chọn agent đích và focused/full context; giữ session gốc | `ContinuationManifest`/`ContextReceipt`, preview trong shell, launch attempt qua daemon | Target; kiểm idempotency, missing context và native hidden state không chuyển. |
+| OrCa `AgentKanbanBoard` + dashboard snapshot | Needs You/Working/Done/Idle, acknowledge khác reveal; shared drawer/pop-out projection | `Attention` projection từ approvals, uncertain effects, workers; reveal bằng stable IDs | UI có attention entry; chưa được gọi parity với board nguồn khi ack/reveal/liveness chưa có e2e. |
+| OrCa worktree space + tab/terminal affinity | Resource theo host/worktree, lifecycle create→review→cleanup | `ExecutionWorkspace`, resource refs, PTY coordinator, SCM diff | Một phần ở `vi`; cần kiểm dirty/base hash, restart, release owner và remote unknown. |
+| OrCa launch executor + structured adapters | Requested/actual mode, refusal trước commit, `operation_unknown` sau commit | `AgentRuntimePort` capability matrix + durable launch attempt | Codex/Goose adapters hiện có; chưa coi native parity chỉ vì file tồn tại. |
+| OrCa orchestration task/dispatch/mailbox | Atomic ready claim, assignee identity, message provenance, unresolved dispatch | Runtime scheduler + narrow persistence transitions, Task evidence ở core/pack | Target rộng; cần crash/fencing, không bê schema OrCa. |
+| OrCa browser/automation/remote | Browser resource, scheduled headless run và SSH host độc lập UI | Capability adapters + scoped grant, per-run attempt, reconcile | Step 10 là dirty WIP domain/persistence; không hứa browser isolation từ URL string validation hay remote stop khi mất contact. |
+| Open Science `PaneTree`/`GroupTabs`/`PresentedArtifactPane` | Split/group/drag, artifact ở cạnh chat, zoom/close không tái chạy | `ResourceInstance` + local pane layout; artifact ID/version từ daemon | Có resource tabs ở `vi`; thiếu parity về stable resource placement/close confirmation. |
+| Open Science `SelectionActions` | Quote/Explain/Remember ngay từ selection có ranh giới message | Reader/text selection candidate → anchor/claim proposal/memory command riêng | Current Literature pane có selection nhưng chưa được tự tuyên bố semantic support. |
+| Open Science `TrajectoryPane` + `SubagentActivity` | Nhìn turn/model/tool timeline và worker activity | Event projection + stream correlation, không thêm journal thứ hai | Target; duration chỉ khi có timestamps, workers không tự pass Task. |
+| Open Science notebook + run/provenance + ReviewerCard | Kernel state, observed output, lineage, structured findings | Notebook coordinator, run/artifact/assessment; inspector ghi missing edges | Một phần đã có trong `vi`; cần restart/negative output/reviewer-traceability fixtures. |
+| Open Science settings/compute/connectors | Hiện dependency, data flow, local/remote compute lựa chọn rõ | Capability status + egress/grant + adapter conformance | Chọn lọc theo user job; không auto-install MCP packages hoặc mở remote gateway mặc định. |
+| Open Science typed viewers + browser/computer use | PDF, molecule, genome, FITS/mesh và platform-assisted interaction nằm ở các renderer/adapter riêng | Resource renderer registry ở desktop; OS/browser attempts ở adapters, policy ở core | Không tạo crate cho từng file type; mỗi renderer phải có source/version/unknown state và mỗi computer-use action phải có assurance profile. |
+
+### 26.2. Conflict ledger giữa `vi` và `origin/dev`
+
+Tại thời điểm kiểm: `vi=f7c15b6`, `origin/dev=7e7487c`, merge base `ff3b67b`. `vi` có Step 7–9 và desktop shell/workbench rewrite; `origin/dev` có domain additions vốn phần lớn đã đi vào `vi`, cộng một UI rewrite cạnh tranh. `git merge-tree` báo va chạm ở `Custos.md`, domain `artifact.rs/lib.rs`, catalog và hơn hai mươi file desktop, gồm layout/settings/studio, research panes, AppHeader/sidebars/context. Đây là **potential merge conflicts**, chưa phải merge đang dở; working tree `vi` còn Step 10 uncommitted ở domain/persistence. Không dùng `git merge -X theirs`, xóa component đã thay bằng `ChatSection/Header/ResearchView`, hoặc stash/reset Step 10 để ép merge.
+
+| Vùng va chạm | Quyết định tích hợp | Lý do và gate |
+|---|---|---|
+| `crates/custos-domain/src/{artifact,lib}.rs` | Merge cấu trúc theo field/export, giữ các contract đã có ở `vi`; kiểm `cargo check/test` | Không chọn cả file theo một bên; `vi` đã hấp thụ nhiều domain commits từ `dev`, còn Step 10 đang thêm exports. |
+| `ui/desktop/src/components/research/{ClaimsMatrix,Literature,NotebookWorkspace,RunsLedger}Pane.tsx` | Giữ live API + explicit empty/error của `vi`; chỉ lấy interaction cải tiến sau khi nối API thật | `origin/dev` đưa `MOCK_CLAIMS`, `MOCK_SOURCES`, `MOCK_RUNS`, `MOCK_NOTEBOOK_CELLS` và fallback im lặng vào production, gồm claims/papers/benchmarks không có nguồn thực. Không được merge các literals đó. |
+| `AppHeader`, `WorkspaceSidebar`, `studio/page`, `layout`, `AppContext`, views | Giữ `vi` resource canvas + three-lens routing làm spine; map từng affordance của `dev` sang command/pane hiện hữu | `dev` đổi/đặt lại tên views và bỏ các controls resource/attention của `vi`. Merge theo semantic event contract, không theo JSX hunk. |
+| `settings`, modals và palette | Giữ daemon-backed settings, accessibility và capability status; port skin/spacing nếu không thay semantics | Không fallback success hoặc tạo control đẹp nhưng không có command. |
+| CSS/tokens và lockfile | Một token system, một dependency graph; kiểm build sau reconcile | Không ghép hai theme bằng cách giữ cả hard-coded màu và CSS vars. Lockfile phải đi theo package manifests, không chọn nguyên file theo nhánh. |
+
+### 26.3. Trình tự vá conflict không mất WIP
+
+1. Ghi lại `git status --short`, dirty manifest và test baseline. Fetch lại `origin/dev`, kiểm `merge-base` và `merge-tree` read-only. Không ghi lên Step 10 trước khi tác giả ổn định hoặc có worktree/commit an toàn do nhóm chủ động tạo.
+2. Hòa giải backend contracts trước: so từng field/domain export, migration index và SDK DTO; không copy trùng symbol. `cargo check --workspace --offline` rồi focused tests/migration tests.
+3. Hòa giải frontend theo journey: chat→resource→agent continuation; research source→anchor→claim→run→artifact→review; attention→reveal/ack; settings→real effect. Với mỗi view dùng `vi` live path làm baseline, lấy UI affordance từ `dev` bằng patch chọn lọc. Cấm mock fallback trong live components.
+4. Chạy `pnpm --dir ui/desktop build`, focused UI tests nếu có, và e2e Local API. Kiểm empty/offline/unknown, restart, close/reopen pane không tự chạy effect. Chỉ sau đó mới thực hiện merge có review trên branch phù hợp; không tự commit/push.
+
+**Release gate:** một merge xanh về cú pháp không đủ. Một Research claim bôi chọn phải bắt đầu ở trạng thái chưa kiểm, không được xuất hiện như verified; một failure tải nguồn phải hiện lỗi thay vì paper giả; một agent launch có thể đã commit phải giữ `unknown` và không tạo lượt thứ hai. Đây là ba fixture bắt buộc để gọi conflict đã vá về hành vi.

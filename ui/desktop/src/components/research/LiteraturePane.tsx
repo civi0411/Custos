@@ -6,11 +6,9 @@ import {
   ShieldCheck,
   Plus,
   FileText,
-  Highlighter,
-  Sparkles,
-  ChevronRight
+  Highlighter
 } from 'lucide-react';
-import { SourceRecord, ResearchClaim } from '@/types/research';
+import { SourceRecord, PassageAnchor } from '@/types/research';
 import { daemonClient } from '@/api/daemon_client';
 
 interface LiteraturePaneProps {
@@ -38,40 +36,39 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({ onShowToast }) =
 
   const handleTextSelect = () => {
     const selection = window.getSelection();
-    if (selection && selection.toString().trim().length > 5) {
-      setSelectedText(selection.toString().trim());
+    const excerpt = selection?.toString().trim() ?? '';
+    if (excerpt.length > 5 && activeSource?.abstractText?.includes(excerpt)) {
+      setSelectedText(excerpt);
     }
   };
 
-  const handleCreateClaim = async () => {
-    if (!selectedText || !activeSource) return;
+  const handleSavePassage = async () => {
+    if (!selectedText || !activeSource?.abstractText) return;
+
+    const startOffset = activeSource.abstractText.indexOf(selectedText);
+    if (startOffset < 0 || activeSource.abstractText.indexOf(selectedText, startOffset + 1) >= 0) {
+      onShowToast?.('Passage location is ambiguous. Select a unique excerpt from the abstract.');
+      return;
+    }
 
     try {
-      const claim: ResearchClaim = {
-        id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `claim-${Date.now()}`,
-        statement: selectedText,
-        level: 'L0_UNGROUNDED',
-        confidenceScore: 0.88,
-        invariants: ['INV-CLAIM-ACCURACY', 'INV-NO-CONTRADICTION'],
-        evidenceLinks: [
-          {
-            passageAnchorId: activeSource.id,
-            sourceTitle: activeSource.title,
-            exactText: selectedText,
-            relation: 'SUPPORTS',
-            rationale: `Direct literature extract from ${activeSource.title}`,
-            verifiedBy: 'deterministic_engine'
-          }
-        ],
-        createdAt: Date.now()
+      const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(selectedText));
+      const passageHash = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+      const anchor: PassageAnchor = {
+        id: crypto.randomUUID(),
+        sourceId: activeSource.id,
+        sourceTitle: activeSource.title,
+        sectionTitle: 'Abstract',
+        startOffset,
+        endOffset: startOffset + selectedText.length,
+        exactText: selectedText,
+        passageHash
       };
-
-      await daemonClient.saveResearchClaim(claim);
-
-      onShowToast?.('Extracted passage anchored to Claims Matrix');
+      await daemonClient.saveResearchAnchor(anchor);
+      onShowToast?.('Passage saved. Claim support has not been assessed.');
       setSelectedText('');
-    } catch {
-      onShowToast?.('Error extracting claim from passage');
+    } catch (err) {
+      onShowToast?.(`Could not save passage: ${String(err)}`);
     }
   };
 
@@ -127,7 +124,10 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({ onShowToast }) =
             return (
               <div
                 key={source.id}
-                onClick={() => setSelectedSourceId(source.id)}
+                onClick={() => {
+                  setSelectedSourceId(source.id);
+                  setSelectedText('');
+                }}
                 className={`group p-3 rounded-xl border cursor-pointer transition text-xs ${
                   isSelected
                     ? 'bg-surface-2 border-border-default text-fg-editor shadow-xs'
@@ -198,12 +198,10 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({ onShowToast }) =
               </div>
             </div>
             <button
-              onClick={handleCreateClaim}
+              onClick={handleSavePassage}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-3 hover:bg-surface-2 border border-border-default text-fg-editor text-xs font-medium transition shrink-0"
             >
-              <Sparkles size={13} className="workbench-accent" />
-              <span>Anchor to Matrix</span>
-              <ChevronRight size={13} />
+              <span>Save passage</span>
             </button>
           </div>
         )}
@@ -211,7 +209,6 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({ onShowToast }) =
         {/* Document Content Viewport */}
         <div className="flex-1 overflow-y-auto relative no-scrollbar">
           <div
-            onMouseUp={handleTextSelect}
             className="p-8 select-text max-w-3xl mx-auto w-full space-y-8 relative z-10 font-sans"
           >
             {/* Metadata Card */}
@@ -237,44 +234,11 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({ onShowToast }) =
                 <div className="h-px bg-border-muted flex-1" />
               </div>
               
-              <p className="text-[14px] leading-relaxed text-fg-editor bg-surface-1/50 p-5 rounded-xl border border-border-muted">
+              <p onMouseUp={handleTextSelect} className="text-[14px] leading-relaxed text-fg-editor bg-surface-1/50 p-5 rounded-xl border border-border-muted">
                 {activeSource.abstractText}
               </p>
             </section>
 
-            {/* Source details rendered from records */}
-            <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
-                1. Invariant Formulation & Non-Repudiation Gates
-              </h3>
-              <div className="space-y-3 text-[13.5px] leading-relaxed text-fg-muted pl-3.5 border-l border-border-muted">
-                <p>
-                  In sovereign execution topologies, an agent cannot claim a task outcome
-                  without attaching a cryptographic receipt. When verifying invariant closures,
-                  the state transition Merkle tree must match the pre-condition predicate exactly.
-                  <span className="text-fg-editor bg-surface-2 px-1 mx-1 rounded border border-border-muted">Select any sentence in this passage</span>
-                  to extract it directly into the Claims Matrix.
-                </p>
-                <p>
-                  Formally, let <code className="font-mono text-[12px] text-fg-editor bg-surface-2 px-1 py-0.2 rounded">S_0</code> be the initial workspace snapshot and <code className="font-mono text-[12px] text-fg-editor bg-surface-2 px-1 py-0.2 rounded">S_1</code> be the post-execution
-                  state. The invariant verifier computes <code className="font-mono text-[12px] text-fg-editor bg-surface-2 px-1 py-0.2 rounded">\Delta = H(S_1) \oplus H(S_0)</code>. If <code className="font-mono text-[12px] text-fg-editor bg-surface-2 px-1 py-0.2 rounded">\Delta</code>
-                  contains unpermitted mutations, the execution ticket is revoked with zero latency.
-                </p>
-              </div>
-            </section>
-
-            <section className="space-y-3">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
-                2. Empirical Reproducibility Benchmarks
-              </h3>
-              <div className="space-y-3 text-[13.5px] leading-relaxed text-fg-muted pl-3.5 border-l border-border-muted">
-                <p>
-                  Across 5,000 synthetic trials under high-jitter networks (10ms to 80ms latency),
-                  the proposed zero-trust capability protocol eliminated double-dispatch anomalies
-                  entirely <strong className="font-medium text-fg-editor">(0 occurrences)</strong>, whereas optimistic state sharing failed in <strong className="font-medium text-fg-editor">14.2%</strong> of executions.
-                </p>
-              </div>
-            </section>
           </div>
         </div>
       </div>

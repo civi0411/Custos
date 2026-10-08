@@ -27,7 +27,10 @@ pub mod run;
 pub mod annotation;
 pub mod execution_record;
 pub mod provider_config;
+pub mod automation;
+pub mod browser;
 pub mod recipe;
+pub mod remote_fleet;
 pub mod review;
 pub mod session;
 pub mod span;
@@ -40,6 +43,19 @@ pub mod workspace;
 pub mod workspace_files;
 
 // Explicit re-exports of public domain surface (No glob *)
+pub use automation::{
+    CreateHeadlessJobParams, HeadlessAutomationJob, HeadlessJobStatus, HeadlessTaskSpec,
+    HeadlessTrigger, RunHeadlessJobResult,
+};
+pub use browser::{
+    validate_browser_url, BrowserConsoleEntry, BrowserNetworkRequest, BrowserPageSnapshot,
+    BrowserSession, BrowserTab, BrowserTabStatus, CaptureSnapshotParams, CreateTabParams,
+    NavigateTabParams,
+};
+pub use remote_fleet::{
+    FleetExecParams, FleetExecReceipt, FleetExecResult, RegisterHostParams, RemoteHostNode,
+    RemoteHostStatus, SshAuthMethod,
+};
 pub use annotation::{AnnotationRecord, AnnotationStatus, AnnotationTarget};
 pub use execution_record::{ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus};
 pub use note::{NoteRecord, NoteVersionRecord};
