@@ -21,6 +21,7 @@ import { ExecutionWorkspacesPane } from '@/components/workspaces/engineering/Exe
 import { TerminalWorkbenchPane } from '@/components/workspaces/engineering/TerminalWorkbenchPane';
 import { FilesWorkbenchPane } from '@/components/workspaces/engineering/FilesWorkbenchPane';
 import { ChangesWorkbenchPane } from '@/components/workspaces/engineering/ChangesWorkbenchPane';
+import { AgentsWorkbenchPane } from '@/components/workspaces/engineering/AgentsWorkbenchPane';
 import {
   ClaimsMatrixPane,
   DeepInspectorPane,
@@ -126,7 +127,7 @@ const UnavailableResource: React.FC<{ resource: ResourceDefinition }> = ({ resou
         </div>
         <h2 className="text-sm font-semibold text-[var(--color-editor-fg)]">{resource.title} is currently unavailable</h2>
         <p className="mt-2 text-xs leading-5 text-[var(--color-fg-muted)]">{resource.description}</p>
-        
+
         {resource.reason && (
           <div className="mt-4 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-1)] p-3 text-left">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fg-subtle)]">Daemon Rationale</div>
@@ -243,13 +244,12 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                 >
                   <div className="flex items-start justify-between">
                     <Icon className="h-4 w-4 text-[var(--color-fg-muted)] group-hover:workbench-accent" />
-                    <span className={`text-[9px] font-semibold uppercase tracking-[0.08em] ${
-                      resource.status === 'available'
+                    <span className={`text-[9px] font-semibold uppercase tracking-[0.08em] ${resource.status === 'available'
                         ? 'text-emerald-500'
                         : resource.status === 'degraded'
-                        ? 'text-amber-500'
-                        : 'text-[var(--color-fg-subtle)]'
-                    }`}>
+                          ? 'text-amber-500'
+                          : 'text-[var(--color-fg-subtle)]'
+                      }`}>
                       {resource.status === 'available' ? 'API' : resource.status === 'degraded' ? 'Degraded' : 'Planned'}
                     </span>
                   </div>
@@ -304,6 +304,10 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
 
   if (activeId === 'changes') {
     return <ChangesWorkbenchPane />;
+  }
+
+  if (activeId === 'kanban') {
+    return <AgentsWorkbenchPane />;
   }
 
   if (activeId === 'synthesis') {

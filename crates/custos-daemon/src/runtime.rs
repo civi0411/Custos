@@ -1,5 +1,5 @@
 use crate::api::LocalApiDispatcher;
-use custos_adapters::harness::ClaudeCodeHarnessAdapter;
+use custos_adapters::harness::{ClaudeCodeHarnessAdapter, HarnessRegistry};
 use custos_adapters::providers::{
     AntigravityProvider, ClaudeProvider, CodexProvider, FakeProvider, LocalModelProvider,
 };
@@ -30,6 +30,7 @@ pub struct CustosRuntime {
     pub sandbox: Arc<dyn SandboxPort>,
     pub model: Arc<dyn ModelPort>,
     pub harness: Arc<dyn AgentRuntimePort>,
+    pub harnesses: Arc<HarnessRegistry>,
     pub workflow: Arc<dyn WorkflowPort>,
     pub lease_manager: Arc<custos_runtime::workflow::WorkspaceLeaseManager>,
     pub workspace_coordinator: Arc<custos_runtime::workspace::WorkspaceCoordinator>,
@@ -70,13 +71,27 @@ impl CustosRuntime {
             _ => Arc::new(FakeProvider::new("fake")),
         };
 
-        // Sovereign Coding Harness Adapter (Claude Code CLI / sub-process agent runtime)
+        // Sovereign Coding Harness Adapter & Multi-Harness Registry
         let lease_manager = Arc::new(custos_runtime::workflow::WorkspaceLeaseManager::new(
             workspace_root.clone(),
         ));
 
-        let harness: Arc<dyn AgentRuntimePort> =
-            Arc::new(ClaudeCodeHarnessAdapter::new(workspace_root));
+        let mut harness_reg = HarnessRegistry::default_with_workspace(workspace_root.clone());
+        let governed = Arc::new(custos_runtime::agent::runtime_port::GovernedAgentRuntime::new(
+            model.clone(),
+            "Custos Governed Agent Runtime",
+            vec![],
+        ));
+        harness_reg.register(
+            governed,
+            "Governed Agent Runtime",
+            "Custos kernel-mediated autonomous agent runtime with ExecutionPermits.",
+            "internal",
+        );
+        let harnesses = Arc::new(harness_reg);
+        let harness = harnesses
+            .get("claude-code")
+            .unwrap_or_else(|| Arc::new(ClaudeCodeHarnessAdapter::new(workspace_root)));
 
         let workflow = Arc::new(
             TaskRuntime::new()
@@ -107,7 +122,8 @@ impl CustosRuntime {
             .with_workspace(workspace_coordinator.clone())
             .with_terminal(terminal_coordinator.clone())
             .with_research(Arc::new(store.research().clone()))
-            .with_providers(Arc::new(store.providers().clone())),
+            .with_providers(Arc::new(store.providers().clone()))
+            .with_harnesses(harnesses.clone()),
         );
 
         Ok(Self {
@@ -120,6 +136,7 @@ impl CustosRuntime {
             sandbox,
             model,
             harness,
+            harnesses,
             workflow,
             lease_manager,
             workspace_coordinator,

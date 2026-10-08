@@ -449,5 +449,69 @@ export interface WorkspaceFileDiff {
   isStaged?: boolean;
 }
 
+export type ToolMediationLevel = 'custos_mediated' | 'provider_governed' | 'observe_only';
+export type WorktreeOwnership = 'shared_live' | 'isolated_worktree';
+export type CostVisibility = 'exact_tokens' | 'estimated' | 'none';
+
+export interface HarnessProfile {
+  harness_id: string;
+  harnessId?: string;
+  tool_mediation: ToolMediationLevel;
+  toolMediation?: ToolMediationLevel;
+  worktree_ownership: WorktreeOwnership;
+  worktreeOwnership?: WorktreeOwnership;
+  supports_cancel: boolean;
+  supportsCancel?: boolean;
+  supports_steer: boolean;
+  supportsSteer?: boolean;
+  cost_visibility: CostVisibility;
+  costVisibility?: CostVisibility;
+}
+
+export interface HarnessDescriptor {
+  id: string;
+  name: string;
+  description: string;
+  binary_path: string;
+  binaryPath?: string;
+  is_available: boolean;
+  isAvailable?: boolean;
+  profile: HarnessProfile;
+}
+
+export interface RunNativeHarnessParams {
+  harness_id?: string;
+  harnessId?: string;
+  instruction: string;
+  workspace_id?: string;
+  workspaceId?: string;
+  cwd?: string;
+}
+
+export interface ObservedEffect {
+  id: string;
+  name: string;
+  target: string;
+  parameters: Record<string, unknown>;
+  risk_level?: string;
+  riskLevel?: string;
+  assurance: string;
+  task_id?: string | null;
+  taskId?: string | null;
+}
+
+export interface HarnessExecutionResult {
+  success: boolean;
+  exit_code?: number | null;
+  exitCode?: number | null;
+  stdout: string;
+  stderr: string;
+  observed_effects: ObservedEffect[];
+  observedEffects?: ObservedEffect[];
+  mediation_level: ToolMediationLevel;
+  mediationLevel?: ToolMediationLevel;
+}
+
+
 
 

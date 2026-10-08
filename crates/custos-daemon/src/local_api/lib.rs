@@ -65,6 +65,13 @@ pub const METHOD_TERMINAL_TERMINATE: &str = "v1.terminal.terminate";
 pub const METHOD_TERMINAL_LIST: &str = "v1.terminal.list";
 pub const METHOD_TERMINAL_GET: &str = "v1.terminal.get";
 
+pub const METHOD_HARNESS_LIST: &str = "v1.harness.list";
+pub const METHOD_HARNESS_GET: &str = "v1.harness.get";
+pub const METHOD_HARNESS_RUN_NATIVE: &str = "v1.harness.run_native";
+pub const METHOD_HARNESS_CANCEL: &str = "v1.harness.cancel";
+pub const METHOD_HARNESS_STEER: &str = "v1.harness.steer";
+
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiRequest {
     pub id: String,
@@ -255,7 +262,36 @@ pub struct GetCapabilityApiRequest {
     pub capability_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetHarnessRequest {
+    pub harness_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunNativeHarnessRequest {
+    pub harness_id: String,
+    pub instruction: String,
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+    #[serde(default)]
+    pub cwd: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CancelHarnessRunRequest {
+    pub harness_id: String,
+    pub run_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SteerHarnessRunRequest {
+    pub harness_id: String,
+    pub run_id: String,
+    pub guidance: String,
+}
+
 /// Abstract transport for communicating with the Custos Daemon
+
 #[async_trait]
 pub trait ApiTransport: Send + Sync {
     async fn send_request(&self, req: ApiRequest) -> Result<ApiResponse, String>;
@@ -1015,6 +1051,55 @@ impl LocalApiClient {
         }
 
         Ok(())
+    }
+
+    pub async fn list_harnesses(
+        &self,
+        req_id: &str,
+    ) -> Result<Vec<custos_core::contracts::harness::HarnessDescriptor>, String> {
+        let req = ApiRequest::new(req_id, METHOD_HARNESS_LIST, serde_json::json!({}));
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse harnesses list: {e}"))
+    }
+
+    pub async fn get_harness(
+        &self,
+        req_id: &str,
+        harness_id: &str,
+    ) -> Result<custos_core::contracts::harness::HarnessDescriptor, String> {
+        let params = serde_json::json!({ "harness_id": harness_id });
+        let req = ApiRequest::new(req_id, METHOD_HARNESS_GET, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse harness descriptor: {e}"))
+    }
+
+    pub async fn run_native_harness(
+        &self,
+        req_id: &str,
+        request: RunNativeHarnessRequest,
+    ) -> Result<custos_core::contracts::harness::HarnessExecutionResult, String> {
+        let params = serde_json::to_value(request).map_err(|e| e.to_string())?;
+        let req = ApiRequest::new(req_id, METHOD_HARNESS_RUN_NATIVE, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse run native result: {e}"))
     }
 }
 

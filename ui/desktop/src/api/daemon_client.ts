@@ -21,6 +21,9 @@ import {
   WriteWorkspaceFileParams,
   WorkspaceDiffSummary,
   WorkspaceFileDiff,
+  HarnessDescriptor,
+  RunNativeHarnessParams,
+  HarnessExecutionResult,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -561,6 +564,38 @@ export class DaemonClient {
     return this.request<{ discarded: boolean; path: string }>('v1.workspace.git.discard', {
       workspace_id: workspaceId,
       path,
+    });
+  }
+
+  async listHarnesses(): Promise<HarnessDescriptor[]> {
+    return this.request<HarnessDescriptor[]>('v1.harness.list', {});
+  }
+
+  async getHarness(harnessId: string): Promise<HarnessDescriptor> {
+    return this.request<HarnessDescriptor>('v1.harness.get', { harness_id: harnessId });
+  }
+
+  async runNativeHarness(params: RunNativeHarnessParams): Promise<HarnessExecutionResult> {
+    return this.request<HarnessExecutionResult>('v1.harness.run_native', {
+      harness_id: params.harness_id ?? params.harnessId,
+      instruction: params.instruction,
+      workspace_id: params.workspace_id ?? params.workspaceId,
+      cwd: params.cwd,
+    });
+  }
+
+  async cancelHarness(harnessId: string, runId: string): Promise<{ cancelled: boolean }> {
+    return this.request<{ cancelled: boolean }>('v1.harness.cancel', {
+      harness_id: harnessId,
+      run_id: runId,
+    });
+  }
+
+  async steerHarness(harnessId: string, runId: string, guidance: string): Promise<{ steered: boolean }> {
+    return this.request<{ steered: boolean }>('v1.harness.steer', {
+      harness_id: harnessId,
+      run_id: runId,
+      guidance,
     });
   }
 }

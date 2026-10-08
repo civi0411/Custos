@@ -21,7 +21,11 @@ pub use crate::custos_local_api::{
     METHOD_WORKSPACE_DIFF, METHOD_WORKSPACE_FILES_READ, METHOD_WORKSPACE_FILES_TREE,
     METHOD_WORKSPACE_FILES_WRITE, METHOD_WORKSPACE_FILE_DIFF, METHOD_WORKSPACE_GIT_DISCARD,
     METHOD_WORKSPACE_GIT_STAGE, METHOD_WORKSPACE_GIT_UNSTAGE,
+    CancelHarnessRunRequest, GetHarnessRequest, RunNativeHarnessRequest, SteerHarnessRunRequest,
+    METHOD_HARNESS_CANCEL, METHOD_HARNESS_GET, METHOD_HARNESS_LIST, METHOD_HARNESS_RUN_NATIVE,
+    METHOD_HARNESS_STEER,
 };
+use custos_adapters::harness::HarnessRegistry;
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
 use custos_core::contracts::terminal::TerminalPort;
 use custos_core::contracts::workflow::WorkflowPort;
@@ -47,6 +51,7 @@ pub struct LocalApiDispatcher {
     providers: Option<Arc<ProviderRepository>>,
     terminal: Arc<TerminalCoordinator>,
     files: Arc<dyn WorkspaceFilesPort>,
+    harnesses: Arc<HarnessRegistry>,
 }
 
 impl LocalApiDispatcher {
@@ -65,7 +70,13 @@ impl LocalApiDispatcher {
             providers: None,
             terminal: Arc::new(TerminalCoordinator::new()),
             files: Arc::new(WorkspaceFilesCoordinator::new()),
+            harnesses: Arc::new(HarnessRegistry::new()),
         }
+    }
+
+    pub fn with_harnesses(mut self, harnesses: Arc<HarnessRegistry>) -> Self {
+        self.harnesses = harnesses;
+        self
     }
 
     pub fn with_files(mut self, files: Arc<dyn WorkspaceFilesPort>) -> Self {
@@ -317,13 +328,13 @@ impl LocalApiDispatcher {
                 Some("evidence"),
                 "Criteria verifier records and receipts scheduled in Roadmap Step 8.",
             ),
-            CapabilityDescriptor::unavailable(
+            CapabilityDescriptor::available(
                 "coordination.kanban",
                 "Agents",
                 CapabilityGroup::Coordination,
-                "Worker runs, attention state, and delegated multi-agent dispatch.",
+                "Worker runs, native coding harnesses (Claude Code, Codex, Goose), and agent loop dispatch.",
                 Some("kanban"),
-                "Worker runs, attention state and delegated task topology scheduled in Roadmap Step 10.",
+                vec!["list_harnesses", "get_harness", "run_native", "dispatch", "cancel", "steer"],
             ),
             CapabilityDescriptor::unavailable(
                 "browser.tabs",
@@ -1940,6 +1951,76 @@ impl LocalApiDispatcher {
                 match self.files.discard_file(&ws, path).await {
                     Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "discarded": true, "path": path })),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_HARNESS_LIST => {
+                let harnesses = self.harnesses.list();
+                match serde_json::to_value(&harnesses) {
+                    Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_HARNESS_GET => {
+                let harness_id = req
+                    .params
+                    .get("harness_id")
+                    .or_else(|| req.params.get("id"))
+                    .and_then(|v| v.as_str());
+
+                match harness_id {
+                    Some(id) => match self.harnesses.get_descriptor(id) {
+                        Some(desc) => match serde_json::to_value(&desc) {
+                            Ok(val) => ApiResponse::success(req.id, val),
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        },
+                        None => ApiResponse::error(req.id, format!("Harness '{id}' not found")),
+                    },
+                    None => ApiResponse::error(req.id, "Missing harness_id parameter"),
+                }
+            }
+            METHOD_HARNESS_RUN_NATIVE => {
+                let params: RunNativeHarnessRequest = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid run_native parameters: {e}")),
+                };
+
+                let cwd_path = if let Some(ws_id) = &params.workspace_id {
+                    match self.resolve_workspace_for_dispatch(&req.id, ws_id).await {
+                        Ok(ws) => std::path::PathBuf::from(ws.path),
+                        Err(resp) => return resp,
+                    }
+                } else if let Some(c) = &params.cwd {
+                    std::path::PathBuf::from(c)
+                } else {
+                    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+                };
+
+                match self.harnesses.run_native(&params.harness_id, &params.instruction, &cwd_path).await {
+                    Ok(result) => match serde_json::to_value(&result) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(err) => ApiResponse::error(req.id, format!("Harness execution failed: {err}")),
+                }
+            }
+            METHOD_HARNESS_CANCEL => {
+                let params: CancelHarnessRunRequest = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid cancel parameters: {e}")),
+                };
+                match self.harnesses.cancel(&params.harness_id, &params.run_id).await {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "cancelled": true })),
+                    Err(err) => ApiResponse::error(req.id, format!("Failed to cancel harness: {err}")),
+                }
+            }
+            METHOD_HARNESS_STEER => {
+                let params: SteerHarnessRunRequest = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid steer parameters: {e}")),
+                };
+                match self.harnesses.steer(&params.harness_id, &params.run_id, &params.guidance).await {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "steered": true })),
+                    Err(err) => ApiResponse::error(req.id, format!("Failed to steer harness: {err}")),
                 }
             }
             unknown => ApiResponse::error(req.id, format!("Unknown method: {unknown}")),
