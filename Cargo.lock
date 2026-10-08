@@ -1657,6 +1657,7 @@ dependencies = [
  "futures",
  "include_dir",
  "indoc",
+ "libc",
  "lru 0.12.5",
  "minijinja",
  "rand 0.8.8",

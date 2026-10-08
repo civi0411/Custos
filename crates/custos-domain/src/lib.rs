@@ -29,6 +29,7 @@ pub mod recipe;
 pub mod session;
 pub mod span;
 pub mod task;
+pub mod terminal;
 pub mod types;
 pub mod workflow;
 pub mod workspace;
@@ -98,6 +99,9 @@ pub use task::{
     ContractEvidence, CriterionSpec, EvidenceKind, Task, TaskContract, TaskContractRevision,
     TaskContractV1, TaskRevision, TaskStatus,
 };
+pub use terminal::{
+    TerminalOutputChunk, TerminalSession, TerminalSessionId, TerminalSessionStatus,
+};
 pub use workflow::{
     RevisionNode, WorkflowIR, WorkflowNodeIR, WorkflowPlan, WorkflowRevision, WorkflowStep,
 };
@@ -105,3 +109,4 @@ pub use workspace::{
     DirtyManifest, ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceLineage,
     WorkspaceStatus,
 };
+

@@ -18,6 +18,7 @@ import { Session } from '@/types';
 import { daemonClient } from '@/api/daemon_client';
 import type { CapabilityDescriptor } from '@/types/domain';
 import { ExecutionWorkspacesPane } from '@/components/workspaces/engineering/ExecutionWorkspacesPane';
+import { TerminalWorkbenchPane } from '@/components/workspaces/engineering/TerminalWorkbenchPane';
 import {
   ClaimsMatrixPane,
   DeepInspectorPane,
@@ -289,6 +290,10 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
 
   if (activeId === 'worktrees') {
     return <ExecutionWorkspacesPane />;
+  }
+
+  if (activeId === 'terminal') {
+    return <TerminalWorkbenchPane />;
   }
 
   if (activeId === 'synthesis') {

@@ -13,6 +13,9 @@ import {
   CreateWorkspaceParams,
   CapabilityDescriptor,
   DirtyManifest,
+  SpawnTerminalParams,
+  TerminalOutputChunk,
+  TerminalSession,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -409,6 +412,59 @@ export class DaemonClient {
   async getCapability(targetId: string): Promise<CapabilityDescriptor> {
     return fromDaemon<CapabilityDescriptor>(
       await this.request<unknown>('v1.capabilities.get', { capability_id: targetId })
+    );
+  }
+
+  // ---------------------------------------------------------
+  // Terminal / Bounded PTY API
+  // ---------------------------------------------------------
+
+  async spawnTerminal(params: SpawnTerminalParams): Promise<TerminalSession> {
+    return fromDaemon<TerminalSession>(
+      await this.request<unknown>('v1.terminal.spawn', toDaemon(params))
+    );
+  }
+
+  async writeTerminal(sessionId: string, data: string): Promise<{ written: number }> {
+    return this.request<{ written: number }>('v1.terminal.write', {
+      session_id: sessionId,
+      data,
+    });
+  }
+
+  async resizeTerminal(sessionId: string, cols: number, rows: number): Promise<{ ok: boolean }> {
+    return this.request<{ ok: boolean }>('v1.terminal.resize', {
+      session_id: sessionId,
+      cols,
+      rows,
+    });
+  }
+
+  async readTerminal(sessionId: string, fromSeq = 0, maxBytes = 65536): Promise<TerminalOutputChunk> {
+    return fromDaemon<TerminalOutputChunk>(
+      await this.request<unknown>('v1.terminal.read', {
+        session_id: sessionId,
+        from_seq: fromSeq,
+        max_bytes: maxBytes,
+      })
+    );
+  }
+
+  async terminateTerminal(sessionId: string): Promise<{ terminated: boolean }> {
+    return this.request<{ terminated: boolean }>('v1.terminal.terminate', {
+      session_id: sessionId,
+    });
+  }
+
+  async listTerminals(workspaceId?: string): Promise<TerminalSession[]> {
+    return fromDaemon<TerminalSession[]>(
+      await this.request<unknown>('v1.terminal.list', { workspace_id: workspaceId })
+    );
+  }
+
+  async getTerminal(sessionId: string): Promise<TerminalSession> {
+    return fromDaemon<TerminalSession>(
+      await this.request<unknown>('v1.terminal.get', { session_id: sessionId })
     );
   }
 }

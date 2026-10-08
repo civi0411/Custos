@@ -11,6 +11,7 @@ pub mod gateway;
 pub mod memory_service;
 pub mod oi;
 pub mod session;
+pub mod terminal;
 pub mod workflow;
 pub mod workspace;
 
@@ -27,5 +28,6 @@ pub use agent::*;
 pub use cognitive::*;
 pub use context::*;
 pub use session::*;
+pub use terminal::TerminalCoordinator;
 pub use workflow::*;
 pub use workspace::{CreateWorkspaceRequest, WorkspaceCoordinator};

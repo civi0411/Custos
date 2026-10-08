@@ -33,6 +33,7 @@ pub struct CustosRuntime {
     pub workflow: Arc<dyn WorkflowPort>,
     pub lease_manager: Arc<custos_runtime::workflow::WorkspaceLeaseManager>,
     pub workspace_coordinator: Arc<custos_runtime::workspace::WorkspaceCoordinator>,
+    pub terminal_coordinator: Arc<custos_runtime::TerminalCoordinator>,
 }
 
 impl CustosRuntime {
@@ -94,6 +95,7 @@ impl CustosRuntime {
             store.clone(),
             workspace_provider,
         ));
+        let terminal_coordinator = Arc::new(custos_runtime::TerminalCoordinator::new());
 
         let local_api = Arc::new(
             LocalApiDispatcher::new(
@@ -103,6 +105,7 @@ impl CustosRuntime {
             )
             .with_workflow(workflow.clone())
             .with_workspace(workspace_coordinator.clone())
+            .with_terminal(terminal_coordinator.clone())
             .with_research(Arc::new(store.research().clone()))
             .with_providers(Arc::new(store.providers().clone())),
         );
@@ -120,6 +123,7 @@ impl CustosRuntime {
             workflow,
             lease_manager,
             workspace_coordinator,
+            terminal_coordinator,
         })
     }
 }

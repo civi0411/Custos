@@ -47,6 +47,13 @@ pub const METHOD_RESEARCH_LINEAGE_LIST: &str = "v1.research.lineage.list";
 pub const METHOD_RESEARCH_HANDOFF_CODING: &str = "v1.research.handoff_coding";
 pub const METHOD_CAPABILITIES_LIST: &str = "v1.capabilities.list";
 pub const METHOD_CAPABILITIES_GET: &str = "v1.capabilities.get";
+pub const METHOD_TERMINAL_SPAWN: &str = "v1.terminal.spawn";
+pub const METHOD_TERMINAL_WRITE: &str = "v1.terminal.write";
+pub const METHOD_TERMINAL_RESIZE: &str = "v1.terminal.resize";
+pub const METHOD_TERMINAL_READ: &str = "v1.terminal.read";
+pub const METHOD_TERMINAL_TERMINATE: &str = "v1.terminal.terminate";
+pub const METHOD_TERMINAL_LIST: &str = "v1.terminal.list";
+pub const METHOD_TERMINAL_GET: &str = "v1.terminal.get";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiRequest {

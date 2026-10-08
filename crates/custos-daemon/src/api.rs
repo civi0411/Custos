@@ -15,9 +15,12 @@ pub use crate::custos_local_api::{
     METHOD_RESEARCH_SOURCES_LIST, METHOD_RESEARCH_SOURCES_SAVE, METHOD_WORKFLOW_CANCEL_RUN,
     METHOD_WORKFLOW_START_RUN, METHOD_WORKSPACES_ARCHIVE, METHOD_WORKSPACES_CREATE,
     METHOD_WORKSPACES_GET, METHOD_WORKSPACES_INSPECT_DIRTY, METHOD_WORKSPACES_LIST,
-    METHOD_WORKSPACES_RECOVER,
+    METHOD_WORKSPACES_RECOVER, METHOD_TERMINAL_GET, METHOD_TERMINAL_LIST,
+    METHOD_TERMINAL_READ, METHOD_TERMINAL_RESIZE, METHOD_TERMINAL_SPAWN,
+    METHOD_TERMINAL_TERMINATE, METHOD_TERMINAL_WRITE,
 };
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
+use custos_core::contracts::terminal::TerminalPort;
 use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::{AdvanceTask, CancelTask, CreateTask, TaskService};
 use custos_domain::{
@@ -27,8 +30,9 @@ use custos_domain::{
 use custos_persistence::{ProviderRepository, ResearchRepository};
 use custos_runtime::session::SessionManager;
 use custos_runtime::workspace::{CreateWorkspaceRequest, WorkspaceCoordinator};
+use custos_runtime::TerminalCoordinator;
 
-/// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, WorkflowPort, ResearchRepository, and ProviderRepository for IPC callers.
+/// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, WorkflowPort, ResearchRepository, ProviderRepository, and TerminalCoordinator for IPC callers.
 pub struct LocalApiDispatcher {
     task_service: Arc<TaskService>,
     session_manager: Arc<SessionManager>,
@@ -37,6 +41,7 @@ pub struct LocalApiDispatcher {
     workspace: Option<Arc<WorkspaceCoordinator>>,
     research: Option<Arc<ResearchRepository>>,
     providers: Option<Arc<ProviderRepository>>,
+    terminal: Arc<TerminalCoordinator>,
 }
 
 impl LocalApiDispatcher {
@@ -53,7 +58,13 @@ impl LocalApiDispatcher {
             workspace: None,
             research: None,
             providers: None,
+            terminal: Arc::new(TerminalCoordinator::new()),
         }
+    }
+
+    pub fn with_terminal(mut self, terminal: Arc<TerminalCoordinator>) -> Self {
+        self.terminal = terminal;
+        self
     }
 
     pub fn with_workflow(mut self, workflow: Arc<dyn WorkflowPort>) -> Self {
@@ -254,14 +265,14 @@ impl LocalApiDispatcher {
                     vec![],
                 )
             },
-            // Roadmap Capabilities (truthfully reported as Unavailable with roadmap milestone)
-            CapabilityDescriptor::unavailable(
+            // Terminal PTY (Native PTY stream scoped to execution workspace)
+            CapabilityDescriptor::available(
                 "compute.pty",
                 "Terminal",
                 CapabilityGroup::Compute,
                 "Bounded PTY streams scoped to an execution workspace.",
                 Some("terminal"),
-                "Bounded PTY streams scoped to an execution workspace scheduled in Roadmap Step 3.",
+                vec!["spawn", "write", "resize", "read", "terminate", "list", "get"],
             ),
             CapabilityDescriptor::unavailable(
                 "code.files",
@@ -1522,6 +1533,202 @@ impl LocalApiDispatcher {
                     None => ApiResponse::error(req.id, "Missing capability_id parameter"),
                 }
             }
+            METHOD_TERMINAL_SPAWN => {
+                let workspace_id = match req
+                    .params
+                    .get("workspace_id")
+                    .and_then(|v| v.as_str())
+                {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing workspace_id parameter"),
+                };
+
+                let working_dir_str = match req.params.get("working_dir").and_then(|v| v.as_str()) {
+                    Some(dir) => dir.to_string(),
+                    None => {
+                        let coordinator = match self.workspace.as_ref() {
+                            Some(c) => c,
+                            None => {
+                                return ApiResponse::error(
+                                    req.id,
+                                    "WorkspaceCoordinator not configured on daemon",
+                                )
+                            }
+                        };
+                        let ws_id = custos_domain::WorkspaceId::new(workspace_id);
+                        match coordinator.get_workspace(&ws_id).await {
+                            Ok(Some(ws)) => ws.path,
+                            Ok(None) => {
+                                return ApiResponse::error(
+                                    req.id,
+                                    format!("Workspace {workspace_id} not found"),
+                                );
+                            }
+                            Err(e) => {
+                                return ApiResponse::error(
+                                    req.id,
+                                    format!("Workspace {workspace_id} lookup failed: {e}"),
+                                );
+                            }
+                        }
+                    }
+                };
+
+                let command = req.params.get("command").and_then(|v| v.as_str());
+                let cols = req
+                    .params
+                    .get("cols")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(80) as u16;
+                let rows = req
+                    .params
+                    .get("rows")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(24) as u16;
+
+                match self
+                    .terminal
+                    .spawn(
+                        workspace_id,
+                        std::path::Path::new(&working_dir_str),
+                        command,
+                        cols,
+                        rows,
+                    )
+                    .await
+                {
+                    Ok(session) => match serde_json::to_value(&session) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_TERMINAL_WRITE => {
+                let session_id = match req
+                    .params
+                    .get("session_id")
+                    .and_then(|v| v.as_str())
+                {
+                    Some(id) => id,
+                    None => return ApiResponse::error(req.id, "Missing session_id parameter"),
+                };
+                let data = match req.params.get("data").and_then(|v| v.as_str()) {
+                    Some(d) => d,
+                    None => return ApiResponse::error(req.id, "Missing data parameter"),
+                };
+
+                match self.terminal.write(session_id, data.as_bytes()).await {
+                    Ok(written) => {
+                        ApiResponse::success(req.id, serde_json::json!({ "written": written }))
+                    }
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_TERMINAL_RESIZE => {
+                let session_id = match req
+                    .params
+                    .get("session_id")
+                    .and_then(|v| v.as_str())
+                {
+                    Some(id) => id,
+                    None => return ApiResponse::error(req.id, "Missing session_id parameter"),
+                };
+                let cols = match req.params.get("cols").and_then(|v| v.as_u64()) {
+                    Some(c) => c as u16,
+                    None => return ApiResponse::error(req.id, "Missing cols parameter"),
+                };
+                let rows = match req.params.get("rows").and_then(|v| v.as_u64()) {
+                    Some(r) => r as u16,
+                    None => return ApiResponse::error(req.id, "Missing rows parameter"),
+                };
+
+                match self.terminal.resize(session_id, cols, rows).await {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "ok": true })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_TERMINAL_READ => {
+                let session_id = match req
+                    .params
+                    .get("session_id")
+                    .and_then(|v| v.as_str())
+                {
+                    Some(id) => id,
+                    None => return ApiResponse::error(req.id, "Missing session_id parameter"),
+                };
+                let from_seq = req
+                    .params
+                    .get("from_seq")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                let max_bytes = req
+                    .params
+                    .get("max_bytes")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(65536) as usize;
+
+                match self
+                    .terminal
+                    .read_output(session_id, from_seq, max_bytes)
+                    .await
+                {
+                    Ok(chunk) => match serde_json::to_value(&chunk) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_TERMINAL_TERMINATE => {
+                let session_id = match req
+                    .params
+                    .get("session_id")
+                    .and_then(|v| v.as_str())
+                {
+                    Some(id) => id,
+                    None => return ApiResponse::error(req.id, "Missing session_id parameter"),
+                };
+
+                match self.terminal.terminate(session_id).await {
+                    Ok(()) => {
+                        ApiResponse::success(req.id, serde_json::json!({ "terminated": true }))
+                    }
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_TERMINAL_LIST => {
+                let workspace_id = req
+                    .params
+                    .get("workspace_id")
+                    .and_then(|v| v.as_str());
+
+                match self.terminal.list_sessions(workspace_id).await {
+                    Ok(sessions) => match serde_json::to_value(&sessions) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_TERMINAL_GET => {
+                let session_id = match req
+                    .params
+                    .get("session_id")
+                    .and_then(|v| v.as_str())
+                {
+                    Some(id) => id,
+                    None => return ApiResponse::error(req.id, "Missing session_id parameter"),
+                };
+
+                match self.terminal.get_session(session_id).await {
+                    Ok(session) => match serde_json::to_value(&session) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
             unknown => ApiResponse::error(req.id, format!("Unknown method: {unknown}")),
         }
     }
@@ -2336,11 +2543,16 @@ mod tests {
         let tasks_cap = caps.iter().find(|c| c.id == "tasks.core").unwrap();
         assert!(tasks_cap.status.is_available());
 
-        // PTY terminal is truthfully unavailable with roadmap rationale
+        // PTY terminal is truthfully available with supported operations
         let pty_cap = caps.iter().find(|c| c.id == "compute.pty").unwrap();
-        assert!(!pty_cap.status.is_available());
+        assert!(pty_cap.status.is_available());
         assert_eq!(pty_cap.resource_id.as_deref(), Some("terminal"));
-        assert!(pty_cap.status.reason().unwrap().contains("Roadmap Step 3"));
+        assert!(pty_cap.supported_operations.contains(&"spawn".to_string()));
+
+        // Files capability is truthfully unavailable with roadmap rationale
+        let files_cap = caps.iter().find(|c| c.id == "code.files").unwrap();
+        assert!(!files_cap.status.is_available());
+        assert!(files_cap.status.reason().unwrap().contains("Roadmap Step 4"));
 
         // 2. Query capability by capability_id
         let get_resp = dispatcher
@@ -2377,5 +2589,111 @@ mod tests {
             })
             .await;
         assert!(missing_resp.error.is_some());
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_terminal_api_dispatch_lifecycle() {
+        let store = Arc::new(MockStore {
+            tasks: Mutex::new(Vec::new()),
+        });
+        let task_service = Arc::new(TaskService::new(store));
+        let session_manager = Arc::new(SessionManager::new());
+        let bridge_service = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
+        let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service);
+
+        let temp = tempfile::tempdir().unwrap();
+
+        // 1. Spawn terminal session
+        let spawn_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "req_t1".into(),
+                method: METHOD_TERMINAL_SPAWN.into(),
+                params: serde_json::json!({
+                    "workspace_id": "ws-mock",
+                    "working_dir": temp.path().to_str().unwrap(),
+                    "command": "echo test_terminal_stream",
+                    "cols": 80,
+                    "rows": 24,
+                }),
+            })
+            .await;
+
+        assert!(spawn_resp.is_success(), "Failed to spawn: {:?}", spawn_resp.error);
+        let session: custos_domain::TerminalSession =
+            serde_json::from_value(spawn_resp.result.unwrap()).unwrap();
+        assert_eq!(session.workspace_id, "ws-mock");
+
+        // 2. Poll read
+        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+        let read_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "req_t2".into(),
+                method: METHOD_TERMINAL_READ.into(),
+                params: serde_json::json!({
+                    "session_id": session.id,
+                    "from_seq": 0,
+                    "max_bytes": 4096,
+                }),
+            })
+            .await;
+
+        assert!(read_resp.is_success());
+        let chunk: custos_domain::TerminalOutputChunk =
+            serde_json::from_value(read_resp.result.unwrap()).unwrap();
+        assert!(chunk.data.contains("test_terminal_stream"));
+
+        // 3. Resize
+        let resize_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "req_t3".into(),
+                method: METHOD_TERMINAL_RESIZE.into(),
+                params: serde_json::json!({
+                    "session_id": session.id,
+                    "cols": 120,
+                    "rows": 30,
+                }),
+            })
+            .await;
+        assert!(resize_resp.is_success());
+
+        // 4. List terminals
+        let list_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "req_t4".into(),
+                method: METHOD_TERMINAL_LIST.into(),
+                params: serde_json::json!({ "workspace_id": "ws-mock" }),
+            })
+            .await;
+        assert!(list_resp.is_success());
+        let sessions: Vec<custos_domain::TerminalSession> =
+            serde_json::from_value(list_resp.result.unwrap()).unwrap();
+        assert_eq!(sessions.len(), 1);
+
+        // 5. Terminate
+        let term_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "req_t5".into(),
+                method: METHOD_TERMINAL_TERMINATE.into(),
+                params: serde_json::json!({ "session_id": session.id }),
+            })
+            .await;
+        assert!(term_resp.is_success());
+
+        // 6. Get terminal
+        let get_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "req_t6".into(),
+                method: METHOD_TERMINAL_GET.into(),
+                params: serde_json::json!({ "session_id": session.id }),
+            })
+            .await;
+        assert!(get_resp.is_success());
+        let got_sess: custos_domain::TerminalSession =
+            serde_json::from_value(get_resp.result.unwrap()).unwrap();
+        assert_eq!(got_sess.status, custos_domain::TerminalSessionStatus::Terminated);
     }
 }

@@ -307,3 +307,51 @@ export interface CapabilityDescriptor {
   version: string;
 }
 
+// ---------------------------------------------------------
+// Terminal / Bounded PTY Contracts
+// ---------------------------------------------------------
+
+export type TerminalSessionStatus =
+  | { type: 'active' }
+  | { type: 'exited'; exit_code?: number | null; exitCode?: number | null }
+  | { type: 'terminated' };
+
+export interface TerminalSession {
+  id: string;
+  workspace_id: string;
+  workspaceId?: string;
+  working_dir: string;
+  workingDir?: string;
+  command: string;
+  cols: number;
+  rows: number;
+  status: TerminalSessionStatus;
+  created_at: number;
+  createdAt?: number;
+  closed_at?: number | null;
+  closedAt?: number | null;
+}
+
+export interface TerminalOutputChunk {
+  session_id: string;
+  sessionId?: string;
+  start_seq: number;
+  startSeq?: number;
+  next_seq: number;
+  nextSeq?: number;
+  data: string;
+  is_eof: boolean;
+  isEof?: boolean;
+}
+
+export interface SpawnTerminalParams {
+  workspace_id: string;
+  workspaceId?: string;
+  command?: string;
+  working_dir?: string;
+  workingDir?: string;
+  cols?: number;
+  rows?: number;
+}
+
+
