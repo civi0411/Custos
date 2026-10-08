@@ -54,6 +54,9 @@ export interface ProviderItem {
   rateLimit?: string;
   vram?: string;
   endpoint?: string;
+  defaultModel?: string;
+  contextWindow?: number;
+  fastMode?: boolean;
   latency: string;
   iconType: 'anthropic' | 'openai' | 'gemini' | 'deepseek';
 }
@@ -85,5 +88,10 @@ export type {
   AttachSessionParams,
   CancelRunParams,
   CreateWorkspaceParams,
+  ProbedModel,
+  ModelPricing,
+  ModelCatalogOption,
+  ModelCatalogResult,
+  ProviderConfigRecord,
 } from './domain';
 export type { Session as DomainSession } from './domain';

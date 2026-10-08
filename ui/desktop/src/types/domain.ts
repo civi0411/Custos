@@ -985,6 +985,56 @@ export interface CreateHeadlessJobParams {
   trigger?: HeadlessTrigger;
 }
 
+export interface ProbedModel {
+  id: string;
+  name?: string;
+  context_window?: number;
+  owned_by?: string;
+  description?: string;
+}
+
+export interface ModelPricing {
+  input_cost_per_m: number;
+  output_cost_per_m: number;
+  cache_read_cost_per_m?: number;
+  cache_write_cost_per_m?: number;
+  currency: string;
+}
+
+export interface ModelCatalogOption {
+  id: string;
+  label: string;
+  description?: string;
+  provider_type: string;
+  is_default: boolean;
+  default_effort?: string;
+  efforts: string[];
+  supports_fast_mode: boolean;
+  context_window?: number;
+  pricing?: ModelPricing;
+}
+
+export interface ModelCatalogResult {
+  origin: string;
+  models: ModelCatalogOption[];
+  fetched_at: number;
+}
+
+export interface ProviderConfigRecord {
+  id: string;
+  name: string;
+  service_type: string;
+  api_key_masked: string;
+  status: string;
+  endpoint_url?: string;
+  default_model?: string;
+  context_window?: number;
+  fast_mode?: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+
 
 
 

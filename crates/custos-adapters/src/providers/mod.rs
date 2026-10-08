@@ -1,16 +1,22 @@
 pub mod antigravity;
+pub mod catalog;
 pub mod claude;
 pub mod codex;
 pub mod fake;
 pub mod local_model;
+pub mod pricing;
+pub mod probe;
 #[allow(clippy::module_inception)]
 pub mod providers;
 
 pub use antigravity::*;
+pub use catalog::*;
 pub use claude::*;
 pub use codex::*;
 pub use fake::*;
 pub use local_model::*;
+pub use pricing::*;
+pub use probe::*;
 pub use providers::*;
 
 #[cfg(test)]

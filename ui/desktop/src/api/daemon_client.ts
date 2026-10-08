@@ -50,6 +50,10 @@ import {
   FleetExecReceipt,
   HeadlessAutomationJob,
   CreateHeadlessJobParams,
+  ProbedModel,
+  ModelPricing,
+  ModelCatalogResult,
+  ProviderConfigRecord,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -415,8 +419,60 @@ export class DaemonClient {
     return this.request<any[]>('v1.providers.list', {});
   }
 
+  async getProvider(providerId: string): Promise<ProviderConfigRecord> {
+    return this.request<ProviderConfigRecord>('v1.providers.get', { id: providerId });
+  }
+
   async saveProvider(provider: any): Promise<{ saved: boolean; id: string }> {
     return this.request<{ saved: boolean; id: string }>('v1.providers.save', provider);
+  }
+
+  async deleteProvider(providerId: string): Promise<{ deleted: boolean; id: string }> {
+    return this.request<{ deleted: boolean; id: string }>('v1.providers.delete', { id: providerId });
+  }
+
+  async probeModels(
+    baseUrl: string,
+    providerType?: string,
+    apiKey?: string,
+    providerId?: string
+  ): Promise<{ models: ProbedModel[]; count: number; base_url: string }> {
+    return this.request<{ models: ProbedModel[]; count: number; base_url: string }>('v1.models.probe', {
+      base_url: baseUrl,
+      provider_type: providerType,
+      api_key: apiKey,
+      provider_id: providerId,
+    });
+  }
+
+  async getModelCatalog(providerType?: string, providerId?: string): Promise<ModelCatalogResult> {
+    return this.request<ModelCatalogResult>('v1.models.catalog', {
+      provider_type: providerType,
+      provider_id: providerId,
+    });
+  }
+
+  async getModelPricing(
+    modelId: string,
+    tokens?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      cache_read_tokens?: number;
+      cache_write_tokens?: number;
+    }
+  ): Promise<{
+    model_id: string;
+    pricing: ModelPricing | null;
+    estimated_cost_usd: number | null;
+  }> {
+    return this.request<{
+      model_id: string;
+      pricing: ModelPricing | null;
+      estimated_cost_usd: number | null;
+    }>('v1.models.pricing', {
+      model_id: modelId,
+      ...(tokens || {}),
+    });
   }
 
   async listClientKeys(): Promise<any[]> {

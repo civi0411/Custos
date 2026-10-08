@@ -58,13 +58,18 @@ interface AppContextType {
   handleCopyDiff: () => void;
   handleCreateNewSession: (title: string, pack: 'engineering' | 'research' | 'assistant') => Promise<void>;
   handleNewProjectPrompt: () => void;
-  handleSaveProvider: (service: string, apiKey: string) => Promise<void> | void;
+  handleSaveProvider: (
+    serviceOrParams: string | { service: string; apiKey?: string; endpointUrl?: string; model?: string; contextWindow?: number; fastMode?: boolean },
+    apiKey?: string
+  ) => Promise<void> | void;
+  handleDeleteProvider: (id: string) => Promise<void> | void;
+  handleTestConnection: (providerNameOrId: string) => Promise<void> | void;
   handleGenerateClientKey: () => Promise<void> | void;
   handleRevokeClientKey: (id: string) => Promise<void> | void;
 }
 
 function mapBackendProvider(p: any): ProviderItem {
-  const pType = (p.provider_type || '').toLowerCase();
+  const pType = (p.service_type || p.provider_type || '').toLowerCase();
   const iconType = (
     pType.includes('claude') || pType.includes('anthropic') ? 'anthropic' :
     pType.includes('openai') || pType.includes('gpt') ? 'openai' :
@@ -74,20 +79,29 @@ function mapBackendProvider(p: any): ProviderItem {
 
   const status = (['primary', 'standby', 'failover', 'offline'].includes(p.status)
     ? p.status
-    : p.is_active ? 'primary' : 'offline') as ProviderItem['status'];
+    : p.status === 'configured' || p.status === 'active' || p.is_active ? 'primary' : 'offline') as ProviderItem['status'];
+
+  const modelName = p.default_model || p.model || (
+    iconType === 'anthropic' ? 'claude-3-7-sonnet' :
+    iconType === 'openai' ? 'gpt-4o' :
+    iconType === 'gemini' ? 'gemini-2.5-flash' : 'deepseek-chat'
+  );
 
   return {
     id: p.id,
     name: p.name,
-    model: p.model,
+    model: modelName,
     status,
-    statusLabel: p.status_label || (status === 'primary' ? 'Verified & Active' : 'Offline'),
+    statusLabel: p.status === 'configured' ? 'Configured & Active' : p.status_label || (status === 'primary' ? 'Verified & Active' : 'Offline'),
     badgeColor: status === 'primary' ? '#10b981' : status === 'standby' ? '#3b82f6' : '#6b7280',
-    apiKey: p.api_key && p.api_key.trim().length > 0 ? `${p.api_key.slice(0, 6)}••••••••` : 'Chưa cấu hình',
+    apiKey: p.api_key_masked || (p.api_key && p.api_key.trim().length > 0 ? `${p.api_key.slice(0, 6)}••••••••` : 'Chưa cấu hình'),
     quotaUsed: p.quota_used || undefined,
     quotaTotal: p.quota_total || undefined,
     quotaPercent: typeof p.quota_percent === 'number' ? p.quota_percent : undefined,
-    endpoint: p.endpoint || undefined,
+    endpoint: p.endpoint_url || p.endpoint || undefined,
+    defaultModel: p.default_model || p.model || undefined,
+    contextWindow: p.context_window || undefined,
+    fastMode: p.fast_mode || undefined,
     latency: p.latency_ms ? `${p.latency_ms}ms` : '32ms',
     iconType,
   };
@@ -546,25 +560,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const handleSaveProvider = async (service: string, apiKey: string) => {
+  const handleSaveProvider = async (
+    serviceOrParams: string | { service: string; apiKey?: string; endpointUrl?: string; model?: string; contextWindow?: number; fastMode?: boolean },
+    maybeApiKey?: string
+  ) => {
     try {
+      const isObj = typeof serviceOrParams === 'object' && serviceOrParams !== null;
+      const service = isObj ? serviceOrParams.service : serviceOrParams;
+      const apiKey = isObj ? (serviceOrParams.apiKey || '') : (maybeApiKey || '');
+      const endpointUrl = isObj ? serviceOrParams.endpointUrl : undefined;
+      const defaultModel = isObj ? serviceOrParams.model : undefined;
+      const contextWindow = isObj ? serviceOrParams.contextWindow : undefined;
+      const fastMode = isObj ? serviceOrParams.fastMode : undefined;
+
       const existing = providers.find((p) => p.name.toLowerCase().includes(service.toLowerCase()) || p.id === service);
       const providerId = existing?.id || service.toLowerCase().replace(/[^a-z0-9]/g, '_');
       const providerType =
         service.toLowerCase().includes('claude') || service.toLowerCase().includes('anthropic') ? 'anthropic' :
         service.toLowerCase().includes('openai') || service.toLowerCase().includes('gpt') ? 'openai' :
-        service.toLowerCase().includes('gemini') ? 'gemini' : 'local';
+        service.toLowerCase().includes('gemini') ? 'gemini' :
+        service.toLowerCase().includes('deepseek') ? 'deepseek' : 'local';
 
       await daemonClient.saveProvider({
         id: providerId,
         name: existing?.name || service,
+        service_type: providerType,
         provider_type: providerType,
-        model: existing?.model || 'claude-3-7-sonnet',
+        model: defaultModel || existing?.model || 'claude-3-7-sonnet',
+        default_model: defaultModel,
         api_key: apiKey,
-        status: apiKey.trim() ? 'primary' : 'offline',
-        status_label: apiKey.trim() ? 'Configured & Active' : 'Offline',
+        endpoint_url: endpointUrl,
+        context_window: contextWindow,
+        fast_mode: fastMode,
+        status: apiKey.trim() || endpointUrl?.trim() ? 'primary' : 'offline',
+        status_label: apiKey.trim() || endpointUrl?.trim() ? 'Configured & Active' : 'Offline',
         latency_ms: 28,
-        is_active: Boolean(apiKey.trim()),
+        is_active: Boolean(apiKey.trim() || endpointUrl?.trim()),
       });
 
       const updated = await daemonClient.listProviders();
@@ -576,6 +607,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err: any) {
       console.error('[SaveProvider] Error:', err);
       showToast(`Lỗi lưu provider: ${err?.message || err}`);
+    }
+  };
+
+  const handleDeleteProvider = async (id: string) => {
+    try {
+      await daemonClient.deleteProvider(id);
+      const updated = await daemonClient.listProviders();
+      setProviders(updated.map(mapBackendProvider));
+      showToast(`Đã xóa provider ${id} khỏi hệ thống!`);
+    } catch (err: any) {
+      console.error('[DeleteProvider] Error:', err);
+      showToast(`Lỗi xóa provider: ${err?.message || err}`);
+    }
+  };
+
+  const handleTestConnection = async (providerNameOrId: string) => {
+    try {
+      const provider = providers.find((p) => p.id === providerNameOrId || p.name === providerNameOrId);
+      if (!provider) {
+        showToast(`Không tìm thấy provider ${providerNameOrId}`);
+        return;
+      }
+      if (provider.endpoint) {
+        const probeRes = await daemonClient.probeModels(provider.endpoint, provider.iconType, undefined, provider.id);
+        showToast(`✓ Đã kết nối endpoint ${provider.name}! Tìm thấy ${probeRes.count} models.`);
+      } else {
+        showToast(`✓ Đã xác minh kết nối provider ${provider.name} qua Daemon protocol.`);
+      }
+    } catch (err: any) {
+      showToast(`Lỗi kết nối provider: ${err?.message || err}`);
     }
   };
 
@@ -654,6 +715,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         handleCreateNewSession,
         handleNewProjectPrompt,
         handleSaveProvider,
+        handleDeleteProvider,
+        handleTestConnection,
         handleGenerateClientKey,
         handleRevokeClientKey,
       }}
