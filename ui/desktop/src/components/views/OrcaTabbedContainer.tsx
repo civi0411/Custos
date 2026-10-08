@@ -19,6 +19,8 @@ import { daemonClient } from '@/api/daemon_client';
 import type { CapabilityDescriptor } from '@/types/domain';
 import { ExecutionWorkspacesPane } from '@/components/workspaces/engineering/ExecutionWorkspacesPane';
 import { TerminalWorkbenchPane } from '@/components/workspaces/engineering/TerminalWorkbenchPane';
+import { FilesWorkbenchPane } from '@/components/workspaces/engineering/FilesWorkbenchPane';
+import { ChangesWorkbenchPane } from '@/components/workspaces/engineering/ChangesWorkbenchPane';
 import {
   ClaimsMatrixPane,
   DeepInspectorPane,
@@ -87,9 +89,9 @@ export type ResourceDefinition = {
 };
 
 const DEFAULT_RESOURCES: ResourceDefinition[] = [
-  { id: 'files', title: 'Files', description: 'Repository tree, editors and source anchors.', icon: FolderTree, group: 'Engineering', status: 'unavailable', reason: 'Safe Git workspace file/editor/diff API scheduled in Roadmap Step 4.' },
-  { id: 'changes', title: 'Changes', description: 'Diff review, annotations and patch decisions.', icon: FileDiff, group: 'Engineering', status: 'unavailable', reason: 'Interactive diff review & patch approval API scheduled in Roadmap Step 4.' },
-  { id: 'terminal', title: 'Terminal', description: 'Bounded PTY streams scoped to an execution workspace.', icon: Terminal, group: 'Engineering', status: 'unavailable', reason: 'Bounded PTY streams scoped to an execution workspace scheduled in Roadmap Step 3.' },
+  { id: 'files', title: 'Files', description: 'Repository tree, editors and source anchors.', icon: FolderTree, group: 'Engineering', status: 'available', supportedOperations: ['tree', 'read', 'write'] },
+  { id: 'changes', title: 'Changes', description: 'Diff review, annotations and patch decisions.', icon: FileDiff, group: 'Engineering', status: 'available', supportedOperations: ['diff', 'file_diff', 'stage', 'unstage', 'discard'] },
+  { id: 'terminal', title: 'Terminal', description: 'Bounded PTY streams scoped to an execution workspace.', icon: Terminal, group: 'Engineering', status: 'available', supportedOperations: ['spawn', 'write', 'resize', 'read', 'terminate', 'list', 'get'] },
   { id: 'worktrees', title: 'Workspaces', description: 'Inspect daemon-owned folder and Git execution workspaces.', icon: GitBranch, group: 'Engineering', status: 'available' },
   { id: 'kanban', title: 'Agents', description: 'Worker runs, attention state and delegated task topology.', icon: Bot, group: 'Engineering', status: 'unavailable', reason: 'Worker runs, attention state and delegated task topology scheduled in Roadmap Step 10.' },
   { id: 'evidence', title: 'Evidence', description: 'Criteria, receipts, verifier records and stale status.', icon: ShieldCheck, group: 'Engineering', status: 'unavailable', reason: 'Criteria verifier records and receipts scheduled in Roadmap Step 8.' },
@@ -294,6 +296,14 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
 
   if (activeId === 'terminal') {
     return <TerminalWorkbenchPane />;
+  }
+
+  if (activeId === 'files') {
+    return <FilesWorkbenchPane />;
+  }
+
+  if (activeId === 'changes') {
+    return <ChangesWorkbenchPane />;
   }
 
   if (activeId === 'synthesis') {

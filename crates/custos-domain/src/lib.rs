@@ -33,6 +33,7 @@ pub mod terminal;
 pub mod types;
 pub mod workflow;
 pub mod workspace;
+pub mod workspace_files;
 
 // Explicit re-exports of public domain surface (No glob *)
 pub use annotation::{AnnotationRecord, AnnotationStatus, AnnotationTarget};
@@ -108,5 +109,9 @@ pub use workflow::{
 pub use workspace::{
     DirtyManifest, ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceLineage,
     WorkspaceStatus,
+};
+pub use workspace_files::{
+    WorkspaceDiffEntry, WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff,
+    WorkspaceFileEntry, WorkspaceFileTree, WriteWorkspaceFileParams,
 };
 

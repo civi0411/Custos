@@ -5,7 +5,8 @@
 use async_trait::async_trait;
 use custos_domain::{
     ExecutionWorkspace, Session, SessionJournalEntry, Task, TaskContract, TaskStatus,
-    VerificationClaim, WorkspaceKind, WorkspaceLineage,
+    VerificationClaim, WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff,
+    WorkspaceFileTree, WorkspaceKind, WorkspaceLineage,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -34,6 +35,15 @@ pub const METHOD_WORKSPACES_LIST: &str = "v1.workspaces.list";
 pub const METHOD_WORKSPACES_ARCHIVE: &str = "v1.workspaces.archive";
 pub const METHOD_WORKSPACES_INSPECT_DIRTY: &str = "v1.workspaces.inspect_dirty";
 pub const METHOD_WORKSPACES_RECOVER: &str = "v1.workspaces.recover";
+
+pub const METHOD_WORKSPACE_FILES_TREE: &str = "v1.workspace.files.tree";
+pub const METHOD_WORKSPACE_FILES_READ: &str = "v1.workspace.files.read";
+pub const METHOD_WORKSPACE_FILES_WRITE: &str = "v1.workspace.files.write";
+pub const METHOD_WORKSPACE_DIFF: &str = "v1.workspace.diff";
+pub const METHOD_WORKSPACE_FILE_DIFF: &str = "v1.workspace.diff.file";
+pub const METHOD_WORKSPACE_GIT_STAGE: &str = "v1.workspace.git.stage";
+pub const METHOD_WORKSPACE_GIT_UNSTAGE: &str = "v1.workspace.git.unstage";
+pub const METHOD_WORKSPACE_GIT_DISCARD: &str = "v1.workspace.git.discard";
 
 pub const METHOD_RESEARCH_SOURCES_LIST: &str = "v1.research.sources.list";
 pub const METHOD_RESEARCH_SOURCES_SAVE: &str = "v1.research.sources.save";
@@ -821,6 +831,183 @@ impl LocalApiClient {
         })
         .map_err(|e| e.to_string())?;
         let req = ApiRequest::new(req_id, METHOD_WORKSPACES_ARCHIVE, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        Ok(())
+    }
+
+    pub async fn get_workspace_file_tree(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        relative_dir: Option<&str>,
+        max_depth: Option<usize>,
+    ) -> Result<WorkspaceFileTree, String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "relative_dir": relative_dir,
+            "max_depth": max_depth,
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_FILES_TREE, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse WorkspaceFileTree: {e}"))
+    }
+
+    pub async fn read_workspace_file(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        path: &str,
+        max_bytes: Option<usize>,
+    ) -> Result<WorkspaceFileContent, String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "path": path,
+            "max_bytes": max_bytes,
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_FILES_READ, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse WorkspaceFileContent: {e}"))
+    }
+
+    pub async fn write_workspace_file(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        path: &str,
+        content: &str,
+        create_parents: Option<bool>,
+        overwrite: Option<bool>,
+    ) -> Result<WorkspaceFileContent, String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "path": path,
+            "content": content,
+            "create_parents": create_parents.unwrap_or(true),
+            "overwrite": overwrite.unwrap_or(true),
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_FILES_WRITE, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse WorkspaceFileContent: {e}"))
+    }
+
+    pub async fn get_workspace_diff(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        staged: Option<bool>,
+    ) -> Result<WorkspaceDiffSummary, String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "staged": staged,
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_DIFF, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse WorkspaceDiffSummary: {e}"))
+    }
+
+    pub async fn get_workspace_file_diff(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        path: &str,
+        staged: Option<bool>,
+    ) -> Result<WorkspaceFileDiff, String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "path": path,
+            "staged": staged,
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_FILE_DIFF, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse WorkspaceFileDiff: {e}"))
+    }
+
+    pub async fn stage_workspace_file(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        path: &str,
+    ) -> Result<(), String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "path": path,
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_GIT_STAGE, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        Ok(())
+    }
+
+    pub async fn unstage_workspace_file(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        path: &str,
+    ) -> Result<(), String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "path": path,
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_GIT_UNSTAGE, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        Ok(())
+    }
+
+    pub async fn discard_workspace_file(
+        &self,
+        req_id: &str,
+        workspace_id: &str,
+        path: &str,
+    ) -> Result<(), String> {
+        let params = serde_json::json!({
+            "workspace_id": workspace_id,
+            "path": path,
+        });
+        let req = ApiRequest::new(req_id, METHOD_WORKSPACE_GIT_DISCARD, params);
         let resp = self.transport.send_request(req).await?;
 
         if let Some(err) = resp.error {

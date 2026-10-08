@@ -18,10 +18,14 @@ pub use crate::custos_local_api::{
     METHOD_WORKSPACES_RECOVER, METHOD_TERMINAL_GET, METHOD_TERMINAL_LIST,
     METHOD_TERMINAL_READ, METHOD_TERMINAL_RESIZE, METHOD_TERMINAL_SPAWN,
     METHOD_TERMINAL_TERMINATE, METHOD_TERMINAL_WRITE,
+    METHOD_WORKSPACE_DIFF, METHOD_WORKSPACE_FILES_READ, METHOD_WORKSPACE_FILES_TREE,
+    METHOD_WORKSPACE_FILES_WRITE, METHOD_WORKSPACE_FILE_DIFF, METHOD_WORKSPACE_GIT_DISCARD,
+    METHOD_WORKSPACE_GIT_STAGE, METHOD_WORKSPACE_GIT_UNSTAGE,
 };
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
 use custos_core::contracts::terminal::TerminalPort;
 use custos_core::contracts::workflow::WorkflowPort;
+use custos_core::contracts::workspace_files::WorkspaceFilesPort;
 use custos_core::{AdvanceTask, CancelTask, CreateTask, TaskService};
 use custos_domain::{
     CapabilityDescriptor, CapabilityGroup, PassageAnchor, ResearchClaim, ResearchExperimentRun,
@@ -29,10 +33,10 @@ use custos_domain::{
 };
 use custos_persistence::{ProviderRepository, ResearchRepository};
 use custos_runtime::session::SessionManager;
-use custos_runtime::workspace::{CreateWorkspaceRequest, WorkspaceCoordinator};
+use custos_runtime::workspace::{CreateWorkspaceRequest, WorkspaceCoordinator, WorkspaceFilesCoordinator};
 use custos_runtime::TerminalCoordinator;
 
-/// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, WorkflowPort, ResearchRepository, ProviderRepository, and TerminalCoordinator for IPC callers.
+/// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, WorkflowPort, ResearchRepository, ProviderRepository, TerminalCoordinator, and WorkspaceFilesPort for IPC callers.
 pub struct LocalApiDispatcher {
     task_service: Arc<TaskService>,
     session_manager: Arc<SessionManager>,
@@ -42,6 +46,7 @@ pub struct LocalApiDispatcher {
     research: Option<Arc<ResearchRepository>>,
     providers: Option<Arc<ProviderRepository>>,
     terminal: Arc<TerminalCoordinator>,
+    files: Arc<dyn WorkspaceFilesPort>,
 }
 
 impl LocalApiDispatcher {
@@ -59,7 +64,13 @@ impl LocalApiDispatcher {
             research: None,
             providers: None,
             terminal: Arc::new(TerminalCoordinator::new()),
+            files: Arc::new(WorkspaceFilesCoordinator::new()),
         }
+    }
+
+    pub fn with_files(mut self, files: Arc<dyn WorkspaceFilesPort>) -> Self {
+        self.files = files;
+        self
     }
 
     pub fn with_terminal(mut self, terminal: Arc<TerminalCoordinator>) -> Self {
@@ -274,21 +285,21 @@ impl LocalApiDispatcher {
                 Some("terminal"),
                 vec!["spawn", "write", "resize", "read", "terminate", "list", "get"],
             ),
-            CapabilityDescriptor::unavailable(
+            CapabilityDescriptor::available(
                 "code.files",
                 "Files",
                 CapabilityGroup::Code,
                 "Repository tree, file buffers, and source anchor inspection.",
                 Some("files"),
-                "Safe Git workspace file/editor/diff API scheduled in Roadmap Step 4.",
+                vec!["tree", "read", "write"],
             ),
-            CapabilityDescriptor::unavailable(
+            CapabilityDescriptor::available(
                 "code.changes",
                 "Changes",
                 CapabilityGroup::Code,
-                "Diff review, patch proposal, annotations, and approval receipts.",
+                "Diff review, patch proposal, annotations, and Git stage decisions.",
                 Some("changes"),
-                "Interactive diff review & patch approval API scheduled in Roadmap Step 4.",
+                vec!["diff", "file_diff", "stage", "unstage", "discard"],
             ),
             CapabilityDescriptor::unavailable(
                 "compute.notebook",
@@ -331,6 +342,34 @@ impl LocalApiDispatcher {
                 "Task notes and Markdown artifacts scheduled in Roadmap Step 6.",
             ),
         ]
+    }
+
+    async fn resolve_workspace_for_dispatch(
+        &self,
+        req_id: &str,
+        ws_id_str: &str,
+    ) -> Result<custos_domain::ExecutionWorkspace, ApiResponse> {
+        let coordinator = match self.workspace.as_ref() {
+            Some(c) => c,
+            None => {
+                return Err(ApiResponse::error(
+                    req_id,
+                    "WorkspaceCoordinator not configured on daemon",
+                ))
+            }
+        };
+        let ws_id = custos_domain::WorkspaceId::new(ws_id_str);
+        match coordinator.get_workspace(&ws_id).await {
+            Ok(Some(ws)) => Ok(ws),
+            Ok(None) => Err(ApiResponse::error(
+                req_id,
+                format!("Workspace {ws_id_str} not found"),
+            )),
+            Err(e) => Err(ApiResponse::error(
+                req_id,
+                format!("Workspace {ws_id_str} lookup failed: {e}"),
+            )),
+        }
     }
 
     pub async fn dispatch_raw(&self, raw: &str) -> String {
@@ -1729,6 +1768,180 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
+            METHOD_WORKSPACE_FILES_TREE => {
+                let workspace_id = match req.params.get("workspace_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing workspace_id parameter"),
+                };
+                let ws = match self.resolve_workspace_for_dispatch(&req.id, workspace_id).await {
+                    Ok(ws) => ws,
+                    Err(resp) => return resp,
+                };
+                let relative_dir = req.params.get("relative_dir").and_then(|v| v.as_str());
+                let max_depth = req.params.get("max_depth").and_then(|v| v.as_u64()).map(|d| d as usize);
+
+                match self.files.get_file_tree(&ws, relative_dir, max_depth).await {
+                    Ok(tree) => match serde_json::to_value(&tree) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKSPACE_FILES_READ => {
+                let workspace_id = match req.params.get("workspace_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing workspace_id parameter"),
+                };
+                let path = match req.params.get("path").and_then(|v| v.as_str()) {
+                    Some(p) if !p.trim().is_empty() => p,
+                    _ => return ApiResponse::error(req.id, "Missing path parameter"),
+                };
+                let max_bytes = req.params.get("max_bytes").and_then(|v| v.as_u64()).map(|b| b as usize);
+                let ws = match self.resolve_workspace_for_dispatch(&req.id, workspace_id).await {
+                    Ok(ws) => ws,
+                    Err(resp) => return resp,
+                };
+
+                match self.files.read_file(&ws, path, max_bytes).await {
+                    Ok(content) => match serde_json::to_value(&content) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKSPACE_FILES_WRITE => {
+                let workspace_id = match req.params.get("workspace_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing workspace_id parameter"),
+                };
+                let path = match req.params.get("path").and_then(|v| v.as_str()) {
+                    Some(p) if !p.trim().is_empty() => p,
+                    _ => return ApiResponse::error(req.id, "Missing path parameter"),
+                };
+                let content = match req.params.get("content").and_then(|v| v.as_str()) {
+                    Some(c) => c.to_string(),
+                    None => return ApiResponse::error(req.id, "Missing content parameter"),
+                };
+                let create_parents = req.params.get("create_parents").and_then(|v| v.as_bool()).unwrap_or(true);
+                let overwrite = req.params.get("overwrite").and_then(|v| v.as_bool()).unwrap_or(true);
+                let ws = match self.resolve_workspace_for_dispatch(&req.id, workspace_id).await {
+                    Ok(ws) => ws,
+                    Err(resp) => return resp,
+                };
+
+                let mut params = custos_domain::WriteWorkspaceFileParams::new(ws.id.clone(), path, content);
+                params.create_parents = create_parents;
+                params.overwrite = overwrite;
+
+                match self.files.write_file(&ws, params).await {
+                    Ok(res) => match serde_json::to_value(&res) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKSPACE_DIFF => {
+                let workspace_id = match req.params.get("workspace_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing workspace_id parameter"),
+                };
+                let staged = req.params.get("staged").and_then(|v| v.as_bool());
+                let ws = match self.resolve_workspace_for_dispatch(&req.id, workspace_id).await {
+                    Ok(ws) => ws,
+                    Err(resp) => return resp,
+                };
+
+                match self.files.get_diff(&ws, staged).await {
+                    Ok(diff) => match serde_json::to_value(&diff) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKSPACE_FILE_DIFF => {
+                let workspace_id = match req.params.get("workspace_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing workspace_id parameter"),
+                };
+                let path = match req.params.get("path").and_then(|v| v.as_str()) {
+                    Some(p) if !p.trim().is_empty() => p,
+                    _ => return ApiResponse::error(req.id, "Missing path parameter"),
+                };
+                let staged = req.params.get("staged").and_then(|v| v.as_bool());
+                let ws = match self.resolve_workspace_for_dispatch(&req.id, workspace_id).await {
+                    Ok(ws) => ws,
+                    Err(resp) => return resp,
+                };
+
+                match self.files.get_file_diff(&ws, path, staged).await {
+                    Ok(diff) => match serde_json::to_value(&diff) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKSPACE_GIT_STAGE => {
+                let workspace_id = match req.params.get("workspace_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing workspace_id parameter"),
+                };
+                let path = match req.params.get("path").and_then(|v| v.as_str()) {
+                    Some(p) if !p.trim().is_empty() => p,
+                    _ => return ApiResponse::error(req.id, "Missing path parameter"),
+                };
+                let ws = match self.resolve_workspace_for_dispatch(&req.id, workspace_id).await {
+                    Ok(ws) => ws,
+                    Err(resp) => return resp,
+                };
+
+                match self.files.stage_file(&ws, path).await {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "staged": true, "path": path })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKSPACE_GIT_UNSTAGE => {
+                let workspace_id = match req.params.get("workspace_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing workspace_id parameter"),
+                };
+                let path = match req.params.get("path").and_then(|v| v.as_str()) {
+                    Some(p) if !p.trim().is_empty() => p,
+                    _ => return ApiResponse::error(req.id, "Missing path parameter"),
+                };
+                let ws = match self.resolve_workspace_for_dispatch(&req.id, workspace_id).await {
+                    Ok(ws) => ws,
+                    Err(resp) => return resp,
+                };
+
+                match self.files.unstage_file(&ws, path).await {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "unstaged": true, "path": path })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKSPACE_GIT_DISCARD => {
+                let workspace_id = match req.params.get("workspace_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing workspace_id parameter"),
+                };
+                let path = match req.params.get("path").and_then(|v| v.as_str()) {
+                    Some(p) if !p.trim().is_empty() => p,
+                    _ => return ApiResponse::error(req.id, "Missing path parameter"),
+                };
+                let ws = match self.resolve_workspace_for_dispatch(&req.id, workspace_id).await {
+                    Ok(ws) => ws,
+                    Err(resp) => return resp,
+                };
+
+                match self.files.discard_file(&ws, path).await {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "discarded": true, "path": path })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
             unknown => ApiResponse::error(req.id, format!("Unknown method: {unknown}")),
         }
     }
@@ -2549,10 +2762,22 @@ mod tests {
         assert_eq!(pty_cap.resource_id.as_deref(), Some("terminal"));
         assert!(pty_cap.supported_operations.contains(&"spawn".to_string()));
 
-        // Files capability is truthfully unavailable with roadmap rationale
+        // Files and Changes capabilities are truthfully available with supported operations
         let files_cap = caps.iter().find(|c| c.id == "code.files").unwrap();
-        assert!(!files_cap.status.is_available());
-        assert!(files_cap.status.reason().unwrap().contains("Roadmap Step 4"));
+        assert!(files_cap.status.is_available());
+        assert!(files_cap.supported_operations.contains(&"tree".to_string()));
+        assert!(files_cap.supported_operations.contains(&"read".to_string()));
+        assert!(files_cap.supported_operations.contains(&"write".to_string()));
+
+        let changes_cap = caps.iter().find(|c| c.id == "code.changes").unwrap();
+        assert!(changes_cap.status.is_available());
+        assert!(changes_cap.supported_operations.contains(&"diff".to_string()));
+        assert!(changes_cap.supported_operations.contains(&"stage".to_string()));
+
+        // Notebook capability is truthfully unavailable with roadmap rationale
+        let notebook_cap = caps.iter().find(|c| c.id == "compute.notebook").unwrap();
+        assert!(!notebook_cap.status.is_available());
+        assert!(notebook_cap.status.reason().unwrap().contains("Roadmap Step 7"));
 
         // 2. Query capability by capability_id
         let get_resp = dispatcher
@@ -2695,5 +2920,90 @@ mod tests {
         let got_sess: custos_domain::TerminalSession =
             serde_json::from_value(get_resp.result.unwrap()).unwrap();
         assert_eq!(got_sess.status, custos_domain::TerminalSessionStatus::Terminated);
+    }
+
+    #[tokio::test]
+    async fn test_workspace_files_api_dispatch() {
+        use custos_persistence::SqliteTaskStore;
+
+        let temp_dir = std::env::temp_dir().join(format!("custos_ws_api_files_{}", std::process::id()));
+        let _ = tokio::fs::create_dir_all(&temp_dir).await;
+
+        let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+        let task_service = Arc::new(TaskService::new(store.clone()));
+        let session_manager = Arc::new(SessionManager::new());
+        let bridge_service = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
+
+        let ws_provider = Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new());
+        let ws_coord = Arc::new(WorkspaceCoordinator::new(store, ws_provider));
+        let ws = ws_coord.create_workspace(CreateWorkspaceRequest {
+            name: "files_test_ws".into(),
+            kind: custos_domain::WorkspaceKind::Folder { path: temp_dir.to_string_lossy().to_string() },
+            path: temp_dir.to_string_lossy().to_string(),
+            lineage: None,
+            owner_task_id: None,
+            metadata: None,
+            setup_script: None,
+        }).await.expect("create workspace");
+
+        let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
+            .with_workspace(ws_coord);
+
+        // 1. Write file
+        let write_resp = dispatcher.handle_request(ApiRequest {
+            id: "wf_1".into(),
+            method: METHOD_WORKSPACE_FILES_WRITE.into(),
+            params: serde_json::json!({
+                "workspace_id": ws.id.to_string(),
+                "path": "src/hello.rs",
+                "content": "pub fn hello() -> &'static str { \"world\" }\n",
+            }),
+        }).await;
+        assert!(write_resp.is_success());
+        let written: custos_domain::WorkspaceFileContent = serde_json::from_value(write_resp.result.unwrap()).unwrap();
+        assert_eq!(written.path, "src/hello.rs");
+        assert_eq!(written.line_count, 1);
+
+        // 2. Read file
+        let read_resp = dispatcher.handle_request(ApiRequest {
+            id: "wf_2".into(),
+            method: METHOD_WORKSPACE_FILES_READ.into(),
+            params: serde_json::json!({
+                "workspace_id": ws.id.to_string(),
+                "path": "src/hello.rs",
+            }),
+        }).await;
+        assert!(read_resp.is_success());
+        let read: custos_domain::WorkspaceFileContent = serde_json::from_value(read_resp.result.unwrap()).unwrap();
+        assert!(read.content.contains("pub fn hello"));
+
+        // 3. Tree
+        let tree_resp = dispatcher.handle_request(ApiRequest {
+            id: "wf_3".into(),
+            method: METHOD_WORKSPACE_FILES_TREE.into(),
+            params: serde_json::json!({
+                "workspace_id": ws.id.to_string(),
+            }),
+        }).await;
+        assert!(tree_resp.is_success());
+        let tree: custos_domain::WorkspaceFileTree = serde_json::from_value(tree_resp.result.unwrap()).unwrap();
+        assert!(tree.entries.iter().any(|e| e.path == "src/hello.rs"));
+
+        // 4. Diff (folder ws is not git repo, returns clean summary)
+        let diff_resp = dispatcher.handle_request(ApiRequest {
+            id: "wf_4".into(),
+            method: METHOD_WORKSPACE_DIFF.into(),
+            params: serde_json::json!({
+                "workspace_id": ws.id.to_string(),
+            }),
+        }).await;
+        assert!(diff_resp.is_success());
+        let diff: custos_domain::WorkspaceDiffSummary = serde_json::from_value(diff_resp.result.unwrap()).unwrap();
+        assert!(diff.is_clean);
+
+        let _ = tokio::fs::remove_dir_all(&temp_dir).await;
     }
 }

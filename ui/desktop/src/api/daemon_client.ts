@@ -16,6 +16,11 @@ import {
   SpawnTerminalParams,
   TerminalOutputChunk,
   TerminalSession,
+  WorkspaceFileTree,
+  WorkspaceFileContent,
+  WriteWorkspaceFileParams,
+  WorkspaceDiffSummary,
+  WorkspaceFileDiff,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -466,6 +471,97 @@ export class DaemonClient {
     return fromDaemon<TerminalSession>(
       await this.request<unknown>('v1.terminal.get', { session_id: sessionId })
     );
+  }
+
+  // ---------------------------------------------------------
+  // Workspace Files & Git Diff API
+  // ---------------------------------------------------------
+
+  async getWorkspaceFileTree(
+    workspaceId: string,
+    relativeDir?: string,
+    maxDepth?: number
+  ): Promise<WorkspaceFileTree> {
+    return fromDaemon<WorkspaceFileTree>(
+      await this.request<unknown>('v1.workspace.files.tree', {
+        workspace_id: workspaceId,
+        relative_dir: relativeDir,
+        max_depth: maxDepth,
+      })
+    );
+  }
+
+  async readWorkspaceFile(
+    workspaceId: string,
+    path: string,
+    maxBytes?: number
+  ): Promise<WorkspaceFileContent> {
+    return fromDaemon<WorkspaceFileContent>(
+      await this.request<unknown>('v1.workspace.files.read', {
+        workspace_id: workspaceId,
+        path,
+        max_bytes: maxBytes,
+      })
+    );
+  }
+
+  async writeWorkspaceFile(params: WriteWorkspaceFileParams): Promise<WorkspaceFileContent> {
+    return fromDaemon<WorkspaceFileContent>(
+      await this.request<unknown>('v1.workspace.files.write', toDaemon(params))
+    );
+  }
+
+  async getWorkspaceDiff(workspaceId: string, staged?: boolean): Promise<WorkspaceDiffSummary> {
+    return fromDaemon<WorkspaceDiffSummary>(
+      await this.request<unknown>('v1.workspace.diff', {
+        workspace_id: workspaceId,
+        staged,
+      })
+    );
+  }
+
+  async getWorkspaceFileDiff(
+    workspaceId: string,
+    path: string,
+    staged?: boolean
+  ): Promise<WorkspaceFileDiff> {
+    return fromDaemon<WorkspaceFileDiff>(
+      await this.request<unknown>('v1.workspace.diff.file', {
+        workspace_id: workspaceId,
+        path,
+        staged,
+      })
+    );
+  }
+
+  async stageWorkspaceFile(
+    workspaceId: string,
+    path: string
+  ): Promise<{ staged: boolean; path: string }> {
+    return this.request<{ staged: boolean; path: string }>('v1.workspace.git.stage', {
+      workspace_id: workspaceId,
+      path,
+    });
+  }
+
+  async unstageWorkspaceFile(
+    workspaceId: string,
+    path: string
+  ): Promise<{ unstaged: boolean; path: string }> {
+    return this.request<{ unstaged: boolean; path: string }>('v1.workspace.git.unstage', {
+      workspace_id: workspaceId,
+      path,
+    });
+  }
+
+  async discardWorkspaceFile(
+    workspaceId: string,
+    path: string
+  ): Promise<{ discarded: boolean; path: string }> {
+    return this.request<{ discarded: boolean; path: string }>('v1.workspace.git.discard', {
+      workspace_id: workspaceId,
+      path,
+    });
   }
 }
 

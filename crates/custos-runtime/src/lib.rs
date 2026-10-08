@@ -30,4 +30,4 @@ pub use context::*;
 pub use session::*;
 pub use terminal::TerminalCoordinator;
 pub use workflow::*;
-pub use workspace::{CreateWorkspaceRequest, WorkspaceCoordinator};
+pub use workspace::{CreateWorkspaceRequest, WorkspaceCoordinator, WorkspaceFilesCoordinator};

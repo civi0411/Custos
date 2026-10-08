@@ -354,4 +354,100 @@ export interface SpawnTerminalParams {
   rows?: number;
 }
 
+// ---------------------------------------------------------
+// Workspace Files & Git Diff Contracts
+// ---------------------------------------------------------
+
+export interface WorkspaceFileEntry {
+  path: string;
+  name: string;
+  is_dir: boolean;
+  isDir?: boolean;
+  size_bytes: number;
+  sizeBytes?: number;
+  modified_at?: number | null;
+  modifiedAt?: number | null;
+  is_readonly: boolean;
+  isReadonly?: boolean;
+}
+
+export interface WorkspaceFileTree {
+  workspace_id: string;
+  workspaceId?: string;
+  root_path: string;
+  rootPath?: string;
+  relative_dir?: string | null;
+  relativeDir?: string | null;
+  entries: WorkspaceFileEntry[];
+  total_files: number;
+  totalFiles?: number;
+  total_dirs: number;
+  totalDirs?: number;
+  truncated: boolean;
+}
+
+export interface WorkspaceFileContent {
+  workspace_id: string;
+  workspaceId?: string;
+  path: string;
+  content: string;
+  is_binary: boolean;
+  isBinary?: boolean;
+  size_bytes: number;
+  sizeBytes?: number;
+  truncated: boolean;
+  line_count: number;
+  lineCount?: number;
+}
+
+export interface WriteWorkspaceFileParams {
+  workspace_id?: string;
+  workspaceId?: string;
+  path: string;
+  content: string;
+  create_parents?: boolean;
+  createParents?: boolean;
+  overwrite?: boolean;
+}
+
+export interface WorkspaceDiffEntry {
+  path: string;
+  old_path?: string | null;
+  oldPath?: string | null;
+  status: string; // 'M' | 'A' | 'D' | 'R' | '??'
+  is_staged: boolean;
+  isStaged?: boolean;
+  additions: number;
+  deletions: number;
+}
+
+export interface WorkspaceDiffSummary {
+  workspace_id: string;
+  workspaceId?: string;
+  head_hash?: string | null;
+  headHash?: string | null;
+  base_hash?: string | null;
+  baseHash?: string | null;
+  branch?: string | null;
+  files: WorkspaceDiffEntry[];
+  raw_diff: string;
+  rawDiff?: string;
+  total_additions: number;
+  totalAdditions?: number;
+  total_deletions: number;
+  totalDeletions?: number;
+  is_clean: boolean;
+  isClean?: boolean;
+}
+
+export interface WorkspaceFileDiff {
+  workspace_id: string;
+  workspaceId?: string;
+  path: string;
+  diff: string;
+  is_staged: boolean;
+  isStaged?: boolean;
+}
+
+
 
