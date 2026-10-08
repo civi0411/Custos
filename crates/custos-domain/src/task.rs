@@ -170,8 +170,14 @@ impl Task {
                 to: next.to_string(),
             });
         }
+        let next_epoch = self.epoch.checked_add(1).ok_or_else(|| {
+            DomainError::InvariantViolation(format!(
+                "Task {} epoch counter overflowed during transition",
+                self.id
+            ))
+        })?;
         self.status = next;
-        self.epoch += 1;
+        self.epoch = next_epoch;
         self.updated_at = Utc::now();
         Ok(())
     }
@@ -182,8 +188,22 @@ impl Task {
         scope: Vec<String>,
         acceptance_criteria: Vec<String>,
         base_source_version: Option<String>,
-    ) -> &TaskRevision {
-        let rev_num = self.active_revision.as_ref().map_or(1, |r| r.revision + 1);
+    ) -> Result<&TaskRevision, DomainError> {
+        let rev_num = match self.active_revision.as_ref() {
+            Some(revision) => revision.revision.checked_add(1).ok_or_else(|| {
+                DomainError::InvariantViolation(format!(
+                    "Task {} revision counter overflowed",
+                    self.id
+                ))
+            })?,
+            None => 1,
+        };
+        let next_state_version = self.state_version.checked_add(1).ok_or_else(|| {
+            DomainError::InvariantViolation(format!(
+                "Task {} state version counter overflowed during revision",
+                self.id
+            ))
+        })?;
         let rev = TaskRevision {
             revision: rev_num,
             goal,
@@ -195,10 +215,9 @@ impl Task {
         if let Some(prev) = self.active_revision.take() {
             self.revision_history.push(prev);
         }
-        self.active_revision = Some(rev);
-        self.state_version += 1;
+        self.state_version = next_state_version;
         self.updated_at = Utc::now();
-        self.active_revision.as_ref().unwrap()
+        Ok(self.active_revision.insert(rev))
     }
 
     pub fn is_stale_against(&self, current_source_version: &str) -> bool {
@@ -244,7 +263,9 @@ mod tests {
             vec!["cargo test passes".into()],
             Some("commit_sha_1".into()),
         );
-        assert_eq!(rev1.revision, 1);
+        assert!(rev1.is_ok());
+        let rev1 = rev1.ok();
+        assert_eq!(rev1.map(|revision| revision.revision), Some(1));
         assert_eq!(t.state_version, 1);
         assert!(!t.is_stale_against("commit_sha_1"));
         assert!(t.is_stale_against("commit_sha_2"));
@@ -256,11 +277,33 @@ mod tests {
             vec!["cargo test passes".into(), "bench passes".into()],
             Some("commit_sha_2".into()),
         );
-        assert_eq!(rev2.revision, 2);
+        assert!(rev2.is_ok());
+        let rev2 = rev2.ok();
+        assert_eq!(rev2.map(|revision| revision.revision), Some(2));
         assert_eq!(t.state_version, 2);
         assert_eq!(t.revision_history.len(), 1);
         assert_eq!(t.revision_history[0].revision, 1);
         assert!(!t.is_stale_against("commit_sha_2"));
         assert!(t.is_stale_against("commit_sha_3"));
+    }
+
+    #[test]
+    fn task_counters_reject_overflow_without_partial_mutation() {
+        let mut transition_task = Task::new("task_epoch".into(), "Epoch overflow".into());
+        transition_task.epoch = u64::MAX;
+        assert!(matches!(
+            transition_task.transition(TaskStatus::Queued),
+            Err(DomainError::InvariantViolation(_))
+        ));
+        assert_eq!(transition_task.status, TaskStatus::Draft);
+
+        let mut revision_task = Task::new("task_revision".into(), "Revision overflow".into());
+        revision_task.state_version = u64::MAX;
+        assert!(matches!(
+            revision_task.create_revision("goal".into(), Vec::new(), Vec::new(), None),
+            Err(DomainError::InvariantViolation(_))
+        ));
+        assert!(revision_task.active_revision.is_none());
+        assert!(revision_task.revision_history.is_empty());
     }
 }

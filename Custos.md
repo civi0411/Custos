@@ -205,11 +205,7 @@ Triết lý tối ưu: tạo kết quả hữu ích nhất trong ngân sách đ�
 
 **Blueprint triển khai thống nhất:** [Kế hoạch refactor SADE](docs/development/workspace-restructuring-plan.md) nối code hiện có với đường chạy đích, cost core, ba pack và waves nghiệm thu. Budget/usage instrumentation bắt đầu từ single-worker path; S1/routing/multiagent là augmentation đo sau đó. [Domain blueprint](docs/architecture/domain-packs-and-workflows.md) giữ jobs/flows/artifacts/verifiers cụ thể. Plan là deliverable kiến trúc, không đánh dấu những module chưa wired là implemented.
 
-**Ranh giới hai workbench:** Workspace/lease/agent harness kiểu OrCa là execution plane dùng chung, không là nguồn chân lý Research. Source, passage, claim và experiment ledger là research plane; Local API chỉ nhận bản nháp từ UI. Client không được tự xác nhận source/claim/proof hoặc báo experiment đã chạy thành công. Handoff sang Coding lấy claim đã lưu từ backend và giữ nguyên mức chưa kiểm chứng; nâng cấp bằng chứng cần verifier riêng. Ba lens dùng chung Task/Session identity nhưng không trộn resource state.
-
 ## 1.2 Định nghĩa và Quyết định Thiết kế Cốt lõi
-
-**Desktop SADE và đường xây dựng tiếp:** [Blueprint frontend–backend](docs/development/sade-frontend-backend-convergence-plan.md#11-blueprint-desktop-sade-và-quyết-định-sản-phẩm) cụ thể hóa shell, ba lens, conversation/Task/resource identity, continuity, event replay, native harness và Research notebook. Đổi lens giữ hội thoại và không khởi execution; đổi executor tạo attempt/continuation phù hợp; fork tạo nhánh có lineage. Backend sở hữu công việc/process/evidence, frontend sở hữu presentation. Blueprint là thiết kế đích và kế hoạch triển khai, chưa phải trạng thái hoàn thành.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
@@ -252,12 +248,6 @@ Triết lý tối ưu: tạo kết quả hữu ích nhất trong ngân sách đ�
 Một shell dùng chung Task strip, conversation, artifact panes, inspector và Connections. Coding mở repo/diff/test/browser; Research mở corpus/PDF/claims/dataset/experiments; Assistant mở draft/recipient/calendar/outbox/automations. Preset Focus/Build/Study/Assist/Compare chỉ đổi bố cục, không đổi mode hoặc quyền. Audit/authority details mở theo ngữ cảnh; approval, pending/uncertain effects và egress không bị che.
 
 UI chốt ba **workbench lens**: **Copilot** (chat + Assistant), **Coding** và **Research**. Lens là cách xem cùng Task, không phải ba session hoặc ba sản phẩm. `Continue in Research`/`Continue in Coding` giữ `task_id`, revision, selected source/artifact refs, decisions, criteria, budget và effect state; nó bind turn/artifact được chọn và compile context riêng cho pack đích. Chỉ khi goal/acceptance thực sự tách mới tạo child Task. Grant, permit, secret và hidden state của native harness không được chuyển ngầm.
-
-**Ngôn ngữ thị giác Desktop:** Custos dùng phong cách *graphite-on-paper*, typography-first và system-native: canvas trung tính, chữ là nội dung chính, đường biên 1 px, bán kính vừa phải và shadow chỉ cho popover nổi. Ba lens không được biến thành ba theme rực màu. Chúng dùng chung shell và chỉ mang một accent có ngữ nghĩa ở icon, vạch chọn, focus và composer: Copilot đất nung dịu, Coding xanh lam thép, Research tím mực. Tên workbench luôn hiện bằng chữ; màu không phải tín hiệu duy nhất. Gradient, glow, glass blur và badge trang trí không được dùng làm nhận diện mặc định.
-
-**Tính trung thực của Desktop:** production UI không có chế độ tự động thay daemon lỗi bằng session, worktree, claim, receipt hay telemetry giả. Dữ liệu chưa có capability được trình bày bằng empty/offline/not-connected state. Literature, Claims và Runs chỉ hiển thị record trả về từ daemon; Files, Changes, Terminal, Worktrees, Agents, Notebook và connector actions chỉ nâng thành hoạt động thật khi adapter/API tương ứng đã nối. Settings là một surface dùng chung, không cho presentation layer tắt invariant Authority hoặc tự tuyên bố sandbox assurance.
-
-**Research recipe và execution ledger:** phương pháp tái lập (`Recipe`) phải tách khỏi lịch sử chạy quan sát được (`ExecutionRecord`). Desktop được phép đọc recipe, execution status, exit code, log refs và artifact refs từ daemon; nó không được tự chạy command hoặc nâng `completed` thành “kết luận đúng”. Dữ liệu environment/recipe/annotation hỏng schema phải trả lỗi đọc có thể quan sát, không được giải mã thành Python, hardware, selector hay timestamp mặc định rồi trình bày như fact. Việc thực thi notebook/kernel vẫn phải đi qua compute admission, permit, supervisor và receipt riêng.
 
 **Lịch sử hội thoại theo workbench là một projection, không phải ba transcript databases.** Mỗi `ConversationSession` có ID và journal ổn định; `home_lens` chỉ xác định nơi xuất hiện mặc định, còn cùng session có thể được mở ở nhiều lens. `Open in Coding/Research/Copilot` chỉ đổi bề mặt trên cùng session. `Continue as linked chat` tạo session đích mới với lineage tới session/turn/source/artifact gốc, không giả rằng native agent giữ được hidden state. UI có thể hiển thị toàn bộ lịch sử gốc ở chat đích theo liên kết, nhưng context thực sự gửi cho model chỉ gồm phần đã chọn, đã lọc privacy và nằm trong token budget; phải hiện rõ hai phạm vi này. `Fork child Task` chỉ dành cho goal/acceptance tách riêng. Thiết kế chi tiết, API và cổng kiểm ở [conversation continuity](docs/architecture/agent-workspace-and-ui.md#12-lịch-sử-hội-thoại-và-chuyển-workbench).
 
@@ -1760,6 +1750,8 @@ Khi người dùng ra lệnh xóa một dự án hoặc xóa một ký ức:
 ## 9.6 Cơ Chế ContinuationPacket và Resume An Toàn
 `ContinuationPacket` là bản chiếu versioned, chứa: goal/revision, current criterion statuses, decisions có actor/source, artifacts, budget còn lại, active workflow cursor, pending approval/uncertain effects. Nó chứa references đến grants chứ không chứa reusable permits hoặc plaintext secrets. Mở lại Task cần: xác thực actor/workspace → resolve Task candidate → kiểm source, policy → reconcile effect chưa rõ trước bất kỳ retry → compile context → tiếp tục node hợp lệ.
 
+Layer 0 chuẩn hóa thêm các value object thuần cho Task spine: turn và session–Task binding có định danh ổn định; continuation manifest chỉ mang selected turn/source/artifact references; context receipt phân biệt `ready`, `delivered`, `blocked` và phần bị loại; handoff artifact không mang grant/permit; usage của từng attempt biểu diễn `known|estimated|unknown`; verifier record và outcome giữ trạng thái `pass|fail|unknown|stale` theo từng criterion. Các value object này không tự tạo session, cấp quyền, gọi model, ghi persistence hoặc quyết định Task completion; các hành vi đó vẫn thuộc bridge/core/runtime/persistence theo ranh giới crate.
+
 ## 9.7 Điều Kiện Caching và Tái Sử Dụng
 Cache key bind chặt với provider/model/version, source digests, schema, privacy scope, policy. Prefix cache là tối ưu theo provider, không hứa chuyển cache giữa các model. File watcher chỉ là signal; read mới tại thời điểm sử dụng mới chốt freshness.
 
@@ -1967,8 +1959,6 @@ flowchart TB
 ---
 
 # PHẦN 11 — RESEARCH PACK
-
-**Blueprint Research đầy đủ:** [Claude Science/Open Science → Custos Research Workbench](docs/architecture/research-workbench-blueprint.md) định nghĩa artifact version/annotations, source acquisition, dataset/environment/kernel, experiment/reproduction, reviewer, AI/Data methodology và handoff. Research assessment cần tách locator, support, replication, methodology và freshness; hash/sealed storage không chứng minh claim đúng. Đây là kiến trúc đích, không nâng trạng thái code hiện tại thành implemented.
 
 ## 11.1 Motivation
 

@@ -347,6 +347,218 @@ pub struct CancelReceipt {
     pub uncertain_effects_count: u32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LaunchStatus {
+    Prepared,
+    Launched,
+    Refused,
+    Failed,
+    Unknown,
+}
+
+impl LaunchStatus {
+    pub fn allows_retry(self) -> bool {
+        matches!(self, Self::Refused | Self::Failed)
+    }
+}
+
+/// One attempt to start a concrete model or native harness execution.
+/// Unknown launch results must be reconciled before another launch is attempted.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LaunchAttempt {
+    pub id: String,
+    pub worker_run_id: String,
+    pub requested_mode: String,
+    pub actual_mode: Option<String>,
+    pub harness_id: Option<String>,
+    pub status: LaunchStatus,
+    pub detail: Option<String>,
+    pub prepared_at: DateTime<Utc>,
+    pub resolved_at: Option<DateTime<Utc>>,
+}
+
+impl LaunchAttempt {
+    pub fn new(
+        worker_run_id: impl Into<String>,
+        requested_mode: impl Into<String>,
+    ) -> Result<Self, DomainError> {
+        let worker_run_id = worker_run_id.into();
+        let requested_mode = requested_mode.into();
+        if worker_run_id.trim().is_empty() || requested_mode.trim().is_empty() {
+            return Err(DomainError::Validation(
+                "Launch attempt requires worker run and requested mode".into(),
+            ));
+        }
+        Ok(Self {
+            id: new_id("launch"),
+            worker_run_id,
+            requested_mode,
+            actual_mode: None,
+            harness_id: None,
+            status: LaunchStatus::Prepared,
+            detail: None,
+            prepared_at: Utc::now(),
+            resolved_at: None,
+        })
+    }
+
+    pub fn mark_launched(
+        &mut self,
+        actual_mode: impl Into<String>,
+        harness_id: Option<String>,
+    ) -> Result<(), DomainError> {
+        self.ensure_prepared(LaunchStatus::Launched)?;
+        let actual_mode = actual_mode.into();
+        if actual_mode.trim().is_empty() {
+            return Err(DomainError::Validation(
+                "Launched attempt requires the actual execution mode".into(),
+            ));
+        }
+        self.actual_mode = Some(actual_mode);
+        self.harness_id = harness_id;
+        self.status = LaunchStatus::Launched;
+        self.resolved_at = Some(Utc::now());
+        Ok(())
+    }
+
+    pub fn mark_refused(&mut self, detail: impl Into<String>) -> Result<(), DomainError> {
+        self.resolve_without_launch(LaunchStatus::Refused, detail)
+    }
+
+    pub fn mark_failed(&mut self, detail: impl Into<String>) -> Result<(), DomainError> {
+        self.resolve_without_launch(LaunchStatus::Failed, detail)
+    }
+
+    pub fn mark_unknown(&mut self, detail: impl Into<String>) -> Result<(), DomainError> {
+        self.resolve_without_launch(LaunchStatus::Unknown, detail)
+    }
+
+    fn resolve_without_launch(
+        &mut self,
+        status: LaunchStatus,
+        detail: impl Into<String>,
+    ) -> Result<(), DomainError> {
+        self.ensure_prepared(status)?;
+        let detail = detail.into();
+        if detail.trim().is_empty() {
+            return Err(DomainError::Validation(
+                "Resolved launch attempt requires detail".into(),
+            ));
+        }
+        self.status = status;
+        self.detail = Some(detail);
+        self.resolved_at = Some(Utc::now());
+        Ok(())
+    }
+
+    fn ensure_prepared(&self, next: LaunchStatus) -> Result<(), DomainError> {
+        if self.status != LaunchStatus::Prepared {
+            return Err(DomainError::InvalidStateTransition {
+                from: format!("{:?}", self.status).to_lowercase(),
+                to: format!("{next:?}").to_lowercase(),
+            });
+        }
+        Ok(())
+    }
+}
+
+/// A measurement never collapses missing telemetry into a zero value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "certainty", content = "value")]
+pub enum UsageMeasurement {
+    Known(u64),
+    Estimated(u64),
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UsageExecutorKind {
+    Model,
+    NativeHarness,
+    Tool,
+    Compute,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UsageRecord {
+    pub id: String,
+    pub task_id: String,
+    pub run_id: String,
+    pub attempt_id: String,
+    pub executor_kind: UsageExecutorKind,
+    pub executor_id: String,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub input_tokens: UsageMeasurement,
+    pub output_tokens: UsageMeasurement,
+    pub cost_micros: UsageMeasurement,
+    pub wall_time_ms: UsageMeasurement,
+    pub recorded_at: DateTime<Utc>,
+}
+
+impl UsageRecord {
+    pub fn new(
+        task_id: impl Into<String>,
+        run_id: impl Into<String>,
+        attempt_id: impl Into<String>,
+        executor_kind: UsageExecutorKind,
+        executor_id: impl Into<String>,
+    ) -> Result<Self, DomainError> {
+        let task_id = task_id.into();
+        let run_id = run_id.into();
+        let attempt_id = attempt_id.into();
+        let executor_id = executor_id.into();
+        if [
+            task_id.as_str(),
+            run_id.as_str(),
+            attempt_id.as_str(),
+            executor_id.as_str(),
+        ]
+        .iter()
+        .any(|value| value.trim().is_empty())
+        {
+            return Err(DomainError::Validation(
+                "Usage record requires task, run, attempt, and executor identity".into(),
+            ));
+        }
+
+        Ok(Self {
+            id: new_id("usage"),
+            task_id,
+            run_id,
+            attempt_id,
+            executor_kind,
+            executor_id,
+            provider: None,
+            model: None,
+            input_tokens: UsageMeasurement::Unknown,
+            output_tokens: UsageMeasurement::Unknown,
+            cost_micros: UsageMeasurement::Unknown,
+            wall_time_ms: UsageMeasurement::Unknown,
+            recorded_at: Utc::now(),
+        })
+    }
+
+    pub fn with_model_identity(
+        mut self,
+        provider: impl Into<String>,
+        model: impl Into<String>,
+    ) -> Result<Self, DomainError> {
+        let provider = provider.into();
+        let model = model.into();
+        if provider.trim().is_empty() || model.trim().is_empty() {
+            return Err(DomainError::Validation(
+                "Model usage identity cannot be empty".into(),
+            ));
+        }
+        self.provider = Some(provider);
+        self.model = Some(model);
+        Ok(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -399,5 +611,34 @@ mod tests {
         assert!(claim.release().is_ok());
         assert_eq!(claim.status, ClaimStatus::Released);
         assert!(claim.released_at.is_some());
+    }
+
+    #[test]
+    fn unknown_launch_cannot_be_blindly_retried_or_reclassified() {
+        let mut attempt = LaunchAttempt::new("worker_run_1", "native");
+        assert!(attempt.is_ok());
+        if let Ok(ref mut value) = attempt {
+            assert!(value
+                .mark_unknown("attach outcome was not observed")
+                .is_ok());
+            assert!(!value.status.allows_retry());
+            assert!(value.mark_launched("native", Some("codex".into())).is_err());
+        }
+    }
+
+    #[test]
+    fn usage_defaults_to_unknown_instead_of_zero() {
+        let usage = UsageRecord::new(
+            "task_1",
+            "run_1",
+            "attempt_1",
+            UsageExecutorKind::NativeHarness,
+            "codex",
+        );
+        assert!(usage.is_ok());
+        if let Ok(value) = usage {
+            assert_eq!(value.input_tokens, UsageMeasurement::Unknown);
+            assert_eq!(value.cost_micros, UsageMeasurement::Unknown);
+        }
     }
 }

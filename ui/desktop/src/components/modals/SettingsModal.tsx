@@ -3,6 +3,7 @@ import {
   Cpu,
   Database,
   Info,
+  Keyboard,
   KeyRound,
   Monitor,
   Plus,
@@ -13,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { daemonClient } from '@/api/daemon_client';
+import { formatKeyCombo } from '@/lib/utils';
 
 export interface SettingsModalProps {
   isOpen: boolean;
@@ -22,7 +24,7 @@ export interface SettingsModalProps {
   onShowToast: (msg: string) => void;
 }
 
-type SettingsTab = 'general' | 'appearance' | 'providers' | 'runtime' | 'security' | 'storage' | 'about';
+type SettingsTab = 'general' | 'appearance' | 'shortcuts' | 'providers' | 'runtime' | 'security' | 'storage' | 'about';
 
 type AppearancePreferences = {
   density: 'comfortable' | 'compact';
@@ -76,7 +78,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    const allowed: SettingsTab[] = ['general', 'appearance', 'providers', 'runtime', 'security', 'storage', 'about'];
+    const allowed: SettingsTab[] = ['general', 'appearance', 'shortcuts', 'providers', 'runtime', 'security', 'storage', 'about'];
     setActiveTab(allowed.includes(initialTab as SettingsTab) ? initialTab as SettingsTab : 'general');
     void checkDaemon();
   }, [isOpen, initialTab]);
@@ -101,6 +103,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const nav = [
     { id: 'general' as const, label: 'General', icon: SlidersHorizontal },
     { id: 'appearance' as const, label: 'Appearance', icon: Monitor },
+    { id: 'shortcuts' as const, label: 'Shortcuts', icon: Keyboard },
     { id: 'providers' as const, label: 'Providers', icon: KeyRound },
     { id: 'runtime' as const, label: 'Runtime', icon: Cpu },
     { id: 'security' as const, label: 'Security', icon: Shield },
@@ -183,6 +186,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <SettingRow title="Reduce motion" description="Disables nonessential transitions and attention animations.">
                   <input type="checkbox" checked={appearance.reduceMotion} onChange={(event) => updateAppearance({ ...appearance, reduceMotion: event.target.checked })} />
                 </SettingRow>
+              </div>
+            )}
+
+            {activeTab === 'shortcuts' && (
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-sm font-semibold">Keyboard Shortcuts</h2>
+                  <p className="mt-1 text-[11px] text-[var(--color-fg-muted)]">
+                    Fast access shortcuts adapted to your operating system.
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] divide-y divide-[var(--color-border-muted)] overflow-hidden">
+                  {[
+                    { action: 'Switch to Copilot workbench', key: formatKeyCombo({ ctrlOrCmd: true, key: '1' }) },
+                    { action: 'Switch to Coding ADE workbench', key: formatKeyCombo({ ctrlOrCmd: true, key: '2' }) },
+                    { action: 'Switch to Research Lab workbench', key: formatKeyCombo({ ctrlOrCmd: true, key: '3' }) },
+                    { action: 'Toggle Sessions sidebar', key: formatKeyCombo({ ctrlOrCmd: true, key: 'B' }) },
+                    { action: 'Toggle Resource Canvas', key: formatKeyCombo({ ctrlOrCmd: true, shift: true, key: 'B' }) },
+                    { action: 'Maximize Resource Canvas', key: formatKeyCombo({ ctrlOrCmd: true, shift: true, key: 'F' }) },
+                    { action: 'Quick Jump Command Palette', key: formatKeyCombo({ ctrlOrCmd: true, key: 'K' }) },
+                    { action: 'Create New Task / Session', key: formatKeyCombo({ ctrlOrCmd: true, key: 'N' }) },
+                    { action: 'Open Preferences & Settings', key: formatKeyCombo({ ctrlOrCmd: true, key: ',' }) },
+                    { action: 'Zoom Interface In', key: `${formatKeyCombo({ ctrlOrCmd: true, key: '+' })}` },
+                    { action: 'Zoom Interface Out', key: `${formatKeyCombo({ ctrlOrCmd: true, key: '-' })}` },
+                    { action: 'Reset Interface Zoom (100%)', key: `${formatKeyCombo({ ctrlOrCmd: true, key: '0' })}` },
+                  ].map((s) => (
+                    <div key={s.action} className="flex items-center justify-between px-4 py-2.5 hover:bg-[var(--color-surface-2)] transition">
+                      <span className="text-xs text-[var(--color-editor-fg)]">{s.action}</span>
+                      <kbd className="px-2 py-0.5 rounded font-mono text-[10px] bg-[var(--color-canvas)] border border-[var(--color-border-default)] text-[var(--color-editor-fg)] shadow-xs">
+                        {s.key}
+                      </kbd>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 

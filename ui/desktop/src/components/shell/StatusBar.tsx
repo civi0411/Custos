@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Scaling } from 'lucide-react';
 import { Tooltip } from '../Tooltip';
+import { formatKeyCombo } from '@/lib/utils';
 
 interface StatusBarProps {
   activeSessionTitle: string;
@@ -48,7 +49,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
         {/* UI Scale Popover Trigger */}
         <div className="relative inline-flex items-center" ref={scaleRef}>
-          <Tooltip content="Scale: Fonts & Components (Ctrl++ / Ctrl+-)" position="top" align="end">
+          <Tooltip content={`Scale: Fonts & Components (${formatKeyCombo({ ctrlOrCmd: true, key: '+' })} / ${formatKeyCombo({ ctrlOrCmd: true, key: '-' })})`} position="top" align="end">
             <button 
               onClick={(e) => {
                 e.stopPropagation();
@@ -73,7 +74,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
                   <Scaling className="w-3.5 h-3.5 workbench-accent" />
                   <span className="font-semibold text-fg-editor">Scale UI & Components</span>
                 </div>
-                <Tooltip content="Reset to 100% (Ctrl+0)" position="top">
+                <Tooltip content={`Reset to 100% (${formatKeyCombo({ ctrlOrCmd: true, key: '0' })})`} position="top">
                   <button 
                     onClick={() => onSetUiScale(100)} 
                     className="text-fg-muted hover:text-fg-editor font-mono bg-surface-2 hover:bg-surface-3 px-1.5 py-0.5 rounded text-[10px] border border-border-default transition cursor-pointer"
@@ -147,7 +148,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                   <span>Fonts & Components</span>
                 </span>
-                <span className="font-mono">Ctrl++ / Ctrl+-</span>
+                <span className="font-mono">{formatKeyCombo({ ctrlOrCmd: true, key: '+' })} / {formatKeyCombo({ ctrlOrCmd: true, key: '-' })}</span>
               </div>
             </div>
           )}

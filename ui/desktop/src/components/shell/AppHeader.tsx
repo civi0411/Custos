@@ -26,6 +26,7 @@ import {
   NotebookTabs
 } from 'lucide-react';
 import type { OrcaTabId, ResourceTabsState } from '@/components/views/OrcaTabbedContainer';
+import { formatKeyCombo } from '@/lib/utils';
 
 // 3 primary workspace modes
 export type AppWorkspaceMode = 'chat' | 'code' | 'research';
@@ -87,21 +88,21 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       id: 'chat',
       label: 'Copilot',
       icon: MessageSquare,
-      shortcut: '⌘1',
+      shortcut: formatKeyCombo({ ctrlOrCmd: true, key: '1' }),
       description: 'Custos Copilot workspace'
     },
     {
       id: 'code',
       label: 'Coding',
       icon: Code2,
-      shortcut: '⌘2',
+      shortcut: formatKeyCombo({ ctrlOrCmd: true, key: '2' }),
       description: 'Custos Coding ADE'
     },
     {
       id: 'research',
       label: 'Research',
       icon: FlaskConical,
-      shortcut: '⌘3',
+      shortcut: formatKeyCombo({ ctrlOrCmd: true, key: '3' }),
       description: 'Custos Science Lab'
     }
   ];
@@ -158,7 +159,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           <button
             onClick={onToggleSidebar}
             className={`p-1 rounded transition ml-0.5 ${!isSidebarCollapsed ? 'text-fg-muted hover:text-fg-editor hover:bg-surface-2' : 'workbench-accent bg-surface-2'}`}
-            title="Toggle Sidebar (⌘B)"
+            title={`Toggle Sidebar (${formatKeyCombo({ ctrlOrCmd: true, key: 'B' })})`}
           >
             <PanelLeft className="w-3.5 h-3.5" />
           </button>
@@ -229,21 +230,25 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 <button
                   onClick={onOpenCommandPalette}
                   className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-canvas hover:bg-surface-2 border border-border-default text-fg-muted hover:text-fg-editor text-[11px] transition"
-                  title="Jump Palette (⌘K / ⌘P)"
+                  title={`Jump Palette (${formatKeyCombo({ ctrlOrCmd: true, key: 'K' })})`}
                 >
                   <Search className="w-3.5 h-3.5 text-fg-muted" />
                   <span className="hidden md:inline">Jump...</span>
-                  <kbd className="hidden lg:inline text-[9px] font-mono bg-surface-1 px-1 py-0.2 rounded border border-border-default">⌘K</kbd>
+                  <kbd className="hidden lg:inline text-[9px] font-mono bg-surface-1 px-1 py-0.2 rounded border border-border-default">
+                    {formatKeyCombo({ ctrlOrCmd: true, key: 'K' })}
+                  </kbd>
                 </button>
               )}
               <button
                 onClick={onToggleWebTab}
                 className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-2 hover:bg-surface-3 text-fg-editor text-[11px] border border-border-default transition"
-                title="Open Resource Canvas (⇧⌘B)"
+                title={`Open Resource Canvas (${formatKeyCombo({ ctrlOrCmd: true, shift: true, key: 'B' })})`}
               >
                 <PanelRight className="w-3.5 h-3.5 text-fg-muted" />
                 <span className="hidden sm:inline">Resources</span>
-                <kbd className="text-[9px] font-mono bg-canvas px-1 py-0.2 rounded border border-border-default">⇧⌘B</kbd>
+                <kbd className="text-[9px] font-mono bg-canvas px-1 py-0.2 rounded border border-border-default">
+                  {formatKeyCombo({ ctrlOrCmd: true, shift: true, key: 'B' })}
+                </kbd>
               </button>
             </div>
           )}

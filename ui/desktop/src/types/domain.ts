@@ -206,3 +206,48 @@ export interface CreateWorkspaceParams {
   metadata?: Record<string, any>;
   setup_script?: string;
 }
+
+// ---------------------------------------------------------
+// Supervised Invariants, Approval & Evidence Records
+// ---------------------------------------------------------
+
+export type ApprovalStatus = 'Pending' | 'Approved' | 'Denied' | 'TimedOut';
+
+export interface ApprovalRequest {
+  id: string;
+  action_id: string;
+  risk_class: string;
+  summary: string;
+  expires_at: number;
+  status: ApprovalStatus;
+  created_at: number;
+}
+
+export interface ApprovalDecision {
+  request_id: string;
+  approved: boolean;
+  decided_by: string;
+  decided_at: number;
+  reason?: string;
+}
+
+export type CriterionVerificationStatus = 'Pass' | 'Fail' | 'Unknown' | 'Stale';
+
+export interface CriterionVerificationRecord {
+  criterion_name: string;
+  status: CriterionVerificationStatus;
+  method: string;
+  version: string;
+  source_revision: string;
+  verified_at: number;
+  evidence_uri?: string;
+}
+
+export interface TaskOutcome {
+  task_id: string;
+  status: 'Succeeded' | 'Failed' | 'Aborted';
+  verification_records: CriterionVerificationRecord[];
+  summary: string;
+  sealed_at: number;
+}
+

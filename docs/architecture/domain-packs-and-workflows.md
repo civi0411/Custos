@@ -60,8 +60,6 @@ Build preset mở agent chat/terminal, source/diff và test matrix; hiện cwd/h
 
 ## 3. Research Pack cho programming, AI và Data
 
-[Research Workbench blueprint](research-workbench-blueprint.md) là đặc tả sâu cho vòng source → analysis → artifact → review → revision → handoff, dựa trên docs Claude Science và source Open Science đã đối chiếu. Nó bổ sung assessment axes thay cách hiểu L0–L3 như thang chân lý, notebook/kernel lifecycle, versioned comments, dataset/experiment contracts và R0–R7 gắn với desktop packets.
-
 ### 3.1 Source, data và experimental execution
 
 Research có ba chiều: tri thức từ nguồn, data/evaluation, thí nghiệm thực thi. Source QA không bắt buộc compute; reproduction cần vượt citation. [Claude Science](https://www.anthropic.com/news/claude-science-ai-workbench) tham khảo cách nối sources/code/environment/figures/compute; Custos ưu tiên programming/AI/Data và scientific connectors theo user job.
@@ -86,8 +84,6 @@ Source record giữ canonical ID/DOI/URL/date/version/fetched_at/digest/license/
 Locator validity, extraction fidelity và semantic support được kiểm riêng. DOI hoặc `verified=true` do actor đưa không chứng minh support. Assessor có identity/version/rubric/source/uncertainty; half-supported claim/negation/OCR/v1-v2 có fixtures. [ALCE](https://aclanthology.org/2023.emnlp-main.398/) và [MiniCheck](https://aclanthology.org/2024.emnlp-main.499/) định hướng evaluation, không oracle.
 
 Rechecking có cap/material trigger: missing support, contradiction hoặc source drift. Bibliographic API unavailable → freshness unknown; không chứng minh paper chưa retracted. `FIRE` là mnemonic nội bộ nếu chưa pin exact paper, không dependency khoa học đã xác minh.
-
-Local API research là đường nhập bản nháp: backend ép `SourceRecord.verified=false`, tính lại digest của `PassageAnchor.exact_text`, ép claim về L0 và không nhận `sealed_proof_uri`/`verified_by` từ client làm proof. Endpoint lưu run chỉ nhận pending proposal và insert một lần; execution receipt/update phải đến từ runtime/adapter có attempt identity. Handoff tra claim canonical trong repository và tạo Coding Task với provenance + trạng thái L0, không coi statement client gửi là nguồn. Đây là invariant hiện thực ban đầu, chưa phải claim verifier/source byte-verifier hoàn chỉnh.
 
 ### 3.3 Experiment plane
 
@@ -171,6 +167,8 @@ sequenceDiagram
 ```
 
 Handoff giữ Task/node/producer/consumer, artifact type/version/digest, source dependencies, selected content/redaction/privacy, intent/consent và caveats. Child budget allocation thuộc shared ceiling, không copy balance. Grant/permit không tự đi theo artifact; stale/schema mismatch cần refresh/migrate/block.
+
+Hợp đồng Layer 0 dùng `ArtifactHandoff` để giữ các trường provenance/selection trên dưới dạng references và digest. Struct này cố ý không có grant, permit hoặc executable secret; authority và việc commit handoff vẫn do core/bridge/persistence kiểm soát.
 
 Parent completion kiểm obligations từng miền: paper supported không tự authorize requirement; patch accepted không authorize email. Partial/unknown/stale/uncertain hiện theo criterion, không gộp thành done của cuối pipeline.
 

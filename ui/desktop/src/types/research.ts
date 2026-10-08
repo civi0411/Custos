@@ -220,3 +220,37 @@ export interface ResearchExecutionRecord {
   endedAt?: string;
   artifacts: ResearchExecutionArtifact[];
 }
+
+// ---------------------------------------------------------
+// Untrusted Client Proposals (Layer 0 Invariants)
+// Client proposes; backend hashes, verifies and materializes.
+// ---------------------------------------------------------
+
+export interface ResearchClaimProposal {
+  id: string;
+  statement: string;
+  invariants: string[];
+  createdAt: number;
+}
+
+export interface PassageAnchorProposal {
+  sourceId: string;
+  sectionTitle?: string;
+  pageNumber?: number;
+  startOffset: number;
+  endOffset: number;
+  exactText: string;
+}
+
+export interface SourceProposal {
+  id: string;
+  sourceType: string;
+  title: string;
+  locator: string;
+  doi?: string;
+  authors?: string[];
+  year?: number;
+  abstractText?: string;
+  createdAt: number;
+}
+
