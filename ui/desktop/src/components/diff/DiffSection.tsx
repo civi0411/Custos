@@ -105,23 +105,23 @@ export const DiffSection: React.FC<DiffSectionProps> = ({
 
   if (!session) {
     return (
-      <section className="flex-1 flex flex-col items-center justify-center bg-surface text-neutral-500 text-xs">
-        <Sparkles className="w-8 h-8 mb-2 opacity-40 text-brand-cyan" />
+      <section className="flex-1 flex flex-col items-center justify-center bg-canvas text-fg-subtle text-xs">
+        <Sparkles className="w-8 h-8 mb-2 opacity-40 workbench-accent" />
         <p>No diff selected</p>
       </section>
     );
   }
 
   return (
-    <section className="flex-1 flex flex-col bg-surface overflow-hidden min-w-0 transition-all duration-150 select-text">
+    <section className="flex-1 flex flex-col bg-canvas overflow-hidden min-w-0 transition-all duration-150 select-text">
       {/* Changes Header & File Tabs */}
-      <div className="h-11 border-b border-surface-border px-3 sm:px-4 flex items-center justify-between bg-surface text-xs shrink-0 min-w-0">
+      <div className="h-11 border-b border-border-muted px-3 sm:px-4 flex items-center justify-between bg-surface-1 text-xs shrink-0 min-w-0">
         <div className="flex items-center gap-2 min-w-0 truncate">
-          <span className="text-xs font-semibold text-neutral-300 flex items-center gap-1.5 truncate">
+          <span className="text-xs font-semibold text-fg-editor flex items-center gap-1.5 truncate">
             <FileDiff className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">Code Changes</span>
           </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono shrink-0">
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-mono shrink-0">
             {session.diffLinesCount}
           </span>
         </div>
@@ -130,14 +130,14 @@ export const DiffSection: React.FC<DiffSectionProps> = ({
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           <button 
             onClick={onAcceptAndRun} 
-            className="px-2 sm:px-2.5 py-0.5 sm:py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-md text-[10px] font-medium transition flex items-center gap-1"
+            className="px-2 sm:px-2.5 py-0.5 sm:py-1 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-500 border border-emerald-500/30 rounded-md text-[10px] font-medium transition flex items-center gap-1"
           >
             <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
             <span>Accept & Run</span>
           </button>
           <button 
             onClick={onRejectDiff} 
-            className="px-2 py-0.5 sm:py-1 bg-surface-elevated hover:bg-surface-hover text-neutral-400 hover:text-white rounded-md text-[10px] font-medium transition hidden sm:inline-block"
+            className="px-2 py-0.5 sm:py-1 bg-surface-2 hover:bg-surface-3 text-fg-muted hover:text-fg-editor border border-border-default rounded-md text-[10px] font-medium transition hidden sm:inline-block"
           >
             Reject
           </button>
@@ -145,31 +145,31 @@ export const DiffSection: React.FC<DiffSectionProps> = ({
       </div>
 
       {/* File Tab Selector Bar */}
-      <div className="h-9 border-b border-surface-border px-3 flex items-center gap-2 bg-surface text-xs overflow-x-auto shrink-0 font-mono min-w-0">
-        <div className="px-2.5 py-1 bg-surface-card border-t-2 border-brand-blue text-white rounded-t flex items-center gap-1.5 text-[11px] truncate shrink-0">
-          <FileCode className="w-3 h-3 text-neutral-400 shrink-0" />
+      <div className="h-9 border-b border-border-muted px-3 flex items-center gap-2 bg-surface-1 text-xs overflow-x-auto shrink-0 font-mono min-w-0">
+        <div className="px-2.5 py-1 bg-surface-2 border-t-2 border-[var(--workbench-accent)] text-fg-editor rounded-t flex items-center gap-1.5 text-[11px] truncate shrink-0">
+          <FileCode className="w-3 h-3 text-fg-muted shrink-0" />
           <span className="truncate">{session.fileName}</span>
-          <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 shrink-0"></span>
+          <span className="w-1.5 h-1.5 rounded-full bg-border-default shrink-0"></span>
         </div>
-        <span className="text-neutral-500 text-[10px] shrink-0">Modified file</span>
+        <span className="text-fg-subtle text-[10px] shrink-0">Modified file</span>
       </div>
 
       {/* Code Diff Viewer Body */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 font-mono text-[11px] leading-5 text-neutral-300 bg-canvas/40 min-w-0 select-text">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-5 font-mono text-[11px] leading-5 text-fg-editor bg-canvas min-w-0 select-text">
         <div className="max-w-5xl w-full mx-auto space-y-4">
-          <div className="border border-surface-border rounded-xl overflow-hidden bg-surface-card/60 shadow-inner min-w-0 w-full">
+          <div className="border border-border-default rounded-xl overflow-hidden bg-surface-1 shadow-inner min-w-0 w-full">
             {/* Header Bar */}
-            <div className="relative z-20 px-3 py-1.5 bg-surface-card border-b border-surface-border flex items-center justify-between text-neutral-400 text-[10px] shrink-0 select-none">
+            <div className="relative z-20 px-3 py-1.5 bg-surface-2 border-b border-border-default flex items-center justify-between text-fg-muted text-[10px] shrink-0 select-none">
               <div className="flex items-center gap-2 min-w-0">
-                <span className="truncate font-mono text-neutral-300">{session.diffHunk}</span>
-                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-surface-elevated font-mono text-neutral-400 border border-surface-border shrink-0">
+                <span className="truncate font-mono text-fg-editor">{session.diffHunk}</span>
+                <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-surface-3 font-mono text-fg-muted border border-border-default shrink-0">
                   {language}
                 </span>
               </div>
               <Tooltip content="Copy diff to clipboard" position="bottom" align="end">
                 <button 
                   onClick={onCopyDiff} 
-                  className="hover:text-white flex items-center gap-1 shrink-0 ml-2 cursor-pointer transition"
+                  className="hover:text-fg-editor flex items-center gap-1 shrink-0 ml-2 cursor-pointer transition text-fg-muted"
                 >
                   <Copy className="w-3 h-3" />
                   <span className="hidden sm:inline">Copy Diff</span>
@@ -186,15 +186,15 @@ export const DiffSection: React.FC<DiffSectionProps> = ({
                     const isDel = line.type === 'del';
 
                     const rowBg = isAdd
-                      ? 'bg-emerald-500/15 hover:bg-emerald-500/20'
+                      ? 'bg-emerald-500/10 hover:bg-emerald-500/15'
                       : isDel
-                      ? 'bg-red-500/15 hover:bg-red-500/20'
-                      : 'hover:bg-surface-elevated/40';
+                      ? 'bg-rose-500/10 hover:bg-rose-500/15'
+                      : 'hover:bg-surface-2/40';
 
                     const signColor = isAdd
-                      ? 'text-emerald-400 font-bold'
+                      ? 'text-emerald-500 font-bold'
                       : isDel
-                      ? 'text-red-400 font-bold'
+                      ? 'text-rose-500 font-bold'
                       : 'text-transparent';
 
                     const lineTokens = tokens[idx] || [];
@@ -205,12 +205,12 @@ export const DiffSection: React.FC<DiffSectionProps> = ({
                         className={`flex items-stretch w-full min-w-0 transition-colors duration-100 ${rowBg}`}
                       >
                         {/* Gutter: Old Line Number */}
-                        <span className="w-9 sm:w-10 text-right pr-2 text-neutral-500/70 select-none shrink-0 font-mono text-[10.5px] tabular-nums py-0.5">
+                        <span className="w-9 sm:w-10 text-right pr-2 text-fg-subtle select-none shrink-0 font-mono text-[10.5px] tabular-nums py-0.5">
                           {line.oldNum}
                         </span>
 
                         {/* Gutter: New Line Number */}
-                        <span className="w-9 sm:w-10 text-right pr-2 text-neutral-500/70 select-none shrink-0 font-mono text-[10.5px] tabular-nums py-0.5 border-r border-surface-border/40">
+                        <span className="w-9 sm:w-10 text-right pr-2 text-fg-subtle select-none shrink-0 font-mono text-[10.5px] tabular-nums py-0.5 border-r border-border-muted">
                           {line.newNum}
                         </span>
 
@@ -220,7 +220,7 @@ export const DiffSection: React.FC<DiffSectionProps> = ({
                         </span>
 
                         {/* Code Content highlighted by prism-react-renderer */}
-                        <div className="flex-1 px-2 py-0.5 whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word] font-mono select-text text-neutral-200 min-w-0">
+                        <div className="flex-1 px-2 py-0.5 whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word] font-mono select-text text-fg-editor min-w-0">
                           {lineTokens.length > 0 ? (
                             lineTokens.map((token, key) => (
                               <span key={key} {...getTokenProps({ token })} />
@@ -238,12 +238,12 @@ export const DiffSection: React.FC<DiffSectionProps> = ({
           </div>
 
           {/* Diff Summary / AST inspection */}
-          <div className="p-3 rounded-xl border border-surface-border bg-surface-card text-xs select-text">
-            <div className="flex items-center justify-between text-neutral-300 font-sans mb-1.5 select-none">
+          <div className="p-3 rounded-xl border border-border-muted bg-surface-1 text-xs select-text">
+            <div className="flex items-center justify-between text-fg-editor font-sans mb-1.5 select-none">
               <span className="font-medium">Diff Analysis & Inspection</span>
-              <span className="text-[10px] text-emerald-400 font-mono">Clean AST Patch</span>
+              <span className="text-[10px] text-emerald-500 font-mono">Clean AST Patch</span>
             </div>
-            <p className="text-neutral-400 text-[11px] leading-relaxed font-sans select-text whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+            <p className="text-fg-muted text-[11px] leading-relaxed font-sans select-text whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
               {session.summary}
             </p>
           </div>

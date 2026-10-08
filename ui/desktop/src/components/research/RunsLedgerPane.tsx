@@ -16,76 +16,6 @@ import {
 import { ResearchExperimentRun } from '@/types/research';
 import { daemonClient } from '@/api/daemon_client';
 
-const MOCK_RUNS: ResearchExperimentRun[] = [
-  {
-    runId: 'run_9941a_det',
-    sessionId: 'session_01',
-    command: 'python simulate_jitter.py --trials 10000 --fence strict --out results.csv',
-    cwd: '/workspace/experiments',
-    status: 'ok',
-    wallMs: 4120,
-    surface: 'sandbox',
-    reproducibility: 'deterministic',
-    inputMerkleRoot: 'blake3_root_in_8829a',
-    outputMerkleRoot: 'blake3_root_out_3310b',
-    envSnapshot: {
-      pythonVersion: '3.11.8',
-      lockfileHash: 'bafy2bzace4v3k99a77z',
-      packageCount: 64,
-      hardware: 'Apple M2 Pro (10 Cores, 32GB RAM)',
-    },
-    codeFiles: [{ path: 'simulate_jitter.py', hash: 'blake3_f721a' }],
-    outputFiles: [{ path: 'results.csv', hash: 'blake3_bb91a', size: 14820 }],
-    logText: `[Custos SADE Sandbox] Spawning bounded workspace with ticket #perm_8821\n[Run] Loading parameters: trials=10000, fence=strict\n[Run] Processed 10000 iterations. Zero divergence.\n[Result] Output written to results.csv. Merkle hash verified.\n[SADE] Invariant gate sealed: cas://bafy2bzace4v3k99a77z`,
-    ts: Date.now() - 1800000,
-  },
-  {
-    runId: 'run_7718b_hpc',
-    sessionId: 'session_01',
-    command: 'torchrun --nproc_per_node=4 train_esm_folding.py --epochs 5',
-    cwd: '/workspace/models',
-    status: 'ok',
-    wallMs: 84210,
-    surface: 'hpc',
-    reproducibility: 'deterministic',
-    inputMerkleRoot: 'blake3_root_in_1120x',
-    outputMerkleRoot: 'blake3_root_out_9941y',
-    envSnapshot: {
-      pythonVersion: '3.10.12',
-      lockfileHash: 'bafy2bzace4v78q1b99m',
-      packageCount: 112,
-      hardware: '4x NVIDIA A100-SXM4-80GB (CUDA 12.2)',
-    },
-    codeFiles: [{ path: 'train_esm_folding.py', hash: 'blake3_c441b' }],
-    outputFiles: [
-      { path: 'checkpoint_epoch5.pt', hash: 'blake3_a001z', size: 1420994120 },
-      { path: 'metrics.json', hash: 'blake3_m112a', size: 4096 },
-    ],
-    logText: `[HPC Job 99281] Slurm allocation granted on node cn-a100-04\n[Epoch 1/5] Loss: 0.412 - Val RMSD: 1.28 A\n[Epoch 5/5] Loss: 0.089 - Val RMSD: 0.44 A\n[Checkpoint] Saved to checkpoint_epoch5.pt`,
-    ts: Date.now() - 7200000,
-  },
-  {
-    runId: 'run_4412c_fail',
-    sessionId: 'session_01',
-    command: 'python evaluate_raw_bash.py --no-sandbox',
-    cwd: '/workspace/tests',
-    status: 'failed',
-    wallMs: 820,
-    surface: 'local',
-    reproducibility: 'unverified',
-    inputMerkleRoot: 'blake3_root_in_bad99',
-    outputMerkleRoot: 'blake3_root_out_empty',
-    envSnapshot: {
-      pythonVersion: '3.11.8',
-      lockfileHash: 'bafy2bzace_unverified',
-      packageCount: 64,
-      hardware: 'Apple M2 Pro',
-    },
-    logText: `[FATAL] Invariant Gate INV-03 Zero-IO Violation: Command attempted unpermitted socket connection to 0.0.0.0.\nExecution fenced immediately. Exit Code: 137`,
-    ts: Date.now() - 14400000,
-  },
-];
-
 interface RunsLedgerPaneProps {
   onReproduce?: (run: ResearchExperimentRun) => void;
   onShowToast?: (msg: string) => void;
@@ -95,22 +25,21 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
   onReproduce,
   onShowToast,
 }) => {
-  const [runs, setRuns] = useState<ResearchExperimentRun[]>(MOCK_RUNS);
+  const [runs, setRuns] = useState<ResearchExperimentRun[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'ok' | 'failed'>('all');
-  const [expandedId, setExpandedId] = useState<string | null>(MOCK_RUNS[0].runId);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     daemonClient
       .listResearchRuns()
       .then((loaded) => {
-        if (loaded && loaded.length > 0) {
-          setRuns(loaded);
-          setExpandedId(loaded[0].runId);
-        }
+        setRuns(loaded);
+        setExpandedId(loaded[0]?.runId ?? null);
       })
-      .catch((err) => console.warn('Using mock runs fallback:', err));
+      .catch((err) => setLoadError(String(err)));
   }, []);
 
   const filteredRuns = runs.filter((r) => {
@@ -133,69 +62,73 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
     onShowToast?.(`Drafted reproducible prompt for ${run.runId} into Research Chat!`);
   };
 
+  if (loadError && runs.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center bg-[var(--color-canvas)] p-6 text-xs text-[var(--color-fg-muted)]">
+        Experiment ledger unavailable: {loadError}
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-full w-full bg-[#04080F] text-[#e0e6ed] overflow-hidden select-none font-sans relative">
-      <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-emerald-500/5 blur-[150px] rounded-full pointer-events-none" />
-      
-      {/* 32px Standard Pane Header */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-[#1e2430] bg-[#080d16]/80 backdrop-blur-md px-5 relative z-10">
-        <div className="flex items-center gap-3">
-          <div className="p-1.5 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20">
-            <FlaskConical className="w-4 h-4 text-white" />
-          </div>
-          <span className="text-[14px] font-bold text-white tracking-wide">
+    <div className="flex flex-col h-full w-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)] overflow-hidden select-none font-sans relative">
+      {/* 48px Standard Pane Header */}
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-5 z-10">
+        <div className="flex items-center gap-2.5">
+          <FlaskConical className="w-4 h-4 workbench-accent" />
+          <span className="text-xs font-semibold text-[var(--color-editor-fg)]">
             Experiment Ledger
           </span>
-          <span className="text-[11px] text-emerald-400 font-mono font-semibold bg-emerald-400/10 px-2 py-0.5 rounded-md border border-emerald-400/20 ml-2">
-            {runs.length} recorded runs
+          <span className="text-[10px] text-[var(--color-fg-muted)] font-mono font-medium bg-[var(--color-surface-2)] px-2 py-0.5 rounded border border-[var(--color-border-muted)] ml-1">
+            {runs.length} recorded run(s)
           </span>
         </div>
       </header>
 
       {/* Filter Toolbar */}
-      <div className="p-4 border-b border-[#1e2430] bg-gradient-to-b from-transparent to-[#080d16]/50 flex flex-wrap items-center gap-4 text-xs relative z-10">
+      <div className="p-3.5 border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)]/70 flex flex-wrap items-center gap-3 text-xs z-10">
         {/* Search */}
-        <div className="relative min-w-[250px] flex-1 group">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#6e7681] group-focus-within:text-emerald-400 transition-colors" />
+        <div className="relative min-w-[240px] flex-1">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-fg-subtle)]" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search commands, run IDs..."
-            className="w-full bg-[#111722] border border-[#2d3342] rounded-xl py-2 pl-9 pr-3 text-sm text-[#e0e6ed] placeholder-[#6e7681] outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 transition-all shadow-inner"
+            className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-lg py-1.5 pl-8 pr-3 text-xs text-[var(--color-editor-fg)] placeholder-[var(--color-fg-subtle)] outline-none focus:border-[var(--workbench-accent)] transition shadow-xs"
           />
         </div>
 
         {/* Facet Chips */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={() => setStatusFilter(statusFilter === 'ok' ? 'all' : 'ok')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11.5px] font-bold transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition ${
               statusFilter === 'ok'
-                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
-                : 'bg-[#111722] border-[#2d3342] text-[#8b949e] hover:bg-[#161c28] hover:text-white'
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500'
+                : 'bg-[var(--color-surface-0)] border-[var(--color-border-muted)] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)]'
             }`}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'ok' ? 'bg-emerald-400 shadow-[0_0_5px_rgba(16,185,129,1)]' : 'bg-[#6e7681]'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'ok' ? 'bg-emerald-500' : 'bg-[var(--color-fg-subtle)]'}`} />
             <span>Success</span>
           </button>
 
           <button
             onClick={() => setStatusFilter(statusFilter === 'failed' ? 'all' : 'failed')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11.5px] font-bold transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition ${
               statusFilter === 'failed'
-                ? 'bg-rose-500/10 border-rose-500/40 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)]'
-                : 'bg-[#111722] border-[#2d3342] text-[#8b949e] hover:bg-[#161c28] hover:text-white'
+                ? 'bg-rose-500/10 border-rose-500/30 text-rose-500'
+                : 'bg-[var(--color-surface-0)] border-[var(--color-border-muted)] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)]'
             }`}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'failed' ? 'bg-rose-400 shadow-[0_0_5px_rgba(244,63,94,1)]' : 'bg-[#6e7681]'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'failed' ? 'bg-rose-500' : 'bg-[var(--color-fg-subtle)]'}`} />
             <span>Failed</span>
           </button>
         </div>
       </div>
 
       {/* Runs List Scroll Area */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4 select-text relative z-10 max-w-5xl mx-auto w-full">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 select-text max-w-5xl mx-auto w-full">
         {filteredRuns.map((run) => {
           const isExpanded = expandedId === run.runId;
           const isOk = run.status === 'ok';
@@ -203,111 +136,110 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
           return (
             <div
               key={run.runId}
-              className={`rounded-2xl border transition-all duration-300 overflow-hidden ${
+              className={`rounded-xl border transition overflow-hidden ${
                 isExpanded
-                  ? `bg-[#0d131f] border-${isOk ? 'emerald-500/30' : 'rose-500/30'} shadow-xl`
-                  : 'bg-[#111722]/80 border-[#1e2430] hover:border-[#2d3342] hover:bg-[#161c28]'
+                  ? 'bg-[var(--color-surface-1)] border-[var(--color-border-default)] shadow-xs'
+                  : 'bg-[var(--color-surface-0)] border-[var(--color-border-muted)] hover:border-[var(--color-border-default)] hover:bg-[var(--color-surface-1)]/60'
               }`}
             >
               {/* Row Header Button */}
               <div
                 onClick={() => setExpandedId(isExpanded ? null : run.runId)}
-                className={`p-4 flex items-center justify-between gap-4 cursor-pointer transition select-none ${isExpanded ? `bg-${isOk ? 'emerald-500' : 'rose-500'}/5` : 'hover:bg-white/5'}`}
+                className="p-3.5 flex items-center justify-between gap-4 cursor-pointer transition select-none"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className={`p-1 rounded-md ${isExpanded ? (isOk ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400') : 'bg-[#1e2430] text-[#8b949e]'}`}>
+                  <div className="p-1 rounded text-[var(--color-fg-muted)]">
                     {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   </div>
                   <span
-                    className={`w-2.5 h-2.5 rounded-full shrink-0 shadow-sm ${
-                      isOk ? 'bg-emerald-400 shadow-emerald-400/50' : 'bg-rose-400 shadow-rose-400/50'
+                    className={`w-2 h-2 rounded-full shrink-0 ${
+                      isOk ? 'bg-emerald-500' : 'bg-rose-500'
                     }`}
                   />
-                  <span className="font-mono text-[13px] text-white font-medium truncate tracking-tight">
+                  <span className="font-mono text-xs text-[var(--color-editor-fg)] font-medium truncate">
                     {run.command}
                   </span>
                 </div>
 
-                <div className="flex items-center gap-4 shrink-0 text-[11px] text-[#8b949e] font-mono">
+                <div className="flex items-center gap-3 shrink-0 text-[11px] text-[var(--color-fg-muted)] font-mono">
                   {run.surface && (
-                    <span className={`px-2 py-0.5 rounded-md uppercase font-bold text-[10px] ${
-                      run.surface === 'sandbox' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 
-                      run.surface === 'hpc' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 
-                      'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                    }`}>
+                    <span className="px-2 py-0.5 rounded bg-[var(--color-surface-2)] border border-[var(--color-border-muted)] uppercase text-[10px] text-[var(--color-fg-subtle)]">
                       {run.surface}
                     </span>
                   )}
-                  <span className="bg-[#1e2430] px-2 py-0.5 rounded-md">{(run.wallMs / 1000).toFixed(1)}s</span>
-                  <span className="text-[#6e7681]">{new Date(run.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span className="bg-[var(--color-surface-2)] px-2 py-0.5 rounded border border-[var(--color-border-muted)]">
+                    {(run.wallMs / 1000).toFixed(1)}s
+                  </span>
+                  <span className="text-[var(--color-fg-subtle)]">
+                    {new Date(run.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
                 </div>
               </div>
 
               {/* Expanded Details Pane */}
-              <div className={`transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
-                <div className="border-t border-[#1e2430] p-6 bg-[#080d16]/50 space-y-6">
-                  
+              {isExpanded && (
+                <div className="border-t border-[var(--color-border-muted)] p-5 bg-[var(--color-surface-1)] space-y-5">
                   {/* Action Bar */}
-                  <div className="flex items-center justify-between text-[11.5px]">
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleReproduce(run)}
-                        className="group flex items-center gap-2 px-4 py-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold hover:shadow-[0_0_15px_rgba(99,102,241,0.4)] transition-all hover:scale-105 active:scale-95"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-2)] text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-3)] font-medium transition"
                         title="Generate verification prompt with exact environment & lockfile"
                       >
-                        <RotateCcw size={14} className="group-hover:-rotate-90 transition-transform duration-500" />
+                        <RotateCcw size={13} />
                         <span>Reproduce Run</span>
                       </button>
 
                       <button
                         onClick={() => handleCopyCommand(run)}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#111722] border border-[#2d3342] text-[#a1abb7] hover:text-white hover:border-[#6e7681] transition-colors font-medium"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-2)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] transition font-medium"
                       >
                         {copiedId === run.runId ? (
-                          <Check size={14} className="text-emerald-400" />
+                          <Check size={13} className="text-emerald-500" />
                         ) : (
-                          <Copy size={14} />
+                          <Copy size={13} />
                         )}
                         <span>Copy Command</span>
                       </button>
                     </div>
 
-                    <div className="font-mono text-[11px] text-[#6e7681] bg-[#111722] px-3 py-1.5 rounded-lg border border-[#1e2430]">
-                      Merkle Hash: <span className="text-blue-400 ml-1 font-semibold">{run.outputMerkleRoot}</span>
+                    <div className="font-mono text-[10px] text-[var(--color-fg-subtle)] bg-[var(--color-surface-2)] px-2.5 py-1 rounded border border-[var(--color-border-muted)]">
+                      Merkle Hash: <span className="text-[var(--color-editor-fg)] ml-1 font-semibold">{run.outputMerkleRoot}</span>
                     </div>
                   </div>
 
                   {/* Hardware & Env Chips */}
-                  <div className="flex flex-wrap items-center gap-3 font-mono text-[11px]">
-                    <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d131f] text-[#c9d1d9] border border-[#1e2430] shadow-inner">
-                      <Cpu size={12} className="text-blue-400" />
-                      <span className="font-semibold">{run.envSnapshot.hardware}</span>
+                  <div className="flex flex-wrap items-center gap-2 font-mono text-[11px]">
+                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--color-surface-2)] text-[var(--color-editor-fg)] border border-[var(--color-border-muted)]">
+                      <Cpu size={12} className="text-[var(--color-fg-muted)]" />
+                      <span className="font-medium">{run.envSnapshot.hardware}</span>
                     </span>
 
-                    <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0d131f] text-[#c9d1d9] border border-[#1e2430] shadow-inner">
-                      <Package size={12} className="text-emerald-400" />
-                      <span className="font-semibold">Python {run.envSnapshot.pythonVersion}</span>
-                      <span className="text-[#6e7681]">({run.envSnapshot.packageCount} pkgs)</span>
+                    <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--color-surface-2)] text-[var(--color-editor-fg)] border border-[var(--color-border-muted)]">
+                      <Package size={12} className="text-[var(--color-fg-muted)]" />
+                      <span className="font-medium">Python {run.envSnapshot.pythonVersion}</span>
+                      <span className="text-[var(--color-fg-subtle)]">({run.envSnapshot.packageCount} pkgs)</span>
                     </span>
 
-                    <span className="px-3 py-1.5 rounded-lg bg-indigo-500/5 text-indigo-300 border border-indigo-500/20 font-semibold shadow-inner">
+                    <span className="px-2.5 py-1 rounded-lg bg-[var(--color-surface-2)] text-[var(--color-fg-muted)] border border-[var(--color-border-muted)] font-medium">
                       Lockfile: {run.envSnapshot.lockfileHash.slice(0, 16)}...
                     </span>
                   </div>
 
                   {/* Input Code & Outputs */}
-                  <div className="grid grid-cols-2 gap-4 text-[11px]">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                     {run.codeFiles && (
-                      <div className="p-4 rounded-xl bg-[#0d131f]/80 border border-[#1e2430] space-y-3">
-                        <div className="text-[10px] text-[#6e7681] font-bold uppercase tracking-wider flex items-center gap-1.5">
-                          <FileCode2 size={12} className="text-indigo-400" /> 
+                      <div className="p-3.5 rounded-xl bg-[var(--color-surface-0)] border border-[var(--color-border-muted)] space-y-2.5">
+                        <div className="text-[10px] text-[var(--color-fg-subtle)] font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                          <FileCode2 size={12} /> 
                           Code Inputs
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                           {run.codeFiles.map((f) => (
-                            <div key={f.path} className="font-mono text-[#e0e6ed] flex justify-between items-center bg-[#111722] p-2 rounded-lg border border-[#2d3342]">
-                              <span>{f.path}</span>
-                              <span className="text-[#6e7681] text-[10px]">{f.hash}</span>
+                            <div key={f.path} className="font-mono text-xs flex justify-between items-center bg-[var(--color-surface-1)] p-2 rounded-lg border border-[var(--color-border-muted)]">
+                              <span className="truncate text-[var(--color-editor-fg)]">{f.path}</span>
+                              <span className="text-[var(--color-fg-subtle)] text-[10px] ml-2 shrink-0">{f.hash}</span>
                             </div>
                           ))}
                         </div>
@@ -315,16 +247,18 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                     )}
 
                     {run.outputFiles && (
-                      <div className="p-4 rounded-xl bg-[#0d131f]/80 border border-[#1e2430] space-y-3">
-                        <div className="text-[10px] text-[#6e7681] font-bold uppercase tracking-wider flex items-center gap-1.5">
-                          <FileOutput size={12} className="text-emerald-400" /> 
+                      <div className="p-3.5 rounded-xl bg-[var(--color-surface-0)] border border-[var(--color-border-muted)] space-y-2.5">
+                        <div className="text-[10px] text-[var(--color-fg-subtle)] font-semibold uppercase tracking-wider flex items-center gap-1.5">
+                          <FileOutput size={12} /> 
                           Captured Outputs
                         </div>
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                           {run.outputFiles.map((f) => (
-                            <div key={f.path} className="font-mono text-[#e0e6ed] flex justify-between items-center bg-[#111722] p-2 rounded-lg border border-[#2d3342]">
-                              <span>{f.path}</span>
-                              <span className="text-emerald-400 font-bold bg-emerald-400/10 px-1.5 py-0.5 rounded text-[10px]">{(f.size / 1024).toFixed(1)} KB</span>
+                            <div key={f.path} className="font-mono text-xs flex justify-between items-center bg-[var(--color-surface-1)] p-2 rounded-lg border border-[var(--color-border-muted)]">
+                              <span className="truncate text-[var(--color-editor-fg)]">{f.path}</span>
+                              <span className="text-emerald-500 font-medium bg-emerald-500/10 px-1.5 py-0.5 rounded text-[10px] ml-2 shrink-0">
+                                {(f.size / 1024).toFixed(1)} KB
+                              </span>
                             </div>
                           ))}
                         </div>
@@ -334,18 +268,18 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
 
                   {/* Stdout / Stderr Log */}
                   {run.logText && (
-                    <div className="rounded-xl bg-[#04080F] border border-[#1e2430] overflow-hidden shadow-inner">
-                      <div className="bg-[#080d16] px-4 py-2 border-b border-[#1e2430] text-[10px] text-blue-400 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                    <div className="rounded-xl bg-[var(--color-canvas-inset)] border border-[var(--color-border-muted)] overflow-hidden">
+                      <div className="bg-[var(--color-surface-2)] px-3.5 py-1.5 border-b border-[var(--color-border-muted)] text-[10px] text-[var(--color-fg-muted)] font-semibold uppercase tracking-wider flex items-center gap-1.5">
                         <Terminal size={12} /> 
                         Execution Trace
                       </div>
-                      <div className="p-4 font-mono text-[11.5px] leading-[1.7] text-[#8b949e] overflow-x-auto">
+                      <div className="p-3.5 font-mono text-xs leading-relaxed text-[var(--color-editor-fg)] overflow-x-auto">
                         <pre className="whitespace-pre-wrap">
                           {run.logText.split('\n').map((line, i) => {
-                            let colorClass = 'text-[#8b949e]';
-                            if (line.includes('[FATAL]') || line.includes('Violation')) colorClass = 'text-rose-400 font-bold';
-                            else if (line.includes('[Result]') || line.includes('verified')) colorClass = 'text-emerald-400';
-                            else if (line.includes('[SADE]')) colorClass = 'text-indigo-400';
+                            let colorClass = 'text-[var(--color-fg-muted)]';
+                            if (line.includes('[FATAL]') || line.includes('Violation')) colorClass = 'text-rose-500 font-semibold';
+                            else if (line.includes('[Result]') || line.includes('verified')) colorClass = 'text-emerald-500';
+                            else if (line.includes('[SADE]')) colorClass = 'text-[var(--workbench-accent)]';
                             
                             return (
                               <div key={i} className={colorClass}>{line}</div>
@@ -356,7 +290,7 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                     </div>
                   )}
                 </div>
-              </div>
+              )}
             </div>
           );
         })}

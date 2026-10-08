@@ -21,7 +21,8 @@ export interface SourceRecord {
   contentHash: string;      // BLAKE3 or SHA-256
   localPath?: string;
   verified: boolean;
-  abstract?: string;
+  abstractText?: string;
+  createdAt: number;
 }
 
 export interface PassageAnchor {
@@ -152,3 +153,70 @@ export interface ParsedTableData {
 }
 
 export type ChartType = 'line' | 'bar' | 'scatter';
+
+export interface AnnotationTargetSpec {
+  type: 'text' | 'image_pin' | 'dom_element';
+  startOffset?: number;
+  endOffset?: number;
+  exactText?: string;
+  xRatio?: number;
+  yRatio?: number;
+  pinNumber?: number;
+  selector?: string;
+}
+
+export interface AnnotationRecord {
+  id: string;
+  artifactPath: string;
+  artifactVersion: number;
+  target: AnnotationTargetSpec;
+  note: string;
+  actor: string;
+  status: 'pending' | 'submitted' | 'addressed' | 'dismissed';
+  sideChatSessionId?: string;
+  submittedTurnId?: string;
+  createdAt: number;
+}
+
+export interface ResearchEnvironmentSpec {
+  pythonVersion?: string;
+  requirements: string[];
+  containerImage?: string;
+  hardware?: string;
+}
+
+export interface ResearchRecipeInput {
+  name: string;
+  sourceUri: string;
+  required: boolean;
+}
+
+export interface ResearchRecipe {
+  id: string;
+  name: string;
+  description?: string;
+  command: string;
+  environmentSpec: ResearchEnvironmentSpec;
+  inputs: ResearchRecipeInput[];
+  outputs: string[];
+  createdAt: string;
+}
+
+export interface ResearchExecutionArtifact {
+  path: string;
+  contentHash: string;
+  sizeBytes: number;
+}
+
+export interface ResearchExecutionRecord {
+  id: string;
+  recipeId: string;
+  sessionId?: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  exitCode?: number;
+  stdoutCasUri?: string;
+  stderrCasUri?: string;
+  startedAt: string;
+  endedAt?: string;
+  artifacts: ResearchExecutionArtifact[];
+}

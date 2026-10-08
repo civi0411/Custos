@@ -9,6 +9,7 @@ pub mod task;
 pub mod workflow_revision;
 pub mod workspace;
 pub mod research;
+pub mod providers;
 
 pub use continuation::*;
 pub use decision::*;
@@ -21,3 +22,4 @@ pub use task::*;
 pub use workflow_revision::*;
 pub use workspace::*;
 pub use research::*;
+pub use providers::*;

@@ -20,7 +20,7 @@ export interface DiffLine {
 export interface Session {
   id: string;
   taskId?: string;
-  source?: 'demo' | 'daemon';
+  source?: 'daemon';
   taskStatus?: string;
   sessionId?: string;
   pack?: string;
@@ -67,3 +67,23 @@ export interface ClientApiKey {
 }
 
 export * from './research';
+export type {
+  Task,
+  TaskStatus,
+  TaskContract,
+  SessionMode,
+  SessionJournalEntry,
+  Run,
+  RunStatus,
+  WorkerRun,
+  ExecutionWorkspace,
+  WorkspaceKind,
+  WorkspaceStatus,
+  WorkspaceLineage,
+  CreateTaskParams,
+  StartRunParams,
+  AttachSessionParams,
+  CancelRunParams,
+  CreateWorkspaceParams,
+} from './domain';
+export type { Session as DomainSession } from './domain';

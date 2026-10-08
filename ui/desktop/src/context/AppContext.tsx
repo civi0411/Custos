@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { MainTab, ProjectData, ProviderItem, ClientApiKey, Session } from '../types';
-import { initialProjectData, initialProviders, initialClientKeys } from '../data/mockData';
 import { daemonClient } from '../api/daemon_client';
 import { Task, SessionJournalEntry } from '../types/domain';
 
@@ -59,21 +58,63 @@ interface AppContextType {
   handleCopyDiff: () => void;
   handleCreateNewSession: (title: string, pack: 'engineering' | 'research' | 'assistant') => Promise<void>;
   handleNewProjectPrompt: () => void;
-  handleSaveProvider: (service: string, apiKey: string) => void;
-  handleGenerateClientKey: () => void;
-  handleRevokeClientKey: (id: string) => void;
+  handleSaveProvider: (service: string, apiKey: string) => Promise<void> | void;
+  handleGenerateClientKey: () => Promise<void> | void;
+  handleRevokeClientKey: (id: string) => Promise<void> | void;
+}
+
+function mapBackendProvider(p: any): ProviderItem {
+  const pType = (p.provider_type || '').toLowerCase();
+  const iconType = (
+    pType.includes('claude') || pType.includes('anthropic') ? 'anthropic' :
+    pType.includes('openai') || pType.includes('gpt') ? 'openai' :
+    pType.includes('gemini') ? 'gemini' :
+    'deepseek'
+  ) as ProviderItem['iconType'];
+
+  const status = (['primary', 'standby', 'failover', 'offline'].includes(p.status)
+    ? p.status
+    : p.is_active ? 'primary' : 'offline') as ProviderItem['status'];
+
+  return {
+    id: p.id,
+    name: p.name,
+    model: p.model,
+    status,
+    statusLabel: p.status_label || (status === 'primary' ? 'Verified & Active' : 'Offline'),
+    badgeColor: status === 'primary' ? '#10b981' : status === 'standby' ? '#3b82f6' : '#6b7280',
+    apiKey: p.api_key && p.api_key.trim().length > 0 ? `${p.api_key.slice(0, 6)}••••••••` : 'Chưa cấu hình',
+    quotaUsed: p.quota_used || undefined,
+    quotaTotal: p.quota_total || undefined,
+    quotaPercent: typeof p.quota_percent === 'number' ? p.quota_percent : undefined,
+    endpoint: p.endpoint || undefined,
+    latency: p.latency_ms ? `${p.latency_ms}ms` : '32ms',
+    iconType,
+  };
+}
+
+function mapBackendKey(k: any): ClientApiKey {
+  let createdDate = new Date().toISOString().split('T')[0];
+  if (k.created_at) {
+    const epoch = typeof k.created_at === 'number' && k.created_at < 1e11 ? k.created_at * 1000 : k.created_at;
+    createdDate = new Date(epoch).toISOString().split('T')[0];
+  }
+  return {
+    id: k.id,
+    name: k.name,
+    token: k.token,
+    created: createdDate,
+    icon: (k.name || '').toLowerCase().includes('cli') ? 'terminal' : 'laptop',
+  };
 }
 
 const AppContext = createContext<AppContextType | null>(null);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Projects & Sessions state
-  const [projectData, setProjectData] = useState<ProjectData>(() => daemonClient.isDemoMode
-    ? Object.fromEntries(Object.entries(initialProjectData).map(([name, sessions]) =>
-      [name, sessions.map((session) => ({ ...session, source: 'demo' as const }))]))
-    : { 'VinUni_Codelab_Day02_Template': [], 'Custos OS': [] });
-  const [currentProject, setCurrentProject] = useState<string>('VinUni_Codelab_Day02_Template');
-  const [activeSessionId, setActiveSessionId] = useState<string>('auth');
+  const [projectData, setProjectData] = useState<ProjectData>({ 'Custos Workspace': [] });
+  const [currentProject, setCurrentProject] = useState<string>('Custos Workspace');
+  const [activeSessionId, setActiveSessionId] = useState<string>('');
   const [tasks, setTasks] = useState<Task[]>([]);
 
   // Navigation & Layout state
@@ -86,8 +127,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   // Providers & Keys state
-  const [providers, setProviders] = useState<ProviderItem[]>(initialProviders);
-  const [clientKeys, setClientKeys] = useState<ClientApiKey[]>(initialClientKeys);
+  const [providers, setProviders] = useState<ProviderItem[]>([]);
+  const [clientKeys, setClientKeys] = useState<ClientApiKey[]>([]);
 
   // Modals state
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -146,12 +187,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     applyUiScale(uiScale);
 
     async function hydrateFromDaemon() {
-      if (daemonClient.isDemoMode) return;
       try {
-        const [fetchedTasks, fetchedSessions] = await Promise.all([
-          daemonClient.listTasks(),
-          daemonClient.listSessions(),
+        const isOnline = await daemonClient.checkHealth();
+        if (!isOnline) {
+          showToast('Custos daemon is offline. No simulated data was loaded.');
+          return;
+        }
+
+        const [fetchedTasks, fetchedSessions, fetchedProviders, fetchedKeys] = await Promise.all([
+          daemonClient.listTasks().catch(() => []),
+          daemonClient.listSessions().catch(() => []),
+          daemonClient.listProviders().catch(() => []),
+          daemonClient.listClientKeys().catch(() => []),
         ]);
+
+        if (fetchedProviders && fetchedProviders.length > 0) {
+          setProviders(fetchedProviders.map(mapBackendProvider));
+        }
+
+        if (fetchedKeys && fetchedKeys.length > 0) {
+          setClientKeys(fetchedKeys.map(mapBackendKey));
+        }
 
         const journals = await Promise.all(
           fetchedSessions.map(async (session) => {
@@ -175,7 +231,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return {
               id: sessionId || `unbound:${taskId}`,
               taskId,
-              source: daemonClient.isDemoMode ? 'demo' : 'daemon',
+              source: 'daemon',
               taskStatus: String(t.status),
               sessionId,
               pack: t.contract?.pack_id || t.contract?.pack,
@@ -202,16 +258,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           setProjectData((prev) => ({
             ...prev,
-            'Custos OS': projectedSessions,
+            'Custos Workspace': projectedSessions,
           }));
 
           if (projectedSessions.length > 0) {
-            setCurrentProject('Custos OS');
+            setCurrentProject('Custos Workspace');
             setActiveSessionId(projectedSessions[0].id);
           }
         }
       } catch (err) {
-        console.warn('[DaemonClient] Could not load tasks:', err);
+        console.warn('[DaemonClient] Could not load data from daemon:', err);
       }
     }
 
@@ -285,15 +341,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     });
 
-    showToast('Dispatching run to Custos Spine...');
-
     try {
-      // 1. Append message to backend session journal
+      // 1. Check if an LLM is currently available / configured
+      const llmStatus = await daemonClient.checkLlmStatus();
+      if (!llmStatus.configured) {
+        const noLlmMsg = {
+          role: 'assistant' as const,
+          author: 'Custos Engine',
+          badge: 'No LLM Available',
+          stepName: 'LLM Gateway',
+          text: `⚠️ Chưa có LLM nào được cấu hình hiện tại (No LLMs currently available).\n\n${llmStatus.message || 'Hệ thống đang hoạt động ở chế độ Sovereign & Offline Kernel. Vui lòng thêm API Key (Anthropic Claude, OpenAI Codex, Google Gemini...) hoặc chọn Local Model trong Cài đặt > Providers để kích hoạt AI reasoning.'}`,
+        };
+
+        setProjectData((prev) => {
+          const list = prev[currentProject] || [];
+          const updatedList = list.map((s) => {
+            if (s.id === activeSession.id) {
+              return {
+                ...s,
+                messages: [...s.messages, noLlmMsg],
+              };
+            }
+            return s;
+          });
+          return {
+            ...prev,
+            [currentProject]: updatedList,
+          };
+        });
+
+        showToast('Chưa có LLM nào được cấu hình hiện tại');
+        return;
+      }
+
+      showToast('Dispatching run to Custos Spine...');
+
+      // 2. Append message to backend session journal
       if (activeSession.sessionId) {
         await daemonClient.appendSessionMessage(activeSession.sessionId, 'user', text);
       }
 
-      // 2. Start workflow run
+      // 3. Start workflow run
       const run = await daemonClient.startRun({
         task_id: activeSession.taskId || activeSession.id,
         preferred_mode: 'model',
@@ -301,8 +389,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const assistantMsg = {
         role: 'assistant' as const,
-        author: daemonClient.isDemoMode ? 'Demo simulator' : 'Custos runtime',
-        badge: `${daemonClient.isDemoMode ? 'Demo run' : 'Run'} ${run.status}`,
+        author: 'Custos runtime',
+        badge: `Run ${run.status}`,
         stepName: `Run #${run.id.slice(0, 8)}`,
         text: `Run ${run.id} was accepted with status ${run.status}. The result is not available in this view yet.`,
       };
@@ -373,10 +461,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const handleAcceptAndRun = async () => {
     if (!activeSession) return;
-    if (activeSession.source === 'demo') {
-      showToast('Demo patch only. No code was applied.');
-      return;
-    }
     try {
       await daemonClient.advanceTask(activeSession.taskId || activeSession.id, 'queued');
       showToast('Task queued. The daemon will report the run state when it starts.');
@@ -411,7 +495,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newSessionItem: Session = {
         id: createdSession.id,
         taskId: createdTask.id,
-        source: daemonClient.isDemoMode ? 'demo' : 'daemon',
+        source: 'daemon',
         taskStatus: createdTask.status,
         sessionId: createdSession.id,
         pack,
@@ -461,39 +545,67 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const handleSaveProvider = (service: string, apiKey: string) => {
-    setProviders((prev) =>
-      prev.map((p) => {
-        if (p.name.toLowerCase().includes(service.toLowerCase())) {
-          return {
-            ...p,
-            apiKey: apiKey.slice(0, 7) + '••••••••',
-            status: 'primary',
-            statusLabel: 'Configured',
-          };
-        }
-        return p;
-      })
-    );
-    setIsAddProviderOpen(false);
-    showToast(`Demo provider setting updated for ${service}; no credential was stored.`);
+  const handleSaveProvider = async (service: string, apiKey: string) => {
+    try {
+      const existing = providers.find((p) => p.name.toLowerCase().includes(service.toLowerCase()) || p.id === service);
+      const providerId = existing?.id || service.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const providerType =
+        service.toLowerCase().includes('claude') || service.toLowerCase().includes('anthropic') ? 'anthropic' :
+        service.toLowerCase().includes('openai') || service.toLowerCase().includes('gpt') ? 'openai' :
+        service.toLowerCase().includes('gemini') ? 'gemini' : 'local';
+
+      await daemonClient.saveProvider({
+        id: providerId,
+        name: existing?.name || service,
+        provider_type: providerType,
+        model: existing?.model || 'claude-3-7-sonnet',
+        api_key: apiKey,
+        status: apiKey.trim() ? 'primary' : 'offline',
+        status_label: apiKey.trim() ? 'Configured & Active' : 'Offline',
+        latency_ms: 28,
+        is_active: Boolean(apiKey.trim()),
+      });
+
+      const updated = await daemonClient.listProviders();
+      if (updated && updated.length > 0) {
+        setProviders(updated.map(mapBackendProvider));
+      }
+      setIsAddProviderOpen(false);
+      showToast(`Provider ${service} đã được cập nhật thành công vào Backend SQLite!`);
+    } catch (err: any) {
+      console.error('[SaveProvider] Error:', err);
+      showToast(`Lỗi lưu provider: ${err?.message || err}`);
+    }
   };
 
-  const handleGenerateClientKey = () => {
-    const newKey: ClientApiKey = {
-      id: `key-${Date.now()}`,
-      name: 'External Client API Token',
-      token: `custos_live_sec_••••${Math.floor(1000 + Math.random() * 9000)}`,
-      created: new Date().toISOString().split('T')[0],
-      icon: 'terminal',
-    };
-    setClientKeys((prev) => [newKey, ...prev]);
-    showToast('Demo token added locally; it cannot authenticate clients.');
+  const handleGenerateClientKey = async () => {
+    try {
+      const name = window.prompt('Nhập tên Client Token mới (vd: CLI Integration, Microservice):', 'Custom API Key');
+      if (!name) return;
+      await daemonClient.generateClientKey(name);
+      const updated = await daemonClient.listClientKeys();
+      if (updated) {
+        setClientKeys(updated.map(mapBackendKey));
+      }
+      showToast('Client Key mới đã được tạo và lưu vào SQLite DB!');
+    } catch (err: any) {
+      console.error('[GenerateKey] Error:', err);
+      showToast(`Lỗi tạo key: ${err?.message || err}`);
+    }
   };
 
-  const handleRevokeClientKey = (id: string) => {
-    setClientKeys((prev) => prev.filter((k) => k.id !== id));
-    showToast('Demo token removed locally.');
+  const handleRevokeClientKey = async (id: string) => {
+    try {
+      await daemonClient.revokeClientKey(id);
+      const updated = await daemonClient.listClientKeys();
+      if (updated) {
+        setClientKeys(updated.map(mapBackendKey));
+      }
+      showToast(`Đã thu hồi Client Key ${id.slice(0, 8)}`);
+    } catch (err: any) {
+      console.error('[RevokeKey] Error:', err);
+      showToast(`Lỗi thu hồi key: ${err?.message || err}`);
+    }
   };
 
   return (

@@ -4,6 +4,8 @@
 
 ## 1. Quyết định sản phẩm
 
+**Thiết kế triển khai chi tiết:** [Desktop SADE blueprint](../development/sade-frontend-backend-convergence-plan.md#11-blueprint-desktop-sade-và-quyết-định-sản-phẩm) nối các contract trong tài liệu này với shell, layout/tab lifecycle, ba workbench, API/event flows, source reuse OrCa/Open Science và packets frontend–backend. Các đường dẫn đích trong blueprint chưa phải file đã hiện thực; thông tin hiện trạng phải đối chiếu source và catalog.
+
 Định vị đầy đủ là **Custos SADE — Supervised Agent Development Environment**. Workspace là experience shell của cùng sản phẩm; xem [SADE design/supervision](sade-design-and-supervision.md) cho cơ chế S1–S2–human, loop ownership và outcome economics. Không giảm supervision thành thêm một tab Audit hoặc approval mỗi tool call.
 
 Custos là **local-first Agent Workspace cho Coding, Research và Assistant**. Người dùng bắt đầu bằng hội thoại, mở tài nguyên cạnh agent, giao việc trong phạm vi rõ, kiểm kết quả và tiếp tục sau khi đóng phiên. Ba miền là ba bộ công cụ và cách đọc kết quả trong cùng workspace, không phải ba chatbot bắt buộc chạy cùng lúc.
@@ -69,6 +71,10 @@ Ba **workbench lens** là cấp điều hướng chính: **Copilot**, **Coding**
 Giao diện hẹp chỉ có một pane tại một thời điểm, navigation bằng tabs và inspector dạng drawer. Keyboard navigation, focus restoration, screen-reader labels, trạng thái bằng chữ cùng màu, phím hủy và copy citation/diff cần có ngay. CLI cung cấp cùng command/status semantics, không cần tái tạo mọi pane desktop.
 
 ### 4.1. Shared shell của cả ba workbench
+
+Desktop dùng một visual system chung mang tính biên tập thay vì ba skin sản phẩm. Nền và panel giữ phổ graphite trung tính, typography dùng system UI stack để khớp macOS/Windows/Linux, code dùng system monospace. Workbench identity là tổ hợp `tên + icon + accent line`; không dựa riêng vào màu và không nhuộm toàn canvas. Copilot dùng muted terracotta, Coding dùng steel blue, Research dùng ink violet. Accent chỉ dành cho trạng thái chọn, focus và primary action của lens; success/warning/error tiếp tục dùng màu trạng thái riêng nên không bị lẫn với domain.
+
+Card mặc định phẳng, viền 1 px, radius 8–12 px; shadow mạnh chỉ dành cho modal, menu và floating composer. Không dùng gradient/glow/backdrop blur như trang trí nền. Header luôn hiện rõ ba nhãn `Copilot`, `Coding`, `Research`; sidebar, empty state và composer lặp lại đúng một dấu hiệu workbench để người dùng định hướng, nhưng nội dung hội thoại và artifact vẫn là trung tâm.
 
 ```text
 ┌ Rail ┬ Workspace/Task list ┬──────────────── Task workspace ────────────────┬ Inspector ┐
@@ -303,7 +309,9 @@ Open lens chỉ đổi view và được phép tức thì. `Add Research/Coding/
 
 **Wide window:** khi không có pane phải, conversation dùng toàn vùng sau sidebar với max readable text width ở giữa, không giữ một cột chat cố định 45%. Khi mở pane, splitter cho hai vùng có min-width; dưới ngưỡng desktop hẹp chỉ một vùng chính cùng tab/drawer để tránh text/code bị ép dưới chiều rộng đọc được. Tab `New tab` không được mang tên một resource đã tồn tại, còn pane rỗng phải cho thấy chọn file/source/diff hoặc đóng pane. Pane layout có thể lưu local theo user/window, nhưng restore không mở process/agent hay đánh thức effect.
 
-**Tab tài nguyên do Studio shell sở hữu:** thứ tự, tab được chọn và thao tác đóng/mở nằm trên ba lens. Đổi lens dùng lại một tab strip, không remount ba tab store độc lập. `New tab` là một resource picker có một identity, không tạo thêm tab trùng ID. Đóng pane không để tab strip mồ côi trên header. Research có Literature, Claims, Experiments và Synthesis; mỗi tab hiện trạng thái chưa kết nối cho tới khi API cung cấp nguồn, claim hoặc run có version. Provenance của artifact nghiên cứu cần nối tới nguồn, code, environment và run khi có dữ liệu; đây là điều học từ [Claude Science](https://www.anthropic.com/news/claude-science-ai-workbench), không phải claim Custos đã có scientific backend.
+**Tab tài nguyên do Studio shell sở hữu:** thứ tự, tab được chọn và thao tác đóng/mở nằm trên ba lens. Đổi lens dùng lại một tab strip, không remount ba tab store độc lập. `New tab` là một resource picker có một identity, không tạo thêm tab trùng ID. Đóng pane không để tab strip mồ côi trên header. Research có Literature, Claims, Notebook, Runs và Artifacts; Literature/Claims/Runs hiện đọc daemon, còn compute/artifact inspector phải hiện `not connected` cho tới khi capability thật tồn tại. Live UI không fallback sang fixture. Provenance của artifact nghiên cứu cần nối tới nguồn, code, environment và run khi có dữ liệu; đây là điều học từ [Claude Science](https://www.anthropic.com/news/claude-science-ai-workbench), không phải claim Custos đã có scientific backend hoàn chỉnh.
+
+Workspace resource có thể list folder/Git records thật từ daemon trước khi terminal/browser/agent orchestration hoàn tất. UI phải tách nhãn `Workspace API` khỏi các capability con: một Git worktree `ready` chỉ chứng minh provider đã provision đường dẫn theo lifecycle hiện tại, không chứng minh PTY reattach, browser affinity, remote execution hoặc integration verification. Đây là điểm phân tách bắt buộc khi học mô hình worktree-native của Orca.
 
 ### 11.3. Chi tiết bắt buộc theo lens
 
@@ -485,7 +493,7 @@ Không tạo crate `workbench`, `science` hay `chat-history` mới. Đây là **
 | Runtime | `crates/custos-runtime/` context/session orchestration | Compile selected refs, freshness/redaction/omission, attach attempt, crash reconciliation; không I/O trực tiếp từ domain. |
 | Research pack/adapters | `crates/custos-packs/src/research/`, `crates/custos-adapters/` | Source/claim/experiment semantics ở pack; PDF/metadata/kernel/SSH/network I/O ở adapters; không đưa notebook process vào core. |
 | Composition/API | `crates/custos-daemon/src/api.rs`, SDK DTOs | Preview/commit/get transfer, list history by lens, watch cursor, typed error/retry; daemon vẫn là host backend duy nhất. |
-| Desktop | `ui/desktop/src/app/studio/page.tsx`, `ResearchView.tsx`, shared resource tabs | Sidebar projections, transfer preview, linked timeline, context receipt, research panes; local layout cache chỉ là preference. |
+| Desktop | `ui/desktop/src/components/shell/AppWorkspaceShell.tsx`, `components/views/OrcaTabbedContainer.tsx`, Research panes | Sidebar projections, transfer preview, linked timeline, context receipt, research panes; local layout cache chỉ là preference. |
 
 Migration không xoá/sửa `sessions.attached_to` ngay: thêm binding table canonical, backfill những attachment có thể xác thực, dual-read trong giai đoạn chuyển và chỉ ngừng legacy field sau fixtures/replay. `session_journal.entry_id` hiện là stable cursor nội bộ; nếu public turn ID cần tính ổn định xuyên import/export, tạo ID riêng hoặc mapping versioned, không dùng số rowid để suy ra quyền. `session_messages` và `session_journal` hiện cùng tồn tại; trước khi thêm record phải chốt một nguồn canonical cho transcript và biến bảng kia thành projection có test rebuild, tránh hai lịch sử lệch nhau. Schema cụ thể/foreign keys phải đối chiếu `tasks(id)` và migrations thực tế trước khi viết SQL; bảng trên không phải migration chạy sẵn.
 

@@ -4,11 +4,14 @@
 //! Claims Matrix (L0-L3), Experiment Runs, and Artifact Lineage.
 
 use crate::connection::DbConnection;
+use chrono::{DateTime, Utc};
 use custos_domain::{
-    ArtifactLineageNode, ClaimEvidenceLink, ClaimGroundingLevel, DomainError, EnvSnapshot,
-    EvidenceRelation, PassageAnchor, ResearchClaim, ResearchExperimentRun, SourceRecord,
+    AnnotationRecord, AnnotationStatus, AnnotationTarget, ArtifactLineageNode, ClaimEvidenceLink,
+    ClaimGroundingLevel, DomainError, EnvSnapshot, EnvironmentSpec, EvidenceRelation,
+    ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus, PassageAnchor, Recipe, RecipeInput,
+    ResearchClaim, ResearchExperimentRun, SourceRecord,
 };
-use rusqlite::params;
+use rusqlite::{params, types::Type};
 
 #[derive(Clone)]
 pub struct ResearchRepository {
@@ -121,7 +124,10 @@ impl ResearchRepository {
         Ok(())
     }
 
-    pub fn list_anchors_for_source(&self, source_id: &str) -> Result<Vec<PassageAnchor>, DomainError> {
+    pub fn list_anchors_for_source(
+        &self,
+        source_id: &str,
+    ) -> Result<Vec<PassageAnchor>, DomainError> {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
@@ -212,7 +218,8 @@ impl ResearchRepository {
                     link.rationale,
                     link.verified_by,
                 ],
-            ).map_err(|e| DomainError::Validation(e.to_string()))?;
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         }
 
         Ok(())
@@ -245,7 +252,15 @@ impl ResearchRepository {
                 };
                 let invariants: Vec<String> = serde_json::from_str(&inv_json).unwrap_or_default();
 
-                Ok((id, statement, level, conf as f32, invariants, sealed, created_at))
+                Ok((
+                    id,
+                    statement,
+                    level,
+                    conf as f32,
+                    invariants,
+                    sealed,
+                    created_at,
+                ))
             })
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
@@ -309,12 +324,7 @@ impl ResearchRepository {
         conn.execute(
             "INSERT INTO research_experiment_runs (
                 run_id, session_id, command, cwd, status, wall_ms, surface, reproducibility, input_merkle_root, output_merkle_root, env_snapshot_json, sade_permit_id, cas_log_uri, ts
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
-            ON CONFLICT(run_id) DO UPDATE SET
-                status = excluded.status,
-                wall_ms = excluded.wall_ms,
-                output_merkle_root = excluded.output_merkle_root,
-                cas_log_uri = excluded.cas_log_uri",
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 run.run_id,
                 run.session_id,
@@ -349,13 +359,9 @@ impl ResearchRepository {
             .query_map([], |row| {
                 let wall: i64 = row.get(5)?;
                 let env_json: String = row.get(10)?;
-                let env: EnvSnapshot = serde_json::from_str(&env_json).unwrap_or(EnvSnapshot {
-                    python_version: "3.11".to_string(),
-                    lockfile_hash: "none".to_string(),
-                    package_count: None,
-                    hardware: "default".to_string(),
-                    platform: None,
-                });
+                let env: EnvSnapshot = serde_json::from_str(&env_json).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(10, Type::Text, Box::new(error))
+                })?;
 
                 Ok(ResearchExperimentRun {
                     run_id: row.get(0)?,
@@ -408,7 +414,10 @@ impl ResearchRepository {
         Ok(())
     }
 
-    pub fn list_artifact_lineage(&self, artifact_path: &str) -> Result<Vec<ArtifactLineageNode>, DomainError> {
+    pub fn list_artifact_lineage(
+        &self,
+        artifact_path: &str,
+    ) -> Result<Vec<ArtifactLineageNode>, DomainError> {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
@@ -436,6 +445,423 @@ impl ResearchRepository {
             res.push(r.map_err(|e| DomainError::Validation(e.to_string()))?);
         }
         Ok(res)
+    }
+
+    // Recipes
+    pub fn save_recipe(&self, recipe: &Recipe) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        let env_spec_json = serde_json::to_string(&recipe.environment_spec)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let inputs_json = serde_json::to_string(&recipe.inputs)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let outputs_json = serde_json::to_string(&recipe.outputs)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        conn.execute(
+            "INSERT INTO research_recipes (
+                id, name, description, command, environment_spec_json, inputs_json, outputs_json, created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ON CONFLICT(id) DO UPDATE SET
+                name = excluded.name,
+                description = excluded.description,
+                command = excluded.command,
+                environment_spec_json = excluded.environment_spec_json,
+                inputs_json = excluded.inputs_json,
+                outputs_json = excluded.outputs_json",
+            params![
+                recipe.id,
+                recipe.name,
+                recipe.description,
+                recipe.command,
+                env_spec_json,
+                inputs_json,
+                outputs_json,
+                recipe.created_at.timestamp(),
+            ],
+        ).map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        Ok(())
+    }
+
+    pub fn get_recipe(&self, id: &str) -> Result<Option<Recipe>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, name, description, command, environment_spec_json, inputs_json, outputs_json, created_at
+                 FROM research_recipes WHERE id = ?1",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut rows = stmt
+            .query_map(params![id], |row| {
+                let env_json: String = row.get(4)?;
+                let inputs_json: String = row.get(5)?;
+                let outputs_json: String = row.get(6)?;
+                let ts: i64 = row.get(7)?;
+
+                let environment_spec: EnvironmentSpec =
+                    serde_json::from_str(&env_json).unwrap_or_else(|_| EnvironmentSpec::new());
+                let inputs: Vec<RecipeInput> =
+                    serde_json::from_str(&inputs_json).unwrap_or_default();
+                let outputs: Vec<String> = serde_json::from_str(&outputs_json).unwrap_or_default();
+
+                Ok(Recipe {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    description: row.get(2)?,
+                    command: row.get(3)?,
+                    environment_spec,
+                    inputs,
+                    outputs,
+                    created_at: DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now),
+                })
+            })
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        if let Some(r) = rows.next() {
+            Ok(Some(r.map_err(|e| DomainError::Validation(e.to_string()))?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn list_recipes(&self) -> Result<Vec<Recipe>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, name, description, command, environment_spec_json, inputs_json, outputs_json, created_at
+                 FROM research_recipes ORDER BY created_at DESC",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                let env_json: String = row.get(4)?;
+                let inputs_json: String = row.get(5)?;
+                let outputs_json: String = row.get(6)?;
+                let ts: i64 = row.get(7)?;
+
+                let environment_spec: EnvironmentSpec =
+                    serde_json::from_str(&env_json).unwrap_or_else(|_| EnvironmentSpec::new());
+                let inputs: Vec<RecipeInput> =
+                    serde_json::from_str(&inputs_json).unwrap_or_default();
+                let outputs: Vec<String> = serde_json::from_str(&outputs_json).unwrap_or_default();
+
+                Ok(Recipe {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    description: row.get(2)?,
+                    command: row.get(3)?,
+                    environment_spec,
+                    inputs,
+                    outputs,
+                    created_at: DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now),
+                })
+            })
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut res = Vec::new();
+        for r in rows {
+            res.push(r.map_err(|e| DomainError::Validation(e.to_string()))?);
+        }
+        Ok(res)
+    }
+
+    // Execution Records
+    pub fn save_execution_record(&self, record: &ExecutionRecord) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        let status_str = match record.status {
+            ExecutionRecordStatus::Pending => "pending",
+            ExecutionRecordStatus::Running => "running",
+            ExecutionRecordStatus::Completed => "completed",
+            ExecutionRecordStatus::Failed => "failed",
+            ExecutionRecordStatus::Cancelled => "cancelled",
+        };
+        let artifacts_json = serde_json::to_string(&record.artifacts)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        conn.execute(
+            "INSERT INTO research_execution_records (
+                id, recipe_id, session_id, status, exit_code, stdout_cas_uri, stderr_cas_uri,
+                started_at, ended_at, artifacts_json
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            ON CONFLICT(id) DO UPDATE SET
+                status = excluded.status,
+                exit_code = excluded.exit_code,
+                stdout_cas_uri = excluded.stdout_cas_uri,
+                stderr_cas_uri = excluded.stderr_cas_uri,
+                started_at = excluded.started_at,
+                ended_at = excluded.ended_at,
+                artifacts_json = excluded.artifacts_json",
+            params![
+                record.id,
+                record.recipe_id,
+                record.session_id,
+                status_str,
+                record.exit_code,
+                record.stdout_cas_uri,
+                record.stderr_cas_uri,
+                record.started_at.timestamp(),
+                record.ended_at.map(|dt| dt.timestamp()),
+                artifacts_json,
+            ],
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        Ok(())
+    }
+
+    pub fn get_execution_record(&self, id: &str) -> Result<Option<ExecutionRecord>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, recipe_id, session_id, status, exit_code, stdout_cas_uri, stderr_cas_uri,
+                        started_at, ended_at, artifacts_json
+                 FROM research_execution_records WHERE id = ?1",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut rows = stmt
+            .query_map(params![id], |row| {
+                let status_str: String = row.get(3)?;
+                let status = match status_str.as_str() {
+                    "running" => ExecutionRecordStatus::Running,
+                    "completed" => ExecutionRecordStatus::Completed,
+                    "failed" => ExecutionRecordStatus::Failed,
+                    "cancelled" => ExecutionRecordStatus::Cancelled,
+                    _ => ExecutionRecordStatus::Pending,
+                };
+                let started_ts: i64 = row.get(7)?;
+                let ended_ts: Option<i64> = row.get(8)?;
+                let artifacts_json: String = row.get(9)?;
+                let artifacts: Vec<ExecutionArtifact> =
+                    serde_json::from_str(&artifacts_json).unwrap_or_default();
+
+                Ok(ExecutionRecord {
+                    id: row.get(0)?,
+                    recipe_id: row.get(1)?,
+                    session_id: row.get(2)?,
+                    status,
+                    exit_code: row.get(4)?,
+                    stdout_cas_uri: row.get(5)?,
+                    stderr_cas_uri: row.get(6)?,
+                    started_at: DateTime::from_timestamp(started_ts, 0).unwrap_or_else(Utc::now),
+                    ended_at: ended_ts.and_then(|ts| DateTime::from_timestamp(ts, 0)),
+                    artifacts,
+                })
+            })
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        if let Some(r) = rows.next() {
+            Ok(Some(r.map_err(|e| DomainError::Validation(e.to_string()))?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn list_execution_records_for_recipe(
+        &self,
+        recipe_id: &str,
+    ) -> Result<Vec<ExecutionRecord>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, recipe_id, session_id, status, exit_code, stdout_cas_uri, stderr_cas_uri,
+                        started_at, ended_at, artifacts_json
+                 FROM research_execution_records WHERE recipe_id = ?1 ORDER BY started_at DESC",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let rows = stmt
+            .query_map(params![recipe_id], |row| {
+                let status_str: String = row.get(3)?;
+                let status = match status_str.as_str() {
+                    "running" => ExecutionRecordStatus::Running,
+                    "completed" => ExecutionRecordStatus::Completed,
+                    "failed" => ExecutionRecordStatus::Failed,
+                    "cancelled" => ExecutionRecordStatus::Cancelled,
+                    _ => ExecutionRecordStatus::Pending,
+                };
+                let started_ts: i64 = row.get(7)?;
+                let ended_ts: Option<i64> = row.get(8)?;
+                let artifacts_json: String = row.get(9)?;
+                let artifacts: Vec<ExecutionArtifact> =
+                    serde_json::from_str(&artifacts_json).unwrap_or_default();
+
+                Ok(ExecutionRecord {
+                    id: row.get(0)?,
+                    recipe_id: row.get(1)?,
+                    session_id: row.get(2)?,
+                    status,
+                    exit_code: row.get(4)?,
+                    stdout_cas_uri: row.get(5)?,
+                    stderr_cas_uri: row.get(6)?,
+                    started_at: DateTime::from_timestamp(started_ts, 0).unwrap_or_else(Utc::now),
+                    ended_at: ended_ts.and_then(|ts| DateTime::from_timestamp(ts, 0)),
+                    artifacts,
+                })
+            })
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut res = Vec::new();
+        for r in rows {
+            res.push(r.map_err(|e| DomainError::Validation(e.to_string()))?);
+        }
+        Ok(res)
+    }
+
+    // Annotations
+    pub fn save_annotation(&self, ann: &AnnotationRecord) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        let target_json = serde_json::to_string(&ann.target)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let status_str = match ann.status {
+            AnnotationStatus::Pending => "pending",
+            AnnotationStatus::Submitted => "submitted",
+            AnnotationStatus::Addressed => "addressed",
+            AnnotationStatus::Dismissed => "dismissed",
+        };
+
+        conn.execute(
+            "INSERT INTO research_annotations (
+                id, artifact_path, artifact_version, target_json, note, actor,
+                status, side_chat_session_id, submitted_turn_id, created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            ON CONFLICT(id) DO UPDATE SET
+                target_json = excluded.target_json,
+                note = excluded.note,
+                status = excluded.status,
+                side_chat_session_id = excluded.side_chat_session_id,
+                submitted_turn_id = excluded.submitted_turn_id",
+            params![
+                ann.id,
+                ann.artifact_path,
+                ann.artifact_version,
+                target_json,
+                ann.note,
+                ann.actor,
+                status_str,
+                ann.side_chat_session_id,
+                ann.submitted_turn_id,
+                ann.created_at.timestamp(),
+            ],
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        Ok(())
+    }
+
+    pub fn list_annotations_for_artifact(
+        &self,
+        path: &str,
+        version: Option<u32>,
+    ) -> Result<Vec<AnnotationRecord>, DomainError> {
+        let conn = self.db.lock()?;
+        let (query, has_version) = if version.is_some() {
+            (
+                "SELECT id, artifact_path, artifact_version, target_json, note, actor,
+                        status, side_chat_session_id, submitted_turn_id, created_at
+                 FROM research_annotations WHERE artifact_path = ?1 AND artifact_version = ?2 ORDER BY created_at ASC",
+                true,
+            )
+        } else {
+            (
+                "SELECT id, artifact_path, artifact_version, target_json, note, actor,
+                        status, side_chat_session_id, submitted_turn_id, created_at
+                 FROM research_annotations WHERE artifact_path = ?1 ORDER BY created_at ASC",
+                false,
+            )
+        };
+
+        let mut stmt = conn
+            .prepare(query)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let rows = if has_version {
+            stmt.query_map(params![path, version.unwrap()], Self::map_annotation_row)
+        } else {
+            stmt.query_map(params![path], Self::map_annotation_row)
+        }
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut res = Vec::new();
+        for r in rows {
+            res.push(r.map_err(|e| DomainError::Validation(e.to_string()))?);
+        }
+        Ok(res)
+    }
+
+    pub fn list_pending_annotations(&self) -> Result<Vec<AnnotationRecord>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, artifact_path, artifact_version, target_json, note, actor,
+                        status, side_chat_session_id, submitted_turn_id, created_at
+                 FROM research_annotations WHERE status = 'pending' ORDER BY created_at ASC",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([], Self::map_annotation_row)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut res = Vec::new();
+        for r in rows {
+            res.push(r.map_err(|e| DomainError::Validation(e.to_string()))?);
+        }
+        Ok(res)
+    }
+
+    pub fn update_annotation_status(
+        &self,
+        id: &str,
+        status: AnnotationStatus,
+        turn_id: Option<&str>,
+    ) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        let status_str = match status {
+            AnnotationStatus::Pending => "pending",
+            AnnotationStatus::Submitted => "submitted",
+            AnnotationStatus::Addressed => "addressed",
+            AnnotationStatus::Dismissed => "dismissed",
+        };
+
+        conn.execute(
+            "UPDATE research_annotations SET status = ?1, submitted_turn_id = COALESCE(?2, submitted_turn_id) WHERE id = ?3",
+            params![status_str, turn_id, id],
+        ).map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        Ok(())
+    }
+
+    fn map_annotation_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<AnnotationRecord> {
+        let target_json: String = row.get(3)?;
+        let target: AnnotationTarget =
+            serde_json::from_str(&target_json).unwrap_or(AnnotationTarget::Text {
+                start_offset: 0,
+                end_offset: 0,
+                exact_text: String::new(),
+            });
+        let status_str: String = row.get(6)?;
+        let status = match status_str.as_str() {
+            "submitted" => AnnotationStatus::Submitted,
+            "addressed" => AnnotationStatus::Addressed,
+            "dismissed" => AnnotationStatus::Dismissed,
+            _ => AnnotationStatus::Pending,
+        };
+        let ts: i64 = row.get(9)?;
+
+        Ok(AnnotationRecord {
+            id: row.get(0)?,
+            artifact_path: row.get(1)?,
+            artifact_version: row.get(2)?,
+            target,
+            note: row.get(4)?,
+            actor: row.get(5)?,
+            status,
+            side_chat_session_id: row.get(7)?,
+            submitted_turn_id: row.get(8)?,
+            created_at: DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now),
+        })
     }
 }
 
@@ -482,7 +908,9 @@ mod tests {
             passage_hash: "hash_anchor_01".to_string(),
         };
         repo.save_anchor(&anchor).expect("save anchor");
-        let anchors = repo.list_anchors_for_source("src_123").expect("list anchors");
+        let anchors = repo
+            .list_anchors_for_source("src_123")
+            .expect("list anchors");
         assert_eq!(anchors.len(), 1);
         assert_eq!(anchors[0].exact_text, anchor.exact_text);
 
@@ -496,7 +924,9 @@ mod tests {
             evidence_links: vec![ClaimEvidenceLink {
                 passage_anchor_id: "anc_01".to_string(),
                 source_title: Some("Attention Is All You Need".to_string()),
-                exact_text: Some("Multi-Head Attention consists of several attention layers".to_string()),
+                exact_text: Some(
+                    "Multi-Head Attention consists of several attention layers".to_string(),
+                ),
                 relation: EvidenceRelation::Supports,
                 rationale: "Confirmed in section 3.2.2".to_string(),
                 verified_by: "expert_review".to_string(),
@@ -549,10 +979,116 @@ mod tests {
             parent_version_hash: None,
             timestamp: 1700000400,
         };
-        repo.record_artifact_lineage(&lineage).expect("record lineage");
-        let lineage_list = repo.list_artifact_lineage("eval_table.csv").expect("list lineage");
+        repo.record_artifact_lineage(&lineage)
+            .expect("record lineage");
+        let lineage_list = repo
+            .list_artifact_lineage("eval_table.csv")
+            .expect("list lineage");
         assert_eq!(lineage_list.len(), 1);
         assert_eq!(lineage_list[0].version, 1);
         assert_eq!(lineage_list[0].content_hash, "hash_csv");
+
+        // 6. Recipe
+        let mut env_spec = EnvironmentSpec::new();
+        env_spec.python_version = Some("3.11.4".to_string());
+        env_spec.requirements = vec!["torch>=2.0.0".to_string(), "pandas".to_string()];
+        let recipe = Recipe::new(
+            "Train Ablation Model",
+            "python train.py --lr 1e-4",
+            env_spec,
+        )
+        .with_description("Ablation study on learning rate")
+        .with_input(RecipeInput::new("train_data", "cas://bafy_data", true))
+        .with_output("loss_curve.png");
+        let recipe_id = recipe.id.clone();
+        repo.save_recipe(&recipe).expect("save recipe");
+
+        let fetched_recipe = repo
+            .get_recipe(&recipe_id)
+            .expect("get recipe")
+            .expect("recipe exists");
+        assert_eq!(fetched_recipe.name, "Train Ablation Model");
+        assert_eq!(fetched_recipe.inputs.len(), 1);
+        assert_eq!(fetched_recipe.outputs, vec!["loss_curve.png"]);
+
+        let recipes = repo.list_recipes().expect("list recipes");
+        assert_eq!(recipes.len(), 1);
+
+        // 7. Execution Record
+        let mut exec_record = ExecutionRecord::new(&recipe_id).with_session_id("session_res_01");
+        exec_record.stdout_cas_uri = Some("cas://bafy_exec_stdout".to_string());
+        exec_record.artifacts.push(ExecutionArtifact::new(
+            "loss_curve.png",
+            "hash_loss_curve",
+            10240,
+        ));
+        let exec_id = exec_record.id.clone();
+        repo.save_execution_record(&exec_record)
+            .expect("save exec record");
+
+        let fetched_exec = repo
+            .get_execution_record(&exec_id)
+            .expect("get exec")
+            .expect("exec exists");
+        assert_eq!(fetched_exec.status, ExecutionRecordStatus::Pending);
+        assert_eq!(fetched_exec.artifacts.len(), 1);
+
+        exec_record.transition(ExecutionRecordStatus::Completed);
+        exec_record.exit_code = Some(0);
+        repo.save_execution_record(&exec_record)
+            .expect("update exec record");
+
+        let updated_exec = repo
+            .get_execution_record(&exec_id)
+            .expect("get exec updated")
+            .expect("exec exists");
+        assert_eq!(updated_exec.status, ExecutionRecordStatus::Completed);
+        assert_eq!(updated_exec.exit_code, Some(0));
+
+        let execs_for_recipe = repo
+            .list_execution_records_for_recipe(&recipe_id)
+            .expect("list execs for recipe");
+        assert_eq!(execs_for_recipe.len(), 1);
+
+        // 8. Annotations
+        let ann_img = AnnotationRecord::new_image_pin(
+            "figures/loss_curve.png",
+            1,
+            0.35,
+            0.75,
+            1,
+            "Add error bars at epoch 50",
+            "alice",
+        )
+        .with_side_chat("session_side_01");
+        let ann_img_id = ann_img.id.clone();
+        repo.save_annotation(&ann_img).expect("save annotation");
+
+        let pending = repo.list_pending_annotations().expect("list pending");
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].actor, "alice");
+
+        let artifact_anns = repo
+            .list_annotations_for_artifact("figures/loss_curve.png", Some(1))
+            .expect("list anns");
+        assert_eq!(artifact_anns.len(), 1);
+        assert_eq!(
+            artifact_anns[0].side_chat_session_id.as_deref(),
+            Some("session_side_01")
+        );
+
+        repo.update_annotation_status(&ann_img_id, AnnotationStatus::Submitted, Some("turn_101"))
+            .expect("update status");
+        let updated_ann = repo
+            .list_annotations_for_artifact("figures/loss_curve.png", Some(1))
+            .expect("list anns updated");
+        assert_eq!(updated_ann[0].status, AnnotationStatus::Submitted);
+        assert_eq!(
+            updated_ann[0].submitted_turn_id.as_deref(),
+            Some("turn_101")
+        );
+
+        let pending_after = repo.list_pending_annotations().expect("list pending after");
+        assert_eq!(pending_after.len(), 0);
     }
 }

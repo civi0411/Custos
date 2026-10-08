@@ -45,7 +45,8 @@ impl CustosRuntime {
         let store = Arc::new(SqliteTaskStore::new(database_path)?);
 
         // Crash Recovery Reconcile (Gate 3): transition any InFlight effects to Uncertain on startup
-        let _ = store.outbox().reconcile_on_startup();
+        store.outbox().reconcile_on_startup()?;
+        store.seed_canonical_data_if_empty()?;
         let task_service = Arc::new(TaskService::new(store.clone()));
         let session_manager = Arc::new(SessionManager::with_store(store.clone()));
         let bridge_service = Arc::new(BridgeService::new(
@@ -102,7 +103,8 @@ impl CustosRuntime {
             )
             .with_workflow(workflow.clone())
             .with_workspace(workspace_coordinator.clone())
-            .with_research(Arc::new(store.research().clone())),
+            .with_research(Arc::new(store.research().clone()))
+            .with_providers(Arc::new(store.providers().clone())),
         );
 
         Ok(Self {

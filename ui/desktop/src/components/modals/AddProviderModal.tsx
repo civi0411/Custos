@@ -58,16 +58,16 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   const selectedOption = providerOptions.find((opt) => opt.value === providerService);
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 select-none">
-      <div className="w-full max-w-lg bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-        <div className="h-12 border-b border-[#21262d] px-5 flex items-center justify-between shrink-0 bg-[#0d1117] rounded-t-2xl">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 select-none">
+      <div className="w-full max-w-lg bg-surface-1 border border-border-default rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+        <div className="h-12 border-b border-border-muted px-5 flex items-center justify-between shrink-0 bg-surface-1 rounded-t-2xl">
           <div className="flex items-center gap-2">
-            <Key className="w-4 h-4 text-[#58a6ff]" />
-            <span className="text-sm font-semibold text-white">Add Provider Key</span>
+            <Key className="w-4 h-4 workbench-accent" />
+            <span className="text-sm font-semibold text-fg-editor">Add Provider Key</span>
           </div>
           <button 
             onClick={onClose} 
-            className="p-1 hover:bg-[#21262d] rounded-md text-[#8b949e] hover:text-white transition cursor-pointer"
+            className="p-1 hover:bg-surface-2 rounded-md text-fg-muted hover:text-fg-editor transition cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -77,9 +77,9 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
           <div className="p-5 space-y-4 text-xs overflow-visible">
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="font-medium text-[#c9d1d9]">Provider Service</label>
+                <label className="font-medium text-fg-editor">Provider Service</label>
                 {selectedOption?.icon && (
-                  <div className="w-5 h-5 rounded-md overflow-hidden shrink-0 shadow-sm">
+                  <div className="w-5 h-5 rounded-md overflow-hidden shrink-0 shadow-xs">
                     {selectedOption.icon}
                   </div>
                 )}
@@ -94,19 +94,19 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
             </div>
 
             <div className="space-y-1.5">
-              <label className="font-medium text-[#c9d1d9]">API Key Secret</label>
+              <label className="font-medium text-fg-editor">API Key Secret</label>
               <input 
                 type="password" 
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="sk-..." 
-                className="w-full bg-[#0d1117] border border-[#30363d] focus:border-[#58a6ff] rounded-lg px-3 py-2 text-white placeholder-[#6e7681] focus:outline-none font-mono text-xs transition"
+                className="w-full bg-surface-0 border border-border-default focus:border-border-emphasis rounded-lg px-3 py-2 text-fg-editor placeholder-fg-subtle focus:outline-none font-mono text-xs transition"
                 autoFocus
               />
             </div>
 
             <div className="space-y-1.5">
-              <label className="font-medium text-[#c9d1d9]">Routing Priority</label>
+              <label className="font-medium text-fg-editor">Routing Priority</label>
               <CustomSelect
                 value={routingPriority}
                 onChange={setRoutingPriority}
@@ -116,17 +116,17 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
             </div>
           </div>
 
-          <div className="h-12 border-t border-[#21262d] px-5 flex items-center justify-end gap-2 bg-[#0d1117] shrink-0">
+          <div className="h-12 border-t border-border-muted px-5 flex items-center justify-end gap-2 bg-surface-1 shrink-0">
             <button 
               type="button"
               onClick={onClose} 
-              className="px-3 py-1.5 rounded-lg hover:bg-[#21262d] text-[#8b949e] hover:text-white transition text-xs"
+              className="px-3 py-1.5 rounded-lg hover:bg-surface-2 text-fg-muted hover:text-fg-editor transition text-xs"
             >
               Cancel
             </button>
             <button 
               type="submit" 
-              className="px-3.5 py-1.5 rounded-lg bg-[#238636] hover:bg-[#2ea043] text-white font-medium transition text-xs shadow-sm"
+              className="workbench-primary-action px-3.5 py-1.5 rounded-lg font-medium transition text-xs shadow-xs"
             >
               Save & Validate
             </button>

@@ -21,11 +21,11 @@ use custos_domain::{
     PassageAnchor, ResearchClaim, ResearchExperimentRun, SessionId, SessionMode, SourceRecord,
     TaskContract, TaskStatus,
 };
-use custos_persistence::ResearchRepository;
+use custos_persistence::{ProviderRepository, ResearchRepository};
 use custos_runtime::session::SessionManager;
 use custos_runtime::workspace::{CreateWorkspaceRequest, WorkspaceCoordinator};
 
-/// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, WorkflowPort, and ResearchRepository for IPC callers.
+/// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, WorkflowPort, ResearchRepository, and ProviderRepository for IPC callers.
 pub struct LocalApiDispatcher {
     task_service: Arc<TaskService>,
     session_manager: Arc<SessionManager>,
@@ -33,6 +33,7 @@ pub struct LocalApiDispatcher {
     workflow: Option<Arc<dyn WorkflowPort>>,
     workspace: Option<Arc<WorkspaceCoordinator>>,
     research: Option<Arc<ResearchRepository>>,
+    providers: Option<Arc<ProviderRepository>>,
 }
 
 impl LocalApiDispatcher {
@@ -48,6 +49,7 @@ impl LocalApiDispatcher {
             workflow: None,
             workspace: None,
             research: None,
+            providers: None,
         }
     }
 
@@ -66,6 +68,11 @@ impl LocalApiDispatcher {
         self
     }
 
+    pub fn with_providers(mut self, providers: Arc<ProviderRepository>) -> Self {
+        self.providers = Some(providers);
+        self
+    }
+
     pub async fn dispatch_raw(&self, raw: &str) -> String {
         let response = match serde_json::from_str::<ApiRequest>(raw) {
             Ok(request) => self.handle_request(request).await,
@@ -80,7 +87,6 @@ impl LocalApiDispatcher {
                 ApiResponse::success(req.id, serde_json::json!({ "status": "ok" }))
             }
             "v1.tasks.create" => {
-
                 let params: CreateTaskRequest = match serde_json::from_value(req.params) {
                     Ok(p) => p,
                     Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
@@ -610,6 +616,10 @@ impl LocalApiDispatcher {
                         return ApiResponse::error(req.id, format!("Invalid source payload: {e}"))
                     }
                 };
+                let src = match custos_core::research_ingress::source_draft(src) {
+                    Ok(src) => src,
+                    Err(e) => return ApiResponse::error(req.id, e),
+                };
                 match research.save_source(&src) {
                     Ok(()) => ApiResponse::success(
                         req.id,
@@ -656,6 +666,15 @@ impl LocalApiDispatcher {
                         return ApiResponse::error(req.id, format!("Invalid anchor payload: {e}"))
                     }
                 };
+                let anchor = match custos_core::research_ingress::passage_draft(anchor) {
+                    Ok(anchor) => anchor,
+                    Err(e) => return ApiResponse::error(req.id, e),
+                };
+                match research.list_sources() {
+                    Ok(sources) if sources.iter().any(|s| s.id == anchor.source_id) => {}
+                    Ok(_) => return ApiResponse::error(req.id, "Passage source does not exist"),
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                }
                 match research.save_anchor(&anchor) {
                     Ok(()) => ApiResponse::success(
                         req.id,
@@ -697,6 +716,10 @@ impl LocalApiDispatcher {
                     Err(e) => {
                         return ApiResponse::error(req.id, format!("Invalid claim payload: {e}"))
                     }
+                };
+                let claim = match custos_core::research_ingress::claim_draft(claim) {
+                    Ok(claim) => claim,
+                    Err(e) => return ApiResponse::error(req.id, e),
                 };
                 match research.save_claim(&claim) {
                     Ok(()) => ApiResponse::success(
@@ -740,6 +763,17 @@ impl LocalApiDispatcher {
                         return ApiResponse::error(req.id, format!("Invalid run payload: {e}"))
                     }
                 };
+                let run = match custos_core::research_ingress::experiment_draft(run) {
+                    Ok(run) => run,
+                    Err(e) => return ApiResponse::error(req.id, e),
+                };
+                match research.list_runs() {
+                    Ok(runs) if runs.iter().any(|existing| existing.run_id == run.run_id) => {
+                        return ApiResponse::error(req.id, "Experiment draft id already exists");
+                    }
+                    Ok(_) => {}
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                }
                 match research.save_run(&run) {
                     Ok(()) => ApiResponse::success(
                         req.id,
@@ -771,23 +805,35 @@ impl LocalApiDispatcher {
                 }
             }
             METHOD_RESEARCH_HANDOFF_CODING => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "ResearchRepository not configured on daemon",
+                        )
+                    }
+                };
                 let claim_id = match req.params.get("claim_id").and_then(|v| v.as_str()) {
                     Some(id) => id,
                     None => return ApiResponse::error(req.id, "Missing claim_id parameter"),
                 };
-                let statement = req
-                    .params
-                    .get("statement")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or(claim_id);
-                let title = format!("Implement & Ground Research Claim: {statement}");
+                let claim = match research.list_claims() {
+                    Ok(claims) => match claims.into_iter().find(|c| c.id == claim_id) {
+                        Some(claim) => claim,
+                        None => return ApiResponse::error(req.id, "Claim does not exist"),
+                    },
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                let title = format!("Investigate research claim: {}", claim.statement);
 
                 let cmd = CreateTask {
                     title,
                     metadata: Some(serde_json::json!({
                         "source": "research_workbench",
                         "claim_id": claim_id,
-                        "grounding_target": "L2Verified",
+                        "claim_statement": claim.statement,
+                        "claim_grounding": "unverified_client_draft",
                     })),
                     contract: None,
                 };
@@ -804,6 +850,322 @@ impl LocalApiDispatcher {
                         Err(e) => ApiResponse::error(req.id, e.to_string()),
                     },
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.research.recipes.list" => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured"),
+                };
+                match research.list_recipes() {
+                    Ok(list) => match serde_json::to_value(&list) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.research.recipes.save" => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured"),
+                };
+                let recipe: custos_domain::Recipe = match serde_json::from_value(req.params) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        return ApiResponse::error(req.id, format!("Invalid recipe payload: {e}"))
+                    }
+                };
+                match research.save_recipe(&recipe) {
+                    Ok(()) => ApiResponse::success(
+                        req.id,
+                        serde_json::json!({ "saved": true, "id": recipe.id }),
+                    ),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.research.recipes.get" => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured"),
+                };
+                let recipe_id = match req.params.get("recipe_id").and_then(|v| v.as_str()) {
+                    Some(id) => id,
+                    None => return ApiResponse::error(req.id, "Missing recipe_id parameter"),
+                };
+                match research.get_recipe(recipe_id) {
+                    Ok(Some(recipe)) => match serde_json::to_value(&recipe) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Ok(None) => ApiResponse::error(req.id, format!("Recipe {recipe_id} not found")),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.research.executions.list" => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured"),
+                };
+                let recipe_id = match req.params.get("recipe_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing recipe_id parameter"),
+                };
+                match research.list_execution_records_for_recipe(recipe_id) {
+                    Ok(list) => match serde_json::to_value(&list) {
+                        Ok(value) => ApiResponse::success(req.id, value),
+                        Err(error) => ApiResponse::error(req.id, error.to_string()),
+                    },
+                    Err(error) => ApiResponse::error(req.id, error.to_string()),
+                }
+            }
+            "v1.research.executions.get" => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured"),
+                };
+                let execution_id = match req.params.get("execution_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing execution_id parameter"),
+                };
+                match research.get_execution_record(execution_id) {
+                    Ok(Some(record)) => match serde_json::to_value(&record) {
+                        Ok(value) => ApiResponse::success(req.id, value),
+                        Err(error) => ApiResponse::error(req.id, error.to_string()),
+                    },
+                    Ok(None) => ApiResponse::error(
+                        req.id,
+                        format!("Execution record {execution_id} not found"),
+                    ),
+                    Err(error) => ApiResponse::error(req.id, error.to_string()),
+                }
+            }
+            "v1.research.annotations.list" => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured"),
+                };
+                let artifact_id = req
+                    .params
+                    .get("artifact_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let version = req
+                    .params
+                    .get("version")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as u32);
+                match research.list_annotations_for_artifact(artifact_id, version) {
+                    Ok(list) => match serde_json::to_value(&list) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.research.annotations.save" => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured"),
+                };
+                let anno: custos_domain::AnnotationRecord = match serde_json::from_value(req.params)
+                {
+                    Ok(a) => a,
+                    Err(e) => {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Invalid annotation payload: {e}"),
+                        )
+                    }
+                };
+                match research.save_annotation(&anno) {
+                    Ok(()) => ApiResponse::success(
+                        req.id,
+                        serde_json::json!({ "saved": true, "id": anno.id }),
+                    ),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.providers.list" => {
+                let providers_repo = match self.providers.as_ref() {
+                    Some(p) => p,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                match providers_repo.list_providers() {
+                    Ok(list) => match serde_json::to_value(&list) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.providers.save" => {
+                let providers_repo = match self.providers.as_ref() {
+                    Some(p) => p,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                let id = req
+                    .params
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("p_custom")
+                    .to_string();
+                let name = req
+                    .params
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(&id)
+                    .to_string();
+                let service_type = req
+                    .params
+                    .get("service_type")
+                    .or_else(|| req.params.get("provider_type"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("anthropic")
+                    .to_string();
+                let raw_api_key = req.params.get("api_key").and_then(|v| v.as_str());
+                let masked = if let Some(key) = raw_api_key {
+                    if key.len() > 8 {
+                        format!("{}••••••••", &key[..6])
+                    } else if !key.is_empty() {
+                        "••••••••".to_string()
+                    } else {
+                        "none".to_string()
+                    }
+                } else {
+                    req.params
+                        .get("api_key_masked")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("none")
+                        .to_string()
+                };
+                let status = req
+                    .params
+                    .get("status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or(if masked != "none" {
+                        "configured"
+                    } else {
+                        "unconfigured"
+                    })
+                    .to_string();
+                let endpoint_url = req
+                    .params
+                    .get("endpoint_url")
+                    .or_else(|| req.params.get("endpoint"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let now = chrono::Utc::now().timestamp_millis();
+
+                let cfg = custos_domain::ProviderConfig {
+                    id,
+                    name,
+                    service_type,
+                    api_key_masked: masked,
+                    status,
+                    endpoint_url,
+                    created_at: now,
+                    updated_at: now,
+                };
+                match providers_repo.save_provider(&cfg) {
+                    Ok(()) => ApiResponse::success(
+                        req.id,
+                        serde_json::json!({ "saved": true, "id": cfg.id }),
+                    ),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.keys.list" => {
+                let providers_repo = match self.providers.as_ref() {
+                    Some(p) => p,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                match providers_repo.list_client_keys() {
+                    Ok(list) => match serde_json::to_value(&list) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.keys.generate" => {
+                let providers_repo = match self.providers.as_ref() {
+                    Some(p) => p,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                let name = req
+                    .params
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Client API Token");
+                let key = custos_domain::ClientApiKeyRecord {
+                    id: custos_domain::new_id("key"),
+                    name: name.to_string(),
+                    token: format!("custos_live_sec_{}", custos_domain::new_id("tok")),
+                    created_at: chrono::Utc::now().format("%Y-%m-%d").to_string(),
+                    revoked: false,
+                };
+                match providers_repo.create_client_key(&key) {
+                    Ok(()) => match serde_json::to_value(&key) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.keys.revoke" => {
+                let providers_repo = match self.providers.as_ref() {
+                    Some(p) => p,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                let key_id = match req.params.get("key_id").and_then(|v| v.as_str()) {
+                    Some(id) => id,
+                    None => return ApiResponse::error(req.id, "Missing key_id parameter"),
+                };
+                match providers_repo.revoke_client_key(key_id) {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "revoked": true })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.llm.status" => {
+                let has_env_key = std::env::var("ANTHROPIC_API_KEY").is_ok()
+                    || std::env::var("OPENAI_API_KEY").is_ok()
+                    || std::env::var("GEMINI_API_KEY").is_ok();
+
+                let configured_provider = if let Some(ref repo) = self.providers {
+                    repo.list_providers().ok().and_then(|list| {
+                        list.into_iter().find(|p| {
+                            (p.status == "configured"
+                                || p.status == "active"
+                                || p.status == "primary")
+                                && p.api_key_masked != "none"
+                        })
+                    })
+                } else {
+                    None
+                };
+
+                if has_env_key || configured_provider.is_some() {
+                    let prov_name = configured_provider
+                        .map(|p| p.name)
+                        .unwrap_or_else(|| "Environment API Key".to_string());
+                    ApiResponse::success(
+                        req.id,
+                        serde_json::json!({
+                            "configured": true,
+                            "active_provider": prov_name,
+                            "message": "LLM sẵn sàng thực thi",
+                        }),
+                    )
+                } else {
+                    ApiResponse::success(
+                        req.id,
+                        serde_json::json!({
+                            "configured": false,
+                            "active_provider": serde_json::Value::Null,
+                            "message": "Chưa có LLM nào được cấu hình hiện tại (No LLMs currently available)",
+                        }),
+                    )
                 }
             }
             unknown => ApiResponse::error(req.id, format!("Unknown method: {unknown}")),
@@ -1251,10 +1613,7 @@ mod tests {
             task_service.clone(),
         ));
         let workspace_provider = Arc::new(LocalWorkspaceProvider::new());
-        let coordinator = Arc::new(WorkspaceCoordinator::new(
-            store.clone(),
-            workspace_provider,
-        ));
+        let coordinator = Arc::new(WorkspaceCoordinator::new(store.clone(), workspace_provider));
 
         let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
             .with_workspace(coordinator);
@@ -1280,7 +1639,11 @@ mod tests {
             }),
         };
         let create_resp = dispatcher.handle_request(create_req).await;
-        assert!(create_resp.error.is_none(), "Error: {:?}", create_resp.error);
+        assert!(
+            create_resp.error.is_none(),
+            "Error: {:?}",
+            create_resp.error
+        );
         let created_ws: ExecutionWorkspace =
             serde_json::from_value(create_resp.result.unwrap()).unwrap();
         assert_eq!(created_ws.name, "api-workspace");
@@ -1329,7 +1692,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_research_api_dispatch_lifecycle() {
+        use custos_adapters::workspace::LocalWorkspaceProvider;
         use custos_persistence::SqliteTaskStore;
+        use custos_runtime::workspace::WorkspaceCoordinator;
 
         let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
         let task_service = Arc::new(TaskService::new(store.clone()));
@@ -1339,12 +1704,40 @@ mod tests {
             task_service.clone(),
         ));
 
+        let workspace = Arc::new(WorkspaceCoordinator::new(
+            store.clone(),
+            Arc::new(LocalWorkspaceProvider::new()),
+        ));
         let dispatcher = LocalApiDispatcher::new(
             task_service.clone(),
             session_manager.clone(),
             bridge_service.clone(),
         )
+        .with_workspace(workspace)
         .with_research(Arc::new(store.research().clone()));
+
+        // Research records and OrCa-style workspace lifecycle share one daemon,
+        // but neither owns the other's canonical state.
+        let temp = tempfile::tempdir().unwrap();
+        let research_dir = temp.path().join("study");
+        let create_workspace = dispatcher
+            .handle_request(ApiRequest {
+                id: "req_research_ws".into(),
+                method: METHOD_WORKSPACES_CREATE.into(),
+                params: serde_json::json!({
+                    "name": "study",
+                    "kind": { "type": "folder", "path": research_dir },
+                    "path": research_dir,
+                    "metadata": { "domain": "research" }
+                }),
+            })
+            .await;
+        assert!(
+            create_workspace.is_success(),
+            "Workspace failed: {:?}",
+            create_workspace.error
+        );
+        assert!(research_dir.exists());
 
         // 1. Save & List Source
         let save_src_req = ApiRequest {
@@ -1365,7 +1758,11 @@ mod tests {
             }),
         };
         let save_src_resp = dispatcher.handle_request(save_src_req).await;
-        assert!(save_src_resp.is_success(), "Failed to save source: {:?}", save_src_resp.error);
+        assert!(
+            save_src_resp.is_success(),
+            "Failed to save source: {:?}",
+            save_src_resp.error
+        );
 
         let list_src_req = ApiRequest {
             id: "req_s2".into(),
@@ -1374,9 +1771,11 @@ mod tests {
         };
         let list_src_resp = dispatcher.handle_request(list_src_req).await;
         assert!(list_src_resp.is_success());
-        let sources: Vec<SourceRecord> = serde_json::from_value(list_src_resp.result.unwrap()).unwrap();
+        let sources: Vec<SourceRecord> =
+            serde_json::from_value(list_src_resp.result.unwrap()).unwrap();
         assert_eq!(sources.len(), 1);
         assert_eq!(sources[0].title, "Quantum Error Mitigation");
+        assert!(!sources[0].verified, "client cannot certify a source");
 
         // 2. Save & List Passage Anchor
         let save_anc_req = ApiRequest {
@@ -1404,9 +1803,15 @@ mod tests {
         };
         let list_anc_resp = dispatcher.handle_request(list_anc_req).await;
         assert!(list_anc_resp.is_success());
-        let anchors: Vec<PassageAnchor> = serde_json::from_value(list_anc_resp.result.unwrap()).unwrap();
+        let anchors: Vec<PassageAnchor> =
+            serde_json::from_value(list_anc_resp.result.unwrap()).unwrap();
         assert_eq!(anchors.len(), 1);
-        assert_eq!(anchors[0].exact_text, "ZNE scales circuit noise artificially by pulse stretching.");
+        assert_eq!(
+            anchors[0].exact_text,
+            "ZNE scales circuit noise artificially by pulse stretching."
+        );
+        assert!(anchors[0].passage_hash.starts_with("sha256:"));
+        assert_ne!(anchors[0].passage_hash, "hash_anchor_zne");
 
         // 3. Save & List Claims
         let save_claim_req = ApiRequest {
@@ -1431,7 +1836,11 @@ mod tests {
             }),
         };
         let save_claim_resp = dispatcher.handle_request(save_claim_req).await;
-        assert!(save_claim_resp.is_success(), "Failed to save claim: {:?}", save_claim_resp.error);
+        assert!(
+            save_claim_resp.is_success(),
+            "Failed to save claim: {:?}",
+            save_claim_resp.error
+        );
 
         let list_claim_req = ApiRequest {
             id: "req_c2".into(),
@@ -1440,11 +1849,56 @@ mod tests {
         };
         let list_claim_resp = dispatcher.handle_request(list_claim_req).await;
         assert!(list_claim_resp.is_success());
-        let claims: Vec<ResearchClaim> = serde_json::from_value(list_claim_resp.result.unwrap()).unwrap();
+        let claims: Vec<ResearchClaim> =
+            serde_json::from_value(list_claim_resp.result.unwrap()).unwrap();
         assert_eq!(claims.len(), 1);
         assert_eq!(claims[0].id, "claim_zne_01");
+        assert_eq!(
+            claims[0].level,
+            custos_domain::ClaimGroundingLevel::L0Ungrounded
+        );
+        assert_eq!(
+            claims[0].evidence_links[0].verified_by,
+            "unreviewed_client_proposal"
+        );
 
-        // 4. Handoff Claim to Coding Task
+        // 4. Recipe definitions and observed executions stay separate. The API
+        // exposes the ledger read-only; it does not execute the recipe command.
+        let recipe = custos_domain::Recipe::new(
+            "QEM reproduction",
+            "python reproduce.py --seed 7",
+            custos_domain::EnvironmentSpec::new(),
+        );
+        store.research().save_recipe(&recipe).unwrap();
+        let mut execution =
+            custos_domain::ExecutionRecord::new(&recipe.id).with_session_id("research_session_01");
+        execution.transition(custos_domain::ExecutionRecordStatus::Completed);
+        execution.exit_code = Some(0);
+        store.research().save_execution_record(&execution).unwrap();
+
+        let list_executions = dispatcher
+            .handle_request(ApiRequest {
+                id: "req_exec_list".into(),
+                method: "v1.research.executions.list".into(),
+                params: serde_json::json!({ "recipe_id": recipe.id }),
+            })
+            .await;
+        assert!(list_executions.is_success());
+        let records: Vec<custos_domain::ExecutionRecord> =
+            serde_json::from_value(list_executions.result.unwrap()).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].id, execution.id);
+
+        let get_execution = dispatcher
+            .handle_request(ApiRequest {
+                id: "req_exec_get".into(),
+                method: "v1.research.executions.get".into(),
+                params: serde_json::json!({ "execution_id": execution.id }),
+            })
+            .await;
+        assert!(get_execution.is_success());
+
+        // 5. Handoff Claim to Coding Task
         let handoff_req = ApiRequest {
             id: "req_h1".into(),
             method: METHOD_RESEARCH_HANDOFF_CODING.into(),
@@ -1454,9 +1908,20 @@ mod tests {
             }),
         };
         let handoff_resp = dispatcher.handle_request(handoff_req).await;
-        assert!(handoff_resp.is_success(), "Failed handoff: {:?}", handoff_resp.error);
+        assert!(
+            handoff_resp.is_success(),
+            "Failed handoff: {:?}",
+            handoff_resp.error
+        );
         let handoff_val = handoff_resp.result.unwrap();
         assert_eq!(handoff_val["handoff_status"], "task_created");
         assert!(handoff_val["task"]["id"].is_string());
+
+        let forged_handoff = dispatcher.handle_request(ApiRequest {
+            id: "req_h2".into(),
+            method: METHOD_RESEARCH_HANDOFF_CODING.into(),
+            params: serde_json::json!({"claim_id": "missing", "statement": "Trusted by client"}),
+        }).await;
+        assert!(forged_handoff.error.is_some());
     }
 }

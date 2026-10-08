@@ -60,12 +60,12 @@ function sessionMatchesPack(session: Session, pack: PackFilter): boolean {
 
 function PackDot({ pack }: { pack?: string }) {
   if (!pack) return null;
-  const color =
-    pack === 'engineering' || pack === 'coding' ? '#3fb950' :
-    pack === 'research'  ? '#58a6ff' :
-    pack === 'assistant' ? '#a78bfa' : '#8b949e';
+  const cls =
+    pack === 'engineering' || pack === 'coding' ? 'text-emerald-500' :
+    pack === 'research'  ? 'workbench-accent' :
+    pack === 'assistant' ? 'text-fg-editor' : 'text-fg-subtle';
   return (
-    <span className="font-mono text-[9px] shrink-0" style={{ color }}>
+    <span className={`font-mono text-[9px] shrink-0 ${cls}`}>
       ●
     </span>
   );
@@ -73,12 +73,12 @@ function PackDot({ pack }: { pack?: string }) {
 
 function StatusChip({ status }: { status?: string }) {
   if (!status) return null;
-  const color =
-    status === 'Active' || status === 'Running' ? '#3fb950' :
-    status === 'Done' ? '#58a6ff' :
-    status === 'Blocked' ? '#d29922' : '#8b949e';
+  const cls =
+    status === 'Active' || status === 'Running' ? 'text-emerald-500' :
+    status === 'Done' ? 'workbench-accent' :
+    status === 'Blocked' ? 'text-amber-500' : 'text-fg-subtle';
   return (
-    <span className="font-mono text-[10px] shrink-0" style={{ color }}>
+    <span className={`font-mono text-[10px] shrink-0 ${cls}`}>
       {status}
     </span>
   );
@@ -126,64 +126,59 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
   if (isCollapsed) {
     return (
       <aside 
-        className="w-11 h-full z-20 select-none flex flex-col items-center justify-between py-2 shrink-0"
-        style={{
-          background: 'var(--color-surface-1, #161b22)',
-          borderRight: '1px solid var(--color-border-default, #30363d)',
-        }}
+        className="w-11 h-full z-20 select-none flex flex-col items-center justify-between py-2 shrink-0 bg-surface-1 border-r border-border-default"
       >
         <div className="flex flex-col items-center gap-1.5 w-full px-1">
           <button
             onClick={onToggleCollapse}
-            className="p-2 rounded-lg text-[#8b949e] hover:text-white hover:bg-surface-2 transition"
+            className="p-2 rounded-lg text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
             title="Expand Sidebar (⌘B)"
           >
             <PanelLeftOpen className="w-4 h-4" />
           </button>
 
-          <div className="w-6 h-px bg-[#30363d] my-1" />
+          <div className="w-6 h-px bg-border-muted my-1" />
 
           <button
             onClick={onOpenNewSessionModal}
-            className="p-2 rounded-lg text-white hover:bg-surface-2 transition"
-            style={{ background: 'var(--color-surface-2, #1c2128)', border: '1px solid var(--color-border-default, #30363d)' }}
+            className="p-2 rounded-lg hover:bg-surface-2 transition bg-surface-2 border border-border-default text-fg-editor"
             title="New Chat (⌘N)"
           >
-            <Plus className="w-4 h-4 text-[#a78bfa]" />
+            <Plus className="w-4 h-4 workbench-accent" />
           </button>
 
-          <div className="w-6 h-px bg-[#30363d] my-1" />
+          <div className="w-6 h-px bg-border-muted my-1" />
 
           {/* Core Lens Shortcuts */}
           <button
             onClick={() => onSwitchTab('studio')}
-            className={`p-2 rounded-lg transition ${currentTab === 'studio' ? 'bg-surface-2 text-white' : 'text-[#8b949e] hover:text-white'}`}
+            className={`p-2 rounded-lg transition ${currentTab === 'studio' ? 'bg-surface-2 text-fg-editor' : 'text-fg-muted hover:text-fg-editor'}`}
             title="Claude Chat (Copilot)"
           >
-            <MessageSquare className="w-4 h-4 text-[#a78bfa]" />
+            <MessageSquare className="w-4 h-4 workbench-accent" />
           </button>
 
           <button
             onClick={() => onSwitchTab('studio')}
-            className="p-2 rounded-lg text-[#8b949e] hover:text-white transition"
+            className="p-2 rounded-lg text-fg-muted hover:text-fg-editor transition"
             title="Claude Code (Codex)"
           >
-            <Terminal className="w-4 h-4 text-[#3fb950]" />
+            <Terminal className="w-4 h-4 text-emerald-500" />
           </button>
 
           <button
             onClick={() => onSwitchTab('studio')}
-            className="p-2 rounded-lg text-[#8b949e] hover:text-white transition"
+            className="p-2 rounded-lg text-fg-muted hover:text-fg-editor transition"
             title="Claude Science"
           >
-            <FlaskConical className="w-4 h-4 text-[#58a6ff]" />
+            <FlaskConical className="w-4 h-4 workbench-accent" />
           </button>
         </div>
 
         <div className="flex flex-col items-center gap-1 pb-1">
           <button
             onClick={() => onOpenSettings ? onOpenSettings() : onSwitchTab('settings')}
-            className="p-2 rounded-lg text-[#8b949e] hover:text-white transition"
+            className="p-2 rounded-lg text-fg-muted hover:text-fg-editor transition"
             title="Settings (⌘,)"
           >
             <Settings2 className="w-4 h-4" />
@@ -196,32 +191,27 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
   /* ── EXPANDED CLAUDE DESKTOP SIDEBAR (240px) ── */
   return (
     <aside
-      className="w-60 flex flex-col h-full z-20 select-none overflow-hidden shrink-0 text-xs"
-      style={{
-        background: 'var(--color-surface-1, #161b22)',
-        borderRight: '1px solid var(--color-border-default, #30363d)',
-      }}
+      className="w-60 flex flex-col h-full z-20 select-none overflow-hidden shrink-0 text-xs bg-surface-1 border-r border-border-default"
     >
       {/* ── 1. Brand Header ── */}
       <div
-        className="h-10 px-3 flex items-center justify-between shrink-0"
-        style={{ borderBottom: '1px solid var(--color-border-muted, #21262d)' }}
+        className="h-10 px-3 flex items-center justify-between shrink-0 border-b border-border-muted"
       >
         <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-md bg-[#1c2128] border border-[#30363d] flex items-center justify-center shrink-0">
-            <Sparkles className="w-3.5 h-3.5 text-[#a78bfa]" />
+          <div className="w-5 h-5 rounded-md bg-surface-2 border border-border-default flex items-center justify-center shrink-0">
+            <Sparkles className="w-3.5 h-3.5 workbench-accent" />
           </div>
-          <span className="font-semibold text-white tracking-tight text-xs">
+          <span className="font-semibold text-fg-editor tracking-tight text-xs">
             Custos SADE
           </span>
-          <span className="font-mono text-[9px] text-[#3fb950] px-1 rounded bg-[#3fb950]/10 border border-[#3fb950]/30 font-bold">
+          <span className="font-mono text-[9px] text-emerald-500 px-1 rounded bg-emerald-500/10 border border-emerald-500/30 font-bold">
             v0.1
           </span>
         </div>
 
         <button
           onClick={onToggleCollapse}
-          className="p-1 rounded text-[#8b949e] hover:text-white transition"
+          className="p-1 rounded text-fg-muted hover:text-fg-editor transition"
           title="Collapse Sidebar (⌘B)"
         >
           <PanelLeftClose className="w-3.5 h-3.5" />
@@ -232,20 +222,14 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
       <div className="p-3 pb-2 shrink-0">
         <button
           onClick={onOpenNewSessionModal}
-          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition shadow-sm group"
-          style={{
-            background: 'var(--color-surface-2, #1c2128)',
-            border: '1px solid var(--color-border-default, #30363d)',
-            color: '#ffffff'
-          }}
+          className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition shadow-sm group bg-surface-2 border border-border-default text-fg-editor hover:bg-surface-3"
         >
           <div className="flex items-center gap-2">
-            <Plus className="w-3.5 h-3.5 text-[#a78bfa] group-hover:scale-110 transition-transform" />
+            <Plus className="w-3.5 h-3.5 workbench-accent group-hover:scale-110 transition-transform" />
             <span>New chat</span>
           </div>
           <kbd 
-            className="text-[10px] font-mono text-[#8b949e] px-1.5 py-0.2 rounded" 
-            style={{ background: 'var(--color-canvas, #0d1117)', border: '1px solid var(--color-border-muted, #21262d)' }}
+            className="text-[10px] font-mono text-fg-muted px-1.5 py-0.2 rounded bg-canvas border border-border-muted"
           >
             ⌘N
           </kbd>
@@ -256,28 +240,20 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
       <div className="px-3 pb-2 shrink-0 relative" ref={projectDropdownRef}>
         <button
           onClick={() => setIsProjectOpen(!isProjectOpen)}
-          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] transition text-[#c9d1d9] hover:text-white"
-          style={{
-            background: 'var(--color-surface-0, #0d1117)',
-            border: '1px solid var(--color-border-default, #30363d)',
-          }}
+          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[11px] transition text-fg-editor hover:text-fg-editor bg-surface-0 border border-border-default"
         >
           <span className="flex items-center gap-1.5 truncate">
-            <FolderOpen className="w-3.5 h-3.5 text-[#58a6ff] shrink-0" />
+            <FolderOpen className="w-3.5 h-3.5 workbench-accent shrink-0" />
             <span className="truncate font-medium">{currentProject}</span>
           </span>
-          <ChevronDown className="w-3 h-3 text-[#6e7681] shrink-0" />
+          <ChevronDown className="w-3 h-3 text-fg-subtle shrink-0" />
         </button>
 
         {isProjectOpen && (
           <div
-            className="absolute left-3 right-3 mt-1 rounded-xl shadow-2xl p-1.5 text-xs z-50 animate-in fade-in duration-100"
-            style={{
-              background: 'var(--color-surface-2, #1c2128)',
-              border: '1px solid var(--color-border-default, #30363d)',
-            }}
+            className="absolute left-3 right-3 mt-1 rounded-xl shadow-2xl p-1.5 text-xs z-50 animate-in fade-in duration-100 bg-surface-2 border border-border-default"
           >
-            <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#8b949e]">
+            <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
               Workspaces
             </div>
             {projectNames.map((proj) => (
@@ -289,17 +265,17 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
                   onShowToast(`Switched workspace to ${proj}`);
                 }}
                 className={`w-full text-left px-2 py-1 rounded text-xs transition flex items-center justify-between ${
-                  proj === currentProject ? 'bg-surface-elevated text-white font-medium' : 'text-[#8b949e] hover:text-white'
+                  proj === currentProject ? 'bg-surface-3 text-fg-editor font-medium' : 'text-fg-muted hover:text-fg-editor'
                 }`}
               >
                 <span>{proj}</span>
-                {proj === currentProject && <CheckCircle2 className="w-3 h-3 text-[#3fb950]" />}
+                {proj === currentProject && <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
               </button>
             ))}
-            <div className="my-1 border-t border-[#30363d]" />
+            <div className="my-1 border-t border-border-default" />
             <button
               onClick={() => { setIsProjectOpen(false); onNewProjectPrompt(); }}
-              className="w-full text-left px-2 py-1 rounded text-[11px] text-[#58a6ff] hover:bg-surface-elevated transition flex items-center gap-1.5"
+              className="w-full text-left px-2 py-1 rounded text-[11px] workbench-accent hover:bg-surface-3 transition flex items-center gap-1.5"
             >
               <Plus className="w-3 h-3" />
               <span>New Workspace...</span>
@@ -309,19 +285,15 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
       </div>
 
       {/* ── 4. Search & Filters ── */}
-      <div className="px-3 pb-2 shrink-0 space-y-1.5" style={{ borderBottom: '1px solid var(--color-border-muted, #21262d)' }}>
+      <div className="px-3 pb-2 shrink-0 space-y-1.5 border-b border-border-muted">
         <div className="relative">
-          <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#6e7681]" />
+          <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle" />
           <input
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="Search conversations..."
-            className="w-full pl-7 pr-2 py-1 rounded text-white placeholder-[#6e7681] text-[11px] focus:outline-none font-sans"
-            style={{
-              background: 'var(--color-surface-0, #0d1117)',
-              border: '1px solid var(--color-border-default, #30363d)',
-            }}
+            className="w-full pl-7 pr-2 py-1 rounded text-fg-editor placeholder-fg-subtle text-[11px] focus:outline-none font-sans bg-surface-0 border border-border-default"
           />
         </div>
 
@@ -333,12 +305,7 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
               <button
                 key={f.id}
                 onClick={() => setPackFilter(f.id)}
-                className="px-2 py-0.5 rounded transition font-medium"
-                style={{
-                  background: active ? 'var(--color-surface-2, #1c2128)' : 'transparent',
-                  color: active ? '#ffffff' : '#8b949e',
-                  border: `1px solid ${active ? 'var(--color-border-default, #30363d)' : 'transparent'}`
-                }}
+                className={`px-2 py-0.5 rounded transition font-medium ${active ? 'bg-surface-2 text-fg-editor border border-border-default' : 'bg-transparent text-fg-muted border border-transparent'}`}
               >
                 {f.label}
               </button>
@@ -349,12 +316,12 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
 
       {/* ── 5. Recents Conversation List ── */}
       <div className="flex-1 overflow-y-auto px-2 py-1.5 space-y-0.5">
-        <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[#6e7681]">
+        <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">
           Recent Tasks
         </div>
 
         {filteredSessions.length === 0 ? (
-          <div className="p-6 text-center text-[#6e7681] text-xs">
+          <div className="p-6 text-center text-fg-subtle text-xs">
             <Inbox className="w-4 h-4 mx-auto mb-1.5 opacity-50" />
             <p>No recent conversations</p>
           </div>
@@ -368,23 +335,18 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
                   onSelectSession(session.id);
                   onSwitchTab('studio');
                 }}
-                className="w-full px-2.5 py-2 rounded-lg cursor-pointer transition text-left space-y-0.5 group"
-                style={{
-                  background: isActive ? 'var(--color-surface-2, #1c2128)' : 'transparent',
-                  border: `1px solid ${isActive ? 'var(--color-border-default, #30363d)' : 'transparent'}`,
-                  color: isActive ? '#ffffff' : '#8b949e'
-                }}
+                className={`w-full px-2.5 py-2 rounded-lg cursor-pointer transition text-left space-y-0.5 group ${isActive ? 'bg-surface-2 border border-border-default text-fg-editor' : 'bg-transparent border border-transparent text-fg-muted'}`}
               >
                 <div className="flex items-center justify-between gap-1">
                   <div className="flex items-center gap-1.5 truncate">
                     <PackDot pack={session.pack} />
-                    <span className="font-semibold text-xs truncate text-[#e6edf3]">
+                    <span className="font-semibold text-xs truncate text-fg-editor">
                       {session.title}
                     </span>
                   </div>
                   <StatusChip status={session.taskStatus} />
                 </div>
-                <p className="text-[11px] text-[#6e7681] truncate pl-3">
+                <p className="text-[11px] text-fg-subtle truncate pl-3">
                   {session.preview}
                 </p>
               </div>
@@ -395,52 +357,48 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
 
       {/* ── 6. Advanced Tools Drawer & Footer ── */}
       <div 
-        className="shrink-0 p-2.5 space-y-1.5"
-        style={{
-          borderTop: '1px solid var(--color-border-muted, #21262d)',
-          background: 'var(--color-surface-1, #161b22)',
-        }}
+        className="shrink-0 p-2.5 space-y-1.5 border-t border-border-muted bg-surface-1"
       >
         {/* Toggle secondary tools */}
         <button
           onClick={() => setIsToolsOpen(!isToolsOpen)}
-          className="w-full flex items-center justify-between px-2 py-1 rounded text-[11px] text-[#8b949e] hover:text-white transition"
+          className="w-full flex items-center justify-between px-2 py-1 rounded text-[11px] text-fg-muted hover:text-fg-editor transition"
         >
           <span className="flex items-center gap-1.5 font-medium">
-            <MoreHorizontal className="w-3.5 h-3.5 text-[#6e7681]" />
+            <MoreHorizontal className="w-3.5 h-3.5 text-fg-subtle" />
             <span>Advanced Tools</span>
           </span>
-          <ChevronDown className={`w-3 h-3 text-[#6e7681] transition-transform ${isToolsOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`w-3 h-3 text-fg-subtle transition-transform ${isToolsOpen ? 'rotate-180' : ''}`} />
         </button>
 
         {isToolsOpen && (
           <div className="space-y-0.5 pl-2 font-mono text-[11px]">
             <button
               onClick={() => onSwitchTab('providers')}
-              className={`w-full text-left px-2 py-1 rounded transition flex items-center gap-1.5 ${currentTab === 'providers' ? 'text-white font-bold' : 'text-[#8b949e] hover:text-white'}`}
+              className={`w-full text-left px-2 py-1 rounded transition flex items-center gap-1.5 ${currentTab === 'providers' ? 'text-fg-editor font-bold' : 'text-fg-muted hover:text-fg-editor'}`}
             >
-              <KeyRound className="w-3 h-3 text-[#d29922]" />
+              <KeyRound className="w-3 h-3 workbench-accent" />
               <span>Providers & Keys</span>
             </button>
             <button
               onClick={() => onSwitchTab('chains')}
-              className={`w-full text-left px-2 py-1 rounded transition flex items-center gap-1.5 ${currentTab === 'chains' ? 'text-white font-bold' : 'text-[#8b949e] hover:text-white'}`}
+              className={`w-full text-left px-2 py-1 rounded transition flex items-center gap-1.5 ${currentTab === 'chains' ? 'text-fg-editor font-bold' : 'text-fg-muted hover:text-fg-editor'}`}
             >
-              <GitFork className="w-3 h-3 text-[#3fb950]" />
+              <GitFork className="w-3 h-3 text-emerald-500" />
               <span>OmniRoute Cascade</span>
             </button>
             <button
               onClick={() => onSwitchTab('telemetry')}
-              className={`w-full text-left px-2 py-1 rounded transition flex items-center gap-1.5 ${currentTab === 'telemetry' ? 'text-white font-bold' : 'text-[#8b949e] hover:text-white'}`}
+              className={`w-full text-left px-2 py-1 rounded transition flex items-center gap-1.5 ${currentTab === 'telemetry' ? 'text-fg-editor font-bold' : 'text-fg-muted hover:text-fg-editor'}`}
             >
-              <Activity className="w-3 h-3 text-[#58a6ff]" />
+              <Activity className="w-3 h-3 workbench-accent" />
               <span>Telemetry & Logs</span>
             </button>
             <button
               onClick={() => onSwitchTab('cache')}
-              className={`w-full text-left px-2 py-1 rounded transition flex items-center gap-1.5 ${currentTab === 'cache' ? 'text-white font-bold' : 'text-[#8b949e] hover:text-white'}`}
+              className={`w-full text-left px-2 py-1 rounded transition flex items-center gap-1.5 ${currentTab === 'cache' ? 'text-fg-editor font-bold' : 'text-fg-muted hover:text-fg-editor'}`}
             >
-              <Database className="w-3 h-3 text-[#a78bfa]" />
+              <Database className="w-3 h-3 text-fg-subtle" />
               <span>KV Semantic Cache</span>
             </button>
           </div>
@@ -449,13 +407,13 @@ export const UnifiedSidebar: React.FC<UnifiedSidebarProps> = ({
         {/* Footer row */}
         <div className="flex items-center justify-between pt-1">
           <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#3fb950] animate-pulse" />
-            <span className="font-mono text-[10px] text-[#3fb950]">Sovereign · Safe</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="font-mono text-[10px] text-emerald-500">Sovereign · Safe</span>
           </div>
 
           <button
             onClick={() => onOpenSettings ? onOpenSettings() : onSwitchTab('settings')}
-            className="p-1 rounded text-[#8b949e] hover:text-white transition"
+            className="p-1 rounded text-fg-muted hover:text-fg-editor transition"
             title="Settings (⌘,)"
           >
             <Settings2 className="w-3.5 h-3.5" />

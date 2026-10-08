@@ -4,6 +4,7 @@
 //! All models are serializable and validate state machine transitions strictly.
 
 pub mod action;
+pub mod annotation;
 pub mod approval;
 pub mod artifact;
 pub mod authority;
@@ -15,11 +16,14 @@ pub mod continuation;
 pub mod decision;
 pub mod error;
 pub mod evidence;
+pub mod execution_record;
 pub mod fact;
 pub mod ids;
 pub mod memory;
 pub mod oi;
 pub mod packet;
+pub mod provider_config;
+pub mod recipe;
 pub mod repo;
 pub mod run;
 pub mod session;
@@ -34,6 +38,7 @@ pub use action::{
     Action, ActionIntent, ActionIntentV1, ActionLifecycleState, Assurance, EffectAttempt,
     EffectStatus, RiskLevel,
 };
+pub use annotation::{AnnotationRecord, AnnotationStatus, AnnotationTarget};
 pub use approval::{ApprovalDecision, ApprovalRequest, ApprovalStatus};
 pub use artifact::{ArtifactKind, ArtifactRef};
 pub use authority::{
@@ -57,6 +62,7 @@ pub use error::DomainError;
 pub use evidence::{
     EvidenceRecord, EvidenceRecordV1, EvidenceRequirement, EvidenceStatus, VerificationClaim,
 };
+pub use execution_record::{ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus};
 pub use fact::Fact;
 pub use ids::{canonical_json, digest, new_id, TaskId};
 pub use memory::{
@@ -64,6 +70,8 @@ pub use memory::{
     ProposalStatus, RecallQuery, WorkerRunId,
 };
 pub use packet::ContinuationPacket as PacketContinuation;
+pub use provider_config::{ClientApiKeyRecord, ProviderConfig};
+pub use recipe::{EnvironmentSpec, Recipe, RecipeInput};
 pub use repo::{
     ConfidenceLevel, CoverageMetrics, MissingReason, QueryResult, RepoSnapshotRef, SourceSpan,
     SymbolMatch,

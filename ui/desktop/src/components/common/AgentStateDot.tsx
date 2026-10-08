@@ -134,7 +134,7 @@ export const AgentStateDot = React.memo(function AgentStateDot({
     <div className="relative group inline-flex items-center">
       {indicator}
       {tooltipLabel && (
-        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-50 whitespace-nowrap rounded bg-surface-elevated px-2 py-0.5 text-2xs font-medium text-neutral-200 shadow-lg border border-surface-border">
+        <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-50 whitespace-nowrap rounded bg-surface-2 px-2 py-0.5 text-2xs font-medium text-fg-editor shadow-lg border border-border-default">
           {tooltipLabel}
         </div>
       )}

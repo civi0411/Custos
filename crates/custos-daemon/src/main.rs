@@ -34,13 +34,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let local_port = tcp_listener.local_addr()?.port();
     profile.write_port(local_port)?;
 
+    let local_api = runtime.local_api.clone();
+
+    // Bind HTTP Server on loopback (default 3000, or env CUSTOS_HTTP_BIND)
+    let http_bind = std::env::var("CUSTOS_HTTP_BIND").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
+    let http_api = local_api.clone();
+    let (http_port, http_task) = match custos_daemon::start_http_server(&http_bind, http_api).await {
+        Ok(res) => res,
+        Err(err) => {
+            eprintln!("Notice: primary HTTP bind on {http_bind} failed ({err}), falling back to dynamic port...");
+            custos_daemon::start_http_server("127.0.0.1:0", local_api.clone()).await?
+        }
+    };
+    profile.write_http_port(http_port)?;
+
     eprintln!(
-        "Custos daemon ready; profile={}; database={}; tcp=127.0.0.1:{local_port}; transport=tcp+stdio-jsonl",
+        "Custos daemon ready; profile={}; database={}; tcp=127.0.0.1:{local_port}; http=http://127.0.0.1:{http_port}; transport=tcp+http+stdio-jsonl",
         profile.profile_id(),
         database_path.display()
     );
-
-    let local_api = runtime.local_api.clone();
 
     // Spawn TCP accept loop
     let tcp_api = local_api.clone();
@@ -98,6 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             eprintln!("Custos daemon received interrupt signal, shutting down...");
         }
         _ = tcp_task => {}
+        _ = http_task => {}
         _ = stdio_task => {}
     }
 

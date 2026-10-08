@@ -1,10 +1,7 @@
 import { useState, useEffect, type SetStateAction } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
-import { AppHeader, type AppWorkspaceMode } from '@/components/shell/AppHeader';
-import { ClaudeChatView } from '@/components/views/ClaudeChatView';
-import { CodexOrcaView } from '@/components/views/CodexOrcaView';
-import { ResearchView } from '@/components/views/ResearchView';
+import { type AppWorkspaceMode, AppWorkspaceShell } from '@/components/shell';
 import { type OrcaTab, type OrcaTabId, type ResourceTabsState } from '@/components/views/OrcaTabbedContainer';
 
 const MODE_STORAGE_KEY = 'custos.workspace.mode.v2';
@@ -108,120 +105,37 @@ export function StudioPage() {
   }, [showToast]);
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#0d1117] overflow-hidden select-none">
-      {/* ─────────────────────────────────────────────────────────────
-          UNIFIED TOP BAR WITH THE 2 MODE ICONS: [ 💬 Chat ] & [ </> Code ]
-      ───────────────────────────────────────────────────────────── */}
-      <AppHeader
+    <div className="h-full w-full bg-canvas overflow-hidden select-none">
+      <AppWorkspaceShell
         mode={mode}
-        workspaceTitle={currentSessions.find((item) => item.id === activeSessionId)?.title}
         onSwitchMode={(newMode) => setMode(newMode)}
+        currentProject={currentProject}
+        projectNames={Object.keys(projectData)}
+        onSelectProject={(p) => {
+          setCurrentProject(p);
+          const first = (projectData[p] || [])[0];
+          if (first) setActiveSessionId(first.id);
+        }}
+        sessions={currentSessions}
+        activeSessionId={activeSessionId}
+        onSelectSession={(id) => setActiveSessionId(id)}
+        onNewSession={() => setIsNewSessionOpen(true)}
+        onSendMessage={handleSendMessage}
+        onClearHistory={handleClearHistory}
+        onAcceptAndRun={handleAcceptAndRun}
+        onRejectDiff={handleRejectDiff}
+        onCopyDiff={handleCopyDiff}
+        onShowToast={showToast}
+        onOpenSettings={() => openSettings('general')}
         isSidebarCollapsed={isSidebarCollapsed}
         onToggleSidebar={() => setIsSidebarCollapsed((prev) => !prev)}
-        onShowToast={showToast}
-        onNewTab={() => openResources(false)}
-        onNewTabFullView={() => openResources(true)}
+        resourceTabs={resourceTabs}
         isWebTabOpen={isWebTabOpen}
-        webTabCount={currentTabState.tabs.length}
-
+        isWebTabExpanded={isWebTabExpanded}
         onToggleWebTab={() => setIsWebTabOpen((prev) => !prev)}
+        onToggleExpandWebTab={() => setIsWebTabExpanded(!isWebTabExpanded)}
+        openResources={openResources}
       />
-
-      {/* ─────────────────────────────────────────────────────────────
-          MAIN WORKSPACE BODY
-      ───────────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-hidden min-h-0 relative">
-        {mode === 'chat' && (
-          /* SCREENSHOT 1: CLAUDE DESKTOP CHAT & COWORK */
-          <ClaudeChatView
-            currentProject={currentProject}
-            projectNames={Object.keys(projectData)}
-            onSelectProject={(p) => {
-              setCurrentProject(p);
-              const first = (projectData[p] || [])[0];
-              if (first) setActiveSessionId(first.id);
-            }}
-            sessions={currentSessions}
-            activeSessionId={activeSessionId}
-            onSelectSession={(id) => setActiveSessionId(id)}
-            onNewSession={() => setIsNewSessionOpen(true)}
-            onSendMessage={handleSendMessage}
-            onClearHistory={handleClearHistory}
-            onShowToast={showToast}
-            onOpenSettings={() => openSettings('general')}
-            onSwitchMode={setMode}
-            isSidebarCollapsed={isSidebarCollapsed}
-            isWebTabOpen={isWebTabOpen}
-
-
-            isWebTabExpanded={isWebTabExpanded}
-            onToggleExpandWebTab={() => setIsWebTabExpanded(!isWebTabExpanded)}
-            resourceTabs={resourceTabs}
-          />
-        )}
-
-        {mode === 'code' && (
-          /* SCREENSHOT 2: CODEX / ORCA ADE 3-COLUMN WORKSPACE */
-          <CodexOrcaView
-            currentProject={currentProject}
-            projectNames={Object.keys(projectData)}
-            onSelectProject={(p) => {
-              setCurrentProject(p);
-              const first = (projectData[p] || [])[0];
-              if (first) setActiveSessionId(first.id);
-            }}
-            sessions={currentSessions}
-            activeSessionId={activeSessionId}
-            onSelectSession={(id) => setActiveSessionId(id)}
-            onNewSession={() => setIsNewSessionOpen(true)}
-            onSendMessage={handleSendMessage}
-            onClearHistory={handleClearHistory}
-            onAcceptAndRun={handleAcceptAndRun}
-            onRejectDiff={handleRejectDiff}
-            onCopyDiff={handleCopyDiff}
-            onShowToast={showToast}
-            onOpenSettings={() => openSettings('general')}
-            onSwitchMode={setMode}
-            isSidebarCollapsed={isSidebarCollapsed}
-            isWebTabOpen={isWebTabOpen}
-
-
-            isWebTabExpanded={isWebTabExpanded}
-            onToggleExpandWebTab={() => setIsWebTabExpanded(!isWebTabExpanded)}
-            resourceTabs={resourceTabs}
-          />
-        )}
-
-        {mode === 'research' && (
-          /* RESEARCH: CLAUDE SCIENCE LAB */
-          <ResearchView
-            onOpenResourcePane={() => setIsWebTabOpen(true)}
-            currentProject={currentProject}
-            projectNames={Object.keys(projectData)}
-            onSelectProject={(p) => {
-              setCurrentProject(p);
-              const first = (projectData[p] || [])[0];
-              if (first) setActiveSessionId(first.id);
-            }}
-            sessions={currentSessions}
-            activeSessionId={activeSessionId}
-            onSelectSession={(id) => setActiveSessionId(id)}
-            onNewSession={() => setIsNewSessionOpen(true)}
-            onSendMessage={handleSendMessage}
-            onClearHistory={handleClearHistory}
-            onShowToast={showToast}
-            onOpenSettings={() => openSettings('general')}
-            onSwitchMode={setMode}
-            isSidebarCollapsed={isSidebarCollapsed}
-            isWebTabOpen={isWebTabOpen}
-
-
-            isWebTabExpanded={isWebTabExpanded}
-            onToggleExpandWebTab={() => setIsWebTabExpanded(!isWebTabExpanded)}
-            resourceTabs={resourceTabs}
-          />
-        )}
-      </div>
     </div>
   );
 }

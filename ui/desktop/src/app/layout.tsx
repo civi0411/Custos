@@ -136,8 +136,8 @@ export const RootLayout: React.FC = () => {
 
         {/* Bottom Status Bar */}
         <StatusBar
-          activeSessionTitle={activeSession?.title || 'No active session'}
-          activeModel={activeSession?.model || 'Model not reported'}
+          activeSessionTitle={activeSession?.title || 'Custos Sovereign Workspace'}
+          activeModel={activeSession?.model || 'Custos Runtime · Mediated'}
           uiScale={uiScale}
           onSetUiScale={handleSetUiScale}
           onStepUiScale={handleStepUiScale}
