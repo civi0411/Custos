@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Database, Search, Trash2, RefreshCw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Database, Search, Trash2, RefreshCw, ArrowLeft } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 import { Tooltip } from '../../components/Tooltip';
 
@@ -22,6 +23,7 @@ const mockCacheItems: CacheItem[] = [
 ];
 
 export const CachePage: React.FC = () => {
+  const navigate = useNavigate();
   const { showToast } = useAppContext();
   const [items, setItems] = useState<CacheItem[]>(mockCacheItems);
   const [search, setSearch] = useState('');
@@ -48,13 +50,23 @@ export const CachePage: React.FC = () => {
     <div className="flex-1 flex flex-col h-full bg-canvas overflow-hidden p-4 sm:p-6 space-y-4 text-fg-editor font-sans">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-border-muted shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-surface-2 border border-border-default flex items-center justify-center workbench-accent">
-            <Database className="w-5 h-5" />
-          </div>
-          <div>
-            <h1 className="text-base sm:text-lg font-semibold tracking-[-0.02em] text-fg-editor">Local KV Cache</h1>
-            <p className="text-xs text-fg-muted mt-0.5">Embedded SQLite Key-Value storage, fast AST lookups & session caches</p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/studio')}
+            className="p-1.5 rounded-lg bg-surface-2 hover:bg-surface-3 border border-border-default text-fg-muted hover:text-fg-editor transition flex items-center gap-1.5 text-xs"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Studio</span>
+          </button>
+          <div className="h-4 w-[1px] bg-border-muted" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-surface-2 border border-border-default flex items-center justify-center workbench-accent">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-base sm:text-lg font-semibold tracking-[-0.02em] text-fg-editor">Local KV Cache</h1>
+              <p className="text-xs text-fg-muted mt-0.5">Embedded SQLite Key-Value storage, fast AST lookups & session caches</p>
+            </div>
           </div>
         </div>
 

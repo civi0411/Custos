@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { BookOpen, Copy, Check } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { BookOpen, Copy, Check, ArrowLeft } from 'lucide-react';
 import { useAppContext } from '../../context/AppContext';
 
 interface ApiEndpoint {
@@ -45,6 +46,7 @@ const endpoints: ApiEndpoint[] = [
 ];
 
 export const DocsPage: React.FC = () => {
+  const navigate = useNavigate();
   const { showToast } = useAppContext();
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
@@ -59,7 +61,15 @@ export const DocsPage: React.FC = () => {
     <div className="flex-1 flex flex-col h-full bg-canvas overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 text-fg-editor font-sans">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-muted">
-        <div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/studio')}
+            className="p-1.5 rounded-lg bg-surface-2 hover:bg-surface-3 border border-border-default text-fg-muted hover:text-fg-editor transition flex items-center gap-1.5 text-xs"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Studio</span>
+          </button>
+          <div className="h-4 w-[1px] bg-border-muted" />
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-surface-2 border border-border-default flex items-center justify-center workbench-accent">
               <BookOpen className="w-5 h-5" />

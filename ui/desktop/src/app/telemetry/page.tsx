@@ -1,16 +1,28 @@
 import React from 'react';
-import { Activity, ServerOff } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Activity, ServerOff, ArrowLeft } from 'lucide-react';
 import { useDaemon } from '@/hooks/useDaemon';
 
 export const TelemetryPage: React.FC = () => {
+  const navigate = useNavigate();
   const { isOnline, isChecking, lastChecked, checkHealth } = useDaemon();
 
   return (
-    <main className="flex h-full flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
+    <main className="flex h-full flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)] font-sans">
       <header className="flex h-12 items-center justify-between border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-5">
-        <div className="flex items-center gap-2">
-          <Activity className="h-4 w-4 text-[var(--color-fg-muted)]" />
-          <span className="text-sm font-semibold">Runtime telemetry</span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/studio')}
+            className="p-1.5 rounded-lg bg-surface-2 hover:bg-surface-3 border border-border-default text-fg-muted hover:text-fg-editor transition flex items-center gap-1.5 text-xs"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Studio</span>
+          </button>
+          <div className="h-4 w-[1px] bg-border-muted" />
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-[var(--color-fg-muted)]" />
+            <span className="text-sm font-semibold">Runtime telemetry</span>
+          </div>
         </div>
         <button
           type="button"

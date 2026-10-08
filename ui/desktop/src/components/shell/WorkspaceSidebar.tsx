@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useAppContext } from '@/context/AppContext';
 import {
   SlidersHorizontal,
   ChevronDown,
@@ -73,7 +73,15 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   onOpenSettings,
   isSidebarCollapsed
 }) => {
-  const navigate = useNavigate();
+  const { openSettings } = useAppContext();
+  const handleOpenSettings = () => {
+    setIsProfileDropdownOpen(false);
+    if (onOpenSettings) {
+      onOpenSettings();
+    } else {
+      openSettings('general');
+    }
+  };
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
 
@@ -271,10 +279,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               {/* Action Links */}
               <div className="space-y-0.5 text-xs">
                 <button
-                  onClick={() => {
-                    setIsProfileDropdownOpen(false);
-                    onOpenSettings ? onOpenSettings() : navigate('/settings');
-                  }}
+                  onClick={handleOpenSettings}
                   className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
                 >
                   <Settings className="w-3.5 h-3.5 text-fg-muted" />
@@ -296,10 +301,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
         {/* Direct Settings Trigger */}
         <button
-          onClick={() => {
-            if (onOpenSettings) onOpenSettings();
-            else navigate('/settings');
-          }}
+          onClick={handleOpenSettings}
           className="p-1.5 rounded-md text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
           title="Preferences & Settings (⌘,)"
         >

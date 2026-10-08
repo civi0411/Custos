@@ -1,4 +1,3 @@
-export * from './Header';
 export * from './AppHeader';
 export * from './StatusBar';
 export * from './Splitter';
