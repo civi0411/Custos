@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use custos_core::contracts::workspace::WorkspaceProvider;
-use custos_domain::{DomainError, ExecutionWorkspace, WorkspaceKind};
+use custos_domain::{DirtyManifest, DomainError, ExecutionWorkspace, WorkspaceKind};
 use std::path::Path;
 use tokio::fs;
 use tokio::process::Command;
@@ -145,6 +145,128 @@ impl WorkspaceProvider for LocalWorkspaceProvider {
         }
 
         Ok(())
+    }
+
+    async fn inspect_dirty(
+        &self,
+        workspace: &ExecutionWorkspace,
+    ) -> Result<DirtyManifest, DomainError> {
+        match &workspace.kind {
+            WorkspaceKind::Git { .. } => {
+                let target = Path::new(&workspace.path);
+                if !target.exists() {
+                    return Ok(DirtyManifest {
+                        is_dirty: false,
+                        modified_files: Vec::new(),
+                        untracked_files: Vec::new(),
+                        deleted_files: Vec::new(),
+                        head_commit: None,
+                        checked_at: chrono::Utc::now().timestamp_millis(),
+                    });
+                }
+
+                // Run git status --porcelain
+                let mut status_cmd = Command::new("git");
+                status_cmd
+                    .current_dir(&workspace.path)
+                    .arg("status")
+                    .arg("--porcelain");
+
+                let output = status_cmd.output().await.map_err(|e| {
+                    DomainError::Validation(format!("Failed to execute git status: {}", e))
+                })?;
+
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                let mut modified_files = Vec::new();
+                let mut untracked_files = Vec::new();
+                let mut deleted_files = Vec::new();
+
+                for line in stdout.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    let status = &trimmed[..std::cmp::min(2, trimmed.len())];
+                    let file_path = trimmed[std::cmp::min(2, trimmed.len())..].trim().to_string();
+
+                    if status.contains('?') {
+                        untracked_files.push(file_path);
+                    } else if status.contains('D') {
+                        deleted_files.push(file_path);
+                    } else {
+                        modified_files.push(file_path);
+                    }
+                }
+
+                let is_dirty = !modified_files.is_empty()
+                    || !untracked_files.is_empty()
+                    || !deleted_files.is_empty();
+
+                // Get HEAD commit hash
+                let mut rev_cmd = Command::new("git");
+                rev_cmd
+                    .current_dir(&workspace.path)
+                    .arg("rev-parse")
+                    .arg("HEAD");
+                let head_commit = rev_cmd
+                    .output()
+                    .await
+                    .ok()
+                    .filter(|out| out.status.success())
+                    .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string());
+
+                Ok(DirtyManifest {
+                    is_dirty,
+                    modified_files,
+                    untracked_files,
+                    deleted_files,
+                    head_commit,
+                    checked_at: chrono::Utc::now().timestamp_millis(),
+                })
+            }
+            WorkspaceKind::Folder { path } => {
+                let _exists = Path::new(path).exists();
+                Ok(DirtyManifest {
+                    is_dirty: false,
+                    modified_files: Vec::new(),
+                    untracked_files: Vec::new(),
+                    deleted_files: Vec::new(),
+                    head_commit: None,
+                    checked_at: chrono::Utc::now().timestamp_millis(),
+                })
+            }
+            WorkspaceKind::RemoteSsh { .. } => Ok(DirtyManifest {
+                is_dirty: false,
+                modified_files: Vec::new(),
+                untracked_files: Vec::new(),
+                deleted_files: Vec::new(),
+                head_commit: None,
+                checked_at: chrono::Utc::now().timestamp_millis(),
+            }),
+        }
+    }
+
+    async fn recover(&self, workspace: &ExecutionWorkspace) -> Result<bool, DomainError> {
+        let target = Path::new(&workspace.path);
+        if !target.exists() {
+            return Ok(false);
+        }
+
+        match &workspace.kind {
+            WorkspaceKind::Git { .. } => {
+                let mut cmd = Command::new("git");
+                cmd.current_dir(&workspace.path)
+                    .arg("rev-parse")
+                    .arg("--is-inside-work-tree");
+
+                match cmd.output().await {
+                    Ok(out) if out.status.success() => Ok(true),
+                    _ => Ok(false),
+                }
+            }
+            WorkspaceKind::Folder { .. } => Ok(true),
+            WorkspaceKind::RemoteSsh { .. } => Ok(true),
+        }
     }
 
     async fn teardown(&self, workspace: &ExecutionWorkspace) -> Result<(), DomainError> {

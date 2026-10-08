@@ -185,6 +185,21 @@ export interface WorkspaceLineage {
   head_commit?: string;
 }
 
+export interface DirtyManifest {
+  is_dirty: boolean;
+  isDirty?: boolean;
+  modified_files: string[];
+  modifiedFiles?: string[];
+  untracked_files: string[];
+  untrackedFiles?: string[];
+  deleted_files: string[];
+  deletedFiles?: string[];
+  head_commit?: string | null;
+  headCommit?: string | null;
+  checked_at: number;
+  checkedAt?: number;
+}
+
 export interface ExecutionWorkspace {
   id: string;
   name: string;
@@ -193,6 +208,12 @@ export interface ExecutionWorkspace {
   status: WorkspaceStatus;
   status_reason?: string;
   lineage: WorkspaceLineage;
+  owner_task_id?: string | null;
+  ownerTaskId?: string | null;
+  base_commit_hash?: string | null;
+  baseCommitHash?: string | null;
+  dirty_manifest?: DirtyManifest | null;
+  dirtyManifest?: DirtyManifest | null;
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
@@ -203,6 +224,8 @@ export interface CreateWorkspaceParams {
   kind: WorkspaceKind;
   path: string;
   lineage?: WorkspaceLineage;
+  owner_task_id?: string;
+  ownerTaskId?: string;
   metadata?: Record<string, any>;
   setup_script?: string;
 }

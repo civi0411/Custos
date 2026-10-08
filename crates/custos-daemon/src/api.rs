@@ -7,13 +7,15 @@ use std::sync::Arc;
 pub use crate::custos_local_api::{
     AdvanceTaskRequest, ApiRequest, ApiResponse, ArchiveWorkspaceApiRequest, CancelRunRequest,
     CancelTaskRequest, CompleteTaskRequest, CreateTaskRequest, CreateWorkspaceApiRequest,
-    GetCapabilityApiRequest, GetWorkspaceApiRequest, StartRunRequest, METHOD_CAPABILITIES_GET,
+    GetCapabilityApiRequest, GetWorkspaceApiRequest, InspectWorkspaceDirtyApiRequest,
+    RecoverWorkspaceApiRequest, StartRunRequest, METHOD_CAPABILITIES_GET,
     METHOD_CAPABILITIES_LIST, METHOD_RESEARCH_ANCHORS_LIST, METHOD_RESEARCH_ANCHORS_SAVE,
     METHOD_RESEARCH_CLAIMS_LIST, METHOD_RESEARCH_CLAIMS_SAVE, METHOD_RESEARCH_HANDOFF_CODING,
     METHOD_RESEARCH_LINEAGE_LIST, METHOD_RESEARCH_RUNS_LIST, METHOD_RESEARCH_RUNS_SAVE,
     METHOD_RESEARCH_SOURCES_LIST, METHOD_RESEARCH_SOURCES_SAVE, METHOD_WORKFLOW_CANCEL_RUN,
     METHOD_WORKFLOW_START_RUN, METHOD_WORKSPACES_ARCHIVE, METHOD_WORKSPACES_CREATE,
-    METHOD_WORKSPACES_GET, METHOD_WORKSPACES_LIST,
+    METHOD_WORKSPACES_GET, METHOD_WORKSPACES_INSPECT_DIRTY, METHOD_WORKSPACES_LIST,
+    METHOD_WORKSPACES_RECOVER,
 };
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
 use custos_core::contracts::workflow::WorkflowPort;
@@ -98,7 +100,7 @@ impl LocalApiDispatcher {
                     CapabilityGroup::Code,
                     "Inspect daemon-owned folder and Git execution workspaces.",
                     Some("worktrees"),
-                    vec!["create", "list", "get", "archive"],
+                    vec!["create", "list", "get", "archive", "inspect_dirty", "recover"],
                 )
             } else {
                 CapabilityDescriptor::unavailable(
@@ -745,6 +747,12 @@ impl LocalApiDispatcher {
                         )
                     }
                 };
+                let owner_task_id = req
+                    .params
+                    .get("owner_task_id")
+                    .or_else(|| req.params.get("task_id"))
+                    .and_then(|v| v.as_str())
+                    .map(ToString::to_string);
                 let params: CreateWorkspaceApiRequest = match serde_json::from_value(req.params) {
                     Ok(p) => p,
                     Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
@@ -754,6 +762,7 @@ impl LocalApiDispatcher {
                     kind: params.kind,
                     path: params.path,
                     lineage: params.lineage,
+                    owner_task_id,
                     metadata: params.metadata,
                     setup_script: params.setup_script,
                 };
@@ -822,11 +831,76 @@ impl LocalApiDispatcher {
                 };
                 let ws_id = custos_domain::WorkspaceId::new(params.workspace_id);
                 match coordinator
-                    .archive_workspace(&ws_id, params.delete_physical)
+                    .archive_workspace_with_force(&ws_id, params.delete_physical, params.force)
                     .await
                 {
                     Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "archived": true })),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKSPACES_INSPECT_DIRTY => {
+                let coordinator = match self.workspace.as_ref() {
+                    Some(c) => c,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "WorkspaceCoordinator not configured on daemon",
+                        )
+                    }
+                };
+                let ws_id = match req
+                    .params
+                    .get("workspace_id")
+                    .or_else(|| req.params.get("id"))
+                    .and_then(|v| v.as_str())
+                {
+                    Some(id) => custos_domain::WorkspaceId::new(id),
+                    None => return ApiResponse::error(req.id, "Missing workspace_id parameter"),
+                };
+                match coordinator.inspect_dirty(&ws_id).await {
+                    Ok(dirty) => match serde_json::to_value(&dirty) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKSPACES_RECOVER => {
+                let coordinator = match self.workspace.as_ref() {
+                    Some(c) => c,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "WorkspaceCoordinator not configured on daemon",
+                        )
+                    }
+                };
+                let target_id = req
+                    .params
+                    .get("workspace_id")
+                    .or_else(|| req.params.get("id"))
+                    .and_then(|v| v.as_str());
+
+                match target_id {
+                    Some(id) => {
+                        let ws_id = custos_domain::WorkspaceId::new(id);
+                        match coordinator.recover_workspace(&ws_id).await {
+                            Ok(ws) => match serde_json::to_value(&ws) {
+                                Ok(val) => ApiResponse::success(req.id, val),
+                                Err(e) => ApiResponse::error(req.id, e.to_string()),
+                            },
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
+                    None => {
+                        match coordinator.reconcile_all().await {
+                            Ok(recovered) => match serde_json::to_value(&recovered) {
+                                Ok(val) => ApiResponse::success(req.id, val),
+                                Err(e) => ApiResponse::error(req.id, e.to_string()),
+                            },
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
                 }
             }
             METHOD_RESEARCH_SOURCES_LIST => {
@@ -1956,13 +2030,39 @@ mod tests {
             serde_json::from_value(list_resp.result.unwrap()).unwrap();
         assert_eq!(workspaces.len(), 1);
 
+        // 3b. Inspect dirty manifest
+        let inspect_req = ApiRequest {
+            id: "req_ws_inspect".into(),
+            method: METHOD_WORKSPACES_INSPECT_DIRTY.into(),
+            params: serde_json::json!({
+                "workspace_id": created_ws.id.as_str()
+            }),
+        };
+        let inspect_resp = dispatcher.handle_request(inspect_req).await;
+        assert!(inspect_resp.is_success());
+        let dirty: custos_domain::DirtyManifest =
+            serde_json::from_value(inspect_resp.result.unwrap()).unwrap();
+        assert!(!dirty.is_dirty);
+
+        // 3c. Recover workspace
+        let recover_req = ApiRequest {
+            id: "req_ws_recover".into(),
+            method: METHOD_WORKSPACES_RECOVER.into(),
+            params: serde_json::json!({
+                "workspace_id": created_ws.id.as_str()
+            }),
+        };
+        let recover_resp = dispatcher.handle_request(recover_req).await;
+        assert!(recover_resp.is_success());
+
         // 4. Archive Workspace (with delete_physical: true)
         let archive_req = ApiRequest {
             id: "req_ws_4".into(),
             method: METHOD_WORKSPACES_ARCHIVE.into(),
             params: serde_json::json!({
                 "workspace_id": created_ws.id.as_str(),
-                "delete_physical": true
+                "delete_physical": true,
+                "force": false
             }),
         };
         let archive_resp = dispatcher.handle_request(archive_req).await;

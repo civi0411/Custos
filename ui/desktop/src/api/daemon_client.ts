@@ -12,6 +12,7 @@ import {
   ExecutionWorkspace,
   CreateWorkspaceParams,
   CapabilityDescriptor,
+  DirtyManifest,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -45,10 +46,22 @@ const toDaemon = (value: unknown): Record<string, any> => mapKeysDeep(value, sna
 
 const normalizeWorkspace = (wire: any): ExecutionWorkspace => {
   const failure = wire.status && typeof wire.status === 'object' ? wire.status.setup_failed : null;
+  const dirtyManifest = wire.dirty_manifest
+    ? (fromDaemon(wire.dirty_manifest) as DirtyManifest)
+    : wire.dirtyManifest ?? null;
+  const ownerTaskId = wire.owner_task_id ?? wire.ownerTaskId ?? null;
+  const baseCommitHash = wire.base_commit_hash ?? wire.baseCommitHash ?? null;
+
   return {
     ...wire,
     status: failure ? 'setup_failed' : wire.status,
     status_reason: failure?.reason,
+    owner_task_id: ownerTaskId,
+    ownerTaskId,
+    base_commit_hash: baseCommitHash,
+    baseCommitHash,
+    dirty_manifest: dirtyManifest,
+    dirtyManifest,
   } as ExecutionWorkspace;
 };
 
@@ -256,11 +269,26 @@ export class DaemonClient {
     return records.map(normalizeWorkspace);
   }
 
-  async archiveWorkspace(workspaceId: string, deletePhysical = false): Promise<void> {
+  async archiveWorkspace(workspaceId: string, deletePhysical = false, force = false): Promise<void> {
     return this.request<void>('v1.workspaces.archive', {
       workspace_id: workspaceId,
       delete_physical: deletePhysical,
+      force,
     });
+  }
+
+  async inspectWorkspaceDirty(workspaceId: string): Promise<DirtyManifest> {
+    return fromDaemon<DirtyManifest>(
+      await this.request<unknown>('v1.workspaces.inspect_dirty', { workspace_id: workspaceId })
+    );
+  }
+
+  async recoverWorkspace(workspaceId?: string): Promise<ExecutionWorkspace | ExecutionWorkspace[]> {
+    const raw = await this.request<unknown>('v1.workspaces.recover', { workspace_id: workspaceId });
+    if (Array.isArray(raw)) {
+      return raw.map(normalizeWorkspace);
+    }
+    return normalizeWorkspace(raw);
   }
 
   // ---------------------------------------------------------

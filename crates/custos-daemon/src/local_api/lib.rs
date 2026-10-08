@@ -32,6 +32,8 @@ pub const METHOD_WORKSPACES_CREATE: &str = "v1.workspaces.create";
 pub const METHOD_WORKSPACES_GET: &str = "v1.workspaces.get";
 pub const METHOD_WORKSPACES_LIST: &str = "v1.workspaces.list";
 pub const METHOD_WORKSPACES_ARCHIVE: &str = "v1.workspaces.archive";
+pub const METHOD_WORKSPACES_INSPECT_DIRTY: &str = "v1.workspaces.inspect_dirty";
+pub const METHOD_WORKSPACES_RECOVER: &str = "v1.workspaces.recover";
 
 pub const METHOD_RESEARCH_SOURCES_LIST: &str = "v1.research.sources.list";
 pub const METHOD_RESEARCH_SOURCES_SAVE: &str = "v1.research.sources.save";
@@ -216,6 +218,19 @@ pub struct ArchiveWorkspaceApiRequest {
     pub workspace_id: String,
     #[serde(default)]
     pub delete_physical: bool,
+    #[serde(default)]
+    pub force: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct InspectWorkspaceDirtyApiRequest {
+    pub workspace_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RecoverWorkspaceApiRequest {
+    #[serde(default)]
+    pub workspace_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -795,6 +810,7 @@ impl LocalApiClient {
         let params = serde_json::to_value(ArchiveWorkspaceApiRequest {
             workspace_id: workspace_id.to_string(),
             delete_physical,
+            force: false,
         })
         .map_err(|e| e.to_string())?;
         let req = ApiRequest::new(req_id, METHOD_WORKSPACES_ARCHIVE, params);
