@@ -28,6 +28,8 @@ pub use crate::custos_local_api::{
     METHOD_ARTIFACTS_GET, METHOD_ARTIFACTS_LINEAGE_GRAPH, METHOD_ARTIFACTS_LIST,
     METHOD_ARTIFACTS_RECORD_LINEAGE, METHOD_NOTES_GET, METHOD_NOTES_HISTORY,
     METHOD_NOTES_LIST, METHOD_NOTES_SAVE,
+    METHOD_NOTEBOOK_CELLS_LIST, METHOD_NOTEBOOK_CELLS_SAVE, METHOD_NOTEBOOK_EXECUTE,
+    METHOD_NOTEBOOK_INTERRUPT, METHOD_NOTEBOOK_RESET, METHOD_NOTEBOOK_STATUS,
 };
 use custos_adapters::harness::HarnessRegistry;
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
@@ -39,11 +41,12 @@ use custos_domain::{
     ArtifactLineageNode, CapabilityDescriptor, CapabilityGroup, NoteRecord, PassageAnchor,
     ResearchClaim, ResearchExperimentRun, SessionId, SessionMode, SourceRecord, TaskContract,
     TaskStatus,
+    ExecuteCellParams, NotebookCell,
 };
 use custos_persistence::{ProviderRepository, ResearchRepository};
 use custos_runtime::session::SessionManager;
 use custos_runtime::workspace::{CreateWorkspaceRequest, WorkspaceCoordinator, WorkspaceFilesCoordinator};
-use custos_runtime::TerminalCoordinator;
+use custos_runtime::{PythonKernelCoordinator, TerminalCoordinator};
 
 /// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, WorkflowPort, ResearchRepository, ProviderRepository, TerminalCoordinator, and WorkspaceFilesPort for IPC callers.
 pub struct LocalApiDispatcher {
@@ -57,6 +60,7 @@ pub struct LocalApiDispatcher {
     terminal: Arc<TerminalCoordinator>,
     files: Arc<dyn WorkspaceFilesPort>,
     harnesses: Arc<HarnessRegistry>,
+    python_kernel: Option<Arc<PythonKernelCoordinator>>,
 }
 
 impl LocalApiDispatcher {
@@ -76,7 +80,13 @@ impl LocalApiDispatcher {
             terminal: Arc::new(TerminalCoordinator::new()),
             files: Arc::new(WorkspaceFilesCoordinator::new()),
             harnesses: Arc::new(HarnessRegistry::new()),
+            python_kernel: Some(Arc::new(PythonKernelCoordinator::new())),
         }
+    }
+
+    pub fn with_python_kernel(mut self, python_kernel: Arc<PythonKernelCoordinator>) -> Self {
+        self.python_kernel = Some(python_kernel);
+        self
     }
 
     pub fn with_harnesses(mut self, harnesses: Arc<HarnessRegistry>) -> Self {
@@ -317,14 +327,25 @@ impl LocalApiDispatcher {
                 Some("changes"),
                 vec!["diff", "file_diff", "stage", "unstage", "discard"],
             ),
-            CapabilityDescriptor::unavailable(
-                "compute.notebook",
-                "Notebook",
-                CapabilityGroup::Compute,
-                "Authorized kernels, code cells, and reproducible compute epochs.",
-                Some("experiments"),
-                "Authorized kernels, code cells and reproducible compute scheduled in Roadmap Step 7.",
-            ),
+            if self.python_kernel.is_some() {
+                CapabilityDescriptor::available(
+                    "compute.notebook",
+                    "Notebook",
+                    CapabilityGroup::Compute,
+                    "Authorized kernels, code cells, and reproducible compute epochs.",
+                    Some("experiments"),
+                    vec!["cells.list", "cells.save", "execute", "interrupt", "reset", "status"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "compute.notebook",
+                    "Notebook",
+                    CapabilityGroup::Compute,
+                    "Authorized kernels, code cells, and reproducible compute epochs.",
+                    Some("experiments"),
+                    "PythonKernelCoordinator is not configured on this daemon instance.",
+                )
+            },
             CapabilityDescriptor::unavailable(
                 "evidence.criteria",
                 "Evidence",
@@ -1611,6 +1632,109 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
+            METHOD_NOTEBOOK_CELLS_LIST => {
+                let session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
+                    Some(s) if !s.trim().is_empty() => s,
+                    _ => return ApiResponse::error(req.id, "Missing or empty session_id parameter"),
+                };
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
+                };
+                match research.list_notebook_cells(session_id) {
+                    Ok(cells) => match serde_json::to_value(&cells) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_NOTEBOOK_CELLS_SAVE => {
+                let _session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
+                    Some(s) if !s.trim().is_empty() => s,
+                    _ => return ApiResponse::error(req.id, "Missing or empty session_id parameter"),
+                };
+                let cells: Vec<NotebookCell> = match req.params.get("cells").and_then(|v| serde_json::from_value(v.clone()).ok()) {
+                    Some(c) => c,
+                    None => return ApiResponse::error(req.id, "Missing or invalid cells parameter"),
+                };
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
+                };
+                match research.save_notebook_cells(&cells) {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "saved": true, "count": cells.len() })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_NOTEBOOK_EXECUTE => {
+                let kernel = match self.python_kernel.as_ref() {
+                    Some(k) => k,
+                    None => return ApiResponse::error(req.id, "PythonKernelCoordinator not configured on daemon"),
+                };
+                let params: ExecuteCellParams = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid execute cell params: {e}")),
+                };
+                let repo_ref = self.research.as_deref();
+                match kernel.execute_cell(params, repo_ref).await {
+                    Ok(res) => match serde_json::to_value(&res) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_NOTEBOOK_INTERRUPT => {
+                let kernel = match self.python_kernel.as_ref() {
+                    Some(k) => k,
+                    None => return ApiResponse::error(req.id, "PythonKernelCoordinator not configured on daemon"),
+                };
+                let session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
+                    Some(s) if !s.trim().is_empty() => s,
+                    _ => return ApiResponse::error(req.id, "Missing or empty session_id parameter"),
+                };
+                match kernel.interrupt(session_id).await {
+                    Ok(interrupted) => ApiResponse::success(req.id, serde_json::json!({ "interrupted": interrupted })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_NOTEBOOK_RESET => {
+                let kernel = match self.python_kernel.as_ref() {
+                    Some(k) => k,
+                    None => return ApiResponse::error(req.id, "PythonKernelCoordinator not configured on daemon"),
+                };
+                let session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
+                    Some(s) if !s.trim().is_empty() => s,
+                    _ => return ApiResponse::error(req.id, "Missing or empty session_id parameter"),
+                };
+                let repo_ref = self.research.as_deref();
+                match kernel.reset(session_id, repo_ref).await {
+                    Ok(state) => match serde_json::to_value(&state) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_NOTEBOOK_STATUS => {
+                let kernel = match self.python_kernel.as_ref() {
+                    Some(k) => k,
+                    None => return ApiResponse::error(req.id, "PythonKernelCoordinator not configured on daemon"),
+                };
+                let session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
+                    Some(s) if !s.trim().is_empty() => s,
+                    _ => return ApiResponse::error(req.id, "Missing or empty session_id parameter"),
+                };
+                let repo_ref = self.research.as_deref();
+                match kernel.get_status(session_id, repo_ref).await {
+                    Ok(state) => match serde_json::to_value(&state) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
             "v1.providers.list" => {
                 let providers_repo = match self.providers.as_ref() {
                     Some(p) => p,
@@ -2283,7 +2407,9 @@ mod tests {
     use super::*;
     use async_trait::async_trait;
     use custos_core::{TaskEvent, TaskStore};
-    use custos_domain::{ContinuationPacket, DomainError, Span, Task};
+    use custos_domain::{
+        ContinuationPacket, DomainError, ExecuteCellResult, NotebookKernelState, Span, Task,
+    };
     use std::sync::Mutex;
 
     struct MockStore {
@@ -3098,10 +3224,11 @@ mod tests {
         assert!(changes_cap.supported_operations.contains(&"diff".to_string()));
         assert!(changes_cap.supported_operations.contains(&"stage".to_string()));
 
-        // Notebook capability is truthfully unavailable with roadmap rationale
+        // Notebook capability is truthfully available when PythonKernelCoordinator is configured
         let notebook_cap = caps.iter().find(|c| c.id == "compute.notebook").unwrap();
-        assert!(!notebook_cap.status.is_available());
-        assert!(notebook_cap.status.reason().unwrap().contains("Roadmap Step 7"));
+        assert!(notebook_cap.status.is_available());
+        assert!(notebook_cap.supported_operations.contains(&"execute".to_string()));
+        assert!(notebook_cap.supported_operations.contains(&"reset".to_string()));
 
         // 2. Query capability by capability_id
         let get_resp = dispatcher
@@ -3418,5 +3545,106 @@ mod tests {
         let graph: custos_domain::ArtifactLineageGraph = serde_json::from_value(dag_resp.result.unwrap()).unwrap();
         assert_eq!(graph.nodes.len(), 2); // v1 and v2
         assert_eq!(graph.edges.len(), 1); // edge from v1 to v2
+    }
+
+    #[tokio::test]
+    async fn test_notebook_kernel_api_lifecycle() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().join("custos_test_nb.db");
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new(&db_path.to_string_lossy()).unwrap());
+        let task_service = Arc::new(TaskService::new(store.clone()));
+        let session_manager = Arc::new(SessionManager::new());
+        let bridge_service = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
+        let research = Arc::new(store.research().clone());
+        let dispatcher = LocalApiDispatcher::new(
+            task_service,
+            session_manager,
+            bridge_service,
+        ).with_research(research);
+        let session_id = "test_nb_session_42";
+
+        // 1. Initial kernel status
+        let status_req = ApiRequest {
+            id: "nb_status_1".into(),
+            method: METHOD_NOTEBOOK_STATUS.into(),
+            params: serde_json::json!({ "session_id": session_id }),
+        };
+        let status_resp = dispatcher.handle_request(status_req).await;
+        assert!(status_resp.is_success());
+        let initial_state: NotebookKernelState = serde_json::from_value(status_resp.result.unwrap()).unwrap();
+        assert_eq!(initial_state.epoch, 1);
+        assert_eq!(initial_state.execution_counter, 0);
+
+        // 2. Save cells
+        let cell = NotebookCell {
+            id: custos_domain::new_id("cell"),
+            session_id: session_id.to_string(),
+            cell_type: custos_domain::NotebookCellType::Code,
+            source: "print(6 * 7)".to_string(),
+            cell_index: 0,
+            execution_count: None,
+            status: custos_domain::CellExecutionStatus::Idle,
+            stdout: None,
+            stderr: None,
+            output_image: None,
+            wall_ms: None,
+            epoch: 0,
+            updated_at: chrono::Utc::now().timestamp(),
+        };
+        let save_cells_req = ApiRequest {
+            id: "nb_save_1".into(),
+            method: METHOD_NOTEBOOK_CELLS_SAVE.into(),
+            params: serde_json::json!({
+                "session_id": session_id,
+                "cells": [cell.clone()]
+            }),
+        };
+        let save_resp = dispatcher.handle_request(save_cells_req).await;
+        assert!(save_resp.is_success(), "Failed to save cells: {:?}", save_resp.error);
+
+        // 3. List cells
+        let list_req = ApiRequest {
+            id: "nb_list_1".into(),
+            method: METHOD_NOTEBOOK_CELLS_LIST.into(),
+            params: serde_json::json!({ "session_id": session_id }),
+        };
+        let list_resp = dispatcher.handle_request(list_req).await;
+        assert!(list_resp.is_success());
+        let loaded_cells: Vec<NotebookCell> = serde_json::from_value(list_resp.result.unwrap()).unwrap();
+        assert_eq!(loaded_cells.len(), 1);
+        assert_eq!(loaded_cells[0].source, "print(6 * 7)");
+
+        // 4. Execute cell
+        let exec_req = ApiRequest {
+            id: "nb_exec_1".into(),
+            method: METHOD_NOTEBOOK_EXECUTE.into(),
+            params: serde_json::json!({
+                "session_id": session_id,
+                "cell_id": cell.id,
+                "code": "print(6 * 7)",
+            }),
+        };
+        let exec_resp = dispatcher.handle_request(exec_req).await;
+        assert!(exec_resp.is_success(), "Execution failed: {:?}", exec_resp.error);
+        let exec_result: ExecuteCellResult = serde_json::from_value(exec_resp.result.unwrap()).unwrap();
+        assert_eq!(exec_result.status, custos_domain::CellExecutionStatus::Success);
+        assert_eq!(exec_result.stdout.trim(), "42");
+        assert_eq!(exec_result.execution_count, 1);
+        assert_eq!(exec_result.epoch, 1);
+
+        // 5. Reset kernel
+        let reset_req = ApiRequest {
+            id: "nb_reset_1".into(),
+            method: METHOD_NOTEBOOK_RESET.into(),
+            params: serde_json::json!({ "session_id": session_id }),
+        };
+        let reset_resp = dispatcher.handle_request(reset_req).await;
+        assert!(reset_resp.is_success());
+        let reset_state: NotebookKernelState = serde_json::from_value(reset_resp.result.unwrap()).unwrap();
+        assert_eq!(reset_state.epoch, 2);
+        assert_eq!(reset_state.execution_counter, 0);
     }
 }

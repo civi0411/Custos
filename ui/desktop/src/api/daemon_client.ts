@@ -30,6 +30,10 @@ import {
   NoteRecord,
   NoteVersionRecord,
   SaveNoteParams,
+  NotebookCell,
+  NotebookKernelState,
+  ExecuteCellParams,
+  ExecuteCellResult,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -644,6 +648,42 @@ export class DaemonClient {
   async listNoteVersions(noteId: string): Promise<NoteVersionRecord[]> {
     return this.request<NoteVersionRecord[]>('v1.notes.history', {
       note_id: noteId,
+    });
+  }
+
+  // Notebook Cells & Python Kernel
+  async listNotebookCells(sessionId: string): Promise<NotebookCell[]> {
+    return this.request<NotebookCell[]>('v1.notebook.cells.list', {
+      session_id: sessionId,
+    });
+  }
+
+  async saveNotebookCells(sessionId: string, cells: NotebookCell[]): Promise<{ saved: boolean; count: number }> {
+    return this.request<{ saved: boolean; count: number }>('v1.notebook.cells.save', {
+      session_id: sessionId,
+      cells,
+    });
+  }
+
+  async executeNotebookCell(params: ExecuteCellParams): Promise<ExecuteCellResult> {
+    return this.request<ExecuteCellResult>('v1.notebook.execute', params);
+  }
+
+  async interruptNotebookKernel(sessionId: string): Promise<{ interrupted: boolean }> {
+    return this.request<{ interrupted: boolean }>('v1.notebook.interrupt', {
+      session_id: sessionId,
+    });
+  }
+
+  async resetNotebookKernel(sessionId: string): Promise<NotebookKernelState> {
+    return this.request<NotebookKernelState>('v1.notebook.reset', {
+      session_id: sessionId,
+    });
+  }
+
+  async getNotebookKernelStatus(sessionId: string): Promise<NotebookKernelState> {
+    return this.request<NotebookKernelState>('v1.notebook.status', {
+      session_id: sessionId,
     });
   }
 }

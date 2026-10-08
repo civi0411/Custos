@@ -608,6 +608,74 @@ export interface SaveNoteParams {
   tags?: string[];
 }
 
+export type NotebookCellType = 'code' | 'markdown';
+export type CellExecutionStatus = 'idle' | 'running' | 'success' | 'error';
+export type KernelStatus = 'idle' | 'busy' | 'interrupted';
+
+export interface NotebookCell {
+  id: string;
+  session_id: string;
+  sessionId?: string;
+  cell_type: NotebookCellType;
+  cellType?: NotebookCellType;
+  source: string;
+  cell_index: number;
+  cellIndex?: number;
+  execution_count?: number | null;
+  executionCount?: number | null;
+  status: CellExecutionStatus;
+  stdout?: string | null;
+  stderr?: string | null;
+  output_image?: string | null;
+  outputImage?: string | null;
+  wall_ms?: number | null;
+  wallMs?: number | null;
+  epoch: number;
+  updated_at: number;
+  updatedAt?: number;
+}
+
+export interface NotebookKernelState {
+  session_id: string;
+  sessionId?: string;
+  epoch: number;
+  status: KernelStatus;
+  python_version: string;
+  pythonVersion?: string;
+  execution_counter: number;
+  executionCounter?: number;
+  created_at: number;
+  createdAt?: number;
+  updated_at: number;
+  updatedAt?: number;
+}
+
+export interface ExecuteCellParams {
+  session_id: string;
+  sessionId?: string;
+  cell_id: string;
+  cellId?: string;
+  code: string;
+  workspace_id?: string;
+  workspaceId?: string;
+  cwd?: string;
+}
+
+export interface ExecuteCellResult {
+  cell_id: string;
+  cellId?: string;
+  execution_count: number;
+  executionCount?: number;
+  status: CellExecutionStatus;
+  stdout: string;
+  stderr: string;
+  output_image?: string | null;
+  outputImage?: string | null;
+  wall_ms: number;
+  wallMs?: number;
+  epoch: number;
+}
+
 
 
 

@@ -35,6 +35,7 @@ pub struct CustosRuntime {
     pub lease_manager: Arc<custos_runtime::workflow::WorkspaceLeaseManager>,
     pub workspace_coordinator: Arc<custos_runtime::workspace::WorkspaceCoordinator>,
     pub terminal_coordinator: Arc<custos_runtime::TerminalCoordinator>,
+    pub python_coordinator: Arc<custos_runtime::PythonKernelCoordinator>,
 }
 
 impl CustosRuntime {
@@ -111,6 +112,7 @@ impl CustosRuntime {
             workspace_provider,
         ));
         let terminal_coordinator = Arc::new(custos_runtime::TerminalCoordinator::new());
+        let python_coordinator = Arc::new(custos_runtime::PythonKernelCoordinator::new());
 
         let local_api = Arc::new(
             LocalApiDispatcher::new(
@@ -121,6 +123,7 @@ impl CustosRuntime {
             .with_workflow(workflow.clone())
             .with_workspace(workspace_coordinator.clone())
             .with_terminal(terminal_coordinator.clone())
+            .with_python_kernel(python_coordinator.clone())
             .with_research(Arc::new(store.research().clone()))
             .with_providers(Arc::new(store.providers().clone()))
             .with_harnesses(harnesses.clone()),
@@ -141,6 +144,7 @@ impl CustosRuntime {
             lease_manager,
             workspace_coordinator,
             terminal_coordinator,
+            python_coordinator,
         })
     }
 }

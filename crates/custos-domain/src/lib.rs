@@ -19,6 +19,7 @@ pub mod fact;
 pub mod ids;
 pub mod memory;
 pub mod note;
+pub mod notebook;
 pub mod oi;
 pub mod packet;
 pub mod repo;
@@ -40,6 +41,10 @@ pub mod workspace_files;
 pub use annotation::{AnnotationRecord, AnnotationStatus, AnnotationTarget};
 pub use execution_record::{ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus};
 pub use note::{NoteRecord, NoteVersionRecord};
+pub use notebook::{
+    CellExecutionStatus, ExecuteCellParams, ExecuteCellResult, KernelStatus, NotebookCell,
+    NotebookCellType, NotebookKernelState,
+};
 pub use provider_config::{ClientApiKeyRecord, ProviderConfig};
 pub use recipe::{EnvironmentSpec, Recipe, RecipeInput};
 pub use action::{

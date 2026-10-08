@@ -4,7 +4,8 @@
 
 use async_trait::async_trait;
 use custos_domain::{
-    ExecutionWorkspace, Session, SessionJournalEntry, Task, TaskContract, TaskStatus,
+    ExecutionWorkspace, ExecuteCellParams, ExecuteCellResult, NotebookCell, NotebookKernelState,
+    Session, SessionJournalEntry, Task, TaskContract, TaskStatus,
     VerificationClaim, WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff,
     WorkspaceFileTree, WorkspaceKind, WorkspaceLineage,
 };
@@ -79,6 +80,13 @@ pub const METHOD_NOTES_LIST: &str = "v1.notes.list";
 pub const METHOD_NOTES_GET: &str = "v1.notes.get";
 pub const METHOD_NOTES_SAVE: &str = "v1.notes.save";
 pub const METHOD_NOTES_HISTORY: &str = "v1.notes.history";
+
+pub const METHOD_NOTEBOOK_CELLS_LIST: &str = "v1.notebook.cells.list";
+pub const METHOD_NOTEBOOK_CELLS_SAVE: &str = "v1.notebook.cells.save";
+pub const METHOD_NOTEBOOK_EXECUTE: &str = "v1.notebook.execute";
+pub const METHOD_NOTEBOOK_INTERRUPT: &str = "v1.notebook.interrupt";
+pub const METHOD_NOTEBOOK_RESET: &str = "v1.notebook.reset";
+pub const METHOD_NOTEBOOK_STATUS: &str = "v1.notebook.status";
 
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1219,6 +1227,110 @@ impl LocalApiClient {
         }
         let result = resp.result.ok_or("Empty result in response")?;
         serde_json::from_value(result).map_err(|e| format!("Failed to parse note versions: {e}"))
+    }
+
+    pub async fn list_notebook_cells(
+        &self,
+        req_id: &str,
+        session_id: &str,
+    ) -> Result<Vec<NotebookCell>, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_NOTEBOOK_CELLS_LIST,
+            serde_json::json!({ "session_id": session_id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse notebook cells: {e}"))
+    }
+
+    pub async fn save_notebook_cells(
+        &self,
+        req_id: &str,
+        session_id: &str,
+        cells: Vec<NotebookCell>,
+    ) -> Result<(), String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_NOTEBOOK_CELLS_SAVE,
+            serde_json::json!({ "session_id": session_id, "cells": cells }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        Ok(())
+    }
+
+    pub async fn execute_notebook_cell(
+        &self,
+        req_id: &str,
+        params: ExecuteCellParams,
+    ) -> Result<ExecuteCellResult, String> {
+        let val = serde_json::to_value(params).map_err(|e| e.to_string())?;
+        let req = ApiRequest::new(req_id, METHOD_NOTEBOOK_EXECUTE, val);
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse execution result: {e}"))
+    }
+
+    pub async fn interrupt_notebook_kernel(
+        &self,
+        req_id: &str,
+        session_id: &str,
+    ) -> Result<(), String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_NOTEBOOK_INTERRUPT,
+            serde_json::json!({ "session_id": session_id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        Ok(())
+    }
+
+    pub async fn reset_notebook_kernel(
+        &self,
+        req_id: &str,
+        session_id: &str,
+    ) -> Result<NotebookKernelState, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_NOTEBOOK_RESET,
+            serde_json::json!({ "session_id": session_id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse kernel state: {e}"))
+    }
+
+    pub async fn get_notebook_kernel_status(
+        &self,
+        req_id: &str,
+        session_id: &str,
+    ) -> Result<NotebookKernelState, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_NOTEBOOK_STATUS,
+            serde_json::json!({ "session_id": session_id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse kernel state: {e}"))
     }
 }
 

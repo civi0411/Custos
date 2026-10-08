@@ -54,6 +54,9 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!(
         "../migrations/0020_notes_and_artifact_registry.sql"
     ))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0021_notebook_cells_and_kernels.sql"
+    ))?;
 
     Ok(())
 }

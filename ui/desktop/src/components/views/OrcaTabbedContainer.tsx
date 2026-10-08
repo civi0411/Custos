@@ -101,7 +101,7 @@ const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'literature', title: 'Sources', description: 'Versioned literature, passages and corpus coverage.', icon: BookOpen, group: 'Research', status: 'available' },
   { id: 'claims', title: 'Claims', description: 'Atomic claims and support, contradiction or unknown evidence.', icon: ShieldCheck, group: 'Research', status: 'available' },
   { id: 'knowledge', title: 'Methods', description: 'Reproduction recipes separated from observed execution records.', icon: FlaskConical, group: 'Research', status: 'available' },
-  { id: 'experiments', title: 'Notebook', description: 'Authorized kernels, code cells and reproducible compute.', icon: NotebookTabs, group: 'Research', status: 'unavailable', reason: 'Authorized kernels, code cells and reproducible compute scheduled in Roadmap Step 7.' },
+  { id: 'experiments', title: 'Notebook', description: 'Authorized kernels, code cells and reproducible compute epochs.', icon: NotebookTabs, group: 'Research', status: 'available', supportedOperations: ['cells.list', 'cells.save', 'execute', 'interrupt', 'reset', 'status'] },
   { id: 'synthesis', title: 'Runs', description: 'Experiment attempts, environments, artifacts and receipts.', icon: FlaskConical, group: 'Research', status: 'available' },
   { id: 'artifacts', title: 'Artifacts', description: 'Inspect versions, lineage, annotations, provenance DAG and review findings.', icon: FileCode, group: 'Research', status: 'available', supportedOperations: ['list', 'get', 'record_lineage', 'lineage.list', 'lineage.graph', 'annotations.list', 'annotations.save'] },
   { id: 'browser', title: 'Browser', description: 'Scoped browsing and page capture.', icon: Globe, group: 'Shared', status: 'unavailable', reason: 'Scoped browsing and page capture scheduled in Roadmap Step 10.' },
@@ -288,7 +288,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   }
 
   if (activeId === 'experiments') {
-    return <NotebookWorkspacePane onAskAgent={onAskAgent} onShowToast={onShowToast} />;
+    return <NotebookWorkspacePane sessionId={session?.id} onAskAgent={onAskAgent} onShowToast={onShowToast} />;
   }
 
   if (activeId === 'worktrees') {
