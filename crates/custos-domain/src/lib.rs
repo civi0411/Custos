@@ -18,6 +18,7 @@ pub mod evidence;
 pub mod fact;
 pub mod ids;
 pub mod memory;
+pub mod note;
 pub mod oi;
 pub mod packet;
 pub mod repo;
@@ -38,6 +39,7 @@ pub mod workspace_files;
 // Explicit re-exports of public domain surface (No glob *)
 pub use annotation::{AnnotationRecord, AnnotationStatus, AnnotationTarget};
 pub use execution_record::{ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus};
+pub use note::{NoteRecord, NoteVersionRecord};
 pub use provider_config::{ClientApiKeyRecord, ProviderConfig};
 pub use recipe::{EnvironmentSpec, Recipe, RecipeInput};
 pub use action::{
@@ -45,7 +47,10 @@ pub use action::{
     EffectStatus, RiskLevel,
 };
 pub use approval::{ApprovalDecision, ApprovalRequest, ApprovalStatus};
-pub use artifact::{ArtifactHandoff, ArtifactKind, ArtifactRef, HandoffConsent};
+pub use artifact::{
+    ArtifactHandoff, ArtifactKind, ArtifactLineageGraph, ArtifactRef, ArtifactSummary,
+    HandoffConsent, LineageGraphEdge, LineageGraphNode,
+};
 pub use authority::{
     ExecutionPermit, ExecutionReceipt, Grant, Permit, PermitId, PermitV1, Receipt, ReceiptStatus,
     RiskClass,

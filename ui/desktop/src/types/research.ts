@@ -86,11 +86,15 @@ export interface ResearchExperimentRun {
 }
 
 export interface ArtifactLineageNode {
-  artifactPath: string;
+  artifactPath?: string;
+  artifact_path?: string;
   version: number;
-  contentHash: string;
+  contentHash?: string;
+  content_hash?: string;
   producedByRunId?: string;
+  produced_by_run_id?: string;
   parentVersionHash?: string;
+  parent_version_hash?: string;
   timestamp: number;
 }
 

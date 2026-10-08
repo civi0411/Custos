@@ -71,6 +71,15 @@ pub const METHOD_HARNESS_RUN_NATIVE: &str = "v1.harness.run_native";
 pub const METHOD_HARNESS_CANCEL: &str = "v1.harness.cancel";
 pub const METHOD_HARNESS_STEER: &str = "v1.harness.steer";
 
+pub const METHOD_ARTIFACTS_LIST: &str = "v1.artifacts.list";
+pub const METHOD_ARTIFACTS_GET: &str = "v1.artifacts.get";
+pub const METHOD_ARTIFACTS_RECORD_LINEAGE: &str = "v1.artifacts.record_lineage";
+pub const METHOD_ARTIFACTS_LINEAGE_GRAPH: &str = "v1.artifacts.lineage_graph";
+pub const METHOD_NOTES_LIST: &str = "v1.notes.list";
+pub const METHOD_NOTES_GET: &str = "v1.notes.get";
+pub const METHOD_NOTES_SAVE: &str = "v1.notes.save";
+pub const METHOD_NOTES_HISTORY: &str = "v1.notes.history";
+
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiRequest {
@@ -1101,6 +1110,136 @@ impl LocalApiClient {
         let result = resp.result.ok_or("Empty result in response")?;
         serde_json::from_value(result).map_err(|e| format!("Failed to parse run native result: {e}"))
     }
+
+    pub async fn list_artifacts(
+        &self,
+        req_id: &str,
+    ) -> Result<Vec<custos_domain::ArtifactSummary>, String> {
+        let req = ApiRequest::new(req_id, METHOD_ARTIFACTS_LIST, serde_json::json!({}));
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse artifact list: {e}"))
+    }
+
+    pub async fn get_artifact(
+        &self,
+        req_id: &str,
+        path: &str,
+    ) -> Result<ArtifactDetailResponse, String> {
+        let req = ApiRequest::new(req_id, METHOD_ARTIFACTS_GET, serde_json::json!({ "artifact_path": path }));
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse artifact detail: {e}"))
+    }
+
+    pub async fn get_artifact_lineage_graph(
+        &self,
+        req_id: &str,
+        filter_path: Option<&str>,
+    ) -> Result<custos_domain::ArtifactLineageGraph, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_ARTIFACTS_LINEAGE_GRAPH,
+            serde_json::json!({ "artifact_path": filter_path }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse lineage graph: {e}"))
+    }
+
+    pub async fn list_notes(
+        &self,
+        req_id: &str,
+        session_id: Option<&str>,
+    ) -> Result<Vec<custos_domain::NoteRecord>, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_NOTES_LIST,
+            serde_json::json!({ "session_id": session_id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse notes list: {e}"))
+    }
+
+    pub async fn get_note(
+        &self,
+        req_id: &str,
+        id: &str,
+    ) -> Result<Option<custos_domain::NoteRecord>, String> {
+        let req = ApiRequest::new(req_id, METHOD_NOTES_GET, serde_json::json!({ "id": id }));
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse note: {e}"))
+    }
+
+    pub async fn save_note(
+        &self,
+        req_id: &str,
+        params: SaveNoteParams,
+    ) -> Result<custos_domain::NoteRecord, String> {
+        let val = serde_json::to_value(params).map_err(|e| e.to_string())?;
+        let req = ApiRequest::new(req_id, METHOD_NOTES_SAVE, val);
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse saved note: {e}"))
+    }
+
+    pub async fn list_note_versions(
+        &self,
+        req_id: &str,
+        note_id: &str,
+    ) -> Result<Vec<custos_domain::NoteVersionRecord>, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_NOTES_HISTORY,
+            serde_json::json!({ "note_id": note_id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse note versions: {e}"))
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtifactDetailResponse {
+    pub artifact_path: String,
+    pub latest_version: u32,
+    pub latest_content_hash: String,
+    pub versions: Vec<custos_domain::ArtifactLineageNode>,
+    pub annotations: Vec<custos_domain::AnnotationRecord>,
+    pub content: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SaveNoteParams {
+    pub id: Option<String>,
+    pub title: String,
+    pub content: String,
+    pub session_id: Option<String>,
+    pub task_id: Option<String>,
+    pub tags: Option<Vec<String>>,
 }
 
 #[cfg(test)]

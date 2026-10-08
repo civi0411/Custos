@@ -512,6 +512,103 @@ export interface HarnessExecutionResult {
   mediationLevel?: ToolMediationLevel;
 }
 
+// ---------------------------------------------------------
+// Artifact Identity, Lineage DAG & Personal Notes
+// ---------------------------------------------------------
+
+export interface ArtifactSummary {
+  artifact_path: string;
+  artifactPath?: string;
+  latest_version: number;
+  latestVersion?: number;
+  latest_content_hash: string;
+  latestContentHash?: string;
+  versions_count: number;
+  versionsCount?: number;
+  produced_by_run_id?: string;
+  producedByRunId?: string;
+  updated_at: number;
+  updatedAt?: number;
+}
+
+export interface LineageGraphNode {
+  id: string;
+  label: string;
+  node_type: 'artifact' | 'run' | 'recipe' | 'note';
+  nodeType?: 'artifact' | 'run' | 'recipe' | 'note';
+  version?: number;
+  content_hash?: string;
+  contentHash?: string;
+  timestamp: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface LineageGraphEdge {
+  from: string;
+  to: string;
+  edge_type: string;
+  edgeType?: string;
+}
+
+export interface ArtifactLineageGraph {
+  nodes: LineageGraphNode[];
+  edges: LineageGraphEdge[];
+}
+
+export interface ArtifactDetailResponse {
+  artifact_path: string;
+  artifactPath?: string;
+  latest_version: number;
+  latestVersion?: number;
+  latest_content_hash: string;
+  latestContentHash?: string;
+  versions: import('./research').ArtifactLineageNode[];
+  annotations: import('./research').AnnotationRecord[];
+  content?: string;
+}
+
+export interface NoteRecord {
+  id: string;
+  title: string;
+  content: string;
+  version: number;
+  content_hash: string;
+  contentHash?: string;
+  session_id?: string;
+  sessionId?: string;
+  task_id?: string;
+  taskId?: string;
+  tags: string[];
+  created_at: number;
+  createdAt?: number;
+  updated_at: number;
+  updatedAt?: number;
+}
+
+export interface NoteVersionRecord {
+  id: string;
+  note_id: string;
+  noteId?: string;
+  version: number;
+  content: string;
+  content_hash: string;
+  contentHash?: string;
+  created_at: number;
+  createdAt?: number;
+}
+
+export interface SaveNoteParams {
+  id?: string;
+  title: string;
+  content: string;
+  session_id?: string;
+  sessionId?: string;
+  task_id?: string;
+  taskId?: string;
+  tags?: string[];
+}
+
+
 
 
 

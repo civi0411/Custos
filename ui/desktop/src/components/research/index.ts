@@ -7,3 +7,5 @@ export * from './NotebookWorkspacePane';
 export * from './RunsLedgerPane';
 export * from './DeepInspectorPane';
 export * from './ResearchMethodsPane';
+export * from './ArtifactsWorkbenchPane';
+

@@ -6,10 +6,11 @@
 use crate::connection::DbConnection;
 use chrono::{DateTime, Utc};
 use custos_domain::{
-    AnnotationRecord, AnnotationStatus, AnnotationTarget, ArtifactLineageNode, ClaimEvidenceLink,
-    ClaimGroundingLevel, DomainError, EnvSnapshot, EnvironmentSpec, EvidenceRelation,
-    ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus, PassageAnchor, Recipe, RecipeInput,
-    ResearchClaim, ResearchExperimentRun, SourceRecord,
+    AnnotationRecord, AnnotationStatus, AnnotationTarget, ArtifactLineageGraph,
+    ArtifactLineageNode, ArtifactSummary, ClaimEvidenceLink, ClaimGroundingLevel, DomainError,
+    EnvSnapshot, EnvironmentSpec, EvidenceRelation, ExecutionArtifact, ExecutionRecord,
+    ExecutionRecordStatus, LineageGraphEdge, LineageGraphNode, NoteRecord, NoteVersionRecord,
+    PassageAnchor, Recipe, RecipeInput, ResearchClaim, ResearchExperimentRun, SourceRecord,
 };
 use rusqlite::{params, types::Type};
 
@@ -436,6 +437,344 @@ impl ResearchRepository {
                     produced_by_run_id: row.get(3)?,
                     parent_version_hash: row.get(4)?,
                     timestamp: row.get(5)?,
+                })
+            })
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut res = Vec::new();
+        for r in rows {
+            res.push(r.map_err(|e| DomainError::Validation(e.to_string()))?);
+        }
+        Ok(res)
+    }
+
+    pub fn list_all_artifacts(&self) -> Result<Vec<ArtifactSummary>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT artifact_path, MAX(version) as max_v, count(*) as cnt
+                 FROM research_artifact_lineage
+                 GROUP BY artifact_path
+                 ORDER BY MAX(timestamp) DESC",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                let path: String = row.get(0)?;
+                let max_v: i64 = row.get(1)?;
+                let count: i64 = row.get(2)?;
+                Ok((path, max_v as u32, count as u32))
+            })
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut res = Vec::new();
+        for item in rows {
+            let (path, max_v, count) = item.map_err(|e| DomainError::Validation(e.to_string()))?;
+            let mut detail_stmt = conn
+                .prepare(
+                    "SELECT content_hash, produced_by_run_id, timestamp
+                     FROM research_artifact_lineage
+                     WHERE artifact_path = ?1 AND version = ?2",
+                )
+                .map_err(|e| DomainError::Validation(e.to_string()))?;
+            let detail = detail_stmt
+                .query_row(params![path, max_v as i64], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, i64>(2)?,
+                    ))
+                })
+                .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+            res.push(ArtifactSummary {
+                artifact_path: path,
+                latest_version: max_v,
+                latest_content_hash: detail.0,
+                versions_count: count,
+                produced_by_run_id: detail.1,
+                updated_at: detail.2,
+            });
+        }
+        Ok(res)
+    }
+
+    pub fn get_artifact_lineage_graph(
+        &self,
+        filter_path: Option<&str>,
+    ) -> Result<ArtifactLineageGraph, DomainError> {
+        let conn = self.db.lock()?;
+        let mut nodes = Vec::new();
+        let mut edges = Vec::new();
+
+        let query = if let Some(path) = filter_path {
+            format!(
+                "SELECT artifact_path, version, content_hash, produced_by_run_id, parent_version_hash, timestamp
+                 FROM research_artifact_lineage WHERE artifact_path = '{}' ORDER BY version ASC",
+                path.replace('\'', "''")
+            )
+        } else {
+            "SELECT artifact_path, version, content_hash, produced_by_run_id, parent_version_hash, timestamp
+             FROM research_artifact_lineage ORDER BY artifact_path ASC, version ASC".to_string()
+        };
+
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let lineage_rows = stmt
+            .query_map([], |row| {
+                let v: i64 = row.get(1)?;
+                Ok(ArtifactLineageNode {
+                    artifact_path: row.get(0)?,
+                    version: v as u32,
+                    content_hash: row.get(2)?,
+                    produced_by_run_id: row.get(3)?,
+                    parent_version_hash: row.get(4)?,
+                    timestamp: row.get(5)?,
+                })
+            })
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut run_ids_to_fetch = std::collections::HashSet::new();
+
+        for r in lineage_rows {
+            let node = r.map_err(|e| DomainError::Validation(e.to_string()))?;
+            let node_id = format!("artifact:{}:v{}", node.artifact_path, node.version);
+            let label = format!("{} (v{})", node.artifact_path, node.version);
+
+            nodes.push(LineageGraphNode {
+                id: node_id.clone(),
+                label,
+                node_type: if node.artifact_path.starts_with("notes/") {
+                    "note".to_string()
+                } else {
+                    "artifact".to_string()
+                },
+                version: Some(node.version),
+                content_hash: Some(node.content_hash.clone()),
+                timestamp: node.timestamp,
+                metadata: serde_json::json!({
+                    "path": node.artifact_path,
+                    "version": node.version,
+                    "content_hash": node.content_hash,
+                    "produced_by_run_id": node.produced_by_run_id,
+                }),
+            });
+
+            if node.version > 1 {
+                let parent_id = format!("artifact:{}:v{}", node.artifact_path, node.version - 1);
+                edges.push(LineageGraphEdge {
+                    from: parent_id,
+                    to: node_id.clone(),
+                    edge_type: "derived_from_version".to_string(),
+                });
+            }
+
+            if let Some(ref run_id) = node.produced_by_run_id {
+                run_ids_to_fetch.insert(run_id.clone());
+                let run_node_id = format!("run:{}", run_id);
+                edges.push(LineageGraphEdge {
+                    from: run_node_id,
+                    to: node_id,
+                    edge_type: "produced_by_run".to_string(),
+                });
+            }
+        }
+
+        for run_id in run_ids_to_fetch {
+            let mut run_stmt = conn
+                .prepare(
+                    "SELECT run_id, command, status, ts, reproducibility
+                     FROM research_experiment_runs WHERE run_id = ?1",
+                )
+                .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+            if let Ok(run_info) = run_stmt.query_row(params![run_id], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            }) {
+                nodes.push(LineageGraphNode {
+                    id: format!("run:{}", run_info.0),
+                    label: format!("Run: {}", run_info.1),
+                    node_type: "run".to_string(),
+                    version: None,
+                    content_hash: None,
+                    timestamp: run_info.3,
+                    metadata: serde_json::json!({
+                        "run_id": run_info.0,
+                        "command": run_info.1,
+                        "status": run_info.2,
+                        "reproducibility": run_info.4,
+                    }),
+                });
+            }
+        }
+
+        Ok(ArtifactLineageGraph { nodes, edges })
+    }
+
+    // Notes
+    pub fn save_note(&self, note: &NoteRecord) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        let tags_json = serde_json::to_string(&note.tags)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        conn.execute(
+            "INSERT INTO notes (
+                id, title, content, version, content_hash, session_id, task_id, tags_json, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            ON CONFLICT(id) DO UPDATE SET
+                title = excluded.title,
+                content = excluded.content,
+                version = excluded.version,
+                content_hash = excluded.content_hash,
+                tags_json = excluded.tags_json,
+                updated_at = excluded.updated_at",
+            params![
+                note.id,
+                note.title,
+                note.content,
+                note.version as i64,
+                note.content_hash,
+                note.session_id,
+                note.task_id,
+                tags_json,
+                note.created_at,
+                note.updated_at,
+            ],
+        ).map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        Ok(())
+    }
+
+    pub fn save_note_version(&self, ver: &NoteVersionRecord) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "INSERT INTO note_versions (
+                id, note_id, version, content, content_hash, created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            ON CONFLICT(id) DO NOTHING",
+            params![
+                ver.id,
+                ver.note_id,
+                ver.version as i64,
+                ver.content,
+                ver.content_hash,
+                ver.created_at,
+            ],
+        ).map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        Ok(())
+    }
+
+    pub fn get_note(&self, id: &str) -> Result<Option<NoteRecord>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, title, content, version, content_hash, session_id, task_id, tags_json, created_at, updated_at
+                 FROM notes WHERE id = ?1",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut rows = stmt
+            .query_map(params![id], |row| {
+                let v: i64 = row.get(3)?;
+                let tags_raw: String = row.get(7)?;
+                let tags: Vec<String> = serde_json::from_str(&tags_raw).unwrap_or_default();
+                Ok(NoteRecord {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    content: row.get(2)?,
+                    version: v as u32,
+                    content_hash: row.get(4)?,
+                    session_id: row.get(5)?,
+                    task_id: row.get(6)?,
+                    tags,
+                    created_at: row.get(8)?,
+                    updated_at: row.get(9)?,
+                })
+            })
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        match rows.next() {
+            Some(r) => Ok(Some(r.map_err(|e| DomainError::Validation(e.to_string()))?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn list_notes(&self, session_id: Option<&str>) -> Result<Vec<NoteRecord>, DomainError> {
+        let conn = self.db.lock()?;
+        let query = if session_id.is_some() {
+            "SELECT id, title, content, version, content_hash, session_id, task_id, tags_json, created_at, updated_at
+             FROM notes WHERE session_id = ?1 ORDER BY updated_at DESC"
+        } else {
+            "SELECT id, title, content, version, content_hash, session_id, task_id, tags_json, created_at, updated_at
+             FROM notes ORDER BY updated_at DESC"
+        };
+
+        let mut stmt = conn
+            .prepare(query)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let param_vec: Vec<&dyn rusqlite::ToSql> = if let Some(ref sid) = session_id {
+            vec![sid]
+        } else {
+            vec![]
+        };
+
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(param_vec), |row| {
+                let v: i64 = row.get(3)?;
+                let tags_raw: String = row.get(7)?;
+                let tags: Vec<String> = serde_json::from_str(&tags_raw).unwrap_or_default();
+                Ok(NoteRecord {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    content: row.get(2)?,
+                    version: v as u32,
+                    content_hash: row.get(4)?,
+                    session_id: row.get(5)?,
+                    task_id: row.get(6)?,
+                    tags,
+                    created_at: row.get(8)?,
+                    updated_at: row.get(9)?,
+                })
+            })
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut res = Vec::new();
+        for r in rows {
+            res.push(r.map_err(|e| DomainError::Validation(e.to_string()))?);
+        }
+        Ok(res)
+    }
+
+    pub fn list_note_versions(&self, note_id: &str) -> Result<Vec<NoteVersionRecord>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, note_id, version, content, content_hash, created_at
+                 FROM note_versions WHERE note_id = ?1 ORDER BY version DESC",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let rows = stmt
+            .query_map(params![note_id], |row| {
+                let v: i64 = row.get(2)?;
+                Ok(NoteVersionRecord {
+                    id: row.get(0)?,
+                    note_id: row.get(1)?,
+                    version: v as u32,
+                    content: row.get(3)?,
+                    content_hash: row.get(4)?,
+                    created_at: row.get(5)?,
                 })
             })
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -1090,5 +1429,60 @@ mod tests {
 
         let pending_after = repo.list_pending_annotations().expect("list pending after");
         assert_eq!(pending_after.len(), 0);
+
+        // 9. Artifact List & Lineage DAG
+        let all_artifacts = repo.list_all_artifacts().expect("list all artifacts");
+        assert_eq!(all_artifacts.len(), 1);
+        assert_eq!(all_artifacts[0].artifact_path, "eval_table.csv");
+        assert_eq!(all_artifacts[0].latest_version, 1);
+        assert_eq!(all_artifacts[0].latest_content_hash, "hash_csv");
+
+        let graph = repo
+            .get_artifact_lineage_graph(None)
+            .expect("get lineage graph");
+        assert!(!graph.nodes.is_empty());
+        let csv_node = graph
+            .nodes
+            .iter()
+            .find(|n| n.id == "artifact:eval_table.csv:v1");
+        assert!(csv_node.is_some());
+
+        // 10. Notes & Version History
+        let mut note = NoteRecord::new(
+            "Convergence Architecture Notes",
+            "# Custos SADE Convergence\nStep 6 artifact identity verified.",
+            Some("sess_res_01".into()),
+            None,
+            vec!["sade".into(), "architecture".into()],
+        )
+        .expect("create note");
+        let note_id = note.id.clone();
+        repo.save_note(&note).expect("save note");
+
+        let fetched_note = repo
+            .get_note(&note_id)
+            .expect("get note")
+            .expect("note exists");
+        assert_eq!(fetched_note.title, "Convergence Architecture Notes");
+        assert_eq!(fetched_note.version, 1);
+        assert_eq!(fetched_note.tags, vec!["sade", "architecture"]);
+
+        let prev_ver = note
+            .update(
+                Some("Convergence Architecture Notes (Updated)".into()),
+                "# Custos SADE Convergence\nStep 6 updated with lineage DAG graph.".into(),
+                None,
+            )
+            .expect("update note");
+        repo.save_note(&note).expect("save updated note");
+        repo.save_note_version(&prev_ver).expect("save note version");
+
+        let note_versions = repo.list_note_versions(&note_id).expect("list versions");
+        assert_eq!(note_versions.len(), 1);
+        assert_eq!(note_versions[0].version, 1);
+
+        let notes_for_sess = repo.list_notes(Some("sess_res_01")).expect("list notes");
+        assert_eq!(notes_for_sess.len(), 1);
+        assert_eq!(notes_for_sess[0].version, 2);
     }
 }

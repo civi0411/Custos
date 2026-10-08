@@ -24,6 +24,10 @@ pub use crate::custos_local_api::{
     CancelHarnessRunRequest, GetHarnessRequest, RunNativeHarnessRequest, SteerHarnessRunRequest,
     METHOD_HARNESS_CANCEL, METHOD_HARNESS_GET, METHOD_HARNESS_LIST, METHOD_HARNESS_RUN_NATIVE,
     METHOD_HARNESS_STEER,
+    ArtifactDetailResponse, SaveNoteParams,
+    METHOD_ARTIFACTS_GET, METHOD_ARTIFACTS_LINEAGE_GRAPH, METHOD_ARTIFACTS_LIST,
+    METHOD_ARTIFACTS_RECORD_LINEAGE, METHOD_NOTES_GET, METHOD_NOTES_HISTORY,
+    METHOD_NOTES_LIST, METHOD_NOTES_SAVE,
 };
 use custos_adapters::harness::HarnessRegistry;
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
@@ -32,8 +36,9 @@ use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::contracts::workspace_files::WorkspaceFilesPort;
 use custos_core::{AdvanceTask, CancelTask, CreateTask, TaskService};
 use custos_domain::{
-    CapabilityDescriptor, CapabilityGroup, PassageAnchor, ResearchClaim, ResearchExperimentRun,
-    SessionId, SessionMode, SourceRecord, TaskContract, TaskStatus,
+    ArtifactLineageNode, CapabilityDescriptor, CapabilityGroup, NoteRecord, PassageAnchor,
+    ResearchClaim, ResearchExperimentRun, SessionId, SessionMode, SourceRecord, TaskContract,
+    TaskStatus,
 };
 use custos_persistence::{ProviderRepository, ResearchRepository};
 use custos_runtime::session::SessionManager;
@@ -254,7 +259,7 @@ impl LocalApiDispatcher {
                     CapabilityGroup::Evidence,
                     "Version lineage, annotations, provenance DAG, and review findings.",
                     Some("artifacts"),
-                    vec!["lineage.list", "annotations.list", "annotations.save"],
+                    vec!["list", "get", "record_lineage", "lineage.list", "lineage.graph", "annotations.list", "annotations.save"],
                 )
             } else {
                 CapabilityDescriptor::unavailable(
@@ -344,14 +349,25 @@ impl LocalApiDispatcher {
                 Some("browser"),
                 "Scoped browsing and page capture scheduled in Roadmap Step 10.",
             ),
-            CapabilityDescriptor::unavailable(
-                "personal.notes",
-                "Notes",
-                CapabilityGroup::Personal,
-                "Task notes, scratchpads, and Markdown knowledge capture.",
-                Some("notes"),
-                "Task notes and Markdown artifacts scheduled in Roadmap Step 6.",
-            ),
+            if self.research.is_some() {
+                CapabilityDescriptor::available(
+                    "personal.notes",
+                    "Notes",
+                    CapabilityGroup::Personal,
+                    "Task notes, scratchpads, and Markdown knowledge capture with version history.",
+                    Some("notes"),
+                    vec!["list", "get", "save", "history"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "personal.notes",
+                    "Notes",
+                    CapabilityGroup::Personal,
+                    "Task notes, scratchpads, and Markdown knowledge capture with version history.",
+                    Some("notes"),
+                    "ResearchRepository is not configured on this daemon instance.",
+                )
+            },
         ]
     }
 
@@ -1365,6 +1381,233 @@ impl LocalApiDispatcher {
                         req.id,
                         serde_json::json!({ "saved": true, "id": anno.id }),
                     ),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_ARTIFACTS_LIST => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
+                };
+                match research.list_all_artifacts() {
+                    Ok(list) => match serde_json::to_value(&list) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_ARTIFACTS_GET => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
+                };
+                let artifact_path = match req.params.get("artifact_path").and_then(|v| v.as_str()) {
+                    Some(p) if !p.trim().is_empty() => p,
+                    _ => return ApiResponse::error(req.id, "Missing or empty artifact_path parameter"),
+                };
+                let versions = match research.list_artifact_lineage(artifact_path) {
+                    Ok(v) => v,
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                let annotations = match research.list_annotations_for_artifact(artifact_path, None) {
+                    Ok(a) => a,
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                let (latest_version, latest_content_hash) = if let Some(latest) = versions.last() {
+                    (latest.version, latest.content_hash.clone())
+                } else {
+                    (0, String::new())
+                };
+
+                let mut content: Option<String> = None;
+                if artifact_path.starts_with("notes/") {
+                    let note_id = artifact_path.trim_start_matches("notes/").trim_end_matches(".md");
+                    if let Ok(Some(note)) = research.get_note(note_id) {
+                        content = Some(note.content);
+                    }
+                }
+
+                if content.is_none() {
+                    if let Ok(data) = tokio::fs::read_to_string(artifact_path).await {
+                        content = Some(data);
+                    }
+                }
+
+                let resp = ArtifactDetailResponse {
+                    artifact_path: artifact_path.to_string(),
+                    latest_version,
+                    latest_content_hash,
+                    versions,
+                    annotations,
+                    content,
+                };
+                match serde_json::to_value(&resp) {
+                    Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_ARTIFACTS_RECORD_LINEAGE => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
+                };
+                let node: ArtifactLineageNode = match serde_json::from_value(req.params) {
+                    Ok(n) => n,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid artifact lineage payload: {e}")),
+                };
+                if node.artifact_path.trim().is_empty() || node.content_hash.trim().is_empty() {
+                    return ApiResponse::error(req.id, "Artifact path and content hash cannot be empty");
+                }
+                match research.record_artifact_lineage(&node) {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "recorded": true })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_ARTIFACTS_LINEAGE_GRAPH => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
+                };
+                let filter_path = req.params.get("artifact_path").and_then(|v| v.as_str());
+                match research.get_artifact_lineage_graph(filter_path) {
+                    Ok(graph) => match serde_json::to_value(&graph) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_NOTES_LIST => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
+                };
+                let session_id = req.params.get("session_id").and_then(|v| v.as_str());
+                match research.list_notes(session_id) {
+                    Ok(notes) => match serde_json::to_value(&notes) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_NOTES_GET => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
+                };
+                let id = match req.params.get("id").and_then(|v| v.as_str()) {
+                    Some(i) => i,
+                    None => return ApiResponse::error(req.id, "Missing id parameter"),
+                };
+                match research.get_note(id) {
+                    Ok(Some(note)) => match serde_json::to_value(&note) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Ok(None) => ApiResponse::error(req.id, "Note not found"),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_NOTES_SAVE => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
+                };
+                let params: SaveNoteParams = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid save note params: {e}")),
+                };
+
+                let note = if let Some(ref note_id) = params.id {
+                    match research.get_note(note_id) {
+                        Ok(Some(mut existing)) => {
+                            match existing.update(Some(params.title), params.content, params.tags) {
+                                Ok(prev_ver) => {
+                                    if let Err(e) = research.save_note(&existing) {
+                                        return ApiResponse::error(req.id, e.to_string());
+                                    }
+                                    if let Err(e) = research.save_note_version(&prev_ver) {
+                                        return ApiResponse::error(req.id, e.to_string());
+                                    }
+                                    let node = ArtifactLineageNode {
+                                        artifact_path: format!("notes/{}.md", existing.id),
+                                        version: existing.version,
+                                        content_hash: existing.content_hash.clone(),
+                                        produced_by_run_id: None,
+                                        parent_version_hash: Some(prev_ver.content_hash),
+                                        timestamp: existing.updated_at,
+                                    };
+                                    let _ = research.record_artifact_lineage(&node);
+                                    existing
+                                }
+                                Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                            }
+                        }
+                        Ok(None) => {
+                            match NoteRecord::new(params.title, params.content, params.session_id, params.task_id, params.tags.unwrap_or_default()) {
+                                Ok(mut n) => {
+                                    n.id = note_id.clone();
+                                    if let Err(e) = research.save_note(&n) {
+                                        return ApiResponse::error(req.id, e.to_string());
+                                    }
+                                    let node = ArtifactLineageNode {
+                                        artifact_path: format!("notes/{}.md", n.id),
+                                        version: 1,
+                                        content_hash: n.content_hash.clone(),
+                                        produced_by_run_id: None,
+                                        parent_version_hash: None,
+                                        timestamp: n.created_at,
+                                    };
+                                    let _ = research.record_artifact_lineage(&node);
+                                    n
+                                }
+                                Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                            }
+                        }
+                        Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                    }
+                } else {
+                    match NoteRecord::new(params.title, params.content, params.session_id, params.task_id, params.tags.unwrap_or_default()) {
+                        Ok(n) => {
+                            if let Err(e) = research.save_note(&n) {
+                                return ApiResponse::error(req.id, e.to_string());
+                            }
+                            let node = ArtifactLineageNode {
+                                artifact_path: format!("notes/{}.md", n.id),
+                                version: 1,
+                                content_hash: n.content_hash.clone(),
+                                produced_by_run_id: None,
+                                parent_version_hash: None,
+                                timestamp: n.created_at,
+                            };
+                            let _ = research.record_artifact_lineage(&node);
+                            n
+                        }
+                        Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                    }
+                };
+
+                match serde_json::to_value(&note) {
+                    Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_NOTES_HISTORY => {
+                let research = match self.research.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
+                };
+                let note_id = match req.params.get("note_id").and_then(|v| v.as_str()) {
+                    Some(i) => i,
+                    None => return ApiResponse::error(req.id, "Missing note_id parameter"),
+                };
+                match research.list_note_versions(note_id) {
+                    Ok(vers) => match serde_json::to_value(&vers) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
@@ -3086,5 +3329,94 @@ mod tests {
         assert!(diff.is_clean);
 
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
+    }
+
+    #[tokio::test]
+    async fn test_artifact_and_notes_api_lifecycle() {
+        use custos_domain::{ArtifactSummary, NoteVersionRecord};
+
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let task_service = Arc::new(TaskService::new(store.clone()));
+        let session_manager = Arc::new(SessionManager::new());
+        let bridge_service = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
+        let db = custos_persistence::DbConnection::open_in_memory().unwrap();
+        let research = Arc::new(ResearchRepository::new(db));
+
+        let dispatcher = LocalApiDispatcher::new(
+            task_service,
+            session_manager,
+            bridge_service,
+        ).with_research(research);
+
+        // 1. Save a Note
+        let save_resp = dispatcher.handle_request(ApiRequest {
+            id: "note_save_1".into(),
+            method: METHOD_NOTES_SAVE.into(),
+            params: serde_json::json!({
+                "title": "Quantum Attention Hypothesis",
+                "content": "# Theory\nEvaluating linear attention scaling.",
+                "session_id": "sess_101",
+                "tags": ["quantum", "scaling"]
+            }),
+        }).await;
+        assert!(save_resp.is_success());
+        let note: NoteRecord = serde_json::from_value(save_resp.result.unwrap()).unwrap();
+        assert_eq!(note.title, "Quantum Attention Hypothesis");
+        assert_eq!(note.version, 1);
+
+        // 2. Update Note (version 2)
+        let update_resp = dispatcher.handle_request(ApiRequest {
+            id: "note_save_2".into(),
+            method: METHOD_NOTES_SAVE.into(),
+            params: serde_json::json!({
+                "id": note.id,
+                "title": "Quantum Attention Hypothesis (Revised)",
+                "content": "# Theory\nUpdated with ablation empirical data.",
+                "session_id": "sess_101",
+                "tags": ["quantum", "scaling", "ablation"]
+            }),
+        }).await;
+        assert!(update_resp.is_success());
+        let updated_note: NoteRecord = serde_json::from_value(update_resp.result.unwrap()).unwrap();
+        assert_eq!(updated_note.version, 2);
+
+        // 3. List Note History
+        let hist_resp = dispatcher.handle_request(ApiRequest {
+            id: "note_hist_1".into(),
+            method: METHOD_NOTES_HISTORY.into(),
+            params: serde_json::json!({
+                "note_id": note.id,
+            }),
+        }).await;
+        assert!(hist_resp.is_success());
+        let history: Vec<NoteVersionRecord> = serde_json::from_value(hist_resp.result.unwrap()).unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].version, 1);
+
+        // 4. Artifact list includes note
+        let art_list_resp = dispatcher.handle_request(ApiRequest {
+            id: "art_list_1".into(),
+            method: METHOD_ARTIFACTS_LIST.into(),
+            params: serde_json::json!({}),
+        }).await;
+        assert!(art_list_resp.is_success());
+        let artifacts: Vec<ArtifactSummary> = serde_json::from_value(art_list_resp.result.unwrap()).unwrap();
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(artifacts[0].artifact_path, format!("notes/{}.md", note.id));
+        assert_eq!(artifacts[0].latest_version, 2);
+
+        // 5. Lineage Graph DAG
+        let dag_resp = dispatcher.handle_request(ApiRequest {
+            id: "art_dag_1".into(),
+            method: METHOD_ARTIFACTS_LINEAGE_GRAPH.into(),
+            params: serde_json::json!({}),
+        }).await;
+        assert!(dag_resp.is_success());
+        let graph: custos_domain::ArtifactLineageGraph = serde_json::from_value(dag_resp.result.unwrap()).unwrap();
+        assert_eq!(graph.nodes.len(), 2); // v1 and v2
+        assert_eq!(graph.edges.len(), 1); // edge from v1 to v2
     }
 }

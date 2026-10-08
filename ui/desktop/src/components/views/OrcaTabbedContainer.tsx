@@ -22,13 +22,14 @@ import { TerminalWorkbenchPane } from '@/components/workspaces/engineering/Termi
 import { FilesWorkbenchPane } from '@/components/workspaces/engineering/FilesWorkbenchPane';
 import { ChangesWorkbenchPane } from '@/components/workspaces/engineering/ChangesWorkbenchPane';
 import { AgentsWorkbenchPane } from '@/components/workspaces/engineering/AgentsWorkbenchPane';
+import { NotesWorkbenchPane } from '@/components/workspaces/NotesWorkbenchPane';
 import {
   ClaimsMatrixPane,
-  DeepInspectorPane,
   LiteraturePane,
   NotebookWorkspacePane,
   ResearchMethodsPane,
   RunsLedgerPane,
+  ArtifactsWorkbenchPane,
 } from '@/components/research';
 
 export type OrcaTabId =
@@ -94,7 +95,7 @@ const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'changes', title: 'Changes', description: 'Diff review, annotations and patch decisions.', icon: FileDiff, group: 'Engineering', status: 'available', supportedOperations: ['diff', 'file_diff', 'stage', 'unstage', 'discard'] },
   { id: 'terminal', title: 'Terminal', description: 'Bounded PTY streams scoped to an execution workspace.', icon: Terminal, group: 'Engineering', status: 'available', supportedOperations: ['spawn', 'write', 'resize', 'read', 'terminate', 'list', 'get'] },
   { id: 'worktrees', title: 'Workspaces', description: 'Inspect daemon-owned folder and Git execution workspaces.', icon: GitBranch, group: 'Engineering', status: 'available' },
-  { id: 'kanban', title: 'Agents', description: 'Worker runs, attention state and delegated task topology.', icon: Bot, group: 'Engineering', status: 'unavailable', reason: 'Worker runs, attention state and delegated task topology scheduled in Roadmap Step 10.' },
+  { id: 'kanban', title: 'Agents', description: 'Worker runs, native coding harnesses (Claude Code, Codex, Goose), and agent loop dispatch.', icon: Bot, group: 'Engineering', status: 'available', supportedOperations: ['list_harnesses', 'get_harness', 'run_native', 'dispatch', 'cancel', 'steer'] },
   { id: 'evidence', title: 'Evidence', description: 'Criteria, receipts, verifier records and stale status.', icon: ShieldCheck, group: 'Engineering', status: 'unavailable', reason: 'Criteria verifier records and receipts scheduled in Roadmap Step 8.' },
   { id: 'dag', title: 'Workflow', description: 'Execution graph, dependencies, budgets and run state.', icon: Activity, group: 'Engineering', status: 'available' },
   { id: 'literature', title: 'Sources', description: 'Versioned literature, passages and corpus coverage.', icon: BookOpen, group: 'Research', status: 'available' },
@@ -102,9 +103,9 @@ const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'knowledge', title: 'Methods', description: 'Reproduction recipes separated from observed execution records.', icon: FlaskConical, group: 'Research', status: 'available' },
   { id: 'experiments', title: 'Notebook', description: 'Authorized kernels, code cells and reproducible compute.', icon: NotebookTabs, group: 'Research', status: 'unavailable', reason: 'Authorized kernels, code cells and reproducible compute scheduled in Roadmap Step 7.' },
   { id: 'synthesis', title: 'Runs', description: 'Experiment attempts, environments, artifacts and receipts.', icon: FlaskConical, group: 'Research', status: 'available' },
-  { id: 'artifacts', title: 'Artifacts', description: 'Inspect versions, lineage, annotations and review findings.', icon: FileCode, group: 'Research', status: 'available' },
+  { id: 'artifacts', title: 'Artifacts', description: 'Inspect versions, lineage, annotations, provenance DAG and review findings.', icon: FileCode, group: 'Research', status: 'available', supportedOperations: ['list', 'get', 'record_lineage', 'lineage.list', 'lineage.graph', 'annotations.list', 'annotations.save'] },
   { id: 'browser', title: 'Browser', description: 'Scoped browsing and page capture.', icon: Globe, group: 'Shared', status: 'unavailable', reason: 'Scoped browsing and page capture scheduled in Roadmap Step 10.' },
-  { id: 'notes', title: 'Notes', description: 'Task notes and Markdown artifacts.', icon: FileCode, group: 'Shared', status: 'unavailable', reason: 'Task notes and Markdown artifacts scheduled in Roadmap Step 6.' },
+  { id: 'notes', title: 'Notes', description: 'Task notes, scratchpads, and Markdown knowledge capture with version history.', icon: FileCode, group: 'Shared', status: 'available', supportedOperations: ['list', 'get', 'save', 'history'] },
 ];
 
 const urlFor = (id: OrcaTabId) => id === 'tools' ? 'custos://resources' : `custos://resource/${id}`;
@@ -320,7 +321,11 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   }
 
   if (activeId === 'artifacts') {
-    return <DeepInspectorPane onShowToast={onShowToast} />;
+    return <ArtifactsWorkbenchPane onShowToast={onShowToast} />;
+  }
+
+  if (activeId === 'notes') {
+    return <NotesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} />;
   }
 
   return activeResource

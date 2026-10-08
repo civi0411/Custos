@@ -172,6 +172,44 @@ impl ArtifactHandoff {
     }
 }
 
+/// Summary descriptor of a tracked artifact with its latest version and lineage
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArtifactSummary {
+    pub artifact_path: String,
+    pub latest_version: u32,
+    pub latest_content_hash: String,
+    pub versions_count: u32,
+    pub produced_by_run_id: Option<String>,
+    pub updated_at: i64,
+}
+
+/// A node in the artifact provenance DAG
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LineageGraphNode {
+    pub id: String,
+    pub label: String,
+    pub node_type: String, // "artifact", "run", "recipe", "note"
+    pub version: Option<u32>,
+    pub content_hash: Option<String>,
+    pub timestamp: i64,
+    pub metadata: serde_json::Value,
+}
+
+/// A directed edge in the artifact provenance DAG
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LineageGraphEdge {
+    pub from: String,
+    pub to: String,
+    pub edge_type: String, // "derived_from_version", "produced_by_run", "used_as_input"
+}
+
+/// Complete artifact lineage and provenance DAG
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ArtifactLineageGraph {
+    pub nodes: Vec<LineageGraphNode>,
+    pub edges: Vec<LineageGraphEdge>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

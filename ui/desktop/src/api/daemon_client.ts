@@ -24,6 +24,12 @@ import {
   HarnessDescriptor,
   RunNativeHarnessParams,
   HarnessExecutionResult,
+  ArtifactSummary,
+  ArtifactLineageGraph,
+  ArtifactDetailResponse,
+  NoteRecord,
+  NoteVersionRecord,
+  SaveNoteParams,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -596,6 +602,48 @@ export class DaemonClient {
       harness_id: harnessId,
       run_id: runId,
       guidance,
+    });
+  }
+
+  // Artifacts & Lineage DAG
+  async listArtifacts(): Promise<ArtifactSummary[]> {
+    return this.request<ArtifactSummary[]>('v1.artifacts.list');
+  }
+
+  async getArtifact(path: string): Promise<ArtifactDetailResponse> {
+    return this.request<ArtifactDetailResponse>('v1.artifacts.get', {
+      artifact_path: path,
+    });
+  }
+
+  async getArtifactLineageGraph(path?: string): Promise<ArtifactLineageGraph> {
+    return this.request<ArtifactLineageGraph>('v1.artifacts.lineage_graph', {
+      artifact_path: path,
+    });
+  }
+
+  async recordArtifactLineage(node: ArtifactLineageNode): Promise<{ recorded: boolean }> {
+    return this.request<{ recorded: boolean }>('v1.artifacts.record_lineage', node);
+  }
+
+  // Personal Notes & Scratchpads
+  async listNotes(sessionId?: string): Promise<NoteRecord[]> {
+    return this.request<NoteRecord[]>('v1.notes.list', {
+      session_id: sessionId,
+    });
+  }
+
+  async getNote(id: string): Promise<NoteRecord> {
+    return this.request<NoteRecord>('v1.notes.get', { id });
+  }
+
+  async saveNote(params: SaveNoteParams): Promise<NoteRecord> {
+    return this.request<NoteRecord>('v1.notes.save', params);
+  }
+
+  async listNoteVersions(noteId: string): Promise<NoteVersionRecord[]> {
+    return this.request<NoteVersionRecord[]>('v1.notes.history', {
+      note_id: noteId,
     });
   }
 }
