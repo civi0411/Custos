@@ -7,19 +7,20 @@ use std::sync::Arc;
 pub use crate::custos_local_api::{
     AdvanceTaskRequest, ApiRequest, ApiResponse, ArchiveWorkspaceApiRequest, CancelRunRequest,
     CancelTaskRequest, CompleteTaskRequest, CreateTaskRequest, CreateWorkspaceApiRequest,
-    GetWorkspaceApiRequest, StartRunRequest, METHOD_RESEARCH_ANCHORS_LIST,
-    METHOD_RESEARCH_ANCHORS_SAVE, METHOD_RESEARCH_CLAIMS_LIST, METHOD_RESEARCH_CLAIMS_SAVE,
-    METHOD_RESEARCH_HANDOFF_CODING, METHOD_RESEARCH_LINEAGE_LIST, METHOD_RESEARCH_RUNS_LIST,
-    METHOD_RESEARCH_RUNS_SAVE, METHOD_RESEARCH_SOURCES_LIST, METHOD_RESEARCH_SOURCES_SAVE,
-    METHOD_WORKFLOW_CANCEL_RUN, METHOD_WORKFLOW_START_RUN, METHOD_WORKSPACES_ARCHIVE,
-    METHOD_WORKSPACES_CREATE, METHOD_WORKSPACES_GET, METHOD_WORKSPACES_LIST,
+    GetCapabilityApiRequest, GetWorkspaceApiRequest, StartRunRequest, METHOD_CAPABILITIES_GET,
+    METHOD_CAPABILITIES_LIST, METHOD_RESEARCH_ANCHORS_LIST, METHOD_RESEARCH_ANCHORS_SAVE,
+    METHOD_RESEARCH_CLAIMS_LIST, METHOD_RESEARCH_CLAIMS_SAVE, METHOD_RESEARCH_HANDOFF_CODING,
+    METHOD_RESEARCH_LINEAGE_LIST, METHOD_RESEARCH_RUNS_LIST, METHOD_RESEARCH_RUNS_SAVE,
+    METHOD_RESEARCH_SOURCES_LIST, METHOD_RESEARCH_SOURCES_SAVE, METHOD_WORKFLOW_CANCEL_RUN,
+    METHOD_WORKFLOW_START_RUN, METHOD_WORKSPACES_ARCHIVE, METHOD_WORKSPACES_CREATE,
+    METHOD_WORKSPACES_GET, METHOD_WORKSPACES_LIST,
 };
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
 use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::{AdvanceTask, CancelTask, CreateTask, TaskService};
 use custos_domain::{
-    PassageAnchor, ResearchClaim, ResearchExperimentRun, SessionId, SessionMode, SourceRecord,
-    TaskContract, TaskStatus,
+    CapabilityDescriptor, CapabilityGroup, PassageAnchor, ResearchClaim, ResearchExperimentRun,
+    SessionId, SessionMode, SourceRecord, TaskContract, TaskStatus,
 };
 use custos_persistence::{ProviderRepository, ResearchRepository};
 use custos_runtime::session::SessionManager;
@@ -71,6 +72,252 @@ impl LocalApiDispatcher {
     pub fn with_providers(mut self, providers: Arc<ProviderRepository>) -> Self {
         self.providers = Some(providers);
         self
+    }
+
+    /// List all capabilities registered in the Custos ADE kernel truthfully.
+    ///
+    /// Workbenches project views over these capabilities; they do not maintain
+    /// simulated independent backends. Unimplemented or unconfigured surfaces
+    /// report `Unavailable` or `Degraded` with an explicit reason.
+    pub fn list_capabilities(&self) -> Vec<CapabilityDescriptor> {
+        vec![
+            // Core Task Engine
+            CapabilityDescriptor::available(
+                "tasks.core",
+                "Task Engine",
+                CapabilityGroup::Coordination,
+                "Kernel task lifecycle, contract enforcement, and verification proofs.",
+                Some("tasks"),
+                vec!["create", "get", "cancel", "advance", "complete"],
+            ),
+            // Workspaces (Git & Folder Execution Workspaces)
+            if self.workspace.is_some() {
+                CapabilityDescriptor::available(
+                    "workspace.git",
+                    "Workspaces",
+                    CapabilityGroup::Code,
+                    "Inspect daemon-owned folder and Git execution workspaces.",
+                    Some("worktrees"),
+                    vec!["create", "list", "get", "archive"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "workspace.git",
+                    "Workspaces",
+                    CapabilityGroup::Code,
+                    "Inspect daemon-owned folder and Git execution workspaces.",
+                    Some("worktrees"),
+                    "WorkspaceCoordinator is not configured on this daemon instance.",
+                )
+            },
+            // Workflow DAG Engine
+            if self.workflow.is_some() {
+                CapabilityDescriptor::available(
+                    "workflow.dag",
+                    "Workflow",
+                    CapabilityGroup::Coordination,
+                    "Execution graph, dependencies, budgets, and run orchestration.",
+                    Some("dag"),
+                    vec!["start_run", "cancel_run"],
+                )
+            } else {
+                CapabilityDescriptor::degraded(
+                    "workflow.dag",
+                    "Workflow",
+                    CapabilityGroup::Coordination,
+                    "Execution graph, dependencies, budgets, and run orchestration.",
+                    Some("dag"),
+                    "Workflow engine is not attached; graph orchestration is degraded.",
+                    vec![],
+                )
+            },
+            // Research Literature Sources
+            if self.research.is_some() {
+                CapabilityDescriptor::available(
+                    "research.sources",
+                    "Sources",
+                    CapabilityGroup::Evidence,
+                    "Versioned literature, passages, DOI anchors, and corpus coverage.",
+                    Some("literature"),
+                    vec!["list", "save"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "research.sources",
+                    "Sources",
+                    CapabilityGroup::Evidence,
+                    "Versioned literature, passages, DOI anchors, and corpus coverage.",
+                    Some("literature"),
+                    "ResearchRepository is not configured on this daemon instance.",
+                )
+            },
+            // Research Claims Matrix
+            if self.research.is_some() {
+                CapabilityDescriptor::available(
+                    "research.claims",
+                    "Claims",
+                    CapabilityGroup::Evidence,
+                    "Atomic claims with support, contradiction, or unknown evidence grounding.",
+                    Some("claims"),
+                    vec!["list", "save", "handoff_coding"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "research.claims",
+                    "Claims",
+                    CapabilityGroup::Evidence,
+                    "Atomic claims with support, contradiction, or unknown evidence grounding.",
+                    Some("claims"),
+                    "ResearchRepository is not configured on this daemon instance.",
+                )
+            },
+            // Research Methods / Recipes & Executions
+            if self.research.is_some() {
+                CapabilityDescriptor::available(
+                    "research.methods",
+                    "Methods",
+                    CapabilityGroup::Evidence,
+                    "Reproduction recipes separated from observed execution records.",
+                    Some("knowledge"),
+                    vec!["recipes.list", "recipes.get", "executions.list", "executions.get"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "research.methods",
+                    "Methods",
+                    CapabilityGroup::Evidence,
+                    "Reproduction recipes separated from observed execution records.",
+                    Some("knowledge"),
+                    "ResearchRepository is not configured on this daemon instance.",
+                )
+            },
+            // Research Runs Ledger
+            if self.research.is_some() {
+                CapabilityDescriptor::available(
+                    "research.runs",
+                    "Runs",
+                    CapabilityGroup::Compute,
+                    "Experiment attempts, environments, outputs, and execution receipts.",
+                    Some("synthesis"),
+                    vec!["list", "save"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "research.runs",
+                    "Runs",
+                    CapabilityGroup::Compute,
+                    "Experiment attempts, environments, outputs, and execution receipts.",
+                    Some("synthesis"),
+                    "ResearchRepository is not configured on this daemon instance.",
+                )
+            },
+            // Research Artifacts & Lineage
+            if self.research.is_some() {
+                CapabilityDescriptor::available(
+                    "research.artifacts",
+                    "Artifacts",
+                    CapabilityGroup::Evidence,
+                    "Version lineage, annotations, provenance DAG, and review findings.",
+                    Some("artifacts"),
+                    vec!["lineage.list", "annotations.list", "annotations.save"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "research.artifacts",
+                    "Artifacts",
+                    CapabilityGroup::Evidence,
+                    "Version lineage, annotations, provenance DAG, and review findings.",
+                    Some("artifacts"),
+                    "ResearchRepository is not configured on this daemon instance.",
+                )
+            },
+            // Providers (LLM backend)
+            if self.providers.is_some() {
+                CapabilityDescriptor::available(
+                    "providers.llm",
+                    "Providers",
+                    CapabilityGroup::Conversation,
+                    "Model provider credentials, client keys, and health probes.",
+                    Some("providers"),
+                    vec!["list", "save", "check_status", "keys.list", "keys.generate"],
+                )
+            } else {
+                CapabilityDescriptor::degraded(
+                    "providers.llm",
+                    "Providers",
+                    CapabilityGroup::Conversation,
+                    "Model provider credentials, client keys, and health probes.",
+                    Some("providers"),
+                    "Provider repository not configured on daemon instance.",
+                    vec![],
+                )
+            },
+            // Roadmap Capabilities (truthfully reported as Unavailable with roadmap milestone)
+            CapabilityDescriptor::unavailable(
+                "compute.pty",
+                "Terminal",
+                CapabilityGroup::Compute,
+                "Bounded PTY streams scoped to an execution workspace.",
+                Some("terminal"),
+                "Bounded PTY streams scoped to an execution workspace scheduled in Roadmap Step 3.",
+            ),
+            CapabilityDescriptor::unavailable(
+                "code.files",
+                "Files",
+                CapabilityGroup::Code,
+                "Repository tree, file buffers, and source anchor inspection.",
+                Some("files"),
+                "Safe Git workspace file/editor/diff API scheduled in Roadmap Step 4.",
+            ),
+            CapabilityDescriptor::unavailable(
+                "code.changes",
+                "Changes",
+                CapabilityGroup::Code,
+                "Diff review, patch proposal, annotations, and approval receipts.",
+                Some("changes"),
+                "Interactive diff review & patch approval API scheduled in Roadmap Step 4.",
+            ),
+            CapabilityDescriptor::unavailable(
+                "compute.notebook",
+                "Notebook",
+                CapabilityGroup::Compute,
+                "Authorized kernels, code cells, and reproducible compute epochs.",
+                Some("experiments"),
+                "Authorized kernels, code cells and reproducible compute scheduled in Roadmap Step 7.",
+            ),
+            CapabilityDescriptor::unavailable(
+                "evidence.criteria",
+                "Evidence",
+                CapabilityGroup::Evidence,
+                "Criteria, receipts, verifier records, and freshness status.",
+                Some("evidence"),
+                "Criteria verifier records and receipts scheduled in Roadmap Step 8.",
+            ),
+            CapabilityDescriptor::unavailable(
+                "coordination.kanban",
+                "Agents",
+                CapabilityGroup::Coordination,
+                "Worker runs, attention state, and delegated multi-agent dispatch.",
+                Some("kanban"),
+                "Worker runs, attention state and delegated task topology scheduled in Roadmap Step 10.",
+            ),
+            CapabilityDescriptor::unavailable(
+                "browser.tabs",
+                "Browser",
+                CapabilityGroup::Browser,
+                "Scoped browsing, DOM snapshots, network inspector, and page capture.",
+                Some("browser"),
+                "Scoped browsing and page capture scheduled in Roadmap Step 10.",
+            ),
+            CapabilityDescriptor::unavailable(
+                "personal.notes",
+                "Notes",
+                CapabilityGroup::Personal,
+                "Task notes, scratchpads, and Markdown knowledge capture.",
+                Some("notes"),
+                "Task notes and Markdown artifacts scheduled in Roadmap Step 6.",
+            ),
+        ]
     }
 
     pub async fn dispatch_raw(&self, raw: &str) -> String {
@@ -1168,6 +1415,39 @@ impl LocalApiDispatcher {
                     )
                 }
             }
+            METHOD_CAPABILITIES_LIST => {
+                let caps = self.list_capabilities();
+                match serde_json::to_value(&caps) {
+                    Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_CAPABILITIES_GET => {
+                let target_id = req
+                    .params
+                    .get("capability_id")
+                    .or_else(|| req.params.get("id"))
+                    .or_else(|| req.params.get("resource_id"))
+                    .and_then(|v| v.as_str());
+
+                match target_id {
+                    Some(id) => {
+                        let caps = self.list_capabilities();
+                        if let Some(c) = caps
+                            .into_iter()
+                            .find(|cap| cap.id == id || cap.resource_id.as_deref() == Some(id))
+                        {
+                            match serde_json::to_value(&c) {
+                                Ok(val) => ApiResponse::success(req.id, val),
+                                Err(e) => ApiResponse::error(req.id, e.to_string()),
+                            }
+                        } else {
+                            ApiResponse::error(req.id, format!("Capability '{id}' not found"))
+                        }
+                    }
+                    None => ApiResponse::error(req.id, "Missing capability_id parameter"),
+                }
+            }
             unknown => ApiResponse::error(req.id, format!("Unknown method: {unknown}")),
         }
     }
@@ -1923,5 +2203,79 @@ mod tests {
             params: serde_json::json!({"claim_id": "missing", "statement": "Trusted by client"}),
         }).await;
         assert!(forged_handoff.error.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_capabilities_api_dispatch() {
+        let store = Arc::new(MockStore {
+            tasks: Mutex::new(Vec::new()),
+        });
+        let task_service = Arc::new(TaskService::new(store));
+        let session_manager = Arc::new(SessionManager::new());
+        let bridge_service = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
+        let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service);
+
+        // 1. List all capabilities
+        let list_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "req_caps_1".into(),
+                method: METHOD_CAPABILITIES_LIST.into(),
+                params: serde_json::Value::Null,
+            })
+            .await;
+        assert!(list_resp.is_success());
+
+        let caps: Vec<custos_domain::CapabilityDescriptor> =
+            serde_json::from_value(list_resp.result.unwrap()).unwrap();
+        assert!(!caps.is_empty());
+
+        // Kernel task engine is available
+        let tasks_cap = caps.iter().find(|c| c.id == "tasks.core").unwrap();
+        assert!(tasks_cap.status.is_available());
+
+        // PTY terminal is truthfully unavailable with roadmap rationale
+        let pty_cap = caps.iter().find(|c| c.id == "compute.pty").unwrap();
+        assert!(!pty_cap.status.is_available());
+        assert_eq!(pty_cap.resource_id.as_deref(), Some("terminal"));
+        assert!(pty_cap.status.reason().unwrap().contains("Roadmap Step 3"));
+
+        // 2. Query capability by capability_id
+        let get_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "req_caps_2".into(),
+                method: METHOD_CAPABILITIES_GET.into(),
+                params: serde_json::json!({ "capability_id": "compute.pty" }),
+            })
+            .await;
+        assert!(get_resp.is_success());
+        let cap: custos_domain::CapabilityDescriptor =
+            serde_json::from_value(get_resp.result.unwrap()).unwrap();
+        assert_eq!(cap.id, "compute.pty");
+
+        // 3. Query capability by resource_id
+        let get_res_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "req_caps_3".into(),
+                method: METHOD_CAPABILITIES_GET.into(),
+                params: serde_json::json!({ "resource_id": "terminal" }),
+            })
+            .await;
+        assert!(get_res_resp.is_success());
+        let res_cap: custos_domain::CapabilityDescriptor =
+            serde_json::from_value(get_res_resp.result.unwrap()).unwrap();
+        assert_eq!(res_cap.id, "compute.pty");
+
+        // 4. Missing capability returns error
+        let missing_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "req_caps_4".into(),
+                method: METHOD_CAPABILITIES_GET.into(),
+                params: serde_json::json!({ "capability_id": "nonexistent" }),
+            })
+            .await;
+        assert!(missing_resp.error.is_some());
     }
 }

@@ -251,3 +251,36 @@ export interface TaskOutcome {
   sealed_at: number;
 }
 
+// ---------------------------------------------------------
+// Capability Registry Contracts
+// ---------------------------------------------------------
+
+export type CapabilityStatusType = 'available' | 'degraded' | 'unavailable';
+
+export type CapabilityStatus =
+  | { type: 'available' }
+  | { type: 'degraded'; reason: string }
+  | { type: 'unavailable'; reason: string };
+
+export type CapabilityGroup =
+  | 'conversation'
+  | 'code'
+  | 'compute'
+  | 'evidence'
+  | 'browser'
+  | 'personal'
+  | 'coordination';
+
+export interface CapabilityDescriptor {
+  id: string;
+  title: string;
+  group: CapabilityGroup;
+  status: CapabilityStatus;
+  description: string;
+  resourceId?: string | null;
+  resource_id?: string | null;
+  supportedOperations: string[];
+  supported_operations?: string[];
+  version: string;
+}
+

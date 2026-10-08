@@ -43,6 +43,8 @@ pub const METHOD_RESEARCH_RUNS_LIST: &str = "v1.research.runs.list";
 pub const METHOD_RESEARCH_RUNS_SAVE: &str = "v1.research.runs.save";
 pub const METHOD_RESEARCH_LINEAGE_LIST: &str = "v1.research.lineage.list";
 pub const METHOD_RESEARCH_HANDOFF_CODING: &str = "v1.research.handoff_coding";
+pub const METHOD_CAPABILITIES_LIST: &str = "v1.capabilities.list";
+pub const METHOD_CAPABILITIES_GET: &str = "v1.capabilities.get";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiRequest {
@@ -214,6 +216,11 @@ pub struct ArchiveWorkspaceApiRequest {
     pub workspace_id: String,
     #[serde(default)]
     pub delete_physical: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GetCapabilityApiRequest {
+    pub capability_id: String,
 }
 
 /// Abstract transport for communicating with the Custos Daemon

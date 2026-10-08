@@ -49,7 +49,7 @@ pub use authority::{
     RiskClass,
 };
 pub use budget::{Budget, Headroom, ReservationToken};
-pub use capability::CapabilityManifest;
+pub use capability::{CapabilityDescriptor, CapabilityGroup, CapabilityManifest, CapabilityStatus};
 pub use claim::{
     ArtifactLineageNode, Claim, ClaimEvidenceLink, ClaimGroundingLevel, EnvSnapshot,
     EvidenceRelation, PassageAnchor, PassageAnchorProposal, ResearchClaim, ResearchClaimProposal,

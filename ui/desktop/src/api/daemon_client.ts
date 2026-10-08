@@ -11,6 +11,7 @@ import {
   CancelRunParams,
   ExecutionWorkspace,
   CreateWorkspaceParams,
+  CapabilityDescriptor,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -369,6 +370,19 @@ export class DaemonClient {
     return this.request<{ configured: boolean; active_provider: string | null; message: string }>('v1.llm.status', {});
   }
 
+  // ---------------------------------------------------------
+  // Capability Registry API
+  // ---------------------------------------------------------
+
+  async listCapabilities(): Promise<CapabilityDescriptor[]> {
+    return fromDaemon<CapabilityDescriptor[]>(await this.request<unknown>('v1.capabilities.list', {}));
+  }
+
+  async getCapability(targetId: string): Promise<CapabilityDescriptor> {
+    return fromDaemon<CapabilityDescriptor>(
+      await this.request<unknown>('v1.capabilities.get', { capability_id: targetId })
+    );
+  }
 }
 
 export const daemonClient = new DaemonClient();
