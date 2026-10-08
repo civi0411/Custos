@@ -72,7 +72,10 @@ pub use synthesis::{
     RecipeHandoffSummary, ResearchSynthesisProposal, SaveSynthesisProposalParams,
     SynthesisProposalStatus,
 };
-pub use provider_config::{ClientApiKeyRecord, ProviderConfig};
+pub use provider_config::{
+    ClientApiKeyRecord, ModelCatalogOption, ModelCatalogResult, ModelPricing, ProbedModel,
+    ProviderConfig,
+};
 pub use recipe::{EnvironmentSpec, Recipe, RecipeInput};
 pub use action::{
     Action, ActionIntent, ActionIntentV1, ActionLifecycleState, Assurance, EffectAttempt,

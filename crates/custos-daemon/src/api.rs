@@ -40,6 +40,9 @@ pub use crate::custos_local_api::{
     METHOD_FLEET_HOSTS_REGISTER, METHOD_FLEET_HOSTS_PING,
     METHOD_FLEET_EXEC, METHOD_AUTOMATION_JOBS_LIST,
     METHOD_AUTOMATION_JOBS_CREATE, METHOD_AUTOMATION_JOBS_RUN,
+    METHOD_PROVIDERS_LIST, METHOD_PROVIDERS_GET, METHOD_PROVIDERS_SAVE,
+    METHOD_PROVIDERS_DELETE, METHOD_MODELS_PROBE, METHOD_MODELS_CATALOG,
+    METHOD_MODELS_PRICING,
 };
 use custos_adapters::harness::HarnessRegistry;
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
@@ -78,6 +81,7 @@ pub struct LocalApiDispatcher {
     harnesses: Arc<HarnessRegistry>,
     python_kernel: Option<Arc<PythonKernelCoordinator>>,
     fleet_automation: Option<Arc<FleetAutomationRepository>>,
+    model_catalog: custos_adapters::providers::catalog::ModelCatalogService,
 }
 
 impl LocalApiDispatcher {
@@ -99,6 +103,7 @@ impl LocalApiDispatcher {
             harnesses: Arc::new(HarnessRegistry::new()),
             python_kernel: Some(Arc::new(PythonKernelCoordinator::new())),
             fleet_automation: None,
+            model_catalog: custos_adapters::providers::catalog::ModelCatalogService::new(),
         }
     }
 
@@ -2205,6 +2210,51 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
+            "v1.providers.get" => {
+                let providers_repo = match self.providers.as_ref() {
+                    Some(p) => p,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                let id = req
+                    .params
+                    .get("id")
+                    .or_else(|| req.params.get("provider_id"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if id.is_empty() {
+                    return ApiResponse::error(req.id, "Missing provider id parameter");
+                }
+                match providers_repo.get_provider(id) {
+                    Ok(Some(cfg)) => match serde_json::to_value(&cfg) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Ok(None) => ApiResponse::error(req.id, format!("Provider {id} not found")),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.providers.delete" => {
+                let providers_repo = match self.providers.as_ref() {
+                    Some(p) => p,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                let id = req
+                    .params
+                    .get("id")
+                    .or_else(|| req.params.get("provider_id"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if id.is_empty() {
+                    return ApiResponse::error(req.id, "Missing provider id parameter");
+                }
+                match providers_repo.delete_provider(id) {
+                    Ok(deleted) => ApiResponse::success(
+                        req.id,
+                        serde_json::json!({ "deleted": deleted, "id": id }),
+                    ),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
             "v1.providers.save" => {
                 let providers_repo = match self.providers.as_ref() {
                     Some(p) => p,
@@ -2261,6 +2311,21 @@ impl LocalApiDispatcher {
                     .or_else(|| req.params.get("endpoint"))
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
+                let default_model = req
+                    .params
+                    .get("default_model")
+                    .or_else(|| req.params.get("model"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let context_window = req
+                    .params
+                    .get("context_window")
+                    .and_then(|v| v.as_u64());
+                let fast_mode = req
+                    .params
+                    .get("fast_mode")
+                    .and_then(|v| v.as_bool());
+
                 let now = chrono::Utc::now().timestamp_millis();
 
                 let cfg = custos_domain::ProviderConfig {
@@ -2270,6 +2335,9 @@ impl LocalApiDispatcher {
                     api_key_masked: masked,
                     status,
                     endpoint_url,
+                    default_model,
+                    context_window,
+                    fast_mode,
                     created_at: now,
                     updated_at: now,
                 };
@@ -2280,6 +2348,129 @@ impl LocalApiDispatcher {
                     ),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
+            }
+            "v1.models.probe" => {
+                let base_url = req
+                    .params
+                    .get("base_url")
+                    .or_else(|| req.params.get("endpoint_url"))
+                    .or_else(|| req.params.get("endpoint"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                if base_url.trim().is_empty() {
+                    return ApiResponse::error(req.id, "Missing base_url parameter for models probe");
+                }
+
+                let api_key = req
+                    .params
+                    .get("api_key")
+                    .and_then(|v| v.as_str());
+
+                let provider_type = req
+                    .params
+                    .get("provider_type")
+                    .or_else(|| req.params.get("service_type"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("local");
+
+                let provider_id = req
+                    .params
+                    .get("provider_id")
+                    .or_else(|| req.params.get("id"))
+                    .and_then(|v| v.as_str());
+
+                match custos_adapters::providers::probe::probe_endpoint_models(&base_url, api_key, provider_type).await {
+                    Ok(models) => {
+                        if let (Some(repo), Some(pid)) = (self.providers.as_ref(), provider_id) {
+                            let catalog_result = self.model_catalog.merge_probed_models(provider_type, models.clone());
+                            let _ = repo.save_catalog_models(pid, &catalog_result.models);
+                        }
+                        match serde_json::to_value(&models) {
+                            Ok(val) => ApiResponse::success(
+                                req.id,
+                                serde_json::json!({
+                                    "models": val,
+                                    "count": models.len(),
+                                    "base_url": base_url,
+                                }),
+                            ),
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
+                    Err(e) => ApiResponse::error(req.id, format!("Probe failed: {e}")),
+                }
+            }
+            "v1.models.catalog" => {
+                let provider_type = req
+                    .params
+                    .get("provider_type")
+                    .or_else(|| req.params.get("service_type"))
+                    .and_then(|v| v.as_str());
+                let provider_id = req
+                    .params
+                    .get("provider_id")
+                    .or_else(|| req.params.get("id"))
+                    .and_then(|v| v.as_str());
+
+                if let (Some(repo), Some(pid)) = (self.providers.as_ref(), provider_id) {
+                    if let Ok(cached) = repo.list_catalog_models(Some(pid)) {
+                        if !cached.is_empty() {
+                            return ApiResponse::success(
+                                req.id,
+                                serde_json::json!({
+                                    "origin": "cached",
+                                    "models": cached,
+                                    "fetched_at": chrono::Utc::now().timestamp_millis(),
+                                }),
+                            );
+                        }
+                    }
+                }
+
+                let catalog = self.model_catalog.get_catalog(provider_type);
+                match serde_json::to_value(&catalog) {
+                    Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.models.pricing" => {
+                let model_id = req
+                    .params
+                    .get("model_id")
+                    .or_else(|| req.params.get("model"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+
+                if model_id.trim().is_empty() {
+                    return ApiResponse::error(req.id, "Missing model_id parameter");
+                }
+
+                let pricing = custos_adapters::providers::pricing::lookup_model_pricing(model_id);
+                let input_tokens = req.params.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                let output_tokens = req.params.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                let cache_read_tokens = req.params.get("cache_read_tokens").and_then(|v| v.as_u64());
+                let cache_write_tokens = req.params.get("cache_write_tokens").and_then(|v| v.as_u64());
+
+                let estimated_cost = pricing.as_ref().map(|p| {
+                    custos_adapters::providers::pricing::calculate_token_cost(
+                        p,
+                        input_tokens,
+                        output_tokens,
+                        cache_read_tokens,
+                        cache_write_tokens,
+                    )
+                });
+
+                ApiResponse::success(
+                    req.id,
+                    serde_json::json!({
+                        "model_id": model_id,
+                        "pricing": pricing,
+                        "estimated_cost_usd": estimated_cost,
+                    }),
+                )
             }
             "v1.keys.list" => {
                 let providers_repo = match self.providers.as_ref() {
@@ -4743,4 +4934,103 @@ mod tests {
         assert_eq!(persisted.status, HeadlessJobStatus::Pending);
         assert_eq!(persisted.exit_code, None);
     }
+
+    #[tokio::test]
+    async fn test_provider_and_model_catalog_api_lifecycle() {
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let task_service = Arc::new(TaskService::new(store.clone()));
+        let session_manager = Arc::new(SessionManager::with_store(store.clone()));
+        let bridge_service = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
+        let dispatcher = LocalApiDispatcher::new(
+            task_service,
+            session_manager,
+            bridge_service,
+        )
+        .with_providers(Arc::new(store.providers().clone()));
+
+        // 1. Save provider with full protocol fields
+        let save_req = ApiRequest {
+            id: "p_save_1".into(),
+            method: METHOD_PROVIDERS_SAVE.into(),
+            params: serde_json::json!({
+                "id": "p_anthropic_custom",
+                "name": "Custom Anthropic Claude",
+                "service_type": "anthropic",
+                "api_key": "sk-ant-secret-key-123456789",
+                "default_model": "claude-3-7-sonnet",
+                "context_window": 200000,
+                "fast_mode": true
+            }),
+        };
+        let save_res = dispatcher.handle_request(save_req).await;
+        assert!(save_res.is_success());
+
+        // 2. Get provider
+        let get_req = ApiRequest {
+            id: "p_get_1".into(),
+            method: METHOD_PROVIDERS_GET.into(),
+            params: serde_json::json!({ "id": "p_anthropic_custom" }),
+        };
+        let get_res = dispatcher.handle_request(get_req).await;
+        assert!(get_res.is_success());
+        let cfg: custos_domain::ProviderConfig = serde_json::from_value(get_res.result.unwrap()).unwrap();
+        assert_eq!(cfg.id, "p_anthropic_custom");
+        assert_eq!(cfg.default_model, Some("claude-3-7-sonnet".into()));
+        assert_eq!(cfg.context_window, Some(200000));
+        assert_eq!(cfg.fast_mode, Some(true));
+
+        // 3. List providers
+        let list_req = ApiRequest {
+            id: "p_list_1".into(),
+            method: METHOD_PROVIDERS_LIST.into(),
+            params: serde_json::json!({}),
+        };
+        let list_res = dispatcher.handle_request(list_req).await;
+        assert!(list_res.is_success());
+        let providers: Vec<custos_domain::ProviderConfig> = serde_json::from_value(list_res.result.unwrap()).unwrap();
+        assert!(providers.iter().any(|p| p.id == "p_anthropic_custom"));
+
+        // 4. Test Model Catalog
+        let catalog_req = ApiRequest {
+            id: "cat_1".into(),
+            method: METHOD_MODELS_CATALOG.into(),
+            params: serde_json::json!({ "provider_type": "anthropic" }),
+        };
+        let catalog_res = dispatcher.handle_request(catalog_req).await;
+        assert!(catalog_res.is_success());
+        let catalog: custos_domain::ModelCatalogResult = serde_json::from_value(catalog_res.result.unwrap()).unwrap();
+        assert!(!catalog.models.is_empty());
+        assert!(catalog.models.iter().any(|m| m.id == "claude-3-7-sonnet"));
+
+        // 5. Test Model Pricing
+        let pricing_req = ApiRequest {
+            id: "price_1".into(),
+            method: METHOD_MODELS_PRICING.into(),
+            params: serde_json::json!({
+                "model_id": "claude-3-7-sonnet",
+                "input_tokens": 100000,
+                "output_tokens": 10000,
+                "cache_read_tokens": 50000
+            }),
+        };
+        let pricing_res = dispatcher.handle_request(pricing_req).await;
+        assert!(pricing_res.is_success());
+        let price_body = pricing_res.result.unwrap();
+        let cost = price_body.get("estimated_cost_usd").unwrap().as_f64().unwrap();
+        assert!((cost - 0.465).abs() < 1e-4);
+
+        // 6. Delete Provider
+        let del_req = ApiRequest {
+            id: "del_1".into(),
+            method: METHOD_PROVIDERS_DELETE.into(),
+            params: serde_json::json!({ "id": "p_anthropic_custom" }),
+        };
+        let del_res = dispatcher.handle_request(del_req).await;
+        assert!(del_res.is_success());
+        assert_eq!(del_res.result.unwrap().get("deleted").unwrap().as_bool(), Some(true));
+    }
 }
+

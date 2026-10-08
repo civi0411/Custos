@@ -295,6 +295,9 @@ impl SqliteTaskStore {
                 api_key_masked: "sk-ant-••••••••".to_string(),
                 status: "unconfigured".to_string(),
                 endpoint_url: None,
+                default_model: Some("claude-3-7-sonnet".to_string()),
+                context_window: Some(200_000),
+                fast_mode: Some(true),
                 created_at: now,
                 updated_at: now,
             };
@@ -305,6 +308,9 @@ impl SqliteTaskStore {
                 api_key_masked: "sk-proj-••••••••".to_string(),
                 status: "unconfigured".to_string(),
                 endpoint_url: None,
+                default_model: Some("gpt-4o".to_string()),
+                context_window: Some(128_000),
+                fast_mode: Some(true),
                 created_at: now,
                 updated_at: now,
             };
@@ -315,6 +321,9 @@ impl SqliteTaskStore {
                 api_key_masked: "AIzaSy••••••••".to_string(),
                 status: "unconfigured".to_string(),
                 endpoint_url: None,
+                default_model: Some("gemini-2.5-flash".to_string()),
+                context_window: Some(1_048_576),
+                fast_mode: Some(true),
                 created_at: now,
                 updated_at: now,
             };
@@ -325,6 +334,9 @@ impl SqliteTaskStore {
                 api_key_masked: "none".to_string(),
                 status: "unconfigured".to_string(),
                 endpoint_url: Some("http://127.0.0.1:11434".to_string()),
+                default_model: Some("qwen2.5-coder:32b".to_string()),
+                context_window: Some(32_768),
+                fast_mode: Some(false),
                 created_at: now,
                 updated_at: now,
             };

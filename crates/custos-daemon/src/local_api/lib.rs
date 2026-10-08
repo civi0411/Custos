@@ -116,6 +116,13 @@ pub const METHOD_AUTOMATION_JOBS_LIST: &str = "v1.automation.jobs.list";
 pub const METHOD_AUTOMATION_JOBS_CREATE: &str = "v1.automation.jobs.create";
 pub const METHOD_AUTOMATION_JOBS_RUN: &str = "v1.automation.jobs.run";
 
+pub const METHOD_PROVIDERS_LIST: &str = "v1.providers.list";
+pub const METHOD_PROVIDERS_GET: &str = "v1.providers.get";
+pub const METHOD_PROVIDERS_SAVE: &str = "v1.providers.save";
+pub const METHOD_PROVIDERS_DELETE: &str = "v1.providers.delete";
+pub const METHOD_MODELS_PROBE: &str = "v1.models.probe";
+pub const METHOD_MODELS_CATALOG: &str = "v1.models.catalog";
+pub const METHOD_MODELS_PRICING: &str = "v1.models.pricing";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiRequest {

@@ -70,6 +70,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setIsAddProviderOpen,
     handleGenerateClientKey,
     handleRevokeClientKey,
+    handleDeleteProvider,
   } = useAppContext();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [appearance, setAppearance] = useState<AppearancePreferences>(readAppearance);
@@ -240,10 +241,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {providers.map((provider) => (
                     <div key={provider.id} className="flex items-center justify-between rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3">
                       <div>
-                        <div className="text-xs font-semibold">{provider.name}</div>
-                        <div className="mt-1 font-mono text-[10px] text-[var(--color-fg-muted)]">{provider.model} · {provider.statusLabel}</div>
+                        <div className="text-xs font-semibold flex items-center gap-2">
+                          <span>{provider.name}</span>
+                          {provider.fastMode && (
+                            <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1 py-0.2 rounded font-mono">
+                              Fast
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 font-mono text-[10px] text-[var(--color-fg-muted)] flex items-center gap-1.5">
+                          <span>{provider.model}</span>
+                          {provider.contextWindow && (
+                            <span className="text-[9px] px-1 rounded bg-[var(--color-surface-2)] text-[var(--color-fg-subtle)]">
+                              {Math.round(provider.contextWindow / 1000)}k ctx
+                            </span>
+                          )}
+                          <span>· {provider.statusLabel}</span>
+                        </div>
                       </div>
-                      <span className="font-mono text-[10px] text-[var(--color-fg-subtle)]">{provider.apiKey}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-[10px] text-[var(--color-fg-subtle)]">{provider.apiKey}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (window.confirm(`Xóa provider "${provider.name}"?`)) {
+                              void handleDeleteProvider(provider.id);
+                            }
+                          }}
+                          className="text-[10px] text-rose-400 hover:text-rose-300 transition cursor-pointer"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
