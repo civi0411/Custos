@@ -266,7 +266,12 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           {
             icon: Activity,
             label: 'Runs Ledger',
-            onClick: () => openTab('synthesis', 'Runs', 'custos://resource/synthesis')
+            onClick: () => openTab('runs', 'Runs', 'custos://resource/runs')
+          },
+          {
+            icon: Layers,
+            label: 'Synthesis & Handoff',
+            onClick: () => openTab('synthesis', 'Synthesis', 'custos://resource/synthesis')
           }
         ]
       : []),

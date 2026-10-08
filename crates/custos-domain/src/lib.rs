@@ -31,6 +31,7 @@ pub mod recipe;
 pub mod review;
 pub mod session;
 pub mod span;
+pub mod synthesis;
 pub mod task;
 pub mod terminal;
 pub mod types;
@@ -49,6 +50,11 @@ pub use notebook::{
 pub use review::{
     FindingSeverity, RecordReviewParams, ReviewFinding, ReviewMethod, ReviewStatus,
     ReviewTargetType, ReviewerRecord,
+};
+pub use synthesis::{
+    ClaimHandoffSummary, HandoffToCodingParams, HandoffToCodingResult,
+    RecipeHandoffSummary, ResearchSynthesisProposal, SaveSynthesisProposalParams,
+    SynthesisProposalStatus,
 };
 pub use provider_config::{ClientApiKeyRecord, ProviderConfig};
 pub use recipe::{EnvironmentSpec, Recipe, RecipeInput};

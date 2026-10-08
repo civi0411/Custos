@@ -11,9 +11,9 @@ use custos_domain::{
     ClaimGroundingLevel, DomainError, EnvSnapshot, EnvironmentSpec, EvidenceRelation,
     ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus, KernelStatus,
     LineageGraphEdge, LineageGraphNode, NoteRecord, NoteVersionRecord, NotebookCell,
-    NotebookCellType, NotebookKernelState, PassageAnchor, Recipe, RecipeInput, ResearchClaim,
-    ResearchExperimentRun, ReviewFinding, ReviewMethod, ReviewStatus, ReviewTargetType,
-    ReviewerRecord, SourceRecord,
+    NotebookCellType, NotebookKernelState, PassageAnchor, SynthesisProposalStatus, Recipe, RecipeInput,
+    ResearchClaim, ResearchExperimentRun, ResearchSynthesisProposal, ReviewFinding, ReviewMethod,
+    ReviewStatus, ReviewTargetType, ReviewerRecord, SourceRecord,
 };
 use rusqlite::{params, types::Type};
 
@@ -1195,6 +1195,138 @@ impl ResearchRepository {
         })
     }
 
+    // Research Synthesis Proposals
+    pub fn save_synthesis_proposal(
+        &self,
+        proposal: &ResearchSynthesisProposal,
+    ) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        let claims_json = serde_json::to_string(&proposal.claims)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let recipes_json = serde_json::to_string(&proposal.recipes)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let artifact_paths_json = serde_json::to_string(&proposal.artifact_paths)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let caveats_json = serde_json::to_string(&proposal.caveats)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let status_str = match proposal.status {
+            SynthesisProposalStatus::Draft => "draft",
+            SynthesisProposalStatus::Submitted => "submitted",
+            SynthesisProposalStatus::HandoffCompleted => "handoff_completed",
+            SynthesisProposalStatus::Rejected => "rejected",
+        };
+
+        conn.execute(
+            "INSERT INTO research_synthesis_proposals (
+                id, title, summary, claims_json, recipes_json, artifact_paths_json,
+                workspace_id, target_branch, caveats_json, status, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            ON CONFLICT(id) DO UPDATE SET
+                title = excluded.title,
+                summary = excluded.summary,
+                claims_json = excluded.claims_json,
+                recipes_json = excluded.recipes_json,
+                artifact_paths_json = excluded.artifact_paths_json,
+                workspace_id = excluded.workspace_id,
+                target_branch = excluded.target_branch,
+                caveats_json = excluded.caveats_json,
+                status = excluded.status,
+                updated_at = excluded.updated_at",
+            params![
+                proposal.id,
+                proposal.title,
+                proposal.summary,
+                claims_json,
+                recipes_json,
+                artifact_paths_json,
+                proposal.workspace_id,
+                proposal.target_branch,
+                caveats_json,
+                status_str,
+                proposal.created_at,
+                proposal.updated_at,
+            ],
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        Ok(())
+    }
+
+    pub fn get_synthesis_proposal(
+        &self,
+        id: &str,
+    ) -> Result<Option<ResearchSynthesisProposal>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, title, summary, claims_json, recipes_json, artifact_paths_json,
+                        workspace_id, target_branch, caveats_json, status, created_at, updated_at
+                 FROM research_synthesis_proposals WHERE id = ?1",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut rows = stmt
+            .query_map(params![id], Self::row_to_synthesis_proposal)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        match rows.next() {
+            Some(row) => Ok(Some(row.map_err(|e| DomainError::Validation(e.to_string()))?)),
+            None => Ok(None),
+        }
+    }
+
+    pub fn list_synthesis_proposals(&self) -> Result<Vec<ResearchSynthesisProposal>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, title, summary, claims_json, recipes_json, artifact_paths_json,
+                        workspace_id, target_branch, caveats_json, status, created_at, updated_at
+                 FROM research_synthesis_proposals ORDER BY created_at DESC",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let proposals = stmt
+            .query_map([], Self::row_to_synthesis_proposal)
+            .map_err(|e| DomainError::Validation(e.to_string()))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        Ok(proposals)
+    }
+
+    fn row_to_synthesis_proposal(row: &rusqlite::Row) -> rusqlite::Result<ResearchSynthesisProposal> {
+        let claims_json: String = row.get(3)?;
+        let claims = serde_json::from_str(&claims_json).unwrap_or_default();
+        let recipes_json: String = row.get(4)?;
+        let recipes = serde_json::from_str(&recipes_json).unwrap_or_default();
+        let artifact_paths_json: String = row.get(5)?;
+        let artifact_paths = serde_json::from_str(&artifact_paths_json).unwrap_or_default();
+        let caveats_json: String = row.get(8)?;
+        let caveats = serde_json::from_str(&caveats_json).unwrap_or_default();
+        let status_str: String = row.get(9)?;
+        let status = match status_str.as_str() {
+            "submitted" => SynthesisProposalStatus::Submitted,
+            "handoff_completed" => SynthesisProposalStatus::HandoffCompleted,
+            "rejected" => SynthesisProposalStatus::Rejected,
+            _ => SynthesisProposalStatus::Draft,
+        };
+
+        Ok(ResearchSynthesisProposal {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            summary: row.get(2)?,
+            claims,
+            recipes,
+            artifact_paths,
+            workspace_id: row.get(6)?,
+            target_branch: row.get(7)?,
+            caveats,
+            status,
+            created_at: row.get(10)?,
+            updated_at: row.get(11)?,
+        })
+    }
+
     // Recipes
     pub fn save_recipe(&self, recipe: &Recipe) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
@@ -1925,5 +2057,40 @@ mod tests {
         repo.mark_review_stale(&review.id).expect("mark stale");
         let stale_rev = repo.get_review(&review.id).expect("get review").expect("review exists");
         assert!(!stale_rev.is_fresh);
+
+        // 10. Research Synthesis Proposal
+        let proposal = ResearchSynthesisProposal::new(
+            "Empirical Attention Bounds",
+            "Synthesis of multi-head attention claims and verification tasks",
+            vec![custos_domain::ClaimHandoffSummary {
+                claim_id: "claim_01".into(),
+                statement: "Multi-Head Attention runs 8 parallel heads in base model".into(),
+                level: ClaimGroundingLevel::L1Cited,
+                confidence_score: 0.95,
+                has_fresh_review: true,
+                sealed_proof_uri: None,
+            }],
+            vec![custos_domain::RecipeHandoffSummary {
+                recipe_id: "recipe_01".into(),
+                name: "Train transformer".into(),
+                command: "python train.py".into(),
+                inputs_count: 1,
+                outputs: vec!["weights.pt".into()],
+            }],
+            vec!["eval_table.csv".into()],
+            Some("ws_default".into()),
+            Some("feature/attention-bounds".into()),
+        ).expect("create synthesis proposal");
+
+        repo.save_synthesis_proposal(&proposal).expect("save proposal");
+        let fetched_prop = repo.get_synthesis_proposal(&proposal.id).expect("get proposal").expect("proposal exists");
+        assert_eq!(fetched_prop.title, "Empirical Attention Bounds");
+        assert_eq!(fetched_prop.claims.len(), 1);
+        assert_eq!(fetched_prop.recipes.len(), 1);
+        assert_eq!(fetched_prop.status, SynthesisProposalStatus::Draft);
+
+        let proposals = repo.list_synthesis_proposals().expect("list proposals");
+        assert_eq!(proposals.len(), 1);
+        assert_eq!(proposals[0].id, proposal.id);
     }
 }

@@ -53,18 +53,18 @@ export const ClaimsMatrixPane: React.FC<ClaimsMatrixPaneProps> = ({
       return;
     }
 
-    const completed: ResearchClaim[] = [];
-    for (const claim of handoffClaims) {
-      try {
-        await daemonClient.handoffClaimToCoding(claim.id, claim.statement);
-        completed.push(claim);
-      } catch (err) {
-        onShowToast?.(`Handoff failed for ${claim.id}: ${String(err)}`);
-      }
-    }
-    if (completed.length > 0) {
-      onHandoffToCoding?.(completed);
-      onShowToast?.(`Created ${completed.length} Coding task(s) from research drafts.`);
+    try {
+      const result = await daemonClient.executeSynthesisHandoff({
+        title: `Research Handoff (${handoffClaims.length} Claims)`,
+        claim_ids: handoffClaims.map((c) => c.id),
+        recipe_ids: [],
+        enforce_verification: true,
+      });
+      onHandoffToCoding?.(handoffClaims);
+      onShowToast?.(`Created ${result.task_ids.length} Invariant Coding task(s) via Gate 4 handoff.`);
+      setSelectedForHandoff([]);
+    } catch (err) {
+      onShowToast?.(`Handoff rejected by Gate 4 fail-closed gate: ${String(err)}`);
     }
   };
 

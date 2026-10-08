@@ -8,4 +8,5 @@ export * from './RunsLedgerPane';
 export * from './DeepInspectorPane';
 export * from './ResearchMethodsPane';
 export * from './ArtifactsWorkbenchPane';
+export * from './ResearchSynthesisPane';
 

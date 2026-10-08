@@ -724,6 +724,93 @@ export interface RecordReviewParams {
   findings?: ReviewFinding[];
 }
 
+export type SynthesisProposalStatus = 'draft' | 'submitted' | 'handoff_completed' | 'rejected';
+
+export interface ClaimHandoffSummary {
+  claim_id: string;
+  claimId?: string;
+  statement: string;
+  level: string;
+  confidence_score: number;
+  confidenceScore?: number;
+  has_fresh_review: boolean;
+  hasFreshReview?: boolean;
+  sealed_proof_uri?: string | null;
+  sealedProofUri?: string | null;
+}
+
+export interface RecipeHandoffSummary {
+  recipe_id: string;
+  recipeId?: string;
+  name: string;
+  command: string;
+  inputs_count: number;
+  inputsCount?: number;
+  outputs: string[];
+}
+
+export interface ResearchSynthesisProposal {
+  id: string;
+  title: string;
+  summary: string;
+  claims: ClaimHandoffSummary[];
+  recipes: RecipeHandoffSummary[];
+  artifact_paths: string[];
+  artifactPaths?: string[];
+  workspace_id?: string | null;
+  workspaceId?: string | null;
+  target_branch?: string | null;
+  targetBranch?: string | null;
+  caveats: string[];
+  status: SynthesisProposalStatus;
+  created_at: number;
+  createdAt?: number;
+  updated_at: number;
+  updatedAt?: number;
+}
+
+export interface SaveSynthesisProposalParams {
+  id?: string;
+  title: string;
+  summary: string;
+  claim_ids: string[];
+  recipe_ids: string[];
+  artifact_paths?: string[];
+  workspace_id?: string;
+  target_branch?: string;
+}
+
+export interface HandoffToCodingParams {
+  proposal_id?: string;
+  title: string;
+  claim_ids: string[];
+  recipe_ids: string[];
+  artifact_paths?: string[];
+  workspace_id?: string;
+  target_branch?: string;
+  enforce_verification: boolean;
+}
+
+export interface HandoffToCodingResult {
+  handoff_id: string;
+  handoffId?: string;
+  proposal_id?: string | null;
+  proposalId?: string | null;
+  task_ids: string[];
+  taskIds?: string[];
+  workspace_id?: string | null;
+  workspaceId?: string | null;
+  target_branch?: string | null;
+  targetBranch?: string | null;
+  verified_claims_count: number;
+  verifiedClaimsCount?: number;
+  converted_recipes_count: number;
+  convertedRecipesCount?: number;
+  caveats: string[];
+  timestamp: number;
+}
+
+
 
 
 

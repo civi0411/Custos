@@ -94,6 +94,11 @@ pub const METHOD_REVIEWS_GET: &str = "v1.reviews.get";
 pub const METHOD_REVIEWS_RECORD: &str = "v1.reviews.record";
 pub const METHOD_REVIEWS_MARK_STALE: &str = "v1.reviews.mark_stale";
 
+pub const METHOD_SYNTHESIS_PROPOSALS_LIST: &str = "v1.synthesis.proposals.list";
+pub const METHOD_SYNTHESIS_PROPOSALS_GET: &str = "v1.synthesis.proposals.get";
+pub const METHOD_SYNTHESIS_PROPOSALS_SAVE: &str = "v1.synthesis.proposals.save";
+pub const METHOD_SYNTHESIS_HANDOFF_EXECUTE: &str = "v1.synthesis.handoff.execute";
+
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiRequest {
@@ -1409,6 +1414,67 @@ impl LocalApiClient {
             return Err(err);
         }
         Ok(())
+    }
+
+    pub async fn list_synthesis_proposals(
+        &self,
+        req_id: &str,
+    ) -> Result<Vec<custos_domain::ResearchSynthesisProposal>, String> {
+        let req = ApiRequest::new(req_id, METHOD_SYNTHESIS_PROPOSALS_LIST, serde_json::json!({}));
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse proposals: {e}"))
+    }
+
+    pub async fn get_synthesis_proposal(
+        &self,
+        req_id: &str,
+        id: &str,
+    ) -> Result<Option<custos_domain::ResearchSynthesisProposal>, String> {
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_SYNTHESIS_PROPOSALS_GET,
+            serde_json::json!({ "id": id }),
+        );
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse proposal: {e}"))
+    }
+
+    pub async fn save_synthesis_proposal(
+        &self,
+        req_id: &str,
+        params: custos_domain::SaveSynthesisProposalParams,
+    ) -> Result<custos_domain::ResearchSynthesisProposal, String> {
+        let val = serde_json::to_value(params).map_err(|e| e.to_string())?;
+        let req = ApiRequest::new(req_id, METHOD_SYNTHESIS_PROPOSALS_SAVE, val);
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse saved proposal: {e}"))
+    }
+
+    pub async fn execute_synthesis_handoff(
+        &self,
+        req_id: &str,
+        params: custos_domain::HandoffToCodingParams,
+    ) -> Result<custos_domain::HandoffToCodingResult, String> {
+        let val = serde_json::to_value(params).map_err(|e| e.to_string())?;
+        let req = ApiRequest::new(req_id, METHOD_SYNTHESIS_HANDOFF_EXECUTE, val);
+        let resp = self.transport.send_request(req).await?;
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+        let result = resp.result.ok_or("Empty result in response")?;
+        serde_json::from_value(result).map_err(|e| format!("Failed to parse handoff result: {e}"))
     }
 }
 

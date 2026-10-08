@@ -38,6 +38,10 @@ import {
   RecordReviewParams,
   ReviewTargetType,
   ReviewStatus,
+  ResearchSynthesisProposal,
+  SaveSynthesisProposalParams,
+  HandoffToCodingParams,
+  HandoffToCodingResult,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -712,6 +716,23 @@ export class DaemonClient {
 
   async markReviewStale(id: string): Promise<{ marked_stale: boolean }> {
     return this.request<{ marked_stale: boolean }>('v1.reviews.mark_stale', { id });
+  }
+
+  // Research Synthesis Proposals & Coding Handoff
+  async listSynthesisProposals(): Promise<ResearchSynthesisProposal[]> {
+    return this.request<ResearchSynthesisProposal[]>('v1.synthesis.proposals.list', {});
+  }
+
+  async getSynthesisProposal(id: string): Promise<ResearchSynthesisProposal | null> {
+    return this.request<ResearchSynthesisProposal | null>('v1.synthesis.proposals.get', { id });
+  }
+
+  async saveSynthesisProposal(params: SaveSynthesisProposalParams): Promise<ResearchSynthesisProposal> {
+    return this.request<ResearchSynthesisProposal>('v1.synthesis.proposals.save', params);
+  }
+
+  async executeSynthesisHandoff(params: HandoffToCodingParams): Promise<HandoffToCodingResult> {
+    return this.request<HandoffToCodingResult>('v1.synthesis.handoff.execute', params);
   }
 }
 

@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   Terminal,
   Wrench,
+  Layers,
 } from 'lucide-react';
 import { Session } from '@/types';
 import { daemonClient } from '@/api/daemon_client';
@@ -31,6 +32,7 @@ import {
   ResearchMethodsPane,
   RunsLedgerPane,
   ArtifactsWorkbenchPane,
+  ResearchSynthesisPane,
 } from '@/components/research';
 
 export type OrcaTabId =
@@ -49,6 +51,7 @@ export type OrcaTabId =
   | 'literature'
   | 'claims'
   | 'experiments'
+  | 'runs'
   | 'synthesis';
 
 export interface OrcaTab {
@@ -103,7 +106,8 @@ const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'claims', title: 'Claims', description: 'Atomic claims and support, contradiction or unknown evidence.', icon: ShieldCheck, group: 'Research', status: 'available' },
   { id: 'knowledge', title: 'Methods', description: 'Reproduction recipes separated from observed execution records.', icon: FlaskConical, group: 'Research', status: 'available' },
   { id: 'experiments', title: 'Notebook', description: 'Authorized kernels, code cells and reproducible compute epochs.', icon: NotebookTabs, group: 'Research', status: 'available', supportedOperations: ['cells.list', 'cells.save', 'execute', 'interrupt', 'reset', 'status'] },
-  { id: 'synthesis', title: 'Runs', description: 'Experiment attempts, environments, artifacts and receipts.', icon: FlaskConical, group: 'Research', status: 'available' },
+  { id: 'runs', title: 'Runs', description: 'Experiment attempts, environments, artifacts and receipts.', icon: FlaskConical, group: 'Research', status: 'available' },
+  { id: 'synthesis', title: 'Synthesis & Handoff', description: 'Synthesize research claims and recipes into Invariant Coding tasks.', icon: Layers, group: 'Research', status: 'available', supportedOperations: ['synthesis.proposals.list', 'synthesis.proposals.get', 'synthesis.proposals.save', 'synthesis.handoff.execute'] },
   { id: 'artifacts', title: 'Artifacts', description: 'Inspect versions, lineage, annotations, provenance DAG and review findings.', icon: FileCode, group: 'Research', status: 'available', supportedOperations: ['list', 'get', 'record_lineage', 'lineage.list', 'lineage.graph', 'annotations.list', 'annotations.save'] },
   { id: 'browser', title: 'Browser', description: 'Scoped browsing and page capture.', icon: Globe, group: 'Shared', status: 'unavailable', reason: 'Scoped browsing and page capture scheduled in Roadmap Step 10.' },
   { id: 'notes', title: 'Notes', description: 'Task notes, scratchpads, and Markdown knowledge capture with version history.', icon: FileCode, group: 'Shared', status: 'available', supportedOperations: ['list', 'get', 'save', 'history'] },
@@ -316,13 +320,17 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     return <EvidenceWorkbenchPane onShowToast={onShowToast} />;
   }
 
-  if (activeId === 'synthesis') {
+  if (activeId === 'runs') {
     return (
       <RunsLedgerPane
         onReproduce={(run) => onAskAgent?.(`Reproduce run ${run.runId}:\n\`${run.command}\``)}
         onShowToast={onShowToast}
       />
     );
+  }
+
+  if (activeId === 'synthesis') {
+    return <ResearchSynthesisPane onShowToast={onShowToast} />;
   }
 
   if (activeId === 'artifacts') {
