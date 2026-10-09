@@ -53,7 +53,7 @@ export const TableChart: React.FC<{ table: ParsedTableData }> = ({ table }) => {
 
   if (numericCols.length === 0) {
     return (
-      <div className="p-6 text-center text-xs text-[#8b949e]">
+      <div className="p-6 text-center text-xs text-[var(--color-fg-muted)]">
         No numeric columns found in this dataset for charting.
       </div>
     );
@@ -123,17 +123,19 @@ export const TableChart: React.FC<{ table: ParsedTableData }> = ({ table }) => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#0d1117] text-[#c9d1d9] select-none">
+    <div className="flex flex-col h-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)] select-none font-sans">
       {/* Control Toolbar */}
-      <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-[#21262d] bg-[#161b22] text-[11px]">
+      <div className="flex flex-wrap items-center gap-3 px-4 py-2 border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] text-xs">
         {/* Chart Type Picker */}
-        <div className="flex items-center rounded-lg border border-[#30363d] bg-[#0d1117] p-0.5">
+        <div className="flex items-center rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-0)] p-0.5">
           {(['line', 'bar', 'scatter'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setType(t)}
               className={`px-2 py-0.5 rounded-md font-medium uppercase text-[10px] transition ${
-                type === t ? 'bg-[#a371f7] text-white shadow-xs' : 'text-[#8b949e] hover:text-white'
+                type === t
+                  ? 'bg-[var(--color-surface-3)] text-[var(--color-editor-fg)] shadow-xs'
+                  : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
               }`}
             >
               {t}
@@ -142,12 +144,12 @@ export const TableChart: React.FC<{ table: ParsedTableData }> = ({ table }) => {
         </div>
 
         {/* X Axis Selector */}
-        <div className="flex items-center gap-1.5 text-[#8b949e]">
+        <div className="flex items-center gap-1.5 text-[var(--color-fg-muted)]">
           <span>X:</span>
           <select
             value={xIndex}
             onChange={(e) => setXIndex(Number(e.target.value))}
-            className="rounded-md border border-[#30363d] bg-[#0d1117] px-2 py-0.5 text-[11px] text-[#c9d1d9] outline-none"
+            className="rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-0)] px-2 py-0.5 text-xs text-[var(--color-editor-fg)] outline-none"
           >
             <option value={-1}>Row Index (1..{n})</option>
             {cols.map((c) => (
@@ -160,7 +162,7 @@ export const TableChart: React.FC<{ table: ParsedTableData }> = ({ table }) => {
 
         {/* Y Axis Series Chips */}
         <div className="flex flex-wrap items-center gap-1.5 ml-auto">
-          <span className="text-[#8b949e] mr-1">Series:</span>
+          <span className="text-[var(--color-fg-muted)] mr-1">Series:</span>
           {numericCols.map((c, i) => {
             const active = yIndexes.includes(c.index);
             const color = SERIES_COLORS[i % SERIES_COLORS.length];
@@ -168,15 +170,15 @@ export const TableChart: React.FC<{ table: ParsedTableData }> = ({ table }) => {
               <button
                 key={c.index}
                 onClick={() => toggleY(c.index)}
-                className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-[10.5px] transition ${
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] transition ${
                   active
-                    ? 'border-[#a371f7]/40 bg-[#161b22] text-white font-medium'
-                    : 'border-transparent text-[#8b949e] hover:bg-[#21262d] hover:text-white'
+                    ? 'border-[var(--color-border-emphasis)] bg-[var(--color-surface-2)] text-[var(--color-editor-fg)] font-medium'
+                    : 'border-transparent text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-editor-fg)]'
                 }`}
               >
                 <span
                   className="w-2 h-2 rounded-full inline-block"
-                  style={{ backgroundColor: active ? color : '#484f58' }}
+                  style={{ backgroundColor: active ? color : 'var(--color-fg-subtle)' }}
                 />
                 <span className="truncate max-w-[100px]">{c.name}</span>
               </button>
@@ -186,7 +188,7 @@ export const TableChart: React.FC<{ table: ParsedTableData }> = ({ table }) => {
       </div>
 
       {/* SVG Canvas Area */}
-      <div className="flex-1 p-4 flex items-center justify-center overflow-hidden">
+      <div className="flex-1 p-4 flex items-center justify-center overflow-hidden bg-[var(--color-canvas)]">
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className="w-full h-full max-h-[360px] overflow-visible font-mono"
@@ -202,7 +204,7 @@ export const TableChart: React.FC<{ table: ParsedTableData }> = ({ table }) => {
                   y1={y}
                   x2={pad.l + plotW}
                   y2={y}
-                  stroke="#21262d"
+                  stroke="var(--color-border-muted)"
                   strokeDasharray="3 3"
                 />
                 <text
@@ -210,7 +212,7 @@ export const TableChart: React.FC<{ table: ParsedTableData }> = ({ table }) => {
                   y={y + 3}
                   textAnchor="end"
                   fontSize="9.5"
-                  fill="#8b949e"
+                  fill="var(--color-fg-subtle)"
                 >
                   {val.toFixed(val > 100 || val === 0 ? 0 : 2)}
                 </text>
@@ -296,7 +298,7 @@ export const TableChart: React.FC<{ table: ParsedTableData }> = ({ table }) => {
                         cx={xAt(i)}
                         cy={yAt(v)}
                         r={2.5}
-                        fill="#0d1117"
+                        fill="var(--color-canvas)"
                         stroke={color}
                         strokeWidth="1.5"
                       />
@@ -318,7 +320,7 @@ export const TableChart: React.FC<{ table: ParsedTableData }> = ({ table }) => {
                 y={pad.t + plotH + 16}
                 textAnchor="middle"
                 fontSize="9.5"
-                fill="#8b949e"
+                fill="var(--color-fg-subtle)"
               >
                 {label.length > 10 ? `${label.slice(0, 8)}…` : label}
               </text>

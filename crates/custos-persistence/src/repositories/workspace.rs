@@ -44,7 +44,20 @@ impl WorkspaceRepository {
 
         let lineage_json = serde_json::to_string(&ws.lineage)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
-        let metadata_json = serde_json::to_string(&ws.metadata)
+
+        let mut metadata = ws.metadata.clone();
+        if let Some(owner) = &ws.owner_task_id {
+            metadata["owner_task_id"] = serde_json::json!(owner);
+        }
+        if let Some(hash) = &ws.base_commit_hash {
+            metadata["base_commit_hash"] = serde_json::json!(hash);
+        }
+        if let Some(dirty) = &ws.dirty_manifest {
+            if let Ok(val) = serde_json::to_value(dirty) {
+                metadata["dirty_manifest"] = val;
+            }
+        }
+        let metadata_json = serde_json::to_string(&metadata)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         conn.execute(
@@ -208,6 +221,18 @@ impl WorkspaceRepository {
             rusqlite::Error::FromSqlConversionFailure(8, rusqlite::types::Type::Text, Box::new(e))
         })?;
 
+        let owner_task_id = metadata
+            .get("owner_task_id")
+            .and_then(|v| v.as_str())
+            .map(ToString::to_string);
+        let base_commit_hash = metadata
+            .get("base_commit_hash")
+            .and_then(|v| v.as_str())
+            .map(ToString::to_string);
+        let dirty_manifest: Option<custos_domain::DirtyManifest> = metadata
+            .get("dirty_manifest")
+            .and_then(|v| serde_json::from_value(v.clone()).ok());
+
         Ok(ExecutionWorkspace {
             id: WorkspaceId::new(id_str),
             name,
@@ -215,6 +240,9 @@ impl WorkspaceRepository {
             path,
             status,
             lineage,
+            owner_task_id,
+            base_commit_hash,
+            dirty_manifest,
             metadata,
             created_at,
             updated_at,

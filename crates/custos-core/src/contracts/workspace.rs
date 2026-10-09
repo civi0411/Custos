@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 use custos_domain::{
-    DomainError, ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceStatus,
+    DirtyManifest, DomainError, ExecutionWorkspace, WorkspaceId, WorkspaceKind, WorkspaceStatus,
 };
 
 /// Persistence Port for ExecutionWorkspace entities.
@@ -36,7 +36,7 @@ pub trait WorkspaceRepository: Send + Sync {
     async fn delete_workspace(&self, id: &WorkspaceId) -> Result<(), DomainError>;
 }
 
-/// Host Operations Port for physical workspace provisioning and cleanup.
+/// Host Operations Port for physical workspace provisioning, inspection, and recovery.
 ///
 /// Implemented by `custos-adapters`.
 #[async_trait]
@@ -53,6 +53,19 @@ pub trait WorkspaceProvider: Send + Sync {
         workspace: &ExecutionWorkspace,
         script: Option<&str>,
     ) -> Result<(), DomainError>;
+
+    /// Inspects the workspace for uncommitted changes and retrieves dirty manifest.
+    async fn inspect_dirty(
+        &self,
+        _workspace: &ExecutionWorkspace,
+    ) -> Result<DirtyManifest, DomainError> {
+        Ok(DirtyManifest::default())
+    }
+
+    /// Attempts to reconcile or recover an existing workspace on host.
+    async fn recover(&self, _workspace: &ExecutionWorkspace) -> Result<bool, DomainError> {
+        Ok(true)
+    }
 
     /// Cleans up or detaches the physical workspace directory or worktree.
     async fn teardown(&self, workspace: &ExecutionWorkspace) -> Result<(), DomainError>;

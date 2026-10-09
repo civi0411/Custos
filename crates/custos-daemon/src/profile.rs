@@ -112,9 +112,24 @@ impl ProfileResolver {
         self.profile_dir.join("daemon.port")
     }
 
+    /// Path to the local API HTTP port discovery file.
+    pub fn http_port_path(&self) -> PathBuf {
+        self.profile_dir.join("daemon.http_port")
+    }
+
     /// Read the port recorded by a running daemon if available.
     pub fn read_port(&self) -> Option<u16> {
         let path = self.port_path();
+        if !path.exists() {
+            return None;
+        }
+        let content = std::fs::read_to_string(path).ok()?;
+        content.trim().parse::<u16>().ok()
+    }
+
+    /// Read the HTTP port recorded by a running daemon if available.
+    pub fn read_http_port(&self) -> Option<u16> {
+        let path = self.http_port_path();
         if !path.exists() {
             return None;
         }
@@ -128,11 +143,21 @@ impl ProfileResolver {
         std::fs::write(path, port.to_string())
     }
 
-    /// Remove the port file on daemon shutdown.
+    /// Record the active HTTP port number for client discovery.
+    pub fn write_http_port(&self, port: u16) -> std::io::Result<()> {
+        let path = self.http_port_path();
+        std::fs::write(path, port.to_string())
+    }
+
+    /// Remove the port files on daemon shutdown.
     pub fn remove_port(&self) -> std::io::Result<()> {
         let path = self.port_path();
         if path.exists() {
-            std::fs::remove_file(path)?;
+            let _ = std::fs::remove_file(path);
+        }
+        let http_path = self.http_port_path();
+        if http_path.exists() {
+            let _ = std::fs::remove_file(http_path);
         }
         Ok(())
     }
@@ -166,7 +191,10 @@ pub fn ensure_daemon_client(
     if let Ok(current_exe) = std::env::current_exe() {
         if let Some(parent) = current_exe.parent() {
             let candidate = parent.join("custos-daemon");
-            if candidate.exists() {
+            let candidate_exe = parent.join("custos-daemon.exe");
+            if candidate_exe.exists() {
+                cmd = std::process::Command::new(candidate_exe);
+            } else if candidate.exists() {
                 cmd = std::process::Command::new(candidate);
             }
         }

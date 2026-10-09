@@ -2,140 +2,224 @@
 
 /* ============================================================
    CUSTOS SADE — DESIGN SYSTEM
-   Inspired by: Claude Code, VS Code, GitHub Primer Dark
-   Philosophy: Density without noise. Signal over chrome.
+   Graphite on paper: typography first, calm, native and trustworthy.
+   Workbench identity is semantic and restrained, never a full-page skin.
    ============================================================ */
 
 @theme {
   /* ── Typography ─────────────────────────────────────────── */
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: "JetBrains Mono", "Menlo", "Consolas", "DejaVu Sans Mono", monospace;
+  --font-sans: "Söhne", -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", "Inter", sans-serif;
+  --font-mono: "SFMono-Regular", "SF Mono", "Cascadia Code", "Roboto Mono", "Menlo", "Consolas", monospace;
 
-  --font-size-2xs: 0.6875rem;  /* 11px */
-  --font-size-xs:  0.75rem;    /* 12px */
-  --font-size-sm:  0.8125rem;  /* 13px — primary UI size */
-  --font-size-base: 0.875rem;  /* 14px */
-  --font-size-lg:  1rem;       /* 16px */
-  --font-size-xl:  1.125rem;
+  --font-size-2xs: 0.6875rem;
+  /* 11px */
+  --font-size-xs: 0.75rem;
+  /* 12px */
+  --font-size-sm: 0.8125rem;
+  /* 13px — primary UI size */
+  --font-size-base: 0.875rem;
+  /* 14px */
+  --font-size-lg: 1rem;
+  /* 16px */
+  --font-size-xl: 1.125rem;
 
-  /* ── Base canvas (GitHub Primer dark, not pitch black) ─── */
-  --color-canvas:          #0d1117;   /* GitHub dark bg */
-  --color-canvas-subtle:   #161b22;   /* slightly elevated */
-  --color-canvas-inset:    #010409;   /* deepest inset */
+  /* Use CSS variables defined in :root for light/dark mode support */
+  --color-canvas: var(--bg-canvas);
+  --color-canvas-subtle: var(--bg-canvas-subtle);
+  --color-canvas-inset: var(--bg-canvas-inset);
 
-  /* ── Surface layers ───────────────────────────────────────*/
-  --color-surface-0:       #0d1117;   /* base layer */
-  --color-surface-1:       #161b22;   /* sidebar, panels */
-  --color-surface-2:       #1c2128;   /* cards, elevated */
-  --color-surface-3:       #22272e;   /* menus, tooltips */
-  --color-surface-overlay: #2d333b;   /* dropdowns, popovers */
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-overlay: var(--surface-overlay);
 
-  /* ── Border system — softened, subtle borders ──────────────*/
-  --color-border-default:  #262c36;
-  --color-border-muted:    #1c2128;
-  --color-border-subtle:   #161b22;
-  --color-border-emphasis: #484f58;
+  --color-border-default: var(--border-default);
+  --color-border-muted: var(--border-muted);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-emphasis: var(--border-emphasis);
 
-  /* ── Foreground ───────────────────────────────────────────*/
-  --color-editor-fg:       #e6edf3;   /* primary text — warm white */
-  --color-fg-muted:        #8b949e;   /* secondary text */
-  --color-fg-subtle:       #6e7681;   /* hints, placeholders */
-  --color-fg-on-emphasis:  #ffffff;
+  --color-editor-fg: var(--fg-editor);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-on-emphasis: var(--fg-on-emphasis);
 
   /* ── SADE Domain accent colors ────────────────────────────*/
-  /* Copilot / Assistant — violet */
-  --color-copilot:         #a78bfa;
-  --color-copilot-subtle:  rgba(167, 139, 250, 0.10);
-  --color-copilot-muted:   rgba(167, 139, 250, 0.25);
+  --color-copilot: #c98970;
+  --color-copilot-subtle: rgba(201, 137, 112, 0.10);
+  --color-copilot-muted: rgba(201, 137, 112, 0.25);
 
-  /* Coding / Engineering — emerald (like terminal green) */
-  --color-coding:          #3fb950;
-  --color-coding-subtle:   rgba(63, 185, 80, 0.10);
-  --color-coding-muted:    rgba(63, 185, 80, 0.25);
+  --color-coding: #78a9d1;
+  --color-coding-subtle: rgba(120, 169, 209, 0.10);
+  --color-coding-muted: rgba(120, 169, 209, 0.25);
 
-  /* Research / Science — cyan/azure */
-  --color-research:        #58a6ff;
-  --color-research-subtle: rgba(88, 166, 255, 0.10);
-  --color-research-muted:  rgba(88, 166, 255, 0.25);
+  --color-research: #aa9bd4;
+  --color-research-subtle: rgba(170, 155, 212, 0.10);
+  --color-research-muted: rgba(170, 155, 212, 0.25);
 
   /* ── Task / run state colors ──────────────────────────────*/
-  --color-task-active:     #3fb950;   /* emerald — running */
-  --color-task-blocked:    #d29922;   /* amber — blocked */
-  --color-task-unknown:    #6e7681;   /* gray — unverifiable */
-  --color-task-done:       #58a6ff;   /* blue — done */
-  --color-task-failed:     #f85149;   /* red — failed */
-  --color-task-draft:      #8b949e;   /* muted — draft */
+  --color-task-active: #10a37f;
+  --color-task-blocked: #d29922;
+  --color-task-unknown: #6e7681;
+  --color-task-done: #58a6ff;
+  --color-task-failed: #f85149;
+  --color-task-draft: #8b949e;
 
-  /* ── Assurance levels ─────────────────────────────────────*/
-  --color-assurance-mediated: #3fb950;
+  --color-assurance-mediated: #10a37f;
   --color-assurance-provider: #d29922;
-  --color-assurance-observe:  #6e7681;
-  --color-assurance-unknown:  #f85149;
+  --color-assurance-observe: #6e7681;
+  --color-assurance-unknown: #f85149;
 
-  /* ── Syntax highlight tokens (Claude Code palette) ────────*/
-  /* Primary accent — blue */
-  --syntax-keyword:    #ff7b72;   /* fn, pub, impl, use — red/coral */
-  --syntax-string:     #a5d6ff;   /* strings — light blue */
-  --syntax-number:     #79c0ff;   /* numbers — blue */
-  --syntax-comment:    #8b949e;   /* comments — gray (italic) */
-  --syntax-type:       #ffa657;   /* types, structs — orange */
-  --syntax-function:   #d2a8ff;   /* function names — purple */
-  --syntax-variable:   #e6edf3;   /* variables — plain */
-  --syntax-operator:   #ff7b72;   /* operators — coral */
-  --syntax-punctuation:#e6edf3;   /* brackets — plain */
-  --syntax-attr:       #79c0ff;   /* attributes — blue */
-  --syntax-constant:   #79c0ff;   /* constants — blue */
-  --syntax-deleted:    #ffa198;   /* diff removed */
-  --syntax-inserted:   #56d364;   /* diff added */
+  /* ── Syntax highlight tokens ──────────────────────────────*/
+  --syntax-keyword: var(--syn-keyword);
+  --syntax-string: var(--syn-string);
+  --syntax-number: var(--syn-number);
+  --syntax-comment: var(--syn-comment);
+  --syntax-type: var(--syn-type);
+  --syntax-function: var(--syn-function);
+  --syntax-variable: var(--syn-variable);
+  --syntax-operator: var(--syn-operator);
+  --syntax-punctuation: var(--syn-punctuation);
+  --syntax-attr: var(--syn-attr);
+  --syntax-constant: var(--syn-constant);
+  --syntax-deleted: var(--syn-deleted);
+  --syntax-inserted: var(--syn-inserted);
 
   /* ── Interactive/focus ring ───────────────────────────────*/
-  --color-accent:      #58a6ff;
-  --color-accent-subtle: rgba(88, 166, 255, 0.15);
+  --color-accent: var(--accent);
+  --color-accent-subtle: var(--accent-subtle);
 
   /* ── Status bar ───────────────────────────────────────────*/
-  --color-statusbar-bg: #0d1117;
-  --color-statusbar-fg: #6e7681;
+  --color-statusbar-bg: var(--statusbar-bg);
+  --color-statusbar-fg: var(--statusbar-fg);
 
-  /* Legacy compatibility — used in existing components */
-  --color-brand-blue:    #58a6ff;
+  /* Legacy compatibility */
+  --color-brand-blue: #58a6ff;
   --color-brand-blue-glow: rgba(88, 166, 255, 0.20);
-  --color-brand-cyan:    #79c0ff;
-  --color-brand-emerald: #3fb950;
-  --color-brand-amber:   #d29922;
-  --color-brand-rose:    #f85149;
-  --color-surface:       #161b22;
-  --color-surface-card:  #1c2128;
-  --color-surface-elevated: #22272e;
-  --color-surface-border: #30363d;
-  --color-surface-border-hover: #444c56;
-  --color-surface-hover: #1c2128;
-  --color-surface-pill:  #1c2128;
-  --color-muted-foreground: #8b949e;
+  --color-brand-cyan: #79c0ff;
+  --color-brand-emerald: #10a37f;
+  --color-brand-amber: #d29922;
+  --color-brand-rose: #f85149;
+
+  --color-surface: var(--surface-1);
+  --color-surface-card: var(--surface-2);
+  --color-surface-elevated: var(--surface-3);
+  --color-surface-border: var(--border-default);
+  --color-surface-border-hover: var(--border-emphasis);
+  --color-surface-hover: var(--surface-2);
+  --color-surface-pill: var(--surface-2);
+  --color-muted-foreground: var(--fg-muted);
   --color-agent-question: #d29922;
   --color-agent-question-text: #e3b341;
-  --color-editor-fg:     #e6edf3;
 }
+
+:root {
+  /* LIGHT MODE (Graphite on paper) */
+  --bg-canvas: #ffffff;
+  --bg-canvas-subtle: #f9f9f9;
+  --bg-canvas-inset: #f0f0f0;
+
+  --surface-0: #ffffff;
+  --surface-1: #f9f9f9;
+  --surface-2: #f0f0f0;
+  --surface-3: #e5e5e5;
+  --surface-overlay: #ffffff;
+
+  --border-default: #e5e5e5;
+  --border-muted: #f0f0f0;
+  --border-subtle: #f9f9f9;
+  --border-emphasis: #cccccc;
+
+  --fg-editor: #202123;
+  --fg-muted: #6e6e80;
+  --fg-subtle: #8e8ea0;
+  --fg-on-emphasis: #ffffff;
+
+  --syn-keyword: #d73a49;
+  --syn-string: #032f62;
+  --syn-number: #005cc5;
+  --syn-comment: #6a737d;
+  --syn-type: #e36209;
+  --syn-function: #6f42c1;
+  --syn-variable: #24292e;
+  --syn-operator: #d73a49;
+  --syn-punctuation: #24292e;
+  --syn-attr: #005cc5;
+  --syn-constant: #005cc5;
+  --syn-deleted: #b31d28;
+  --syn-inserted: #22863a;
+
+  --accent: #10a37f;
+  --accent-subtle: rgba(16, 163, 127, 0.15);
+
+  --statusbar-bg: #f0f0f0;
+  --statusbar-fg: #6e6e80;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* DARK MODE (Graphite on paper) */
+    --bg-canvas: #212121;
+    --bg-canvas-subtle: #2a2a2a;
+    --bg-canvas-inset: #1a1a1a;
+
+    --surface-0: #212121;
+    --surface-1: #2a2a2a;
+    --surface-2: #333333;
+    --surface-3: #3a3a3a;
+    --surface-overlay: #3a3a3a;
+
+    --border-default: #424242;
+    --border-muted: #333333;
+    --border-subtle: #2a2a2a;
+    --border-emphasis: #555555;
+
+    --fg-editor: #ececec;
+    --fg-muted: #9e9e9e;
+    --fg-subtle: #757575;
+    --fg-on-emphasis: #ffffff;
+
+    --syn-keyword: #ff7b72;
+    --syn-string: #a5d6ff;
+    --syn-number: #79c0ff;
+    --syn-comment: #8b949e;
+    --syn-type: #ffa657;
+    --syn-function: #d2a8ff;
+    --syn-variable: #ececec;
+    --syn-operator: #ff7b72;
+    --syn-punctuation: #ececec;
+    --syn-attr: #79c0ff;
+    --syn-constant: #79c0ff;
+    --syn-deleted: #ffa198;
+    --syn-inserted: #56d364;
+
+    --accent: #10a37f;
+    --accent-subtle: rgba(16, 163, 127, 0.15);
+
+    --statusbar-bg: #1a1a1a;
+    --statusbar-fg: #9e9e9e;
+  }
+}
+
 
 /* ============================================================
    RESET & BASE
    ============================================================ */
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
-}
-
-html, body, #root {
-  height: 100%;
-  width: 100%;
-  min-width: 960px;
-  min-height: 640px;
-  overflow: hidden;
 }
 
 body {
   font-family: var(--font-sans);
-  font-size: 0.8125rem;      /* 13px — same as VS Code */
+  font-size: 0.8125rem;
+  /* 13px — same as VS Code */
   line-height: 1.5;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  /* Inter optical features */
+  font-variation-settings: normal;
   background-color: var(--color-canvas);
   color: var(--color-editor-fg);
   -webkit-font-smoothing: antialiased;
@@ -143,7 +227,136 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-input, textarea, select, button {
+html[data-reduce-motion='true'] *,
+html[data-reduce-motion='true'] *::before,
+html[data-reduce-motion='true'] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+}
+
+/* ============================================================
+   WORKBENCH IDENTITY
+   One calm shell; workbench identity is a small editorial cue.
+   ============================================================ */
+
+.custos-workspace {
+  --workbench-accent: var(--color-copilot);
+  --workbench-accent-soft: var(--color-copilot-subtle);
+  background: var(--color-canvas);
+  color: var(--color-editor-fg);
+}
+
+.custos-workspace[data-workbench="code"] {
+  --workbench-accent: var(--color-coding);
+  --workbench-accent-soft: var(--color-coding-subtle);
+}
+
+.custos-workspace[data-workbench="research"] {
+  --workbench-accent: var(--color-research);
+  --workbench-accent-soft: var(--color-research-subtle);
+}
+
+.workbench-accent {
+  color: var(--workbench-accent);
+}
+
+.workbench-accent-bg {
+  background-color: var(--workbench-accent);
+}
+
+.workbench-accent-border {
+  border-color: color-mix(in srgb, var(--workbench-accent) 46%, transparent);
+}
+
+.workbench-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--color-border-muted);
+  border-radius: 8px;
+  background: var(--color-canvas-inset);
+}
+
+.workbench-switcher__item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  color: var(--color-fg-muted);
+  font-size: 11px;
+  font-weight: 520;
+  letter-spacing: -0.005em;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.workbench-switcher__item:hover {
+  color: var(--color-editor-fg);
+  background: var(--color-surface-2);
+}
+
+.workbench-switcher__item[aria-selected="true"] {
+  color: var(--color-editor-fg);
+  background: var(--color-surface-2);
+  box-shadow: inset 0 0 0 1px var(--color-border-default);
+}
+
+.workbench-switcher__item[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  bottom: 2px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--workbench-accent);
+}
+
+.workbench-kicker {
+  color: var(--workbench-accent);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.workbench-panel {
+  background: var(--color-surface-1);
+  border-color: var(--color-border-muted);
+}
+
+.workbench-composer {
+  background: var(--color-surface-1);
+  border: 1px solid var(--color-border-default);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.workbench-composer:focus-within {
+  border-color: color-mix(in srgb, var(--workbench-accent) 55%, var(--color-border-default));
+  box-shadow: 0 0 0 3px var(--workbench-accent-soft);
+}
+
+.workbench-primary-action {
+  background: var(--workbench-accent);
+  color: #171717;
+}
+
+.workbench-primary-action:hover {
+  filter: brightness(1.08);
+}
+
+input,
+textarea,
+select,
+button {
   font-family: inherit;
   font-size: inherit;
 }
@@ -183,17 +396,6 @@ button[disabled],
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
   border-radius: 2px;
-}
-
-/* Eliminate focus border and rings across all inputs and textareas globally */
-input:not([type="checkbox"]):not([type="radio"]):focus,
-input:not([type="checkbox"]):not([type="radio"]):focus-visible,
-textarea:focus,
-textarea:focus-visible,
-select:focus,
-select:focus-visible {
-  outline: none !important;
-  box-shadow: none !important;
 }
 
 /* ============================================================
@@ -253,6 +455,8 @@ select:hover {
 
 select:focus {
   outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-subtle);
 }
 
 select option {
@@ -331,28 +535,49 @@ input[type="checkbox"]:disabled {
   border-radius: 4px;
   color: var(--color-editor-fg);
   padding: 3px 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 /* Tooltip directions */
 .tooltip-label:not(.tooltip-top):not(.tooltip-bottom):not(.tooltip-left):not(.tooltip-right) {
   transform: translateX(-4px);
 }
+
 .has-tooltip:hover .tooltip-label:not(.tooltip-top):not(.tooltip-bottom):not(.tooltip-left):not(.tooltip-right) {
   transform: translateX(0) !important;
 }
 
-.tooltip-label.tooltip-right { transform: translateY(-50%) translateX(-4px); }
-.has-tooltip:hover .tooltip-label.tooltip-right { transform: translateY(-50%) translateX(0) !important; }
+.tooltip-label.tooltip-right {
+  transform: translateY(-50%) translateX(-4px);
+}
 
-.tooltip-label.tooltip-left { transform: translateY(-50%) translateX(4px); }
-.has-tooltip:hover .tooltip-label.tooltip-left { transform: translateY(-50%) translateX(0) !important; }
+.has-tooltip:hover .tooltip-label.tooltip-right {
+  transform: translateY(-50%) translateX(0) !important;
+}
 
-.tooltip-label.tooltip-bottom { transform: translateX(-50%) translateY(-4px); }
-.has-tooltip:hover .tooltip-label.tooltip-bottom { transform: translateX(-50%) translateY(0) !important; }
+.tooltip-label.tooltip-left {
+  transform: translateY(-50%) translateX(4px);
+}
 
-.tooltip-label.tooltip-top { transform: translateX(-50%) translateY(4px); }
-.has-tooltip:hover .tooltip-label.tooltip-top { transform: translateX(-50%) translateY(0) !important; }
+.has-tooltip:hover .tooltip-label.tooltip-left {
+  transform: translateY(-50%) translateX(0) !important;
+}
+
+.tooltip-label.tooltip-bottom {
+  transform: translateX(-50%) translateY(-4px);
+}
+
+.has-tooltip:hover .tooltip-label.tooltip-bottom {
+  transform: translateX(-50%) translateY(0) !important;
+}
+
+.tooltip-label.tooltip-top {
+  transform: translateX(-50%) translateY(4px);
+}
+
+.has-tooltip:hover .tooltip-label.tooltip-top {
+  transform: translateX(-50%) translateY(0) !important;
+}
 
 /* ============================================================
    RESIZER
@@ -368,8 +593,15 @@ input[type="checkbox"]:disabled {
    ============================================================ */
 
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(-2px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .animate-reveal {
@@ -378,8 +610,15 @@ input[type="checkbox"]:disabled {
 
 /* Agent working state — subtle opacity pulse, no rotation flash */
 @keyframes agent-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.4; }
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
 }
 
 .agent-working-spinner {
@@ -390,6 +629,7 @@ input[type="checkbox"]:disabled {
   .agent-working-spinner {
     animation: none;
   }
+
   .animate-reveal {
     animation: none;
   }
@@ -401,7 +641,8 @@ input[type="checkbox"]:disabled {
 
 .markdown-body {
   font-family: var(--font-sans);
-  font-size: 0.8125rem;    /* 13px */
+  font-size: 0.8125rem;
+  /* 13px */
   line-height: 1.65;
   color: var(--color-editor-fg);
 }
@@ -417,7 +658,8 @@ input[type="checkbox"]:disabled {
 /* Inline code — GitHub-style pill */
 .markdown-body code {
   font-family: var(--font-mono);
-  font-size: 0.75rem;       /* 12px */
+  font-size: 0.75rem;
+  /* 12px */
   background-color: rgba(110, 118, 129, 0.15);
   padding: 0.1em 0.4em;
   border-radius: 4px;
@@ -442,7 +684,8 @@ input[type="checkbox"]:disabled {
   padding: 12px 16px;
   overflow-x: auto;
   margin: 0.75em 0;
-  font-size: 0.75rem;      /* 12px */
+  font-size: 0.75rem;
+  /* 12px */
   line-height: 1.6;
 }
 
@@ -476,7 +719,9 @@ input[type="checkbox"]:disabled {
   color: #cdd9e5;
 }
 
-.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
   font-weight: 600;
   color: #e6edf3;
   margin-top: 1.25em;
@@ -484,9 +729,17 @@ input[type="checkbox"]:disabled {
   line-height: 1.3;
 }
 
-.markdown-body h1 { font-size: 1rem; }
-.markdown-body h2 { font-size: 0.9375rem; }
-.markdown-body h3 { font-size: 0.875rem; }
+.markdown-body h1 {
+  font-size: 1rem;
+}
+
+.markdown-body h2 {
+  font-size: 0.9375rem;
+}
+
+.markdown-body h3 {
+  font-size: 0.875rem;
+}
 
 .markdown-body a {
   color: var(--color-research);
@@ -533,7 +786,7 @@ input[type="checkbox"]:disabled {
 }
 
 .markdown-body tr:hover td {
-  background-color: rgba(255,255,255,0.02);
+  background-color: rgba(255, 255, 255, 0.02);
 }
 
 .markdown-body hr {
@@ -547,28 +800,90 @@ input[type="checkbox"]:disabled {
    Applied via className on pre/code elements
    ============================================================ */
 
-.token-keyword   { color: var(--syntax-keyword); }
-.token-string    { color: var(--syntax-string); }
-.token-number    { color: var(--syntax-number); }
-.token-comment   { color: var(--syntax-comment); font-style: italic; }
-.token-type      { color: var(--syntax-type); }
-.token-function  { color: var(--syntax-function); }
-.token-variable  { color: var(--syntax-variable); }
-.token-operator  { color: var(--syntax-operator); }
-.token-constant  { color: var(--syntax-constant); }
-.token-attr      { color: var(--syntax-attr); }
-.token-deleted   { color: var(--syntax-deleted); background: rgba(248,81,73,0.10); }
-.token-inserted  { color: var(--syntax-inserted); background: rgba(86,211,100,0.10); }
+.token-keyword {
+  color: var(--syntax-keyword);
+}
+
+.token-string {
+  color: var(--syntax-string);
+}
+
+.token-number {
+  color: var(--syntax-number);
+}
+
+.token-comment {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+
+.token-type {
+  color: var(--syntax-type);
+}
+
+.token-function {
+  color: var(--syntax-function);
+}
+
+.token-variable {
+  color: var(--syntax-variable);
+}
+
+.token-operator {
+  color: var(--syntax-operator);
+}
+
+.token-constant {
+  color: var(--syntax-constant);
+}
+
+.token-attr {
+  color: var(--syntax-attr);
+}
+
+.token-deleted {
+  color: var(--syntax-deleted);
+  background: rgba(248, 81, 73, 0.10);
+}
+
+.token-inserted {
+  color: var(--syntax-inserted);
+  background: rgba(86, 211, 100, 0.10);
+}
 
 /* ============================================================
    DIFF LINES — used in DiffSection / engineering workbench
    ============================================================ */
 
-.diff-line { display: flex; font-family: var(--font-mono); font-size: 0.75rem; line-height: 1.6; }
-.diff-line-add  { background: rgba(86,211,100,0.08); color: #56d364; }
-.diff-line-del  { background: rgba(248,81,73,0.08);  color: #ffa198; }
-.diff-line-ctx  { color: #6e7681; }
-.diff-gutter    { user-select: none; color: #6e7681; padding: 0 12px; min-width: 48px; text-align: right; border-right: 1px solid #21262d; }
+.diff-line {
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+.diff-line-add {
+  background: rgba(86, 211, 100, 0.08);
+  color: #56d364;
+}
+
+.diff-line-del {
+  background: rgba(248, 81, 73, 0.08);
+  color: #ffa198;
+}
+
+.diff-line-ctx {
+  color: #6e7681;
+}
+
+.diff-gutter {
+  user-select: none;
+  color: #6e7681;
+  padding: 0 12px;
+  min-width: 48px;
+  text-align: right;
+  border-right: 1px solid #21262d;
+}
 
 /* ============================================================
    SADE DOMAIN BADGES
@@ -605,27 +920,53 @@ input[type="checkbox"]:disabled {
 }
 
 /* Task state pills */
-.state-active  { color: var(--color-task-active);  }
-.state-blocked { color: var(--color-task-blocked); }
-.state-unknown { color: var(--color-task-unknown); }
-.state-done    { color: var(--color-task-done);    }
-.state-failed  { color: var(--color-task-failed);  }
-.state-draft   { color: var(--color-task-draft);   }
+.state-active {
+  color: var(--color-task-active);
+}
+
+.state-blocked {
+  color: var(--color-task-blocked);
+}
+
+.state-unknown {
+  color: var(--color-task-unknown);
+}
+
+.state-done {
+  color: var(--color-task-done);
+}
+
+.state-failed {
+  color: var(--color-task-failed);
+}
+
+.state-draft {
+  color: var(--color-task-draft);
+}
 
 /* ============================================================
    ACTIVE LENS INDICATOR — left border on nav item
    ============================================================ */
 
-.lens-indicator-copilot  { border-left: 2px solid var(--color-copilot); }
-.lens-indicator-coding   { border-left: 2px solid var(--color-coding); }
-.lens-indicator-research { border-left: 2px solid var(--color-research); }
+.lens-indicator-copilot {
+  border-left: 2px solid var(--color-copilot);
+}
+
+.lens-indicator-coding {
+  border-left: 2px solid var(--color-coding);
+}
+
+.lens-indicator-research {
+  border-left: 2px solid var(--color-research);
+}
 
 /* ============================================================
    WORKBENCH PANE HEADER — tight, dense
    ============================================================ */
 
 .pane-header {
-  height: 2rem;         /* 32px — same as VS Code tab bar */
+  height: 2rem;
+  /* 32px — same as VS Code tab bar */
   display: flex;
   align-items: center;
   padding: 0 12px;
@@ -649,7 +990,8 @@ input[type="checkbox"]:disabled {
    ============================================================ */
 
 .task-strip {
-  height: 2.25rem;      /* 36px */
+  height: 2.25rem;
+  /* 36px */
   display: flex;
   align-items: center;
   padding: 0 12px;
@@ -666,7 +1008,8 @@ input[type="checkbox"]:disabled {
    ============================================================ */
 
 .nav-rail {
-  width: 2.5rem;        /* 40px */
+  width: 2.5rem;
+  /* 40px */
   background: var(--color-canvas);
   border-right: 1px solid var(--color-border-muted);
   display: flex;
@@ -700,9 +1043,17 @@ input[type="checkbox"]:disabled {
 }
 
 /* Domain-specific active states */
-.nav-rail-btn.active-copilot  { color: var(--color-copilot); }
-.nav-rail-btn.active-coding   { color: var(--color-coding); }
-.nav-rail-btn.active-research { color: var(--color-research); }
+.nav-rail-btn.active-copilot {
+  color: var(--color-copilot);
+}
+
+.nav-rail-btn.active-coding {
+  color: var(--color-coding);
+}
+
+.nav-rail-btn.active-research {
+  color: var(--color-research);
+}
 
 /* ============================================================
    LENS SWITCHER TABS
@@ -807,6 +1158,9 @@ input[type="checkbox"]:disabled {
   transition: border-color 0.15s;
 }
 
+.composer-wrapper:focus-within {
+  border-color: var(--color-accent);
+}
 
 .composer-textarea {
   background: transparent;
@@ -846,7 +1200,7 @@ input[type="checkbox"]:disabled {
 }
 
 .file-tree-item:hover {
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .file-tree-item.active {
@@ -874,11 +1228,21 @@ input[type="checkbox"]:disabled {
   font-size: 0.8125rem;
 }
 
-.claim-row:last-child { border-bottom: none; }
+.claim-row:last-child {
+  border-bottom: none;
+}
 
-.claim-status-supported  { color: var(--color-task-active); }
-.claim-status-unknown    { color: var(--color-task-unknown); }
-.claim-status-contradicted { color: var(--color-task-failed); }
+.claim-status-supported {
+  color: var(--color-task-active);
+}
+
+.claim-status-unknown {
+  color: var(--color-task-unknown);
+}
+
+.claim-status-contradicted {
+  color: var(--color-task-failed);
+}
 
 /* ============================================================
    STATUS DOT INDICATOR
@@ -893,12 +1257,30 @@ input[type="checkbox"]:disabled {
   display: inline-block;
 }
 
-.status-dot.active   { background: var(--color-task-active); }
-.status-dot.blocked  { background: var(--color-task-blocked); }
-.status-dot.unknown  { background: var(--color-task-unknown); }
-.status-dot.done     { background: var(--color-task-done); }
-.status-dot.failed   { background: var(--color-task-failed); }
-.status-dot.running  { background: var(--color-task-active); animation: agent-pulse 1.5s ease-in-out infinite; }
+.status-dot.active {
+  background: var(--color-task-active);
+}
+
+.status-dot.blocked {
+  background: var(--color-task-blocked);
+}
+
+.status-dot.unknown {
+  background: var(--color-task-unknown);
+}
+
+.status-dot.done {
+  background: var(--color-task-done);
+}
+
+.status-dot.failed {
+  background: var(--color-task-failed);
+}
+
+.status-dot.running {
+  background: var(--color-task-active);
+  animation: agent-pulse 1.5s ease-in-out infinite;
+}
 
 /* ============================================================
    DEMO MODE BANNER
@@ -922,20 +1304,16 @@ input[type="checkbox"]:disabled {
    ============================================================ */
 
 .chat-scroll-mask {
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0px,
-    black 32px,
-    black calc(100% - 32px),
-    transparent 100%
-  );
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0px,
-    black 32px,
-    black calc(100% - 32px),
-    transparent 100%
-  );
+  mask-image: linear-gradient(to bottom,
+      transparent 0px,
+      black 32px,
+      black calc(100% - 32px),
+      transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom,
+      transparent 0px,
+      black 32px,
+      black calc(100% - 32px),
+      transparent 100%);
 }
 
 /* ============================================================
@@ -951,7 +1329,7 @@ input[type="checkbox"]:disabled {
 }
 
 .session-item:hover {
-  background: rgba(255,255,255,0.03);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .session-item.active {
@@ -993,22 +1371,21 @@ input[type="checkbox"]:disabled {
 
 /* Primary button */
 .btn-primary {
-  background: var(--color-accent);
-  color: #0d1117;
+  background: var(--color-editor-fg);
+  color: var(--color-canvas);
   font-weight: 600;
   font-size: 0.8125rem;
   padding: 5px 14px;
   border-radius: 6px;
-  border: 1px solid var(--color-accent);
-  transition: background-color 0.1s, opacity 0.1s;
+  border: 1px solid var(--color-editor-fg);
+  transition: opacity 0.1s;
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
 .btn-primary:hover {
-  background: #79c0ff;
-  border-color: #79c0ff;
+  opacity: 0.9;
 }
 
 /* Ghost button */
@@ -1038,7 +1415,7 @@ input[type="checkbox"]:disabled {
   font-size: 0.8125rem;
   padding: 4px 10px;
   border-radius: 6px;
-  border: 1px solid rgba(248,81,73,0.4);
+  border: 1px solid rgba(248, 81, 73, 0.4);
   transition: background-color 0.1s;
   display: inline-flex;
   align-items: center;
@@ -1046,8 +1423,8 @@ input[type="checkbox"]:disabled {
 }
 
 .btn-danger:hover {
-  background: rgba(248,81,73,0.10);
-  border-color: rgba(248,81,73,0.6);
+  background: rgba(248, 81, 73, 0.10);
+  border-color: rgba(248, 81, 73, 0.6);
 }
 
 /* Icon button — used in toolbars */
@@ -1083,11 +1460,25 @@ input[type="checkbox"]:disabled {
   padding: 8px 12px;
 }
 
-.terminal-prompt { color: var(--color-coding); }
-.terminal-error  { color: var(--color-task-failed); }
-.terminal-warning { color: var(--color-task-blocked); }
-.terminal-success { color: var(--color-coding); }
-.terminal-comment { color: var(--color-fg-subtle); }
+.terminal-prompt {
+  color: var(--color-coding);
+}
+
+.terminal-error {
+  color: var(--color-task-failed);
+}
+
+.terminal-warning {
+  color: var(--color-task-blocked);
+}
+
+.terminal-success {
+  color: var(--color-coding);
+}
+
+.terminal-comment {
+  color: var(--color-fg-subtle);
+}
 
 /* ============================================================
    CODE BLOCK — used in CodeBlock component

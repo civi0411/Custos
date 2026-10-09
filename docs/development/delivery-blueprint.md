@@ -4,6 +4,8 @@
 > **Source of Truth:** Authoritatively defined in [Custos Master Specification](../../Custos.md).  
 > **Directory Index:** See [Custos Developer Hub](README.md).
 
+> **Current sequencing:** The PR-00–PR-11 table below is an earlier dependency sketch, not the active queue for checkout `4b73cce`. Use [backend–desktop convergence §2/§7](sade-frontend-backend-convergence-plan.md#2-những-vấn-đề-hiện-tại-phải-xử-lý-theo-thứ-tự-rủi-ro) for current priorities and acceptance gates. Its first gates are Local API/physical execution admission and one real source-backed chat result; the older table does not account for already added daemon, UI and Research modules.
+
 Custos execution follows a strict **Vertical Slices** methodology: each milestone produces an end-to-end, runnable, verifiable system rather than disconnected horizontal abstraction layers.
 
 ---

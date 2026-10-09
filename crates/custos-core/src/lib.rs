@@ -12,6 +12,7 @@ pub mod evidence;
 pub mod kernel;
 pub mod oi;
 pub mod repo;
+pub mod research_ingress;
 pub mod sandbox_policy;
 
 // Re-exports and compatibility aliases

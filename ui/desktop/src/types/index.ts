@@ -20,7 +20,7 @@ export interface DiffLine {
 export interface Session {
   id: string;
   taskId?: string;
-  source?: 'demo' | 'daemon';
+  source?: 'daemon';
   taskStatus?: string;
   sessionId?: string;
   pack?: string;
@@ -54,8 +54,15 @@ export interface ProviderItem {
   rateLimit?: string;
   vram?: string;
   endpoint?: string;
+  defaultModel?: string;
+  contextWindow?: number;
+  fastMode?: boolean;
   latency: string;
   iconType: 'anthropic' | 'openai' | 'gemini' | 'deepseek';
+  authType?: 'oauth' | 'api_key';
+  accountName?: string;
+  oauthEmail?: string;
+  oauthTier?: string;
 }
 
 export interface ClientApiKey {
@@ -66,4 +73,30 @@ export interface ClientApiKey {
   icon: 'laptop' | 'terminal';
 }
 
+export * from './provider_types';
 export * from './research';
+export type {
+  Task,
+  TaskStatus,
+  TaskContract,
+  SessionMode,
+  SessionJournalEntry,
+  Run,
+  RunStatus,
+  WorkerRun,
+  ExecutionWorkspace,
+  WorkspaceKind,
+  WorkspaceStatus,
+  WorkspaceLineage,
+  CreateTaskParams,
+  StartRunParams,
+  AttachSessionParams,
+  CancelRunParams,
+  CreateWorkspaceParams,
+  ProbedModel,
+  ModelPricing,
+  ModelCatalogOption,
+  ModelCatalogResult,
+  ProviderConfigRecord,
+} from './domain';
+export type { Session as DomainSession } from './domain';

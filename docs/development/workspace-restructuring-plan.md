@@ -1,5 +1,7 @@
 # Kế hoạch refactor Custos SADE và tối ưu chi phí
 
+**Queue hiện hành:** [Backend–desktop convergence §2/§7](sade-frontend-backend-convergence-plan.md#2-những-vấn-đề-hiện-tại-phải-xử-lý-theo-thứ-tự-rủi-ro) chốt thứ tự cấp tốc trên checkout `4b73cce`. Các nhãn R/P/OF trong tài liệu dài này là backlog capability và dependency map; nếu một đoạn dưới đây xếp việc khác thứ tự, dùng queue hiện hành rồi kiểm lại source tại packet đó.
+
 **Deliverable:** bản kế hoạch kiến trúc và migration để triển khai trên checkout hiện có. Phần 1–10 giữ inventory và các packet R0–R10; phần 11–19 cụ thể hóa execution spine, economics, ba pack, thứ tự tích hợp và nghiệm thu; §20 map đầy đủ nền năng lực OrCa vào chương trình refactor Custos OF0–OF7. Đây là kế hoạch, chưa là chứng nhận refactor đã thực hiện. Không thay source of truth của [Custos.md](../../Custos.md).
 
 **Cách đọc để bắt đầu:** đọc §11 cho quyết định khóa, §12 cho đường chạy và contracts, §13 cho cost core, §14 cho ba miền, §15 cho waves, §16 cho evaluation, §17 cho cách giao packet, §20 cho OrCa foundation, và §23 cho kế hoạch UI chat/workbench. Những chỗ ghi **đích/proposed** chưa phải module hay API đã tồn tại. Tên R/P/OF/C là địa chỉ gói việc hoặc capability track trong tài liệu này, không phải protocol hoặc public enum.
@@ -1101,3 +1103,137 @@ Một vertical slice đạt SADE-ready khi cùng `TaskId` được tạo từ ch
 Fixtures riêng theo miền: Coding dùng Git worktree và base hash; Research dùng source revision/locator và `unknown` cho semantic support chưa đủ; Assistant dùng fake connector trước outbound thật. Nhiều agent mặc định, worktree cho mỗi thought, OI LLM mỗi turn, remote fleet/A2A/MCP đầy đủ và copy toàn bộ OrCa backend/UI không thuộc gate ban đầu.
 
 **Trạng thái:** §24 là target/refactor plan dựa trên source audit đã ghi, không xác nhận C0–C7 đã được code. Thay đổi lượt này chỉ cập nhật tài liệu; không sửa product source.
+
+## 25. ADE kernel linh hoạt cho ba workbench và Research capability stack
+
+### 25.1 Một kernel, ba profile, không ba ứng dụng
+
+Custos không có “Orca core”, “Claude Science core” và “Assistant core” chạy cạnh nhau. Đích đúng là một **ADE kernel trung lập miền** sở hữu identity, lifecycle và projection chung; ba workbench chỉ đăng ký resource/capability profile.
+
+```mermaid
+flowchart TD
+    SHELL[Desktop shell: conversation, Task anchor, resource tabs]
+    WK[ADE workspace kernel]
+    TASK[Task, Session, Run, WorkerRun]
+    RES[Resource registry, pane instances, layouts]
+    HOST[Execution host, workspace, leases]
+    CAP[Capability registry, attempts, receipts]
+    PACK[Engineering, Research, Assistant profiles]
+    SHELL --> WK
+    WK --> TASK
+    WK --> RES
+    WK --> HOST
+    WK --> CAP
+    PACK --> WK
+```
+
+`WorkbenchLens` chỉ chọn profile và bố cục mặc định. Nó không sở hữu transcript, Task, provider, permission hoặc process. `ResourceDescriptor` định nghĩa loại resource và renderer; `ResourceInstance` trỏ tới entity thật như repo file, diff, source, artifact, notebook, browser tab hoặc draft. `PaneInstance` chỉ giữ presentation identity/layout và resource ref. `ExecutionWorkspace` giữ môi trường vật lý; `ExecutionHost` giữ local/SSH/server identity; `WorkerRun` giữ executor attempt. Không gộp các object này thành một “workspace” mơ hồ.
+
+### 25.2 Capability registry thay cho điều kiện UI hard-code
+
+Mỗi capability công bố `capability_id`, version, owner, supported operations, input/output schemas, effect class, stream type, host requirements, cancellation, reconciliation và assurance ceiling. Daemon trả `Available | Degraded(reason) | Unavailable(reason)` theo profile/host/session thật. Desktop dựng resource picker từ projection này; không hard-code `connected: true/false` lâu dài.
+
+| Nhóm | Capability examples | Profile mặc định |
+|---|---|---|
+| Conversation | journal, Task binding, context receipt, linked continuation | Cả ba |
+| Code | repo tree, editor, diff, test, Git worktree, SCM review | Coding; Research khi có code artifact |
+| Compute | terminal/PTY, process, notebook kernel, batch/SSH job | Coding + Research theo grant |
+| Evidence | source reader, passages, claims, artifacts, lineage, assessments | Research; Coding dùng verifier subset |
+| Browser | scoped tabs, snapshot, console/network, capture, design selection | Coding + Research theo egress |
+| Personal effects | contacts, calendar, mail, reminders, outbox | Copilot/Assistant |
+| Coordination | worker fleet, DAG, attention, approvals, budgets | Cả ba khi delegated |
+
+Resource mở được ở nhiều lens nếu schema và quyền cho phép. Notebook cùng `resource_id` có thể mở ở Research để phân tích và Coding để sửa script; đổi lens không copy bytes. Profile chỉ chọn panes mặc định, command palette và verifier obligations.
+
+### 25.3 Hấp thụ lõi ADE của Orca theo capability
+
+Học và reimplement các hành vi public/source-audited sau, không nhập Electron store hay tạo backend thứ hai:
+
+1. **Worktree-native task isolation:** repo → base ref/snapshot → managed worktree → terminals/browser/editor gắn workspace ID → diff/integration → retain/archive/cleanup. Custos thêm ownership, base hash, dirty/untracked manifest, permit và evidence gate.
+2. **Terminal/agent lifecycle:** PTY identity, split tree, cursor output, resize/input, restart/reattach và exit observation. Native Codex/Claude/Goose là `AgentRuntimePort`; terminal chỉ là resource/transport, không phải Task outcome.
+3. **Resource affinity:** file/editor/diff/browser/terminal gắn `ExecutionWorkspace`; switching workspace đổi resource set nhất quán. Local, SSH và server host là capabilities khác nhau.
+4. **Fleet/orchestration:** tracked dispatch, parent/child worker, dependency readiness, checkpoint, attention queue, cancel/replace và typed handoff. Custos scheduler + durable claims sở hữu lifecycle.
+5. **Embedded browser/design feedback:** tab profiles, snapshot→act→snapshot, console/network/capture và element selection thành source artifact. Page content luôn untrusted; browser action qua data/egress/effect policy.
+6. **Automation/remote operation:** schedule, headless CLI, remote reconnect và environment selection. Custos thêm standing grant, expiry, per-run budget, idempotency và uncertain reconciliation.
+
+### 25.4 Research stack tương đương hành vi Claude Science
+
+Không có source Claude Science công khai để vendor/copy. “Bê lõi” trong Custos nghĩa là triển khai đầy đủ các **hành vi sản phẩm công khai** bằng contracts riêng:
+
+| Capability | Canonical objects | Runtime/adapter | UI |
+|---|---|---|---|
+| Project/corpus | SourceRecord, SourceRevision, PassageAnchor | acquire/parse/OCR/index | Library + Reader |
+| Scientific conversation | Session/turn, selected refs, ContextReceipt | context compiler + harness | Chat cạnh resource |
+| Methods | Recipe, EnvironmentRevision, DatasetVersion | env resolver, admission | Methods inspector |
+| Persistent compute | KernelInstance, KernelEpoch, CellOperation | Python/R/Jupyter/SSH supervisor | Notebook + controls |
+| Observed experiment | ExecutionRecord, RunAttempt, OutputArtifact | process/job runner, streams | Runs ledger |
+| Artifact workspace | ArtifactIdentity, ArtifactVersion, LineageEdge | CAS/file adapters | code/table/figure/report viewers |
+| Comments/revision | AnnotationRecord + selector/version | annotation commands, revision flow | anchored comments |
+| Reviewer | AssessmentRecord + Finding + rubric/method | deterministic, semantic, reproduction | review matrix, không hidden CoT |
+| Delegation | WorkerRun topology + typed handoff | scheduler/harness | subtask tracks |
+| Export/reuse | ExportManifest + HandoffEnvelope | Markdown/Obsidian/SCM | Synthesis + Open in… |
+
+Research completion là `question → sources → method/analysis → observed execution → artifact versions → assessments → synthesis/handoff`. Reviewer chỉ hiện method, inputs, findings, evidence refs, status và uncertainty; không hiện chain-of-thought hoặc transcript giả. Figure mở generating code/environment/run khi lineage có; thiếu cạnh nào hiển thị missing. Kernel persistent không tự là reproducible: epoch, env revision, dataset version, seed/hardware và hidden-state gaps phải được ghi.
+
+### 25.5 Ba profile lắp cùng primitives
+
+| Profile | Resources mặc định | Semantics riêng | Shared primitives |
+|---|---|---|---|
+| Coding | repo, editor, diff, terminal, browser, tests, worktrees | snapshot/base hash, diagnosis, patch, behavior verifier | conversation, Task, workspace, worker, capability, evidence, cost |
+| Research | library, reader, claims, methods, notebook, runs, artifacts, review | source/version, claim support, dataset/env/method, reproduction | cùng spine |
+| Copilot | chat, notes, personal context, drafts, outbox/calendar | identity/time, exact payload, automation occurrence | cùng Task/session/authority/effect/receipt/cost |
+
+Cross-profile không copy transcript mặc định. `Open resource in…` giữ resource ID và session; `Continue as linked chat` tạo lineage/context receipt; `Fork child Task` chỉ khi goal/acceptance tách. Research code sang Coding bằng selected artifact/method/run refs; Coding result quay lại Research bằng patch/test artifact; Copilot chỉ nhận redacted summary user chọn.
+
+### 25.6 Thứ tự triển khai
+
+1. Kernel contracts: resource/capability/host/pane projection và capability status API.
+2. Orca local foundation: live workspace list/create, safe Git ownership, PTY stream, file/diff, một native harness; browser sau terminal/file lifecycle.
+3. Research provenance: source/claim + recipe/execution + artifact/version/annotation + read-only review.
+4. Research compute: environment revision, Python kernel epoch, cell operations, output persistence, interrupt/reset/recovery.
+5. Reviewer/synthesis: typed assessments, reproduction compare, report/export/handoff.
+6. Fleet/remote/automation: bounded multi-worker, SSH/server và schedule sau local crash/recovery gates.
+
+Mỗi packet có headless API test và Desktop projection test trên cùng IDs. Không merge pane nếu backend chỉ có timer/mock. Không merge backend capability nếu UI không hiện offline/degraded/unknown. “Đủ lõi” được đo bằng end-to-end jobs và recovery, không bằng số folder copy từ upstream.
+
+## 26. Interaction fidelity và hòa giải `origin/dev`
+
+### 26.1. Phạm vi kiểm chứng, không đồng nhất file với tính năng
+
+Đối chiếu trực tiếp checkout OrCa trong `../orca` và Open Science Desktop tại `../open-science` (`04b64817c12e7fdbe0e052bfa1aeaf8802feecde`). OrCa local không còn `.git`; SHA trong source study là provenance ghi trước khi xóa, không tái kiểm được tại checkout này. Inventory hoặc có component trên đĩa không chứng minh user journey chạy được trong Custos. Mọi nguồn bên ngoài chỉ cung cấp pattern; Custos phải có API, policy, persistence, UI và failure fixture của chính mình. Đối chiếu `origin/dev` là remote-tracking ref đã fetch trong lượt audit này; trước merge thực tế phải fetch lại.
+
+| Interaction từ mã nguồn | Hành vi đáng học | Mapping Custos | Trạng thái/gate hiện tại |
+|---|---|---|---|
+| OrCa `AgentSessionContinuationDialog` + `launch-agent-session-continuation` | Chọn agent đích và focused/full context; giữ session gốc | `ContinuationManifest`/`ContextReceipt`, preview trong shell, launch attempt qua daemon | Target; kiểm idempotency, missing context và native hidden state không chuyển. |
+| OrCa `AgentKanbanBoard` + dashboard snapshot | Needs You/Working/Done/Idle, acknowledge khác reveal; shared drawer/pop-out projection | `Attention` projection từ approvals, uncertain effects, workers; reveal bằng stable IDs | UI có attention entry; chưa được gọi parity với board nguồn khi ack/reveal/liveness chưa có e2e. |
+| OrCa worktree space + tab/terminal affinity | Resource theo host/worktree, lifecycle create→review→cleanup | `ExecutionWorkspace`, resource refs, PTY coordinator, SCM diff | Một phần ở `vi`; cần kiểm dirty/base hash, restart, release owner và remote unknown. |
+| OrCa launch executor + structured adapters | Requested/actual mode, refusal trước commit, `operation_unknown` sau commit | `AgentRuntimePort` capability matrix + durable launch attempt | Codex/Goose adapters hiện có; chưa coi native parity chỉ vì file tồn tại. |
+| OrCa orchestration task/dispatch/mailbox | Atomic ready claim, assignee identity, message provenance, unresolved dispatch | Runtime scheduler + narrow persistence transitions, Task evidence ở core/pack | Target rộng; cần crash/fencing, không bê schema OrCa. |
+| OrCa browser/automation/remote | Browser resource, scheduled headless run và SSH host độc lập UI | Capability adapters + scoped grant, per-run attempt, reconcile | Hoàn tất ở Step 10: domain/persistence/daemon API + UI panes đầy đủ, URL validation fail-closed, port/profile isolation và 100% test xanh. |
+| Open Science `PaneTree`/`GroupTabs`/`PresentedArtifactPane` | Split/group/drag, artifact ở cạnh chat, zoom/close không tái chạy | `ResourceInstance` + local pane layout; artifact ID/version từ daemon | Có resource tabs ở `vi`; thiếu parity về stable resource placement/close confirmation. |
+| Open Science `SelectionActions` | Quote/Explain/Remember ngay từ selection có ranh giới message | Reader/text selection candidate → anchor/claim proposal/memory command riêng | Current Literature pane có selection nhưng chưa được tự tuyên bố semantic support. |
+| Open Science `TrajectoryPane` + `SubagentActivity` | Nhìn turn/model/tool timeline và worker activity | Event projection + stream correlation, không thêm journal thứ hai | Target; duration chỉ khi có timestamps, workers không tự pass Task. |
+| Open Science notebook + run/provenance + ReviewerCard | Kernel state, observed output, lineage, structured findings | Notebook coordinator, run/artifact/assessment; inspector ghi missing edges | Một phần đã có trong `vi`; cần restart/negative output/reviewer-traceability fixtures. |
+| Open Science settings/compute/connectors | Hiện dependency, data flow, local/remote compute lựa chọn rõ | Capability status + egress/grant + adapter conformance | Chọn lọc theo user job; không auto-install MCP packages hoặc mở remote gateway mặc định. |
+| Open Science typed viewers + browser/computer use | PDF, molecule, genome, FITS/mesh và platform-assisted interaction nằm ở các renderer/adapter riêng | Resource renderer registry ở desktop; OS/browser attempts ở adapters, policy ở core | Không tạo crate cho từng file type; mỗi renderer phải có source/version/unknown state và mỗi computer-use action phải có assurance profile. |
+
+### 26.2. Conflict ledger giữa `vi` và `origin/dev`
+
+Tại thời điểm kiểm: `vi=f7c15b6`, `origin/dev=7e7487c`, merge base `ff3b67b`. `vi` có Step 7–9 và desktop shell/workbench rewrite; `origin/dev` có domain additions vốn phần lớn đã đi vào `vi`, cộng một UI rewrite cạnh tranh. `git merge-tree` báo va chạm ở `Custos.md`, domain `artifact.rs/lib.rs`, catalog và hơn hai mươi file desktop, gồm layout/settings/studio, research panes, AppHeader/sidebars/context. Đây là **potential merge conflicts**, chưa phải merge đang dở; working tree `vi` còn Step 10 uncommitted ở domain/persistence. Không dùng `git merge -X theirs`, xóa component đã thay bằng `ChatSection/Header/ResearchView`, hoặc stash/reset Step 10 để ép merge.
+
+| Vùng va chạm | Quyết định tích hợp | Lý do và gate |
+|---|---|---|
+| `crates/custos-domain/src/{artifact,lib}.rs` | Merge cấu trúc theo field/export, giữ các contract đã có ở `vi`; kiểm `cargo check/test` | Không chọn cả file theo một bên; `vi` đã hấp thụ nhiều domain commits từ `dev`, còn Step 10 đang thêm exports. |
+| `ui/desktop/src/components/research/{ClaimsMatrix,Literature,NotebookWorkspace,RunsLedger}Pane.tsx` | Giữ live API + explicit empty/error của `vi`; chỉ lấy interaction cải tiến sau khi nối API thật | `origin/dev` đưa `MOCK_CLAIMS`, `MOCK_SOURCES`, `MOCK_RUNS`, `MOCK_NOTEBOOK_CELLS` và fallback im lặng vào production, gồm claims/papers/benchmarks không có nguồn thực. Không được merge các literals đó. |
+| `AppHeader`, `WorkspaceSidebar`, `studio/page`, `layout`, `AppContext`, views | Giữ `vi` resource canvas + three-lens routing làm spine; map từng affordance của `dev` sang command/pane hiện hữu | `dev` đổi/đặt lại tên views và bỏ các controls resource/attention của `vi`. Merge theo semantic event contract, không theo JSX hunk. |
+| `settings`, modals và palette | Giữ daemon-backed settings, accessibility và capability status; port skin/spacing nếu không thay semantics | Không fallback success hoặc tạo control đẹp nhưng không có command. |
+| CSS/tokens và lockfile | Một token system, một dependency graph; kiểm build sau reconcile | Không ghép hai theme bằng cách giữ cả hard-coded màu và CSS vars. Lockfile phải đi theo package manifests, không chọn nguyên file theo nhánh. |
+
+### 26.3. Trình tự vá conflict không mất WIP
+
+1. Ghi lại `git status --short`, dirty manifest và test baseline. Fetch lại `origin/dev`, kiểm `merge-base` và `merge-tree` read-only. Không ghi lên Step 10 trước khi tác giả ổn định hoặc có worktree/commit an toàn do nhóm chủ động tạo.
+2. Hòa giải backend contracts trước: so từng field/domain export, migration index và SDK DTO; không copy trùng symbol. `cargo check --workspace --offline` rồi focused tests/migration tests.
+3. Hòa giải frontend theo journey: chat→resource→agent continuation; research source→anchor→claim→run→artifact→review; attention→reveal/ack; settings→real effect. Với mỗi view dùng `vi` live path làm baseline, lấy UI affordance từ `dev` bằng patch chọn lọc. Cấm mock fallback trong live components.
+4. Chạy `pnpm --dir ui/desktop build`, focused UI tests nếu có, và e2e Local API. Kiểm empty/offline/unknown, restart, close/reopen pane không tự chạy effect. Chỉ sau đó mới thực hiện merge có review trên branch phù hợp; không tự commit/push.
+
+**Release gate:** một merge xanh về cú pháp không đủ. Một Research claim bôi chọn phải bắt đầu ở trạng thái chưa kiểm, không được xuất hiện như verified; một failure tải nguồn phải hiện lỗi thay vì paper giả; một agent launch có thể đã commit phải giữ `unknown` và không tạo lượt thứ hai. Đây là ba fixture bắt buộc để gọi conflict đã vá về hành vi.

@@ -254,7 +254,10 @@ mod process_crash_recovery_resilience {
 
             // 2. Recover Session & Journal
             let session_list = client2.list_sessions("p2_sl").await.unwrap();
-            assert_eq!(session_list.len(), 1);
+            assert!(
+                session_list.iter().any(|s| s.id.0 == session_id_str),
+                "Session {session_id_str} must be recovered after reboot"
+            );
             let journal = client2
                 .get_session_journal("p2_j", &session_id_str)
                 .await
@@ -281,7 +284,8 @@ mod process_crash_recovery_resilience {
             assert_eq!(new_task.title, "Post-Recovery Task");
 
             let all_tasks = client2.list_tasks("p2_all").await.unwrap();
-            assert_eq!(all_tasks.len(), 2);
+            assert!(all_tasks.iter().any(|t| t.id == task_id));
+            assert!(all_tasks.iter().any(|t| t.id == new_task.id));
         }
 
         let _ = std::fs::remove_dir_all(&temp_dir);

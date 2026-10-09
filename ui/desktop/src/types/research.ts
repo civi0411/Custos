@@ -21,7 +21,8 @@ export interface SourceRecord {
   contentHash: string;      // BLAKE3 or SHA-256
   localPath?: string;
   verified: boolean;
-  abstract?: string;
+  abstractText?: string;
+  createdAt: number;
 }
 
 export interface PassageAnchor {
@@ -85,11 +86,15 @@ export interface ResearchExperimentRun {
 }
 
 export interface ArtifactLineageNode {
-  artifactPath: string;
+  artifactPath?: string;
+  artifact_path?: string;
   version: number;
-  contentHash: string;
+  contentHash?: string;
+  content_hash?: string;
   producedByRunId?: string;
+  produced_by_run_id?: string;
   parentVersionHash?: string;
+  parent_version_hash?: string;
   timestamp: number;
 }
 
@@ -152,3 +157,104 @@ export interface ParsedTableData {
 }
 
 export type ChartType = 'line' | 'bar' | 'scatter';
+
+export interface AnnotationTargetSpec {
+  type: 'text' | 'image_pin' | 'dom_element';
+  startOffset?: number;
+  endOffset?: number;
+  exactText?: string;
+  xRatio?: number;
+  yRatio?: number;
+  pinNumber?: number;
+  selector?: string;
+}
+
+export interface AnnotationRecord {
+  id: string;
+  artifactPath: string;
+  artifactVersion: number;
+  target: AnnotationTargetSpec;
+  note: string;
+  actor: string;
+  status: 'pending' | 'submitted' | 'addressed' | 'dismissed';
+  sideChatSessionId?: string;
+  submittedTurnId?: string;
+  createdAt: number;
+}
+
+export interface ResearchEnvironmentSpec {
+  pythonVersion?: string;
+  requirements: string[];
+  containerImage?: string;
+  hardware?: string;
+}
+
+export interface ResearchRecipeInput {
+  name: string;
+  sourceUri: string;
+  required: boolean;
+}
+
+export interface ResearchRecipe {
+  id: string;
+  name: string;
+  description?: string;
+  command: string;
+  environmentSpec: ResearchEnvironmentSpec;
+  inputs: ResearchRecipeInput[];
+  outputs: string[];
+  createdAt: string;
+}
+
+export interface ResearchExecutionArtifact {
+  path: string;
+  contentHash: string;
+  sizeBytes: number;
+}
+
+export interface ResearchExecutionRecord {
+  id: string;
+  recipeId: string;
+  sessionId?: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  exitCode?: number;
+  stdoutCasUri?: string;
+  stderrCasUri?: string;
+  startedAt: string;
+  endedAt?: string;
+  artifacts: ResearchExecutionArtifact[];
+}
+
+// ---------------------------------------------------------
+// Untrusted Client Proposals (Layer 0 Invariants)
+// Client proposes; backend hashes, verifies and materializes.
+// ---------------------------------------------------------
+
+export interface ResearchClaimProposal {
+  id: string;
+  statement: string;
+  invariants: string[];
+  createdAt: number;
+}
+
+export interface PassageAnchorProposal {
+  sourceId: string;
+  sectionTitle?: string;
+  pageNumber?: number;
+  startOffset: number;
+  endOffset: number;
+  exactText: string;
+}
+
+export interface SourceProposal {
+  id: string;
+  sourceType: string;
+  title: string;
+  locator: string;
+  doi?: string;
+  authors?: string[];
+  year?: number;
+  abstractText?: string;
+  createdAt: number;
+}
+

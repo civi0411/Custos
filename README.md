@@ -6,7 +6,7 @@
   <img alt="Custos" src="docs/assets/banner.png" width="100%">
 </picture>
 
-[ EN ](README.md) · [ VI ](docs/i18n/README.vi.md) · [ DE ](docs/i18n/README.de.md) · [ ZH ](docs/i18n/README.zh.md)
+[ EN ](README.md) · [ VI ](docs/i18n/README.vi.md) · [ DE ](docs/i18n/README.de.md) · [ ZH ](docs/i18n/README.zh.md) · [ JA ](docs/i18n/README.ja.md) · [ KO ](docs/i18n/README.ko.md) · [ ES ](docs/i18n/README.es.md)
 
 </div>
 
@@ -154,4 +154,4 @@ cargo test --workspace --all-targets
 
 ## License
 
-The root [LICENSE](LICENSE) currently contains the MIT License. Licensing and attribution for Goose-derived source are under review; see the [upstream source audit](docs/development/upstream-source-map.md). Do not assume the root license alone describes every upstream-derived file.
+The root [LICENSE](LICENSE) is distributed under the **GNU AGPL-3.0-or-later**. It includes a strict Trademark Notice to protect the Custos identity and prohibits closed-source commercial SaaS wrapping. See the LICENSE file for full details.
