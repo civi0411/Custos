@@ -191,7 +191,10 @@ pub fn ensure_daemon_client(
     if let Ok(current_exe) = std::env::current_exe() {
         if let Some(parent) = current_exe.parent() {
             let candidate = parent.join("custos-daemon");
-            if candidate.exists() {
+            let candidate_exe = parent.join("custos-daemon.exe");
+            if candidate_exe.exists() {
+                cmd = std::process::Command::new(candidate_exe);
+            } else if candidate.exists() {
                 cmd = std::process::Command::new(candidate);
             }
         }

@@ -27,6 +27,7 @@ import { OpenAIIcon, ClaudeIcon } from '@/components/common/AgentIcons';
 import { useAppContext } from '@/context/AppContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { formatKeyCombo } from '@/lib/utils';
 
 interface AppWorkspaceShellProps {
   mode: AppWorkspaceMode;
@@ -133,7 +134,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
         if (e.altKey) {
           e.preventDefault();
           openTab('kanban', 'Fleet Kanban', 'orca://kanban');
-          onShowToast?.('Opened Fleet Kanban (⌘⌥K)');
+          onShowToast?.(`Opened Fleet Kanban (${formatKeyCombo({ ctrlOrCmd: true, alt: true, key: 'K' })})`);
         } else {
           e.preventDefault();
           setIsCommandPaletteOpen((prev) => !prev);
@@ -293,7 +294,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       icon: Bot,
       label: 'Fleet Kanban',
       onClick: () => openTab('kanban', 'Fleet Kanban', 'orca://kanban'),
-      rightElement: <span className="text-[10px] text-fg-muted font-mono">⌘⌥K</span>
+      rightElement: <span className="text-[10px] text-fg-muted font-mono">{formatKeyCombo({ ctrlOrCmd: true, alt: true, key: 'K' })}</span>
     },
     {
       icon: Settings2,

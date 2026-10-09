@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
 import { ExecutionWorkspace, WorkspaceFileEntry, WorkspaceFileContent } from '@/types/domain';
+import { formatKeyCombo } from '@/lib/utils';
 
 function getFileIcon(name: string) {
   const ext = name.split('.').pop()?.toLowerCase();
@@ -442,7 +443,7 @@ export const FilesWorkbenchPane: React.FC = () => {
                     }`}
                   >
                     <Save className="h-3 w-3" />
-                    <span>{savingFile ? 'Saving...' : 'Save (⌘S)'}</span>
+                    <span>{savingFile ? 'Saving...' : `Save ${formatKeyCombo({ ctrlOrCmd: true, key: 'S' })}`}</span>
                   </button>
                 </div>
               </div>

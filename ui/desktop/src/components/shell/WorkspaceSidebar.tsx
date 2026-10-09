@@ -7,6 +7,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { Session } from '@/types';
+import { formatKeyCombo } from '@/lib/utils';
 
 export interface SidebarTool {
   icon: React.ElementType;
@@ -283,7 +284,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                   className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
                 >
                   <Settings className="w-3.5 h-3.5 text-fg-muted" />
-                  <span>Preferences & Settings (⌘,)</span>
+                  <span>Preferences & Settings {formatKeyCombo({ ctrlOrCmd: true, key: ',' })}</span>
                 </button>
               </div>
 
@@ -303,7 +304,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         <button
           onClick={handleOpenSettings}
           className="p-1.5 rounded-md text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
-          title="Preferences & Settings (⌘,)"
+          title={`Preferences & Settings (${formatKeyCombo({ ctrlOrCmd: true, key: ',' })})`}
         >
           <Settings className="w-3.5 h-3.5" />
         </button>
