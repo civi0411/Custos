@@ -1,5 +1,7 @@
 # Kế hoạch refactor Custos SADE và tối ưu chi phí
 
+**Queue hiện hành:** [Backend–desktop convergence §2/§7](sade-frontend-backend-convergence-plan.md#2-những-vấn-đề-hiện-tại-phải-xử-lý-theo-thứ-tự-rủi-ro) chốt thứ tự cấp tốc trên checkout `4b73cce`. Các nhãn R/P/OF trong tài liệu dài này là backlog capability và dependency map; nếu một đoạn dưới đây xếp việc khác thứ tự, dùng queue hiện hành rồi kiểm lại source tại packet đó.
+
 **Deliverable:** bản kế hoạch kiến trúc và migration để triển khai trên checkout hiện có. Phần 1–10 giữ inventory và các packet R0–R10; phần 11–19 cụ thể hóa execution spine, economics, ba pack, thứ tự tích hợp và nghiệm thu; §20 map đầy đủ nền năng lực OrCa vào chương trình refactor Custos OF0–OF7. Đây là kế hoạch, chưa là chứng nhận refactor đã thực hiện. Không thay source of truth của [Custos.md](../../Custos.md).
 
 **Cách đọc để bắt đầu:** đọc §11 cho quyết định khóa, §12 cho đường chạy và contracts, §13 cho cost core, §14 cho ba miền, §15 cho waves, §16 cho evaluation, §17 cho cách giao packet, §20 cho OrCa foundation, và §23 cho kế hoạch UI chat/workbench. Những chỗ ghi **đích/proposed** chưa phải module hay API đã tồn tại. Tên R/P/OF/C là địa chỉ gói việc hoặc capability track trong tài liệu này, không phải protocol hoặc public enum.

@@ -1,5 +1,7 @@
 # Custos Developer Hub & Getting Started
 
+**Thứ tự triển khai hiện hành:** [Backend–desktop convergence §2/§7](sade-frontend-backend-convergence-plan.md#2-những-vấn-đề-hiện-tại-phải-xử-lý-theo-thứ-tự-rủi-ro) dựa trên checkout `4b73cce`: khóa ingress/physical execution và capability UI, làm một chat→worker→answer thật, rồi Coding/Research vertical slices, continuity/Assistant, cuối cùng delegated multiworker và optimization. Các bảng PR/wave khác là kế hoạch dài hạn hoặc lịch sử nếu thứ tự khác. [Upstream matching ledger](upstream-source-map.md#cross-source-nexus-audit-orca-and-open-science) xác định mức đã hiện thực của OrCa/Open Science.
+
 Để refactor đúng từng crate, đọc [blueprint §22](workspace-restructuring-plan.md#22-crate-blueprint-và-chuyển-lõi-orca-theo-trách-nhiệm): actual/target dependencies, module addresses, OrCa core decomposition, atomic storage operations, resource/lease gap và skill/model/native integration.
 
 Để giao triển khai kết hợp desktop/headless, bắt đầu từ [superplan §21](workspace-restructuring-plan.md#21-superplan-kết-hợp-custos-và-orca-cho-desktop-và-headless): reuse decisions, source findings, module map, packets đầu và gates. Mobile nằm ngoài scope; ba pack cùng phát triển trên foundation OF/R/P hiện có.

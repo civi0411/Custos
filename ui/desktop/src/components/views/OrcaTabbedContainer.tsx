@@ -15,8 +15,10 @@ import {
   Wrench,
   Layers,
   Server,
+  Smartphone,
 } from 'lucide-react';
 import { BrowserWorkbenchPane } from '@/components/views/BrowserWorkbenchPane';
+import { MobileSimulatorWorkbenchPane } from '@/components/views/MobileSimulatorWorkbenchPane';
 import { RemoteFleetWorkbenchPane } from '@/components/views/RemoteFleetWorkbenchPane';
 import { Session } from '@/types';
 import { daemonClient } from '@/api/daemon_client';
@@ -48,6 +50,7 @@ export type OrcaTabId =
   | 'evidence'
   | 'dag'
   | 'browser'
+  | 'emulator'
   | 'fleet'
   | 'notes'
   | 'artifacts'
@@ -113,8 +116,9 @@ const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'runs', title: 'Runs', description: 'Experiment attempts, environments, artifacts and receipts.', icon: FlaskConical, group: 'Research', status: 'available' },
   { id: 'synthesis', title: 'Synthesis & Handoff', description: 'Synthesize research claims and recipes into Invariant Coding tasks.', icon: Layers, group: 'Research', status: 'available', supportedOperations: ['synthesis.proposals.list', 'synthesis.proposals.get', 'synthesis.proposals.save', 'synthesis.handoff.execute'] },
   { id: 'artifacts', title: 'Artifacts', description: 'Inspect versions, lineage, annotations, provenance DAG and review findings.', icon: FileCode, group: 'Research', status: 'available', supportedOperations: ['list', 'get', 'record_lineage', 'lineage.list', 'lineage.graph', 'annotations.list', 'annotations.save'] },
-  { id: 'browser', title: 'Browser', description: 'Scoped browsing, tab lifecycle, and DOM snapshot inspector.', icon: Globe, group: 'Shared', status: 'available', supportedOperations: ['session.create', 'session.list', 'tab.create', 'tab.navigate', 'tab.close', 'tab.snapshot'] },
-  { id: 'fleet', title: 'Remote Fleet', description: 'Remote host inventory, SSH execution receipts, and headless automation jobs.', icon: Server, group: 'Engineering', status: 'available', supportedOperations: ['hosts.list', 'hosts.register', 'hosts.ping', 'exec.run', 'automation.list', 'automation.schedule', 'automation.cancel'] },
+  { id: 'browser', title: 'Browser', description: 'Persisted browser sessions and tab intents. Physical navigation and snapshots are degraded.', icon: Globe, group: 'Shared', status: 'degraded', reason: 'Browser execution adapter is not connected; navigation and snapshots fail closed.', supportedOperations: ['sessions.list', 'sessions.create', 'tabs.list', 'tabs.create', 'tabs.close'] },
+  { id: 'emulator', title: 'Phone Simulator', description: 'Interactive mobile device simulator (iOS, Android, Responsive) for live frontend preview, touch gestures, and DOM inspection.', icon: Smartphone, group: 'Engineering', status: 'available', supportedOperations: ['preview', 'inspect_ax_tree', 'rotate', 'viewport_switch', 'touch_gesture'] },
+  { id: 'fleet', title: 'Remote Fleet', description: 'Persisted SSH host inventory. Remote probes and execution are degraded.', icon: Server, group: 'Engineering', status: 'degraded', reason: 'SSH transport is not connected; probes and remote execution fail closed.', supportedOperations: ['hosts.list', 'hosts.register', 'jobs.list', 'jobs.create'] },
   { id: 'notes', title: 'Notes', description: 'Task notes, scratchpads, and Markdown knowledge capture with version history.', icon: FileCode, group: 'Shared', status: 'available', supportedOperations: ['list', 'get', 'save', 'history'] },
 ];
 
@@ -282,6 +286,10 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
 
   if (activeId === 'browser') {
     return <BrowserWorkbenchPane onShowToast={onShowToast} />;
+  }
+
+  if (activeId === 'emulator') {
+    return <MobileSimulatorWorkbenchPane onShowToast={onShowToast} />;
   }
 
   if (activeId === 'fleet') {

@@ -1786,6 +1786,26 @@ impl LocalApiDispatcher {
                     Ok(p) => p,
                     Err(e) => return ApiResponse::error(req.id, format!("Invalid execute cell params: {e}")),
                 };
+
+                // Admission Gate: Ensure requested cwd is valid and not a restricted root/system directory
+                if let Some(ref cwd) = params.cwd {
+                    let path = std::path::Path::new(cwd);
+                    let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+                    let s = canon.to_string_lossy();
+                    if s == "/" || s.starts_with("/etc") || s.starts_with("/dev") || s.starts_with("/proc") || s.starts_with("/sys") {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Admission gate refused restricted execution directory: '{s}'"),
+                        );
+                    }
+                    if !path.exists() || !path.is_dir() {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Execution cwd does not exist or is not a directory: '{cwd}'"),
+                        );
+                    }
+                }
+
                 let repo_ref = self.research.as_deref();
                 match kernel.execute_cell(params, repo_ref).await {
                     Ok(res) => match serde_json::to_value(&res) {
@@ -2049,32 +2069,59 @@ impl LocalApiDispatcher {
                     Err(_) => Vec::new(),
                 };
 
-                let selected_claims: Vec<&ResearchClaim> = params.claim_ids.iter().filter_map(|cid| {
-                    all_claims.iter().find(|c| &c.id == cid)
-                }).collect();
-
-                // Fail-closed verification gate
-                if params.enforce_verification && !selected_claims.is_empty() {
-                    let has_any_verified = selected_claims.iter().any(|c| {
-                        c.level >= ClaimGroundingLevel::L2Verified || all_reviews.iter().any(|r| {
-                            r.target_id == c.id && r.is_fresh && r.status == ReviewStatus::Approved
-                        })
-                    });
-                    if !has_any_verified {
+                // Invariant: Verify all requested claim IDs actually exist in the repository
+                for cid in &params.claim_ids {
+                    if !all_claims.iter().any(|c| &c.id == cid) {
                         return ApiResponse::error(
                             req.id,
-                            "Fail-closed verification gate: cannot handoff ungrounded (L0) claims without at least one approved active verifier record or L2+ proof"
+                            format!("Claim '{cid}' not found in research repository"),
                         );
                     }
                 }
+                let selected_claims: Vec<&ResearchClaim> = params
+                    .claim_ids
+                    .iter()
+                    .filter_map(|cid| all_claims.iter().find(|c| &c.id == cid))
+                    .collect();
 
                 let all_recipes = match research.list_recipes() {
                     Ok(r) => r,
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
-                let selected_recipes: Vec<&Recipe> = params.recipe_ids.iter().filter_map(|rid| {
-                    all_recipes.iter().find(|r| &r.id == rid)
-                }).collect();
+
+                // Invariant: Verify all requested recipe IDs actually exist in the repository
+                for rid in &params.recipe_ids {
+                    if !all_recipes.iter().any(|r| &r.id == rid) {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Recipe '{rid}' not found in research repository"),
+                        );
+                    }
+                }
+                let selected_recipes: Vec<&Recipe> = params
+                    .recipe_ids
+                    .iter()
+                    .filter_map(|rid| all_recipes.iter().find(|r| &r.id == rid))
+                    .collect();
+
+                // Fail-closed verification gate: EVERY claim must be grounded/verified
+                if params.enforce_verification && !selected_claims.is_empty() {
+                    let unverified = selected_claims.iter().find(|c| {
+                        !(c.level >= ClaimGroundingLevel::L2Verified
+                            || all_reviews.iter().any(|r| {
+                                r.target_id == c.id && r.is_fresh && r.status == ReviewStatus::Approved
+                            }))
+                    });
+                    if let Some(bad_claim) = unverified {
+                        return ApiResponse::error(
+                            req.id,
+                            format!(
+                                "Fail-closed verification gate: claim '{}' is ungrounded (L0/unverified) and lacks approved active verifier record or L2+ proof",
+                                bad_claim.id
+                            ),
+                        );
+                    }
+                }
 
                 let claim_summaries: Vec<ClaimHandoffSummary> = selected_claims.iter().map(|c| {
                     let has_fresh_review = all_reviews.iter().any(|r| {
