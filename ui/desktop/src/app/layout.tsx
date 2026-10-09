@@ -25,6 +25,7 @@ export const RootLayout: React.FC = () => {
     handleStepUiScale,
     toastMessage,
     showToast,
+    selectedModel,
     handleCreateNewSession,
     handleSaveProvider
   } = useAppContext();
@@ -39,7 +40,7 @@ export const RootLayout: React.FC = () => {
       {/* Bottom Status Bar */}
       <StatusBar
         activeSessionTitle={activeSession?.title || 'Custos Sovereign Workspace'}
-        activeModel={activeSession?.model || 'Custos Runtime · Mediated'}
+        activeModel={activeSession?.model || selectedModel || 'No model selected'}
         uiScale={uiScale}
         onSetUiScale={handleSetUiScale}
         onStepUiScale={handleStepUiScale}

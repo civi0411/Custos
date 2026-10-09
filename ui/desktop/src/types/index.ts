@@ -59,6 +59,10 @@ export interface ProviderItem {
   fastMode?: boolean;
   latency: string;
   iconType: 'anthropic' | 'openai' | 'gemini' | 'deepseek';
+  authType?: 'oauth' | 'api_key';
+  accountName?: string;
+  oauthEmail?: string;
+  oauthTier?: string;
 }
 
 export interface ClientApiKey {
@@ -69,6 +73,7 @@ export interface ClientApiKey {
   icon: 'laptop' | 'terminal';
 }
 
+export * from './provider_types';
 export * from './research';
 export type {
   Task,
