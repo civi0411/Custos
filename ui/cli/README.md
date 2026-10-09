@@ -1,7 +1,24 @@
-# Tauri + React + Typescript
+# Custos CLI
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+Custos provides two interfaces from this package:
 
-## Recommended IDE Setup
+- A terminal CLI for quick task and mode commands.
+- A React/Tauri interface with a terminal-first workspace and visual task views.
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+## Run
+
+```text
+npm start              # terminal CLI
+npm run dev            # browser demo with clearly labeled mock data
+npm run tauri:dev      # desktop client connected through the Custos host
+```
+
+Run `npm start -- help` to see grouped commands. In interactive mode, press `/` to open the searchable command palette and use the arrow keys to navigate.
+
+## Verify
+
+```text
+npm run build
+node bin/custos-cli.js help
+node bin/custos-cli.js status
+```

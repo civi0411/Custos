@@ -62,9 +62,11 @@ export function subscribeToApi(listener: Listener) {
   };
 }
 
-function isTauri(): boolean {
+export function isTauriEnvironment(): boolean {
   return typeof window !== 'undefined' && Boolean((window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__);
 }
+
+const isTauri = isTauriEnvironment;
 
 export const CustosApi = {
   async listTasks(): Promise<Task[]> {

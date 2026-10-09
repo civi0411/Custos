@@ -12,6 +12,7 @@ interface TerminalViewProps {
   onModeChange: (mode: OperationalMode) => void;
   initialCommand?: string;
   onClearInitialCommand?: () => void;
+  onOpenWorkspace?: () => void;
 }
 
 export const TerminalView: React.FC<TerminalViewProps> = ({
@@ -19,6 +20,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   onModeChange,
   initialCommand,
   onClearInitialCommand,
+  onOpenWorkspace,
 }) => {
   const [inputVal, setInputVal] = useState('');
   const [copied, setCopied] = useState(false);
@@ -46,6 +48,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   } = useTerminalCommands({ currentMode, onModeChange });
 
   const modeSlug = getModeSlug(currentMode);
+  const isWelcome = lines.length === 1 && lines[0]?.type === 'banner';
 
   const paletteItems = paletteLevel === 'mode' ? MODE_SLASH_ITEMS : ROOT_SLASH_ITEMS;
   const filterQuery = inputVal.startsWith('/') ? inputVal.slice(1).trim() : '';
@@ -132,6 +135,15 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Tab' && isWelcome) {
+      e.preventDefault();
+      setPaletteLevel('mode');
+      setShowModeSelector(true);
+      setSelectedModeIndex(0);
+      setInputVal('/');
+      return;
+    }
+
     if (showModeSelector) {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -218,7 +230,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   };
 
   return (
-    <div className="terminal-view-card">
+    <div className={`terminal-view-card ${isWelcome ? 'is-welcome' : 'is-active'}`}>
       <div className="terminal-top-bar">
         <div className="terminal-controls">
           <span className="dot dot-red" />
@@ -265,6 +277,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             currentMode={currentMode}
             isPermitPending={vibeSession.step === 'permit'}
             onOpenModeSelector={() => setShowModeSelector(true)}
+            onRunCommand={executeCommand}
             onPermitDecision={handlePermitDecision}
           />
         ))}
@@ -301,6 +314,20 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             }}
             onSend={handleSend}
           />
+
+          {isWelcome && (
+            <div className="focus-shortcuts" aria-label="Phím tắt và điều hướng">
+              <button type="button" onClick={() => setShowModeSelector(true)}>
+                <kbd>/</kbd> lệnh
+              </button>
+              <button type="button" onClick={() => setShowModeSelector(true)}>
+                <kbd>Tab</kbd> đổi chế độ
+              </button>
+              <button type="button" onClick={onOpenWorkspace}>
+                không gian làm việc
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

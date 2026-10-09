@@ -40,7 +40,7 @@ export const TerminalPrompt: React.FC<TerminalPromptProps> = ({
     if (vibeSession.step === 'goal') return 'Nhập mục tiêu nhiệm vụ...';
     if (vibeSession.step === 'permit') return 'Nhập y (đồng ý) hoặc n (từ chối)...';
     if (!isSpecialized) {
-      return "Hỏi bất cứ điều gì, hoặc gõ '/' để chọn mode...";
+      return "Bạn muốn Custos làm gì?";
     }
     return `[${modeSlug}] Nhập yêu cầu, câu hỏi hoặc gõ '/' để đổi mode...`;
   };

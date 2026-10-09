@@ -27,7 +27,7 @@ export const AVAILABLE_MODES: AvailableModeItem[] = [
     capabilities: ['Repository Topology Mapping', 'Concurrency Invariants', 'Security Audit'],
   },
   {
-    mode: 'Assitant',
+    mode: 'Assistant',
     name: 'Assistant Engine',
     slug: 'custos-assistant',
     color: '#10b981',
@@ -101,7 +101,7 @@ export const MODE_SLASH_ITEMS: SlashItem[] = [
     icon: 'assistant',
     color: '#10b981',
     type: 'mode',
-    mode: 'Assitant',
+    mode: 'Assistant',
   },
 ];
 
