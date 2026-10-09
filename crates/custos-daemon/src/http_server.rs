@@ -43,11 +43,32 @@ pub async fn start_http_server(
 
 fn is_allowed_origin(origin: &str) -> bool {
     let lower = origin.trim().to_lowercase();
-    lower == "tauri://localhost"
-        || lower.starts_with("http://localhost")
-        || lower.starts_with("http://127.0.0.1")
-        || lower.starts_with("https://localhost")
-        || lower.starts_with("https://127.0.0.1")
+    if lower == "tauri://localhost" {
+        return true;
+    }
+
+    let Some(authority) = lower
+        .strip_prefix("http://")
+        .or_else(|| lower.strip_prefix("https://"))
+    else {
+        return false;
+    };
+
+    // An Origin is scheme + authority only. Parse this narrow local profile
+    // strictly instead of using a prefix match: `localhost.evil` and
+    // `127.0.0.1.attacker.test` must never inherit local-client trust.
+    if authority.is_empty() || authority.contains(['/', '?', '#', '@']) {
+        return false;
+    }
+
+    if authority == "localhost" || authority == "127.0.0.1" || authority == "[::1]" {
+        return true;
+    }
+
+    ["localhost:", "127.0.0.1:", "[::1]:"]
+        .iter()
+        .find_map(|prefix| authority.strip_prefix(prefix))
+        .is_some_and(|port| !port.is_empty() && port.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 async fn handle_http_client(
@@ -217,10 +238,14 @@ Content-Length: {}\r\n\
         let body_str = String::from_utf8_lossy(&body_bytes);
         let api_response = match serde_json::from_str::<ApiRequest>(&body_str) {
             Ok(req) => api.handle_request(req).await,
-            Err(err) => crate::custos_local_api::ApiResponse::error("", format!("Invalid request JSON: {err}")),
+            Err(err) => crate::custos_local_api::ApiResponse::error(
+                "",
+                format!("Invalid request JSON: {err}"),
+            ),
         };
 
-        let resp_json = serde_json::to_string(&api_response).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"));
+        let resp_json = serde_json::to_string(&api_response)
+            .unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"));
         let resp = format!(
             "HTTP/1.1 200 OK\r\n\
 Content-Type: application/json; charset=utf-8\r\n\
@@ -263,4 +288,37 @@ fn find_header_end(buf: &[u8]) -> Option<usize> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_allowed_origin;
+
+    #[test]
+    fn origin_policy_accepts_only_exact_loopback_authorities() {
+        for allowed in [
+            "tauri://localhost",
+            "http://localhost",
+            "http://localhost:1420",
+            "https://127.0.0.1:443",
+            "http://[::1]:3000",
+        ] {
+            assert!(is_allowed_origin(allowed), "expected allowed: {allowed}");
+        }
+
+        for rejected in [
+            "http://localhost.evil.test",
+            "http://localhost@evil.test",
+            "https://127.0.0.1.attacker.test",
+            "http://127.0.0.1/path",
+            "http://localhost:not-a-port",
+            "https://example.com",
+            "null",
+        ] {
+            assert!(
+                !is_allowed_origin(rejected),
+                "expected rejected: {rejected}"
+            );
+        }
+    }
 }
