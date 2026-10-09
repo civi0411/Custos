@@ -11,10 +11,14 @@ import {
   Shield,
   SlidersHorizontal,
   X,
+  Layers,
+  BarChart3,
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { daemonClient } from '@/api/daemon_client';
 import { formatKeyCombo } from '@/lib/utils';
+import { CombosManager } from '@/components/providers/CombosManager';
+import { UsageMonitor } from '@/components/providers/UsageMonitor';
 
 export interface SettingsModalProps {
   isOpen: boolean;
@@ -67,12 +71,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     handleSetUiScale,
     providers,
     clientKeys,
+    connectedAccounts,
+    handleDeleteAccount,
     setIsAddProviderOpen,
     handleGenerateClientKey,
     handleRevokeClientKey,
     handleDeleteProvider,
   } = useAppContext();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [providersSubTab, setProvidersSubTab] = useState<'providers' | 'combos' | 'usage'>('providers');
   const [appearance, setAppearance] = useState<AppearancePreferences>(readAppearance);
   const [daemonOnline, setDaemonOnline] = useState<boolean | null>(null);
   const [checkingDaemon, setCheckingDaemon] = useState(false);
@@ -226,74 +233,177 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             )}
 
             {activeTab === 'providers' && (
-              <div>
-                <div className="mb-5 flex items-start justify-between">
-                  <div>
-                    <h2 className="text-sm font-semibold">Providers and local client keys</h2>
-                    <p className="mt-1 text-[11px] text-[var(--color-fg-muted)]">Records are loaded from the Custos daemon. Secrets remain redacted.</p>
-                  </div>
-                  <button type="button" onClick={() => setIsAddProviderOpen(true)} className="flex items-center gap-1.5 rounded-md bg-[var(--color-editor-fg)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-canvas)]">
-                    <Plus className="h-3.5 w-3.5" /> Add provider
+              <div className="space-y-4">
+                {/* OmniRoute Sub-navigation */}
+                <div className="flex border-b border-[var(--color-border-muted)] pb-2 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setProvidersSubTab('providers')}
+                    className={`pb-1.5 px-3 font-medium transition border-b-2 flex items-center gap-1.5 cursor-pointer ${
+                      providersSubTab === 'providers'
+                        ? 'border-[var(--color-editor-fg)] text-[var(--color-editor-fg)] font-semibold'
+                        : 'border-transparent text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+                    }`}
+                  >
+                    <Server className="h-3.5 w-3.5" />
+                    <span>Providers & Accounts</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProvidersSubTab('combos')}
+                    className={`pb-1.5 px-3 font-medium transition border-b-2 flex items-center gap-1.5 cursor-pointer ${
+                      providersSubTab === 'combos'
+                        ? 'border-[var(--color-editor-fg)] text-[var(--color-editor-fg)] font-semibold'
+                        : 'border-transparent text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+                    }`}
+                  >
+                    <Layers className="h-3.5 w-3.5 text-workbench-accent" />
+                    <span>Routing Combos</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProvidersSubTab('usage')}
+                    className={`pb-1.5 px-3 font-medium transition border-b-2 flex items-center gap-1.5 cursor-pointer ${
+                      providersSubTab === 'usage'
+                        ? 'border-[var(--color-editor-fg)] text-[var(--color-editor-fg)] font-semibold'
+                        : 'border-transparent text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+                    }`}
+                  >
+                    <BarChart3 className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>Usage & Quotas</span>
                   </button>
                 </div>
-                <div className="space-y-2">
-                  {providers.length === 0 && <p className="rounded-lg border border-[var(--color-border-muted)] p-4 text-xs text-[var(--color-fg-muted)]">No provider records returned by the daemon.</p>}
-                  {providers.map((provider) => (
-                    <div key={provider.id} className="flex items-center justify-between rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3">
+
+                {providersSubTab === 'combos' && <CombosManager />}
+                {providersSubTab === 'usage' && <UsageMonitor />}
+                {providersSubTab === 'providers' && (
+                  <div className="space-y-6">
+                    <div className="flex items-start justify-between">
                       <div>
-                        <div className="text-xs font-semibold flex items-center gap-2">
-                          <span>{provider.name}</span>
-                          {provider.fastMode && (
-                            <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1 py-0.2 rounded font-mono">
-                              Fast
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-1 font-mono text-[10px] text-[var(--color-fg-muted)] flex items-center gap-1.5">
-                          <span>{provider.model}</span>
-                          {provider.contextWindow && (
-                            <span className="text-[9px] px-1 rounded bg-[var(--color-surface-2)] text-[var(--color-fg-subtle)]">
-                              {Math.round(provider.contextWindow / 1000)}k ctx
-                            </span>
-                          )}
-                          <span>· {provider.statusLabel}</span>
-                        </div>
+                        <h2 className="text-sm font-semibold">Configured AI Providers & Accounts</h2>
+                        <p className="mt-1 text-[11px] text-[var(--color-fg-muted)]">OmniRoute / 9Router architecture: Multi-account credentials and live model routes.</p>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <span className="font-mono text-[10px] text-[var(--color-fg-subtle)]">{provider.apiKey}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (window.confirm(`Xóa provider "${provider.name}"?`)) {
-                              void handleDeleteProvider(provider.id);
-                            }
-                          }}
-                          className="text-[10px] text-rose-400 hover:text-rose-300 transition cursor-pointer"
-                        >
-                          Delete
-                        </button>
+                      <button type="button" onClick={() => setIsAddProviderOpen(true)} className="flex items-center gap-1.5 rounded-md bg-[var(--color-editor-fg)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-canvas)] cursor-pointer">
+                        <Plus className="h-3.5 w-3.5" /> Connect Provider
+                      </button>
+                    </div>
+
+                    {/* Section 1: Backend Providers */}
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-semibold uppercase font-mono tracking-wider text-[var(--color-fg-subtle)]">
+                        Persisted Daemon Providers
+                      </div>
+                      {providers.length === 0 && <p className="rounded-lg border border-[var(--color-border-muted)] p-4 text-xs text-[var(--color-fg-muted)]">No provider records returned by the daemon.</p>}
+                      {providers.map((provider) => (
+                        <div key={provider.id} className="flex items-center justify-between rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3">
+                          <div>
+                            <div className="text-xs font-semibold flex items-center gap-2">
+                              <span>{provider.name}</span>
+                              {provider.fastMode && (
+                                <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1 py-0.2 rounded font-mono">
+                                  Fast
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-1 font-mono text-[10px] text-[var(--color-fg-muted)] flex items-center gap-1.5">
+                              <span>{provider.model}</span>
+                              {provider.contextWindow && (
+                                <span className="text-[9px] px-1 rounded bg-[var(--color-surface-2)] text-[var(--color-fg-subtle)]">
+                                  {Math.round(provider.contextWindow / 1000)}k ctx
+                                </span>
+                              )}
+                              <span>· {provider.statusLabel}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-[10px] text-[var(--color-fg-subtle)]">{provider.apiKey}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`Xóa provider "${provider.name}"?`)) {
+                                  void handleDeleteProvider(provider.id);
+                                }
+                              }}
+                              className="text-[10px] text-rose-400 hover:text-rose-300 transition cursor-pointer"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Section 2: Connected Accounts (OAuth & Multi-key) */}
+                    <div className="space-y-2 pt-2">
+                      <div className="text-[11px] font-semibold uppercase font-mono tracking-wider text-[var(--color-fg-subtle)] flex items-center justify-between">
+                        <span>Connected Identity & OAuth Accounts</span>
+                        <span className="text-[10px] lowercase text-[var(--color-fg-subtle)]">{connectedAccounts.length} accounts</span>
+                      </div>
+                      {connectedAccounts.map((account) => (
+                        <div key={account.id} className="flex items-center justify-between rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3">
+                          <div>
+                            <div className="text-xs font-semibold flex items-center gap-2">
+                              <span>{account.accountName}</span>
+                              <span className="text-[9px] px-1.5 py-0.2 rounded font-mono border bg-surface-2 text-fg-editor border-border-default">
+                                {account.authType === 'oauth' ? 'OAuth 2.0' : 'API Key'}
+                              </span>
+                              {account.oauthTier && (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/20">
+                                  {account.oauthTier}
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-1 font-mono text-[10px] text-[var(--color-fg-muted)] flex items-center gap-1.5">
+                              <span>{account.providerName}</span>
+                              {account.oauthEmail && <span>· {account.oauthEmail}</span>}
+                              <span>· {account.defaultModel}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ backgroundColor: account.badgeColor || '#10b981' }}
+                              title={account.statusLabel || account.status}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`Disconnect account "${account.accountName}"?`)) {
+                                  handleDeleteAccount(account.id);
+                                }
+                              }}
+                              className="text-[10px] text-rose-400 hover:text-rose-300 transition cursor-pointer"
+                            >
+                              Disconnect
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Section 3: Local Gateway Keys */}
+                    <div className="pt-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-xs font-semibold">Local API Gateway Keys</div>
+                          <div className="text-[11px] text-[var(--color-fg-muted)]">Used by authorized local SDK and CLI integrations.</div>
+                        </div>
+                        <button type="button" onClick={() => void handleGenerateClientKey()} className="rounded-md border border-[var(--color-border-default)] px-2.5 py-1.5 text-[11px] cursor-pointer">Generate key</button>
+                      </div>
+                      <div className="mt-2 space-y-2">
+                        {clientKeys.map((key) => (
+                          <div key={key.id} className="flex items-center justify-between rounded-lg border border-[var(--color-border-muted)] p-3">
+                            <div>
+                              <div className="text-xs font-medium">{key.name}</div>
+                              <div className="font-mono text-[10px] text-[var(--color-fg-subtle)]">{key.token}</div>
+                            </div>
+                            <button type="button" onClick={() => void handleRevokeClientKey(key.id)} className="text-[10px] text-rose-400 cursor-pointer">Revoke</button>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
-                </div>
-                <div className="mt-6 flex items-center justify-between">
-                  <div>
-                    <div className="text-xs font-semibold">Local API keys</div>
-                    <div className="text-[11px] text-[var(--color-fg-muted)]">Used by authorized local clients.</div>
                   </div>
-                  <button type="button" onClick={() => void handleGenerateClientKey()} className="rounded-md border border-[var(--color-border-default)] px-2.5 py-1.5 text-[11px]">Generate key</button>
-                </div>
-                <div className="mt-2 space-y-2">
-                  {clientKeys.map((key) => (
-                    <div key={key.id} className="flex items-center justify-between rounded-lg border border-[var(--color-border-muted)] p-3">
-                      <div>
-                        <div className="text-xs">{key.name}</div>
-                        <div className="font-mono text-[10px] text-[var(--color-fg-subtle)]">{key.token}</div>
-                      </div>
-                      <button type="button" onClick={() => void handleRevokeClientKey(key.id)} className="text-[10px] text-rose-400">Revoke</button>
-                    </div>
-                  ))}
-                </div>
+                )}
               </div>
             )}
 
