@@ -3,6 +3,7 @@ pub mod catalog;
 pub mod claude;
 pub mod codex;
 pub mod fake;
+pub mod fallback;
 pub mod local_model;
 pub mod oauth_pkce;
 pub mod openai_chat;
@@ -11,12 +12,14 @@ pub mod probe;
 pub mod router;
 #[allow(clippy::module_inception)]
 pub mod providers;
+pub mod translator;
 
 pub use antigravity::*;
 pub use catalog::*;
 pub use claude::*;
 pub use codex::*;
 pub use fake::*;
+pub use fallback::*;
 pub use local_model::*;
 pub use oauth_pkce::*;
 pub use openai_chat::*;
