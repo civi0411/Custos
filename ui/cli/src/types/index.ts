@@ -1,4 +1,4 @@
-export type OperationalMode = 'Custos' | 'Code' | 'Research' | 'Assitant';
+export type OperationalMode = 'Custos' | 'Code' | 'Research' | 'Assistant';
 
 export type TaskStatus = 
   | 'Draft' 

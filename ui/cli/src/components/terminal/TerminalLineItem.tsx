@@ -10,6 +10,7 @@ interface TerminalLineItemProps {
   currentMode: OperationalMode;
   isPermitPending: boolean;
   onOpenModeSelector: () => void;
+  onRunCommand: (command: string) => void;
   onPermitDecision: (approved: boolean) => void;
 }
 
@@ -18,10 +19,11 @@ export const TerminalLineItem: React.FC<TerminalLineItemProps> = ({
   currentMode,
   isPermitPending,
   onOpenModeSelector,
+  onRunCommand,
   onPermitDecision,
 }) => {
   if (line.type === 'banner') {
-    return <TerminalBanner key={line.id} onOpenModeSelector={onOpenModeSelector} />;
+    return <TerminalBanner key={line.id} onOpenModeSelector={onOpenModeSelector} onRunCommand={onRunCommand} />;
   }
 
   if (line.type === 'card') {
