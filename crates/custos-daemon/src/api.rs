@@ -913,12 +913,44 @@ impl LocalApiDispatcher {
                 if let Some(root) = params.workspace_root {
                     cmd = cmd.with_workspace_root(root);
                 }
+                if let Some(ref session_id) = params.session_id {
+                    cmd = cmd.with_session_id(session_id.clone());
+                }
+                if let Some(ref turn_id) = params.turn_id {
+                    cmd = cmd.with_turn_id(turn_id.clone());
+                }
+
+                let prompt = if let Some(p) = params.prompt {
+                    Some(p)
+                } else if let Some(ref sid) = params.session_id {
+                    if let Some(journal) = self.session_manager.get_journal(&SessionId(sid.to_string())).await {
+                        journal.entries.iter().rev()
+                            .find(|e| e.entry_type == "user_message")
+                            .map(|e| e.entry_data.clone())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                if let Some(p) = prompt {
+                    cmd = cmd.with_prompt(p);
+                }
 
                 match workflow.start_run(cmd).await {
-                    Ok(handle) => match serde_json::to_value(&handle) {
-                        Ok(val) => ApiResponse::success(req.id, val),
-                        Err(e) => ApiResponse::error(req.id, e.to_string()),
-                    },
+                    Ok(handle) => {
+                        if let (Some(ref sid), Some(ref out)) = (params.session_id.as_ref(), handle.output.as_ref()) {
+                            let _ = self
+                                .session_manager
+                                .append_assistant_message(&SessionId(sid.to_string()), out)
+                                .await;
+                        }
+                        match serde_json::to_value(&handle) {
+                            Ok(val) => ApiResponse::success(req.id, val),
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
@@ -2574,7 +2606,8 @@ impl LocalApiDispatcher {
             "v1.llm.status" => {
                 let has_env_key = std::env::var("ANTHROPIC_API_KEY").is_ok()
                     || std::env::var("OPENAI_API_KEY").is_ok()
-                    || std::env::var("GEMINI_API_KEY").is_ok();
+                    || std::env::var("GEMINI_API_KEY").is_ok()
+                    || std::env::var("CUSTOS_PROVIDER").is_ok();
 
                 let configured_provider = if let Some(ref repo) = self.providers {
                     repo.list_providers().ok().and_then(|list| {

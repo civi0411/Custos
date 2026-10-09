@@ -391,23 +391,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       showToast('Dispatching run to Custos Spine...');
 
-      // 2. Append message to backend session journal
-      if (activeSession.sessionId) {
-        await daemonClient.appendSessionMessage(activeSession.sessionId, 'user', text);
+      // 2. Ensure session and task are bound to daemon
+      let targetSessionId = activeSession.sessionId;
+      let targetTaskId = activeSession.taskId;
+
+      if (!targetTaskId) {
+        try {
+          const createdTask = await daemonClient.createTask({
+            title: activeSession.title || 'Interactive Session Task',
+            contract: { pack_id: activeSession.pack || 'general' },
+          });
+          targetTaskId = createdTask.id;
+        } catch (e) {
+          console.warn('[DaemonClient] Could not create task on daemon:', e);
+        }
+      }
+
+      if (!targetSessionId) {
+        try {
+          const createdSession = await daemonClient.createSession('assisted');
+          targetSessionId = createdSession.id;
+          if (targetTaskId) {
+            await daemonClient.attachSession({ session_id: targetSessionId, task_id: targetTaskId });
+          }
+        } catch (e) {
+          console.warn('[DaemonClient] Could not create/attach session on daemon:', e);
+        }
+      }
+
+      // Append message to backend session journal
+      if (targetSessionId) {
+        await daemonClient.appendSessionMessage(targetSessionId, 'user', text);
       }
 
       // 3. Start workflow run
       const run = await daemonClient.startRun({
-        task_id: activeSession.taskId || activeSession.id,
+        task_id: targetTaskId || activeSession.id,
         preferred_mode: 'model',
+        session_id: targetSessionId,
+        prompt: text,
       });
+
+      const runId = (run as any).run_id || run.id || 'unknown';
+      const outputText = (run as any).output || run.metadata?.output;
+      const isCompleted = run.status === 'completed';
 
       const assistantMsg = {
         role: 'assistant' as const,
         author: 'Custos runtime',
-        badge: `Run ${run.status}`,
-        stepName: `Run #${run.id.slice(0, 8)}`,
-        text: `Run ${run.id} was accepted with status ${run.status}. The result is not available in this view yet.`,
+        badge: isCompleted ? 'Completed' : `Run ${run.status}`,
+        stepName: `Run #${runId.slice(0, 8)}`,
+        text: outputText
+          ? outputText
+          : `Run ${runId} was accepted with status ${run.status}. Awaiting background completion.`,
       };
 
       setProjectData((prev) => {
@@ -416,6 +452,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (s.id === activeSession.id) {
             return {
               ...s,
+              taskId: targetTaskId || s.taskId,
+              sessionId: targetSessionId || s.sessionId,
               messages: [...s.messages, assistantMsg],
             };
           }
@@ -427,7 +465,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
       });
 
-      showToast(`Run ${run.id.slice(0, 8)}: ${run.status}`);
+      showToast(`Run ${runId.slice(0, 8)}: ${run.status}`);
     } catch (err: any) {
       const errMsg = {
         role: 'assistant' as const,

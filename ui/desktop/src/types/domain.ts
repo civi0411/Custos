@@ -113,12 +113,14 @@ export interface WorkerRun {
 
 export interface Run {
   id: string;
+  run_id?: string;
   task_id: string;
   status: RunStatus;
   started_at: string;
   completed_at?: string;
-  worker_runs: WorkerRun[];
-  metadata: Record<string, any>;
+  worker_runs?: WorkerRun[];
+  metadata?: Record<string, any>;
+  output?: string;
 }
 
 export interface ActionIntent {
@@ -155,6 +157,9 @@ export interface StartRunParams {
   preferred_mode?: 'model' | 'native' | 'terminal';
   workspace_root?: string;
   harness_id?: string;
+  session_id?: string;
+  turn_id?: string;
+  prompt?: string;
 }
 
 export interface AttachSessionParams {
