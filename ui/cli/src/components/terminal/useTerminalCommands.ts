@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { OperationalMode, TerminalLine, Task } from '../../types';
 import { SAMPLE_DIFF } from '../../data/constants';
-import { CustosApi } from '../../services/custosApi';
+import { CustosApi, isTauriEnvironment } from '../../services/custosApi';
 import { getModeSlug, VibeSessionState } from './types';
 
 interface UseTerminalCommandsProps {
@@ -15,11 +15,6 @@ export function useTerminalCommands({ currentMode, onModeChange }: UseTerminalCo
       id: 'init_banner',
       type: 'banner',
       content: '',
-    },
-    {
-      id: 'init_welcome',
-      type: 'system',
-      content: "Custos Runtime sẵn sàng. Bạn có thể chat bình thường bên dưới hoặc gõ '/' để chọn mode (custos-code, custos-research, custos-assistant).",
     },
   ]);
 
@@ -171,7 +166,7 @@ export function useTerminalCommands({ currentMode, onModeChange }: UseTerminalCo
       trimmed === 'assistant' ||
       trimmed === 'custos-assistant'
     ) {
-      selectMode('Assitant');
+      selectMode('Assistant');
       return;
     }
 
@@ -242,9 +237,10 @@ export function useTerminalCommands({ currentMode, onModeChange }: UseTerminalCo
       case 'status': {
         const tasks = await CustosApi.listTasks();
         const pending = CustosApi.getPendingPermits();
+        const runtimeLabel = isTauriEnvironment() ? 'Desktop runtime' : 'Chế độ demo';
         addLine(
           'info',
-          `Daemon: Online | Tasks: ${tasks.length} | Pending Permits: ${pending.length} | Mode: [${activeSlug}]`
+          `${runtimeLabel} | Nhiệm vụ: ${tasks.length} | Chờ phê duyệt: ${pending.length} | Chế độ: [${activeSlug}]`
         );
         break;
       }
@@ -272,7 +268,7 @@ export function useTerminalCommands({ currentMode, onModeChange }: UseTerminalCo
       case 'create':
       case 'new': {
         const title = args.join(' ') || 'Nhiệm vụ tự động mới';
-        const mode = (typeof currentMode === 'string' && ['Code', 'Research', 'Assitant'].includes(currentMode)
+        const mode = (typeof currentMode === 'string' && ['Code', 'Research', 'Assistant'].includes(currentMode)
           ? currentMode
           : 'Code') as OperationalMode;
         const task = await CustosApi.createTask(title, mode);
@@ -306,7 +302,7 @@ export function useTerminalCommands({ currentMode, onModeChange }: UseTerminalCo
       case 'vibe':
       case 'v': {
         const goal = args.join(' ') || 'Tối ưu hóa và kiểm tra invariants trong Sandbox';
-        const mode = (typeof currentMode === 'string' && ['Code', 'Research', 'Assitant'].includes(currentMode)
+        const mode = (typeof currentMode === 'string' && ['Code', 'Research', 'Assistant'].includes(currentMode)
           ? currentMode
           : 'Code') as OperationalMode;
         await runVibeExecution(goal, mode);

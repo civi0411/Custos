@@ -38,7 +38,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="header-divider" />
 
         <div className="mode-selector-group">
-          {(['Code', 'Research', 'Assitant'] as OperationalMode[]).map((mode) => {
+          {(['Code', 'Research', 'Assistant'] as OperationalMode[]).map((mode) => {
             const cfg = OPERATIONAL_MODES[mode];
             const isActive = currentMode === mode;
             return (
@@ -83,7 +83,7 @@ export const Header: React.FC<HeaderProps> = ({
             title="Side-by-side Terminal + Visual View"
           >
             <Split size={14} />
-            <span>Split</span>
+            <span>Không gian làm việc</span>
           </button>
           <button
             className={`view-btn ${viewMode === 'visual' ? 'active' : ''}`}
@@ -91,7 +91,7 @@ export const Header: React.FC<HeaderProps> = ({
             title="Visual Workflow & Mascot Cards View"
           >
             <Layout size={14} />
-            <span>Visual</span>
+            <span>Tổng quan</span>
           </button>
         </div>
 
@@ -101,12 +101,12 @@ export const Header: React.FC<HeaderProps> = ({
           title={crtEffect ? 'Disable CRT Scanlines' : 'Enable CRT Scanlines'}
         >
           <Monitor size={14} />
-          <span>CRT</span>
+          <span>Hiệu ứng</span>
         </button>
 
         <div className="human-permit-indicator" title="Human-in-the-Loop Governance Active">
           <ShieldCheck size={14} className="shield-icon" />
-          <span>Permits: ENFORCED</span>
+          <span>Phê duyệt bật</span>
         </div>
       </div>
     </header>

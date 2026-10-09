@@ -14,7 +14,7 @@ export const MascotShowcase: React.FC<MascotShowcaseProps> = ({
   onSelectMode,
   onStartVibe,
 }) => {
-  const modes: OperationalMode[] = ['Code', 'Research', 'Assitant'];
+  const modes: OperationalMode[] = ['Code', 'Research', 'Assistant'];
 
   const getModeIcon = (mode: OperationalMode) => {
     switch (mode) {
@@ -22,7 +22,7 @@ export const MascotShowcase: React.FC<MascotShowcaseProps> = ({
         return <Code2 size={22} />;
       case 'Research':
         return <Compass size={22} />;
-      case 'Assitant':
+      case 'Assistant':
         return <Bot size={22} />;
     }
   };

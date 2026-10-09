@@ -50,8 +50,8 @@ export const OPERATIONAL_MODES: Record<OperationalMode, ModeConfig> = {
       'Architecture Decision Synthesis',
     ],
   },
-  Assitant: {
-    mode: 'Assitant',
+  Assistant: {
+    mode: 'Assistant',
     name: 'Assistant',
     mascotName: 'Assistant Engine',
     mascotImage: '',
