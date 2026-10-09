@@ -6,7 +6,7 @@
   <img alt="Custos" src="../assets/banner.png" width="100%">
 </picture>
 
-[ EN ](../../README.md) · [ VI ](README.vi.md) · [ DE ](README.de.md) · [ ZH ](README.zh.md)
+[ EN ](../../README.md) · [ VI ](README.vi.md) · [ DE ](README.de.md) · [ ZH ](README.zh.md) · [ JA ](README.ja.md) · [ KO ](README.ko.md) · [ ES ](README.es.md)
 
 </div>
 
