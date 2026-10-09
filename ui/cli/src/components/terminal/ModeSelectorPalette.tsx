@@ -108,7 +108,8 @@ export const ModeSelectorPalette: React.FC<ModeSelectorPaletteProps> = ({
           const isActive = selectedIndex === idx;
 
           return (
-            <div
+            <button
+              type="button"
               key={item.id}
               className={`slash-palette-item ${isActive ? 'active' : ''}`}
               onClick={() => onSelectItem(item)}
@@ -126,7 +127,7 @@ export const ModeSelectorPalette: React.FC<ModeSelectorPaletteProps> = ({
                 </div>
                 <div className="slash-item-description">{item.description}</div>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>

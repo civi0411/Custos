@@ -3,7 +3,7 @@
 import chalk from 'chalk';
 import boxen from 'boxen';
 import ora from 'ora';
-import { select, input, confirm, Separator } from '@inquirer/prompts';
+import { select, input, confirm } from '@inquirer/prompts';
 import * as readline from 'node:readline/promises';
 import { emitKeypressEvents } from 'node:readline';
 import { stdin as inputDevice, stdout as outputDevice } from 'node:process';
@@ -16,41 +16,126 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const VERSION = '0.1.1';
+const CHAT_WIDTH = 58;
+let alternateScreenActive = false;
+const COMMANDS = [
+  'assistant',
+  'clear',
+  'code',
+  'create',
+  'diff',
+  'help',
+  'list',
+  'mode',
+  'permit',
+  'research',
+  'status',
+  'vibe',
+];
+
+function editDistance(left, right) {
+  const rows = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    let diagonal = rows[0];
+    rows[0] = leftIndex;
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const previous = rows[rightIndex];
+      rows[rightIndex] = Math.min(
+        rows[rightIndex] + 1,
+        rows[rightIndex - 1] + 1,
+        diagonal + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1),
+      );
+      diagonal = previous;
+    }
+  }
+  return rows[right.length];
+}
+
+function suggestCommands(inputCommand) {
+  return COMMANDS
+    .map((command) => ({ command, distance: editDistance(inputCommand, command) }))
+    .filter(({ distance }) => distance <= Math.max(2, Math.floor(inputCommand.length / 3)))
+    .sort((left, right) => left.distance - right.distance || left.command.localeCompare(right.command))
+    .slice(0, 3)
+    .map(({ command }) => command);
+}
+
+function printUnknownCommand(inputCommand) {
+  console.error(chalk.red(`\n  Không tìm thấy lệnh "${inputCommand}".`));
+  const suggestions = suggestCommands(inputCommand);
+  if (suggestions.length > 0) {
+    console.error(chalk.dim('  Có phải bạn muốn dùng: ') + suggestions.map((item) => chalk.cyan(item)).join(', '));
+  }
+  console.error(chalk.dim("  Bước tiếp theo: chạy 'custos help' hoặc nhấn '/' trong chế độ tương tác.\n"));
+}
 
 function getTerminalWidth() {
   return process.stdout.columns || 100;
 }
 
+function enterAlternateScreen() {
+  if (!outputDevice.isTTY || alternateScreenActive) return;
+  outputDevice.write('\x1b[?1049h\x1b[2J\x1b[H\x1b[?25h');
+  alternateScreenActive = true;
+}
+
+function leaveAlternateScreen() {
+  if (!alternateScreenActive) return;
+  outputDevice.write('\x1b[?1049l');
+  alternateScreenActive = false;
+}
+
+function padToWidth(content, width) {
+  return `${content}${' '.repeat(Math.max(0, width - stripAnsi(content).length))}`;
+}
+
+function getPanelIndent(width = CHAT_WIDTH) {
+  return ' '.repeat(Math.max(0, Math.floor((getTerminalWidth() - width) / 2)));
+}
+
 function getBannerLines(version) {
   return [
     '',
+    chalk.rgb(214, 214, 214).bold(' ██████╗██╗   ██╗███████╗████████╗ ██████╗ ███████╗'),
+    chalk.rgb(198, 198, 198).bold('██╔════╝██║   ██║██╔════╝╚══██╔══╝██╔═══██╗██╔════╝'),
+    chalk.rgb(180, 180, 180).bold('██║     ██║   ██║███████╗   ██║   ██║   ██║███████╗'),
+    chalk.rgb(156, 156, 156).bold('██║     ██║   ██║╚════██║   ██║   ██║   ██║╚════██║'),
+    chalk.rgb(132, 132, 132).bold('╚██████╗╚██████╔╝███████║   ██║   ╚██████╔╝███████║'),
+    chalk.rgb(100, 100, 100).bold(' ╚═════╝ ╚═════╝ ╚══════╝   ╚═╝    ╚═════╝ ╚══════╝'),
     '',
-    '\x1b[38;2;125;211;252;1m   ██████╗ ██╗   ██╗ ███████╗ ████████╗  ██████╗  ███████╗\x1b[0m',
-    '\x1b[38;2;147;197;253;1m  ██╔════╝ ██║   ██║ ██╔════╝ ╚══██╔══╝ ██╔═══██╗ ██╔════╝\x1b[0m',
-    '\x1b[38;2;186;230;253;1m  ██║      ██║   ██║ ███████╗    ██║    ██║   ██║ ███████╗\x1b[0m',
-    '\x1b[38;2;224;242;254;1m  ██║      ██║   ██║ ╚════██║    ██║    ██║   ██║ ╚════██║\x1b[0m',
-    '\x1b[38;2;240;248;255;1m  ╚██████╗ ╚██████╔╝ ███████║    ██║    ╚██████╔╝ ███████║\x1b[0m',
-    '\x1b[38;2;248;250;252;1m   ╚═════╝  ╚═════╝  ╚══════╝    ╚═╝     ╚═════╝  ╚══════╝\x1b[0m',
+    chalk.rgb(92, 92, 92)(`v${version}  agent workspace có kiểm soát`),
     '',
-    `  \x1b[38;2;56;189;248m❄\x1b[0m \x1b[38;2;251;191;36;1mCustos\x1b[0m \x1b[38;2;148;163;184mv${version}\x1b[0m \x1b[38;2;125;211;252;3m- Guardian of Agentic Work\x1b[0m`,
-    '  \x1b[38;2;148;163;184mHuman-governed runtime for agentic workflows\x1b[0m',
-    '  \x1b[38;2;100;116;139mChat tự do hoặc nhấn \'/\' để mở bảng chọn chức năng & mode:\x1b[0m',
-    '  \x1b[38;2;56;189;248m(custos-code, custos-research, vibe, tasks, diff, status, ...)\x1b[0m',
-    '',
+    padToWidth(`${chalk.hex('#eab308').bold('build')}  ${chalk.rgb(205, 205, 205)('custos')}  ${chalk.rgb(105, 105, 105)('tab đổi chế độ')}  ${chalk.hex('#eab308')('/ lệnh')}`, CHAT_WIDTH),
   ];
 }
 
 export function printMainBanner() {
   const bannerLines = getBannerLines(VERSION);
-  console.log();
+  const terminalWidth = getTerminalWidth();
+  const terminalHeight = process.stdout.rows || 30;
+  const verticalPadding = Math.max(2, Math.floor((terminalHeight - bannerLines.length - 3) / 2));
+  console.clear();
+  console.log('\n'.repeat(verticalPadding));
   for (const line of bannerLines) {
-    console.log(line);
+    const visibleWidth = stripAnsi(line).length;
+    const leftPadding = Math.max(0, Math.floor((terminalWidth - visibleWidth) / 2));
+    console.log(`${' '.repeat(leftPadding)}${line}`);
   }
-  console.log();
+  console.log('\n');
 }
 
 function stripAnsi(str) {
   return str.replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+function printCentered(content = '') {
+  const visibleWidth = stripAnsi(content).length;
+  const leftPadding = Math.max(0, Math.floor((getTerminalWidth() - visibleWidth) / 2));
+  console.log(`${' '.repeat(leftPadding)}${content}`);
+}
+
+function printPanelLine(content = '') {
+  console.log(`${getPanelIndent()}${content}`);
 }
 
 export function printModeCard(mode) {
@@ -126,81 +211,109 @@ export function printModeCard(mode) {
 
   console.log();
   for (const line of boxLines) {
-    console.log(`  ${line}`);
+    printCentered(line);
   }
   console.log();
 }
 
 export async function promptSlashSelection() {
-  console.log(chalk.bold.hex('#38bdf8')('\n  ══ BẢNG LỆNH & CHỨC NĂNG CUSTOS (SLASH COMMAND PALETTE) ══\n'));
-
-  const choice = await select({
-    message: chalk.bold.white('Chọn chức năng hoặc chế độ hoạt động:'),
-    choices: [
-      new Separator(chalk.hex('#38bdf8')('─── Chế độ hoạt động (Operational Engines) ───')),
-      {
-        name: `${chalk.hex('#38bdf8').bold('/mode')}              ${chalk.dim('— Chọn Code, Research hoặc Assistant')}`,
-        value: { type: 'submenu', value: 'mode' },
-      },
-
-      new Separator(chalk.hex('#ec4899')('─── Tác vụ & Quy trình (Actions & Workflows) ───')),
-      {
-        name: `${chalk.hex('#ec4899').bold('vibe')}               ${chalk.dim('— Khởi chạy quy trình Vibe Coding tương tác')}`,
-        value: { type: 'action', value: 'vibe' },
-      },
-      {
-        name: `${chalk.hex('#818cf8').bold('tasks / list')}       ${chalk.dim('— Xem danh sách nhiệm vụ & SQLite audit spans')}`,
-        value: { type: 'action', value: 'list' },
-      },
-      {
-        name: `${chalk.hex('#34d399').bold('create')}             ${chalk.dim('— Tạo nhiệm vụ agentic mới vào hàng đợi')}`,
-        value: { type: 'action', value: 'create' },
-      },
-      {
-        name: `${chalk.hex('#fbbf24').bold('advance')}            ${chalk.dim('— Chuyển tiến trình task sang trạng thái kế tiếp')}`,
-        value: { type: 'action', value: 'advance' },
-      },
-      {
-        name: `${chalk.hex('#f97316').bold('diff')}               ${chalk.dim('— Xem bản so sánh Unified AST Diff Review')}`,
-        value: { type: 'action', value: 'diff' },
-      },
-      {
-        name: `${chalk.hex('#ef4444').bold('permit')}             ${chalk.dim('— Xem & phê duyệt Giấy phép Thực thi (Human Permit)')}`,
-        value: { type: 'action', value: 'permit' },
-      },
-      {
-        name: `${chalk.hex('#06b6d4').bold('status')}             ${chalk.dim('— Kiểm tra trạng thái Sovereign Runtime & Sandbox')}`,
-        value: { type: 'action', value: 'status' },
-      },
-
-      new Separator(chalk.dim('─── Hệ thống & Trợ giúp (System) ───')),
-      {
-        name: `${chalk.dim.white('clear')}              ${chalk.dim('— Xóa màn hình terminal và in lại banner')}`,
-        value: { type: 'action', value: 'clear' },
-      },
-      {
-        name: `${chalk.dim.white('help')}               ${chalk.dim('— Tra cứu danh sách lệnh chi tiết')}`,
-        value: { type: 'action', value: 'help' },
-      },
-      {
-        name: `${chalk.red('exit')}               ${chalk.dim('— Thoát khỏi Custos CLI')}`,
-        value: { type: 'action', value: 'exit' },
-      },
-    ],
-    pageSize: 16,
-  });
-
-  return choice;
+  return promptCenteredPalette([
+    { name: 'Code', description: 'Lập trình, sửa lỗi và kiểm thử', value: { type: 'mode', value: 'code' } },
+    { name: 'Research', description: 'Phân tích và đối chiếu bằng chứng', value: { type: 'mode', value: 'research' } },
+    { name: 'Assistant', description: 'Điều phối tác vụ và phê duyệt', value: { type: 'mode', value: 'assistant' } },
+    { name: 'vibe', description: 'Khởi chạy quy trình tương tác', value: { type: 'action', value: 'vibe' } },
+    { name: 'tasks', description: 'Xem danh sách nhiệm vụ', value: { type: 'action', value: 'list' } },
+    { name: 'create', description: 'Tạo nhiệm vụ mới', value: { type: 'action', value: 'create' } },
+    { name: 'advance', description: 'Chuyển bước nhiệm vụ', value: { type: 'action', value: 'advance' } },
+    { name: 'diff', description: 'Xem thay đổi đề xuất', value: { type: 'action', value: 'diff' } },
+    { name: 'permit', description: 'Xem yêu cầu phê duyệt', value: { type: 'action', value: 'permit' } },
+    { name: 'status', description: 'Kiểm tra runtime và sandbox', value: { type: 'action', value: 'status' } },
+    { name: 'clear', description: 'Làm sạch phiên hiển thị', value: { type: 'action', value: 'clear' } },
+    { name: 'help', description: 'Xem hướng dẫn', value: { type: 'action', value: 'help' } },
+    { name: 'exit', description: 'Thoát Custos', value: { type: 'action', value: 'exit' } },
+  ], 'Lệnh và chế độ');
 }
 
 export async function promptModeSelection() {
-  return select({
-    message: chalk.bold.white('Chọn mode:'),
-    choices: [
-      { name: `${chalk.hex('#38bdf8').bold('/code')}       ${chalk.dim('— Lập trình, sửa lỗi & Sandbox Worktree')}`, value: 'code' },
-      { name: `${chalk.hex('#f59e0b').bold('/research')}   ${chalk.dim('— Điều tra kiến trúc & đối soát bằng chứng')}`, value: 'research' },
-      { name: `${chalk.hex('#10b981').bold('/assistant')}  ${chalk.dim('— Điều phối quy trình tác vụ & Epoch Lock')}`, value: 'assistant' },
-    ],
+  return promptCenteredPalette([
+    { name: 'Code', description: 'Lập trình, sửa lỗi và kiểm thử', value: 'code' },
+    { name: 'Research', description: 'Phân tích và đối chiếu bằng chứng', value: 'research' },
+    { name: 'Assistant', description: 'Điều phối tác vụ và phê duyệt', value: 'assistant' },
+  ], 'Chọn chế độ');
+}
+
+function promptCenteredPalette(items, title) {
+  let selectedIndex = 0;
+  let query = '';
+
+  return new Promise((resolve) => {
+    const filteredItems = () => items.filter((item) => {
+      const searchText = `${item.name} ${item.description}`.toLowerCase();
+      return searchText.includes(query.toLowerCase());
+    });
+
+    const render = () => {
+      const visibleItems = filteredItems();
+      selectedIndex = Math.min(selectedIndex, Math.max(0, visibleItems.length - 1));
+      printMainBanner();
+      const inputText = ` /${query}`;
+      printPanelLine(chalk.bgRgb(29, 29, 29).rgb(210, 210, 210)(padToWidth(inputText, CHAT_WIDTH)));
+
+      for (const [index, item] of visibleItems.entries()) {
+        const marker = index === selectedIndex ? chalk.white('›') : ' ';
+        const command = chalk.hex('#eab308').bold(item.name.padEnd(12));
+        const description = chalk.rgb(145, 145, 145)(item.description);
+        const row = padToWidth(`${marker} ${command}${description}`, CHAT_WIDTH);
+        const surface = index === selectedIndex
+          ? chalk.bgRgb(38, 38, 38)(row)
+          : chalk.bgRgb(22, 22, 22)(row);
+        printPanelLine(surface);
+      }
+
+      if (visibleItems.length === 0) {
+        printPanelLine(chalk.bgRgb(22, 22, 22).gray(padToWidth('  Không tìm thấy lệnh phù hợp', CHAT_WIDTH)));
+      }
+      printPanelLine(chalk.rgb(105, 105, 105)(padToWidth('↑↓ chọn   Enter xác nhận   Backspace đóng', CHAT_WIDTH)));
+    };
+
+    const finish = (value) => {
+      inputDevice.removeListener('keypress', onPaletteKeypress);
+      printMainBanner();
+      resolve(value);
+    };
+
+    const onPaletteKeypress = (character, key) => {
+      const visibleItems = filteredItems();
+      if (key?.name === 'up') {
+        selectedIndex = (selectedIndex - 1 + Math.max(1, visibleItems.length)) % Math.max(1, visibleItems.length);
+      } else if (key?.name === 'down') {
+        selectedIndex = (selectedIndex + 1) % Math.max(1, visibleItems.length);
+      } else if (key?.name === 'return' || key?.name === 'enter') {
+        finish(visibleItems[selectedIndex]?.value ?? null);
+        return;
+      } else if (key?.name === 'escape') {
+        finish(null);
+        return;
+      } else if (key?.name === 'backspace') {
+        if (query.length === 0) {
+          finish(null);
+          return;
+        }
+        query = query.slice(0, -1);
+        selectedIndex = 0;
+      } else if (character && !key?.ctrl && !key?.meta && character.length === 1 && character !== '/') {
+        query += character;
+        selectedIndex = 0;
+      } else {
+        return;
+      }
+      render();
+    };
+
+    if (inputDevice.isTTY) inputDevice.setRawMode(true);
+    inputDevice.resume();
+    inputDevice.on('keypress', onPaletteKeypress);
+    render();
   });
 }
 
@@ -328,14 +441,13 @@ export function printTaskList() {
 
 export function printStatus() {
   const statusContent =
-    `${chalk.bold.hex('#38bdf8')('Custos Sovereign Runtime Status')}\n\n` +
-    `${chalk.cyan('• Daemon Connection')} : ${chalk.green.bold('Online & Responding')}\n` +
-    `${chalk.cyan('• Local SQLite DB')}   : ${chalk.white('~/.custos/custos_vault.db (WAL Active)')}\n` +
-    `${chalk.cyan('• Active Sandbox')}    : ${chalk.white('Bubblewrap / Seatbelt Worktree (Clean)')}\n` +
-    `${chalk.cyan('• Concurrency Guard')}: ${chalk.white('Epoch Optimistic Lock v0.1.1')}\n` +
-    `${chalk.cyan('• Registered Tasks')}: ${chalk.yellow(tasks.length + ' active tasks')}\n` +
-    `${chalk.cyan('• Operational Modes')}: ${chalk.white('$custos-code, $custos-research, $custos-assistant')}\n` +
-    `${chalk.cyan('• Execution Mode')}   : ${chalk.hex('#10b981').bold('Direct Terminal Interactive')}`;
+    `${chalk.bold.hex('#38bdf8')('Trạng thái Custos CLI')}\n\n` +
+    `${chalk.cyan('• Nguồn dữ liệu')}     : ${chalk.yellow.bold('Mô phỏng cục bộ')}\n` +
+    `${chalk.cyan('• Daemon')}            : ${chalk.dim('Chưa được kết nối từ CLI Node')}\n` +
+    `${chalk.cyan('• Tệp nhiệm vụ')}      : ${chalk.white(TASKS_FILE)}\n` +
+    `${chalk.cyan('• Nhiệm vụ')}          : ${chalk.yellow(tasks.length + ' mục')}\n` +
+    `${chalk.cyan('• Chế độ')}            : ${chalk.white('code, research, assistant')}\n\n` +
+    `${chalk.dim('Bước tiếp theo: dùng ứng dụng Tauri để kết nối daemon thật.')}`;
 
   console.log(
     boxen(statusContent, {
@@ -490,6 +602,7 @@ export async function runVibeWizard(initialMode = null) {
 }
 
 export async function startRepl() {
+  enterAlternateScreen();
   printMainBanner();
 
   let currentMode = 'custos';
@@ -499,11 +612,27 @@ export async function startRepl() {
   let waitingForInput = false;
 
   const onKeypress = (str, key) => {
-    // If prompt is waiting and user presses '/', trigger mode selection immediately without pressing Enter
+    if (waitingForInput && (key?.name === 'return' || key?.name === 'enter')) {
+      outputDevice.write('\x1b[0m');
+    }
     if (waitingForInput && str === '/' && (rl.line?.trim() === '/' || rl.line?.trim() === '')) {
       waitingForInput = false;
       setImmediate(() => {
         rl.write('\r\n');
+      });
+      return;
+    }
+    if (waitingForInput && key?.name === 'tab' && !rl.line) {
+      waitingForInput = false;
+      setImmediate(() => {
+        rl.write('mode\r\n');
+      });
+      return;
+    }
+    if (waitingForInput && key?.ctrl && key?.name === 'p') {
+      waitingForInput = false;
+      setImmediate(() => {
+        rl.write('\x15/\r\n');
       });
     }
   };
@@ -511,14 +640,12 @@ export async function startRepl() {
   inputDevice.on('keypress', onKeypress);
 
   const getPrompt = () => {
+    const inputLeft = Math.max(0, Math.floor((getTerminalWidth() - CHAT_WIDTH) / 2));
+    const inputPadding = ' '.repeat(inputLeft);
     if (currentMode === 'custos') {
-      return `${chalk.hex('#38bdf8').bold('custos')} ${chalk.dim('❯')} `;
+      return `${inputPadding}${chalk.bgRgb(29, 29, 29).rgb(205, 205, 205)(' │ ')}\x1b[48;2;29;29;29m\x1b[38;2;205;205;205m`;
     }
-    let modeColor = chalk.hex('#38bdf8');
-    if (currentMode === 'code') modeColor = chalk.hex('#38bdf8');
-    if (currentMode === 'research') modeColor = chalk.hex('#f59e0b');
-    if (currentMode === 'assistant') modeColor = chalk.hex('#10b981');
-    return `${modeColor.bold(`custos-${currentMode}`)} ${chalk.dim('❯')} `;
+    return `${inputPadding}${chalk.bgRgb(29, 29, 29).rgb(205, 205, 205)(' │ ')}${chalk.bgRgb(29, 29, 29).hex('#eab308')(`custos-${currentMode} › `)}\x1b[48;2;29;29;29m\x1b[38;2;205;205;205m`;
   };
 
   while (true) {
@@ -546,10 +673,10 @@ export async function startRepl() {
         if (chosen) {
           if (chosen.type === 'submenu' && chosen.value === 'mode') {
             currentMode = await promptModeSelection();
-            console.log(chalk.cyan(`\n  ✔ Đã chuyển sang chế độ [custos-${currentMode}].\n`));
+            printCentered(chalk.cyan(`Đã chuyển sang custos-${currentMode}`));
           } else if (chosen.type === 'mode') {
             currentMode = chosen.value;
-            console.log(chalk.cyan(`\n  ✔ Đã chuyển sang chế độ [${currentMode === 'custos' ? 'custos' : `custos-${currentMode}`}].\n`));
+            printCentered(chalk.cyan(`Đã chuyển sang ${currentMode === 'custos' ? 'custos' : `custos-${currentMode}`}`));
           } else if (chosen.type === 'action') {
             switch (chosen.value) {
               case 'vibe':
@@ -604,6 +731,7 @@ export async function startRepl() {
                 console.log(chalk.dim('\n  Tạm biệt! Custos Runtime đang bảo vệ hệ thống của bạn.\n'));
                 inputDevice.removeListener('keypress', onKeypress);
                 rl.close();
+                leaveAlternateScreen();
                 return;
             }
           }
@@ -623,24 +751,24 @@ export async function startRepl() {
       (cleanCmd === 'mode' && args[0]?.toLowerCase() === 'code')
     ) {
       currentMode = 'code';
-      console.log(chalk.cyan(`\n  ✔ Đã chuyển sang chế độ [custos-code].\n`));
+      printCentered(chalk.cyan('Đã chuyển sang custos-code'));
     } else if (
       cleanCmd === 'research' ||
       cleanCmd === 'custos-research' ||
       (cleanCmd === 'mode' && args[0]?.toLowerCase() === 'research')
     ) {
       currentMode = 'research';
-      console.log(chalk.cyan(`\n  ✔ Đã chuyển sang chế độ [custos-research].\n`));
+      printCentered(chalk.cyan('Đã chuyển sang custos-research'));
     } else if (
       cleanCmd === 'assistant' ||
       cleanCmd === 'custos-assistant' ||
       (cleanCmd === 'mode' && args[0]?.toLowerCase() === 'assistant')
     ) {
       currentMode = 'assistant';
-      console.log(chalk.cyan(`\n  ✔ Đã chuyển sang chế độ [custos-assistant].\n`));
+      printCentered(chalk.cyan('Đã chuyển sang custos-assistant'));
     } else if (cleanCmd === 'custos' || cleanCmd === 'exit-mode') {
       currentMode = 'custos';
-      console.log(chalk.cyan('\n  ✔ Đã quay lại chế độ gốc [custos]. Bạn có thể chat bình thường hoặc gõ / để mở bảng lệnh.\n'));
+      printMainBanner();
     } else if (cleanCmd === 'vibe' || cleanCmd === 'v') {
       await runVibeWizard(currentMode !== 'custos' ? currentMode : null);
     } else if (cleanCmd === 'list' || cleanCmd === 'tasks' || cleanCmd === 'ls') {
@@ -711,51 +839,56 @@ export async function startRepl() {
         }
         console.log();
       } else {
-        console.log(chalk.cyan(`\n  💬 [CUSTOS] `) + chalk.white(`"${line}"`));
-        console.log(chalk.dim(`  Hệ thống đang ở chế độ giao tiếp chung. Bạn có thể chat tự do hoặc gõ `) + chalk.yellow.bold('/') + chalk.dim(` để kích hoạt engine chuyên biệt (custos-code, custos-research, custos-assistant).\n`));
+        printCentered(chalk.white(`Bạn: ${line}`));
+        printCentered(chalk.dim("Custos đang ở chế độ hội thoại. Nhấn Tab để chọn agent hoặc '/' để mở lệnh."));
+        console.log();
       }
     }
   }
 
   inputDevice.removeListener('keypress', onKeypress);
   rl.close();
+  leaveAlternateScreen();
 }
 
 export function printHelp() {
-  console.log(chalk.bold.hex('#38bdf8')('\n  ══ Custos CLI — Bảng tra cứu lệnh ══\n'));
-
-  const commands = [
-    ['/ (hoặc mode)', 'Mở bảng chọn chế độ hoạt động (custos-code, custos-research, ...)'],
-    ['custos', 'Quay lại chế độ giao tiếp chung để chat tự do'],
-    ['code / /code', 'Kích hoạt custos-code (Code Engine) trong Sandbox'],
-    ['research / /research', 'Kích hoạt custos-research (Research Engine) điều tra'],
-    ['assistant / /assistant', 'Kích hoạt custos-assistant (Assistant Engine) điều phối'],
-    ['vibe (hoặc v)', 'Khởi chạy quy trình Vibe Coding tương tác từng bước'],
-    ['list / tasks', 'Hiển thị bảng danh sách các task và số lượng SQLite Spans'],
-    ['create <tiêu đề>', 'Tạo một nhiệm vụ agentic mới vào hàng đợi'],
-    ['advance <id>', 'Chuyển tiến trình task sang trạng thái tiếp theo'],
-    ['diff (hoặc d)', 'Xem bản so sánh Unified Diff với màu sắc highlight'],
-    ['permit (hoặc p)', 'Xem và phê duyệt Giấy phép Thực thi (Human-in-the-Loop)'],
-    ['status', 'Kiểm tra trạng thái hệ thống, daemon và sandbox'],
-    ['clear / cls', 'Xóa màn hình terminal và in lại banner'],
-    ['help / ?', 'Hiển thị trợ giúp này'],
-    ['exit / quit', 'Thoát khỏi Custos CLI'],
+  const sections = [
+    ['Bắt đầu', [
+      ['vibe', 'Tạo quy trình có hướng dẫn từng bước'],
+      ['create <mục tiêu>', 'Tạo nhiệm vụ mới'],
+      ['list', 'Xem các nhiệm vụ hiện có'],
+      ['status', 'Kiểm tra trạng thái runtime'],
+    ]],
+    ['Chế độ làm việc', [
+      ['code', 'Lập trình, sửa lỗi và kiểm thử'],
+      ['research', 'Phân tích và đối chiếu bằng chứng'],
+      ['assistant', 'Điều phối nhiệm vụ và phê duyệt'],
+      ['mode', 'Mở bộ chọn chế độ tương tác'],
+    ]],
+    ['Kiểm soát', [
+      ['diff', 'Xem thay đổi đang được đề xuất'],
+      ['permit', 'Xem yêu cầu đang chờ phê duyệt'],
+      ['advance <id>', 'Chuyển nhiệm vụ sang bước tiếp theo'],
+    ]],
   ];
 
-  commands.forEach(([c, d]) => {
-    console.log(`  ${chalk.yellow.bold(c.padEnd(24))} ${chalk.white(d)}`);
-  });
+  console.log(chalk.bold.hex('#38bdf8')('\n  Custos CLI'));
+  console.log(chalk.dim('  Không gian làm việc agent có kiểm soát\n'));
+  console.log(`  ${chalk.white('Cách dùng:')} custos <lệnh> [tham số]`);
+  console.log(`  ${chalk.white('Tương tác:')} chạy ${chalk.cyan('custos')}, sau đó nhấn ${chalk.cyan('/')} để mở lệnh nhanh`);
 
-  console.log(chalk.dim('\n  Tham số dòng lệnh nhanh:'));
-  console.log(`  ${chalk.white('custos vibe')}         ${chalk.dim('Chạy ngay wizard Vibe Coding')}`);
-  console.log(`  ${chalk.white('custos code')}         ${chalk.dim('Kích hoạt Code Engine (custos-code)')}`);
-  console.log(`  ${chalk.white('custos research')}     ${chalk.dim('Kích hoạt Research Engine (custos-research)')}`);
-  console.log(`  ${chalk.white('custos assistant')}    ${chalk.dim('Kích hoạt Assistant Engine (custos-assistant)')}`);
-  console.log(`  ${chalk.white('custos list')}         ${chalk.dim('In bảng task hiện tại')}`);
-  console.log(`  ${chalk.white('custos status')}       ${chalk.dim('In thông tin trạng thái')}`);
-  console.log(`  ${chalk.white('custos diff')}         ${chalk.dim('Xem bản vá Unified Diff')}`);
-  console.log(`  ${chalk.white('custos permit')}       ${chalk.dim('Xác nhận giấy phép thực thi')}`);
-  console.log();
+  for (const [title, commands] of sections) {
+    console.log(chalk.bold(`\n  ${title}`));
+    for (const [command, description] of commands) {
+      console.log(`    ${chalk.cyan(command.padEnd(20))} ${description}`);
+    }
+  }
+
+  console.log(chalk.bold('\n  Hệ thống'));
+  console.log(`    ${chalk.cyan('help'.padEnd(20))} Hiển thị hướng dẫn này`);
+  console.log(`    ${chalk.cyan('clear'.padEnd(20))} Xóa màn hình tương tác`);
+  console.log(`    ${chalk.cyan('exit'.padEnd(20))} Thoát chế độ tương tác`);
+  console.log(chalk.dim("\n  Ví dụ: custos create \"Kiểm tra luồng đăng nhập\"\n"));
 }
 
 async function main() {
@@ -763,7 +896,16 @@ async function main() {
   const first = args[0]?.toLowerCase();
 
   if (!first) {
+    if (!inputDevice.isTTY || !outputDevice.isTTY) {
+      printHelp();
+      return;
+    }
     await startRepl();
+    return;
+  }
+
+  if (first === '--version' || first === '-v') {
+    console.log(VERSION);
     return;
   }
 
@@ -803,12 +945,13 @@ async function main() {
   } else if (first === '--help' || first === '-h' || first === 'help' || first === '?') {
     printHelp();
   } else {
-    console.log(chalk.red(`\n  Lệnh không hợp lệ: "${first}"`));
-    printHelp();
+    printUnknownCommand(first);
+    process.exitCode = 1;
   }
 }
 
 main().catch((err) => {
+  leaveAlternateScreen();
   if (err.name === 'ExitPromptError') {
     console.log(chalk.dim('\n  Đã hủy thao tác.\n'));
     process.exit(0);

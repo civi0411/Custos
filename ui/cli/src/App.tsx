@@ -7,12 +7,12 @@ import { VibeWizard } from './components/VibeWizard';
 import { TaskManager } from './components/TaskManager';
 import { StatusBar } from './components/StatusBar';
 import { ExecutionPermitModal } from './components/ExecutionPermitModal';
-import { CustosApi, subscribeToApi } from './services/custosApi';
+import { CustosApi, isTauriEnvironment, subscribeToApi } from './services/custosApi';
 import './App.css';
 
 export function App() {
   const [currentMode, setCurrentMode] = useState<OperationalMode>('Custos');
-  const [viewMode, setViewMode] = useState<ViewMode>('split');
+  const [viewMode, setViewMode] = useState<ViewMode>('terminal');
   const [crtEffect, setCrtEffect] = useState<boolean>(false);
   const [termWidth, setTermWidth] = useState<number>(100);
   const [responsiveTier, setResponsiveTier] = useState<ResponsiveTier>('Standard');
@@ -80,16 +80,18 @@ export function App() {
     <div className="cli-app-root">
       {crtEffect && <div className="crt-overlay" />}
 
-      <Header
-        currentMode={currentMode}
-        onModeChange={setCurrentMode}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-        responsiveTier={responsiveTier}
-        crtEffect={crtEffect}
-        onToggleCrt={() => setCrtEffect((prev) => !prev)}
-        termWidth={termWidth}
-      />
+      {viewMode !== 'terminal' && (
+        <Header
+          currentMode={currentMode}
+          onModeChange={setCurrentMode}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          responsiveTier={responsiveTier}
+          crtEffect={crtEffect}
+          onToggleCrt={() => setCrtEffect((prev) => !prev)}
+          termWidth={termWidth}
+        />
+      )}
 
       <main className="cli-main-content">
         {viewMode === 'terminal' && (
@@ -99,6 +101,7 @@ export function App() {
               onModeChange={setCurrentMode}
               initialCommand={initialCliCommand}
               onClearInitialCommand={() => setInitialCliCommand(undefined)}
+              onOpenWorkspace={() => setViewMode('split')}
             />
           </div>
         )}
@@ -161,11 +164,14 @@ export function App() {
         />
       )}
 
-      <StatusBar
-        currentMode={currentMode}
-        responsiveTier={responsiveTier}
-        termWidth={termWidth}
-      />
+      {viewMode !== 'terminal' && (
+        <StatusBar
+          currentMode={currentMode}
+          responsiveTier={responsiveTier}
+          termWidth={termWidth}
+          isLive={isTauriEnvironment()}
+        />
+      )}
     </div>
   );
 }

@@ -25,7 +25,7 @@ export const VibeWizard: React.FC<VibeWizardProps> = ({
         return <Code2 size={16} />;
       case 'Research':
         return <Compass size={16} />;
-      case 'Assitant':
+      case 'Assistant':
         return <Bot size={16} />;
     }
   };
@@ -152,7 +152,7 @@ export const VibeWizard: React.FC<VibeWizardProps> = ({
             <div className="mode-select-row">
               <label className="field-label">Active Mode:</label>
               <div className="mode-pills">
-                {(['Code', 'Research', 'Assitant'] as OperationalMode[]).map((m) => {
+                {(['Code', 'Research', 'Assistant'] as OperationalMode[]).map((m) => {
                   const cfg = OPERATIONAL_MODES[m];
                   return (
                     <button
