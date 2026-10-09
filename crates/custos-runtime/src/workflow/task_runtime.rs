@@ -296,6 +296,7 @@ impl WorkflowPort for TaskRuntime {
 
         // 6. Execute governed agent turn based on actual_mode
         let turn_result = async {
+            let mut turn_output: Option<String> = None;
             if actual_mode == "native" {
                 if let Some(ref harness) = self.harness {
                     let context_pack =
@@ -398,26 +399,50 @@ impl WorkflowPort for TaskRuntime {
                 }
             } else if actual_mode == "model" {
                 if let Some(ref model) = self.model {
+                    let prompt_text = cmd
+                        .prompt
+                        .clone()
+                        .unwrap_or_else(|| format!("Initial run turn for task {}", cmd.task_id));
                     let req = ProviderRequest::new(
                         new_id("req"),
                         &cmd.task_id,
                         1,
-                        format!("Initial run turn for task {}", cmd.task_id),
+                        prompt_text,
                         model.provider_id(),
                     );
-                    let _ = model.generate(&req).await?;
+                    let resp = model.generate(&req).await?;
+                    run.metadata["output"] = serde_json::json!(resp.content);
+                    run.metadata["tokens_used"] = serde_json::json!(resp.tokens_used);
+                    run.metadata["model_id"] = serde_json::json!(resp.model_id);
+                    turn_output = Some(resp.content);
+                    let _ = run.transition(RunStatus::Completed);
+                    let _ = wrun.transition(RunStatus::Completed);
+                    if let Some(ref store) = self.run_store {
+                        let _ = store.save_run(&run).await;
+                        let _ = store.save_worker_run(&wrun).await;
+                    }
                 }
             }
-            Ok::<(), DomainError>(())
+            Ok::<Option<String>, DomainError>(turn_output)
         }
         .await;
 
-        if let Err(e) = turn_result {
+        let output_text = match turn_result {
+            Ok(out) => out,
+            Err(e) => {
+                if let Some(ref mut l) = lease {
+                    let _ = l.release();
+                }
+                let _ = self.dispatcher.release_claim(&claim.id).await;
+                return Err(e);
+            }
+        };
+
+        if run.status.is_terminal() {
             if let Some(ref mut l) = lease {
                 let _ = l.release();
             }
             let _ = self.dispatcher.release_claim(&claim.id).await;
-            return Err(e);
         }
 
         let handle = RunHandle {
@@ -425,6 +450,8 @@ impl WorkflowPort for TaskRuntime {
             task_id: run.task_id.clone(),
             status: run.status,
             started_at: run.started_at,
+            completed_at: run.ended_at,
+            output: output_text,
         };
 
         // 5. Register active executions
@@ -545,11 +572,17 @@ impl WorkflowPort for TaskRuntime {
             let _ = store.save_run(&run).await;
         }
 
+        let handle_output = run
+            .metadata
+            .get("output")
+            .and_then(|v| v.as_str().map(|s| s.to_string()));
         Ok(RunHandle {
             run_id: run.id.clone(),
             task_id: run.task_id.clone(),
             status: run.status,
             started_at: run.started_at,
+            completed_at: run.ended_at,
+            output: handle_output,
         })
     }
 
@@ -665,5 +698,64 @@ mod tests {
         assert_eq!(run.metadata["requested_mode"], "native");
         assert_eq!(run.metadata["actual_mode"], "none");
         assert_eq!(run.metadata["mode_downgraded"], true);
+    }
+
+    struct TestMockModel;
+
+    #[async_trait]
+    impl ModelPort for TestMockModel {
+        fn provider_id(&self) -> &str {
+            "test_model"
+        }
+
+        async fn generate(
+            &self,
+            req: &ProviderRequest,
+        ) -> Result<custos_provider::request::ModelResponse, DomainError> {
+            Ok(custos_provider::request::ModelResponse::text(
+                format!(
+                    "Completed turn response for task {} with prompt: {}",
+                    req.task_id, req.prompt
+                ),
+                "test_model",
+                42,
+            ))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_task_runtime_model_turn_generates_and_completes() {
+        let model = Arc::new(TestMockModel);
+        let runtime = TaskRuntime::new().with_model(model);
+        let cmd = StartRunCommand::new("task_chat_01", "actor_user")
+            .with_preferred_mode("model")
+            .with_prompt("Help me build the mobile simulator");
+
+        let handle = runtime.start_run(cmd).await.unwrap();
+        assert_eq!(handle.task_id, "task_chat_01");
+        assert_eq!(handle.status, RunStatus::Completed);
+        assert!(handle.completed_at.is_some());
+        assert!(handle.output.is_some());
+        let output = handle.output.unwrap();
+        assert!(output.contains("Completed turn response for task task_chat_01"));
+        assert!(output.contains("Help me build the mobile simulator"));
+
+        let runs = runtime.active_runs.read().await;
+        let run = runs.get(&handle.run_id).unwrap();
+        assert_eq!(run.status, RunStatus::Completed);
+        assert_eq!(run.metadata["actual_mode"], "model");
+        assert_eq!(run.metadata["tokens_used"], 42);
+        drop(runs);
+
+        // Since the run is completed, its dispatch claim is automatically released,
+        // allowing a subsequent turn to be started immediately on the same task without Conflict!
+        let cmd2 = StartRunCommand::new("task_chat_01", "actor_user")
+            .with_preferred_mode("model")
+            .with_prompt("Second turn follow-up");
+        let handle2 = runtime
+            .start_run(cmd2)
+            .await
+            .expect("Subsequent turn should succeed");
+        assert_eq!(handle2.status, RunStatus::Completed);
     }
 }

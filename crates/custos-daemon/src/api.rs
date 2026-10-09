@@ -913,12 +913,44 @@ impl LocalApiDispatcher {
                 if let Some(root) = params.workspace_root {
                     cmd = cmd.with_workspace_root(root);
                 }
+                if let Some(ref session_id) = params.session_id {
+                    cmd = cmd.with_session_id(session_id.clone());
+                }
+                if let Some(ref turn_id) = params.turn_id {
+                    cmd = cmd.with_turn_id(turn_id.clone());
+                }
+
+                let prompt = if let Some(p) = params.prompt {
+                    Some(p)
+                } else if let Some(ref sid) = params.session_id {
+                    if let Some(journal) = self.session_manager.get_journal(&SessionId(sid.to_string())).await {
+                        journal.entries.iter().rev()
+                            .find(|e| e.entry_type == "user_message")
+                            .map(|e| e.entry_data.clone())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                if let Some(p) = prompt {
+                    cmd = cmd.with_prompt(p);
+                }
 
                 match workflow.start_run(cmd).await {
-                    Ok(handle) => match serde_json::to_value(&handle) {
-                        Ok(val) => ApiResponse::success(req.id, val),
-                        Err(e) => ApiResponse::error(req.id, e.to_string()),
-                    },
+                    Ok(handle) => {
+                        if let (Some(ref sid), Some(ref out)) = (params.session_id.as_ref(), handle.output.as_ref()) {
+                            let _ = self
+                                .session_manager
+                                .append_assistant_message(&SessionId(sid.to_string()), out)
+                                .await;
+                        }
+                        match serde_json::to_value(&handle) {
+                            Ok(val) => ApiResponse::success(req.id, val),
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
@@ -1786,6 +1818,26 @@ impl LocalApiDispatcher {
                     Ok(p) => p,
                     Err(e) => return ApiResponse::error(req.id, format!("Invalid execute cell params: {e}")),
                 };
+
+                // Admission Gate: Ensure requested cwd is valid and not a restricted root/system directory
+                if let Some(ref cwd) = params.cwd {
+                    let path = std::path::Path::new(cwd);
+                    let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+                    let s = canon.to_string_lossy();
+                    if s == "/" || s.starts_with("/etc") || s.starts_with("/dev") || s.starts_with("/proc") || s.starts_with("/sys") {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Admission gate refused restricted execution directory: '{s}'"),
+                        );
+                    }
+                    if !path.exists() || !path.is_dir() {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Execution cwd does not exist or is not a directory: '{cwd}'"),
+                        );
+                    }
+                }
+
                 let repo_ref = self.research.as_deref();
                 match kernel.execute_cell(params, repo_ref).await {
                     Ok(res) => match serde_json::to_value(&res) {
@@ -2049,32 +2101,59 @@ impl LocalApiDispatcher {
                     Err(_) => Vec::new(),
                 };
 
-                let selected_claims: Vec<&ResearchClaim> = params.claim_ids.iter().filter_map(|cid| {
-                    all_claims.iter().find(|c| &c.id == cid)
-                }).collect();
-
-                // Fail-closed verification gate
-                if params.enforce_verification && !selected_claims.is_empty() {
-                    let has_any_verified = selected_claims.iter().any(|c| {
-                        c.level >= ClaimGroundingLevel::L2Verified || all_reviews.iter().any(|r| {
-                            r.target_id == c.id && r.is_fresh && r.status == ReviewStatus::Approved
-                        })
-                    });
-                    if !has_any_verified {
+                // Invariant: Verify all requested claim IDs actually exist in the repository
+                for cid in &params.claim_ids {
+                    if !all_claims.iter().any(|c| &c.id == cid) {
                         return ApiResponse::error(
                             req.id,
-                            "Fail-closed verification gate: cannot handoff ungrounded (L0) claims without at least one approved active verifier record or L2+ proof"
+                            format!("Claim '{cid}' not found in research repository"),
                         );
                     }
                 }
+                let selected_claims: Vec<&ResearchClaim> = params
+                    .claim_ids
+                    .iter()
+                    .filter_map(|cid| all_claims.iter().find(|c| &c.id == cid))
+                    .collect();
 
                 let all_recipes = match research.list_recipes() {
                     Ok(r) => r,
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
-                let selected_recipes: Vec<&Recipe> = params.recipe_ids.iter().filter_map(|rid| {
-                    all_recipes.iter().find(|r| &r.id == rid)
-                }).collect();
+
+                // Invariant: Verify all requested recipe IDs actually exist in the repository
+                for rid in &params.recipe_ids {
+                    if !all_recipes.iter().any(|r| &r.id == rid) {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Recipe '{rid}' not found in research repository"),
+                        );
+                    }
+                }
+                let selected_recipes: Vec<&Recipe> = params
+                    .recipe_ids
+                    .iter()
+                    .filter_map(|rid| all_recipes.iter().find(|r| &r.id == rid))
+                    .collect();
+
+                // Fail-closed verification gate: EVERY claim must be grounded/verified
+                if params.enforce_verification && !selected_claims.is_empty() {
+                    let unverified = selected_claims.iter().find(|c| {
+                        !(c.level >= ClaimGroundingLevel::L2Verified
+                            || all_reviews.iter().any(|r| {
+                                r.target_id == c.id && r.is_fresh && r.status == ReviewStatus::Approved
+                            }))
+                    });
+                    if let Some(bad_claim) = unverified {
+                        return ApiResponse::error(
+                            req.id,
+                            format!(
+                                "Fail-closed verification gate: claim '{}' is ungrounded (L0/unverified) and lacks approved active verifier record or L2+ proof",
+                                bad_claim.id
+                            ),
+                        );
+                    }
+                }
 
                 let claim_summaries: Vec<ClaimHandoffSummary> = selected_claims.iter().map(|c| {
                     let has_fresh_review = all_reviews.iter().any(|r| {
@@ -2527,7 +2606,8 @@ impl LocalApiDispatcher {
             "v1.llm.status" => {
                 let has_env_key = std::env::var("ANTHROPIC_API_KEY").is_ok()
                     || std::env::var("OPENAI_API_KEY").is_ok()
-                    || std::env::var("GEMINI_API_KEY").is_ok();
+                    || std::env::var("GEMINI_API_KEY").is_ok()
+                    || std::env::var("CUSTOS_PROVIDER").is_ok();
 
                 let configured_provider = if let Some(ref repo) = self.providers {
                     repo.list_providers().ok().and_then(|list| {

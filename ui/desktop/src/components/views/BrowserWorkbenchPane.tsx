@@ -14,7 +14,6 @@ import {
 import {
   BrowserSession,
   BrowserTab,
-  BrowserPageSnapshot,
 } from '@/types/domain';
 import { daemonClient } from '@/api/daemon_client';
 
@@ -33,7 +32,6 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [urlInput, setUrlInput] = useState<string>('https://example.com');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isNavigating, setIsNavigating] = useState<boolean>(false);
   const [activeDrawer, setActiveDrawer] = useState<'snapshot' | 'console' | 'network'>('snapshot');
   const [newSessionName, setNewSessionName] = useState<string>('');
   const [isCreatingSession, setIsCreatingSession] = useState<boolean>(false);
@@ -113,53 +111,11 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
 
   const handleNavigate = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!activeTabId) return;
-
-    const trimmedUrl = urlInput.trim();
-    if (!trimmedUrl) return;
-
-    // Fail-closed client validation
-    if (trimmedUrl.startsWith('file://')) {
-      onShowToast?.('Sandbox Policy Error: Local file:// URIs are forbidden.');
-      return;
-    }
-
-    setIsNavigating(true);
-    try {
-      const updatedTab = await daemonClient.navigateBrowserTab(activeTabId, trimmedUrl);
-      setTabs((prev) => prev.map((t) => (t.id === updatedTab.id ? updatedTab : t)));
-      setUrlInput(updatedTab.url);
-      onShowToast?.(`Navigated to: ${updatedTab.url}`);
-    } catch (err) {
-      onShowToast?.(`Navigation failed: ${String(err)}`);
-    } finally {
-      setIsNavigating(false);
-    }
+    onShowToast?.('Browser navigation unavailable: scoped browser execution adapter is not connected.');
   };
 
   const handleCaptureSnapshot = async () => {
-    if (!activeTab) return;
-    try {
-      const snapshot: BrowserPageSnapshot = {
-        tab_id: activeTab.id,
-        url: activeTab.url,
-        title: activeTab.title || 'Page Snapshot',
-        dom_tree_summary: `<!DOCTYPE html>\n<html>\n<head><title>${activeTab.title}</title></head>\n<body>\n  <main class="page-container">\n    <h1>${activeTab.title}</h1>\n    <p>Captured from ${activeTab.url}</p>\n  </main>\n</body>\n</html>`,
-        text_content: `Page title: ${activeTab.title}\nURL: ${activeTab.url}\nCaptured timestamp: ${new Date().toISOString()}`,
-        links: [activeTab.url],
-        viewport_width: 1280,
-        viewport_height: 800,
-        screenshot_uri: null,
-        timestamp: Date.now(),
-      };
-      await daemonClient.snapshotBrowserTab(snapshot);
-      if (activeSessionId) {
-        await loadTabs(activeSessionId);
-      }
-      onShowToast?.('DOM page snapshot saved to persistence.');
-    } catch (err) {
-      onShowToast?.(`Snapshot failed: ${String(err)}`);
-    }
+    onShowToast?.('DOM snapshot capture unavailable: scoped browser execution adapter is not connected.');
   };
 
   const handleCloseTab = async (tabId: string, e: React.MouseEvent) => {
@@ -249,6 +205,15 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
         </div>
       </div>
 
+      {/* Fail-closed Degraded Status Notification */}
+      <div className="bg-amber-500/10 border-b border-amber-500/20 px-3 py-1.5 flex items-center justify-between text-[11px] text-amber-400 shrink-0">
+        <div className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+          <span>Browser Execution Gated: Headless browser driver is not connected (metadata/session inspect mode only).</span>
+        </div>
+        <span className="font-mono text-[10px] text-amber-400/80">Fail-Closed</span>
+      </div>
+
       {/* Tabs Strip */}
       <div className="flex items-center gap-1 px-2 pt-1 border-b border-zinc-800 bg-[#151518] overflow-x-auto no-scrollbar">
         {tabs.map((tab) => {
@@ -291,11 +256,11 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
       <div className="flex items-center gap-2 px-3 py-2 bg-[#18181b] border-b border-zinc-800">
         <button
           onClick={() => handleNavigate()}
-          disabled={!activeTabId || isNavigating}
-          className="p-1.5 rounded bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 disabled:opacity-40 transition"
-          title="Reload"
+          disabled={true}
+          className="p-1.5 rounded bg-zinc-800/50 text-zinc-500 cursor-not-allowed transition"
+          title="Browser navigation unavailable: scoped browser execution adapter is not connected"
         >
-          <RotateCw size={12} className={isNavigating ? 'animate-spin' : ''} />
+          <RotateCw size={12} />
         </button>
 
         <form onSubmit={handleNavigate} className="flex-1 flex items-center relative">
@@ -303,14 +268,15 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
             type="text"
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
-            disabled={!activeTabId}
-            placeholder="Enter URL (https://..., about:blank)..."
-            className="w-full bg-zinc-950/80 border border-zinc-800 focus:border-zinc-600 rounded-md px-3 py-1 text-xs text-zinc-200 font-mono tracking-tight focus:outline-none transition"
+            disabled={true}
+            placeholder="Browser navigation unavailable (headless browser driver not connected)..."
+            className="w-full bg-zinc-950/60 border border-zinc-850 rounded-md px-3 py-1 text-xs text-zinc-500 font-mono tracking-tight focus:outline-none cursor-not-allowed"
           />
           <button
             type="submit"
-            disabled={!activeTabId || isNavigating}
-            className="absolute right-1 px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-[11px] disabled:opacity-40"
+            disabled={true}
+            title="Browser navigation unavailable: scoped browser execution adapter is not connected"
+            className="absolute right-1 px-2 py-0.5 bg-zinc-850 border border-zinc-800 text-zinc-500 rounded text-[11px] cursor-not-allowed"
           >
             <ArrowRight size={11} />
           </button>
@@ -318,10 +284,11 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
 
         <button
           onClick={handleCaptureSnapshot}
-          disabled={!activeTabId}
-          className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-zinc-200 font-medium text-[11px] transition disabled:opacity-40"
+          disabled={true}
+          title="DOM snapshot capture unavailable: authenticated browser adapter is not connected"
+          className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800/50 border border-zinc-800 rounded text-zinc-500 font-medium text-[11px] cursor-not-allowed"
         >
-          <Camera size={12} className="text-amber-400" />
+          <Camera size={12} className="text-zinc-500" />
           <span>DOM Snapshot</span>
         </button>
       </div>

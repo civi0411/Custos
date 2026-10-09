@@ -296,6 +296,12 @@ pub struct StartRunCommand {
     pub harness_id: Option<String>,
     #[serde(default)]
     pub workspace_root: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub turn_id: Option<String>,
+    #[serde(default)]
+    pub prompt: Option<String>,
 }
 
 impl StartRunCommand {
@@ -307,6 +313,9 @@ impl StartRunCommand {
             preferred_mode: None,
             harness_id: None,
             workspace_root: None,
+            session_id: None,
+            turn_id: None,
+            prompt: None,
         }
     }
 
@@ -329,6 +338,21 @@ impl StartRunCommand {
         self.workspace_root = Some(root.into());
         self
     }
+
+    pub fn with_session_id(mut self, session_id: impl Into<String>) -> Self {
+        self.session_id = Some(session_id.into());
+        self
+    }
+
+    pub fn with_turn_id(mut self, turn_id: impl Into<String>) -> Self {
+        self.turn_id = Some(turn_id.into());
+        self
+    }
+
+    pub fn with_prompt(mut self, prompt: impl Into<String>) -> Self {
+        self.prompt = Some(prompt.into());
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -337,6 +361,34 @@ pub struct RunHandle {
     pub task_id: String,
     pub status: RunStatus,
     pub started_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+}
+
+impl RunHandle {
+    pub fn new(
+        run_id: impl Into<String>,
+        task_id: impl Into<String>,
+        status: RunStatus,
+        started_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            run_id: run_id.into(),
+            task_id: task_id.into(),
+            status,
+            started_at,
+            completed_at: None,
+            output: None,
+        }
+    }
+
+    pub fn with_completion(mut self, completed_at: Option<DateTime<Utc>>, output: Option<String>) -> Self {
+        self.completed_at = completed_at;
+        self.output = output;
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

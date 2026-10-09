@@ -29,9 +29,8 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
   const [jobs, setJobs] = useState<HeadlessAutomationJob[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [commandInput, setCommandInput] = useState<string>('uname -a');
-  const [execReceipts, setExecReceipts] = useState<FleetExecReceipt[]>([]);
+  const [execReceipts] = useState<FleetExecReceipt[]>([]);
 
   // Modals
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState<boolean>(false);
@@ -130,18 +129,7 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
 
   const handleExecCommand = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedHost || !commandInput.trim()) return;
-
-    setIsExecuting(true);
-    try {
-      const receipt = await daemonClient.execFleet(selectedHost.id, commandInput.trim());
-      setExecReceipts((prev) => [receipt, ...prev]);
-      onShowToast?.(`Execution completed with exit code ${receipt.exit_code ?? 0}.`);
-    } catch (err) {
-      onShowToast?.(`Fleet command failed: ${String(err)}`);
-    } finally {
-      setIsExecuting(false);
-    }
+    onShowToast?.('Remote execution unavailable: SSH transport adapter is not connected.');
   };
 
   const handleCreateJob = async (e: React.FormEvent) => {
@@ -221,6 +209,15 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
             <span>Headless Jobs ({jobs.length})</span>
           </button>
         </div>
+      </div>
+
+      {/* Fail-closed Degraded Status Notification */}
+      <div className="bg-amber-500/10 border-b border-amber-500/20 px-3 py-1.5 flex items-center justify-between text-[11px] text-amber-400 shrink-0">
+        <div className="flex items-center gap-1.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+          <span>SSH Transport Gated: Remote execution, ping probes, and headless job execution are degraded (metadata-only mode).</span>
+        </div>
+        <span className="font-mono text-[10px] text-amber-400/80">Fail-Closed</span>
       </div>
 
       {/* Main Tab Content */}
@@ -322,10 +319,12 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
                   </div>
 
                   <button
+                    disabled={true}
+                    title="Ping probe unavailable: SSH transport adapter is not connected"
                     onClick={() => handlePingHost(selectedHost.id)}
-                    className="flex items-center gap-1 px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-zinc-200 text-[11px] transition"
+                    className="flex items-center gap-1 px-2.5 py-1 bg-zinc-800/50 border border-zinc-800 rounded text-zinc-500 text-[11px] cursor-not-allowed"
                   >
-                    <Activity size={12} className="text-emerald-400" />
+                    <Activity size={12} className="text-zinc-500" />
                     <span>Ping Probe</span>
                   </button>
                 </div>
@@ -335,21 +334,23 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
                   onSubmit={handleExecCommand}
                   className="flex items-center gap-2 p-3 border-b border-zinc-800 bg-[#161619]"
                 >
-                  <Terminal size={14} className="text-zinc-400 shrink-0" />
+                  <Terminal size={14} className="text-zinc-500 shrink-0" />
                   <input
                     type="text"
                     value={commandInput}
                     onChange={(e) => setCommandInput(e.target.value)}
-                    placeholder="Enter bash command to execute on remote host..."
-                    className="flex-1 bg-zinc-950 border border-zinc-800 focus:border-zinc-700 rounded px-3 py-1 font-mono text-xs text-zinc-200 focus:outline-none"
+                    disabled={true}
+                    placeholder="Remote command execution unavailable (SSH transport adapter not connected)..."
+                    className="flex-1 bg-zinc-950/60 border border-zinc-850 rounded px-3 py-1 font-mono text-xs text-zinc-500 focus:outline-none cursor-not-allowed"
                   />
                   <button
                     type="submit"
-                    disabled={isExecuting}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-cyan-900/60 hover:bg-cyan-800/80 border border-cyan-700/60 rounded text-cyan-200 font-medium text-[11px] transition disabled:opacity-40"
+                    disabled={true}
+                    title="Remote execution unavailable: SSH transport adapter is not connected"
+                    className="flex items-center gap-1.5 px-3 py-1 bg-zinc-850 border border-zinc-800 rounded text-zinc-500 font-medium text-[11px] cursor-not-allowed"
                   >
                     <Play size={11} />
-                    <span>{isExecuting ? 'Running...' : 'Execute'}</span>
+                    <span>Execute</span>
                   </button>
                 </form>
 
@@ -446,10 +447,12 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
                       </div>
 
                       <button
+                        disabled={true}
+                        title="Headless job execution unavailable: executor adapter not connected"
                         onClick={() => handleRunJob(job.id)}
-                        className="flex items-center gap-1.5 px-3 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-zinc-200 text-xs font-medium transition"
+                        className="flex items-center gap-1.5 px-3 py-1 bg-zinc-800/50 border border-zinc-800 rounded text-zinc-500 text-xs font-medium cursor-not-allowed"
                       >
-                        <Play size={11} className="text-emerald-400" />
+                        <Play size={11} className="text-zinc-500" />
                         <span>Run Job</span>
                       </button>
                     </div>

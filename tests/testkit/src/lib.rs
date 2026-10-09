@@ -267,12 +267,12 @@ impl WorkflowPort for MockWorkflow {
     async fn start_run(&self, cmd: StartRunCommand) -> Result<RunHandle, DomainError> {
         let run_id = new_id("run");
         self.started_runs.lock().unwrap().push(cmd.clone());
-        Ok(RunHandle {
+        Ok(RunHandle::new(
             run_id,
-            task_id: cmd.task_id,
-            status: custos_domain::RunStatus::Active,
-            started_at: Utc::now(),
-        })
+            cmd.task_id,
+            custos_domain::RunStatus::Active,
+            Utc::now(),
+        ))
     }
 
     async fn request_cancel(
@@ -293,12 +293,12 @@ impl WorkflowPort for MockWorkflow {
     }
 
     async fn resume(&self, run_id: &str) -> Result<RunHandle, DomainError> {
-        Ok(RunHandle {
-            run_id: run_id.to_string(),
-            task_id: "resumed".into(),
-            status: custos_domain::RunStatus::Active,
-            started_at: Utc::now(),
-        })
+        Ok(RunHandle::new(
+            run_id.to_string(),
+            "resumed",
+            custos_domain::RunStatus::Active,
+            Utc::now(),
+        ))
     }
 
     async fn checkpoint(&self, run_id: &str) -> Result<ContinuationPacket, DomainError> {

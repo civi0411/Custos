@@ -262,6 +262,12 @@ pub struct StartRunRequest {
     pub harness_id: Option<String>,
     #[serde(default)]
     pub workspace_root: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub turn_id: Option<String>,
+    #[serde(default)]
+    pub prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
