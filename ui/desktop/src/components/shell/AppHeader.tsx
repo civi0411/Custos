@@ -326,11 +326,11 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 <button
                   onClick={onOpenCommandPalette}
                   className="flex items-center gap-1 px-2 py-1 rounded-md bg-canvas hover:bg-surface-2 border border-border-default text-fg-muted hover:text-fg-editor text-[11px] transition"
-                  title="Jump Palette (⌘K / ⌘P)"
+                  title={`Jump Palette (${formatKeyCombo({ ctrlOrCmd: true, key: 'K' })} / ${formatKeyCombo({ ctrlOrCmd: true, key: 'P' })})`}
                 >
                   <Search className="w-3 h-3 text-fg-muted" />
                   <span className="hidden xl:inline">Jump...</span>
-                  <kbd className="hidden 2xl:inline text-[9px] font-mono bg-surface-1 px-1 rounded border border-border-default">⌘K</kbd>
+                  <kbd className="hidden 2xl:inline text-[9px] font-mono bg-surface-1 px-1 rounded border border-border-default">{formatKeyCombo({ ctrlOrCmd: true, key: 'K' })}</kbd>
                 </button>
               )}
 
@@ -352,7 +352,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 <button
                   onClick={onOpenKanban}
                   className="p-1 rounded-md text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
-                  title="Fleet Kanban Board (⌘⌥K)"
+                  title={`Fleet Kanban Board (${formatKeyCombo({ ctrlOrCmd: true, alt: true, key: 'K' })})`}
                 >
                   <Bot className="w-3.5 h-3.5" />
                 </button>

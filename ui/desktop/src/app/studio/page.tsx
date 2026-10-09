@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { type AppWorkspaceMode, AppWorkspaceShell } from '@/components/shell';
 import { type OrcaTab, type OrcaTabId, type ResourceTabsState } from '@/components/views/OrcaTabbedContainer';
+import { formatKeyCombo } from '@/lib/utils';
 
 const MODE_STORAGE_KEY = 'custos.workspace.mode.v2';
 
@@ -75,22 +76,22 @@ export function StudioPage() {
     }
   }, [sessionId, activeSessionId, currentSessions, setActiveSessionId]);
 
-  // Global Keyboard Shortcuts (⌘1 for Chat, ⌘2 for Code)
+  // Global Keyboard Shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey)) return;
       if (e.key === '1') {
         e.preventDefault();
         setMode('chat');
-        showToast('Opened Copilot view (⌘1)');
+        showToast(`Opened Copilot view (${formatKeyCombo({ ctrlOrCmd: true, key: '1' })})`);
       } else if (e.key === '2') {
         e.preventDefault();
         setMode('code');
-        showToast('Opened Coding view (⌘2)');
+        showToast(`Opened Coding view (${formatKeyCombo({ ctrlOrCmd: true, key: '2' })})`);
       } else if (e.key === '3') {
         e.preventDefault();
         setMode('research');
-        showToast('Opened Research view (⌘3)');
+        showToast(`Opened Research view (${formatKeyCombo({ ctrlOrCmd: true, key: '3' })})`);
       } else if (e.key === 'f' && e.shiftKey && e.metaKey) {
         e.preventDefault();
         setIsWebTabOpen(true);

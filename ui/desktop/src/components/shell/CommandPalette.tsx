@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import type { AppWorkspaceMode } from './AppHeader';
 import type { OrcaTabId } from '@/components/views/OrcaTabbedContainer';
+import { formatKeyCombo } from '@/lib/utils';
 
 export interface CommandPaletteProps {
   isOpen: boolean;
@@ -93,7 +94,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       icon: MessageSquare,
       iconColor: 'text-[#cc785c]',
       badge: currentMode === 'chat' ? 'Current' : undefined,
-      shortcut: '⌘1',
+      shortcut: `${formatKeyCombo({ ctrlOrCmd: true, key: '1' })}`,
       action: () => { onSwitchMode('chat'); onClose(); }
     },
     {
@@ -104,7 +105,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       icon: Code2,
       iconColor: 'text-[#58a6ff]',
       badge: currentMode === 'code' ? 'Current' : undefined,
-      shortcut: '⌘2',
+      shortcut: `${formatKeyCombo({ ctrlOrCmd: true, key: '2' })}`,
       action: () => { onSwitchMode('code'); onClose(); }
     },
     {
@@ -115,7 +116,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       icon: FlaskConical,
       iconColor: 'text-[#a371f7]',
       badge: currentMode === 'research' ? 'Current' : undefined,
-      shortcut: '⌘3',
+      shortcut: `${formatKeyCombo({ ctrlOrCmd: true, key: '3' })}`,
       action: () => { onSwitchMode('research'); onClose(); }
     },
 
@@ -172,7 +173,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       subtitle: 'Needs You, Working, Done, and Idle agent dashboard',
       icon: Bot,
       iconColor: 'text-[#bc8cff]',
-      shortcut: '⌘⌥K',
+      shortcut: `${formatKeyCombo({ ctrlOrCmd: true, alt: true, key: 'K' })}`,
       action: () => { onOpenTab('kanban', 'Fleet Kanban', 'orca://kanban'); onClose(); }
     },
 
@@ -195,7 +196,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       subtitle: 'Start clean dialogue or bounded agent execution',
       icon: Plus,
       iconColor: 'text-[#3fb950]',
-      shortcut: '⌘N',
+      shortcut: `${formatKeyCombo({ ctrlOrCmd: true, key: 'N' })}`,
       action: () => { onNewSession(); onClose(); }
     },
     {
@@ -205,7 +206,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       subtitle: 'Configure models, API keys, and sandbox permissions',
       icon: Settings2,
       iconColor: 'text-[#8b949e]',
-      shortcut: '⌘,',
+      shortcut: `${formatKeyCombo({ ctrlOrCmd: true, key: ',' })}`,
       action: () => { onOpenSettings(); onClose(); }
     }
   ];
