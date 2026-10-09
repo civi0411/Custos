@@ -131,8 +131,9 @@ develop-eggs/
 dist/
 downloads/
 eggs/
-.eggs/
 lib/
+!**/src/**/lib/
+!**/src/**/lib/**
 lib64/
 parts/
 sdist/
@@ -349,7 +350,8 @@ cas/
 .cas/
 artifacts/
 storage/
-data/
+/data/
+!crates/**/data/**
 cache/
 .cache/
 
