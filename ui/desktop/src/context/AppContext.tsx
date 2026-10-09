@@ -761,12 +761,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await daemonClient.appendSessionMessage(targetSessionId, 'user', text);
       }
 
-      // 3. Start workflow run
+      // 3. Start workflow run with target model
+      const chosenModel = activeSession.model || selectedModel || 'gpt-4o';
       const run = await daemonClient.startRun({
         task_id: targetTaskId || activeSession.id,
         preferred_mode: 'model',
         session_id: targetSessionId,
         prompt: text,
+        model: chosenModel,
       });
 
       const runId = (run as any).run_id || run.id || 'unknown';
@@ -775,8 +777,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const assistantMsg = {
         role: 'assistant' as const,
-        author: 'Custos runtime',
-        badge: isCompleted ? 'Completed' : `Run ${run.status}`,
+        author: chosenModel,
+        badge: isCompleted ? 'Live Inference' : `Run ${run.status}`,
         stepName: `Run #${runId.slice(0, 8)}`,
         text: outputText
           ? outputText

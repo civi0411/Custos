@@ -1,5 +1,8 @@
 use crate::connection::DbConnection;
-use custos_domain::{ClientApiKeyRecord, DomainError, ModelCatalogOption, ModelPricing, ProviderConfig};
+use custos_domain::{
+    ClientApiKeyRecord, DomainError, ModelCatalogOption, ModelPricing, OAuthTokenRecord,
+    ProviderConfig,
+};
 use rusqlite::params;
 
 #[derive(Clone)]
@@ -294,5 +297,112 @@ impl ProviderRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
+    }
+
+    pub fn save_oauth_token(&self, token: &OAuthTokenRecord) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "INSERT INTO provider_oauth_tokens (
+                provider_id, service_type, access_token, refresh_token,
+                expires_at, token_type, scope, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(provider_id) DO UPDATE SET
+                service_type = excluded.service_type,
+                access_token = excluded.access_token,
+                refresh_token = excluded.refresh_token,
+                expires_at = excluded.expires_at,
+                token_type = excluded.token_type,
+                scope = excluded.scope,
+                updated_at = excluded.updated_at",
+            params![
+                token.provider_id,
+                token.service_type,
+                token.access_token,
+                token.refresh_token,
+                token.expires_at,
+                token.token_type,
+                token.scope,
+                token.created_at,
+                token.updated_at,
+            ],
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+        Ok(())
+    }
+
+    pub fn get_oauth_token(&self, provider_id: &str) -> Result<Option<OAuthTokenRecord>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT provider_id, service_type, access_token, refresh_token,
+                        expires_at, token_type, scope, created_at, updated_at
+                 FROM provider_oauth_tokens WHERE provider_id = ?1",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut rows = stmt
+            .query_map(params![provider_id], |row| {
+                Ok(OAuthTokenRecord {
+                    provider_id: row.get(0)?,
+                    service_type: row.get(1)?,
+                    access_token: row.get(2)?,
+                    refresh_token: row.get(3)?,
+                    expires_at: row.get(4)?,
+                    token_type: row.get(5)?,
+                    scope: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                })
+            })
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        if let Some(row) = rows.next() {
+            Ok(Some(row.map_err(|e| DomainError::Validation(e.to_string()))?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    pub fn delete_oauth_token(&self, provider_id: &str) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "DELETE FROM provider_oauth_tokens WHERE provider_id = ?1",
+            params![provider_id],
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+        Ok(())
+    }
+
+    pub fn list_expiring_oauth_tokens(&self, threshold_ms: i64) -> Result<Vec<OAuthTokenRecord>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT provider_id, service_type, access_token, refresh_token,
+                        expires_at, token_type, scope, created_at, updated_at
+                 FROM provider_oauth_tokens WHERE expires_at <= ?1 AND refresh_token IS NOT NULL",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let rows = stmt
+            .query_map(params![threshold_ms], |row| {
+                Ok(OAuthTokenRecord {
+                    provider_id: row.get(0)?,
+                    service_type: row.get(1)?,
+                    access_token: row.get(2)?,
+                    refresh_token: row.get(3)?,
+                    expires_at: row.get(4)?,
+                    token_type: row.get(5)?,
+                    scope: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                })
+            })
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut list = Vec::new();
+        for r in rows {
+            list.push(r.map_err(|e| DomainError::Validation(e.to_string()))?);
+        }
+        Ok(list)
     }
 }

@@ -477,7 +477,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={lensMeta.placeholder}
-                  className="w-full bg-transparent border-none outline-none text-fg-editor placeholder-fg-subtle text-[13px] resize-none leading-relaxed"
+                  className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-fg-editor placeholder-fg-subtle text-[13px] resize-none leading-relaxed"
                 />
 
                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-border-muted">
@@ -554,7 +554,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           {/* FLOATING MINI DOCK (Only visible when tab canvas is maximized) */}
           {isWebTabExpanded && (
             <div className="absolute z-50 bottom-5 right-5 w-[380px] pointer-events-auto animate-in slide-in-from-bottom-2 duration-150">
-              <div className="bg-surface-1/95 backdrop-blur-xl border border-border-default rounded-2xl p-3 shadow-[0_12px_45px_-10px_rgba(0,0,0,0.85)] focus-within:border-accent">
+              <div className="bg-surface-1/95 backdrop-blur-xl border border-border-default rounded-2xl p-3 shadow-[0_12px_45px_-10px_rgba(0,0,0,0.85)] focus-within:border-border-emphasis">
                 <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-border-muted text-[11px] text-fg-muted">
                   <div className="flex items-center gap-1.5">
                     <span className={`w-2 h-2 rounded-full ${lensMeta.activeColor}`} />
@@ -575,7 +575,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={lensMeta.placeholder}
-                  className="w-full bg-transparent border-none outline-none text-fg-editor placeholder-fg-subtle text-[13px] resize-none"
+                  className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-fg-editor placeholder-fg-subtle text-[13px] resize-none"
                 />
 
                 <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-border-muted">

@@ -403,12 +403,17 @@ impl WorkflowPort for TaskRuntime {
                         .prompt
                         .clone()
                         .unwrap_or_else(|| format!("Initial run turn for task {}", cmd.task_id));
+                    let target_model = cmd
+                        .model
+                        .as_deref()
+                        .filter(|m| !m.trim().is_empty())
+                        .unwrap_or_else(|| model.provider_id());
                     let req = ProviderRequest::new(
                         new_id("req"),
                         &cmd.task_id,
                         1,
                         prompt_text,
-                        model.provider_id(),
+                        target_model,
                     );
                     let resp = model.generate(&req).await?;
                     run.metadata["output"] = serde_json::json!(resp.content);

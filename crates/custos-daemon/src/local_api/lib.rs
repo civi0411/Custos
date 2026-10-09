@@ -124,6 +124,56 @@ pub const METHOD_MODELS_PROBE: &str = "v1.models.probe";
 pub const METHOD_MODELS_CATALOG: &str = "v1.models.catalog";
 pub const METHOD_MODELS_PRICING: &str = "v1.models.pricing";
 
+pub const METHOD_OAUTH_AUTHORIZE: &str = "v1.oauth.authorize";
+pub const METHOD_OAUTH_EXCHANGE: &str = "v1.oauth.exchange";
+pub const METHOD_OAUTH_REFRESH: &str = "v1.oauth.refresh";
+pub const METHOD_OAUTH_GET: &str = "v1.oauth.get";
+pub const METHOD_OAUTH_DELETE: &str = "v1.oauth.delete";
+pub const METHOD_OAUTH_STATUS: &str = "v1.oauth.status";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OAuthAuthorizeParams {
+    #[serde(default)]
+    pub provider_id: Option<String>,
+    #[serde(default)]
+    pub service_type: Option<String>,
+    #[serde(default)]
+    pub client_id: Option<String>,
+    #[serde(default)]
+    pub redirect_uri: Option<String>,
+    #[serde(default)]
+    pub scope: Option<String>,
+    #[serde(default)]
+    pub auth_endpoint: Option<String>,
+    #[serde(default)]
+    pub token_endpoint: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OAuthExchangeParams {
+    #[serde(default)]
+    pub provider_id: Option<String>,
+    #[serde(default)]
+    pub service_type: Option<String>,
+    #[serde(default)]
+    pub client_id: Option<String>,
+    pub code_or_url: String,
+    pub code_verifier: String,
+    #[serde(default)]
+    pub redirect_uri: Option<String>,
+    #[serde(default)]
+    pub token_endpoint: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OAuthRefreshParams {
+    pub provider_id: String,
+    #[serde(default)]
+    pub client_id: Option<String>,
+    #[serde(default)]
+    pub token_endpoint: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiRequest {
     pub id: String,
@@ -268,6 +318,8 @@ pub struct StartRunRequest {
     pub turn_id: Option<String>,
     #[serde(default)]
     pub prompt: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -42,7 +42,9 @@ pub use crate::custos_local_api::{
     METHOD_AUTOMATION_JOBS_CREATE, METHOD_AUTOMATION_JOBS_RUN,
     METHOD_PROVIDERS_LIST, METHOD_PROVIDERS_GET, METHOD_PROVIDERS_SAVE,
     METHOD_PROVIDERS_DELETE, METHOD_MODELS_PROBE, METHOD_MODELS_CATALOG,
-    METHOD_MODELS_PRICING,
+    METHOD_MODELS_PRICING, METHOD_OAUTH_AUTHORIZE, METHOD_OAUTH_EXCHANGE,
+    METHOD_OAUTH_REFRESH, METHOD_OAUTH_GET, METHOD_OAUTH_DELETE, METHOD_OAUTH_STATUS,
+    OAuthAuthorizeParams, OAuthExchangeParams, OAuthRefreshParams,
 };
 use custos_adapters::harness::HarnessRegistry;
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
@@ -82,6 +84,7 @@ pub struct LocalApiDispatcher {
     python_kernel: Option<Arc<PythonKernelCoordinator>>,
     fleet_automation: Option<Arc<FleetAutomationRepository>>,
     model_catalog: custos_adapters::providers::catalog::ModelCatalogService,
+    oauth_callback_server: Option<Arc<crate::oauth_callback_server::OAuthCallbackServer>>,
 }
 
 impl LocalApiDispatcher {
@@ -104,6 +107,7 @@ impl LocalApiDispatcher {
             python_kernel: Some(Arc::new(PythonKernelCoordinator::new())),
             fleet_automation: None,
             model_catalog: custos_adapters::providers::catalog::ModelCatalogService::new(),
+            oauth_callback_server: None,
         }
     }
 
@@ -149,6 +153,14 @@ impl LocalApiDispatcher {
 
     pub fn with_fleet_automation(mut self, fleet_automation: Arc<FleetAutomationRepository>) -> Self {
         self.fleet_automation = Some(fleet_automation);
+        self
+    }
+
+    pub fn with_oauth_callback_server(
+        mut self,
+        oauth_callback_server: Arc<crate::oauth_callback_server::OAuthCallbackServer>,
+    ) -> Self {
+        self.oauth_callback_server = Some(oauth_callback_server);
         self
     }
 
@@ -918,6 +930,9 @@ impl LocalApiDispatcher {
                 }
                 if let Some(ref turn_id) = params.turn_id {
                     cmd = cmd.with_turn_id(turn_id.clone());
+                }
+                if let Some(ref m) = params.model {
+                    cmd = cmd.with_model(m.clone());
                 }
 
                 let prompt = if let Some(p) = params.prompt {
@@ -2407,6 +2422,28 @@ impl LocalApiDispatcher {
 
                 let now = chrono::Utc::now().timestamp_millis();
 
+                if let Some(key) = raw_api_key {
+                    if !key.trim().is_empty() {
+                        let tok = custos_domain::OAuthTokenRecord {
+                            provider_id: id.clone(),
+                            service_type: service_type.clone(),
+                            access_token: key.trim().to_string(),
+                            refresh_token: None,
+                            expires_at: i64::MAX / 2,
+                            token_type: "bearer".to_string(),
+                            scope: None,
+                            created_at: now,
+                            updated_at: now,
+                        };
+                        let _ = providers_repo.save_oauth_token(&tok);
+                        if service_type != id {
+                            let mut tok_alias = tok.clone();
+                            tok_alias.provider_id = service_type.clone();
+                            let _ = providers_repo.save_oauth_token(&tok_alias);
+                        }
+                    }
+                }
+
                 let cfg = custos_domain::ProviderConfig {
                     id,
                     name,
@@ -2609,6 +2646,12 @@ impl LocalApiDispatcher {
                     || std::env::var("GEMINI_API_KEY").is_ok()
                     || std::env::var("CUSTOS_PROVIDER").is_ok();
 
+                let oauth_token = if let Some(ref repo) = self.providers {
+                    repo.get_oauth_token("openai").ok().flatten()
+                } else {
+                    None
+                };
+
                 let configured_provider = if let Some(ref repo) = self.providers {
                     repo.list_providers().ok().and_then(|list| {
                         list.into_iter().find(|p| {
@@ -2622,7 +2665,17 @@ impl LocalApiDispatcher {
                     None
                 };
 
-                if has_env_key || configured_provider.is_some() {
+                if let Some(tok) = oauth_token {
+                    ApiResponse::success(
+                        req.id,
+                        serde_json::json!({
+                            "configured": true,
+                            "active_provider": "OpenAI (OAuth PKCE)",
+                            "message": "OAuth 2.0 PKCE authentication active",
+                            "expires_at": tok.expires_at,
+                        }),
+                    )
+                } else if has_env_key || configured_provider.is_some() {
                     let prov_name = configured_provider
                         .map(|p| p.name)
                         .unwrap_or_else(|| "Environment API Key".to_string());
@@ -2643,6 +2696,236 @@ impl LocalApiDispatcher {
                             "message": "Chưa có LLM nào được cấu hình hiện tại (No LLMs currently available)",
                         }),
                     )
+                }
+            }
+            METHOD_OAUTH_AUTHORIZE => {
+                let params: OAuthAuthorizeParams = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
+                };
+                let auth_url = params
+                    .auth_endpoint
+                    .as_deref()
+                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_AUTH_URL);
+                let token_url = params
+                    .token_endpoint
+                    .as_deref()
+                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_TOKEN_URL);
+                let client_id = params
+                    .client_id
+                    .as_deref()
+                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_CLIENT_ID);
+                let redirect_uri = params
+                    .redirect_uri
+                    .as_deref()
+                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_REDIRECT_URI);
+                let scope = params.scope.as_deref();
+
+                let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(auth_url, token_url);
+                let challenge = custos_adapters::providers::oauth_pkce::OAuthPkceManager::generate_pkce_challenge();
+
+                match manager.build_authorization_url(client_id, redirect_uri, scope, &challenge) {
+                    Ok(res) => {
+                        // Start the loopback callback server on port 1455 if available
+                        if let Some(ref cb_server) = self.oauth_callback_server {
+                            let provider_id = params.provider_id.as_deref().unwrap_or("openai");
+                            let service_type = params.service_type.as_deref().unwrap_or("openai");
+                            let pending = crate::oauth_callback_server::PendingOAuthContext {
+                                provider_id: provider_id.to_string(),
+                                service_type: service_type.to_string(),
+                                client_id: client_id.to_string(),
+                                code_verifier: challenge.code_verifier.clone(),
+                                state: challenge.state.clone(),
+                                redirect_uri: redirect_uri.to_string(),
+                            };
+                            let _ = cb_server.start_listening(pending).await;
+                        }
+
+                        match serde_json::to_value(&res) {
+                            Ok(val) => ApiResponse::success(req.id, val),
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_OAUTH_EXCHANGE => {
+                let providers_repo = match self.providers.as_ref() {
+                    Some(p) => p,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                let params: OAuthExchangeParams = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
+                };
+
+                let provider_id = params.provider_id.as_deref().unwrap_or("openai");
+                let service_type = params.service_type.as_deref().unwrap_or("openai");
+                let client_id = params
+                    .client_id
+                    .as_deref()
+                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_CLIENT_ID);
+                let redirect_uri = params
+                    .redirect_uri
+                    .as_deref()
+                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_REDIRECT_URI);
+                let token_url = params
+                    .token_endpoint
+                    .as_deref()
+                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_TOKEN_URL);
+
+                let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(
+                    custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_AUTH_URL,
+                    token_url,
+                );
+
+                match manager
+                    .exchange_code(
+                        provider_id,
+                        service_type,
+                        client_id,
+                        &params.code_or_url,
+                        redirect_uri,
+                        &params.code_verifier,
+                    )
+                    .await
+                {
+                    Ok(token_record) => {
+                        // Persist in provider_oauth_tokens
+                        if let Err(e) = providers_repo.save_oauth_token(&token_record) {
+                            return ApiResponse::error(req.id, format!("Failed to save OAuth token: {e}"));
+                        }
+
+                        // Upsert matching provider config so it appears in UI as active
+                        let now = chrono::Utc::now().timestamp_millis();
+                        let masked = if token_record.access_token.len() > 8 {
+                            format!("{}••••••••", &token_record.access_token[..6])
+                        } else {
+                            "••••••••".to_string()
+                        };
+                        let prov_cfg = custos_domain::ProviderConfig {
+                            id: provider_id.to_string(),
+                            name: format!("{} (OAuth)", if provider_id == "openai" { "OpenAI" } else { provider_id }),
+                            service_type: service_type.to_string(),
+                            api_key_masked: masked,
+                            status: "active".to_string(),
+                            endpoint_url: Some("https://api.openai.com/v1".to_string()),
+                            default_model: Some("gpt-4o".to_string()),
+                            context_window: Some(128000),
+                            fast_mode: Some(false),
+                            created_at: now,
+                            updated_at: now,
+                        };
+                        let _ = providers_repo.save_provider(&prov_cfg);
+
+                        match serde_json::to_value(&token_record) {
+                            Ok(val) => ApiResponse::success(req.id, val),
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_OAUTH_REFRESH => {
+                let providers_repo = match self.providers.as_ref() {
+                    Some(p) => p,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                let params: OAuthRefreshParams = match serde_json::from_value(req.params) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
+                };
+
+                let existing = match providers_repo.get_oauth_token(&params.provider_id) {
+                    Ok(Some(tok)) => tok,
+                    Ok(None) => return ApiResponse::error(req.id, format!("No OAuth token found for {}", params.provider_id)),
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+
+                let client_id = params.client_id.as_deref().unwrap_or("custos-openai-desktop");
+                let token_url = params
+                    .token_endpoint
+                    .as_deref()
+                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_TOKEN_URL);
+                let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(
+                    custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_AUTH_URL,
+                    token_url,
+                );
+
+                match manager.refresh_token(client_id, &existing).await {
+                    Ok(refreshed) => {
+                        if let Err(e) = providers_repo.save_oauth_token(&refreshed) {
+                            return ApiResponse::error(req.id, format!("Failed to update token: {e}"));
+                        }
+                        match serde_json::to_value(&refreshed) {
+                            Ok(val) => ApiResponse::success(req.id, val),
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_OAUTH_GET => {
+                let providers_repo = match self.providers.as_ref() {
+                    Some(p) => p,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                let provider_id = req
+                    .params
+                    .get("provider_id")
+                    .or_else(|| req.params.get("id"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("openai");
+                match providers_repo.get_oauth_token(provider_id) {
+                    Ok(Some(tok)) => match serde_json::to_value(&tok) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Ok(None) => ApiResponse::success(req.id, serde_json::Value::Null),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_OAUTH_DELETE => {
+                let providers_repo = match self.providers.as_ref() {
+                    Some(p) => p,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                let provider_id = req
+                    .params
+                    .get("provider_id")
+                    .or_else(|| req.params.get("id"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("openai");
+                match providers_repo.delete_oauth_token(provider_id) {
+                    Ok(()) => ApiResponse::success(
+                        req.id,
+                        serde_json::json!({ "deleted": true, "provider_id": provider_id }),
+                    ),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_OAUTH_STATUS => {
+                if let Some(ref cb_server) = self.oauth_callback_server {
+                    let status_val = match cb_server.status() {
+                        crate::oauth_callback_server::CallbackServerStatus::Idle => {
+                            serde_json::json!({ "status": "idle" })
+                        }
+                        crate::oauth_callback_server::CallbackServerStatus::Listening { port } => {
+                            serde_json::json!({ "status": "listening", "port": port })
+                        }
+                        crate::oauth_callback_server::CallbackServerStatus::Exchanging { code } => {
+                            serde_json::json!({ "status": "exchanging", "code": code })
+                        }
+                        crate::oauth_callback_server::CallbackServerStatus::Completed { provider_id } => {
+                            serde_json::json!({ "status": "completed", "provider_id": provider_id })
+                        }
+                        crate::oauth_callback_server::CallbackServerStatus::Failed { error } => {
+                            serde_json::json!({ "status": "failed", "error": error })
+                        }
+                    };
+                    ApiResponse::success(req.id, status_val)
+                } else {
+                    ApiResponse::success(req.id, serde_json::json!({ "status": "idle" }))
                 }
             }
             METHOD_CAPABILITIES_LIST => {
@@ -5112,5 +5395,106 @@ mod tests {
         assert!(del_res.is_success());
         assert_eq!(del_res.result.unwrap().get("deleted").unwrap().as_bool(), Some(true));
     }
+
+    #[tokio::test]
+    async fn test_oauth_api_lifecycle() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("custos_oauth_test.db");
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new(&db_path.to_string_lossy()).unwrap());
+        let task_service = Arc::new(TaskService::new(store.clone()));
+        let session_manager = Arc::new(SessionManager::with_store(store.clone()));
+        let bridge_service = Arc::new(BridgeService::new(session_manager.clone(), task_service.clone()));
+        let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
+            .with_providers(Arc::new(store.providers().clone()));
+
+        // 1. Authorize URL generation
+        let auth_req = ApiRequest {
+            id: "oa_1".into(),
+            method: METHOD_OAUTH_AUTHORIZE.into(),
+            params: serde_json::json!({
+                "provider_id": "openai",
+                "client_id": "custos-test-client",
+                "redirect_uri": "http://localhost:1420/auth/callback"
+            }),
+        };
+        let auth_res = dispatcher.handle_request(auth_req).await;
+        assert!(auth_res.is_success(), "auth_res failed: {:?}", auth_res.error);
+        let auth_val = auth_res.result.unwrap();
+        let auth_url = auth_val.get("authorization_url").unwrap().as_str().unwrap();
+        assert!(auth_url.contains("client_id=custos-test-client"));
+        assert!(auth_url.contains("code_challenge="));
+        assert!(auth_url.contains("code_challenge_method=S256"));
+        assert!(auth_val.get("code_verifier").unwrap().as_str().unwrap().len() >= 43);
+
+        // 2. Query empty OAuth token
+        let get_req = ApiRequest {
+            id: "oa_2".into(),
+            method: METHOD_OAUTH_GET.into(),
+            params: serde_json::json!({ "provider_id": "openai" }),
+        };
+        let get_res = dispatcher.handle_request(get_req).await;
+        assert!(get_res.is_success());
+        assert!(get_res.result.unwrap().is_null());
+
+        // 3. Save mock OAuth token into database directly to simulate successful exchange
+        let now = chrono::Utc::now().timestamp_millis();
+        let token_record = custos_domain::OAuthTokenRecord {
+            provider_id: "openai".into(),
+            service_type: "openai".into(),
+            access_token: "sk-proj-test-oauth-access-token".into(),
+            refresh_token: Some("rt-test-refresh-token".into()),
+            expires_at: now + 3600_000,
+            token_type: "Bearer".into(),
+            scope: Some("openid profile email model.request".into()),
+            created_at: now,
+            updated_at: now,
+        };
+        store.providers().save_oauth_token(&token_record).unwrap();
+
+        // 4. Query token via v1.oauth.get
+        let get_req_2 = ApiRequest {
+            id: "oa_3".into(),
+            method: METHOD_OAUTH_GET.into(),
+            params: serde_json::json!({ "provider_id": "openai" }),
+        };
+        let get_res_2 = dispatcher.handle_request(get_req_2).await;
+        assert!(get_res_2.is_success());
+        let tok_val = get_res_2.result.unwrap();
+        assert_eq!(tok_val.get("access_token").unwrap().as_str().unwrap(), "sk-proj-test-oauth-access-token");
+        assert_eq!(tok_val.get("refresh_token").unwrap().as_str().unwrap(), "rt-test-refresh-token");
+
+        // 5. Query v1.llm.status -> should report OAuth PKCE active
+        let llm_req = ApiRequest {
+            id: "oa_4".into(),
+            method: "v1.llm.status".into(),
+            params: serde_json::json!({}),
+        };
+        let llm_res = dispatcher.handle_request(llm_req).await;
+        assert!(llm_res.is_success());
+        let llm_body = llm_res.result.unwrap();
+        assert_eq!(llm_body.get("configured").unwrap().as_bool(), Some(true));
+        assert_eq!(llm_body.get("active_provider").unwrap().as_str(), Some("OpenAI (OAuth PKCE)"));
+
+        // 6. Delete OAuth token via v1.oauth.delete
+        let del_req = ApiRequest {
+            id: "oa_5".into(),
+            method: METHOD_OAUTH_DELETE.into(),
+            params: serde_json::json!({ "provider_id": "openai" }),
+        };
+        let del_res = dispatcher.handle_request(del_req).await;
+        assert!(del_res.is_success());
+        assert_eq!(del_res.result.unwrap().get("deleted").unwrap().as_bool(), Some(true));
+
+        // 7. Verify token is gone
+        let get_req_3 = ApiRequest {
+            id: "oa_6".into(),
+            method: METHOD_OAUTH_GET.into(),
+            params: serde_json::json!({ "provider_id": "openai" }),
+        };
+        let get_res_3 = dispatcher.handle_request(get_req_3).await;
+        assert!(get_res_3.is_success());
+        assert!(get_res_3.result.unwrap().is_null());
+    }
 }
+
 

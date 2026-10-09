@@ -73,8 +73,8 @@ pub use synthesis::{
     SynthesisProposalStatus,
 };
 pub use provider_config::{
-    ClientApiKeyRecord, ModelCatalogOption, ModelCatalogResult, ModelPricing, ProbedModel,
-    ProviderConfig,
+    ClientApiKeyRecord, ModelCatalogOption, ModelCatalogResult, ModelPricing, OAuthTokenRecord,
+    ProbedModel, ProviderConfig,
 };
 pub use recipe::{EnvironmentSpec, Recipe, RecipeInput};
 pub use action::{

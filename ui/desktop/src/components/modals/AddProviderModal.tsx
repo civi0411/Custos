@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Key,
   X,
@@ -11,7 +11,9 @@ import {
   ShieldCheck,
   ExternalLink,
   Loader2,
-  UserCheck
+  UserCheck,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { CustomSelect, CustomSelectOption } from '../CustomSelect';
 import { daemonClient } from '@/api/daemon_client';
@@ -101,15 +103,89 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   const [reasoningEffort, setReasoningEffort] = useState('medium');
 
   // OAuth Form State
-  const [oauthProvider, setOauthProvider] = useState<ProviderServiceId>('copilot');
-  const [oauthAccountName, setOauthAccountName] = useState('GitHub Copilot (Enterprise)');
-  const [oauthEmail, setOauthEmail] = useState('developer@custos.local');
+  const [oauthProvider, setOauthProvider] = useState<ProviderServiceId>('openai');
+  const [oauthAccountName, setOauthAccountName] = useState('OpenAI Platform');
+  const [oauthEmail, setOauthEmail] = useState('user@openai.com');
   const [oauthStep, setOauthStep] = useState<'idle' | 'authorizing' | 'success'>('idle');
   const [deviceCode] = useState('CUST-8492');
 
+  // OAuth PKCE Flow State
+  const [authUrlResult, setAuthUrlResult] = useState<any>(null);
+  const [isGeneratingUrl, setIsGeneratingUrl] = useState(false);
+  const [callbackInput, setCallbackInput] = useState('');
+  const [isExchangingCode, setIsExchangingCode] = useState(false);
+  const [exchangeError, setExchangeError] = useState<string | null>(null);
+  const [exchangeSuccess, setExchangeSuccess] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const [callbackStatus, setCallbackStatus] = useState<'idle' | 'listening' | 'exchanging' | 'completed' | 'failed'>('idle');
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+
+  const startPolling = useCallback((targetProvider: ProviderServiceId, accountName: string, email?: string) => {
+    stopPolling();
+    setCallbackStatus('listening');
+    pollTimerRef.current = setInterval(async () => {
+      try {
+        const statusRes = await daemonClient.getOAuthStatus();
+        if (statusRes && statusRes.status) {
+          setCallbackStatus(statusRes.status);
+          if (statusRes.status === 'completed') {
+            stopPolling();
+            setExchangeSuccess(true);
+            await handleConnectOAuth(targetProvider, accountName, email);
+            setTimeout(() => {
+              onClose();
+            }, 900);
+            return;
+          }
+          if (statusRes.status === 'failed') {
+            stopPolling();
+            setExchangeError(statusRes.error || 'Token exchange failed');
+            return;
+          }
+        }
+
+        // Secondary check: directly inspect token table in daemon
+        const tokenRes = await daemonClient.getOAuthToken(targetProvider);
+        if (tokenRes && tokenRes.access_token) {
+          stopPolling();
+          setCallbackStatus('completed');
+          setExchangeSuccess(true);
+          await handleConnectOAuth(targetProvider, accountName, email);
+          setTimeout(() => {
+            onClose();
+          }, 900);
+          return;
+        }
+      } catch {
+        // Silently continue polling
+      }
+    }, 1000);
+  }, [stopPolling, handleConnectOAuth, onClose]);
+
+  // Clean up timer on unmount
+  useEffect(() => {
+    return () => {
+      stopPolling();
+    };
+  }, [stopPolling]);
+
   // Reset & update OAuth defaults on provider switch
   const handleSelectOauthProvider = (prov: ProviderServiceId) => {
+    stopPolling();
+    setCallbackStatus('idle');
     setOauthProvider(prov);
+    setAuthUrlResult(null);
+    setCallbackInput('');
+    setExchangeError(null);
+    setExchangeSuccess(false);
     if (prov === 'copilot') {
       setOauthAccountName('GitHub Copilot Account');
       setOauthEmail('developer@custos.local');
@@ -124,6 +200,168 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
       setOauthEmail('claude-user@anthropic.local');
     }
     setOauthStep('idle');
+  };
+
+  // Helper to open URL in default external browser (Tauri opener or window.open)
+  const openExternalBrowser = async (url: string) => {
+    try {
+      const { openUrl } = await import('@tauri-apps/plugin-opener');
+      await openUrl(url);
+      return true;
+    } catch {
+      window.open(url, '_blank');
+      return true;
+    }
+  };
+
+  // Client-side RFC 7636 PKCE Generator for instant zero-latency URL generation
+  const generateClientPkce = async (
+    clientId = 'app_EMoamEEZ73f0CkXaXp7hrann',
+    redirectUri = 'http://localhost:1455/auth/callback',
+    scope = 'openid profile email offline_access'
+  ) => {
+    // Generate 64-character unreserved string per RFC 7636 Section 4.1
+    const unreserved = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+    const randBytes = new Uint8Array(64);
+    if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(randBytes);
+    } else {
+      for (let i = 0; i < 64; i++) randBytes[i] = Math.floor(Math.random() * 256);
+    }
+    const codeVerifier = Array.from(randBytes, (b) => unreserved[b % unreserved.length]).join('');
+
+    // Generate SHA-256 code challenge
+    let codeChallenge = '';
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(codeVerifier);
+      const digest = await window.crypto.subtle.digest('SHA-256', data);
+      const digestArray = new Uint8Array(digest);
+      let binary = '';
+      for (let i = 0; i < digestArray.byteLength; i++) {
+        binary += String.fromCharCode(digestArray[i]);
+      }
+      codeChallenge = btoa(binary)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+    } catch {
+      codeChallenge = btoa(codeVerifier)
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=+$/, '');
+    }
+
+    const stateBytes = new Uint8Array(24);
+    if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+      window.crypto.getRandomValues(stateBytes);
+    } else {
+      for (let i = 0; i < 24; i++) stateBytes[i] = Math.floor(Math.random() * 256);
+    }
+    const state = Array.from(stateBytes, (b) => unreserved[b % unreserved.length]).join('');
+
+    const params = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      scope: scope,
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+      state: state,
+    });
+
+    return {
+      authorization_url: `https://auth.openai.com/oauth/authorize?${params.toString()}`,
+      code_verifier: codeVerifier,
+      code_challenge: codeChallenge,
+      state: state,
+      redirect_uri: redirectUri,
+    };
+  };
+
+  const handleGenerateAuthorizeUrl = async (autoOpen = true) => {
+    setIsGeneratingUrl(true);
+    setExchangeError(null);
+    try {
+      let res: any = null;
+      try {
+        res = await daemonClient.getOAuthAuthorizeUrl({
+          provider_id: oauthProvider,
+          service_type: oauthProvider,
+        });
+      } catch (daemonErr) {
+        console.warn('[AddProviderModal] Daemon authorize endpoint warning, using client PKCE generator:', daemonErr);
+      }
+
+      if (!res || !res.authorization_url) {
+        res = await generateClientPkce();
+      }
+
+      setAuthUrlResult(res);
+      startPolling(oauthProvider, oauthAccountName, oauthEmail);
+      if (autoOpen && res.authorization_url) {
+        await openExternalBrowser(res.authorization_url);
+      }
+    } catch (err: any) {
+      console.error('[AddProviderModal] Generate URL error:', err);
+      setExchangeError(err?.message || 'Failed to generate authorization URL');
+    } finally {
+      setIsGeneratingUrl(false);
+    }
+  };
+
+  const handleOpenInBrowser = async () => {
+    if (!authUrlResult?.authorization_url) return;
+    await openExternalBrowser(authUrlResult.authorization_url);
+  };
+
+  const handleCopyLink = () => {
+    if (authUrlResult?.authorization_url) {
+      navigator.clipboard.writeText(authUrlResult.authorization_url);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  };
+
+  const handleExchangeCode = async () => {
+    const rawInput = callbackInput.trim();
+    if (!rawInput || !authUrlResult) return;
+    setIsExchangingCode(true);
+    setExchangeError(null);
+    try {
+      // Check if user directly pasted an API key or session token
+      if (rawInput.startsWith('sk-') || rawInput.startsWith('sess-')) {
+        stopPolling();
+        await onSaveProvider({
+          service: 'openai',
+          apiKey: rawInput,
+          model: 'gpt-4o',
+          fastMode: true,
+        });
+        setExchangeSuccess(true);
+        setTimeout(() => onClose(), 900);
+        return;
+      }
+
+      stopPolling();
+      await daemonClient.exchangeOAuthCode({
+        code_or_url: rawInput,
+        code_verifier: authUrlResult.code_verifier,
+        provider_id: oauthProvider,
+        service_type: oauthProvider,
+        redirect_uri: authUrlResult.redirect_uri,
+      });
+      setExchangeSuccess(true);
+      await handleConnectOAuth(oauthProvider, oauthAccountName, oauthEmail);
+      setTimeout(() => {
+        onClose();
+      }, 900);
+    } catch (err: any) {
+      console.error('[AddProviderModal] Token exchange error:', err);
+      setExchangeError(err?.message || 'Token exchange failed. Please verify the code or URL.');
+    } finally {
+      setIsExchangingCode(false);
+    }
   };
 
   // Load canonical catalog whenever provider changes
@@ -543,6 +781,167 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* OpenAI PKCE Interactive Box */}
+              {oauthProvider === 'openai' && (
+                <div className="p-3.5 bg-surface-0 border border-border-default rounded-xl space-y-3 font-mono text-xs">
+                  <div className="flex items-center justify-between text-fg-subtle text-[11px]">
+                    <span className="font-semibold text-fg-editor">OpenAI PKCE Flow (RFC 7636)</span>
+                    <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                      Auto-Refresh Enabled
+                    </span>
+                  </div>
+
+                  {!authUrlResult ? (
+                    <div className="flex flex-col items-center justify-center p-4 bg-surface-2/60 rounded-xl border border-dashed border-border-default space-y-3">
+                      <p className="text-[11px] text-fg-muted text-center font-sans">
+                        Click below to open OpenAI authorization in your browser. After authorizing, copy and paste the redirect URL or code below.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleGenerateAuthorizeUrl(true)}
+                        disabled={isGeneratingUrl}
+                        className="workbench-primary-action px-4 py-2 rounded-lg text-xs font-sans font-medium flex items-center gap-2 cursor-pointer disabled:opacity-50 shadow-sm"
+                      >
+                        {isGeneratingUrl ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Opening OpenAI Portal...</span>
+                          </>
+                        ) : (
+                          <>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>Log in with OpenAI (Opens Browser)</span>
+                          </>
+                        )}
+                      </button>
+
+                      {exchangeError && (
+                        <div className="p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-[11px] flex items-center gap-2 w-full font-sans">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{exchangeError}</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3 font-sans">
+                      {/* Auto Callback Listener Status Banner */}
+                      <div className="p-3 bg-surface-2 border border-border-default rounded-xl text-xs space-y-1.5 font-sans">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {callbackStatus === 'listening' ? (
+                              <span className="relative flex h-2.5 w-2.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                              </span>
+                            ) : callbackStatus === 'exchanging' ? (
+                              <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin" />
+                            ) : (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                            )}
+                            <span className="font-medium text-fg-editor">
+                              {callbackStatus === 'listening'
+                                ? 'Waiting for browser authorization...'
+                                : callbackStatus === 'exchanging'
+                                ? 'Exchanging tokens with OpenAI...'
+                                : 'Authorization callback complete!'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-fg-muted font-mono bg-surface-1 px-1.5 py-0.5 rounded border border-border-muted">
+                            127.0.0.1:1455
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-fg-muted">
+                          Once authorized in your browser, Custos automatically captures the session and completes setup.
+                        </p>
+                      </div>
+
+                      {/* URL Display & Action Buttons */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-fg-editor">1. Official OpenAI Authorization URL</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            readOnly
+                            value={authUrlResult.authorization_url}
+                            className="flex-1 bg-surface-2 border border-border-muted rounded-lg px-2.5 py-1.5 text-[11px] text-fg-subtle font-mono truncate select-all focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={handleOpenInBrowser}
+                            className="px-2.5 py-1.5 bg-workbench-accent text-white rounded-lg hover:brightness-110 text-xs font-medium flex items-center gap-1 shrink-0 cursor-pointer"
+                            title="Re-open in Browser"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>Re-open</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCopyLink}
+                            className="px-2.5 py-1.5 bg-surface-2 hover:bg-surface-3 text-fg-editor rounded-lg border border-border-default text-xs font-medium flex items-center gap-1 shrink-0 cursor-pointer"
+                            title="Copy to clipboard"
+                          >
+                            {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            <span>{copiedLink ? 'Copied' : 'Copy'}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Callback Input & Exchange */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-medium text-fg-editor">
+                          2. Manual Fallback (Optional): Paste Callback URL or Authorization Code
+                        </label>
+                        <input
+                          type="text"
+                          value={callbackInput}
+                          onChange={(e) => setCallbackInput(e.target.value)}
+                          placeholder="http://localhost:1455/auth/callback?code=... or raw code or sk-..."
+                          className="w-full bg-surface-0 border border-border-default focus:border-border-emphasis rounded-lg px-3 py-2 text-fg-editor focus:outline-none text-xs font-mono transition"
+                        />
+                      </div>
+
+                      {exchangeError && (
+                        <div className="p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-[11px] flex items-center gap-2 font-sans">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          <span className="truncate">{exchangeError}</span>
+                        </div>
+                      )}
+
+                      {exchangeSuccess && (
+                        <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-[11px] flex items-center gap-2 font-sans">
+                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                          <span>Connected successfully! Stored tokens & activated live models.</span>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleExchangeCode}
+                        disabled={!callbackInput.trim() || isExchangingCode || exchangeSuccess}
+                        className="w-full workbench-primary-action py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                      >
+                        {isExchangingCode ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Exchanging Token with OpenAI...</span>
+                          </>
+                        ) : exchangeSuccess ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Verified & Connected!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="w-3.5 h-3.5" />
+                            <span>Verify & Connect Provider</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Footer */}
@@ -556,16 +955,28 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
               </button>
               <button
                 type="button"
-                onClick={handleStartOAuthConnect}
-                disabled={oauthStep === 'authorizing'}
+                onClick={() => {
+                  if (oauthProvider === 'openai') {
+                    if (!authUrlResult) {
+                      handleGenerateAuthorizeUrl(true);
+                    } else if (callbackInput.trim()) {
+                      handleExchangeCode();
+                    } else {
+                      handleOpenInBrowser();
+                    }
+                  } else {
+                    handleStartOAuthConnect();
+                  }
+                }}
+                disabled={oauthStep === 'authorizing' || isGeneratingUrl || isExchangingCode}
                 className="workbench-primary-action px-4 py-1.5 rounded-lg font-medium transition text-xs shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               >
-                {oauthStep === 'authorizing' ? (
+                {oauthStep === 'authorizing' || isExchangingCode ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     <span>Connecting OAuth...</span>
                   </>
-                ) : oauthStep === 'success' ? (
+                ) : oauthStep === 'success' || exchangeSuccess ? (
                   <>
                     <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Connected!</span>
@@ -573,7 +984,13 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                 ) : (
                   <>
                     <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>Authorize & Connect Account</span>
+                    <span>
+                      {oauthProvider === 'openai' && !authUrlResult
+                        ? 'Log in with OpenAI'
+                        : oauthProvider === 'openai' && callbackInput.trim()
+                        ? 'Verify & Connect'
+                        : 'Authorize & Connect Account'}
+                    </span>
                   </>
                 )}
               </button>

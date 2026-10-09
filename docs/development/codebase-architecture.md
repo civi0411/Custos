@@ -306,6 +306,7 @@ Custos/
 | [`migrations/0006_session_and_bridge.sql`](../../crates/custos-persistence/migrations/0006_session_and_bridge.sql) | 47 | Module 0006_session_and_bridge: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`migrations/0007_task_contract.sql`](../../crates/custos-persistence/migrations/0007_task_contract.sql) | 1 | Module 0007_task_contract: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`migrations/0008_task_events.sql`](../../crates/custos-persistence/migrations/0008_task_events.sql) | 10 | Module 0008_task_events: phục vụ các cấu trúc và chức năng liên quan | None |
+| [`migrations/0026_provider_oauth_tokens.sql`](../../crates/custos-persistence/migrations/0026_provider_oauth_tokens.sql) | 16 | Lưu trữ OAuth 2.0 tokens (access/refresh/expires_at) của các Provider | None |
 | [`src/artifacts/filesystem.rs`](../../crates/custos-persistence/src/artifacts/filesystem.rs) | 53 | Kho lưu trữ tệp vật lý Content-Addressable (CAS) | `struct FsArtifactStore`, `fn new` |
 | [`src/artifacts/lib.rs`](../../crates/custos-persistence/src/artifacts/lib.rs) | 5 | Module lib: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/artifacts/traits.rs`](../../crates/custos-persistence/src/artifacts/traits.rs) | 9 | Trait trừu tượng ArtifactStore | `trait ArtifactStore` |
@@ -314,6 +315,7 @@ Custos/
 | [`src/migrations.rs`](../../crates/custos-persistence/src/migrations.rs) | 35 | Thực thi các script migration tự động | `fn run_migrations` |
 | [`src/repositories/continuation.rs`](../../crates/custos-persistence/src/repositories/continuation.rs) | 124 | Gói tiếp tục ContinuationPacket kèm mã băm SHA-256 bảo đảm an toàn khi tiếp tục | `struct ContinuationRepository`, `fn new`, `fn save_continuation`, `fn get_latest_continuation` |
 | [`src/repositories/mod.rs`](../../crates/custos-persistence/src/repositories/mod.rs) | 9 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
+| [`src/repositories/providers.rs`](../../crates/custos-persistence/src/repositories/providers.rs) | 360 | Quản lý cấu hình AI Providers, OAuth 2.0 tokens và Catalog models | `struct ProviderRepository`, `fn save_oauth_token`, `fn get_oauth_token`, `fn list_expiring_oauth_tokens` |
 | [`src/repositories/session.rs`](../../crates/custos-persistence/src/repositories/session.rs) | 201 | Thực thể Session, SessionId, SessionStatus, nhật ký SessionJournalEntry | `struct SessionRepository`, `fn new`, `fn get_session`, `fn list_sessions` |
 | [`src/repositories/span.rs`](../../crates/custos-persistence/src/repositories/span.rs) | 134 | Quản lý phân đoạn thực thi Span, SpanState | `struct SpanRepository`, `fn new`, `fn get_span`, `fn save_span` |
 | [`src/repositories/task.rs`](../../crates/custos-persistence/src/repositories/task.rs) | 312 | Mô hình nhiệm vụ cốt lõi: Task, TaskContract, TaskStatus, ContractEvidence | `struct TaskRepository`, `fn new`, `fn get_task`, `fn read_task` |
@@ -701,7 +703,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-adapters`
 - **Chủ sở hữu chính (Owner):** **Trường (Sandbox) & Vinh (MCP/Harnesses) & Vĩ (Providers)**
 - **Quy tắc ranh giới:** Mọi dữ liệu ngoại vi đều là untrusted; cô lập an toàn trong sandbox.
-- **Tổng số file:** 157 files | **Tổng số dòng mã:** 49,392 lines
+- **Tổng số file:** 158 files | **Tổng số dòng mã:** 49,870 lines
 - **Mô tả chức năng:** Bộ điều hợp thế giới thực: OS Sandbox (Seatbelt macOS, Bubblewrap Linux), MCP Client STDIO/SSE, inference cục bộ (llama.cpp/MLX) và external harnesses.
 
 #### Danh mục các file bên trong `crates/custos-adapters/`:
@@ -776,6 +778,9 @@ Custos/
 | [`src/providers/fake/mod.rs`](../../crates/custos-adapters/src/providers/fake/mod.rs) | 146 | A fake provider for testing, replay fixtures, and end-to-end simulation. | `struct FakeProvider`, `fn new`, `fn with_default_text`, `fn enqueue_response` |
 | [`src/providers/local_model/mod.rs`](../../crates/custos-adapters/src/providers/local_model/mod.rs) | 45 | Unconfigured placeholder; real local inference uses separate backend integration. Fails closed instead of fabricating output. | `struct LocalModelProvider`, `fn new`, `fn with_model`, `fn default` |
 | [`src/providers/mod.rs`](../../crates/custos-adapters/src/providers/mod.rs) | 38 | Provider exports and regression test that unconfigured adapters do not fabricate model output. | `mod placeholder_tests` |
+| [`src/providers/oauth_pkce.rs`](../../crates/custos-adapters/src/providers/oauth_pkce.rs) | 180 | Quản lý luồng OAuth 2.0 PKCE (RFC 7636) cho OpenAI: sinh verifier/challenge, exchange code và refresh token | `struct OAuthPkceManager`, `fn generate_challenge`, `fn build_authorize_url`, `fn exchange_code`, `fn refresh_token` |
+| [`src/providers/openai_chat.rs`](../../crates/custos-adapters/src/providers/openai_chat.rs) | 260 | Live ModelPort adapter kết nối trực tiếp endpoint OpenAI Chat Completions với Bearer OAuth/API Key | `struct OpenAiChatProvider`, `trait TokenProvider`, `fn new`, `fn generate` |
+| [`src/providers/router.rs`](../../crates/custos-adapters/src/providers/router.rs) | 478 | Multi-provider router điều phối suy luận trực tiếp tới OpenAI, Anthropic, Gemini, DeepSeek, Local/Ollama | `struct RouterModelProvider`, `trait CredentialResolver`, `struct EnvCredentialResolver` |
 | [`src/providers/providers/anthropic.rs`](../../crates/custos-adapters/src/providers/providers/anthropic.rs) | 856 | Builder for [`AnthropicProvider`]. | `struct AnthropicProvider`, `struct AnthropicProviderBuilder`, `fn new`, `fn api_client` |
 | [`src/providers/providers/api_client.rs`](../../crates/custos-adapters/src/providers/providers/api_client.rs) | 1092 | Configure TLS settings on a reqwest ClientBuilder | `type RequestBuilderDecorator`, `struct ApiClient`, `enum TransportPolicy`, `enum AuthMethod` |
 | [`src/providers/providers/azure_foundry.rs`](../../crates/custos-adapters/src/providers/providers/azure_foundry.rs) | 1395 | Module azure_foundry: phục vụ các cấu trúc và chức năng liên quan | `enum EndpointKind`, `fn endpoint_kind`, `fn is_project_endpoint`, `enum ModelPublisher` |
@@ -912,8 +917,8 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-daemon`
 - **Chủ sở hữu chính (Owner):** **Vĩ (Chief Architect)**
 - **Quy tắc ranh giới:** Daemon crate là composition root; `runtime.rs` ráp concrete storage/runtime/adapters, `main.rs` chỉ sở hữu listener/process lifecycle.
-- **Tổng số file:** 8 files | **Tổng số dòng hiện hành:** 7,801 lines (gồm manifest; số đo tại audit `4b73cce`)
-- **Mô tả chức năng:** Tiến trình dịch vụ Custos phục vụ TCP, HTTP và stdio JSONL; sở hữu profile, SQLite, Local API dispatcher và recovery. HTTP RPC hiện cần auth/origin hardening.
+- **Tổng số file:** 9 files | **Tổng số dòng hiện hành:** 8,156 lines (gồm manifest; số đo tại audit `4b73cce`)
+- **Mô tả chức năng:** Tiến trình dịch vụ Custos phục vụ TCP, HTTP và stdio JSONL; sở hữu profile, SQLite, Local API dispatcher, OAuth loopback listener và recovery. HTTP RPC hiện cần auth/origin hardening.
 
 #### Danh mục các file bên trong `crates/custos-daemon/`:
 
@@ -925,6 +930,7 @@ Custos/
 | [`src/lib.rs`](../../crates/custos-daemon/src/lib.rs) | 18 | Export API, HTTP adapter, profile, runtime và Local API client/transport. | None |
 | [`src/local_api/lib.rs`](../../crates/custos-daemon/src/local_api/lib.rs) | 1,594 | Versioned request/response DTO, process/TCP transports và typed client methods. Cần được tách module cơ học theo domain trong cùng crate khi refactor. | `struct ApiRequest`, `struct ApiResponse`, `struct ProcessTransport`, `struct TcpTransport`, `struct LocalApiClient` |
 | [`src/main.rs`](../../crates/custos-daemon/src/main.rs) | 121 | Composition/process entry point: singleton lock và loopback TCP + HTTP + stdio JSONL listeners. | `fn main` |
+| [`src/oauth_callback_server.rs`](../../crates/custos-daemon/src/oauth_callback_server.rs) | 355 | Loopback HTTP callback server (port 1455) đón nhận mã ủy quyền OAuth PKCE của OpenAI/Codex, tự động trao đổi và lưu trữ token SQLite. | `struct OAuthCallbackServer`, `enum CallbackServerStatus`, `fn start`, `fn status`, `fn stop` |
 | [`src/profile.rs`](../../crates/custos-daemon/src/profile.rs) | 381 | Profile directory resolver, TCP/HTTP port discovery, singleton file lock và auto-connect helper. | `struct ProfileResolver`, `struct DaemonLock`, `fn ensure_daemon_client` |
 | [`src/runtime.rs`](../../crates/custos-daemon/src/runtime.rs) | 151 | Composition root ráp store, kernel, sandbox, model, harness registry, workflow, workspace, terminal, notebook và Local API. | `struct CustosRuntime`, `fn bootstrap`, `fn bootstrap_profile` |
 
