@@ -1,18 +1,28 @@
-//! CodexProvider Adapter
+//! CodexProvider Adapter / OpenAI Live Model Provider
 
 use async_trait::async_trait;
 use custos_domain::DomainError;
 use custos_provider::{ModelProvider, ModelRequest, ModelResponse};
+use crate::providers::openai_chat::OpenAiChatProvider;
 
 pub struct CodexProvider {
-    provider_id: String,
+    inner: OpenAiChatProvider,
 }
 
 impl CodexProvider {
     pub fn new() -> Self {
         Self {
-            provider_id: "openai-codex".to_string(),
+            inner: OpenAiChatProvider::new(),
         }
+    }
+
+    pub fn with_provider(inner: OpenAiChatProvider) -> Self {
+        Self { inner }
+    }
+
+    pub fn with_token_provider(mut self, provider: std::sync::Arc<dyn crate::providers::openai_chat::TokenProvider>) -> Self {
+        self.inner = self.inner.with_token_provider(provider);
+        self
     }
 }
 
@@ -25,12 +35,10 @@ impl Default for CodexProvider {
 #[async_trait]
 impl ModelProvider for CodexProvider {
     fn provider_id(&self) -> &str {
-        &self.provider_id
+        "openai-codex"
     }
 
-    async fn generate(&self, _req: &ModelRequest) -> Result<ModelResponse, DomainError> {
-        Err(DomainError::Validation(
-            "Codex transport is not configured; this placeholder cannot perform inference".into(),
-        ))
+    async fn generate(&self, req: &ModelRequest) -> Result<ModelResponse, DomainError> {
+        self.inner.generate(req).await
     }
 }

@@ -54,6 +54,9 @@ import {
   ModelPricing,
   ModelCatalogResult,
   ProviderConfigRecord,
+  OAuthAuthorizeResult,
+  OAuthTokenRecord,
+  OAuthStatusResult,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -430,6 +433,51 @@ export class DaemonClient {
   async deleteProvider(providerId: string): Promise<{ deleted: boolean; id: string }> {
     return this.request<{ deleted: boolean; id: string }>('v1.providers.delete', { id: providerId });
   }
+
+  // ---------------------------------------------------------
+  // OAuth 2.0 PKCE Flow API
+  // ---------------------------------------------------------
+
+  async getOAuthAuthorizeUrl(params?: {
+    provider_id?: string;
+    service_type?: string;
+    client_id?: string;
+    redirect_uri?: string;
+    scope?: string;
+    auth_endpoint?: string;
+    token_endpoint?: string;
+  }): Promise<OAuthAuthorizeResult> {
+    return this.request<OAuthAuthorizeResult>('v1.oauth.authorize', params || {});
+  }
+
+  async exchangeOAuthCode(params: {
+    code_or_url: string;
+    code_verifier: string;
+    provider_id?: string;
+    service_type?: string;
+    client_id?: string;
+    redirect_uri?: string;
+    token_endpoint?: string;
+  }): Promise<OAuthTokenRecord> {
+    return this.request<OAuthTokenRecord>('v1.oauth.exchange', params);
+  }
+
+  async refreshOAuthToken(provider_id: string = 'openai'): Promise<OAuthTokenRecord> {
+    return this.request<OAuthTokenRecord>('v1.oauth.refresh', { provider_id });
+  }
+
+  async getOAuthToken(provider_id: string = 'openai'): Promise<OAuthTokenRecord | null> {
+    return this.request<OAuthTokenRecord | null>('v1.oauth.get', { provider_id });
+  }
+
+  async deleteOAuthToken(provider_id: string = 'openai'): Promise<{ deleted: boolean; provider_id: string }> {
+    return this.request<{ deleted: boolean; provider_id: string }>('v1.oauth.delete', { provider_id });
+  }
+
+  async getOAuthStatus(): Promise<OAuthStatusResult> {
+    return this.request<OAuthStatusResult>('v1.oauth.status', {});
+  }
+
 
   async probeModels(
     baseUrl: string,

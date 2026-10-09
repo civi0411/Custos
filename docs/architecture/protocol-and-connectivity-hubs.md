@@ -79,14 +79,14 @@ gateway or client code from bypassing Kernel authority and persistence ports.
 
 | Responsibility | Current location and evidence | Target location if the feature is built |
 |---|---|---|
-| Local API handler and transport | `custos-daemon/src/{api.rs,main.rs,local_api/}`; `main.rs` says `transport=stdio-jsonl` | Add IPC socket/pipe or HTTP listener **in daemon**, reusing the same handler; client DTOs in `custos-sdk` |
+| Local API handler and transport | `custos-daemon/src/{api.rs,main.rs,local_api/,oauth_callback_server.rs}`; loopback TCP, HTTP & port 1455 OAuth callback server | HTTP listener on port 3000, OAuth callback loopback on port 1455, client DTOs in `custos-sdk` |
 | Session ↔ Task binding | `custos-bridge/src/{port.rs,service.rs}` | Keep bridge focused on binding/steering, not transport listeners or SQLite |
-| Model and harness contracts | `custos-provider/src/{port.rs,events.rs,types/}` has thin and Goose-derived provider interfaces | Reconcile into one supported public contract per job; no third provider abstraction |
+| Model and harness contracts | `custos-provider/src/{port.rs,events.rs,types/}`; `custos-adapters/src/providers/` | Live `OpenAiProvider` direct transport over ModelPort, OAuth 2.0 PKCE flow (`app_EMoamEEZ73f0CkXaXp7hrann`, port 1455 callback) in `oauth_pkce.rs`, auto-refresh; token persistence in `custos-persistence` |
 | Workflow/catalog/health | `custos-runtime/src/{agent,cognitive,workflow,context}` | Add integration catalog only after proving existing registries cannot represent a real connection lifecycle |
 | MCP | `custos-adapters/src/mcp/`; `adapters/client.rs` currently fabricates a success result for mock tools | Real stdio/Streamable HTTP client, version/auth/normalization in the same adapter boundary |
-| Native agents, ACP, CAP | `custos-adapters/src/providers/{codex,claude,antigravity}` are model-named stubs | Distinct harness adapters under `custos-adapters`, only when native/ACP/CAP implementation and conformance exist |
+| Native agents, ACP, CAP | `custos-adapters/src/providers/` now includes live `OpenAiProvider`; Codex/Claude/Antigravity stubs fail closed when unconfigured | Distinct harness adapters under `custos-adapters`, only when native/ACP/CAP implementation and conformance exist |
 | A2A | `custos-adapters/src/roaming/a2a.rs` contains `Simulated immediate dispatch` | Distinct A2A client/card/task mapping only after a remote job requires it; roaming transport is not A2A |
-| Canonical effects and connections | `custos-core/src/{authority,capability,kernel,evidence}`; `custos-persistence/` | Core admits; persistence stores connection refs, permit/outbox/attempt/receipt; adapters never write canonical DB |
+| Canonical effects and connections | `custos-core/src/{authority,capability,kernel,evidence}`; `custos-persistence/` | Core admits; persistence stores connection refs, permit/outbox/attempt/receipt, OAuth tokens; adapters never write canonical DB |
 
 Dependency direction: pure domain → core/ports → runtime/pack semantics → daemon composition, with persistence and external adapters implementing ports. `custos-adapters/mcp` or a future A2A module must not decide Task success, mint a permit, or turn remote metadata into policy. A proxy binary is an optional supervised connection, not a new source of canonical state.
 

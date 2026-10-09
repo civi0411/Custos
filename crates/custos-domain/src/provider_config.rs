@@ -27,6 +27,29 @@ pub struct ClientApiKeyRecord {
     pub revoked: bool,
 }
 
+/// Persisted OAuth 2.0 token credentials for AI providers.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct OAuthTokenRecord {
+    pub provider_id: String,
+    pub service_type: String,
+    pub access_token: String,
+    pub refresh_token: Option<String>,
+    pub expires_at: i64,
+    pub token_type: String,
+    pub scope: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+impl OAuthTokenRecord {
+    /// Returns true if the token is already expired or expiring within `skew_secs`.
+    pub fn is_expired(&self, skew_secs: i64) -> bool {
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        let expiry_threshold = self.expires_at - (skew_secs * 1000);
+        now_ms >= expiry_threshold
+    }
+}
+
 /// Probed Model discovered live from an endpoint (e.g., Ollama /api/tags, OpenAI /v1/models, Anthropic /models).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProbedModel {

@@ -4,8 +4,11 @@ pub mod claude;
 pub mod codex;
 pub mod fake;
 pub mod local_model;
+pub mod oauth_pkce;
+pub mod openai_chat;
 pub mod pricing;
 pub mod probe;
+pub mod router;
 #[allow(clippy::module_inception)]
 pub mod providers;
 
@@ -15,8 +18,11 @@ pub use claude::*;
 pub use codex::*;
 pub use fake::*;
 pub use local_model::*;
+pub use oauth_pkce::*;
+pub use openai_chat::*;
 pub use pricing::*;
 pub use probe::*;
+pub use router::*;
 pub use providers::*;
 
 #[cfg(test)]

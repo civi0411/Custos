@@ -160,6 +160,7 @@ export interface StartRunParams {
   session_id?: string;
   turn_id?: string;
   prompt?: string;
+  model?: string;
 }
 
 export interface AttachSessionParams {
@@ -1039,10 +1040,31 @@ export interface ProviderConfigRecord {
   updated_at: number;
 }
 
+export interface OAuthAuthorizeResult {
+  authorization_url: string;
+  code_verifier: string;
+  code_challenge: string;
+  state: string;
+  redirect_uri: string;
+}
 
+export interface OAuthTokenRecord {
+  provider_id: string;
+  service_type: string;
+  access_token: string;
+  refresh_token?: string;
+  expires_at: number;
+  token_type: string;
+  scope?: string;
+  created_at: number;
+  updated_at: number;
+}
 
-
-
-
-
+export interface OAuthStatusResult {
+  status: 'idle' | 'listening' | 'exchanging' | 'completed' | 'failed';
+  port?: number;
+  code?: string;
+  provider_id?: string;
+  error?: string;
+}
 

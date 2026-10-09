@@ -340,8 +340,8 @@ html[data-reduce-motion='true'] *::after {
 }
 
 .workbench-composer:focus-within {
-  border-color: color-mix(in srgb, var(--workbench-accent) 55%, var(--color-border-default));
-  box-shadow: 0 0 0 3px var(--workbench-accent-soft);
+  border-color: var(--color-border-emphasis);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
 .workbench-primary-action {
@@ -393,9 +393,17 @@ button[disabled],
    ============================================================ */
 
 *:focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-border-emphasis);
   outline-offset: 2px;
   border-radius: 2px;
+}
+
+.workbench-composer textarea:focus,
+.workbench-composer textarea:focus-visible,
+textarea.composer-textarea:focus,
+textarea.composer-textarea:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* ============================================================
@@ -1159,7 +1167,7 @@ input[type="checkbox"]:disabled {
 }
 
 .composer-wrapper:focus-within {
-  border-color: var(--color-accent);
+  border-color: var(--color-border-emphasis);
 }
 
 .composer-textarea {

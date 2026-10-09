@@ -302,6 +302,8 @@ pub struct StartRunCommand {
     pub turn_id: Option<String>,
     #[serde(default)]
     pub prompt: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 impl StartRunCommand {
@@ -316,6 +318,7 @@ impl StartRunCommand {
             session_id: None,
             turn_id: None,
             prompt: None,
+            model: None,
         }
     }
 
@@ -351,6 +354,11 @@ impl StartRunCommand {
 
     pub fn with_prompt(mut self, prompt: impl Into<String>) -> Self {
         self.prompt = Some(prompt.into());
+        self
+    }
+
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.model = Some(model.into());
         self
     }
 }

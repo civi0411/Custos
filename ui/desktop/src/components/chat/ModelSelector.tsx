@@ -230,6 +230,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     providers,
     combos,
     openSettings,
+    connectedAccounts,
     selectedModel: contextSelectedModel,
     handleSelectModel: contextHandleSelectModel
   } = useAppContext();
@@ -279,11 +280,34 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     activeModelId !== 'Model not reported'
   );
 
-  // Merge configured providers models into model list
+  // Merge configured providers and connected accounts into model list
   const allModels: ModelOption[] = useMemo(() => {
-    const list = [...CANONICAL_MODELS];
+    const list = CANONICAL_MODELS.map((m) => ({ ...m }));
+
+    // Track which provider types are configured & active
+    const activeProviderTypes = new Set<string>();
+
+    connectedAccounts?.forEach((acc) => {
+      if (acc.status === 'active') {
+        activeProviderTypes.add(acc.providerId.toLowerCase());
+        acc.supportedModels?.forEach((sm) => {
+          const match = list.find((m) => m.id.toLowerCase() === sm.toLowerCase());
+          if (match) match.isConfigured = true;
+        });
+      }
+    });
 
     providers.forEach((p) => {
+      const pType = (p.id || p.name || '').toLowerCase();
+      const isConfigured = p.status === 'primary' || p.status === 'standby' || (p.apiKey && p.apiKey !== 'Chưa cấu hình');
+      if (isConfigured) {
+        if (pType.includes('openai') || pType.includes('gpt')) activeProviderTypes.add('openai');
+        if (pType.includes('anthropic') || pType.includes('claude')) activeProviderTypes.add('anthropic');
+        if (pType.includes('gemini') || pType.includes('google')) activeProviderTypes.add('gemini');
+        if (pType.includes('deepseek')) activeProviderTypes.add('deepseek');
+        if (pType.includes('local') || pType.includes('ollama')) activeProviderTypes.add('local');
+      }
+
       const pModel = p.defaultModel || p.model;
       if (!pModel) return;
 
@@ -305,8 +329,15 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       }
     });
 
+    // Mark canonical models as configured if their provider family is active
+    list.forEach((m) => {
+      if (activeProviderTypes.has(m.provider)) {
+        m.isConfigured = true;
+      }
+    });
+
     return list;
-  }, [providers]);
+  }, [providers, connectedAccounts]);
 
   // Find active model details if not a combo
   const activeModel = useMemo(() => {
