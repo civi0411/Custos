@@ -24,6 +24,7 @@ import { AppHeader, type AppWorkspaceMode } from '@/components/shell/AppHeader';
 import { CommandPalette } from '@/components/shell/CommandPalette';
 import { AttentionBanner, type AttentionItem } from '@/components/shell/AttentionBanner';
 import { OpenAIIcon, ClaudeIcon } from '@/components/common/AgentIcons';
+import { ModelSelector } from '@/components/chat/ModelSelector';
 import { useAppContext } from '@/context/AppContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -82,7 +83,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   onToggleExpandWebTab,
   openResources
 }) => {
-  const { openSettings } = useAppContext();
+  const { openSettings, selectedModel, handleSelectModel } = useAppContext();
   const [inputText, setInputText] = useState('');
   const [splitPercent, setSplitPercent] = useState<number>(() => {
     return mode === 'chat' ? 50 : 42;
@@ -386,7 +387,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                 <div className="h-full flex flex-col items-center justify-center text-center my-auto pb-12">
                   <div className="w-14 h-14 rounded-xl bg-surface-1 border border-border-default flex items-center justify-center text-fg-muted mb-5">
                     {mode === 'code' ? (
-                      <span className="font-mono text-2xl text-fg-muted select-none">&#123; _ &#125;</span>
+                      <span className="font-mono text-2xl workbench-accent select-none">&#123;_&#125;</span>
                     ) : mode === 'research' ? (
                       <FlaskConical className="w-7 h-7 workbench-accent" />
                     ) : (
@@ -468,7 +469,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
             </div>
 
             {/* DOCKED CHAT COMPOSER (Natural Flex Child) */}
-            <div className="shrink-0 p-4 border-t border-border-muted bg-canvas">
+            <div className="shrink-0 p-4 bg-canvas">
               <div className="workbench-composer max-w-2xl mx-auto p-3 transition group">
                 <textarea
                   rows={2}
@@ -491,9 +492,10 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                     <span className={`text-[11px] font-mono border border-border-default bg-surface-1 px-2 py-0.5 rounded ${lensMeta.iconColor}`}>
                       {lensMeta.badge}
                     </span>
-                    <span className="hidden sm:inline text-[11px] text-fg-subtle">
-                      {lensMeta.modelName}
-                    </span>
+                    <ModelSelector
+                      currentModel={activeSession?.model || selectedModel}
+                      onSelectModel={handleSelectModel}
+                    />
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -576,7 +578,12 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   className="w-full bg-transparent border-none outline-none text-fg-editor placeholder-fg-subtle text-[13px] resize-none"
                 />
 
-                <div className="flex items-center justify-end mt-1.5 pt-1.5 border-t border-border-muted">
+                <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-border-muted">
+                  <ModelSelector
+                    currentModel={activeSession?.model || selectedModel}
+                    onSelectModel={handleSelectModel}
+                    compact
+                  />
                   <button
                     onClick={handleSend}
                     disabled={!inputText.trim()}

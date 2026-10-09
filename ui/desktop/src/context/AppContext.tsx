@@ -1,5 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { MainTab, ProjectData, ProviderItem, ClientApiKey, Session } from '../types';
+import {
+  MainTab,
+  ProjectData,
+  ProviderItem,
+  ClientApiKey,
+  Session,
+  ModelCombo,
+  UsageRecord,
+  ConnectedAccount,
+  ProviderServiceId,
+} from '../types';
 import { daemonClient } from '../api/daemon_client';
 import { Task, SessionJournalEntry } from '../types/domain';
 
@@ -30,6 +40,19 @@ interface AppContextType {
   clientKeys: ClientApiKey[];
   setClientKeys: React.Dispatch<React.SetStateAction<ClientApiKey[]>>;
 
+  // Routing Combos & Usage (OmniRoute / 9Router style)
+  combos: ModelCombo[];
+  setCombos: React.Dispatch<React.SetStateAction<ModelCombo[]>>;
+  handleCreateCombo: (combo: Omit<ModelCombo, 'id' | 'createdAt'>) => void;
+  handleUpdateCombo: (id: string, updates: Partial<ModelCombo>) => void;
+  handleDeleteCombo: (id: string) => void;
+  usageRecords: UsageRecord[];
+  handleResetUsage: () => void;
+  connectedAccounts: ConnectedAccount[];
+  setConnectedAccounts: React.Dispatch<React.SetStateAction<ConnectedAccount[]>>;
+  handleConnectOAuth: (providerId: ProviderServiceId, accountName: string, email?: string) => Promise<void>;
+  handleDeleteAccount: (accountId: string) => void;
+
   // Modals
   isSettingsOpen: boolean;
   setIsSettingsOpen: (open: boolean) => void;
@@ -49,6 +72,10 @@ interface AppContextType {
   // Toast
   toastMessage: string | null;
   showToast: (msg: string) => void;
+
+  // Selected Model
+  selectedModel: string;
+  handleSelectModel: (model: string) => void;
 
   // Actions
   handleSendMessage: (text: string) => Promise<void>;
@@ -122,6 +149,214 @@ function mapBackendKey(k: any): ClientApiKey {
   };
 }
 
+const DEFAULT_COMBOS: ModelCombo[] = [
+  {
+    id: 'combo-fast-coding',
+    name: 'Primary Coding + Fallback',
+    description: 'Claude 3.7 Sonnet as primary, failing over to GPT-4o if rate limited or offline.',
+    strategy: 'fallback',
+    enabled: true,
+    createdAt: new Date().toISOString(),
+    targets: [
+      {
+        modelId: 'claude-3-7-sonnet',
+        modelName: 'Claude 3.7 Sonnet',
+        providerId: 'anthropic',
+        providerName: 'Anthropic',
+        priority: 1,
+      },
+      {
+        modelId: 'gpt-4o',
+        modelName: 'GPT-4o',
+        providerId: 'openai',
+        providerName: 'OpenAI',
+        priority: 2,
+      },
+      {
+        modelId: 'deepseek-chat',
+        modelName: 'DeepSeek Chat',
+        providerId: 'deepseek',
+        providerName: 'DeepSeek',
+        priority: 3,
+      },
+    ],
+  },
+  {
+    id: 'combo-round-robin',
+    name: 'Multi-Model Round Robin',
+    description: 'Distributes load evenly across Gemini 2.5 Flash and GPT-4o-mini.',
+    strategy: 'round_robin',
+    enabled: true,
+    createdAt: new Date().toISOString(),
+    targets: [
+      {
+        modelId: 'gemini-2.5-flash',
+        modelName: 'Gemini 2.5 Flash',
+        providerId: 'gemini',
+        providerName: 'Google Gemini',
+        priority: 1,
+        weight: 50,
+      },
+      {
+        modelId: 'gpt-4o-mini',
+        modelName: 'GPT-4o Mini',
+        providerId: 'openai',
+        providerName: 'OpenAI',
+        priority: 2,
+        weight: 50,
+      },
+    ],
+  },
+];
+
+const DEFAULT_CONNECTED_ACCOUNTS: ConnectedAccount[] = [
+  {
+    id: 'acc-anthropic-1',
+    providerId: 'anthropic',
+    providerName: 'Anthropic Claude',
+    accountName: 'Primary Claude Pro',
+    authType: 'api_key',
+    apiKeyMasked: 'sk-ant-••••••••w9Z',
+    status: 'active',
+    statusLabel: 'Verified & Active',
+    badgeColor: '#10b981',
+    defaultModel: 'claude-3-7-sonnet',
+    supportedModels: ['claude-3-7-sonnet', 'claude-3-5-haiku', 'claude-3-opus'],
+    latencyMs: 38,
+    createdAt: new Date().toISOString(),
+    lastUsedAt: 'Just now',
+  },
+  {
+    id: 'acc-openai-1',
+    providerId: 'openai',
+    providerName: 'OpenAI',
+    accountName: 'Team GPT-4o Org',
+    authType: 'api_key',
+    apiKeyMasked: 'sk-proj-••••••••K1a',
+    status: 'active',
+    statusLabel: 'Verified & Active',
+    badgeColor: '#10b981',
+    defaultModel: 'gpt-4o',
+    supportedModels: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
+    latencyMs: 45,
+    createdAt: new Date().toISOString(),
+    lastUsedAt: '12m ago',
+  },
+  {
+    id: 'acc-copilot-1',
+    providerId: 'copilot',
+    providerName: 'GitHub Copilot',
+    accountName: 'GitHub Enterprise SSO',
+    authType: 'oauth',
+    oauthEmail: 'dev@custos.local',
+    oauthTier: 'Copilot Business',
+    status: 'active',
+    statusLabel: 'OAuth Active',
+    badgeColor: '#6366f1',
+    defaultModel: 'claude-3-7-sonnet',
+    supportedModels: ['claude-3-7-sonnet', 'gpt-4o'],
+    latencyMs: 52,
+    createdAt: new Date().toISOString(),
+    lastUsedAt: '1h ago',
+  },
+  {
+    id: 'acc-gemini-1',
+    providerId: 'gemini',
+    providerName: 'Google Gemini',
+    accountName: 'Google AI Studio',
+    authType: 'oauth',
+    oauthEmail: 'developer@gmail.com',
+    oauthTier: 'Pay-As-You-Go',
+    status: 'rate_limited',
+    statusLabel: 'Near Quota Limit (94%)',
+    badgeColor: '#f59e0b',
+    defaultModel: 'gemini-2.5-flash',
+    supportedModels: ['gemini-2.5-flash', 'gemini-2.5-pro'],
+    latencyMs: 29,
+    createdAt: new Date().toISOString(),
+    lastUsedAt: '4m ago',
+  },
+];
+
+const DEFAULT_USAGE_RECORDS: UsageRecord[] = [
+  {
+    id: 'usage-1',
+    modelId: 'claude-3-7-sonnet',
+    modelName: 'Claude 3.7 Sonnet',
+    providerId: 'anthropic',
+    providerName: 'Anthropic',
+    accountName: 'Production Org',
+    inputTokens: 142500,
+    outputTokens: 38200,
+    totalTokens: 180700,
+    estimatedCostUsd: 1.02,
+    requestCount: 48,
+    quotaLimitTokens: 1000000,
+    quotaUsedTokens: 180700,
+    quotaPercent: 18,
+    rateLimitStatus: 'normal',
+    resetPeriod: 'Resets daily at 00:00 UTC',
+    lastUsedAt: 'Just now',
+  },
+  {
+    id: 'usage-2',
+    modelId: 'gpt-4o',
+    modelName: 'GPT-4o',
+    providerId: 'openai',
+    providerName: 'OpenAI',
+    accountName: 'Personal Key',
+    inputTokens: 215400,
+    outputTokens: 41600,
+    totalTokens: 257000,
+    estimatedCostUsd: 0.95,
+    requestCount: 62,
+    quotaLimitTokens: 500000,
+    quotaUsedTokens: 257000,
+    quotaPercent: 51,
+    rateLimitStatus: 'normal',
+    resetPeriod: 'Resets daily at 00:00 UTC',
+    lastUsedAt: '12m ago',
+  },
+  {
+    id: 'usage-3',
+    modelId: 'gemini-2.5-flash',
+    modelName: 'Gemini 2.5 Flash',
+    providerId: 'gemini',
+    providerName: 'Google Gemini',
+    accountName: 'Free Tier OAuth',
+    inputTokens: 820000,
+    outputTokens: 120000,
+    totalTokens: 940000,
+    estimatedCostUsd: 0.14,
+    requestCount: 155,
+    quotaLimitTokens: 1000000,
+    quotaUsedTokens: 940000,
+    quotaPercent: 94,
+    rateLimitStatus: 'throttled',
+    resetPeriod: 'Resets daily at 00:00 UTC',
+    lastUsedAt: '4m ago',
+  },
+  {
+    id: 'usage-4',
+    modelId: 'deepseek-chat',
+    modelName: 'DeepSeek Chat',
+    providerId: 'deepseek',
+    providerName: 'DeepSeek',
+    accountName: 'DeepSeek Dev',
+    inputTokens: 64000,
+    outputTokens: 18000,
+    totalTokens: 82000,
+    estimatedCostUsd: 0.03,
+    requestCount: 19,
+    quotaLimitTokens: 10000000,
+    quotaUsedTokens: 82000,
+    quotaPercent: 1,
+    rateLimitStatus: 'normal',
+    resetPeriod: 'Prepaid Balance',
+    lastUsedAt: '2h ago',
+  },
+];
+
 const AppContext = createContext<AppContextType | null>(null);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -143,6 +378,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Providers & Keys state
   const [providers, setProviders] = useState<ProviderItem[]>([]);
   const [clientKeys, setClientKeys] = useState<ClientApiKey[]>([]);
+
+  // Combos & Usage state (OmniRoute / 9Router style)
+  const [combos, setCombos] = useState<ModelCombo[]>(() => {
+    try {
+      const saved = localStorage.getItem('custos_combos');
+      return saved ? JSON.parse(saved) : DEFAULT_COMBOS;
+    } catch {
+      return DEFAULT_COMBOS;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('custos_combos', JSON.stringify(combos));
+    } catch (e) {
+      console.warn('Failed to save combos to localStorage', e);
+    }
+  }, [combos]);
+
+  const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>(() => {
+    try {
+      const saved = localStorage.getItem('custos_connected_accounts');
+      return saved ? JSON.parse(saved) : DEFAULT_CONNECTED_ACCOUNTS;
+    } catch {
+      return DEFAULT_CONNECTED_ACCOUNTS;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('custos_connected_accounts', JSON.stringify(connectedAccounts));
+    } catch (e) {
+      console.warn('Failed to save connected accounts to localStorage', e);
+    }
+  }, [connectedAccounts]);
+
+  const [usageRecords, setUsageRecords] = useState<UsageRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('custos_usage_records');
+      return saved ? JSON.parse(saved) : DEFAULT_USAGE_RECORDS;
+    } catch {
+      return DEFAULT_USAGE_RECORDS;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('custos_usage_records', JSON.stringify(usageRecords));
+    } catch (e) {
+      console.warn('Failed to save usage records to localStorage', e);
+    }
+  }, [usageRecords]);
 
   // Modals state
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -197,6 +484,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const activeSession: Session | null =
     currentSessions.find((s) => s.id === activeSessionId) || currentSessions[0] || null;
 
+  // Selected Model state: default empty string means "No model selected"
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    return localStorage.getItem('custos_selected_model') || '';
+  });
+
+  const handleSelectModel = useCallback((modelName: string) => {
+    setSelectedModel(modelName);
+    localStorage.setItem('custos_selected_model', modelName);
+    if (activeSessionId) {
+      setProjectData((prev) => {
+        const list = prev[currentProject] || [];
+        const updatedList = list.map((s) => {
+          if (s.id === activeSessionId) {
+            return {
+              ...s,
+              model: modelName,
+            };
+          }
+          return s;
+        });
+        return {
+          ...prev,
+          [currentProject]: updatedList,
+        };
+      });
+    }
+    showToast(modelName ? `Active Model: ${modelName}` : 'No model selected');
+  }, [activeSessionId, currentProject, showToast]);
+
+  // Synchronize activeSession model if present and not empty
+  useEffect(() => {
+    if (
+      activeSession?.model &&
+      activeSession.model !== 'Model not reported' &&
+      activeSession.model !== 'No model selected' &&
+      activeSession.model !== selectedModel
+    ) {
+      setSelectedModel(activeSession.model);
+    }
+  }, [activeSessionId, activeSession?.model]);
+
   // Hydrate state from Custos Daemon on Mount
   useEffect(() => {
     applyUiScale(uiScale);
@@ -243,6 +571,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const domainSession = fetchedSessions.find((s) => (s.task_id || s.attached_to) === t.id);
             const taskId = t.id;
             const sessionId = domainSession?.id;
+            const rawJournal = journalBySession.get(domainSession?.id || '') || domainSession?.journal || [];
+            const journalList: any[] = Array.isArray(rawJournal)
+              ? rawJournal
+              : Array.isArray((rawJournal as any)?.entries)
+              ? (rawJournal as any).entries
+              : Array.isArray((rawJournal as any)?.journal)
+              ? (rawJournal as any).journal
+              : [];
+
             return {
               id: sessionId || `unbound:${taskId}`,
               taskId,
@@ -253,12 +590,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               title: t.title,
               time: 'Live',
               preview: `Status: ${t.status} | Contract: ${t.contract?.pack || 'general'}`,
-              model: 'Model not reported',
+              model: (t.contract as any)?.model || selectedModel || '',
               fileName: '',
               diffHunk: '',
               diffLinesCount: '',
               summary: `Task ${t.id}: ${t.status}`,
-              messages: (journalBySession.get(domainSession?.id || '') || domainSession?.journal || []).map((j) => ({
+              messages: journalList.map((j) => ({
                 id: j.id || String(j.entry_id || `${sessionId}-${j.occurred_at}`),
                 role: (j.role || j.entry_type) === 'user' ? 'user' : 'assistant',
                 author: (j.role || j.entry_type) === 'user' ? 'You' : 'Custos Kernel',
@@ -517,7 +854,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         title: createdTask.title,
         time: 'Just now',
         preview: `${pack} task · ${createdTask.status}`,
-        model: 'Model not reported',
+        model: selectedModel || 'claude-3-7-sonnet',
         fileName: '',
         diffHunk: '',
         diffLinesCount: '',
@@ -670,6 +1007,100 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Combos & Usage Handlers (OmniRoute / 9Router style)
+  const handleCreateCombo = useCallback((comboData: Omit<ModelCombo, 'id' | 'createdAt'>) => {
+    const newCombo: ModelCombo = {
+      ...comboData,
+      id: `combo-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+    };
+    setCombos((prev) => [newCombo, ...prev]);
+    showToast(`Routing Combo "${newCombo.name}" created!`);
+  }, [showToast]);
+
+  const handleUpdateCombo = useCallback((id: string, updates: Partial<ModelCombo>) => {
+    setCombos((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c))
+    );
+    showToast('Routing Combo updated');
+  }, [showToast]);
+
+  const handleDeleteCombo = useCallback((id: string) => {
+    setCombos((prev) => prev.filter((c) => c.id !== id));
+    if (selectedModel === id) {
+      setSelectedModel('');
+      localStorage.setItem('custos_selected_model', '');
+    }
+    showToast('Routing Combo deleted');
+  }, [selectedModel, showToast]);
+
+  const handleResetUsage = useCallback(() => {
+    setUsageRecords((prev) =>
+      prev.map((r) => ({
+        ...r,
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        estimatedCostUsd: 0,
+        requestCount: 0,
+        quotaUsedTokens: 0,
+        quotaPercent: 0,
+        rateLimitStatus: 'normal' as const,
+        lastUsedAt: 'Reset just now',
+      }))
+    );
+    showToast('Usage metrics reset successfully');
+  }, [showToast]);
+
+  const handleConnectOAuth = useCallback(async (providerId: ProviderServiceId, accountName: string, email?: string) => {
+    const providerLabels: Record<ProviderServiceId, string> = {
+      copilot: 'GitHub Copilot',
+      gemini: 'Google Gemini',
+      openai: 'OpenAI Platform',
+      anthropic: 'Anthropic Claude',
+      deepseek: 'DeepSeek',
+      openrouter: 'OpenRouter Gateway',
+      groq: 'Groq Cloud',
+      local: 'Local Inference',
+      custom: 'Custom Gateway'
+    };
+    const defaultModels: Record<ProviderServiceId, string> = {
+      copilot: 'claude-3-7-sonnet',
+      gemini: 'gemini-2.5-flash',
+      openai: 'gpt-4o',
+      anthropic: 'claude-3-7-sonnet',
+      deepseek: 'deepseek-chat',
+      openrouter: 'anthropic/claude-3.7-sonnet',
+      groq: 'llama-3.3-70b-versatile',
+      local: 'llama3.3:70b',
+      custom: 'custom-model'
+    };
+    const newAccount: ConnectedAccount = {
+      id: `acc-${providerId}-${Date.now().toString(36)}`,
+      providerId,
+      providerName: providerLabels[providerId] || providerId,
+      accountName: accountName || `${providerLabels[providerId] || providerId} Account`,
+      authType: 'oauth',
+      oauthEmail: email || `${providerId}-user@custos.local`,
+      oauthTier: 'Active Subscription',
+      status: 'active',
+      statusLabel: 'OAuth Active',
+      badgeColor: '#6366f1',
+      defaultModel: defaultModels[providerId] || 'gpt-4o',
+      supportedModels: [defaultModels[providerId] || 'gpt-4o'],
+      latencyMs: 35,
+      createdAt: new Date().toISOString(),
+      lastUsedAt: 'Just connected',
+    };
+    setConnectedAccounts((prev) => [newAccount, ...prev]);
+    showToast(`Connected ${newAccount.accountName} via OAuth!`);
+  }, [showToast]);
+
+  const handleDeleteAccount = useCallback((accountId: string) => {
+    setConnectedAccounts((prev) => prev.filter((a) => a.id !== accountId));
+    showToast('Account disconnected');
+  }, [showToast]);
+
   return (
     <AppContext.Provider
       value={{
@@ -693,6 +1124,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setProviders,
         clientKeys,
         setClientKeys,
+        combos,
+        setCombos,
+        handleCreateCombo,
+        handleUpdateCombo,
+        handleDeleteCombo,
+        usageRecords,
+        handleResetUsage,
+        connectedAccounts,
+        setConnectedAccounts,
+        handleConnectOAuth,
+        handleDeleteAccount,
         isSettingsOpen,
         setIsSettingsOpen,
         settingsTab,
@@ -707,6 +1149,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         handleStepUiScale,
         toastMessage,
         showToast,
+        selectedModel,
+        handleSelectModel,
         handleSendMessage,
         handleClearHistory,
         handleAcceptAndRun,

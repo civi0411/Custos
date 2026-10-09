@@ -41,7 +41,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           <span className="truncate max-w-[150px] sm:max-w-[250px]">{activeSessionTitle}</span>
         </span>
         <span className="text-border-default hidden sm:inline">|</span>
-        <span className="hidden sm:inline text-fg-subtle">{activeModel}</span>
+        <span className="hidden sm:inline text-fg-subtle">{activeModel || 'No model selected'}</span>
       </div>
 
       {/* Metrics & UI Scale Controller */}
