@@ -56,12 +56,20 @@ impl HarnessRegistry {
             "codex",
         );
 
-        let goose = Arc::new(super::goose::GooseHarnessAdapter::new(root));
+        let goose = Arc::new(super::goose::GooseHarnessAdapter::new(root.clone()));
         registry.register(
             goose,
             "Block Goose",
             "Block Goose autonomous developer CLI native coding harness.",
             "goose",
+        );
+
+        let opencode = Arc::new(super::opencode::OpenCodeHarnessAdapter::new(root));
+        registry.register(
+            opencode,
+            "OpenCode Agent",
+            "OpenCode native server/CLI agent loop with provider-governed execution.",
+            "opencode",
         );
 
         registry.set_default("claude-code");
@@ -168,20 +176,21 @@ mod tests {
         let registry = HarnessRegistry::default_with_workspace("/tmp");
 
         let harnesses = registry.list();
-        assert_eq!(harnesses.len(), 3);
+        assert_eq!(harnesses.len(), 4);
 
         let ids: Vec<&str> = harnesses.iter().map(|h| h.id.as_str()).collect();
         assert!(ids.contains(&"claude-code"));
         assert!(ids.contains(&"codex"));
         assert!(ids.contains(&"goose"));
+        assert!(ids.contains(&"opencode"));
 
         assert_eq!(registry.default_harness_id(), Some("claude-code"));
 
-        let codex = registry.get("codex").expect("Codex must be found");
-        assert_eq!(codex.harness_id(), "codex");
+        let opencode = registry.get("opencode").expect("OpenCode must be found");
+        assert_eq!(opencode.harness_id(), "opencode");
 
-        let desc = registry.get_descriptor("goose").expect("Goose descriptor");
-        assert_eq!(desc.id, "goose");
-        assert_eq!(desc.name, "Block Goose");
+        let desc = registry.get_descriptor("opencode").expect("OpenCode descriptor");
+        assert_eq!(desc.id, "opencode");
+        assert_eq!(desc.name, "OpenCode Agent");
     }
 }

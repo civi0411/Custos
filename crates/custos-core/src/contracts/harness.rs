@@ -70,10 +70,30 @@ impl HarnessProfile {
             harness_id: harness_id.into(),
             tool_mediation,
             worktree_ownership: WorktreeOwnership::SharedLive,
-            supports_cancel: true,
+            supports_cancel: false,
             supports_steer: false,
-            cost_visibility: CostVisibility::ExactTokens,
+            cost_visibility: CostVisibility::None,
         }
+    }
+
+    pub fn with_supports_cancel(mut self, supports_cancel: bool) -> Self {
+        self.supports_cancel = supports_cancel;
+        self
+    }
+
+    pub fn with_supports_steer(mut self, supports_steer: bool) -> Self {
+        self.supports_steer = supports_steer;
+        self
+    }
+
+    pub fn with_cost_visibility(mut self, cost_visibility: CostVisibility) -> Self {
+        self.cost_visibility = cost_visibility;
+        self
+    }
+
+    pub fn with_worktree_ownership(mut self, ownership: WorktreeOwnership) -> Self {
+        self.worktree_ownership = ownership;
+        self
     }
 
     pub fn is_custos_governed(&self) -> bool {
@@ -158,11 +178,23 @@ pub trait AgentRuntimePort: Send + Sync {
 
     /// Signals cancellation to an ongoing agent run.
     async fn cancel_run(&self, _run_id: &str) -> Result<(), DomainError> {
+        if !self.profile().supports_cancel {
+            return Err(DomainError::Validation(format!(
+                "Harness '{}' does not support cancellation",
+                self.harness_id()
+            )));
+        }
         Ok(())
     }
 
     /// Injects steering guidance/feedback to an ongoing agent run.
     async fn steer_run(&self, _run_id: &str, _guidance: &str) -> Result<(), DomainError> {
+        if !self.profile().supports_steer {
+            return Err(DomainError::Validation(format!(
+                "Harness '{}' does not support steering",
+                self.harness_id()
+            )));
+        }
         Ok(())
     }
 
