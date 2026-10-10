@@ -77,12 +77,52 @@ impl PackVerifier for CitationCoverageOracle {
                 .map(|s| !s.trim().is_empty())
                 .unwrap_or(false);
 
-            let is_verified = claim
+            // B5 Invariant: DOI or citation syntax presence alone NEVER defaults verified to true.
+            let self_asserted_verified = claim
                 .get("verified")
                 .and_then(Value::as_bool)
-                .unwrap_or(has_citation);
+                .unwrap_or(false);
 
-            if is_verified {
+            // Check grounding level: must not be l0_ungrounded
+            let is_ungrounded = claim
+                .get("level")
+                .or_else(|| claim.get("grounding_level"))
+                .and_then(Value::as_str)
+                .map(|s| s.eq_ignore_ascii_case("l0_ungrounded") || s.eq_ignore_ascii_case("ungrounded"))
+                .unwrap_or(false);
+
+            // Check semantic support & locator status
+            let is_unsupported = claim
+                .get("semantic_status")
+                .or_else(|| claim.get("support_status"))
+                .and_then(Value::as_str)
+                .map(|s| s.eq_ignore_ascii_case("unsupported") || s.eq_ignore_ascii_case("contradicted"))
+                .unwrap_or(false);
+
+            let is_locator_invalid = claim
+                .get("locator_status")
+                .and_then(Value::as_str)
+                .map(|s| s.eq_ignore_ascii_case("invalid") || s.eq_ignore_ascii_case("missing"))
+                .unwrap_or(false);
+
+            let is_stale = claim
+                .get("is_stale")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+
+            // Grounded & verified requires:
+            // 1. Valid citation/DOI
+            // 2. Verified flag is explicitly true
+            // 3. Not L0 ungrounded
+            // 4. Not unsupported, not invalid locator, not stale
+            let is_grounded = has_citation
+                && self_asserted_verified
+                && !is_ungrounded
+                && !is_unsupported
+                && !is_locator_invalid
+                && !is_stale;
+
+            if is_grounded {
                 grounded_claims += 1;
             } else {
                 let id = claim
@@ -147,6 +187,37 @@ mod tests {
             "claims": [
                 { "id": "c1", "doi": "10.1038/s41586-020-2649-2", "verified": true },
                 { "id": "c2", "doi": "", "verified": false }
+            ]
+        }));
+
+        let res = oracle.verify(&ctx).await;
+        assert!(matches!(res, VerificationResult::Fail { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_citation_coverage_rejects_unverified_even_with_doi() {
+        let oracle = CitationCoverageOracle::new();
+        // Claims have a DOI but verified is missing (previously falsely passed!)
+        let ctx = VerificationContext::new("task_res_3").with_metadata(json!({
+            "claims": [
+                { "id": "c1", "doi": "10.1038/s41586-020-2649-2" },
+                { "id": "c2", "doi": "10.1126/science.1234567" }
+            ]
+        }));
+
+        let res = oracle.verify(&ctx).await;
+        // Must FAIL because presence of DOI alone never grants verified!
+        assert!(matches!(res, VerificationResult::Fail { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_citation_coverage_rejects_self_asserted_l0_ungrounded() {
+        let oracle = CitationCoverageOracle::new();
+        // Caller claims verified: true, but grounding level is l0_ungrounded or semantic_status is unsupported
+        let ctx = VerificationContext::new("task_res_4").with_metadata(json!({
+            "claims": [
+                { "id": "c1", "doi": "10.1038/s41586-020-2649-2", "verified": true, "level": "l0_ungrounded" },
+                { "id": "c2", "doi": "10.1126/science.1234567", "verified": true, "semantic_status": "unsupported" }
             ]
         }));
 

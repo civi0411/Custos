@@ -48,6 +48,28 @@ impl PackVerifier for UserAcceptanceOracle {
             };
         }
 
+        // B7 Invariant: Draft is never sent; action marked draft_only cannot pass user acceptance
+        let is_draft_only = ctx
+            .metadata
+            .get("draft_only")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        if is_draft_only {
+            return VerificationResult::Fail {
+                reason: "action is marked draft-only; draft is never sent without explicit dispatch command"
+                    .into(),
+            };
+        }
+
+        // B7 Invariant: Timeout after send or unconfirmed receipt remains uncertain
+        if let Some(effect_status) = ctx.metadata.get("effect_status").and_then(Value::as_str) {
+            if effect_status.eq_ignore_ascii_case("uncertain") {
+                return VerificationResult::Unknown {
+                    reason: "effect execution is in uncertain state; must reconcile outbox before user acceptance".into(),
+                };
+            }
+        }
+
         let approval_token = ctx.metadata.get("approval_token").and_then(Value::as_str);
 
         if approval_token.is_none() || approval_token.unwrap().trim().is_empty() {
@@ -102,5 +124,33 @@ mod tests {
 
         let res = oracle.verify(&ctx).await;
         assert!(matches!(res, VerificationResult::Fail { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_user_acceptance_rejects_draft_only() {
+        let oracle = UserAcceptanceOracle::new();
+        let ctx = VerificationContext::new("task_ast_3").with_metadata(json!({
+            "approved": true,
+            "draft_only": true,
+            "approval_token": "usr_tok_1",
+            "payload_digest": "sha256:abc"
+        }));
+
+        let res = oracle.verify(&ctx).await;
+        assert!(matches!(res, VerificationResult::Fail { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_user_acceptance_uncertain_effect_returns_unknown() {
+        let oracle = UserAcceptanceOracle::new();
+        let ctx = VerificationContext::new("task_ast_4").with_metadata(json!({
+            "approved": true,
+            "effect_status": "uncertain",
+            "approval_token": "usr_tok_2",
+            "payload_digest": "sha256:def"
+        }));
+
+        let res = oracle.verify(&ctx).await;
+        assert!(matches!(res, VerificationResult::Unknown { .. }));
     }
 }
