@@ -98,25 +98,64 @@ impl OAuthCallbackServer {
     }
 
     /// Spawns the loopback listener for a pending authorization context.
+    /// Binds both IPv4 (127.0.0.1) and IPv6 ([::1]) to guarantee compatibility with
+    /// operating systems (e.g. Windows) where `localhost` resolves to `::1` first.
     pub async fn start_listening(&self, context: PendingOAuthContext) -> Result<u16, DomainError> {
         // Cancel any existing running callback listener
         let _ = self.shutdown_tx.send(());
 
-        let bind_addr = format!("127.0.0.1:{OAUTH_CALLBACK_PORT}");
-        let listener = match TcpListener::bind(&bind_addr).await {
-            Ok(l) => l,
-            Err(e) => {
+        // Wait briefly and retry binding IPv4 loopback to avoid WSAEADDRINUSE race condition
+        let mut listener_v4 = None;
+        let mut last_v4_err = None;
+        for _ in 0..10 {
+            match TcpListener::bind(format!("127.0.0.1:{OAUTH_CALLBACK_PORT}")).await {
+                Ok(l) => {
+                    listener_v4 = Some(l);
+                    break;
+                }
+                Err(e) => {
+                    last_v4_err = Some(e);
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+            }
+        }
+
+        let listener_v4 = match listener_v4 {
+            Some(l) => l,
+            None => {
+                let err_msg = last_v4_err
+                    .as_ref()
+                    .map(|e| e.to_string())
+                    .unwrap_or_else(|| "unknown socket error".to_string());
                 tracing::warn!(
                     port = OAUTH_CALLBACK_PORT,
-                    "Cannot bind OAuth loopback listener (port in use?): {e}. Fallback to manual callback paste."
+                    "Cannot bind IPv4 OAuth loopback listener: {err_msg}. Fallback to manual callback paste."
                 );
                 return Err(DomainError::Validation(format!(
-                    "Failed to bind OAuth callback listener on port {OAUTH_CALLBACK_PORT}: {e}"
+                    "Failed to bind IPv4 OAuth callback listener on port {OAUTH_CALLBACK_PORT}: {err_msg}"
                 )));
             }
         };
 
-        let port = listener
+        // Attempt IPv6 loopback bind ([::1]) to serve localhost on Windows cleanly
+        let mut listener_v6 = None;
+        for _ in 0..5 {
+            match TcpListener::bind(format!("[::1]:{OAUTH_CALLBACK_PORT}")).await {
+                Ok(l) => {
+                    listener_v6 = Some(l);
+                    break;
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        port = OAUTH_CALLBACK_PORT,
+                        "IPv6 loopback listener not yet bound: {e}"
+                    );
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+            }
+        }
+
+        let port = listener_v4
             .local_addr()
             .map(|a| a.port())
             .unwrap_or(OAUTH_CALLBACK_PORT);
@@ -133,27 +172,61 @@ impl OAuthCallbackServer {
         tokio::spawn(async move {
             tracing::info!(
                 port = port,
+                has_ipv6 = listener_v6.is_some(),
                 provider_id = %context.provider_id,
-                "OAuth loopback callback server active on port {port}"
+                "OAuth loopback callback server active on port {port} (dual-stack: IPv4 + IPv6)"
             );
 
             let server_future = async {
                 loop {
-                    match listener.accept().await {
-                        Ok((mut socket, _addr)) => {
-                            let mut buf = vec![0u8; 4096];
-                            let n = match socket.read(&mut buf).await {
-                                Ok(read_bytes) if read_bytes > 0 => read_bytes,
-                                _ => continue,
-                            };
+                    let (mut socket, _addr) = if let Some(ref l6) = listener_v6 {
+                        tokio::select! {
+                            res = listener_v4.accept() => {
+                                match res {
+                                    Ok(pair) => pair,
+                                    Err(e) => {
+                                        tracing::warn!("Error accepting IPv4 connection on port {port}: {e}");
+                                        break;
+                                    }
+                                }
+                            }
+                            res = l6.accept() => {
+                                match res {
+                                    Ok(pair) => pair,
+                                    Err(e) => {
+                                        tracing::warn!("Error accepting IPv6 connection on port {port}: {e}");
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        match listener_v4.accept().await {
+                            Ok(pair) => pair,
+                            Err(e) => {
+                                tracing::warn!("Error accepting IPv4 connection on port {port}: {e}");
+                                break;
+                            }
+                        }
+                    };
 
-                            let request_str = String::from_utf8_lossy(&buf[..n]);
-                            let first_line = request_str.lines().next().unwrap_or_default();
+                    let mut buf = vec![0u8; 4096];
+                    let n = match socket.read(&mut buf).await {
+                        Ok(read_bytes) if read_bytes > 0 => read_bytes,
+                        _ => continue,
+                    };
 
-                            // Look for GET /auth/callback?...
-                            if first_line.starts_with("GET /auth/callback") {
-                                let query_str =
-                                    first_line.split_whitespace().nth(1).unwrap_or_default();
+                    let request_str = String::from_utf8_lossy(&buf[..n]);
+                    let first_line = request_str.lines().next().unwrap_or_default();
+
+                    // Accept GET /auth/callback, GET /oauth_callback, or GET /callback
+                    let is_callback = first_line.starts_with("GET /auth/callback")
+                        || first_line.starts_with("GET /oauth_callback")
+                        || first_line.starts_with("GET /callback");
+
+                    if is_callback {
+                        let query_str =
+                            first_line.split_whitespace().nth(1).unwrap_or_default();
 
                                 let code = extract_query_param(query_str, "code");
                                 let state = extract_query_param(query_str, "state");
@@ -279,12 +352,6 @@ impl OAuthCallbackServer {
                                     "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
                                 let _ = socket.write_all(not_found.as_bytes()).await;
                             }
-                        }
-                        Err(e) => {
-                            tracing::warn!("Error accepting connection on port {port}: {e}");
-                            break;
-                        }
-                    }
                 }
             };
 
@@ -418,4 +485,43 @@ fn render_success_html() -> &'static str {
   </div>
 </body>
 </html>"#
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_query_param_basic() {
+        let uri = "/auth/callback?code=abc123xyz&state=state_secret";
+        assert_eq!(
+            extract_query_param(uri, "code"),
+            Some("abc123xyz".to_string())
+        );
+        assert_eq!(
+            extract_query_param(uri, "state"),
+            Some("state_secret".to_string())
+        );
+        assert_eq!(extract_query_param(uri, "missing"), None);
+    }
+
+    #[test]
+    fn test_extract_query_param_url_encoded() {
+        let uri = "/oauth_callback?code=test%2F123%2Bcode&state=val+space";
+        assert_eq!(
+            extract_query_param(uri, "code"),
+            Some("test/123+code".to_string())
+        );
+        assert_eq!(
+            extract_query_param(uri, "state"),
+            Some("val space".to_string())
+        );
+    }
+
+    #[test]
+    fn test_render_success_html() {
+        let html = render_success_html();
+        assert!(html.contains("Authorization Successful"));
+        assert!(html.contains("Custos has securely connected"));
+    }
 }

@@ -61,7 +61,47 @@ export const CANONICAL_MODELS: ModelOption[] = [
     contextWindow: '200k tokens'
   },
 
-  // OpenAI
+  // OpenAI / Codex
+  {
+    id: 'gpt-5.6-sol',
+    name: 'GPT-5.6 Sol',
+    provider: 'openai',
+    providerName: 'OpenAI (Codex)',
+    badge: 'Codex Flagship',
+    badgeColor: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+    description: 'Flagship reasoning & agentic code generation',
+    contextWindow: '200k tokens'
+  },
+  {
+    id: 'gpt-5.6-terra',
+    name: 'GPT-5.6 Terra',
+    provider: 'openai',
+    providerName: 'OpenAI (Codex)',
+    badge: 'Codex High-Throughput',
+    badgeColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+    description: 'High-throughput coding model optimized for agent workflows',
+    contextWindow: '200k tokens'
+  },
+  {
+    id: 'gpt-5.6-luna',
+    name: 'GPT-5.6 Luna',
+    provider: 'openai',
+    providerName: 'OpenAI (Codex)',
+    badge: 'Codex Fast',
+    badgeColor: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
+    description: 'Ultra-fast low-latency coding model for real-time iterations',
+    contextWindow: '200k tokens'
+  },
+  {
+    id: 'gpt-5.5',
+    name: 'GPT-5.5',
+    provider: 'openai',
+    providerName: 'OpenAI (Codex)',
+    badge: 'Codex General',
+    badgeColor: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
+    description: 'General reasoning and synthesis model',
+    contextWindow: '200k tokens'
+  },
   {
     id: 'gpt-4o',
     name: 'GPT-4o',
@@ -90,6 +130,56 @@ export const CANONICAL_MODELS: ModelOption[] = [
     badge: 'Efficient',
     badgeColor: 'text-zinc-400 bg-zinc-500/10 border-zinc-500/20',
     description: 'Affordable fast coding and quick lookups',
+    contextWindow: '128k tokens'
+  },
+  {
+    id: 'o1',
+    name: 'o1',
+    provider: 'openai',
+    providerName: 'OpenAI',
+    badge: 'Flagship Reasoning',
+    badgeColor: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
+    description: 'OpenAI flagship reasoning for complex STEM & code',
+    contextWindow: '200k tokens'
+  },
+  {
+    id: 'o1-mini',
+    name: 'o1-mini',
+    provider: 'openai',
+    providerName: 'OpenAI',
+    badge: 'Fast Reasoning',
+    badgeColor: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
+    description: 'Fast, efficient reasoning model for coding and math',
+    contextWindow: '128k tokens'
+  },
+  {
+    id: 'o1-preview',
+    name: 'o1-preview',
+    provider: 'openai',
+    providerName: 'OpenAI',
+    badge: 'Reasoning Preview',
+    badgeColor: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
+    description: 'OpenAI preview reasoning model',
+    contextWindow: '128k tokens'
+  },
+  {
+    id: 'chatgpt-4o-latest',
+    name: 'ChatGPT-4o Latest',
+    provider: 'openai',
+    providerName: 'OpenAI',
+    badge: 'ChatGPT Omni',
+    badgeColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+    description: 'Continuously updated ChatGPT-4o model',
+    contextWindow: '128k tokens'
+  },
+  {
+    id: 'gpt-4-turbo',
+    name: 'GPT-4 Turbo',
+    provider: 'openai',
+    providerName: 'OpenAI',
+    badge: 'Turbo',
+    badgeColor: 'text-zinc-400 bg-zinc-500/10 border-zinc-500/20',
+    description: 'High-capability multimodal GPT-4 Turbo',
     contextWindow: '128k tokens'
   },
 
@@ -435,9 +525,36 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               </button>
             </div>
 
+            {/* Custom Model Option when search query is entered and not an exact match */}
+            {searchQuery.trim().length > 0 &&
+              !allModels.some((m) => m.id.toLowerCase() === searchQuery.trim().toLowerCase()) && (
+                <div className="py-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSelect(searchQuery.trim());
+                      setIsOpen(false);
+                    }}
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition bg-surface-2 hover:bg-surface-3 text-fg-editor border border-sky-500/30 hover:border-sky-500/50 shadow-xs group"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Cpu size={14} className="text-sky-400 shrink-0" />
+                      <div className="min-w-0 truncate">
+                        <div className="text-xs font-medium text-fg-editor truncate">
+                          Use custom model: <span className="font-mono text-sky-400 font-bold">{searchQuery.trim()}</span>
+                        </div>
+                        <div className="text-[10px] text-fg-subtle truncate">
+                          Send prompt directly to provider with this model ID
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              )}
+
             {filteredModels.length === 0 ? (
-              <div className="p-6 text-center text-fg-subtle text-xs">
-                No models matching "{searchQuery}"
+              <div className="p-4 text-center text-fg-subtle text-xs">
+                No configured models matching "{searchQuery}"
               </div>
             ) : (
               <div className="py-1 first:pt-0 last:pb-0">

@@ -52,6 +52,9 @@ pub trait RunPort: Send + Sync {
     ) -> Result<Option<DispatchClaim>, DomainError>;
     async fn save_launch_attempt(&self, attempt: &LaunchAttempt) -> Result<(), DomainError>;
     async fn get_launch_attempt(&self, attempt_id: &str) -> Result<Option<LaunchAttempt>, DomainError>;
+    async fn reconcile_runs_on_startup(&self) -> Result<usize, DomainError> {
+        Ok(0)
+    }
 }
 
 /// Persistence Port for Orchestration Intelligence Decision Records (RFC 003).

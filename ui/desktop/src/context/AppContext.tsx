@@ -775,15 +775,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               diffHunk: '',
               diffLinesCount: '',
               summary: `Task ${t.id}: ${t.status}`,
-              messages: journalList.map((j) => ({
-                id: j.id || String(j.entry_id || `${sessionId}-${j.occurred_at}`),
-                role: (j.role || j.entry_type) === 'user' ? 'user' : 'assistant',
-                author: (j.role || j.entry_type) === 'user' ? 'You' : 'Custos Kernel',
-                badge: j.badge,
-                stepName: j.step_name,
-                duration: j.duration,
-                text: j.content || j.entry_data || '',
-              })),
+              messages: journalList.map((j) => {
+                const isUser =
+                  j.role === 'user' ||
+                  j.entry_type === 'user' ||
+                  j.entry_type === 'user_message';
+                return {
+                  id: j.id || String(j.entry_id || `${sessionId}-${j.occurred_at}`),
+                  role: isUser ? 'user' : 'assistant',
+                  author: isUser ? 'You' : (j.author || 'Custos Kernel'),
+                  badge: j.badge,
+                  stepName: j.step_name,
+                  duration: j.duration,
+                  text: j.content || j.entry_data || '',
+                };
+              }),
               diffCode: [],
             }];
           });
@@ -901,12 +907,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const chosenModel = (selectedModel || activeSession.model || '').trim();
       const selectedCombo = combos.find((combo) => combo.id.toLowerCase() === chosenModel.toLowerCase());
-      const liveModelIds = new Set(
-        connectedAccounts
-          .filter((account) => account.status === 'active')
-          .flatMap((account) => account.supportedModels)
-          .map((model) => model.toLowerCase())
-      );
 
       if (!chosenModel) {
         appendAssistantMessage({
@@ -932,15 +932,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      if (liveModelIds.size === 0 || !liveModelIds.has(chosenModel.toLowerCase())) {
+      const hasActiveAccount = connectedAccounts.some((account) => account.status === 'active');
+      if (!hasActiveAccount) {
         appendAssistantMessage({
           role: 'assistant',
           author: 'Custos Engine',
           badge: 'Model Not Connected',
           stepName: 'Model Gateway',
-          text: `Model "${chosenModel}" is not in the live model catalog for any connected PKCE/API key account. Refresh or reconnect the provider, then select a discovered model.`,
+          text: `Model "${chosenModel}" cannot be dispatched because no active provider accounts are connected. Please connect a provider in Settings > Providers first.`,
         });
-        showToast('Selected model is not connected');
+        showToast('No active provider connected');
         return;
       }
 
@@ -994,8 +995,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       try {
+        const rawTitle = (activeSession.title || chosenModel).replace(/^(Chat turn:\s*)+/, '').trim();
+        const turnTitle = rawTitle ? `Chat turn: ${rawTitle}` : `Chat turn: ${chosenModel}`;
         const createdTask = await daemonClient.createTask({
-          title: `Chat turn: ${activeSession.title || chosenModel}`,
+          title: turnTitle,
           metadata: {
             kind: 'conversation_chat_turn',
             pack_id: activeSession.pack || 'assistant',
@@ -1129,9 +1132,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const nextList = list.filter((session) => session.id !== sessionId);
     const fallbackSession = nextList[targetIndex] || nextList[targetIndex - 1] || nextList[0];
 
-    if (target.source === 'daemon' && target.sessionId) {
+    const daemonSessionId = target.sessionId || (target.source === 'daemon' ? target.id : undefined);
+    if (daemonSessionId) {
       try {
-        await daemonClient.deleteSession(target.sessionId);
+        await daemonClient.deleteSession(daemonSessionId);
       } catch (error) {
         showToast(`Could not delete session: ${error instanceof Error ? error.message : String(error)}`);
         return;

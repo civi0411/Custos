@@ -152,22 +152,14 @@ impl TaskRuntime {
     }
 
     async fn recover_completed_model_chat_turn(&self, task_id: &str) -> Result<(), DomainError> {
-        let Some(ref kernel) = self.kernel else {
-            return Ok(());
-        };
         let Some(ref store) = self.run_store else {
             return Ok(());
         };
 
-        let Some(task) = kernel.get_task(task_id).await? else {
-            return Ok(());
-        };
-        if task.metadata.get("kind").and_then(|v| v.as_str()) != Some("conversation_chat_turn") {
-            return Ok(());
-        }
-
         let mut recovered_any = false;
         let active_workers = store.list_worker_runs_for_task(task_id).await?;
+        let active_runs_guard = self.active_runs.read().await;
+
         for mut worker in active_workers
             .into_iter()
             .filter(|w| w.status == RunStatus::Active)
@@ -175,6 +167,12 @@ impl TaskRuntime {
             let Some(run_id) = worker.run_id.clone() else {
                 continue;
             };
+
+            // If the run is actively running in-memory in this process, do not disrupt it
+            if active_runs_guard.contains_key(&run_id) {
+                continue;
+            }
+
             let Some(mut run) = store.get_run(&run_id).await? else {
                 continue;
             };
@@ -188,16 +186,24 @@ impl TaskRuntime {
                 .map(|s| !s.trim().is_empty())
                 .unwrap_or(false);
 
-            if run.status == RunStatus::Active && model_mode && has_model_output {
-                run.transition(RunStatus::Completed)?;
-                run.metadata["completion_reason"] =
-                    serde_json::json!("recovered_model_turn_completed");
+            if run.status == RunStatus::Active {
+                if model_mode && has_model_output {
+                    run.transition(RunStatus::Completed)?;
+                    run.metadata["completion_reason"] =
+                        serde_json::json!("recovered_model_turn_completed");
+                    worker.transition(RunStatus::Completed)?;
+                } else {
+                    run.transition(RunStatus::Failed)?;
+                    run.metadata["completion_reason"] =
+                        serde_json::json!("recovered_stale_active_turn");
+                    worker.transition(RunStatus::Failed)?;
+                }
                 store.save_run(&run).await?;
-                worker.transition(RunStatus::Completed)?;
                 store.save_worker_run(&worker).await?;
                 recovered_any = true;
             }
         }
+        drop(active_runs_guard);
 
         if recovered_any {
             if let Some(claim) = self.dispatcher.get_active_claim(task_id, None).await {
@@ -511,6 +517,13 @@ impl WorkflowPort for TaskRuntime {
                 if let Some(ref mut l) = lease {
                     let _ = l.release();
                 }
+                let _ = run.transition(RunStatus::Failed);
+                let _ = wrun.transition(RunStatus::Failed);
+                run.metadata["failure_reason"] = serde_json::json!(e.to_string());
+                if let Some(ref store) = self.run_store {
+                    let _ = store.save_run(&run).await;
+                    let _ = store.save_worker_run(&wrun).await;
+                }
                 let _ = self.dispatcher.release_claim(&claim.id).await;
                 return Err(e);
             }
@@ -582,6 +595,13 @@ impl WorkflowPort for TaskRuntime {
 
         if let Some(ref store) = self.run_store {
             let _ = store.save_run(&run).await;
+            if let Ok(wruns) = store.list_worker_runs_for_task(&run.task_id).await {
+                for mut w in wruns.into_iter().filter(|w| w.status == RunStatus::Active) {
+                    if w.transition(RunStatus::Cancelled).is_ok() {
+                        let _ = store.save_worker_run(&w).await;
+                    }
+                }
+            }
         }
 
         if let Some(ref harness) = self.harness {
@@ -912,5 +932,79 @@ mod tests {
             .await
             .unwrap()
             .is_none());
+    }
+
+    struct TestFailingModel;
+
+    #[async_trait]
+    impl custos_provider::ModelPort for TestFailingModel {
+        fn provider_id(&self) -> &str {
+            "test-fail"
+        }
+
+        async fn generate(
+            &self,
+            _req: &ProviderRequest,
+        ) -> Result<custos_provider::request::ModelResponse, DomainError> {
+            Err(DomainError::Validation("Simulated model provider failure".into()))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_task_runtime_failed_model_turn_transitions_to_failed_and_releases_lock() {
+        use custos_core::contracts::kernel::TrustedKernel;
+        use custos_core::TaskStore;
+        use custos_domain::Task;
+        use custos_persistence::SqliteTaskStore;
+
+        let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+        let task = Task::new(
+            "task_fail_recover_01".into(),
+            "Fail and retry task".into(),
+        );
+        store.save_task(&task).await.unwrap();
+
+        let kernel = Arc::new(TrustedKernel::new(store.clone()));
+        let model = Arc::new(TestFailingModel);
+        let runtime = TaskRuntime::new()
+            .with_kernel(kernel)
+            .with_model(model)
+            .with_run_store(store.clone());
+
+        // First run fails due to model error
+        let err = runtime
+            .start_run(
+                StartRunCommand::new(&task.id, "actor_user")
+                    .with_preferred_mode("model")
+                    .with_prompt("failing prompt"),
+            )
+            .await
+            .expect_err("Should fail with model error");
+        assert!(matches!(err, DomainError::Validation(_)));
+
+        // Verify worker run in store is Failed, not left Active
+        let wruns = store.list_worker_runs_for_task(&task.id).await.unwrap();
+        assert_eq!(wruns.len(), 1);
+        assert_eq!(wruns[0].status, RunStatus::Failed);
+
+        let runs = store.list_runs_for_task(&task.id).await.unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, RunStatus::Failed);
+
+        // Second run can immediately proceed without Conflict error
+        let working_model = Arc::new(TestMockModel);
+        let runtime2 = TaskRuntime::new()
+            .with_model(working_model)
+            .with_run_store(store.clone());
+
+        let handle2 = runtime2
+            .start_run(
+                StartRunCommand::new(&task.id, "actor_user")
+                    .with_preferred_mode("model")
+                    .with_prompt("retry prompt"),
+            )
+            .await
+            .expect("Retry turn should succeed without Conflict error");
+        assert_eq!(handle2.status, RunStatus::Completed);
     }
 }

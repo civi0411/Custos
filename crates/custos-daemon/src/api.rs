@@ -2830,7 +2830,12 @@ impl LocalApiDispatcher {
                                 state: challenge.state.clone(),
                                 redirect_uri: redirect_uri.to_string(),
                             };
-                            let _ = cb_server.start_listening(pending).await;
+                            if let Err(e) = cb_server.start_listening(pending).await {
+                                tracing::warn!(
+                                    provider_id = %provider_id,
+                                    "Notice: OAuth loopback callback listener failed to bind: {e}"
+                                );
+                            }
                         }
 
                         match serde_json::to_value(&res) {
