@@ -7,8 +7,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use custos_domain::{
-    ArtifactRef, DecisionRecord, DomainError, ExecutionReceipt, NodePlacement, ReplanRecord, Run,
-    WorkerRun, WorkflowRevision,
+    ArtifactRef, DecisionRecord, DispatchClaim, DomainError, ExecutionReceipt, LaunchAttempt,
+    NodePlacement, ReplanRecord, Run, WorkerRun, WorkflowRevision,
 };
 use serde::{Deserialize, Serialize};
 
@@ -42,6 +42,16 @@ pub trait RunPort: Send + Sync {
     async fn list_worker_runs_for_task(&self, task_id: &str)
         -> Result<Vec<WorkerRun>, DomainError>;
     async fn list_worker_runs_for_run(&self, run_id: &str) -> Result<Vec<WorkerRun>, DomainError>;
+    async fn claim_ready(&self, claim: &DispatchClaim) -> Result<(), DomainError>;
+    async fn update_claim(&self, claim: &DispatchClaim) -> Result<(), DomainError>;
+    async fn get_claim(&self, claim_id: &str) -> Result<Option<DispatchClaim>, DomainError>;
+    async fn get_active_claim(
+        &self,
+        task_id: &str,
+        node_id: Option<&str>,
+    ) -> Result<Option<DispatchClaim>, DomainError>;
+    async fn save_launch_attempt(&self, attempt: &LaunchAttempt) -> Result<(), DomainError>;
+    async fn get_launch_attempt(&self, attempt_id: &str) -> Result<Option<LaunchAttempt>, DomainError>;
 }
 
 /// Persistence Port for Orchestration Intelligence Decision Records (RFC 003).

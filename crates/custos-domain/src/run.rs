@@ -423,6 +423,18 @@ impl LaunchStatus {
     }
 }
 
+impl std::fmt::Display for LaunchStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Prepared => write!(f, "prepared"),
+            Self::Launched => write!(f, "launched"),
+            Self::Refused => write!(f, "refused"),
+            Self::Failed => write!(f, "failed"),
+            Self::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
 /// One attempt to start a concrete model or native harness execution.
 /// Unknown launch results must be reconciled before another launch is attempted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
