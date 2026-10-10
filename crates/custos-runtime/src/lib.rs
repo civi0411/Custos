@@ -8,6 +8,7 @@ pub mod cognitive;
 pub mod context;
 pub mod context_management;
 pub mod gateway;
+pub mod integration;
 pub mod memory_service;
 pub mod oi;
 pub mod notebook;
@@ -15,6 +16,11 @@ pub mod session;
 pub mod terminal;
 pub mod workflow;
 pub mod workspace;
+
+pub use integration::{
+    BindingDirection, IntegrationBinding, IntegrationKind, IntegrationRegistry, LifecycleState,
+    MediationLevel,
+};
 
 // Compatibility shims for intra-crate modules and engine integration
 pub use cognitive as custos_cognitive;

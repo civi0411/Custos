@@ -4,6 +4,7 @@
 //! Model Context Protocol (MCP), OS Sandboxes (Seatbelt, Bubblewrap),
 //! Local Inference, Download Manager, and Roaming.
 
+pub mod a2a;
 pub mod download_manager;
 pub mod harness;
 pub mod local_inference;
@@ -31,6 +32,7 @@ pub use local_inference::provider_utils::*;
 pub use local_inference::tool_emulation;
 pub use local_inference::tool_parsing;
 
+pub use a2a::*;
 pub use download_manager::*;
 pub use harness::*;
 pub use local_inference::*;
