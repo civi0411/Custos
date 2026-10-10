@@ -38,7 +38,11 @@ impl WorkspaceLease {
     pub fn release(&mut self) -> Result<(), DomainError> {
         self.active = false;
         if self.lease_path.exists() {
-            let _ = fs::remove_dir_all(&self.lease_path);
+            // Safety: Only delete within .custos/worktrees directory to prevent arbitrary directory removal
+            let expected_parent = self.base_path.join(".custos").join("worktrees");
+            if self.lease_path.starts_with(&expected_parent) && self.lease_path != expected_parent {
+                let _ = fs::remove_dir_all(&self.lease_path);
+            }
         }
         Ok(())
     }
@@ -57,6 +61,10 @@ impl WorkspaceLease {
         if let Ok(entries) = fs::read_dir(current) {
             for entry in entries.flatten() {
                 let path = entry.path();
+                // Prohibit following symlinks that escape the lease root
+                if path.is_symlink() {
+                    continue;
+                }
                 if path.is_dir() {
                     Self::scan_dir(root, &path, out)?;
                 } else if let Ok(rel) = path.strip_prefix(root) {
@@ -121,7 +129,8 @@ impl WorkspaceLeaseManager {
     }
 
     /// Merges modified files from an isolated worktree back into the base workspace,
-    /// enforcing that all changes are within the permitted write prefix.
+    /// enforcing that all changes are strictly within the permitted write prefix
+    /// and prohibiting path traversal and prefix-collision vulnerabilities.
     pub fn merge_lease(
         &self,
         lease: &WorkspaceLease,
@@ -131,13 +140,42 @@ impl WorkspaceLeaseManager {
         let mut merged = Vec::new();
 
         for rel_path in &modified {
+            // Guard: Traversal check
+            for comp in rel_path.components() {
+                if matches!(comp, std::path::Component::ParentDir) {
+                    return Err(DomainError::Validation(format!(
+                        "Path traversal ('..') detected in lease path: {:?}",
+                        rel_path
+                    )));
+                }
+            }
+
             let rel_str = rel_path.to_string_lossy();
             if let Some(prefix) = permitted_prefix {
+                if prefix.contains("..") {
+                    return Err(DomainError::Validation(format!(
+                        "Path traversal forbidden in permitted prefix: {}",
+                        prefix
+                    )));
+                }
+
                 let clean_prefix = prefix
                     .trim_start_matches('/')
                     .trim_end_matches("/**")
                     .trim_end_matches("/*");
-                if !rel_str.starts_with(clean_prefix) {
+
+                // Strict boundary check to prevent prefix-collision (e.g. "src_other" matching "src")
+                let matches_prefix = if clean_prefix.is_empty() {
+                    true
+                } else if rel_str == clean_prefix {
+                    true
+                } else if rel_str.starts_with(&format!("{}/", clean_prefix)) {
+                    true
+                } else {
+                    false
+                };
+
+                if !matches_prefix {
                     return Err(DomainError::Validation(format!(
                         "Gate 5 Violation: Worktree lease '{}' attempted to write to unauthorized path '{}' outside permitted prefix '{}'",
                         lease.lease_id, rel_str, prefix
@@ -227,4 +265,25 @@ mod tests {
         manager.release_lease(&lease_a.lease_id).unwrap();
         assert!(!lease_a.lease_path.exists());
     }
+
+    #[test]
+    fn test_prefix_collision_and_traversal_protection() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let manager = WorkspaceLeaseManager::new(temp_dir.path());
+
+        let lease = manager.acquire_lease("task_1", "node_sec").unwrap();
+
+        // 1. Prefix collision: file in "src_other/file.rs" must NOT match prefix "src"
+        let collision_file = lease.lease_path.join("src_other").join("file.rs");
+        fs::create_dir_all(collision_file.parent().unwrap()).unwrap();
+        fs::write(&collision_file, "malicious").unwrap();
+
+        let err_collision = manager.merge_lease(&lease, Some("src"));
+        assert!(err_collision.is_err(), "Must prevent prefix collision (src_other vs src)");
+
+        // 2. Traversal in prefix: "src/../../etc" must be rejected
+        let err_traversal_prefix = manager.merge_lease(&lease, Some("src/../../etc"));
+        assert!(err_traversal_prefix.is_err(), "Must reject traversal in prefix");
+    }
 }
+

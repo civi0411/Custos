@@ -222,6 +222,100 @@ impl ExecutionWorkspace {
         self.lineage.head_commit = Some(commit.into());
         self.updated_at = Utc::now().to_rfc3339();
     }
+
+    /// Validates path safety, prohibiting directory traversal ('..'), system root targeting,
+    /// and repo-worktree path collision.
+    pub fn validate_path_safety(&self) -> Result<(), DomainError> {
+        let trimmed_path = self.path.trim();
+        if trimmed_path.is_empty() {
+            return Err(DomainError::Validation("Workspace path cannot be empty".into()));
+        }
+
+        // Check for path traversal components in workspace path
+        for comp in std::path::Path::new(trimmed_path).components() {
+            if matches!(comp, std::path::Component::ParentDir) {
+                return Err(DomainError::Validation(format!(
+                    "Path traversal ('..') is prohibited in workspace path: {}",
+                    self.path
+                )));
+            }
+        }
+
+        // Prohibit targeting root or critical system directories
+        let prohibited = ["/", "/bin", "/sbin", "/usr", "/etc", "/System", "/dev", "/proc", "/sys"];
+        for forbidden in &prohibited {
+            if trimmed_path == *forbidden {
+                return Err(DomainError::Validation(format!(
+                    "Workspace path cannot target system root or critical directory: {}",
+                    self.path
+                )));
+            }
+        }
+
+        match &self.kind {
+            WorkspaceKind::Git {
+                repo_path,
+                branch,
+                ..
+            } => {
+                let trimmed_repo = repo_path.trim();
+                if trimmed_repo.is_empty() {
+                    return Err(DomainError::Validation("Git repo path cannot be empty".into()));
+                }
+                for comp in std::path::Path::new(trimmed_repo).components() {
+                    if matches!(comp, std::path::Component::ParentDir) {
+                        return Err(DomainError::Validation(format!(
+                            "Path traversal ('..') is prohibited in git repo path: {}",
+                            repo_path
+                        )));
+                    }
+                }
+                let trimmed_branch = branch.trim();
+                if trimmed_branch.is_empty() {
+                    return Err(DomainError::Validation("Git branch name cannot be empty".into()));
+                }
+                if trimmed_branch.contains("..") || trimmed_branch.starts_with('/') {
+                    return Err(DomainError::Validation(format!(
+                        "Invalid git branch name: {}",
+                        branch
+                    )));
+                }
+                if trimmed_path == trimmed_repo {
+                    return Err(DomainError::Validation(
+                        "Target worktree path cannot be identical to repository root".into(),
+                    ));
+                }
+            }
+            WorkspaceKind::Folder { path } => {
+                let trimmed_folder = path.trim();
+                if trimmed_folder.is_empty() {
+                    return Err(DomainError::Validation("Folder path cannot be empty".into()));
+                }
+                for comp in std::path::Path::new(trimmed_folder).components() {
+                    if matches!(comp, std::path::Component::ParentDir) {
+                        return Err(DomainError::Validation(format!(
+                            "Path traversal ('..') is prohibited in folder path: {}",
+                            path
+                        )));
+                    }
+                }
+            }
+            WorkspaceKind::RemoteSsh {
+                host,
+                remote_path,
+                ..
+            } => {
+                if host.trim().is_empty() {
+                    return Err(DomainError::Validation("Remote SSH host cannot be empty".into()));
+                }
+                if remote_path.trim().is_empty() {
+                    return Err(DomainError::Validation("Remote SSH path cannot be empty".into()));
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -320,4 +414,56 @@ mod tests {
         assert_eq!(ws, deserialized);
         assert_eq!(deserialized.metadata["domain"], "engineering");
     }
+
+    #[test]
+    fn test_validate_path_safety_guards() {
+        // Traversal in path
+        let ws_traversal = ExecutionWorkspace::new(
+            WorkspaceId::generate(),
+            "bad-ws",
+            WorkspaceKind::Folder {
+                path: "/safe/path".into(),
+            },
+            "/safe/path/../../etc/passwd",
+        );
+        assert!(ws_traversal.validate_path_safety().is_err());
+
+        // Root path targeting
+        let ws_root = ExecutionWorkspace::new(
+            WorkspaceId::generate(),
+            "root-ws",
+            WorkspaceKind::Folder {
+                path: "/".into(),
+            },
+            "/",
+        );
+        assert!(ws_root.validate_path_safety().is_err());
+
+        // Git repo identical to worktree path
+        let ws_collision = ExecutionWorkspace::new(
+            WorkspaceId::generate(),
+            "collision-ws",
+            WorkspaceKind::Git {
+                repo_path: "/repo/custos".into(),
+                branch: "feat".into(),
+                base_commit: None,
+            },
+            "/repo/custos",
+        );
+        assert!(ws_collision.validate_path_safety().is_err());
+
+        // Valid workspace
+        let ws_valid = ExecutionWorkspace::new(
+            WorkspaceId::generate(),
+            "valid-ws",
+            WorkspaceKind::Git {
+                repo_path: "/repo/custos".into(),
+                branch: "feat-1".into(),
+                base_commit: None,
+            },
+            "/repo/custos/.custos/worktrees/feat-1",
+        );
+        assert!(ws_valid.validate_path_safety().is_ok());
+    }
 }
+

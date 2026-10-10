@@ -62,6 +62,11 @@ pub trait WorkspaceProvider: Send + Sync {
         Ok(DirtyManifest::default())
     }
 
+    /// Generates unified diff relative to the recorded base commit or HEAD.
+    async fn diff(&self, _workspace: &ExecutionWorkspace) -> Result<String, DomainError> {
+        Ok(String::new())
+    }
+
     /// Attempts to reconcile or recover an existing workspace on host.
     async fn recover(&self, _workspace: &ExecutionWorkspace) -> Result<bool, DomainError> {
         Ok(true)
