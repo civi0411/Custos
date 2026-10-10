@@ -50,6 +50,18 @@ pub trait ModelProvider: Send + Sync {
         let provider_id = self.provider_id().to_string();
         let requested_model = req.requested_model.clone();
 
+        let has_non_text_blocks = req.structured_messages.iter().any(|m| {
+            m.content.iter().any(|c| !matches!(c, crate::types::conversation::message::MessageContentBlock::Text(_)))
+        });
+        let has_tools = !req.tool_schemas.is_empty();
+
+        if has_non_text_blocks || has_tools {
+            return Err(DomainError::Validation(format!(
+                "Provider '{}' does not implement structured ModelTurn execution natively; refusing to strip multimodal blocks or tool schemas into legacy flat prompt",
+                self.provider_id()
+            )));
+        }
+
         let flat_prompt = req
             .structured_messages
             .iter()
