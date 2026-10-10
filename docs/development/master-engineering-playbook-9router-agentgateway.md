@@ -449,3 +449,30 @@ Trước khi mở PR, đồng đội của bạn cần tick đủ các mục sau
 - [ ] Tất cả tool calls của MCP đều đi qua `SandboxGuard` để băm tham số và kiểm tra `CapabilityPermit`.
 - [ ] Không có tình trạng context overflow nhờ module `rtk.rs` tính toán Headroom an toàn.
 - [ ] Hoàn thành Task bằng test exit 0 (Evidence Tier 1) thay vì phụ thuộc vào câu trả lời của LLM.
+- [ ] Loopback MCP endpoints được bảo vệ bởi bộ lọc DNS Rebinding (`is_localhost_request`).
+- [ ] Hợp đồng A2A tuân thủ chuẩn `AgentCard` và JSON-RPC 2.0 task delegation.
+
+---
+
+## 8. ĐẶC TẢ PHÂN HỆ NÂNG CAO: A2A PROTOCOL, DNS REBINDING & VIRTUAL COMBOS
+
+### 8.1. Hợp đồng A2A & Agent Card Discovery (`crates/custos-adapters/src/a2a/mod.rs`)
+Kế thừa kiến trúc A2A từ AgentGateway, Custos hỗ trợ giao tiếp giữa các autonomous agents độc lập mà không phá vỡ ranh giới chủ quyền:
+1. **Agent Card Discovery (`/.well-known/agent-card.json`)**: Khai báo danh tính `AgentCard`, danh sách `supported_interfaces` (JSON-RPC 2.0, MCP), capabilities (streaming, stateful_context, tool_delegation), và yêu cầu xác thực (`AgentAuthRequirement`).
+2. **JSON-RPC 2.0 Delegation Dispatcher**: Quản lý các method `tasks.create`, `tasks.get`, `tasks.cancel`, `messages.send` với `context_id` liên kết xuyên suốt nhiều turn hội thoại.
+
+### 8.2. Phòng thủ DNS Rebinding & Origin Spoofing (`crates/custos-adapters/src/mcp/security.rs`)
+Tuân thủ RFC 8414 và khuyến nghị bảo mật local MCP:
+1. Kiểm tra Authority `Host`: Chỉ chấp nhận các địa chỉ loopback cục bộ (`localhost`, `127.0.0.1`, `[::1]`).
+2. Kiểm tra `Origin`: Ngăn chặn trình duyệt bị lợi dụng tấn công CSRF/DNS Rebinding từ website độc hại nhằm thực thi tool hoặc đọc trộm dữ liệu local MCP.
+
+### 8.3. Virtual Model Combos & Capability-Aware Routing (`crates/custos-provider/src/catalog/combo.rs`)
+Kế thừa cơ chế Combo Presets từ 9Router:
+1. **Model Tiers**: Phân cấp 4 tầng `Fast`, `Balanced`, `Heavy`, `Reasoning`.
+2. **Capability-Aware Reordering**: Khi một turn yêu cầu năng lực đặc thù (như `Vision` hoặc `Reasoning`), router tự động đẩy các model thỏa mãn toàn bộ hard capabilities lên Tier 0 trước khi phát lệnh.
+
+### 8.4. Phân loại Lỗi & Exponential Backoff (`crates/custos-adapters/src/providers/fallback.rs`)
+Tránh bẫy khóa nhầm tài khoản lành mạnh:
+1. **Credential/Capacity Errors** (401, 402, 403, 429, 503, timeout): Kích hoạt `record_failure` với exponential backoff (1s, 2s, 4s, 8s, tối đa 240s) và chuyển sang candidate tiếp theo.
+2. **Request-Scoped Errors** (400 Bad Request, context overflow, schema mismatch): Lỗi do phía client/input, **tuyệt đối không phạt cooldown** provider để không làm gián đoạn các phiên làm việc hợp lệ khác.
+
