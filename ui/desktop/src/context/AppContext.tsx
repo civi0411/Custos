@@ -11,7 +11,13 @@ import {
   ProviderServiceId,
 } from '../types';
 import { daemonClient } from '../api/daemon_client';
-import { Task, SessionJournalEntry } from '../types/domain';
+import {
+  ModelCatalogOption,
+  OAuthTokenRecord,
+  ProviderConfigRecord,
+  Task,
+  SessionJournalEntry,
+} from '../types/domain';
 
 interface AppContextType {
   // Projects & Sessions
@@ -80,6 +86,7 @@ interface AppContextType {
   // Actions
   handleSendMessage: (text: string) => Promise<void>;
   handleClearHistory: () => void;
+  handleDeleteConversation: (sessionId: string) => Promise<void>;
   handleAcceptAndRun: () => Promise<void>;
   handleRejectDiff: () => void;
   handleCopyDiff: () => void;
@@ -108,11 +115,7 @@ function mapBackendProvider(p: any): ProviderItem {
     ? p.status
     : p.status === 'configured' || p.status === 'active' || p.is_active ? 'primary' : 'offline') as ProviderItem['status'];
 
-  const modelName = p.default_model || p.model || (
-    iconType === 'anthropic' ? 'claude-3-7-sonnet' :
-    iconType === 'openai' ? 'gpt-4o' :
-    iconType === 'gemini' ? 'gemini-2.5-flash' : 'deepseek-chat'
-  );
+  const modelName = p.default_model || p.model || 'Model not reported';
 
   return {
     id: p.id,
@@ -148,6 +151,93 @@ function mapBackendKey(k: any): ClientApiKey {
     icon: (k.name || '').toLowerCase().includes('cli') ? 'terminal' : 'laptop',
   };
 }
+
+const PROVIDER_LABELS: Record<ProviderServiceId, string> = {
+  copilot: 'GitHub Copilot',
+  gemini: 'Google Gemini',
+  openai: 'OpenAI Platform',
+  anthropic: 'Anthropic Claude',
+  deepseek: 'DeepSeek',
+  openrouter: 'OpenRouter Gateway',
+  groq: 'Groq Cloud',
+  local: 'Local Inference',
+  custom: 'Custom Gateway',
+};
+
+const normalizeProviderServiceId = (service?: string): ProviderServiceId => {
+  const s = (service || '').toLowerCase();
+  if (s.includes('anthropic') || s.includes('claude')) return 'anthropic';
+  if (s.includes('openai') || s.includes('gpt') || s.includes('codex')) return 'openai';
+  if (s.includes('gemini') || s.includes('google')) return 'gemini';
+  if (s.includes('deepseek')) return 'deepseek';
+  if (s.includes('openrouter')) return 'openrouter';
+  if (s.includes('groq')) return 'groq';
+  if (s.includes('local') || s.includes('ollama')) return 'local';
+  return 'custom';
+};
+
+const defaultProbeBaseUrl = (service: ProviderServiceId): string | undefined => {
+  switch (service) {
+    case 'openai':
+      return 'https://api.openai.com/v1';
+    case 'anthropic':
+      return 'https://api.anthropic.com/v1';
+    case 'gemini':
+      return 'https://generativelanguage.googleapis.com';
+    case 'deepseek':
+      return 'https://api.deepseek.com/v1';
+    case 'local':
+      return 'http://localhost:11434';
+    default:
+      return undefined;
+  }
+};
+
+const isProviderConnected = (p: ProviderConfigRecord): boolean => {
+  const status = (p.status || '').toLowerCase();
+  const statusConnected =
+    status === 'configured' ||
+    status === 'active' ||
+    status === 'primary' ||
+    status === 'standby';
+  const localProvider = normalizeProviderServiceId(p.service_type) === 'local';
+  return statusConnected && (localProvider || p.api_key_masked !== 'none');
+};
+
+const safeIsoFromMillis = (value?: number): string => {
+  if (!value || value > 253402300799000) {
+    return new Date().toISOString();
+  }
+  return new Date(value).toISOString();
+};
+
+const tokenLooksOauth = (token?: OAuthTokenRecord | null): boolean =>
+  Boolean(token?.has_refresh_token || token?.refresh_token || token?.scope?.includes('openid'));
+
+const uniqueModels = (models: string[]): string[] => {
+  const seen = new Set<string>();
+  return models.filter((model) => {
+    const key = model.trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const mergeCatalogModels = (
+  primary: ModelCatalogOption[],
+  fallback: ModelCatalogOption[]
+): ModelCatalogOption[] => {
+  const seen = new Set<string>();
+  const merged: ModelCatalogOption[] = [];
+  for (const model of [...primary, ...fallback]) {
+    const key = model.id.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    merged.push(model);
+  }
+  return merged;
+};
 
 const DEFAULT_COMBOS: ModelCombo[] = [
   {
@@ -206,75 +296,6 @@ const DEFAULT_COMBOS: ModelCombo[] = [
         weight: 50,
       },
     ],
-  },
-];
-
-const DEFAULT_CONNECTED_ACCOUNTS: ConnectedAccount[] = [
-  {
-    id: 'acc-anthropic-1',
-    providerId: 'anthropic',
-    providerName: 'Anthropic Claude',
-    accountName: 'Primary Claude Pro',
-    authType: 'api_key',
-    apiKeyMasked: 'sk-ant-••••••••w9Z',
-    status: 'active',
-    statusLabel: 'Verified & Active',
-    badgeColor: '#10b981',
-    defaultModel: 'claude-3-7-sonnet',
-    supportedModels: ['claude-3-7-sonnet', 'claude-3-5-haiku', 'claude-3-opus'],
-    latencyMs: 38,
-    createdAt: new Date().toISOString(),
-    lastUsedAt: 'Just now',
-  },
-  {
-    id: 'acc-openai-1',
-    providerId: 'openai',
-    providerName: 'OpenAI',
-    accountName: 'Team GPT-4o Org',
-    authType: 'api_key',
-    apiKeyMasked: 'sk-proj-••••••••K1a',
-    status: 'active',
-    statusLabel: 'Verified & Active',
-    badgeColor: '#10b981',
-    defaultModel: 'gpt-4o',
-    supportedModels: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
-    latencyMs: 45,
-    createdAt: new Date().toISOString(),
-    lastUsedAt: '12m ago',
-  },
-  {
-    id: 'acc-copilot-1',
-    providerId: 'copilot',
-    providerName: 'GitHub Copilot',
-    accountName: 'GitHub Enterprise SSO',
-    authType: 'oauth',
-    oauthEmail: 'dev@custos.local',
-    oauthTier: 'Copilot Business',
-    status: 'active',
-    statusLabel: 'OAuth Active',
-    badgeColor: '#6366f1',
-    defaultModel: 'claude-3-7-sonnet',
-    supportedModels: ['claude-3-7-sonnet', 'gpt-4o'],
-    latencyMs: 52,
-    createdAt: new Date().toISOString(),
-    lastUsedAt: '1h ago',
-  },
-  {
-    id: 'acc-gemini-1',
-    providerId: 'gemini',
-    providerName: 'Google Gemini',
-    accountName: 'Google AI Studio',
-    authType: 'oauth',
-    oauthEmail: 'developer@gmail.com',
-    oauthTier: 'Pay-As-You-Go',
-    status: 'rate_limited',
-    statusLabel: 'Near Quota Limit (94%)',
-    badgeColor: '#f59e0b',
-    defaultModel: 'gemini-2.5-flash',
-    supportedModels: ['gemini-2.5-flash', 'gemini-2.5-pro'],
-    latencyMs: 29,
-    createdAt: new Date().toISOString(),
-    lastUsedAt: '4m ago',
   },
 ];
 
@@ -398,12 +419,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [combos]);
 
   const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>(() => {
-    try {
-      const saved = localStorage.getItem('custos_connected_accounts');
-      return saved ? JSON.parse(saved) : DEFAULT_CONNECTED_ACCOUNTS;
-    } catch {
-      return DEFAULT_CONNECTED_ACCOUNTS;
-    }
+    return [];
   });
 
   useEffect(() => {
@@ -489,6 +505,169 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return localStorage.getItem('custos_selected_model') || '';
   });
 
+  const refreshProviderState = useCallback(async () => {
+    const [fetchedProviders, fetchedKeys] = await Promise.all([
+      daemonClient.listProviders().catch(() => []),
+      daemonClient.listClientKeys().catch(() => []),
+    ]);
+
+    let providerRecords = fetchedProviders as ProviderConfigRecord[];
+    let repairedOAuthProvider = false;
+
+    const recoverableOAuthProviders: ProviderServiceId[] = ['openai', 'anthropic', 'gemini', 'deepseek'];
+    for (const providerId of recoverableOAuthProviders) {
+      const hasProvider = providerRecords.some((provider) =>
+        provider.id === providerId ||
+        normalizeProviderServiceId(provider.service_type || provider.id) === providerId
+      );
+      if (hasProvider) {
+        continue;
+      }
+
+      const token = await daemonClient.getOAuthToken(providerId).catch(() => null);
+      if (!token?.connected && !token?.access_token) {
+        continue;
+      }
+
+      await daemonClient.saveProvider({
+        id: providerId,
+        name: `${PROVIDER_LABELS[providerId]} (OAuth)`,
+        service_type: providerId,
+        provider_type: providerId,
+        api_key_masked: 'oauth',
+        endpoint_url: defaultProbeBaseUrl(providerId),
+        status: 'active',
+        status_label: 'OAuth Active',
+        fast_mode: false,
+        is_active: true,
+      }).catch(() => undefined);
+      repairedOAuthProvider = true;
+    }
+
+    if (repairedOAuthProvider) {
+      providerRecords = (await daemonClient.listProviders().catch(() => providerRecords)) as ProviderConfigRecord[];
+    }
+
+    setProviders(providerRecords.map(mapBackendProvider));
+    setClientKeys(fetchedKeys.map(mapBackendKey));
+
+    const accounts = await Promise.all(
+      providerRecords.map(async (provider): Promise<ConnectedAccount | null> => {
+        const serviceId = normalizeProviderServiceId(provider.service_type || provider.id);
+        const connected = isProviderConnected(provider);
+        const endpointUrl = provider.endpoint_url || defaultProbeBaseUrl(serviceId);
+
+        let tokenMeta: OAuthTokenRecord | null = null;
+        tokenMeta = await daemonClient.getOAuthToken(provider.id).catch(() => null);
+        if (!tokenMeta && provider.id !== serviceId) {
+          tokenMeta = await daemonClient.getOAuthToken(serviceId).catch(() => null);
+        }
+
+        let catalogModels: ModelCatalogOption[] = [];
+        if (connected && endpointUrl) {
+          try {
+            const probed = await daemonClient.probeModels(
+              endpointUrl,
+              provider.service_type || serviceId,
+              undefined,
+              provider.id
+            );
+            catalogModels = probed.models.map((model, index) => ({
+              id: model.id,
+              label: model.name || model.id,
+              description: model.description,
+              provider_type: provider.service_type || serviceId,
+              is_default: index === 0,
+              default_effort: undefined,
+              efforts: [],
+              supports_fast_mode: true,
+              context_window: model.context_window || provider.context_window,
+              pricing: undefined,
+            }));
+          } catch (err) {
+            console.warn(`[ProviderHydrate] Live model probe failed for ${provider.id}:`, err);
+          }
+        }
+
+        try {
+          const providerCatalog = await daemonClient.getModelCatalog(provider.service_type || serviceId, provider.id);
+          const canonicalCatalog =
+            providerCatalog.origin === 'catalog'
+              ? providerCatalog
+              : await daemonClient.getModelCatalog(provider.service_type || serviceId);
+          catalogModels = mergeCatalogModels(catalogModels, [
+            ...(providerCatalog.models || []),
+            ...(canonicalCatalog.models || []),
+          ]);
+        } catch {
+          catalogModels = catalogModels;
+        }
+
+        const supportedModels = uniqueModels(catalogModels.map((model) => model.id));
+
+        if (!connected) {
+          return null;
+        }
+
+        const defaultModel =
+          provider.default_model && supportedModels.includes(provider.default_model)
+            ? provider.default_model
+            : supportedModels[0] || '';
+        const contextWindow =
+          catalogModels.find((model) => model.id === defaultModel)?.context_window ||
+          provider.context_window ||
+          catalogModels[0]?.context_window;
+        const authType = tokenLooksOauth(tokenMeta) || provider.name.toLowerCase().includes('oauth')
+          ? 'oauth'
+          : 'api_key';
+
+        return {
+          id: provider.id,
+          providerId: serviceId,
+          providerName: PROVIDER_LABELS[serviceId] || provider.name,
+          accountName: provider.name || PROVIDER_LABELS[serviceId] || provider.id,
+          authType,
+          apiKeyMasked: authType === 'api_key' ? provider.api_key_masked : undefined,
+          endpointUrl,
+          oauthTier: authType === 'oauth' ? 'Connected via PKCE' : undefined,
+          oauthExpiresAt: tokenMeta?.expires_at ? safeIsoFromMillis(tokenMeta.expires_at) : undefined,
+          status: connected ? 'active' : 'offline',
+          statusLabel: connected ? 'Connected' : 'Offline',
+          badgeColor: connected ? '#10b981' : '#6b7280',
+          defaultModel,
+          supportedModels,
+          contextWindow,
+          fastMode: provider.fast_mode,
+          latencyMs: 0,
+          createdAt: safeIsoFromMillis(provider.created_at),
+          lastUsedAt: connected ? 'Connected' : undefined,
+        };
+      })
+    );
+
+    const liveAccounts = accounts.filter((account): account is ConnectedAccount => account !== null);
+    setConnectedAccounts(liveAccounts);
+
+    const liveModelIds = new Set(
+      liveAccounts.flatMap((account) => account.supportedModels).map((model) => model.toLowerCase())
+    );
+    const fallbackModel =
+      liveAccounts.find((account) => account.status === 'active' && account.defaultModel)?.defaultModel ||
+      liveAccounts.flatMap((account) => account.supportedModels)[0] ||
+      '';
+
+    setSelectedModel((previous) => {
+      const current = previous || localStorage.getItem('custos_selected_model') || '';
+      if (current && liveModelIds.has(current.toLowerCase())) {
+        return current;
+      }
+      localStorage.setItem('custos_selected_model', fallbackModel);
+      return fallbackModel;
+    });
+
+    return { providers: providerRecords, keys: fetchedKeys, accounts: liveAccounts };
+  }, []);
+
   const handleSelectModel = useCallback((modelName: string) => {
     setSelectedModel(modelName);
     localStorage.setItem('custos_selected_model', modelName);
@@ -513,17 +692,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(modelName ? `Active Model: ${modelName}` : 'No model selected');
   }, [activeSessionId, currentProject, showToast]);
 
-  // Synchronize activeSession model if present and not empty
+  // Synchronize activeSession model only when it still belongs to a live account catalog.
   useEffect(() => {
+    const sessionModel = activeSession?.model || '';
+    const sessionModelIsLive = connectedAccounts.some((account) =>
+      account.status === 'active' &&
+      account.supportedModels.some((model) => model.toLowerCase() === sessionModel.toLowerCase())
+    );
     if (
-      activeSession?.model &&
-      activeSession.model !== 'Model not reported' &&
-      activeSession.model !== 'No model selected' &&
-      activeSession.model !== selectedModel
+      sessionModel &&
+      sessionModelIsLive &&
+      sessionModel !== 'Model not reported' &&
+      sessionModel !== 'No model selected' &&
+      sessionModel !== selectedModel
     ) {
-      setSelectedModel(activeSession.model);
+      setSelectedModel(sessionModel);
     }
-  }, [activeSessionId, activeSession?.model]);
+  }, [activeSessionId, activeSession?.model, connectedAccounts, selectedModel]);
 
   // Hydrate state from Custos Daemon on Mount
   useEffect(() => {
@@ -537,20 +722,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return;
         }
 
-        const [fetchedTasks, fetchedSessions, fetchedProviders, fetchedKeys] = await Promise.all([
+        const [fetchedTasks, fetchedSessions] = await Promise.all([
           daemonClient.listTasks().catch(() => []),
           daemonClient.listSessions().catch(() => []),
-          daemonClient.listProviders().catch(() => []),
-          daemonClient.listClientKeys().catch(() => []),
         ]);
 
-        if (fetchedProviders && fetchedProviders.length > 0) {
-          setProviders(fetchedProviders.map(mapBackendProvider));
-        }
-
-        if (fetchedKeys && fetchedKeys.length > 0) {
-          setClientKeys(fetchedKeys.map(mapBackendKey));
-        }
+        await refreshProviderState();
 
         const journals = await Promise.all(
           fetchedSessions.map(async (session) => {
@@ -567,11 +744,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setTasks(fetchedTasks);
 
           // Project daemon tasks and sessions into UI sessions
-          const projectedSessions: Session[] = fetchedTasks.map((t) => {
+          const projectedSessions: Session[] = fetchedTasks.flatMap((t) => {
             const domainSession = fetchedSessions.find((s) => (s.task_id || s.attached_to) === t.id);
+            if (!domainSession) {
+              return [];
+            }
             const taskId = t.id;
-            const sessionId = domainSession?.id;
-            const rawJournal = journalBySession.get(domainSession?.id || '') || domainSession?.journal || [];
+            const sessionId = domainSession.id;
+            const rawJournal = journalBySession.get(domainSession.id) || domainSession.journal || [];
             const journalList: any[] = Array.isArray(rawJournal)
               ? rawJournal
               : Array.isArray((rawJournal as any)?.entries)
@@ -580,8 +760,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ? (rawJournal as any).journal
               : [];
 
-            return {
-              id: sessionId || `unbound:${taskId}`,
+            return [{
+              id: sessionId,
               taskId,
               source: 'daemon',
               taskStatus: String(t.status),
@@ -605,7 +785,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 text: j.content || j.entry_data || '',
               })),
               diffCode: [],
-            };
+            }];
           });
 
           setProjectData((prev) => ({
@@ -693,7 +873,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     });
 
+    const appendAssistantMessage = (assistantMsg: {
+      role: 'assistant';
+      author: string;
+      badge?: string;
+      stepName?: string;
+      text: string;
+    }) => {
+      setProjectData((prev) => {
+        const list = prev[currentProject] || [];
+        const updatedList = list.map((s) => {
+          if (s.id === activeSession.id) {
+            return {
+              ...s,
+              messages: [...s.messages, assistantMsg],
+            };
+          }
+          return s;
+        });
+        return {
+          ...prev,
+          [currentProject]: updatedList,
+        };
+      });
+    };
+
     try {
+      const chosenModel = (selectedModel || activeSession.model || '').trim();
+      const selectedCombo = combos.find((combo) => combo.id.toLowerCase() === chosenModel.toLowerCase());
+      const liveModelIds = new Set(
+        connectedAccounts
+          .filter((account) => account.status === 'active')
+          .flatMap((account) => account.supportedModels)
+          .map((model) => model.toLowerCase())
+      );
+
+      if (!chosenModel) {
+        appendAssistantMessage({
+          role: 'assistant',
+          author: 'Custos Engine',
+          badge: 'Model Required',
+          stepName: 'Model Gateway',
+          text: 'Select a connected model before sending chat. Add an API key or complete PKCE in Providers, then choose one of the discovered models.',
+        });
+        showToast('Select a connected model first');
+        return;
+      }
+
+      if (selectedCombo) {
+        appendAssistantMessage({
+          role: 'assistant',
+          author: 'Custos Engine',
+          badge: 'Concrete Model Required',
+          stepName: 'Model Gateway',
+          text: 'Routing combos are not dispatched as a single model turn yet. Select one concrete live model from a connected account.',
+        });
+        showToast('Select a concrete model, not a combo');
+        return;
+      }
+
+      if (liveModelIds.size === 0 || !liveModelIds.has(chosenModel.toLowerCase())) {
+        appendAssistantMessage({
+          role: 'assistant',
+          author: 'Custos Engine',
+          badge: 'Model Not Connected',
+          stepName: 'Model Gateway',
+          text: `Model "${chosenModel}" is not in the live model catalog for any connected PKCE/API key account. Refresh or reconnect the provider, then select a discovered model.`,
+        });
+        showToast('Selected model is not connected');
+        return;
+      }
+
       // 1. Check if an LLM is currently available / configured
       const llmStatus = await daemonClient.checkLlmStatus();
       if (!llmStatus.configured) {
@@ -728,32 +978,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       showToast('Dispatching run to Custos Spine...');
 
-      // 2. Ensure session and task are bound to daemon
+      // 2. Ensure a daemon session exists, but run each chat turn on its own task
+      // so active worker claims on the source task do not fence conversation turns.
       let targetSessionId = activeSession.sessionId;
-      let targetTaskId = activeSession.taskId;
-
-      if (!targetTaskId) {
-        try {
-          const createdTask = await daemonClient.createTask({
-            title: activeSession.title || 'Interactive Session Task',
-            contract: { pack_id: activeSession.pack || 'general' },
-          });
-          targetTaskId = createdTask.id;
-        } catch (e) {
-          console.warn('[DaemonClient] Could not create task on daemon:', e);
-        }
-      }
+      let runTaskId = '';
+      let createTaskError: unknown = null;
 
       if (!targetSessionId) {
         try {
           const createdSession = await daemonClient.createSession('assisted');
           targetSessionId = createdSession.id;
-          if (targetTaskId) {
-            await daemonClient.attachSession({ session_id: targetSessionId, task_id: targetTaskId });
-          }
         } catch (e) {
-          console.warn('[DaemonClient] Could not create/attach session on daemon:', e);
+          console.warn('[DaemonClient] Could not create session on daemon:', e);
         }
+      }
+
+      try {
+        const createdTask = await daemonClient.createTask({
+          title: `Chat turn: ${activeSession.title || chosenModel}`,
+          metadata: {
+            kind: 'conversation_chat_turn',
+            pack_id: activeSession.pack || 'assistant',
+            conversation_session_id: targetSessionId || activeSession.id,
+            source_task_id: activeSession.taskId || activeSession.id,
+            model: chosenModel,
+          },
+        });
+        runTaskId = createdTask.id;
+      } catch (e) {
+        createTaskError = e;
+        console.warn('[DaemonClient] Could not create chat turn task on daemon:', e);
+      }
+
+      if (!runTaskId) {
+        appendAssistantMessage({
+          role: 'assistant',
+          author: 'Custos Kernel',
+          badge: 'Task Required',
+          stepName: 'Conversation Dispatch',
+          text: `Could not create an isolated chat task for this turn: ${
+            createTaskError instanceof Error ? createTaskError.message : String(createTaskError || 'unknown error')
+          }`,
+        });
+        return;
       }
 
       // Append message to backend session journal
@@ -762,9 +1029,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // 3. Start workflow run with target model
-      const chosenModel = activeSession.model || selectedModel || 'gpt-4o';
       const run = await daemonClient.startRun({
-        task_id: targetTaskId || activeSession.id,
+        task_id: runTaskId,
         preferred_mode: 'model',
         session_id: targetSessionId,
         prompt: text,
@@ -791,7 +1057,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (s.id === activeSession.id) {
             return {
               ...s,
-              taskId: targetTaskId || s.taskId,
+              taskId: s.taskId,
               sessionId: targetSessionId || s.sessionId,
               messages: [...s.messages, assistantMsg],
             };
@@ -851,6 +1117,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('Demo conversation cleared in this window');
   };
 
+  const handleDeleteConversation = useCallback(async (sessionId: string) => {
+    const list = projectData[currentProject] || [];
+    const targetIndex = list.findIndex((session) => session.id === sessionId);
+    if (targetIndex < 0) {
+      showToast('Conversation not found');
+      return;
+    }
+
+    const target = list[targetIndex];
+    const nextList = list.filter((session) => session.id !== sessionId);
+    const fallbackSession = nextList[targetIndex] || nextList[targetIndex - 1] || nextList[0];
+
+    if (target.source === 'daemon' && target.sessionId) {
+      try {
+        await daemonClient.deleteSession(target.sessionId);
+      } catch (error) {
+        showToast(`Could not delete session: ${error instanceof Error ? error.message : String(error)}`);
+        return;
+      }
+    }
+
+    setProjectData((prev) => ({
+      ...prev,
+      [currentProject]: nextList,
+    }));
+
+    if (activeSessionId === sessionId) {
+      setActiveSessionId(fallbackSession?.id || '');
+    }
+
+    showToast(
+      target.source === 'daemon'
+        ? 'Session deleted from daemon'
+        : 'Conversation deleted'
+    );
+  }, [activeSessionId, currentProject, projectData, showToast]);
+
   const handleAcceptAndRun = async () => {
     if (!activeSession) return;
     try {
@@ -877,7 +1180,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // 1. Create real Task in Custos Daemon
       const createdTask = await daemonClient.createTask({
         title: title || 'New Supervised Task',
-        contract: { pack_id: pack },
+        contract: {
+          pack_id: pack,
+          name: title || 'New Supervised Task',
+          description: `${pack} conversation task`,
+          required_capabilities: [],
+          evidence_requirements: [],
+        },
       });
 
       // 2. Create Session in Custos Daemon
@@ -894,7 +1203,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         title: createdTask.title,
         time: 'Just now',
         preview: `${pack} task · ${createdTask.status}`,
-        model: selectedModel || 'claude-3-7-sonnet',
+        model: selectedModel || '',
         fileName: '',
         diffHunk: '',
         diffLinesCount: '',
@@ -957,28 +1266,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         service.toLowerCase().includes('openai') || service.toLowerCase().includes('gpt') ? 'openai' :
         service.toLowerCase().includes('gemini') ? 'gemini' :
         service.toLowerCase().includes('deepseek') ? 'deepseek' : 'local';
+      const normalizedService = normalizeProviderServiceId(providerType);
+      const resolvedEndpoint = endpointUrl?.trim() || undefined;
+      const configured = Boolean(apiKey.trim() || resolvedEndpoint || normalizedService === 'local');
 
       await daemonClient.saveProvider({
         id: providerId,
         name: existing?.name || service,
         service_type: providerType,
         provider_type: providerType,
-        model: defaultModel || existing?.model || 'claude-3-7-sonnet',
+        model: defaultModel || existing?.model || '',
         default_model: defaultModel,
         api_key: apiKey,
-        endpoint_url: endpointUrl,
+        endpoint_url: resolvedEndpoint,
         context_window: contextWindow,
         fast_mode: fastMode,
-        status: apiKey.trim() || endpointUrl?.trim() ? 'primary' : 'offline',
-        status_label: apiKey.trim() || endpointUrl?.trim() ? 'Configured & Active' : 'Offline',
+        status: configured ? 'primary' : 'offline',
+        status_label: configured ? 'Configured & Active' : 'Offline',
         latency_ms: 28,
-        is_active: Boolean(apiKey.trim() || endpointUrl?.trim()),
+        is_active: configured,
       });
 
-      const updated = await daemonClient.listProviders();
-      if (updated && updated.length > 0) {
-        setProviders(updated.map(mapBackendProvider));
-      }
+      await refreshProviderState();
       setIsAddProviderOpen(false);
       showToast(`Provider ${service} đã được cập nhật thành công vào Backend SQLite!`);
     } catch (err: any) {
@@ -990,8 +1299,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const handleDeleteProvider = async (id: string) => {
     try {
       await daemonClient.deleteProvider(id);
-      const updated = await daemonClient.listProviders();
-      setProviders(updated.map(mapBackendProvider));
+      await refreshProviderState();
       showToast(`Đã xóa provider ${id} khỏi hệ thống!`);
     } catch (err: any) {
       console.error('[DeleteProvider] Error:', err);
@@ -1008,6 +1316,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       if (provider.endpoint) {
         const probeRes = await daemonClient.probeModels(provider.endpoint, provider.iconType, undefined, provider.id);
+        await refreshProviderState();
         showToast(`✓ Đã kết nối endpoint ${provider.name}! Tìm thấy ${probeRes.count} models.`);
       } else {
         showToast(`✓ Đã xác minh kết nối provider ${provider.name} qua Daemon protocol.`);
@@ -1092,54 +1401,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('Usage metrics reset successfully');
   }, [showToast]);
 
-  const handleConnectOAuth = useCallback(async (providerId: ProviderServiceId, accountName: string, email?: string) => {
-    const providerLabels: Record<ProviderServiceId, string> = {
-      copilot: 'GitHub Copilot',
-      gemini: 'Google Gemini',
-      openai: 'OpenAI Platform',
-      anthropic: 'Anthropic Claude',
-      deepseek: 'DeepSeek',
-      openrouter: 'OpenRouter Gateway',
-      groq: 'Groq Cloud',
-      local: 'Local Inference',
-      custom: 'Custom Gateway'
-    };
-    const defaultModels: Record<ProviderServiceId, string> = {
-      copilot: 'claude-3-7-sonnet',
-      gemini: 'gemini-2.5-flash',
-      openai: 'gpt-4o',
-      anthropic: 'claude-3-7-sonnet',
-      deepseek: 'deepseek-chat',
-      openrouter: 'anthropic/claude-3.7-sonnet',
-      groq: 'llama-3.3-70b-versatile',
-      local: 'llama3.3:70b',
-      custom: 'custom-model'
-    };
-    const newAccount: ConnectedAccount = {
-      id: `acc-${providerId}-${Date.now().toString(36)}`,
-      providerId,
-      providerName: providerLabels[providerId] || providerId,
-      accountName: accountName || `${providerLabels[providerId] || providerId} Account`,
-      authType: 'oauth',
-      oauthEmail: email || `${providerId}-user@custos.local`,
-      oauthTier: 'Active Subscription',
+  const ensureOAuthProviderRecord = useCallback(async (
+    providerId: ProviderServiceId,
+    accountName?: string
+  ) => {
+    const token = await daemonClient.getOAuthToken(providerId).catch(() => null);
+    if (!token?.connected && !token?.access_token) {
+      return;
+    }
+
+    const providerRecords = (await daemonClient.listProviders().catch(() => [])) as ProviderConfigRecord[];
+    const serviceId = normalizeProviderServiceId(providerId);
+    const existing = providerRecords.find((provider) =>
+      provider.id === providerId ||
+      normalizeProviderServiceId(provider.service_type || provider.id) === serviceId
+    );
+
+    if (existing && isProviderConnected(existing)) {
+      return;
+    }
+
+    await daemonClient.saveProvider({
+      id: existing?.id || providerId,
+      name: existing?.name || accountName || `${PROVIDER_LABELS[serviceId]} (OAuth)`,
+      service_type: serviceId,
+      provider_type: serviceId,
+      api_key_masked: existing?.api_key_masked && existing.api_key_masked !== 'none' ? existing.api_key_masked : 'oauth',
+      endpoint_url: existing?.endpoint_url || defaultProbeBaseUrl(serviceId),
       status: 'active',
-      statusLabel: 'OAuth Active',
-      badgeColor: '#6366f1',
-      defaultModel: defaultModels[providerId] || 'gpt-4o',
-      supportedModels: [defaultModels[providerId] || 'gpt-4o'],
-      latencyMs: 35,
-      createdAt: new Date().toISOString(),
-      lastUsedAt: 'Just connected',
-    };
-    setConnectedAccounts((prev) => [newAccount, ...prev]);
-    showToast(`Connected ${newAccount.accountName} via OAuth!`);
-  }, [showToast]);
+      status_label: 'OAuth Active',
+      fast_mode: existing?.fast_mode ?? false,
+      is_active: true,
+    });
+  }, []);
+
+  const handleConnectOAuth = useCallback(async (providerId: ProviderServiceId, accountName: string, _email?: string) => {
+    await ensureOAuthProviderRecord(providerId, accountName);
+    const refreshed = await refreshProviderState();
+    const account = refreshed.accounts.find((item) => item.providerId === providerId);
+    showToast(`Connected ${account?.accountName || accountName || PROVIDER_LABELS[providerId]} via OAuth`);
+  }, [ensureOAuthProviderRecord, refreshProviderState, showToast]);
 
   const handleDeleteAccount = useCallback((accountId: string) => {
+    const account = connectedAccounts.find((item) => item.id === accountId);
+    if (account) {
+      void daemonClient.deleteOAuthToken(account.id).finally(() => {
+        void refreshProviderState();
+      });
+    }
     setConnectedAccounts((prev) => prev.filter((a) => a.id !== accountId));
     showToast('Account disconnected');
-  }, [showToast]);
+  }, [connectedAccounts, refreshProviderState, showToast]);
 
   return (
     <AppContext.Provider
@@ -1193,6 +1505,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         handleSelectModel,
         handleSendMessage,
         handleClearHistory,
+        handleDeleteConversation,
         handleAcceptAndRun,
         handleRejectDiff,
         handleCopyDiff,

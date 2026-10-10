@@ -42,6 +42,7 @@ interface AppWorkspaceShellProps {
   onNewSession: () => void;
   onSendMessage: (text: string) => void;
   onClearHistory: () => void;
+  onDeleteConversation: (sessionId: string) => void | Promise<void>;
   onAcceptAndRun?: () => void;
   onRejectDiff?: () => void;
   onCopyDiff?: () => void;
@@ -69,6 +70,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   onNewSession,
   onSendMessage,
   onClearHistory: _onClearHistory,
+  onDeleteConversation,
   onAcceptAndRun,
   onRejectDiff,
   onCopyDiff,
@@ -350,6 +352,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           sessions={sessions}
           activeSessionId={activeSessionId}
           onSelectSession={onSelectSession}
+          onDeleteSession={onDeleteConversation}
           newTaskLabel={lensMeta.taskLabel}
           newTaskIcon={Plus}
           newTaskIconColor={lensMeta.iconColor}

@@ -4,11 +4,10 @@
 
 use async_trait::async_trait;
 use custos_domain::{
-    ExecutionWorkspace, ExecuteCellParams, ExecuteCellResult, NotebookCell, NotebookKernelState,
-    RecordReviewParams, ReviewerRecord, ReviewTargetType,
-    Session, SessionJournalEntry, Task, TaskContract, TaskStatus,
-    VerificationClaim, WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff,
-    WorkspaceFileTree, WorkspaceKind, WorkspaceLineage,
+    ExecuteCellParams, ExecuteCellResult, ExecutionWorkspace, NotebookCell, NotebookKernelState,
+    RecordReviewParams, ReviewTargetType, ReviewerRecord, Session, SessionJournalEntry, Task,
+    TaskContract, TaskStatus, VerificationClaim, WorkspaceDiffSummary, WorkspaceFileContent,
+    WorkspaceFileDiff, WorkspaceFileTree, WorkspaceKind, WorkspaceLineage,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -29,6 +28,7 @@ pub const METHOD_SESSIONS_LIST: &str = "v1.sessions.list";
 pub const METHOD_SESSIONS_JOURNAL: &str = "v1.sessions.journal";
 pub const METHOD_SESSIONS_MESSAGE: &str = "v1.sessions.message";
 pub const METHOD_SESSIONS_PROMOTE: &str = "v1.sessions.promote";
+pub const METHOD_SESSIONS_DELETE: &str = "v1.sessions.delete";
 pub const METHOD_BRIDGE_ATTACH: &str = "v1.bridge.attach";
 pub const METHOD_BRIDGE_STEER: &str = "v1.bridge.steer";
 pub const METHOD_OI_EXPLAIN: &str = "v1.oi.explain";
@@ -271,6 +271,11 @@ pub struct SessionCreateRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionGetRequest {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionDeleteRequest {
     pub session_id: String,
 }
 
@@ -532,7 +537,10 @@ impl ApiTransport for TcpTransport {
         let mut encoded = serde_json::to_vec(&req).map_err(|e| e.to_string())?;
         encoded.push(b'\n');
 
-        writer.write_all(&encoded).await.map_err(|e| e.to_string())?;
+        writer
+            .write_all(&encoded)
+            .await
+            .map_err(|e| e.to_string())?;
         writer.flush().await.map_err(|e| e.to_string())?;
 
         let mut lines = BufReader::new(reader).lines();
@@ -598,14 +606,15 @@ impl LocalApiClient {
             }
         };
         match self.transport.send_request(req).await {
-            Ok(resp) => serde_json::to_string(&resp).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}")),
+            Ok(resp) => {
+                serde_json::to_string(&resp).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
+            }
             Err(err) => {
                 let err_resp = ApiResponse::error("", err);
                 serde_json::to_string(&err_resp).unwrap_or_else(|_| "{}".to_string())
             }
         }
     }
-
 
     pub async fn create_task(
         &self,
@@ -787,6 +796,22 @@ impl LocalApiClient {
         serde_json::from_value(result).map_err(|e| format!("Failed to parse Session: {e}"))
     }
 
+    pub async fn delete_session(&self, req_id: &str, session_id: &str) -> Result<bool, String> {
+        let params = serde_json::json!({ "session_id": session_id });
+        let req = ApiRequest::new(req_id, METHOD_SESSIONS_DELETE, params);
+        let resp = self.transport.send_request(req).await?;
+
+        if let Some(err) = resp.error {
+            return Err(err);
+        }
+
+        let result = resp.result.ok_or("Empty result in response")?;
+        Ok(result
+            .get("deleted")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false))
+    }
+
     pub async fn list_sessions(&self, req_id: &str) -> Result<Vec<Session>, String> {
         let req = ApiRequest::new(req_id, METHOD_SESSIONS_LIST, serde_json::json!({}));
         let resp = self.transport.send_request(req).await?;
@@ -937,7 +962,8 @@ impl LocalApiClient {
         }
 
         let result = resp.result.ok_or("Empty result in response")?;
-        serde_json::from_value(result).map_err(|e| format!("Failed to parse ExecutionWorkspace: {e}"))
+        serde_json::from_value(result)
+            .map_err(|e| format!("Failed to parse ExecutionWorkspace: {e}"))
     }
 
     pub async fn get_workspace(
@@ -954,13 +980,11 @@ impl LocalApiClient {
         }
 
         let result = resp.result.ok_or("Empty result in response")?;
-        serde_json::from_value(result).map_err(|e| format!("Failed to parse ExecutionWorkspace: {e}"))
+        serde_json::from_value(result)
+            .map_err(|e| format!("Failed to parse ExecutionWorkspace: {e}"))
     }
 
-    pub async fn list_workspaces(
-        &self,
-        req_id: &str,
-    ) -> Result<Vec<ExecutionWorkspace>, String> {
+    pub async fn list_workspaces(&self, req_id: &str) -> Result<Vec<ExecutionWorkspace>, String> {
         let req = ApiRequest::new(req_id, METHOD_WORKSPACES_LIST, serde_json::json!({}));
         let resp = self.transport.send_request(req).await?;
 
@@ -969,7 +993,8 @@ impl LocalApiClient {
         }
 
         let result = resp.result.ok_or("Empty result in response")?;
-        serde_json::from_value(result).map_err(|e| format!("Failed to parse Vec<ExecutionWorkspace>: {e}"))
+        serde_json::from_value(result)
+            .map_err(|e| format!("Failed to parse Vec<ExecutionWorkspace>: {e}"))
     }
 
     pub async fn archive_workspace(
@@ -1014,7 +1039,8 @@ impl LocalApiClient {
         }
 
         let result = resp.result.ok_or("Empty result in response")?;
-        serde_json::from_value(result).map_err(|e| format!("Failed to parse WorkspaceFileTree: {e}"))
+        serde_json::from_value(result)
+            .map_err(|e| format!("Failed to parse WorkspaceFileTree: {e}"))
     }
 
     pub async fn read_workspace_file(
@@ -1037,7 +1063,8 @@ impl LocalApiClient {
         }
 
         let result = resp.result.ok_or("Empty result in response")?;
-        serde_json::from_value(result).map_err(|e| format!("Failed to parse WorkspaceFileContent: {e}"))
+        serde_json::from_value(result)
+            .map_err(|e| format!("Failed to parse WorkspaceFileContent: {e}"))
     }
 
     pub async fn write_workspace_file(
@@ -1064,7 +1091,8 @@ impl LocalApiClient {
         }
 
         let result = resp.result.ok_or("Empty result in response")?;
-        serde_json::from_value(result).map_err(|e| format!("Failed to parse WorkspaceFileContent: {e}"))
+        serde_json::from_value(result)
+            .map_err(|e| format!("Failed to parse WorkspaceFileContent: {e}"))
     }
 
     pub async fn get_workspace_diff(
@@ -1085,7 +1113,8 @@ impl LocalApiClient {
         }
 
         let result = resp.result.ok_or("Empty result in response")?;
-        serde_json::from_value(result).map_err(|e| format!("Failed to parse WorkspaceDiffSummary: {e}"))
+        serde_json::from_value(result)
+            .map_err(|e| format!("Failed to parse WorkspaceDiffSummary: {e}"))
     }
 
     pub async fn get_workspace_file_diff(
@@ -1108,7 +1137,8 @@ impl LocalApiClient {
         }
 
         let result = resp.result.ok_or("Empty result in response")?;
-        serde_json::from_value(result).map_err(|e| format!("Failed to parse WorkspaceFileDiff: {e}"))
+        serde_json::from_value(result)
+            .map_err(|e| format!("Failed to parse WorkspaceFileDiff: {e}"))
     }
 
     pub async fn stage_workspace_file(
@@ -1200,7 +1230,8 @@ impl LocalApiClient {
         }
 
         let result = resp.result.ok_or("Empty result in response")?;
-        serde_json::from_value(result).map_err(|e| format!("Failed to parse harness descriptor: {e}"))
+        serde_json::from_value(result)
+            .map_err(|e| format!("Failed to parse harness descriptor: {e}"))
     }
 
     pub async fn run_native_harness(
@@ -1217,7 +1248,8 @@ impl LocalApiClient {
         }
 
         let result = resp.result.ok_or("Empty result in response")?;
-        serde_json::from_value(result).map_err(|e| format!("Failed to parse run native result: {e}"))
+        serde_json::from_value(result)
+            .map_err(|e| format!("Failed to parse run native result: {e}"))
     }
 
     pub async fn list_artifacts(
@@ -1238,7 +1270,11 @@ impl LocalApiClient {
         req_id: &str,
         path: &str,
     ) -> Result<ArtifactDetailResponse, String> {
-        let req = ApiRequest::new(req_id, METHOD_ARTIFACTS_GET, serde_json::json!({ "artifact_path": path }));
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_ARTIFACTS_GET,
+            serde_json::json!({ "artifact_path": path }),
+        );
         let resp = self.transport.send_request(req).await?;
         if let Some(err) = resp.error {
             return Err(err);
@@ -1461,11 +1497,7 @@ impl LocalApiClient {
         req_id: &str,
         id: &str,
     ) -> Result<Option<ReviewerRecord>, String> {
-        let req = ApiRequest::new(
-            req_id,
-            METHOD_REVIEWS_GET,
-            serde_json::json!({ "id": id }),
-        );
+        let req = ApiRequest::new(req_id, METHOD_REVIEWS_GET, serde_json::json!({ "id": id }));
         let resp = self.transport.send_request(req).await?;
         if let Some(err) = resp.error {
             return Err(err);
@@ -1489,11 +1521,7 @@ impl LocalApiClient {
         serde_json::from_value(result).map_err(|e| format!("Failed to parse recorded review: {e}"))
     }
 
-    pub async fn mark_review_stale(
-        &self,
-        req_id: &str,
-        id: &str,
-    ) -> Result<(), String> {
+    pub async fn mark_review_stale(&self, req_id: &str, id: &str) -> Result<(), String> {
         let req = ApiRequest::new(
             req_id,
             METHOD_REVIEWS_MARK_STALE,
@@ -1510,7 +1538,11 @@ impl LocalApiClient {
         &self,
         req_id: &str,
     ) -> Result<Vec<custos_domain::ResearchSynthesisProposal>, String> {
-        let req = ApiRequest::new(req_id, METHOD_SYNTHESIS_PROPOSALS_LIST, serde_json::json!({}));
+        let req = ApiRequest::new(
+            req_id,
+            METHOD_SYNTHESIS_PROPOSALS_LIST,
+            serde_json::json!({}),
+        );
         let resp = self.transport.send_request(req).await?;
         if let Some(err) = resp.error {
             return Err(err);
@@ -1636,7 +1668,8 @@ mod tests {
                 if let Ok(Some(line)) = lines.next_line().await {
                     let req: ApiRequest = serde_json::from_str(&line).unwrap();
                     assert_eq!(req.method, "v1.ping");
-                    let resp = ApiResponse::success(req.id, serde_json::json!({ "status": "pong" }));
+                    let resp =
+                        ApiResponse::success(req.id, serde_json::json!({ "status": "pong" }));
                     let mut data = serde_json::to_vec(&resp).unwrap();
                     data.push(b'\n');
                     let _ = writer.write_all(&data).await;
@@ -1649,7 +1682,9 @@ mod tests {
         let req = ApiRequest::new("ping_1", "v1.ping", serde_json::json!({}));
         let resp = client.send_request(req).await.unwrap();
         assert!(resp.is_success());
-        assert_eq!(resp.result.unwrap(), serde_json::json!({ "status": "pong" }));
+        assert_eq!(
+            resp.result.unwrap(),
+            serde_json::json!({ "status": "pong" })
+        );
     }
 }
-

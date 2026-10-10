@@ -103,11 +103,7 @@ impl ModelCatalogService {
             };
 
             let efforts = if default_effort.is_some() {
-                vec![
-                    "low".into(),
-                    "medium".into(),
-                    "high".into(),
-                ]
+                vec!["low".into(), "medium".into(), "high".into()]
             } else {
                 Vec::new()
             };
@@ -186,6 +182,30 @@ pub fn default_canonical_models() -> Vec<ModelCatalogOption> {
             context_window: Some(200_000),
             pricing: lookup_model_pricing("claude-3-5-haiku"),
         },
+        ModelCatalogOption {
+            id: "claude-3-opus".into(),
+            label: "claude-3-opus".into(),
+            description: Some("Anthropic legacy flagship model".into()),
+            provider_type: "anthropic".into(),
+            is_default: false,
+            default_effort: None,
+            efforts: vec![],
+            supports_fast_mode: true,
+            context_window: Some(200_000),
+            pricing: lookup_model_pricing("claude-3-opus"),
+        },
+        ModelCatalogOption {
+            id: "claude-3-haiku".into(),
+            label: "claude-3-haiku".into(),
+            description: Some("Anthropic fast legacy model".into()),
+            provider_type: "anthropic".into(),
+            is_default: false,
+            default_effort: None,
+            efforts: vec![],
+            supports_fast_mode: true,
+            context_window: Some(200_000),
+            pricing: lookup_model_pricing("claude-3-haiku"),
+        },
         // OpenAI / Codex
         ModelCatalogOption {
             id: "gpt-4o".into(),
@@ -223,6 +243,90 @@ pub fn default_canonical_models() -> Vec<ModelCatalogOption> {
             context_window: Some(128_000),
             pricing: lookup_model_pricing("gpt-4o-mini"),
         },
+        ModelCatalogOption {
+            id: "gpt-4.1".into(),
+            label: "gpt-4.1".into(),
+            description: Some("OpenAI GPT-4.1 general model".into()),
+            provider_type: "openai".into(),
+            is_default: false,
+            default_effort: None,
+            efforts: vec![],
+            supports_fast_mode: true,
+            context_window: Some(1_000_000),
+            pricing: lookup_model_pricing("gpt-4.1"),
+        },
+        ModelCatalogOption {
+            id: "gpt-4.1-mini".into(),
+            label: "gpt-4.1-mini".into(),
+            description: Some("OpenAI GPT-4.1 mini model".into()),
+            provider_type: "openai".into(),
+            is_default: false,
+            default_effort: None,
+            efforts: vec![],
+            supports_fast_mode: true,
+            context_window: Some(1_000_000),
+            pricing: lookup_model_pricing("gpt-4.1-mini"),
+        },
+        ModelCatalogOption {
+            id: "gpt-4.1-nano".into(),
+            label: "gpt-4.1-nano".into(),
+            description: Some("OpenAI GPT-4.1 nano model".into()),
+            provider_type: "openai".into(),
+            is_default: false,
+            default_effort: None,
+            efforts: vec![],
+            supports_fast_mode: true,
+            context_window: Some(1_000_000),
+            pricing: lookup_model_pricing("gpt-4.1-nano"),
+        },
+        ModelCatalogOption {
+            id: "o3".into(),
+            label: "o3".into(),
+            description: Some("OpenAI reasoning model".into()),
+            provider_type: "openai".into(),
+            is_default: false,
+            default_effort: Some("medium".into()),
+            efforts: vec!["low".into(), "medium".into(), "high".into()],
+            supports_fast_mode: true,
+            context_window: Some(200_000),
+            pricing: lookup_model_pricing("o3"),
+        },
+        ModelCatalogOption {
+            id: "o4-mini".into(),
+            label: "o4-mini".into(),
+            description: Some("OpenAI compact reasoning model".into()),
+            provider_type: "openai".into(),
+            is_default: false,
+            default_effort: Some("medium".into()),
+            efforts: vec!["low".into(), "medium".into(), "high".into()],
+            supports_fast_mode: true,
+            context_window: Some(200_000),
+            pricing: lookup_model_pricing("o4-mini"),
+        },
+        ModelCatalogOption {
+            id: "gpt-4-turbo".into(),
+            label: "gpt-4-turbo".into(),
+            description: Some("OpenAI GPT-4 Turbo model".into()),
+            provider_type: "openai".into(),
+            is_default: false,
+            default_effort: None,
+            efforts: vec![],
+            supports_fast_mode: true,
+            context_window: Some(128_000),
+            pricing: lookup_model_pricing("gpt-4-turbo"),
+        },
+        ModelCatalogOption {
+            id: "gpt-3.5-turbo".into(),
+            label: "gpt-3.5-turbo".into(),
+            description: Some("OpenAI legacy fast chat model".into()),
+            provider_type: "openai".into(),
+            is_default: false,
+            default_effort: None,
+            efforts: vec![],
+            supports_fast_mode: true,
+            context_window: Some(16_385),
+            pricing: lookup_model_pricing("gpt-3.5-turbo"),
+        },
         // DeepSeek
         ModelCatalogOption {
             id: "deepseek-chat".into(),
@@ -248,6 +352,18 @@ pub fn default_canonical_models() -> Vec<ModelCatalogOption> {
             context_window: Some(64_000),
             pricing: lookup_model_pricing("deepseek-reasoner"),
         },
+        ModelCatalogOption {
+            id: "deepseek-coder".into(),
+            label: "deepseek-coder".into(),
+            description: Some("DeepSeek coding model".into()),
+            provider_type: "deepseek".into(),
+            is_default: false,
+            default_effort: None,
+            efforts: vec![],
+            supports_fast_mode: true,
+            context_window: Some(64_000),
+            pricing: lookup_model_pricing("deepseek-coder"),
+        },
         // Google Gemini
         ModelCatalogOption {
             id: "gemini-2.5-pro".into(),
@@ -272,6 +388,54 @@ pub fn default_canonical_models() -> Vec<ModelCatalogOption> {
             supports_fast_mode: true,
             context_window: Some(1_048_576),
             pricing: lookup_model_pricing("gemini-2.5-flash"),
+        },
+        ModelCatalogOption {
+            id: "gemini-2.5-flash-lite".into(),
+            label: "gemini-2.5-flash-lite".into(),
+            description: Some("Google Gemini low-latency model".into()),
+            provider_type: "gemini".into(),
+            is_default: false,
+            default_effort: None,
+            efforts: vec![],
+            supports_fast_mode: true,
+            context_window: Some(1_048_576),
+            pricing: lookup_model_pricing("gemini-2.5-flash-lite"),
+        },
+        ModelCatalogOption {
+            id: "gemini-2.0-flash".into(),
+            label: "gemini-2.0-flash".into(),
+            description: Some("Google Gemini 2.0 Flash model".into()),
+            provider_type: "gemini".into(),
+            is_default: false,
+            default_effort: None,
+            efforts: vec![],
+            supports_fast_mode: true,
+            context_window: Some(1_048_576),
+            pricing: lookup_model_pricing("gemini-2.0-flash"),
+        },
+        ModelCatalogOption {
+            id: "gemini-1.5-pro".into(),
+            label: "gemini-1.5-pro".into(),
+            description: Some("Google Gemini 1.5 Pro model".into()),
+            provider_type: "gemini".into(),
+            is_default: false,
+            default_effort: None,
+            efforts: vec![],
+            supports_fast_mode: true,
+            context_window: Some(1_048_576),
+            pricing: lookup_model_pricing("gemini-1.5-pro"),
+        },
+        ModelCatalogOption {
+            id: "gemini-1.5-flash".into(),
+            label: "gemini-1.5-flash".into(),
+            description: Some("Google Gemini 1.5 Flash model".into()),
+            provider_type: "gemini".into(),
+            is_default: false,
+            default_effort: None,
+            efforts: vec![],
+            supports_fast_mode: true,
+            context_window: Some(1_048_576),
+            pricing: lookup_model_pricing("gemini-1.5-flash"),
         },
         // Local / Ollama
         ModelCatalogOption {
@@ -312,7 +476,10 @@ mod tests {
         assert!(!all.models.is_empty());
 
         let anthropic = svc.get_catalog(Some("anthropic"));
-        assert!(anthropic.models.iter().all(|m| m.provider_type == "anthropic"));
+        assert!(anthropic
+            .models
+            .iter()
+            .all(|m| m.provider_type == "anthropic"));
         assert!(anthropic.models.iter().any(|m| m.id == "claude-3-7-sonnet"));
     }
 

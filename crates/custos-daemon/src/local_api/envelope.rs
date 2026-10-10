@@ -119,12 +119,7 @@ pub struct EventEnvelope<T> {
 }
 
 impl<T> EventEnvelope<T> {
-    pub fn new(
-        cursor: u64,
-        event_id: Uuid,
-        event_type: impl Into<String>,
-        payload: T,
-    ) -> Self {
+    pub fn new(cursor: u64, event_id: Uuid, event_type: impl Into<String>, payload: T) -> Self {
         Self {
             cursor,
             event_id,

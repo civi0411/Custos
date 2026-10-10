@@ -4,7 +4,8 @@ import {
   SlidersHorizontal,
   ChevronDown,
   Settings,
-  ShieldCheck
+  ShieldCheck,
+  Trash2
 } from 'lucide-react';
 import { Session } from '@/types';
 import { formatKeyCombo } from '@/lib/utils';
@@ -24,6 +25,7 @@ export interface WorkspaceSidebarProps {
   sessions: Session[];
   activeSessionId: string;
   onSelectSession: (id: string) => void;
+  onDeleteSession?: (id: string) => void | Promise<void>;
 
   // Header button
   newTaskLabel: string;
@@ -59,6 +61,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   sessions,
   activeSessionId,
   onSelectSession,
+  onDeleteSession,
   newTaskLabel,
   newTaskIcon: NewTaskIcon,
   newTaskIconColor = 'text-fg-muted',
@@ -158,6 +161,13 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               const worktreeBranch = (s as any).worktreeBranch || null;
               const isRunning = s.taskStatus === 'running' || s.taskStatus === 'active';
               const needsAttention = (s as any).needsAttention || s.taskStatus === 'blocked';
+              const handleDelete = (event: React.MouseEvent<HTMLButtonElement>) => {
+                event.stopPropagation();
+                if (!onDeleteSession) return;
+                const confirmed = window.confirm(`Delete conversation "${s.title}" from this desktop view?`);
+                if (!confirmed) return;
+                void onDeleteSession(s.id);
+              };
 
               const packColor =
                 s.pack === 'engineering' || s.pack === 'coding' ? '#58a6ff' :
@@ -211,6 +221,17 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                       >
                         {s.taskStatus}
                       </span>
+                    )}
+                    {onDeleteSession && (
+                      <button
+                        type="button"
+                        onClick={handleDelete}
+                        className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded text-fg-subtle transition hover:bg-[rgba(248,81,73,0.10)] hover:text-[var(--color-task-failed)]"
+                        title="Delete conversation"
+                        aria-label={`Delete conversation ${s.title}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     )}
                   </div>
                 </div>

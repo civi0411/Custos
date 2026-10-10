@@ -395,6 +395,8 @@ MCP phù hợp để nối công cụ ngoài khi có connector thực; in-proces
 
 Thiết kế này phân biệt **lịch sử nhìn thấy** với **ngữ cảnh đã giao cho executor**. Một session có một journal canonical, được đọc theo cursor; Copilot/Coding/Research chỉ là các truy vấn và bố cục khác nhau trên journal đó. Không nhân bản message để tạo ba lịch sử. Mỗi lượt có `turn_id` ổn định, actor, lens lúc tạo, model/harness attempt nếu có, resource refs và privacy label. Sửa/xóa theo retention tạo event hoặc tombstone có audit, không viết lại turn cũ rồi để các liên kết trở thành sai.
 
+Current Local API deletion scope is intentionally narrow: `v1.sessions.delete` removes the session record and its canonical `session_journal` entries, then evicts runtime caches. It is a conversation/session deletion command only; it must not cascade into Task, Run, WorkerRun, Evidence, Artifact, provider credentials or audit records. Full retention/tombstone semantics remain a later contract, so UI copy must not claim global erasure.
+
 | ID/record đích | Sở hữu | Bất biến |
 |---|---|---|
 | `session_id`, `turn_id` | Session service; journal canonical | Một turn thuộc đúng một session nguồn; linked session chỉ tham chiếu, không đổi tác giả/nguồn. |

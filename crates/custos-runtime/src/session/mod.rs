@@ -57,6 +57,12 @@ mod tests {
             Ok(())
         }
 
+        async fn delete_session(&self, session_id: &SessionId) -> Result<bool, DomainError> {
+            let removed_session = self.sessions.lock().unwrap().remove(session_id).is_some();
+            self.journals.lock().unwrap().remove(session_id);
+            Ok(removed_session)
+        }
+
         async fn append_journal(&self, entry: &SessionJournalEntry) -> Result<i64, DomainError> {
             let mut lock = self.journals.lock().unwrap();
             let list = lock.entry(entry.session_id.clone()).or_default();

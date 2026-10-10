@@ -202,20 +202,25 @@ impl SqliteTaskStore {
             self.session_repo.save_session(&session)?;
 
             let now = chrono::Utc::now().to_rfc3339();
-            self.session_repo.append_journal(&custos_domain::SessionJournalEntry {
-                entry_id: None,
-                session_id: session_id.clone(),
-                entry_type: "user".to_string(),
-                entry_data: "Initialize invariant verification bounds for multi-agent swarm".to_string(),
-                occurred_at: now.clone(),
-            })?;
-            self.session_repo.append_journal(&custos_domain::SessionJournalEntry {
-                entry_id: None,
-                session_id,
-                entry_type: "assistant".to_string(),
-                entry_data: "Verification bounds initialized with MERKLE-CAS-SEALED invariant contract.".to_string(),
-                occurred_at: now,
-            })?;
+            self.session_repo
+                .append_journal(&custos_domain::SessionJournalEntry {
+                    entry_id: None,
+                    session_id: session_id.clone(),
+                    entry_type: "user".to_string(),
+                    entry_data: "Initialize invariant verification bounds for multi-agent swarm"
+                        .to_string(),
+                    occurred_at: now.clone(),
+                })?;
+            self.session_repo
+                .append_journal(&custos_domain::SessionJournalEntry {
+                    entry_id: None,
+                    session_id,
+                    entry_type: "assistant".to_string(),
+                    entry_data:
+                        "Verification bounds initialized with MERKLE-CAS-SEALED invariant contract."
+                            .to_string(),
+                    occurred_at: now,
+                })?;
         }
 
         // 2. Seed research sources & claims if empty
@@ -258,7 +263,8 @@ impl SqliteTaskStore {
                 page_number: Some(8),
                 start_offset: 1240,
                 end_offset: 1485,
-                exact_text: "Phantom state execution was reduced by 99.8% across 10,000 runs.".to_string(),
+                exact_text: "Phantom state execution was reduced by 99.8% across 10,000 runs."
+                    .to_string(),
                 passage_hash: "blake3_anc_4491c".to_string(),
             };
             self.research_repo.save_anchor(&anchor)?;
@@ -435,6 +441,10 @@ impl SessionStore for SqliteTaskStore {
         self.session_repo.save_session(session)
     }
 
+    async fn delete_session(&self, session_id: &SessionId) -> Result<bool, DomainError> {
+        self.session_repo.delete_session(session_id)
+    }
+
     async fn append_journal(&self, entry: &SessionJournalEntry) -> Result<i64, DomainError> {
         self.session_repo.append_journal(entry)
     }
@@ -567,7 +577,10 @@ impl RunPort for SqliteTaskStore {
         self.run_repo.save_launch_attempt(attempt)
     }
 
-    async fn get_launch_attempt(&self, attempt_id: &str) -> Result<Option<LaunchAttempt>, DomainError> {
+    async fn get_launch_attempt(
+        &self,
+        attempt_id: &str,
+    ) -> Result<Option<LaunchAttempt>, DomainError> {
         self.run_repo.get_launch_attempt(attempt_id)
     }
 }
@@ -910,6 +923,12 @@ mod tests {
         let list = store.list_sessions().await.unwrap();
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].id, session_id);
+
+        // 7. Delete session and canonical journal without touching other stores
+        let deleted = store.delete_session(&session_id).await.unwrap();
+        assert!(deleted);
+        assert!(store.get_session(&session_id).await.unwrap().is_none());
+        assert!(store.get_journal(&session_id).await.unwrap().is_empty());
     }
 
     #[tokio::test]

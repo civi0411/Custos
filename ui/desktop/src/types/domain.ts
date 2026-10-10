@@ -1051,13 +1051,15 @@ export interface OAuthAuthorizeResult {
 export interface OAuthTokenRecord {
   provider_id: string;
   service_type: string;
-  access_token: string;
+  access_token?: string;
   refresh_token?: string;
-  expires_at: number;
-  token_type: string;
+  expires_at?: number;
+  token_type?: string;
   scope?: string;
-  created_at: number;
-  updated_at: number;
+  created_at?: number;
+  updated_at?: number;
+  connected?: boolean;
+  has_refresh_token?: boolean;
 }
 
 export interface OAuthStatusResult {

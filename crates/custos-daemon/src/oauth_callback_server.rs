@@ -4,7 +4,7 @@
 //! capturing standard Codex / OpenAI OAuth 2.0 PKCE redirect callbacks.
 
 use custos_adapters::providers::oauth_pkce::OAuthPkceManager;
-use custos_domain::DomainError;
+use custos_domain::{DomainError, ProviderConfig};
 use custos_persistence::SqliteTaskStore;
 use std::sync::Arc;
 use std::time::Duration;
@@ -43,6 +43,34 @@ pub struct OAuthCallbackServer {
     shutdown_tx: broadcast::Sender<()>,
 }
 
+fn oauth_provider_endpoint(service_type: &str) -> Option<String> {
+    match service_type.to_ascii_lowercase().as_str() {
+        "openai" | "codex" => Some("https://api.openai.com/v1".to_string()),
+        "anthropic" | "claude" => Some("https://api.anthropic.com/v1".to_string()),
+        "gemini" | "google" => Some("https://generativelanguage.googleapis.com".to_string()),
+        "deepseek" => Some("https://api.deepseek.com/v1".to_string()),
+        _ => None,
+    }
+}
+
+fn oauth_provider_label(provider_id: &str, service_type: &str) -> String {
+    match service_type.to_ascii_lowercase().as_str() {
+        "openai" | "codex" => "OpenAI".to_string(),
+        "anthropic" | "claude" => "Anthropic".to_string(),
+        "gemini" | "google" => "Google Gemini".to_string(),
+        "deepseek" => "DeepSeek".to_string(),
+        _ => provider_id.to_string(),
+    }
+}
+
+fn mask_oauth_token(token: &str) -> String {
+    if token.trim().is_empty() {
+        return "none".to_string();
+    }
+    let prefix: String = token.chars().take(6).collect();
+    format!("{prefix}********")
+}
+
 impl OAuthCallbackServer {
     pub fn new(store: Arc<SqliteTaskStore>) -> Self {
         let (status_tx, status_rx) = watch::channel(CallbackServerStatus::Idle);
@@ -70,10 +98,7 @@ impl OAuthCallbackServer {
     }
 
     /// Spawns the loopback listener for a pending authorization context.
-    pub async fn start_listening(
-        &self,
-        context: PendingOAuthContext,
-    ) -> Result<u16, DomainError> {
+    pub async fn start_listening(&self, context: PendingOAuthContext) -> Result<u16, DomainError> {
         // Cancel any existing running callback listener
         let _ = self.shutdown_tx.send(());
 
@@ -127,10 +152,8 @@ impl OAuthCallbackServer {
 
                             // Look for GET /auth/callback?...
                             if first_line.starts_with("GET /auth/callback") {
-                                let query_str = first_line
-                                    .split_whitespace()
-                                    .nth(1)
-                                    .unwrap_or_default();
+                                let query_str =
+                                    first_line.split_whitespace().nth(1).unwrap_or_default();
 
                                 let code = extract_query_param(query_str, "code");
                                 let state = extract_query_param(query_str, "state");
@@ -179,24 +202,66 @@ impl OAuthCallbackServer {
                                         .await
                                     {
                                         Ok(tokens) => {
-                                            if let Err(err) = store
-                                                .providers()
-                                                .save_oauth_token(&tokens)
-                                            {
+                                            let providers = store.providers();
+                                            if let Err(err) = providers.save_oauth_token(&tokens) {
                                                 tracing::error!(
                                                     "Failed to persist exchanged OAuth token: {err}"
                                                 );
-                                                let _ = status_tx.send(CallbackServerStatus::Failed {
-                                                    error: format!("Failed to save token: {err}"),
-                                                });
+                                                let _ =
+                                                    status_tx.send(CallbackServerStatus::Failed {
+                                                        error: format!(
+                                                            "Failed to save token: {err}"
+                                                        ),
+                                                    });
                                             } else {
+                                                let now = chrono::Utc::now().timestamp_millis();
+                                                let provider_config = ProviderConfig {
+                                                    id: context.provider_id.clone(),
+                                                    name: format!(
+                                                        "{} (OAuth)",
+                                                        oauth_provider_label(
+                                                            &context.provider_id,
+                                                            &context.service_type
+                                                        )
+                                                    ),
+                                                    service_type: context.service_type.clone(),
+                                                    api_key_masked: mask_oauth_token(
+                                                        &tokens.access_token,
+                                                    ),
+                                                    status: "active".to_string(),
+                                                    endpoint_url: oauth_provider_endpoint(
+                                                        &context.service_type,
+                                                    ),
+                                                    default_model: None,
+                                                    context_window: None,
+                                                    fast_mode: Some(false),
+                                                    created_at: now,
+                                                    updated_at: now,
+                                                };
+                                                if let Err(err) =
+                                                    providers.save_provider(&provider_config)
+                                                {
+                                                    tracing::error!(
+                                                        "Failed to persist OAuth provider config: {err}"
+                                                    );
+                                                    let _ = status_tx
+                                                        .send(CallbackServerStatus::Failed {
+                                                        error: format!(
+                                                            "Failed to save provider config: {err}"
+                                                        ),
+                                                    });
+                                                    break;
+                                                }
+
                                                 tracing::info!(
                                                     provider_id = %context.provider_id,
-                                                    "Successfully exchanged and persisted OAuth token record"
+                                                    "Successfully exchanged and persisted OAuth provider credentials"
                                                 );
-                                                let _ = status_tx.send(CallbackServerStatus::Completed {
-                                                    provider_id: context.provider_id.clone(),
-                                                });
+                                                let _ = status_tx.send(
+                                                    CallbackServerStatus::Completed {
+                                                        provider_id: context.provider_id.clone(),
+                                                    },
+                                                );
                                             }
                                         }
                                         Err(err) => {
@@ -210,7 +275,8 @@ impl OAuthCallbackServer {
                                     break;
                                 }
                             } else if first_line.starts_with("GET /favicon.ico") {
-                                let not_found = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+                                let not_found =
+                                    "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
                                 let _ = socket.write_all(not_found.as_bytes()).await;
                             }
                         }
