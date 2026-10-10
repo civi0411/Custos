@@ -61,3 +61,28 @@
 2. Không chạy `git push --force` dưới bất kỳ hình thức nào.
 3. Trước khi chỉnh sửa, luôn kiểm tra `git status --short`. Bảo tồn các thay đổi dở dang của người dùng.
 4. Không tự ý thực hiện commit hoặc push khi chưa được yêu cầu rõ ràng.
+
+---
+
+### 5. Chuẩn Mực Commit, PR & Vinh Danh Đồng Đội (Team Attribution & GitHub Achievements)
+
+> **Mục tiêu:** Đảm bảo toàn bộ 3 thành viên trong nhóm (Vĩ, Vinh, Nhật Trường) đều được ghi nhận đóng góp (contributions), streaks, và mở khóa các huy hiệu GitHub Achievements (Pair Extraordinaire, Pull Shark).
+
+1. **Bắt buộc Trailer Đồng Tác Giả (Co-authored-by Trailing Headers):**
+   - Mọi commit khi được tạo BẮT BUỘC phải đính kèm trailer `Co-authored-by` cho các thành viên còn lại:
+     - `Co-authored-by: Vinh <phuvi301@gmail.com>`
+     - `Co-authored-by: NhatTruong1905 <tn696199@gmail.com>`
+     *(hoặc nếu tác giả là Vinh/Trường thì đính kèm `Co-authored-by: civi0411 <cuuvi985@gmail.com>`)*.
+   - Để trống một dòng giữa thân commit message và các dòng `Co-authored-by`.
+2. **Cơ chế Hybrid & Luân Phiên Đóng Góp:**
+   - Khi tách chuỗi commits/PRs, có thể chỉ định `--author` luân phiên giữa các thành viên (Vĩ, Vinh, Trường) kết hợp trailer co-author để cân bằng biểu đồ đóng góp (GitHub contribution graph) cho cả 3 bạn.
+3. **Quy Chuẩn Chia Nhỏ PR & Săn Huy Hiệu (Modular Topic PRs):**
+   - Mỗi PR chỉ tập trung vào một chủ đề kỹ thuật duy nhất (Single Responsibility: giao thức, bảo mật, tài liệu, routing).
+   - Kiểm tra `cargo check --workspace` trước khi push.
+   - Tiêu đề PR phải tuân thủ chuẩn Conventional Commits (ví dụ: `feat(runtime): ...`, `docs(arch): ...`).
+   - Thân PR phải liệt kê rõ:
+     - Tóm tắt thay đổi kỹ thuật.
+     - Kiểm chứng (Test verification).
+     - Đóng góp đồng đội (Co-authors attribution).
+   - Merge PR vào nhánh mặc định (`dev`) theo chuẩn squash/rebase hoặc merge commit có đầy đủ co-authors để kích hoạt huy hiệu Pair Extraordinaire và Pull Shark.
+
