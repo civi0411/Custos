@@ -4,11 +4,8 @@ import {
   Check,
   Search,
   Settings,
-  Sparkles,
   Server,
-  Zap,
   Cpu,
-  Layers,
   Ban
 } from 'lucide-react';
 import {
@@ -223,12 +220,9 @@ export interface ModelSelectorProps {
 export const ModelSelector: React.FC<ModelSelectorProps> = ({
   currentModel,
   onSelectModel,
-  className = '',
-  compact = false
+  className = ''
 }) => {
   const {
-    providers,
-    combos,
     openSettings,
     connectedAccounts,
     selectedModel: contextSelectedModel,
@@ -268,11 +262,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     };
   }, [isOpen]);
 
-  // Check if a combo is active
-  const activeCombo = useMemo(() => {
-    return combos?.find((c) => c.id.toLowerCase() === activeModelId.toLowerCase()) || null;
-  }, [combos, activeModelId]);
-
   const hasModel = Boolean(
     activeModelId &&
     activeModelId.trim().length > 0 &&
@@ -280,66 +269,41 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     activeModelId !== 'Model not reported'
   );
 
-  // Merge configured providers and connected accounts into model list
+  // Build the selectable list only from connected account catalogs.
   const allModels: ModelOption[] = useMemo(() => {
     const list = CANONICAL_MODELS.map((m) => ({ ...m }));
 
-    // Track which provider types are configured & active
-    const activeProviderTypes = new Set<string>();
-
     connectedAccounts?.forEach((acc) => {
       if (acc.status === 'active') {
-        activeProviderTypes.add(acc.providerId.toLowerCase());
         acc.supportedModels?.forEach((sm) => {
           const match = list.find((m) => m.id.toLowerCase() === sm.toLowerCase());
-          if (match) match.isConfigured = true;
+          if (match) {
+            match.isConfigured = true;
+          } else {
+            const info = getProviderInfo(sm);
+            list.unshift({
+              id: sm,
+              name: sm,
+              provider: info.provider,
+              providerName: acc.providerName || info.label,
+              badge: acc.authType === 'oauth' ? 'OAuth PKCE' : 'API key',
+              badgeColor:
+                acc.authType === 'oauth'
+                  ? 'text-sky-400 bg-sky-500/10 border-sky-500/20'
+                  : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+              description: `Live account: ${acc.accountName}`,
+              contextWindow: acc.contextWindow ? `${Math.round(acc.contextWindow / 1000)}k tokens` : undefined,
+              isConfigured: true,
+            });
+          }
         });
       }
     });
 
-    providers.forEach((p) => {
-      const pType = (p.id || p.name || '').toLowerCase();
-      const isConfigured = p.status === 'primary' || p.status === 'standby' || (p.apiKey && p.apiKey !== 'Chưa cấu hình');
-      if (isConfigured) {
-        if (pType.includes('openai') || pType.includes('gpt')) activeProviderTypes.add('openai');
-        if (pType.includes('anthropic') || pType.includes('claude')) activeProviderTypes.add('anthropic');
-        if (pType.includes('gemini') || pType.includes('google')) activeProviderTypes.add('gemini');
-        if (pType.includes('deepseek')) activeProviderTypes.add('deepseek');
-        if (pType.includes('local') || pType.includes('ollama')) activeProviderTypes.add('local');
-      }
+    return list.filter((m) => m.isConfigured);
+  }, [connectedAccounts]);
 
-      const pModel = p.defaultModel || p.model;
-      if (!pModel) return;
-
-      const existing = list.find((m) => m.id.toLowerCase() === pModel.toLowerCase());
-      if (existing) {
-        existing.isConfigured = true;
-      } else {
-        const info = getProviderInfo(pModel);
-        list.unshift({
-          id: pModel,
-          name: pModel,
-          provider: info.provider,
-          providerName: p.name || info.label,
-          badge: 'Configured',
-          badgeColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-          description: `Custom configured provider: ${p.name}`,
-          isConfigured: true
-        });
-      }
-    });
-
-    // Mark canonical models as configured if their provider family is active
-    list.forEach((m) => {
-      if (activeProviderTypes.has(m.provider)) {
-        m.isConfigured = true;
-      }
-    });
-
-    return list;
-  }, [providers, connectedAccounts]);
-
-  // Find active model details if not a combo
+  // Find active model details.
   const activeModel = useMemo(() => {
     if (!hasModel) {
       return {
@@ -348,15 +312,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         provider: 'other' as const,
         providerName: 'Unassigned',
         badge: 'Select'
-      };
-    }
-    if (activeCombo) {
-      return {
-        id: activeCombo.id,
-        name: `⚡ ${activeCombo.name}`,
-        provider: 'other' as const,
-        providerName: 'OmniRoute Combo',
-        badge: 'Combo'
       };
     }
     const found = allModels.find((m) => m.id.toLowerCase() === activeModelId.toLowerCase());
@@ -370,21 +325,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       providerName: info.label,
       badge: 'Active'
     };
-  }, [allModels, activeModelId, activeCombo, hasModel]);
-
-  // Filtered combos
-  const filteredCombos = useMemo(() => {
-    if (!combos || combos.length === 0) return [];
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return combos;
-    return combos.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        c.description.toLowerCase().includes(q) ||
-        c.strategy.toLowerCase().includes(q) ||
-        c.targets.some((t) => t.modelName.toLowerCase().includes(q) || t.modelId.toLowerCase().includes(q))
-    );
-  }, [combos, searchQuery]);
+  }, [allModels, activeModelId, hasModel]);
 
   // Filtered models
   const filteredModels = useMemo(() => {
@@ -400,25 +341,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         (m.badge && m.badge.toLowerCase().includes(q))
     );
   }, [allModels, searchQuery]);
-
-  // Group models by provider
-  const groupedModels = useMemo(() => {
-    const groups: { [key: string]: { label: string; provider: ModelOption['provider']; items: ModelOption[] } } = {
-      anthropic: { label: 'Anthropic Claude', provider: 'anthropic', items: [] },
-      openai: { label: 'OpenAI', provider: 'openai', items: [] },
-      gemini: { label: 'Google Gemini', provider: 'gemini', items: [] },
-      deepseek: { label: 'DeepSeek', provider: 'deepseek', items: [] },
-      local: { label: 'Local Inference (Ollama / vLLM)', provider: 'local', items: [] },
-      other: { label: 'Custom Models', provider: 'other', items: [] }
-    };
-
-    filteredModels.forEach((m) => {
-      const g = groups[m.provider] || groups.other;
-      g.items.push(m);
-    });
-
-    return Object.values(groups).filter((g) => g.items.length > 0);
-  }, [filteredModels]);
 
   return (
     <div className={`relative inline-block text-left ${className}`} ref={popoverRef}>
@@ -436,36 +358,19 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         title={
           !hasModel
             ? 'No model selected. Click to select a model or combo.'
-            : activeCombo
-            ? `Routing Combo: ${activeCombo.name} (${activeCombo.strategy})`
-            : `Current Model: ${activeModel.name}. Click to change model.`
+            : `Current Model: ${activeModel.id}. Click to change model.`
         }
       >
-        {activeCombo ? (
-          <Zap size={13} className="shrink-0 text-amber-400" />
-        ) : !hasModel ? (
+        {!hasModel ? (
           <Cpu size={13} className="shrink-0 text-amber-400" />
         ) : (
           <ProviderIcon provider={activeModel.provider} size={13} className="shrink-0" />
         )}
 
         <span className="font-mono text-[11px] truncate max-w-[140px] text-fg-editor">
-          {!hasModel ? 'No model selected' : compact ? activeModel.id : activeModel.name}
+          {!hasModel ? 'No model selected' : activeModel.id}
         </span>
 
-        {activeModel.badge && !compact && (
-          <span
-            className={`hidden md:inline text-[9px] px-1 py-0.2 rounded border font-sans ${
-              !hasModel
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                : activeCombo
-                ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 font-mono'
-                : 'bg-surface-2 text-fg-subtle border-border-muted'
-            }`}
-          >
-            {activeModel.badge}
-          </span>
-        )}
         <ChevronDown
           size={12}
           className={`shrink-0 text-fg-subtle transition-transform duration-150 ${
@@ -477,18 +382,17 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       {/* Floating Popover (Opens Upward Above Composer) */}
       {isOpen && (
         <div
-          className="absolute bottom-full mb-2 left-0 z-50 w-80 md:w-96 rounded-xl border border-border-default bg-surface-1/95 backdrop-blur-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150"
+          className="absolute bottom-full mb-2 left-0 z-50 w-72 md:w-72 rounded-xl border border-border-default bg-surface-1/95 backdrop-blur-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150"
           style={{ maxHeight: '420px' }}
         >
           {/* Header & Search */}
           <div className="p-2.5 border-b border-border-muted bg-surface-0/60">
             <div className="flex items-center justify-between mb-2 px-1">
               <span className="text-[11px] font-semibold text-fg-editor flex items-center gap-1.5">
-                <Sparkles size={12} className="text-amber-400" />
-                Select Model or Combo
+                Select Model
               </span>
               <span className="text-[10px] text-fg-subtle">
-                {allModels.length} models · {combos?.length || 0} combos
+                {allModels.length} models
               </span>
             </div>
             <div className="relative">
@@ -498,7 +402,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search models, combos, providers..."
+                placeholder="Search model ids..."
                 className="w-full bg-surface-1 border border-border-muted focus:border-border-default focus:ring-1 focus:ring-border-default/20 rounded-lg pl-8 pr-3 py-1.5 text-xs text-fg-editor placeholder-fg-subtle outline-none transition"
               />
             </div>
@@ -531,51 +435,30 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               </button>
             </div>
 
-            {/* Virtual Routing Combos Section */}
-            {filteredCombos.length > 0 && (
-              <div className="py-1">
-                <div className="px-2 py-1 text-[10px] font-semibold text-fg-subtle uppercase tracking-wider flex items-center gap-1.5">
-                  <Layers size={11} className="text-workbench-accent" />
-                  Virtual Routing Combos
-                </div>
-                <div className="space-y-0.5 mt-0.5">
-                  {filteredCombos.map((combo) => {
-                    const isSelected = combo.id.toLowerCase() === activeModelId.toLowerCase();
-                    const targetsText = combo.targets.map((t) => t.modelName).join(' → ');
-
+            {filteredModels.length === 0 ? (
+              <div className="p-6 text-center text-fg-subtle text-xs">
+                No models matching "{searchQuery}"
+              </div>
+            ) : (
+              <div className="py-1 first:pt-0 last:pb-0">
+                <div className="space-y-0.5">
+                  {filteredModels.map((m) => {
+                    const isSelected = m.id.toLowerCase() === activeModelId.toLowerCase();
                     return (
                       <button
-                        key={combo.id}
+                        key={m.id}
                         type="button"
                         onClick={() => {
-                          handleSelect(combo.id);
+                          handleSelect(m.id);
                           setIsOpen(false);
                         }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition group ${
+                        className={`w-full text-left px-2.5 py-1.5 rounded-md flex items-center justify-between transition ${
                           isSelected
-                            ? 'bg-surface-2/80 text-fg-editor border border-border-default/80 shadow-xs'
+                            ? 'bg-surface-2 text-fg-editor border border-border-default'
                             : 'hover:bg-surface-2/50 text-fg-muted hover:text-fg-editor'
                         }`}
                       >
-                        <div className="flex items-start gap-2 min-w-0 pr-2">
-                          <div className="mt-0.5 shrink-0">
-                            <Layers size={14} className="text-workbench-accent" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`text-xs font-medium truncate ${isSelected ? 'text-fg-editor font-semibold' : ''}`}>
-                                {combo.name}
-                              </span>
-                              <span className="text-[9px] px-1 py-0.2 rounded border font-mono bg-amber-500/10 text-amber-400 border-amber-500/20 capitalize">
-                                {combo.strategy.replace('_', ' ')}
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-fg-subtle truncate mt-0.5 font-mono">
-                              {targetsText}
-                            </p>
-                          </div>
-                        </div>
-
+                        <span className="font-mono text-xs truncate pr-2">{m.id}</span>
                         {isSelected && <Check size={13} className="text-emerald-400 stroke-[2.5] shrink-0" />}
                       </button>
                     );
@@ -583,87 +466,11 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 </div>
               </div>
             )}
-
-            {groupedModels.length === 0 ? (
-              <div className="p-6 text-center text-fg-subtle text-xs">
-                No models matching "{searchQuery}"
-              </div>
-            ) : (
-              groupedModels.map((group) => (
-                <div key={group.label} className="py-1 first:pt-0 last:pb-0">
-                  <div className="px-2 py-1 text-[10px] font-semibold text-fg-subtle uppercase tracking-wider flex items-center gap-1.5">
-                    <ProviderIcon provider={group.provider} size={11} />
-                    {group.label}
-                  </div>
-                  <div className="space-y-0.5 mt-0.5">
-                    {group.items.map((m) => {
-                      const isSelected = m.id.toLowerCase() === activeModelId.toLowerCase();
-                      return (
-                        <button
-                          key={m.id}
-                          type="button"
-                          onClick={() => {
-                            handleSelect(m.id);
-                            setIsOpen(false);
-                          }}
-                          className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition group ${
-                            isSelected
-                              ? 'bg-surface-2/80 text-fg-editor border border-border-default/80 shadow-xs'
-                              : 'hover:bg-surface-2/50 text-fg-muted hover:text-fg-editor'
-                          }`}
-                        >
-                          <div className="flex items-start gap-2 min-w-0 pr-2">
-                            <div className="mt-0.5 shrink-0">
-                              <ProviderIcon provider={m.provider} size={14} />
-                            </div>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <span className={`text-xs font-medium truncate ${isSelected ? 'text-fg-editor font-semibold' : ''}`}>
-                                  {m.name}
-                                </span>
-                                {m.badge && (
-                                  <span
-                                    className={`text-[9px] px-1 py-0.2 rounded border font-mono ${
-                                      m.badgeColor || 'text-fg-subtle bg-surface-2 border-border-muted'
-                                    }`}
-                                  >
-                                    {m.badge}
-                                  </span>
-                                )}
-                              </div>
-                              {m.description && (
-                                <p className="text-[10px] text-fg-subtle truncate mt-0.5 leading-tight">
-                                  {m.description}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="shrink-0 flex items-center gap-1.5">
-                            {m.contextWindow && (
-                              <span className="hidden sm:inline text-[9px] text-fg-subtle font-mono">
-                                {m.contextWindow}
-                              </span>
-                            )}
-                            {isSelected && (
-                              <Check size={13} className="text-emerald-400 stroke-[2.5]" />
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))
-            )}
           </div>
 
           {/* Footer: Jump to Settings */}
           <div className="p-2 border-t border-border-muted bg-surface-0/60 flex items-center justify-between">
-            <span className="text-[10px] text-fg-subtle flex items-center gap-1">
-              <Zap size={10} className="text-amber-400" />
-              Sovereign LLM Gateway
-            </span>
+            <span className="text-[10px] ml-2 text-fg-subtle">{filteredModels.length} shown</span>
             <button
               type="button"
               onClick={() => {

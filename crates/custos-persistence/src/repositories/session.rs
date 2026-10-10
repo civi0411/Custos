@@ -46,6 +46,31 @@ impl SessionRepository {
         Self::write_session(&conn, session)
     }
 
+    pub fn delete_session(&self, session_id: &SessionId) -> Result<bool, DomainError> {
+        let mut conn = self.db.lock()?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        tx.execute(
+            "DELETE FROM session_journal WHERE session_id = ?1",
+            params![session_id.0],
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let deleted = tx
+            .execute(
+                "DELETE FROM sessions WHERE session_id = ?1",
+                params![session_id.0],
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        Ok(deleted > 0)
+    }
+
     pub fn append_journal(&self, entry: &SessionJournalEntry) -> Result<i64, DomainError> {
         let conn = self.db.lock()?;
         conn.execute(

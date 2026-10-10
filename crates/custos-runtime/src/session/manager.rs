@@ -107,6 +107,23 @@ impl SessionManager {
         }
     }
 
+    pub async fn delete_session(&self, id: &SessionId) -> Result<bool, DomainError> {
+        let existed_in_memory = {
+            let mut sess_lock = self.sessions.write().await;
+            sess_lock.remove(id).is_some()
+        };
+        {
+            let mut journ_lock = self.journals.write().await;
+            journ_lock.remove(id);
+        }
+
+        if let Some(ref store) = self.store {
+            return store.delete_session(id).await;
+        }
+
+        Ok(existed_in_memory)
+    }
+
     pub async fn append_user_message(
         &self,
         id: &SessionId,

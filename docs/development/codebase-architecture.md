@@ -27,7 +27,7 @@
 | [`9router-custos-integration-plan.md`](9router-custos-integration-plan.md) | 318 | Pinned 9Router extraction matrix plus complete Custos provider/desktop codebase blueprint: current dual model contracts, crate ownership, target model-turn/connection/route/attempt semantics, UI state ownership, migration and verification gates. Proposal only. | None; no runtime behavior added. |
 | [`system-design-9router-agentgateway-custos.md`](system-design-9router-agentgateway-custos.md) | 320 | Unified System Design Blueprint & Codebase Mapping: Mổ xẻ chi tiết 9Router & AgentGateway, thiết kế kiến trúc chuẩn công nghiệp tích hợp vào Rust native (`custos-provider`, `custos-adapters`, `custos-runtime`), sequence flows và developer playbook cho team. | Architecture blueprint. |
 
-> **Conversation continuity/research target, not implemented:** [UI architecture §12](../architecture/agent-workspace-and-ui.md#12-lịch-sử-hội-thoại-và-chuyển-workbench) specifies one canonical session journal with per-lens history projections, plus optional linked continuation manifest/context receipt. Current [`domain/session.rs`](../../crates/custos-domain/src/session.rs) has one `attached_to` Task and untyped journal entry content; [`daemon/api.rs`](../../crates/custos-daemon/src/api.rs) exposes create/get/list/journal/message/attach but no cross-workbench continuation transaction. Future contracts belong in domain/core or bridge, transactional records/migrations in persistence, orchestration/context compilation in runtime, Research semantics in packs, provider/compute I/O in adapters, and DTO/API composition in daemon/SDK. [`StudioPage`](../../ui/desktop/src/app/studio/page.tsx) can change lens and preserve in-memory resource tabs but cannot truthfully transfer model-visible history or native harness state today. Do not treat this target index as a migration result.
+> **Conversation continuity/research target, not implemented:** [UI architecture §12](../architecture/agent-workspace-and-ui.md#12-lịch-sử-hội-thoại-và-chuyển-workbench) specifies one canonical session journal with per-lens history projections, plus optional linked continuation manifest/context receipt. Current [`domain/session.rs`](../../crates/custos-domain/src/session.rs) has one `attached_to` Task and untyped journal entry content; [`daemon/api.rs`](../../crates/custos-daemon/src/api.rs) exposes create/get/list/journal/message/attach/delete but no cross-workbench continuation transaction. `v1.sessions.delete` is scoped to session + canonical journal deletion only and does not cascade into Task/Run/Evidence/Artifact state. Future contracts belong in domain/core or bridge, transactional records/migrations in persistence, orchestration/context compilation in runtime, Research semantics in packs, provider/compute I/O in adapters, and DTO/API composition in daemon/SDK. [`StudioPage`](../../ui/desktop/src/app/studio/page.tsx) can change lens and preserve in-memory resource tabs but cannot truthfully transfer model-visible history or native harness state today. Do not treat this target index as a migration result.
 
 > **Continuity implementation map:** [Target contracts and migration sequence](../architecture/agent-workspace-and-ui.md#124-hợp-đồng-danh-tính-và-lịch-sử) place typed turn/lineage/receipt values in existing `custos-domain`, authority and Task-binding policy in `custos-core`/`custos-bridge`, idempotent session-link and membership records in `custos-persistence`, context compilation and attempt attribution in `custos-runtime`, Research source/claim/experiment semantics in `custos-packs`, compute/metadata I/O in `custos-adapters`, and API composition in `custos-daemon`. `session_messages` and `session_journal` already coexist; implementation must select one transcript source of truth before new writes and keep the other rebuildable. No new source file, migration, API or crate is claimed by this documentation map; update the physical file tables and counts when implementing each slice.
 
@@ -236,7 +236,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-core`
 - **Chủ sở hữu chính (Owner):** **Vĩ (Chief Architect)**
 - **Quy tắc ranh giới:** Logic nghiệp vụ thuần túy; phụ thuộc độc quyền vào custos-domain.
-- **Tổng số file:** 32 files | **Tổng số dòng mã:** 3,349 lines
+- **Tổng số file:** 61 files | **Tổng số dòng mã:** 5,944 lines
 - **Mô tả chức năng:** Bộ hạt nhân điều phối: Quản lý TaskStateMachine, AuthorityEngine, CompletionGate thẩm định bằng chứng, và cơ chế sandbox policy logic.
 
 #### Danh mục các file bên trong `crates/custos-core/`:
@@ -271,7 +271,7 @@ Custos/
 | [`src/kernel/invariants.rs`](../../crates/custos-core/src/kernel/invariants.rs) | 56 | Asserts title is valid and non-empty | `struct TaskInvariants`, `fn assert_valid_title`, `fn assert_epoch`, `fn assert_not_terminal` |
 | [`src/kernel/mod.rs`](../../crates/custos-core/src/kernel/mod.rs) | 26 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/kernel/observability.rs`](../../crates/custos-core/src/kernel/observability.rs) | 11 | Khởi tạo theo dõi và giám sát telemetry | `fn init_tracing` |
-| [`src/kernel/ports.rs`](../../crates/custos-core/src/kernel/ports.rs) | 44 | Persistence Port for Interactive Sessions & Interaction Journals | `trait TaskStore`, `trait SessionStore` |
+| [`src/kernel/ports.rs`](../../crates/custos-core/src/kernel/ports.rs) | 45 | Persistence Port for Interactive Sessions & Interaction Journals, including session deletion contract | `trait TaskStore`, `trait SessionStore` |
 | [`src/kernel/reducer.rs`](../../crates/custos-core/src/kernel/reducer.rs) | 195 | Creates an initial Task from TaskCreated event | `struct TaskReducer`, `fn from_created`, `fn replay`, `fn apply` |
 | [`src/kernel/service.rs`](../../crates/custos-core/src/kernel/service.rs) | 387 | CQRS command: CreateTask | `struct TaskService`, `fn new`, `struct MockTaskStore` |
 | [`src/kernel/session_state_machine.rs`](../../crates/custos-core/src/kernel/session_state_machine.rs) | 40 | Máy trạng thái vòng đời phiên làm việc | `struct SessionStateMachine`, `fn transition` |
@@ -295,7 +295,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-persistence`
 - **Chủ sở hữu chính (Owner):** **Trường (Systems & Persistence Lead)**
 - **Quy tắc ranh giới:** Triệt tiêu lỗi đói WAL (P0), single-writer connection, runtime version check.
-- **Tổng số file:** 21 files | **Tổng số dòng mã:** 1,597 lines
+- **Tổng số file:** 49 files | **Tổng số dòng mã:** 7,690 lines
 - **Mô tả chức năng:** Hạ tầng lưu trữ bền vững SQLite WAL mode, schema migrations, Event Store, Transactional Outbox, và CAS Content-Addressable Storage.
 
 #### Danh mục các file bên trong `crates/custos-persistence/`:
@@ -321,10 +321,10 @@ Custos/
 | [`src/repositories/continuation.rs`](../../crates/custos-persistence/src/repositories/continuation.rs) | 124 | Gói tiếp tục ContinuationPacket kèm mã băm SHA-256 bảo đảm an toàn khi tiếp tục | `struct ContinuationRepository`, `fn new`, `fn save_continuation`, `fn get_latest_continuation` |
 | [`src/repositories/mod.rs`](../../crates/custos-persistence/src/repositories/mod.rs) | 9 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/repositories/providers.rs`](../../crates/custos-persistence/src/repositories/providers.rs) | 360 | Quản lý cấu hình AI Providers, OAuth 2.0 tokens và Catalog models | `struct ProviderRepository`, `fn save_oauth_token`, `fn get_oauth_token`, `fn list_expiring_oauth_tokens` |
-| [`src/repositories/session.rs`](../../crates/custos-persistence/src/repositories/session.rs) | 201 | Thực thể Session, SessionId, SessionStatus, nhật ký SessionJournalEntry | `struct SessionRepository`, `fn new`, `fn get_session`, `fn list_sessions` |
+| [`src/repositories/session.rs`](../../crates/custos-persistence/src/repositories/session.rs) | 226 | SQLite Session and canonical journal repository, including session+journal deletion | `struct SessionRepository`, `fn new`, `fn get_session`, `fn list_sessions`, `fn delete_session` |
 | [`src/repositories/span.rs`](../../crates/custos-persistence/src/repositories/span.rs) | 134 | Quản lý phân đoạn thực thi Span, SpanState | `struct SpanRepository`, `fn new`, `fn get_span`, `fn save_span` |
 | [`src/repositories/task.rs`](../../crates/custos-persistence/src/repositories/task.rs) | 312 | Mô hình nhiệm vụ cốt lõi: Task, TaskContract, TaskStatus, ContractEvidence | `struct TaskRepository`, `fn new`, `fn get_task`, `fn read_task` |
-| [`src/store.rs`](../../crates/custos-persistence/src/store.rs) | 406 | SQLite-backed persistent storage implementing TaskStore and SessionStore. | `struct SqliteTaskStore`, `fn new_in_memory`, `fn new`, `fn db` |
+| [`src/store.rs`](../../crates/custos-persistence/src/store.rs) | 1,103 | SQLite-backed persistent storage implementing TaskStore, SessionStore, RunPort and related ports. | `struct SqliteTaskStore`, `fn new_in_memory`, `fn new`, `fn db` |
 
 ### 3.4. Crate `custos-provider` — Layer 1: Model Contracts
 
@@ -413,7 +413,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-runtime`
 - **Chủ sở hữu chính (Owner):** **Vinh (Runtime & Client Lead) & Vĩ (Cognitive Lead)**
 - **Quy tắc ranh giới:** Quản lý vòng lặp thực thi, nhận thức S1/S2, và context compiler.
-- **Tổng số file:** 287 files | **Tổng số dòng mã:** 100,623 lines
+- **Tổng số file:** 288 files | **Tổng số dòng mã:** 101,473 lines
 - **Mô tả chức năng:** Động cơ vận hành tác vụ: Agent execution loop, code hiện có cho routing S1/S2, context và workflow. OI đích chọn direct/one-worker/bounded graph theo policy và outcome; hiện diện của `routing.rs`/`workflow/` **không** xác nhận compiler, semantic preflight, calibrated utility hoặc evidence-triggered replan đã hoàn tất.
 
 #### Danh mục các file bên trong `crates/custos-runtime/`:
@@ -699,14 +699,15 @@ Custos/
 | [`src/memory_service/mod.rs`](../../crates/custos-runtime/src/memory_service/mod.rs) | 2 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/memory_service/traits.rs`](../../crates/custos-runtime/src/memory_service/traits.rs) | 17 | Module traits: phục vụ các cấu trúc và chức năng liên quan | `enum MemoryTier`, `trait MemoryStore` |
 | [`src/session/journal.rs`](../../crates/custos-runtime/src/session/journal.rs) | 35 | Module journal: phục vụ các cấu trúc và chức năng liên quan | `struct SessionJournal`, `fn new`, `fn append`, `fn tool_call_count` |
-| [`src/session/manager.rs`](../../crates/custos-runtime/src/session/manager.rs) | 321 | Creates an in-memory session manager without durable backing (for testing). | `struct SessionManager`, `fn default`, `fn new`, `fn with_store` |
-| [`src/session/mod.rs`](../../crates/custos-runtime/src/session/mod.rs) | 214 | Module mod: phục vụ các cấu trúc và chức năng liên quan | `struct MockSessionStore`, `fn new` |
-| [`src/workflow/dispatcher.rs`](../../crates/custos-runtime/src/workflow/dispatcher.rs) | 295 | Điều phối ready WorkerRun và chống claim trùng trong cùng process; đọc trạng thái run bền vững nhưng active claim/lease epoch hiện còn nằm trong bộ nhớ. | `struct WorkflowDispatcher`, `fn claim_ready_node`, `fn release_claim`, `fn dispatch_ready` |
+| [`src/session/manager.rs`](../../crates/custos-runtime/src/session/manager.rs) | 338 | Session manager with in-memory cache, durable store backing, journal operations and session deletion cache eviction. | `struct SessionManager`, `fn default`, `fn new`, `fn with_store`, `fn delete_session` |
+| [`src/session/mod.rs`](../../crates/custos-runtime/src/session/mod.rs) | 220 | Module mod: phục vụ các cấu trúc và chức năng liên quan | `struct MockSessionStore`, `fn new` |
+| [`src/workflow/dispatcher.rs`](../../crates/custos-runtime/src/workflow/dispatcher.rs) | 295 | Điều phối ready WorkerRun và chống claim trùng trong cùng process; đọc trạng thái run bền vững nhưng active claim/lease epoch hiện còn nằm trong bộ nhớ. | `struct WorkflowDispatcher`, `fn claim_ready_task`, `fn release_claim`, `fn mark_dispatched` |
 | [`src/workflow/lease.rs`](../../crates/custos-runtime/src/workflow/lease.rs) | 230 | Workflow worker lease tạo thư mục `.custos/worktrees` và copy files khi merge; ownership process-local, khác `ExecutionWorkspace` Git worktree. | `struct WorkspaceLease`, `struct WorkspaceLeaseManager`, `fn acquire_lease`, `fn merge_lease` |
 | [`src/workflow/machine.rs`](../../crates/custos-runtime/src/workflow/machine.rs) | 397 | Module machine: phục vụ các cấu trúc và chức năng liên quan | `struct WorkflowState`, `fn default`, `enum OperationOutcome`, `trait WorkflowOperation` |
 | [`src/workflow/mod.rs`](../../crates/custos-runtime/src/workflow/mod.rs) | 15 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/workflow/outbox.rs`](../../crates/custos-runtime/src/workflow/outbox.rs) | 9 | Module outbox: phục vụ các cấu trúc và chức năng liên quan | `struct OutboxMessage` |
 | [`src/workflow/scheduler.rs`](../../crates/custos-runtime/src/workflow/scheduler.rs) | 250 | Schedule a new workflow job | `struct ScheduledJobId`, `fn new`, `fn generate`, `fn fmt` |
+| [`src/workflow/task_runtime.rs`](../../crates/custos-runtime/src/workflow/task_runtime.rs) | 916 | WorkflowPort implementation for task run dispatch, model-turn completion, claim release and stale chat-turn recovery. | `struct TaskRuntime`, `fn start_run`, `fn recover_completed_model_chat_turn`, `fn request_cancel` |
 | [`src/integration/binding.rs`](../../crates/custos-runtime/src/integration/binding.rs) | 103 | Canonical Integration Binding definitions, lifecycle states, and mediation tiers | `enum IntegrationKind`, `enum LifecycleState`, `enum BindingDirection`, `enum MediationLevel`, `struct IntegrationBinding` |
 | [`src/integration/registry.rs`](../../crates/custos-runtime/src/integration/registry.rs) | 116 | Thread-safe registry managing external protocol bindings and lifecycle state transitions | `struct IntegrationRegistry`, `fn register`, `fn get`, `fn update_state`, `fn list_by_kind`, `fn list_enabled` |
 
@@ -934,7 +935,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-daemon`
 - **Chủ sở hữu chính (Owner):** **Vĩ (Chief Architect)**
 - **Quy tắc ranh giới:** Daemon crate là composition root; `runtime.rs` ráp concrete storage/runtime/adapters, `main.rs` chỉ sở hữu listener/process lifecycle.
-- **Tổng số file:** 9 files | **Tổng số dòng hiện hành:** 8,156 lines (gồm manifest; số đo tại audit `4b73cce`)
+- **Tổng số file:** 10 files | **Tổng số dòng hiện hành:** 8,519 lines (gồm manifest)
 - **Mô tả chức năng:** Tiến trình dịch vụ Custos phục vụ TCP, HTTP và stdio JSONL; sở hữu profile, SQLite, Local API dispatcher, OAuth loopback listener và recovery. HTTP RPC hiện cần auth/origin hardening.
 
 #### Danh mục các file bên trong `crates/custos-daemon/`:
@@ -942,10 +943,10 @@ Custos/
 | Tập tin | Số dòng | Vai trò & Trách nhiệm kiến trúc | Các Struct / Trait / Hàm cốt lõi |
 |---|:---:|---|---|
 | [`Cargo.toml`](../../crates/custos-daemon/Cargo.toml) | 40 | Manifest của composition root và các concrete dependency được phép ráp tại daemon. | None |
-| [`src/api.rs`](../../crates/custos-daemon/src/api.rs) | 5,036 | Local API dispatcher cho Task/Session/Run, capability/resource, workspace, research, notebook, provider, fleet và automation. Kích thước hiện tại là tín hiệu cần tách command handlers theo chủ đề bên trong cùng crate, không tạo thêm source-of-truth. | `struct LocalApiDispatcher`, `fn list_capabilities`, `fn handle_request` |
+| [`src/api.rs`](../../crates/custos-daemon/src/api.rs) | 5,773 | Local API dispatcher cho Task/Session/Run, capability/resource, workspace, research, notebook, provider, fleet và automation; owns `v1.sessions.delete` composition. Kích thước hiện tại là tín hiệu cần tách command handlers theo chủ đề bên trong cùng crate, không tạo thêm source-of-truth. | `struct LocalApiDispatcher`, `fn list_capabilities`, `fn handle_request` |
 | [`src/http_server.rs`](../../crates/custos-daemon/src/http_server.rs) | 165 | Loopback HTTP RPC/health listener; `POST /api/request` chuyển trực tiếp vào Local API, hiện cho wildcard CORS và thiếu caller/origin admission. | `fn start_http_server`, `fn handle_http_client` |
 | [`src/lib.rs`](../../crates/custos-daemon/src/lib.rs) | 18 | Export API, HTTP adapter, profile, runtime và Local API client/transport. | None |
-| [`src/local_api/lib.rs`](../../crates/custos-daemon/src/local_api/lib.rs) | 1,594 | Versioned request/response DTO, process/TCP transports và typed client methods. Cần được tách module cơ học theo domain trong cùng crate khi refactor. | `struct ApiRequest`, `struct ApiResponse`, `struct ProcessTransport`, `struct TcpTransport`, `struct LocalApiClient` |
+| [`src/local_api/lib.rs`](../../crates/custos-daemon/src/local_api/lib.rs) | 1,690 | Versioned request/response DTO, process/TCP transports và typed client methods, including session deletion request/client helper. Cần được tách module cơ học theo domain trong cùng crate khi refactor. | `struct ApiRequest`, `struct ApiResponse`, `struct ProcessTransport`, `struct TcpTransport`, `struct LocalApiClient` |
 | [`src/main.rs`](../../crates/custos-daemon/src/main.rs) | 121 | Composition/process entry point: singleton lock và loopback TCP + HTTP + stdio JSONL listeners. | `fn main` |
 | [`src/oauth_callback_server.rs`](../../crates/custos-daemon/src/oauth_callback_server.rs) | 355 | Loopback HTTP callback server (port 1455) đón nhận mã ủy quyền OAuth PKCE của OpenAI/Codex, tự động trao đổi và lưu trữ token SQLite. | `struct OAuthCallbackServer`, `enum CallbackServerStatus`, `fn start`, `fn status`, `fn stop` |
 | [`src/profile.rs`](../../crates/custos-daemon/src/profile.rs) | 381 | Profile directory resolver, TCP/HTTP port discovery, singleton file lock và auto-connect helper. | `struct ProfileResolver`, `struct DaemonLock`, `fn ensure_daemon_client` |

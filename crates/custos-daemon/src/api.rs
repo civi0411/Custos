@@ -5,46 +5,40 @@
 use std::sync::Arc;
 
 pub use crate::custos_local_api::{
-    AdvanceTaskRequest, ApiRequest, ApiResponse, ArchiveWorkspaceApiRequest, CancelRunRequest,
-    CancelTaskRequest, CompleteTaskRequest, CreateTaskRequest, CreateWorkspaceApiRequest,
-    GetCapabilityApiRequest, GetWorkspaceApiRequest, InspectWorkspaceDirtyApiRequest,
-    RecoverWorkspaceApiRequest, StartRunRequest, METHOD_CAPABILITIES_GET,
-    METHOD_CAPABILITIES_LIST, METHOD_RESEARCH_ANCHORS_LIST, METHOD_RESEARCH_ANCHORS_SAVE,
-    METHOD_RESEARCH_CLAIMS_LIST, METHOD_RESEARCH_CLAIMS_SAVE, METHOD_RESEARCH_HANDOFF_CODING,
-    METHOD_RESEARCH_LINEAGE_LIST, METHOD_RESEARCH_RUNS_LIST, METHOD_RESEARCH_RUNS_SAVE,
-    METHOD_RESEARCH_SOURCES_LIST, METHOD_RESEARCH_SOURCES_SAVE, METHOD_WORKFLOW_CANCEL_RUN,
+    AdvanceTaskRequest, ApiRequest, ApiResponse, ArchiveWorkspaceApiRequest,
+    ArtifactDetailResponse, CancelHarnessRunRequest, CancelRunRequest, CancelTaskRequest,
+    CompleteTaskRequest, CreateTaskRequest, CreateWorkspaceApiRequest, GetCapabilityApiRequest,
+    GetHarnessRequest, GetWorkspaceApiRequest, InspectWorkspaceDirtyApiRequest,
+    OAuthAuthorizeParams, OAuthExchangeParams, OAuthRefreshParams, RecoverWorkspaceApiRequest,
+    RunNativeHarnessRequest, SaveNoteParams, StartRunRequest, SteerHarnessRunRequest,
+    METHOD_ARTIFACTS_GET, METHOD_ARTIFACTS_LINEAGE_GRAPH, METHOD_ARTIFACTS_LIST,
+    METHOD_ARTIFACTS_RECORD_LINEAGE, METHOD_AUTOMATION_JOBS_CREATE, METHOD_AUTOMATION_JOBS_LIST,
+    METHOD_AUTOMATION_JOBS_RUN, METHOD_BROWSER_SESSIONS_CREATE, METHOD_BROWSER_SESSIONS_LIST,
+    METHOD_BROWSER_TABS_CLOSE, METHOD_BROWSER_TABS_CREATE, METHOD_BROWSER_TABS_LIST,
+    METHOD_BROWSER_TABS_NAVIGATE, METHOD_BROWSER_TABS_SNAPSHOT, METHOD_CAPABILITIES_GET,
+    METHOD_CAPABILITIES_LIST, METHOD_FLEET_EXEC, METHOD_FLEET_HOSTS_LIST, METHOD_FLEET_HOSTS_PING,
+    METHOD_FLEET_HOSTS_REGISTER, METHOD_HARNESS_CANCEL, METHOD_HARNESS_GET, METHOD_HARNESS_LIST,
+    METHOD_HARNESS_RUN_NATIVE, METHOD_HARNESS_STEER, METHOD_MODELS_CATALOG, METHOD_MODELS_PRICING,
+    METHOD_MODELS_PROBE, METHOD_NOTEBOOK_CELLS_LIST, METHOD_NOTEBOOK_CELLS_SAVE,
+    METHOD_NOTEBOOK_EXECUTE, METHOD_NOTEBOOK_INTERRUPT, METHOD_NOTEBOOK_RESET,
+    METHOD_NOTEBOOK_STATUS, METHOD_NOTES_GET, METHOD_NOTES_HISTORY, METHOD_NOTES_LIST,
+    METHOD_NOTES_SAVE, METHOD_OAUTH_AUTHORIZE, METHOD_OAUTH_DELETE, METHOD_OAUTH_EXCHANGE,
+    METHOD_OAUTH_GET, METHOD_OAUTH_REFRESH, METHOD_OAUTH_STATUS, METHOD_PROVIDERS_DELETE,
+    METHOD_PROVIDERS_GET, METHOD_PROVIDERS_LIST, METHOD_PROVIDERS_SAVE,
+    METHOD_RESEARCH_ANCHORS_LIST, METHOD_RESEARCH_ANCHORS_SAVE, METHOD_RESEARCH_CLAIMS_LIST,
+    METHOD_RESEARCH_CLAIMS_SAVE, METHOD_RESEARCH_HANDOFF_CODING, METHOD_RESEARCH_LINEAGE_LIST,
+    METHOD_RESEARCH_RUNS_LIST, METHOD_RESEARCH_RUNS_SAVE, METHOD_RESEARCH_SOURCES_LIST,
+    METHOD_RESEARCH_SOURCES_SAVE, METHOD_REVIEWS_GET, METHOD_REVIEWS_LIST,
+    METHOD_REVIEWS_MARK_STALE, METHOD_REVIEWS_RECORD, METHOD_SESSIONS_DELETE,
+    METHOD_SYNTHESIS_HANDOFF_EXECUTE, METHOD_SYNTHESIS_PROPOSALS_GET,
+    METHOD_SYNTHESIS_PROPOSALS_LIST, METHOD_SYNTHESIS_PROPOSALS_SAVE, METHOD_TERMINAL_GET,
+    METHOD_TERMINAL_LIST, METHOD_TERMINAL_READ, METHOD_TERMINAL_RESIZE, METHOD_TERMINAL_SPAWN,
+    METHOD_TERMINAL_TERMINATE, METHOD_TERMINAL_WRITE, METHOD_WORKFLOW_CANCEL_RUN,
     METHOD_WORKFLOW_START_RUN, METHOD_WORKSPACES_ARCHIVE, METHOD_WORKSPACES_CREATE,
     METHOD_WORKSPACES_GET, METHOD_WORKSPACES_INSPECT_DIRTY, METHOD_WORKSPACES_LIST,
-    METHOD_WORKSPACES_RECOVER, METHOD_TERMINAL_GET, METHOD_TERMINAL_LIST,
-    METHOD_TERMINAL_READ, METHOD_TERMINAL_RESIZE, METHOD_TERMINAL_SPAWN,
-    METHOD_TERMINAL_TERMINATE, METHOD_TERMINAL_WRITE,
-    METHOD_WORKSPACE_DIFF, METHOD_WORKSPACE_FILES_READ, METHOD_WORKSPACE_FILES_TREE,
-    METHOD_WORKSPACE_FILES_WRITE, METHOD_WORKSPACE_FILE_DIFF, METHOD_WORKSPACE_GIT_DISCARD,
-    METHOD_WORKSPACE_GIT_STAGE, METHOD_WORKSPACE_GIT_UNSTAGE,
-    CancelHarnessRunRequest, GetHarnessRequest, RunNativeHarnessRequest, SteerHarnessRunRequest,
-    METHOD_HARNESS_CANCEL, METHOD_HARNESS_GET, METHOD_HARNESS_LIST, METHOD_HARNESS_RUN_NATIVE,
-    METHOD_HARNESS_STEER,
-    ArtifactDetailResponse, SaveNoteParams,
-    METHOD_ARTIFACTS_GET, METHOD_ARTIFACTS_LINEAGE_GRAPH, METHOD_ARTIFACTS_LIST,
-    METHOD_ARTIFACTS_RECORD_LINEAGE, METHOD_NOTES_GET, METHOD_NOTES_HISTORY,
-    METHOD_NOTES_LIST, METHOD_NOTES_SAVE,
-    METHOD_NOTEBOOK_CELLS_LIST, METHOD_NOTEBOOK_CELLS_SAVE, METHOD_NOTEBOOK_EXECUTE,
-    METHOD_NOTEBOOK_INTERRUPT, METHOD_NOTEBOOK_RESET, METHOD_NOTEBOOK_STATUS,
-    METHOD_REVIEWS_LIST, METHOD_REVIEWS_GET, METHOD_REVIEWS_RECORD, METHOD_REVIEWS_MARK_STALE,
-    METHOD_SYNTHESIS_PROPOSALS_LIST, METHOD_SYNTHESIS_PROPOSALS_GET,
-    METHOD_SYNTHESIS_PROPOSALS_SAVE, METHOD_SYNTHESIS_HANDOFF_EXECUTE,
-    METHOD_BROWSER_SESSIONS_LIST, METHOD_BROWSER_SESSIONS_CREATE,
-    METHOD_BROWSER_TABS_LIST, METHOD_BROWSER_TABS_CREATE,
-    METHOD_BROWSER_TABS_NAVIGATE, METHOD_BROWSER_TABS_SNAPSHOT,
-    METHOD_BROWSER_TABS_CLOSE, METHOD_FLEET_HOSTS_LIST,
-    METHOD_FLEET_HOSTS_REGISTER, METHOD_FLEET_HOSTS_PING,
-    METHOD_FLEET_EXEC, METHOD_AUTOMATION_JOBS_LIST,
-    METHOD_AUTOMATION_JOBS_CREATE, METHOD_AUTOMATION_JOBS_RUN,
-    METHOD_PROVIDERS_LIST, METHOD_PROVIDERS_GET, METHOD_PROVIDERS_SAVE,
-    METHOD_PROVIDERS_DELETE, METHOD_MODELS_PROBE, METHOD_MODELS_CATALOG,
-    METHOD_MODELS_PRICING, METHOD_OAUTH_AUTHORIZE, METHOD_OAUTH_EXCHANGE,
-    METHOD_OAUTH_REFRESH, METHOD_OAUTH_GET, METHOD_OAUTH_DELETE, METHOD_OAUTH_STATUS,
-    OAuthAuthorizeParams, OAuthExchangeParams, OAuthRefreshParams,
+    METHOD_WORKSPACES_RECOVER, METHOD_WORKSPACE_DIFF, METHOD_WORKSPACE_FILES_READ,
+    METHOD_WORKSPACE_FILES_TREE, METHOD_WORKSPACE_FILES_WRITE, METHOD_WORKSPACE_FILE_DIFF,
+    METHOD_WORKSPACE_GIT_DISCARD, METHOD_WORKSPACE_GIT_STAGE, METHOD_WORKSPACE_GIT_UNSTAGE,
 };
 use custos_adapters::harness::HarnessRegistry;
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
@@ -53,21 +47,31 @@ use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::contracts::workspace_files::WorkspaceFilesPort;
 use custos_core::{AdvanceTask, CancelTask, CreateTask, TaskService};
 use custos_domain::{
-    ArtifactLineageNode, CapabilityDescriptor, CapabilityGroup, NoteRecord, PassageAnchor,
-    ResearchClaim, ResearchExperimentRun, SessionId, SessionMode, SourceRecord, TaskContract,
-    TaskStatus,
-    ExecuteCellParams, NotebookCell,
-    RecordReviewParams, ReviewerRecord,
-    ClaimGroundingLevel, ClaimHandoffSummary, HandoffToCodingParams, HandoffToCodingResult,
-    Recipe, RecipeHandoffSummary, ResearchSynthesisProposal, ReviewStatus,
-    SaveSynthesisProposalParams,
-    BrowserSession, BrowserTab, CreateHeadlessJobParams, HeadlessAutomationJob,
-    HeadlessJobStatus, RegisterHostParams, RemoteHostNode, SshAuthMethod,
+    ArtifactLineageNode, BrowserSession, BrowserTab, CapabilityDescriptor, CapabilityGroup,
+    ClaimGroundingLevel, ClaimHandoffSummary, CreateHeadlessJobParams, ExecuteCellParams,
+    HandoffToCodingParams, HandoffToCodingResult, HeadlessAutomationJob, HeadlessJobStatus,
+    NoteRecord, NotebookCell, PassageAnchor, Recipe, RecipeHandoffSummary, RecordReviewParams,
+    RegisterHostParams, RemoteHostNode, ResearchClaim, ResearchExperimentRun,
+    ResearchSynthesisProposal, ReviewStatus, ReviewerRecord, SaveSynthesisProposalParams,
+    SessionId, SessionMode, SourceRecord, SshAuthMethod, TaskContract, TaskStatus,
 };
-use custos_persistence::{ProviderRepository, ResearchRepository, FleetAutomationRepository};
+use custos_persistence::{FleetAutomationRepository, ProviderRepository, ResearchRepository};
 use custos_runtime::session::SessionManager;
-use custos_runtime::workspace::{CreateWorkspaceRequest, WorkspaceCoordinator, WorkspaceFilesCoordinator};
+use custos_runtime::workspace::{
+    CreateWorkspaceRequest, WorkspaceCoordinator, WorkspaceFilesCoordinator,
+};
 use custos_runtime::{PythonKernelCoordinator, TerminalCoordinator};
+
+fn default_model_probe_base_url(provider_type: &str) -> Option<&'static str> {
+    match provider_type.to_ascii_lowercase().as_str() {
+        "openai" | "codex" => Some("https://api.openai.com/v1"),
+        "anthropic" | "claude" => Some("https://api.anthropic.com/v1"),
+        "gemini" | "google" => Some("https://generativelanguage.googleapis.com"),
+        "deepseek" => Some("https://api.deepseek.com/v1"),
+        "local" | "ollama" => Some("http://localhost:11434"),
+        _ => None,
+    }
+}
 
 /// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, WorkflowPort, ResearchRepository, ProviderRepository, TerminalCoordinator, and WorkspaceFilesPort for IPC callers.
 pub struct LocalApiDispatcher {
@@ -151,7 +155,10 @@ impl LocalApiDispatcher {
         self
     }
 
-    pub fn with_fleet_automation(mut self, fleet_automation: Arc<FleetAutomationRepository>) -> Self {
+    pub fn with_fleet_automation(
+        mut self,
+        fleet_automation: Arc<FleetAutomationRepository>,
+    ) -> Self {
         self.fleet_automation = Some(fleet_automation);
         self
     }
@@ -741,6 +748,23 @@ impl LocalApiDispatcher {
                         Err(e) => ApiResponse::error(req.id, e.to_string()),
                     },
                     None => ApiResponse::error(req.id, format!("Session {session_id} not found")),
+                }
+            }
+            METHOD_SESSIONS_DELETE => {
+                let session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
+                    Some(id) => SessionId(id.to_string()),
+                    None => return ApiResponse::error(req.id, "Missing session_id param"),
+                };
+
+                match self.session_manager.delete_session(&session_id).await {
+                    Ok(deleted) => ApiResponse::success(
+                        req.id,
+                        serde_json::json!({
+                            "deleted": deleted,
+                            "session_id": session_id.0,
+                        }),
+                    ),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
             "v1.sessions.promote" => {
@@ -2500,40 +2524,74 @@ impl LocalApiDispatcher {
                 }
             }
             "v1.models.probe" => {
-                let base_url = req
+                let provider_id = req
                     .params
-                    .get("base_url")
-                    .or_else(|| req.params.get("endpoint_url"))
-                    .or_else(|| req.params.get("endpoint"))
+                    .get("provider_id")
+                    .or_else(|| req.params.get("id"))
                     .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
+                    .filter(|s| !s.trim().is_empty())
+                    .map(|s| s.trim().to_string());
 
-                if base_url.trim().is_empty() {
-                    return ApiResponse::error(req.id, "Missing base_url parameter for models probe");
-                }
-
-                let api_key = req
-                    .params
-                    .get("api_key")
-                    .and_then(|v| v.as_str());
+                let provider_record = if let (Some(repo), Some(pid)) =
+                    (self.providers.as_ref(), provider_id.as_deref())
+                {
+                    repo.get_provider(pid).ok().flatten()
+                } else {
+                    None
+                };
 
                 let provider_type = req
                     .params
                     .get("provider_type")
                     .or_else(|| req.params.get("service_type"))
                     .and_then(|v| v.as_str())
+                    .filter(|s| !s.trim().is_empty())
+                    .or_else(|| provider_record.as_ref().map(|p| p.service_type.as_str()))
                     .unwrap_or("local");
 
-                let provider_id = req
+                let base_url = req
                     .params
-                    .get("provider_id")
-                    .or_else(|| req.params.get("id"))
-                    .and_then(|v| v.as_str());
+                    .get("base_url")
+                    .or_else(|| req.params.get("endpoint_url"))
+                    .or_else(|| req.params.get("endpoint"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .or_else(|| {
+                        provider_record
+                            .as_ref()
+                            .and_then(|p| p.endpoint_url.as_deref())
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                    })
+                    .or_else(|| default_model_probe_base_url(provider_type).map(str::to_string))
+                    .unwrap_or_default();
+
+                if base_url.trim().is_empty() {
+                    return ApiResponse::error(req.id, "Missing base_url parameter for models probe");
+                }
+
+                let api_key_owned = req
+                    .params
+                    .get("api_key")
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string)
+                    .or_else(|| {
+                        self.providers.as_ref().and_then(|repo| {
+                            provider_id
+                                .as_deref()
+                                .and_then(|pid| repo.get_oauth_token(pid).ok().flatten())
+                                .or_else(|| repo.get_oauth_token(provider_type).ok().flatten())
+                                .map(|tok| tok.access_token)
+                        })
+                    });
+                let api_key = api_key_owned.as_deref();
 
                 match custos_adapters::providers::probe::probe_endpoint_models(&base_url, api_key, provider_type).await {
                     Ok(models) => {
-                        if let (Some(repo), Some(pid)) = (self.providers.as_ref(), provider_id) {
+                        if let (Some(repo), Some(pid)) = (self.providers.as_ref(), provider_id.as_deref()) {
                             let catalog_result = self.model_catalog.merge_probed_models(provider_type, models.clone());
                             let _ = repo.save_catalog_models(pid, &catalog_result.models);
                         }
@@ -2843,9 +2901,9 @@ impl LocalApiDispatcher {
                             service_type: service_type.to_string(),
                             api_key_masked: masked,
                             status: "active".to_string(),
-                            endpoint_url: Some("https://api.openai.com/v1".to_string()),
-                            default_model: Some("gpt-4o".to_string()),
-                            context_window: Some(128000),
+                            endpoint_url: default_model_probe_base_url(service_type).map(str::to_string),
+                            default_model: None,
+                            context_window: None,
                             fast_mode: Some(false),
                             created_at: now,
                             updated_at: now,
@@ -3668,7 +3726,8 @@ mod tests {
     use async_trait::async_trait;
     use custos_core::{TaskEvent, TaskStore};
     use custos_domain::{
-        ContinuationPacket, DomainError, ExecuteCellResult, NotebookKernelState, Span, Task,
+        ContinuationPacket, DomainError, ExecuteCellResult, NotebookKernelState, Session, Span,
+        Task,
     };
     use std::sync::Mutex;
 
@@ -3859,6 +3918,23 @@ mod tests {
         };
         let session_res = dispatcher.handle_request(session_create_req).await;
         assert!(session_res.error.is_none());
+        let created_session: Session = serde_json::from_value(session_res.result.unwrap()).unwrap();
+
+        let delete_session_req = ApiRequest {
+            id: "req_sess_delete".into(),
+            method: METHOD_SESSIONS_DELETE.into(),
+            params: serde_json::json!({ "session_id": created_session.id.0 }),
+        };
+        let delete_session_res = dispatcher.handle_request(delete_session_req).await;
+        assert!(delete_session_res.error.is_none());
+        assert_eq!(
+            delete_session_res
+                .result
+                .unwrap()
+                .get("deleted")
+                .and_then(|v| v.as_bool()),
+            Some(true)
+        );
 
         // 5. Unknown method
         let invalid_req = ApiRequest {
@@ -4093,7 +4169,10 @@ mod tests {
         };
         let invalid_resp = dispatcher.handle_request(invalid_sess_req).await;
         assert!(invalid_resp.error.is_some());
-        assert!(invalid_resp.error.unwrap().contains("Admission gate refused unverified session_id"));
+        assert!(invalid_resp
+            .error
+            .unwrap()
+            .contains("Admission gate refused unverified session_id"));
     }
 
     #[tokio::test]
@@ -4491,28 +4570,44 @@ mod tests {
         assert!(files_cap.status.is_available());
         assert!(files_cap.supported_operations.contains(&"tree".to_string()));
         assert!(files_cap.supported_operations.contains(&"read".to_string()));
-        assert!(files_cap.supported_operations.contains(&"write".to_string()));
+        assert!(files_cap
+            .supported_operations
+            .contains(&"write".to_string()));
 
         let changes_cap = caps.iter().find(|c| c.id == "code.changes").unwrap();
         assert!(changes_cap.status.is_available());
-        assert!(changes_cap.supported_operations.contains(&"diff".to_string()));
-        assert!(changes_cap.supported_operations.contains(&"stage".to_string()));
+        assert!(changes_cap
+            .supported_operations
+            .contains(&"diff".to_string()));
+        assert!(changes_cap
+            .supported_operations
+            .contains(&"stage".to_string()));
 
         // Notebook capability is truthfully available when PythonKernelCoordinator is configured
         let notebook_cap = caps.iter().find(|c| c.id == "compute.notebook").unwrap();
         assert!(notebook_cap.status.is_available());
-        assert!(notebook_cap.supported_operations.contains(&"execute".to_string()));
-        assert!(notebook_cap.supported_operations.contains(&"reset".to_string()));
+        assert!(notebook_cap
+            .supported_operations
+            .contains(&"execute".to_string()));
+        assert!(notebook_cap
+            .supported_operations
+            .contains(&"reset".to_string()));
 
         // Evidence criteria verifier capability is truthfully unavailable without ResearchRepository
         let evidence_cap = caps.iter().find(|c| c.id == "evidence.criteria").unwrap();
         assert!(!evidence_cap.status.is_available());
-        assert_eq!(evidence_cap.status.reason(), Some("ResearchRepository is not configured on this daemon instance."));
+        assert_eq!(
+            evidence_cap.status.reason(),
+            Some("ResearchRepository is not configured on this daemon instance.")
+        );
 
         // Synthesis handoff capability is truthfully unavailable without ResearchRepository
         let synth_cap = caps.iter().find(|c| c.id == "synthesis.handoff").unwrap();
         assert!(!synth_cap.status.is_available());
-        assert_eq!(synth_cap.status.reason(), Some("ResearchRepository is not configured on this daemon instance."));
+        assert_eq!(
+            synth_cap.status.reason(),
+            Some("ResearchRepository is not configured on this daemon instance.")
+        );
 
         // 2. Query capability by capability_id
         let get_resp = dispatcher
@@ -4582,7 +4677,11 @@ mod tests {
             })
             .await;
 
-        assert!(spawn_resp.is_success(), "Failed to spawn: {:?}", spawn_resp.error);
+        assert!(
+            spawn_resp.is_success(),
+            "Failed to spawn: {:?}",
+            spawn_resp.error
+        );
         let session: custos_domain::TerminalSession =
             serde_json::from_value(spawn_resp.result.unwrap()).unwrap();
         assert_eq!(session.workspace_id, "ws-mock");
@@ -4654,14 +4753,18 @@ mod tests {
         assert!(get_resp.is_success());
         let got_sess: custos_domain::TerminalSession =
             serde_json::from_value(get_resp.result.unwrap()).unwrap();
-        assert_eq!(got_sess.status, custos_domain::TerminalSessionStatus::Terminated);
+        assert_eq!(
+            got_sess.status,
+            custos_domain::TerminalSessionStatus::Terminated
+        );
     }
 
     #[tokio::test]
     async fn test_workspace_files_api_dispatch() {
         use custos_persistence::SqliteTaskStore;
 
-        let temp_dir = std::env::temp_dir().join(format!("custos_ws_api_files_{}", std::process::id()));
+        let temp_dir =
+            std::env::temp_dir().join(format!("custos_ws_api_files_{}", std::process::id()));
         let _ = tokio::fs::create_dir_all(&temp_dir).await;
 
         let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
@@ -4674,69 +4777,86 @@ mod tests {
 
         let ws_provider = Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new());
         let ws_coord = Arc::new(WorkspaceCoordinator::new(store, ws_provider));
-        let ws = ws_coord.create_workspace(CreateWorkspaceRequest {
-            name: "files_test_ws".into(),
-            kind: custos_domain::WorkspaceKind::Folder { path: temp_dir.to_string_lossy().to_string() },
-            path: temp_dir.to_string_lossy().to_string(),
-            lineage: None,
-            owner_task_id: None,
-            metadata: None,
-            setup_script: None,
-        }).await.expect("create workspace");
+        let ws = ws_coord
+            .create_workspace(CreateWorkspaceRequest {
+                name: "files_test_ws".into(),
+                kind: custos_domain::WorkspaceKind::Folder {
+                    path: temp_dir.to_string_lossy().to_string(),
+                },
+                path: temp_dir.to_string_lossy().to_string(),
+                lineage: None,
+                owner_task_id: None,
+                metadata: None,
+                setup_script: None,
+            })
+            .await
+            .expect("create workspace");
 
         let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
             .with_workspace(ws_coord);
 
         // 1. Write file
-        let write_resp = dispatcher.handle_request(ApiRequest {
-            id: "wf_1".into(),
-            method: METHOD_WORKSPACE_FILES_WRITE.into(),
-            params: serde_json::json!({
-                "workspace_id": ws.id.to_string(),
-                "path": "src/hello.rs",
-                "content": "pub fn hello() -> &'static str { \"world\" }\n",
-            }),
-        }).await;
+        let write_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "wf_1".into(),
+                method: METHOD_WORKSPACE_FILES_WRITE.into(),
+                params: serde_json::json!({
+                    "workspace_id": ws.id.to_string(),
+                    "path": "src/hello.rs",
+                    "content": "pub fn hello() -> &'static str { \"world\" }\n",
+                }),
+            })
+            .await;
         assert!(write_resp.is_success());
-        let written: custos_domain::WorkspaceFileContent = serde_json::from_value(write_resp.result.unwrap()).unwrap();
+        let written: custos_domain::WorkspaceFileContent =
+            serde_json::from_value(write_resp.result.unwrap()).unwrap();
         assert_eq!(written.path, "src/hello.rs");
         assert_eq!(written.line_count, 1);
 
         // 2. Read file
-        let read_resp = dispatcher.handle_request(ApiRequest {
-            id: "wf_2".into(),
-            method: METHOD_WORKSPACE_FILES_READ.into(),
-            params: serde_json::json!({
-                "workspace_id": ws.id.to_string(),
-                "path": "src/hello.rs",
-            }),
-        }).await;
+        let read_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "wf_2".into(),
+                method: METHOD_WORKSPACE_FILES_READ.into(),
+                params: serde_json::json!({
+                    "workspace_id": ws.id.to_string(),
+                    "path": "src/hello.rs",
+                }),
+            })
+            .await;
         assert!(read_resp.is_success());
-        let read: custos_domain::WorkspaceFileContent = serde_json::from_value(read_resp.result.unwrap()).unwrap();
+        let read: custos_domain::WorkspaceFileContent =
+            serde_json::from_value(read_resp.result.unwrap()).unwrap();
         assert!(read.content.contains("pub fn hello"));
 
         // 3. Tree
-        let tree_resp = dispatcher.handle_request(ApiRequest {
-            id: "wf_3".into(),
-            method: METHOD_WORKSPACE_FILES_TREE.into(),
-            params: serde_json::json!({
-                "workspace_id": ws.id.to_string(),
-            }),
-        }).await;
+        let tree_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "wf_3".into(),
+                method: METHOD_WORKSPACE_FILES_TREE.into(),
+                params: serde_json::json!({
+                    "workspace_id": ws.id.to_string(),
+                }),
+            })
+            .await;
         assert!(tree_resp.is_success());
-        let tree: custos_domain::WorkspaceFileTree = serde_json::from_value(tree_resp.result.unwrap()).unwrap();
+        let tree: custos_domain::WorkspaceFileTree =
+            serde_json::from_value(tree_resp.result.unwrap()).unwrap();
         assert!(tree.entries.iter().any(|e| e.path == "src/hello.rs"));
 
         // 4. Diff (folder ws is not git repo, returns clean summary)
-        let diff_resp = dispatcher.handle_request(ApiRequest {
-            id: "wf_4".into(),
-            method: METHOD_WORKSPACE_DIFF.into(),
-            params: serde_json::json!({
-                "workspace_id": ws.id.to_string(),
-            }),
-        }).await;
+        let diff_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "wf_4".into(),
+                method: METHOD_WORKSPACE_DIFF.into(),
+                params: serde_json::json!({
+                    "workspace_id": ws.id.to_string(),
+                }),
+            })
+            .await;
         assert!(diff_resp.is_success());
-        let diff: custos_domain::WorkspaceDiffSummary = serde_json::from_value(diff_resp.result.unwrap()).unwrap();
+        let diff: custos_domain::WorkspaceDiffSummary =
+            serde_json::from_value(diff_resp.result.unwrap()).unwrap();
         assert!(diff.is_clean);
 
         let _ = tokio::fs::remove_dir_all(&temp_dir).await;
@@ -4756,77 +4876,87 @@ mod tests {
         let db = custos_persistence::DbConnection::open_in_memory().unwrap();
         let research = Arc::new(ResearchRepository::new(db));
 
-        let dispatcher = LocalApiDispatcher::new(
-            task_service,
-            session_manager,
-            bridge_service,
-        ).with_research(research);
+        let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
+            .with_research(research);
 
         // 1. Save a Note
-        let save_resp = dispatcher.handle_request(ApiRequest {
-            id: "note_save_1".into(),
-            method: METHOD_NOTES_SAVE.into(),
-            params: serde_json::json!({
-                "title": "Quantum Attention Hypothesis",
-                "content": "# Theory\nEvaluating linear attention scaling.",
-                "session_id": "sess_101",
-                "tags": ["quantum", "scaling"]
-            }),
-        }).await;
+        let save_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "note_save_1".into(),
+                method: METHOD_NOTES_SAVE.into(),
+                params: serde_json::json!({
+                    "title": "Quantum Attention Hypothesis",
+                    "content": "# Theory\nEvaluating linear attention scaling.",
+                    "session_id": "sess_101",
+                    "tags": ["quantum", "scaling"]
+                }),
+            })
+            .await;
         assert!(save_resp.is_success());
         let note: NoteRecord = serde_json::from_value(save_resp.result.unwrap()).unwrap();
         assert_eq!(note.title, "Quantum Attention Hypothesis");
         assert_eq!(note.version, 1);
 
         // 2. Update Note (version 2)
-        let update_resp = dispatcher.handle_request(ApiRequest {
-            id: "note_save_2".into(),
-            method: METHOD_NOTES_SAVE.into(),
-            params: serde_json::json!({
-                "id": note.id,
-                "title": "Quantum Attention Hypothesis (Revised)",
-                "content": "# Theory\nUpdated with ablation empirical data.",
-                "session_id": "sess_101",
-                "tags": ["quantum", "scaling", "ablation"]
-            }),
-        }).await;
+        let update_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "note_save_2".into(),
+                method: METHOD_NOTES_SAVE.into(),
+                params: serde_json::json!({
+                    "id": note.id,
+                    "title": "Quantum Attention Hypothesis (Revised)",
+                    "content": "# Theory\nUpdated with ablation empirical data.",
+                    "session_id": "sess_101",
+                    "tags": ["quantum", "scaling", "ablation"]
+                }),
+            })
+            .await;
         assert!(update_resp.is_success());
         let updated_note: NoteRecord = serde_json::from_value(update_resp.result.unwrap()).unwrap();
         assert_eq!(updated_note.version, 2);
 
         // 3. List Note History
-        let hist_resp = dispatcher.handle_request(ApiRequest {
-            id: "note_hist_1".into(),
-            method: METHOD_NOTES_HISTORY.into(),
-            params: serde_json::json!({
-                "note_id": note.id,
-            }),
-        }).await;
+        let hist_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "note_hist_1".into(),
+                method: METHOD_NOTES_HISTORY.into(),
+                params: serde_json::json!({
+                    "note_id": note.id,
+                }),
+            })
+            .await;
         assert!(hist_resp.is_success());
-        let history: Vec<NoteVersionRecord> = serde_json::from_value(hist_resp.result.unwrap()).unwrap();
+        let history: Vec<NoteVersionRecord> =
+            serde_json::from_value(hist_resp.result.unwrap()).unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].version, 1);
 
         // 4. Artifact list includes note
-        let art_list_resp = dispatcher.handle_request(ApiRequest {
-            id: "art_list_1".into(),
-            method: METHOD_ARTIFACTS_LIST.into(),
-            params: serde_json::json!({}),
-        }).await;
+        let art_list_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "art_list_1".into(),
+                method: METHOD_ARTIFACTS_LIST.into(),
+                params: serde_json::json!({}),
+            })
+            .await;
         assert!(art_list_resp.is_success());
-        let artifacts: Vec<ArtifactSummary> = serde_json::from_value(art_list_resp.result.unwrap()).unwrap();
+        let artifacts: Vec<ArtifactSummary> =
+            serde_json::from_value(art_list_resp.result.unwrap()).unwrap();
         assert_eq!(artifacts.len(), 1);
         assert_eq!(artifacts[0].artifact_path, format!("notes/{}.md", note.id));
         assert_eq!(artifacts[0].latest_version, 2);
 
         // 5. Lineage Graph DAG
-        let dag_resp = dispatcher.handle_request(ApiRequest {
-            id: "art_dag_1".into(),
-            method: METHOD_ARTIFACTS_LINEAGE_GRAPH.into(),
-            params: serde_json::json!({}),
-        }).await;
+        let dag_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "art_dag_1".into(),
+                method: METHOD_ARTIFACTS_LINEAGE_GRAPH.into(),
+                params: serde_json::json!({}),
+            })
+            .await;
         assert!(dag_resp.is_success());
-        let graph: custos_domain::ArtifactLineageGraph = serde_json::from_value(dag_resp.result.unwrap()).unwrap();
+        let graph: custos_domain::ArtifactLineageGraph =
+            serde_json::from_value(dag_resp.result.unwrap()).unwrap();
         assert_eq!(graph.nodes.len(), 2); // v1 and v2
         assert_eq!(graph.edges.len(), 1); // edge from v1 to v2
     }
@@ -4835,7 +4965,8 @@ mod tests {
     async fn test_notebook_kernel_api_lifecycle() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("custos_test_nb.db");
-        let store = Arc::new(custos_persistence::SqliteTaskStore::new(&db_path.to_string_lossy()).unwrap());
+        let store =
+            Arc::new(custos_persistence::SqliteTaskStore::new(&db_path.to_string_lossy()).unwrap());
         let task_service = Arc::new(TaskService::new(store.clone()));
         let session_manager = Arc::new(SessionManager::new());
         let bridge_service = Arc::new(BridgeService::new(
@@ -4843,11 +4974,8 @@ mod tests {
             task_service.clone(),
         ));
         let research = Arc::new(store.research().clone());
-        let dispatcher = LocalApiDispatcher::new(
-            task_service,
-            session_manager,
-            bridge_service,
-        ).with_research(research);
+        let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
+            .with_research(research);
         let session_id = "test_nb_session_42";
 
         // 1. Initial kernel status
@@ -4858,7 +4986,8 @@ mod tests {
         };
         let status_resp = dispatcher.handle_request(status_req).await;
         assert!(status_resp.is_success());
-        let initial_state: NotebookKernelState = serde_json::from_value(status_resp.result.unwrap()).unwrap();
+        let initial_state: NotebookKernelState =
+            serde_json::from_value(status_resp.result.unwrap()).unwrap();
         assert_eq!(initial_state.epoch, 1);
         assert_eq!(initial_state.execution_counter, 0);
 
@@ -4887,7 +5016,11 @@ mod tests {
             }),
         };
         let save_resp = dispatcher.handle_request(save_cells_req).await;
-        assert!(save_resp.is_success(), "Failed to save cells: {:?}", save_resp.error);
+        assert!(
+            save_resp.is_success(),
+            "Failed to save cells: {:?}",
+            save_resp.error
+        );
 
         // 3. List cells
         let list_req = ApiRequest {
@@ -4897,7 +5030,8 @@ mod tests {
         };
         let list_resp = dispatcher.handle_request(list_req).await;
         assert!(list_resp.is_success());
-        let loaded_cells: Vec<NotebookCell> = serde_json::from_value(list_resp.result.unwrap()).unwrap();
+        let loaded_cells: Vec<NotebookCell> =
+            serde_json::from_value(list_resp.result.unwrap()).unwrap();
         assert_eq!(loaded_cells.len(), 1);
         assert_eq!(loaded_cells[0].source, "print(6 * 7)");
 
@@ -4912,9 +5046,17 @@ mod tests {
             }),
         };
         let exec_resp = dispatcher.handle_request(exec_req).await;
-        assert!(exec_resp.is_success(), "Execution failed: {:?}", exec_resp.error);
-        let exec_result: ExecuteCellResult = serde_json::from_value(exec_resp.result.unwrap()).unwrap();
-        assert_eq!(exec_result.status, custos_domain::CellExecutionStatus::Success);
+        assert!(
+            exec_resp.is_success(),
+            "Execution failed: {:?}",
+            exec_resp.error
+        );
+        let exec_result: ExecuteCellResult =
+            serde_json::from_value(exec_resp.result.unwrap()).unwrap();
+        assert_eq!(
+            exec_result.status,
+            custos_domain::CellExecutionStatus::Success
+        );
         assert_eq!(exec_result.stdout.trim(), "42");
         assert_eq!(exec_result.execution_count, 1);
         assert_eq!(exec_result.epoch, 1);
@@ -4927,7 +5069,8 @@ mod tests {
         };
         let reset_resp = dispatcher.handle_request(reset_req).await;
         assert!(reset_resp.is_success());
-        let reset_state: NotebookKernelState = serde_json::from_value(reset_resp.result.unwrap()).unwrap();
+        let reset_state: NotebookKernelState =
+            serde_json::from_value(reset_resp.result.unwrap()).unwrap();
         assert_eq!(reset_state.epoch, 2);
         assert_eq!(reset_state.execution_counter, 0);
     }
@@ -4945,11 +5088,8 @@ mod tests {
         ));
         let mem_conn = custos_persistence::DbConnection::open_in_memory().expect("open memory db");
         let research_repo = Arc::new(custos_persistence::ResearchRepository::new(mem_conn));
-        let dispatcher = LocalApiDispatcher::new(
-            task_service,
-            session_manager,
-            bridge_service,
-        ).with_research(research_repo);
+        let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
+            .with_research(research_repo);
 
         // 1. Record a review
         let record_req = ApiRequest {
@@ -4975,7 +5115,11 @@ mod tests {
             }),
         };
         let record_resp = dispatcher.handle_request(record_req).await;
-        assert!(record_resp.is_success(), "Failed to record review: {:?}", record_resp.error);
+        assert!(
+            record_resp.is_success(),
+            "Failed to record review: {:?}",
+            record_resp.error
+        );
         let record: ReviewerRecord = serde_json::from_value(record_resp.result.unwrap()).unwrap();
         assert_eq!(record.reviewer, "custos-verifier");
         assert_eq!(record.status, custos_domain::ReviewStatus::Approved);
@@ -4990,7 +5134,8 @@ mod tests {
         };
         let get_resp = dispatcher.handle_request(get_req).await;
         assert!(get_resp.is_success());
-        let fetched: Option<ReviewerRecord> = serde_json::from_value(get_resp.result.unwrap()).unwrap();
+        let fetched: Option<ReviewerRecord> =
+            serde_json::from_value(get_resp.result.unwrap()).unwrap();
         assert!(fetched.is_some());
         assert_eq!(fetched.unwrap().id, record.id);
 
@@ -5017,7 +5162,14 @@ mod tests {
         };
         let stale_resp = dispatcher.handle_request(stale_req).await;
         assert!(stale_resp.is_success());
-        assert_eq!(stale_resp.result.unwrap().get("marked_stale").and_then(|v| v.as_bool()), Some(true));
+        assert_eq!(
+            stale_resp
+                .result
+                .unwrap()
+                .get("marked_stale")
+                .and_then(|v| v.as_bool()),
+            Some(true)
+        );
 
         // 5. Verify fetched record is now stale
         let verify_get_req = ApiRequest {
@@ -5027,7 +5179,8 @@ mod tests {
         };
         let verify_get_resp = dispatcher.handle_request(verify_get_req).await;
         assert!(verify_get_resp.is_success());
-        let verified: Option<ReviewerRecord> = serde_json::from_value(verify_get_resp.result.unwrap()).unwrap();
+        let verified: Option<ReviewerRecord> =
+            serde_json::from_value(verify_get_resp.result.unwrap()).unwrap();
         assert!(!verified.unwrap().is_fresh);
     }
 
@@ -5082,11 +5235,9 @@ mod tests {
         let recipe_id = recipe.id.clone();
         research_repo.save_recipe(&recipe).unwrap();
 
-        let dispatcher = LocalApiDispatcher::new(
-            task_service.clone(),
-            session_manager,
-            bridge_service,
-        ).with_research(research_repo.clone());
+        let dispatcher =
+            LocalApiDispatcher::new(task_service.clone(), session_manager, bridge_service)
+                .with_research(research_repo.clone());
 
         // 1. Save synthesis proposal
         let save_req = ApiRequest {
@@ -5103,12 +5254,20 @@ mod tests {
             }),
         };
         let save_resp = dispatcher.handle_request(save_req).await;
-        assert!(save_resp.is_success(), "Save proposal failed: {:?}", save_resp.error);
-        let prop: custos_domain::ResearchSynthesisProposal = serde_json::from_value(save_resp.result.unwrap()).unwrap();
+        assert!(
+            save_resp.is_success(),
+            "Save proposal failed: {:?}",
+            save_resp.error
+        );
+        let prop: custos_domain::ResearchSynthesisProposal =
+            serde_json::from_value(save_resp.result.unwrap()).unwrap();
         assert_eq!(prop.title, "Attention Quadratic Optimization");
         assert_eq!(prop.claims.len(), 2);
         assert_eq!(prop.recipes.len(), 1);
-        assert!(!prop.caveats.is_empty(), "Should generate caveats for ungrounded claim");
+        assert!(
+            !prop.caveats.is_empty(),
+            "Should generate caveats for ungrounded claim"
+        );
 
         // 2. Get and List proposal
         let get_req = ApiRequest {
@@ -5118,7 +5277,8 @@ mod tests {
         };
         let get_resp = dispatcher.handle_request(get_req).await;
         assert!(get_resp.is_success());
-        let fetched: Option<custos_domain::ResearchSynthesisProposal> = serde_json::from_value(get_resp.result.unwrap()).unwrap();
+        let fetched: Option<custos_domain::ResearchSynthesisProposal> =
+            serde_json::from_value(get_resp.result.unwrap()).unwrap();
         assert_eq!(fetched.unwrap().id, prop.id);
 
         let list_req = ApiRequest {
@@ -5128,7 +5288,8 @@ mod tests {
         };
         let list_resp = dispatcher.handle_request(list_req).await;
         assert!(list_resp.is_success());
-        let props: Vec<custos_domain::ResearchSynthesisProposal> = serde_json::from_value(list_resp.result.unwrap()).unwrap();
+        let props: Vec<custos_domain::ResearchSynthesisProposal> =
+            serde_json::from_value(list_resp.result.unwrap()).unwrap();
         assert_eq!(props.len(), 1);
 
         // 3. Test Fail-Closed Rejection: Handoff only ungrounded claim with enforce_verification = true
@@ -5143,8 +5304,14 @@ mod tests {
             }),
         };
         let reject_resp = dispatcher.handle_request(reject_req).await;
-        assert!(reject_resp.error.is_some(), "Fail-closed check should reject unverified L0 claims");
-        assert!(reject_resp.error.unwrap().contains("Fail-closed verification gate"));
+        assert!(
+            reject_resp.error.is_some(),
+            "Fail-closed check should reject unverified L0 claims"
+        );
+        assert!(reject_resp
+            .error
+            .unwrap()
+            .contains("Fail-closed verification gate"));
 
         // 4. Test Successful Handoff: includes verified claim and recipe
         let exec_req = ApiRequest {
@@ -5161,20 +5328,34 @@ mod tests {
             }),
         };
         let exec_resp = dispatcher.handle_request(exec_req).await;
-        assert!(exec_resp.is_success(), "Handoff execution failed: {:?}", exec_resp.error);
-        let handoff_res: custos_domain::HandoffToCodingResult = serde_json::from_value(exec_resp.result.unwrap()).unwrap();
+        assert!(
+            exec_resp.is_success(),
+            "Handoff execution failed: {:?}",
+            exec_resp.error
+        );
+        let handoff_res: custos_domain::HandoffToCodingResult =
+            serde_json::from_value(exec_resp.result.unwrap()).unwrap();
         assert_eq!(handoff_res.verified_claims_count, 1);
         assert_eq!(handoff_res.converted_recipes_count, 1);
         assert_eq!(handoff_res.task_ids.len(), 2);
 
         // 5. Verify created tasks exist in TaskService
-        let task_0 = task_service.get_task(&handoff_res.task_ids[0]).await.unwrap();
+        let task_0 = task_service
+            .get_task(&handoff_res.task_ids[0])
+            .await
+            .unwrap();
         assert!(task_0.is_some());
         let t0 = task_0.unwrap();
         assert!(t0.title.contains("[Research Claim]"));
-        assert!(t0.contract.is_some(), "Task must have contract with evidence requirements");
+        assert!(
+            t0.contract.is_some(),
+            "Task must have contract with evidence requirements"
+        );
 
-        let task_1 = task_service.get_task(&handoff_res.task_ids[1]).await.unwrap();
+        let task_1 = task_service
+            .get_task(&handoff_res.task_ids[1])
+            .await
+            .unwrap();
         assert!(task_1.is_some());
         let t1 = task_1.unwrap();
         assert!(t1.title.contains("[Recipe Reproduction]"));
@@ -5186,8 +5367,12 @@ mod tests {
             params: serde_json::json!({ "id": prop.id }),
         };
         let check_resp = dispatcher.handle_request(check_prop_req).await;
-        let completed_prop: Option<custos_domain::ResearchSynthesisProposal> = serde_json::from_value(check_resp.result.unwrap()).unwrap();
-        assert_eq!(completed_prop.unwrap().status, custos_domain::SynthesisProposalStatus::HandoffCompleted);
+        let completed_prop: Option<custos_domain::ResearchSynthesisProposal> =
+            serde_json::from_value(check_resp.result.unwrap()).unwrap();
+        assert_eq!(
+            completed_prop.unwrap().status,
+            custos_domain::SynthesisProposalStatus::HandoffCompleted
+        );
     }
 
     #[tokio::test]
@@ -5332,7 +5517,8 @@ mod tests {
         };
         let create_job_res = dispatcher.handle_request(create_job_req).await;
         assert!(create_job_res.is_success());
-        let job: HeadlessAutomationJob = serde_json::from_value(create_job_res.result.unwrap()).unwrap();
+        let job: HeadlessAutomationJob =
+            serde_json::from_value(create_job_res.result.unwrap()).unwrap();
         assert_eq!(job.name, "Nightly Regression Invariants");
         assert_eq!(job.status, HeadlessJobStatus::Pending);
 
@@ -5363,12 +5549,8 @@ mod tests {
             session_manager.clone(),
             task_service.clone(),
         ));
-        let dispatcher = LocalApiDispatcher::new(
-            task_service,
-            session_manager,
-            bridge_service,
-        )
-        .with_providers(Arc::new(store.providers().clone()));
+        let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
+            .with_providers(Arc::new(store.providers().clone()));
 
         // 1. Save provider with full protocol fields
         let save_req = ApiRequest {
@@ -5395,7 +5577,8 @@ mod tests {
         };
         let get_res = dispatcher.handle_request(get_req).await;
         assert!(get_res.is_success());
-        let cfg: custos_domain::ProviderConfig = serde_json::from_value(get_res.result.unwrap()).unwrap();
+        let cfg: custos_domain::ProviderConfig =
+            serde_json::from_value(get_res.result.unwrap()).unwrap();
         assert_eq!(cfg.id, "p_anthropic_custom");
         assert_eq!(cfg.default_model, Some("claude-3-7-sonnet".into()));
         assert_eq!(cfg.context_window, Some(200000));
@@ -5409,7 +5592,8 @@ mod tests {
         };
         let list_res = dispatcher.handle_request(list_req).await;
         assert!(list_res.is_success());
-        let providers: Vec<custos_domain::ProviderConfig> = serde_json::from_value(list_res.result.unwrap()).unwrap();
+        let providers: Vec<custos_domain::ProviderConfig> =
+            serde_json::from_value(list_res.result.unwrap()).unwrap();
         assert!(providers.iter().any(|p| p.id == "p_anthropic_custom"));
 
         // 4. Test Model Catalog
@@ -5420,7 +5604,8 @@ mod tests {
         };
         let catalog_res = dispatcher.handle_request(catalog_req).await;
         assert!(catalog_res.is_success());
-        let catalog: custos_domain::ModelCatalogResult = serde_json::from_value(catalog_res.result.unwrap()).unwrap();
+        let catalog: custos_domain::ModelCatalogResult =
+            serde_json::from_value(catalog_res.result.unwrap()).unwrap();
         assert!(!catalog.models.is_empty());
         assert!(catalog.models.iter().any(|m| m.id == "claude-3-7-sonnet"));
 
@@ -5438,7 +5623,11 @@ mod tests {
         let pricing_res = dispatcher.handle_request(pricing_req).await;
         assert!(pricing_res.is_success());
         let price_body = pricing_res.result.unwrap();
-        let cost = price_body.get("estimated_cost_usd").unwrap().as_f64().unwrap();
+        let cost = price_body
+            .get("estimated_cost_usd")
+            .unwrap()
+            .as_f64()
+            .unwrap();
         assert!((cost - 0.465).abs() < 1e-4);
 
         // 6. Delete Provider
@@ -5449,17 +5638,24 @@ mod tests {
         };
         let del_res = dispatcher.handle_request(del_req).await;
         assert!(del_res.is_success());
-        assert_eq!(del_res.result.unwrap().get("deleted").unwrap().as_bool(), Some(true));
+        assert_eq!(
+            del_res.result.unwrap().get("deleted").unwrap().as_bool(),
+            Some(true)
+        );
     }
 
     #[tokio::test]
     async fn test_oauth_api_lifecycle() {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("custos_oauth_test.db");
-        let store = Arc::new(custos_persistence::SqliteTaskStore::new(&db_path.to_string_lossy()).unwrap());
+        let store =
+            Arc::new(custos_persistence::SqliteTaskStore::new(&db_path.to_string_lossy()).unwrap());
         let task_service = Arc::new(TaskService::new(store.clone()));
         let session_manager = Arc::new(SessionManager::with_store(store.clone()));
-        let bridge_service = Arc::new(BridgeService::new(session_manager.clone(), task_service.clone()));
+        let bridge_service = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
         let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
             .with_providers(Arc::new(store.providers().clone()));
 
@@ -5474,13 +5670,25 @@ mod tests {
             }),
         };
         let auth_res = dispatcher.handle_request(auth_req).await;
-        assert!(auth_res.is_success(), "auth_res failed: {:?}", auth_res.error);
+        assert!(
+            auth_res.is_success(),
+            "auth_res failed: {:?}",
+            auth_res.error
+        );
         let auth_val = auth_res.result.unwrap();
         let auth_url = auth_val.get("authorization_url").unwrap().as_str().unwrap();
         assert!(auth_url.contains("client_id=custos-test-client"));
         assert!(auth_url.contains("code_challenge="));
         assert!(auth_url.contains("code_challenge_method=S256"));
-        assert!(auth_val.get("code_verifier").unwrap().as_str().unwrap().len() >= 43);
+        assert!(
+            auth_val
+                .get("code_verifier")
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .len()
+                >= 43
+        );
 
         // 2. Query empty OAuth token
         let get_req = ApiRequest {
@@ -5517,7 +5725,10 @@ mod tests {
         assert!(get_res_2.is_success());
         let tok_val = get_res_2.result.unwrap();
         assert_eq!(tok_val.get("connected").unwrap().as_bool(), Some(true));
-        assert_eq!(tok_val.get("has_refresh_token").unwrap().as_bool(), Some(true));
+        assert_eq!(
+            tok_val.get("has_refresh_token").unwrap().as_bool(),
+            Some(true)
+        );
         assert!(tok_val.get("access_token").is_none());
         assert!(tok_val.get("refresh_token").is_none());
 
@@ -5531,7 +5742,10 @@ mod tests {
         assert!(llm_res.is_success());
         let llm_body = llm_res.result.unwrap();
         assert_eq!(llm_body.get("configured").unwrap().as_bool(), Some(true));
-        assert_eq!(llm_body.get("active_provider").unwrap().as_str(), Some("OpenAI (OAuth PKCE)"));
+        assert_eq!(
+            llm_body.get("active_provider").unwrap().as_str(),
+            Some("OpenAI (OAuth PKCE)")
+        );
 
         // 6. Delete OAuth token via v1.oauth.delete
         let del_req = ApiRequest {
@@ -5541,7 +5755,10 @@ mod tests {
         };
         let del_res = dispatcher.handle_request(del_req).await;
         assert!(del_res.is_success());
-        assert_eq!(del_res.result.unwrap().get("deleted").unwrap().as_bool(), Some(true));
+        assert_eq!(
+            del_res.result.unwrap().get("deleted").unwrap().as_bool(),
+            Some(true)
+        );
 
         // 7. Verify token is gone
         let get_req_3 = ApiRequest {
@@ -5554,5 +5771,3 @@ mod tests {
         assert!(get_res_3.result.unwrap().is_null());
     }
 }
-
-

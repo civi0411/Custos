@@ -154,7 +154,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
 
         // Secondary check: directly inspect token table in daemon
         const tokenRes = await daemonClient.getOAuthToken(targetProvider);
-        if (tokenRes && tokenRes.access_token) {
+        if (tokenRes && (tokenRes.connected || tokenRes.access_token)) {
           stopPolling();
           setCallbackStatus('completed');
           setExchangeSuccess(true);
@@ -335,7 +335,6 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
         await onSaveProvider({
           service: 'openai',
           apiKey: rawInput,
-          model: 'gpt-4o',
           fastMode: true,
         });
         setExchangeSuccess(true);
@@ -459,7 +458,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
       service: providerService,
       apiKey: apiKey.trim(),
       endpointUrl: endpointUrl.trim() || undefined,
-      model: selectedModel || (providerService === 'anthropic' ? 'claude-3-7-sonnet' : 'gpt-4o'),
+      model: selectedModel || undefined,
       contextWindow,
       fastMode,
     });
@@ -469,14 +468,8 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   };
 
   const handleStartOAuthConnect = async () => {
-    setOauthStep('authorizing');
-    setTimeout(async () => {
-      await handleConnectOAuth(oauthProvider, oauthAccountName, oauthEmail);
-      setOauthStep('success');
-      setTimeout(() => {
-        onClose();
-      }, 700);
-    }, 1200);
+    setOauthStep('idle');
+    setExchangeError('PKCE is currently wired through the daemon callback flow. Use the OpenAI PKCE flow or connect this provider with an API key.');
   };
 
   const selectedOption = providerOptions.find((opt) => opt.value === providerService);

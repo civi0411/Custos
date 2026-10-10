@@ -18,6 +18,7 @@ export function StudioPage() {
     setIsNewSessionOpen,
     handleSendMessage,
     handleClearHistory,
+    handleDeleteConversation,
     handleAcceptAndRun,
     handleRejectDiff,
     handleCopyDiff,
@@ -123,6 +124,7 @@ export function StudioPage() {
         onNewSession={() => setIsNewSessionOpen(true)}
         onSendMessage={handleSendMessage}
         onClearHistory={handleClearHistory}
+        onDeleteConversation={handleDeleteConversation}
         onAcceptAndRun={handleAcceptAndRun}
         onRejectDiff={handleRejectDiff}
         onCopyDiff={handleCopyDiff}

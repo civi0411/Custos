@@ -150,6 +150,67 @@ impl TaskRuntime {
     pub fn dispatcher(&self) -> &Arc<super::dispatcher::WorkflowDispatcher> {
         &self.dispatcher
     }
+
+    async fn recover_completed_model_chat_turn(&self, task_id: &str) -> Result<(), DomainError> {
+        let Some(ref kernel) = self.kernel else {
+            return Ok(());
+        };
+        let Some(ref store) = self.run_store else {
+            return Ok(());
+        };
+
+        let Some(task) = kernel.get_task(task_id).await? else {
+            return Ok(());
+        };
+        if task.metadata.get("kind").and_then(|v| v.as_str()) != Some("conversation_chat_turn") {
+            return Ok(());
+        }
+
+        let mut recovered_any = false;
+        let active_workers = store.list_worker_runs_for_task(task_id).await?;
+        for mut worker in active_workers
+            .into_iter()
+            .filter(|w| w.status == RunStatus::Active)
+        {
+            let Some(run_id) = worker.run_id.clone() else {
+                continue;
+            };
+            let Some(mut run) = store.get_run(&run_id).await? else {
+                continue;
+            };
+
+            let model_mode =
+                run.metadata.get("actual_mode").and_then(|v| v.as_str()) == Some("model");
+            let has_model_output = run
+                .metadata
+                .get("output")
+                .and_then(|v| v.as_str())
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false);
+
+            if run.status == RunStatus::Active && model_mode && has_model_output {
+                run.transition(RunStatus::Completed)?;
+                run.metadata["completion_reason"] =
+                    serde_json::json!("recovered_model_turn_completed");
+                store.save_run(&run).await?;
+                worker.transition(RunStatus::Completed)?;
+                store.save_worker_run(&worker).await?;
+                recovered_any = true;
+            }
+        }
+
+        if recovered_any {
+            if let Some(claim) = self.dispatcher.get_active_claim(task_id, None).await {
+                let _ = self.dispatcher.release_claim(&claim.id).await;
+            }
+            if let Some(mut claim) = store.get_active_claim(task_id, None).await? {
+                claim.release()?;
+                store.update_claim(&claim).await?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl Default for TaskRuntime {
@@ -161,6 +222,8 @@ impl Default for TaskRuntime {
 #[async_trait]
 impl WorkflowPort for TaskRuntime {
     async fn start_run(&self, cmd: StartRunCommand) -> Result<RunHandle, DomainError> {
+        self.recover_completed_model_chat_turn(&cmd.task_id).await?;
+
         // 1. Atomic claim via WorkflowDispatcher (Gate A Fencing & double-dispatch prevention)
         let claim = self
             .dispatcher
@@ -452,6 +515,16 @@ impl WorkflowPort for TaskRuntime {
                 return Err(e);
             }
         };
+
+        if actual_mode == "model" && run.status == RunStatus::Active {
+            run.transition(RunStatus::Completed)?;
+            wrun.transition(RunStatus::Completed)?;
+            run.metadata["completion_reason"] = serde_json::json!("model_turn_completed");
+            if let Some(ref store) = self.run_store {
+                let _ = store.save_run(&run).await;
+                let _ = store.save_worker_run(&wrun).await;
+            }
+        }
 
         if run.status.is_terminal() {
             if let Some(ref mut l) = lease {
@@ -748,8 +821,8 @@ mod tests {
 
         let handle = runtime.start_run(cmd).await.unwrap();
         assert_eq!(handle.task_id, "task_chat_01");
-        assert_eq!(handle.status, RunStatus::Active);
-        assert!(handle.completed_at.is_none());
+        assert_eq!(handle.status, RunStatus::Completed);
+        assert!(handle.completed_at.is_some());
         assert!(handle.output.is_some());
         let output = handle.output.unwrap();
         assert!(output.contains("Completed turn response for task task_chat_01"));
@@ -757,36 +830,87 @@ mod tests {
 
         let runs = runtime.active_runs.read().await;
         let run = runs.get(&handle.run_id).unwrap();
-        assert_eq!(run.status, RunStatus::Active);
+        assert_eq!(run.status, RunStatus::Completed);
         assert_eq!(run.metadata["actual_mode"], "model");
         assert_eq!(run.metadata["tokens_used"], 42);
         assert!(run.metadata["launch_attempt_id"].is_string());
+        assert_eq!(run.metadata["completion_reason"], "model_turn_completed");
         drop(runs);
 
-        // While the run is active, a subsequent start_run on the SAME task must be refused by fencing
+        // A completed model-only turn releases its claim, so a follow-up can reuse the task.
         let cmd2 = StartRunCommand::new("task_chat_01", "actor_user")
             .with_preferred_mode("model")
             .with_prompt("Second turn follow-up");
-        let err2 = runtime
+        let handle2 = runtime
             .start_run(cmd2)
             .await
-            .expect_err("Double-dispatch on active run must conflict");
-        assert!(matches!(err2, DomainError::Conflict(_)));
+            .expect("Follow-up model turn should succeed after claim release");
+        assert_eq!(handle2.status, RunStatus::Completed);
+    }
 
-        // Graceful cancellation frees the claim and transitions task/run
-        let cancel_receipt = runtime
-            .request_cancel(&handle.run_id, "Turn finished")
+    #[tokio::test]
+    async fn test_task_runtime_recovers_persisted_completed_chat_turn_claim() {
+        use custos_core::contracts::kernel::TrustedKernel;
+        use custos_core::TaskStore;
+        use custos_domain::{DispatchClaim, Task};
+        use custos_persistence::SqliteTaskStore;
+
+        let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+        let mut task = Task::new(
+            "task_chat_recover_01".into(),
+            "Recover completed chat turn".into(),
+        );
+        task.metadata = serde_json::json!({ "kind": "conversation_chat_turn" });
+        store.save_task(&task).await.unwrap();
+
+        let mut stale_run = Run::new(task.id.clone(), 1);
+        stale_run.transition(RunStatus::Active).unwrap();
+        stale_run.metadata["actual_mode"] = serde_json::json!("model");
+        stale_run.metadata["output"] = serde_json::json!("already completed output");
+        store.save_run(&stale_run).await.unwrap();
+
+        let mut stale_worker = WorkerRun::new(task.id.clone(), "daemon_user".into(), 3);
+        stale_worker.run_id = Some(stale_run.id.clone());
+        stale_worker.transition(RunStatus::Active).unwrap();
+        store.save_worker_run(&stale_worker).await.unwrap();
+
+        let mut stale_claim = DispatchClaim::new(&task.id, "daemon_user", 1);
+        stale_claim.mark_dispatched(&stale_worker.id).unwrap();
+        store.claim_ready(&stale_claim).await.unwrap();
+
+        let kernel = Arc::new(TrustedKernel::new(store.clone()));
+        let model = Arc::new(TestMockModel);
+        let runtime = TaskRuntime::new()
+            .with_kernel(kernel)
+            .with_model(model)
+            .with_run_store(store.clone());
+
+        let handle = runtime
+            .start_run(
+                StartRunCommand::new(&task.id, "actor_user")
+                    .with_preferred_mode("model")
+                    .with_prompt("follow-up after stale claim"),
+            )
             .await
+            .expect("stale completed model chat turn should be recovered before claiming");
+
+        assert_eq!(handle.status, RunStatus::Completed);
+        let stale_run_after = store.get_run(&stale_run.id).await.unwrap().unwrap();
+        assert_eq!(stale_run_after.status, RunStatus::Completed);
+        assert_eq!(
+            stale_run_after.metadata["completion_reason"],
+            "recovered_model_turn_completed"
+        );
+        let stale_worker_after = store
+            .get_worker_run(&stale_worker.id)
+            .await
+            .unwrap()
             .unwrap();
-        assert_eq!(cancel_receipt.run_id, handle.run_id);
-
-        let cmd3 = StartRunCommand::new("task_chat_01", "actor_user")
-            .with_preferred_mode("model")
-            .with_prompt("Subsequent turn after cancel");
-        let handle3 = runtime
-            .start_run(cmd3)
+        assert_eq!(stale_worker_after.status, RunStatus::Completed);
+        assert!(store
+            .get_active_claim(&task.id, None)
             .await
-            .expect("Subsequent turn should succeed after claim release");
-        assert_eq!(handle3.status, RunStatus::Active);
+            .unwrap()
+            .is_none());
     }
 }

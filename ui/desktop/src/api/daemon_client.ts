@@ -241,6 +241,12 @@ export class DaemonClient {
     return this.request<Session[]>('v1.sessions.list', {});
   }
 
+  async deleteSession(sessionId: string): Promise<{ deleted: boolean; session_id: string }> {
+    return this.request<{ deleted: boolean; session_id: string }>('v1.sessions.delete', {
+      session_id: sessionId,
+    });
+  }
+
   async getSessionJournal(sessionId: string): Promise<SessionJournalEntry[]> {
     return this.request<SessionJournalEntry[]>('v1.sessions.journal', {
       session_id: sessionId,
