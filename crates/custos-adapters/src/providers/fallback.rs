@@ -21,9 +21,50 @@ pub struct ProviderCandidate {
     pub provider: Arc<dyn ModelProvider>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FallbackErrorClass {
+    /// Credential, rate-limit, or capacity limits (HTTP 429, 503, 401, 402, 403, timeouts)
+    /// Triggers cooldown and fallback to the next candidate.
+    CredentialOrCapacity,
+    /// Request-scoped client errors (HTTP 400, validation, bad params)
+    /// Must NOT cooldown healthy credentials to avoid false lockout.
+    RequestScoped,
+}
+
+/// Classify domain and provider errors to determine if route cooldown is appropriate
+pub fn classify_fallback_error(err: &DomainError) -> FallbackErrorClass {
+    let msg = err.to_string().to_lowercase();
+    if msg.contains("429")
+        || msg.contains("rate limit")
+        || msg.contains("quota")
+        || msg.contains("overloaded")
+        || msg.contains("503")
+        || msg.contains("timeout")
+        || msg.contains("401")
+        || msg.contains("unauthorized")
+    {
+        FallbackErrorClass::CredentialOrCapacity
+    } else if msg.contains("validation")
+        || msg.contains("invalid parameter")
+        || msg.contains("context length exceeded")
+        || msg.contains("400")
+        || msg.contains("bad request")
+    {
+        FallbackErrorClass::RequestScoped
+    } else {
+        FallbackErrorClass::CredentialOrCapacity
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RouteCooldownEntry {
+    until: Instant,
+    backoff_level: u32,
+}
+
 #[derive(Clone, Default)]
 pub struct CooldownTracker {
-    cooldowns: Arc<RwLock<HashMap<String, Instant>>>,
+    cooldowns: Arc<RwLock<HashMap<String, RouteCooldownEntry>>>,
 }
 
 impl CooldownTracker {
@@ -33,25 +74,48 @@ impl CooldownTracker {
         }
     }
 
+    /// Record a failure with exponential backoff calculation (1s, 2s, 4s, 8s, up to 240s)
+    pub async fn record_failure(&self, route_id: &str) -> Duration {
+        let mut guard = self.cooldowns.write().await;
+        let entry = guard.entry(route_id.to_string()).or_insert(RouteCooldownEntry {
+            until: Instant::now(),
+            backoff_level: 0,
+        });
+
+        entry.backoff_level = (entry.backoff_level + 1).min(8);
+        let base_secs = 2u64.pow(entry.backoff_level.saturating_sub(1));
+        let duration = Duration::from_secs(base_secs.min(240));
+
+        entry.until = Instant::now() + duration;
+        warn!(
+            "Provider route '{}' penalized (level {}), cooldown for {:?}",
+            route_id, entry.backoff_level, duration
+        );
+        duration
+    }
+
     /// Mark a route as cooled down until now + duration
     pub async fn mark_cooldown(&self, route_id: &str, duration: Duration) {
-        let until = Instant::now() + duration;
         let mut guard = self.cooldowns.write().await;
-        guard.insert(route_id.to_string(), until);
+        let entry = guard.entry(route_id.to_string()).or_insert(RouteCooldownEntry {
+            until: Instant::now(),
+            backoff_level: 1,
+        });
+        entry.until = Instant::now() + duration;
         warn!("Provider route '{}' put in cooldown for {:?}", route_id, duration);
     }
 
     /// Check if a route is currently available (not in cooldown)
     pub async fn is_available(&self, route_id: &str) -> bool {
         let guard = self.cooldowns.read().await;
-        if let Some(until) = guard.get(route_id) {
-            Instant::now() >= *until
+        if let Some(entry) = guard.get(route_id) {
+            Instant::now() >= entry.until
         } else {
             true
         }
     }
 
-    /// Reset cooldown for a route
+    /// Reset cooldown and backoff level for a route on successful request
     pub async fn clear(&self, route_id: &str) {
         let mut guard = self.cooldowns.write().await;
         guard.remove(route_id);
@@ -99,10 +163,16 @@ impl ModelProvider for FallbackRouter {
                 }
                 Err(err) => {
                     warn!("Candidate '{}' failed with error: {}", candidate.id, err);
-                    self.tracker
-                        .mark_cooldown(&candidate.id, Duration::from_secs(30))
-                        .await;
-                    last_err = Some(err);
+                    match classify_fallback_error(&err) {
+                        FallbackErrorClass::CredentialOrCapacity => {
+                            self.tracker.record_failure(&candidate.id).await;
+                            last_err = Some(err);
+                        }
+                        FallbackErrorClass::RequestScoped => {
+                            // Request-scoped error must NOT lock out healthy candidate
+                            return Err(err);
+                        }
+                    }
                 }
             }
         }
@@ -152,10 +222,15 @@ impl ModelProvider for FallbackRouter {
                 }
                 Err(err) => {
                     warn!("Candidate '{}' execute_turn failed: {}", candidate.id, err);
-                    self.tracker
-                        .mark_cooldown(&candidate.id, Duration::from_secs(30))
-                        .await;
-                    last_err = Some(err);
+                    match classify_fallback_error(&err) {
+                        FallbackErrorClass::CredentialOrCapacity => {
+                            self.tracker.record_failure(&candidate.id).await;
+                            last_err = Some(err);
+                        }
+                        FallbackErrorClass::RequestScoped => {
+                            return Err(err);
+                        }
+                    }
                 }
             }
         }
@@ -165,3 +240,4 @@ impl ModelProvider for FallbackRouter {
         }))
     }
 }
+

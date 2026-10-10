@@ -44,13 +44,42 @@ pub enum GeminiPart {
 pub struct GeminiFunctionCall {
     pub name: String,
     pub args: Value,
+    #[serde(rename = "thoughtSignature", skip_serializing_if = "Option::is_none")]
+    pub thought_signature: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GeminiFunctionResponse {
     pub name: String,
     pub response: Value,
+    #[serde(rename = "thoughtSignature", skip_serializing_if = "Option::is_none")]
+    pub thought_signature: Option<String>,
 }
+
+/// Cache of Gemini thought signatures indexed by tool call ID to prevent 400 Corrupted thought signature errors
+#[derive(Debug, Default)]
+pub struct ThoughtSignatureStore {
+    signatures: std::sync::RwLock<std::collections::HashMap<String, String>>,
+}
+
+impl ThoughtSignatureStore {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn insert(&self, tool_call_id: &str, signature: &str) {
+        if let Ok(mut lock) = self.signatures.write() {
+            lock.insert(tool_call_id.to_string(), signature.to_string());
+        }
+    }
+
+    pub fn get(&self, tool_call_id: &str) -> Option<String> {
+        self.signatures.read().ok()?.get(tool_call_id).cloned()
+    }
+}
+
+pub static GLOBAL_THOUGHT_STORE: once_cell::sync::Lazy<ThoughtSignatureStore> =
+    once_cell::sync::Lazy::new(ThoughtSignatureStore::new);
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GeminiGenerationConfig {
