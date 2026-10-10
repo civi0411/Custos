@@ -12,9 +12,9 @@ use custos_core::contracts::storage::{
 use custos_core::contracts::workspace::WorkspaceRepository as WorkspaceRepoPort;
 use custos_core::kernel::{SessionStore, TaskEvent, TaskStore};
 use custos_domain::{
-    ContinuationPacket, DecisionRecord, DomainError, ExecutionReceipt, ExecutionWorkspace,
-    NodePlacement, ReplanRecord, Run, Session, SessionId, SessionJournalEntry, Span, Task,
-    WorkerRun, WorkflowRevision, WorkspaceId, WorkspaceStatus,
+    ContinuationPacket, DecisionRecord, DispatchClaim, DomainError, ExecutionReceipt,
+    ExecutionWorkspace, LaunchAttempt, NodePlacement, ReplanRecord, Run, Session, SessionId,
+    SessionJournalEntry, Span, Task, WorkerRun, WorkflowRevision, WorkspaceId, WorkspaceStatus,
 };
 
 /// SQLite-backed persistent storage implementing TaskStore, SessionStore, OutboxPort, RunPort,
@@ -541,6 +541,34 @@ impl RunPort for SqliteTaskStore {
 
     async fn list_worker_runs_for_run(&self, run_id: &str) -> Result<Vec<WorkerRun>, DomainError> {
         self.run_repo.list_worker_runs_for_run(run_id)
+    }
+
+    async fn claim_ready(&self, claim: &DispatchClaim) -> Result<(), DomainError> {
+        self.run_repo.claim_ready(claim)
+    }
+
+    async fn update_claim(&self, claim: &DispatchClaim) -> Result<(), DomainError> {
+        self.run_repo.update_claim(claim)
+    }
+
+    async fn get_claim(&self, claim_id: &str) -> Result<Option<DispatchClaim>, DomainError> {
+        self.run_repo.get_claim(claim_id)
+    }
+
+    async fn get_active_claim(
+        &self,
+        task_id: &str,
+        node_id: Option<&str>,
+    ) -> Result<Option<DispatchClaim>, DomainError> {
+        self.run_repo.get_active_claim(task_id, node_id)
+    }
+
+    async fn save_launch_attempt(&self, attempt: &LaunchAttempt) -> Result<(), DomainError> {
+        self.run_repo.save_launch_attempt(attempt)
+    }
+
+    async fn get_launch_attempt(&self, attempt_id: &str) -> Result<Option<LaunchAttempt>, DomainError> {
+        self.run_repo.get_launch_attempt(attempt_id)
     }
 }
 

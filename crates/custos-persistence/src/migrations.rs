@@ -90,5 +90,9 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         "../migrations/0026_provider_oauth_tokens.sql"
     ))?;
 
+    conn.execute_batch(include_str!(
+        "../migrations/0027_dispatch_claims_and_fencing.sql"
+    ))?;
+
     Ok(())
 }

@@ -67,7 +67,7 @@ impl WorkflowDispatcher {
             )));
         }
 
-        // 2. Check persistence for active worker runs if run_store is attached
+        // 2. Check persistence for active worker runs and active claims if run_store is attached
         if let Some(ref store) = self.run_store {
             let active_wruns = store.list_worker_runs_for_task(task_id).await?;
             if let Some(active) = active_wruns
@@ -77,6 +77,19 @@ impl WorkflowDispatcher {
                 return Err(DomainError::Conflict(format!(
                     "Task '{}' is already claimed and actively running under worker run '{}' (assigned to '{}')",
                     task_id, active.id, active.worker_id
+                )));
+            }
+
+            if let Ok(Some(active_claim)) = store.get_active_claim(task_id, node_id).await {
+                return Err(DomainError::Conflict(format!(
+                    "Task '{}'{} is already claimed by '{}' (claim '{}', status {}) in persistent store",
+                    task_id,
+                    node_id
+                        .map(|n| format!(" [node: {}]", n))
+                        .unwrap_or_default(),
+                    active_claim.assignee,
+                    active_claim.id,
+                    active_claim.status
                 )));
             }
         }
@@ -111,6 +124,10 @@ impl WorkflowDispatcher {
             claim = claim.with_node_id(nid);
         }
 
+        if let Some(ref store) = self.run_store {
+            store.claim_ready(&claim).await?;
+        }
+
         index_guard.insert(key, claim.id.clone());
         claims_guard.insert(claim.id.clone(), claim.clone());
 
@@ -128,6 +145,9 @@ impl WorkflowDispatcher {
             })?;
 
         claim.release()?;
+        if let Some(ref store) = self.run_store {
+            let _ = store.update_claim(claim).await;
+        }
 
         let key = Self::index_key(&claim.task_id, claim.node_id.as_deref());
         let mut index_guard = self.active_index.write().await;
@@ -154,7 +174,11 @@ impl WorkflowDispatcher {
                 id: claim_id.to_string(),
             })?;
 
-        claim.mark_dispatched(worker_run_id)
+        claim.mark_dispatched(worker_run_id)?;
+        if let Some(ref store) = self.run_store {
+            let _ = store.update_claim(claim).await;
+        }
+        Ok(())
     }
 
     /// Retrieves a claim by its ID.
