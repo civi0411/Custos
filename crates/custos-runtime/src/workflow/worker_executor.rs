@@ -6,9 +6,10 @@
 
 use async_trait::async_trait;
 use custos_core::contracts::harness::AgentRuntimePort;
+use custos_core::contracts::kernel::KernelPort;
 use custos_core::contracts::sandbox::SandboxPort;
 use custos_domain::oi::{WorkerResult, WorkerStatus};
-use custos_domain::{new_id, ActionIntent, DomainError, Permit, RiskClass, RiskLevel};
+use custos_domain::{new_id, ActionIntent, DomainError, RiskLevel};
 use custos_provider::request::ProviderRequest;
 use custos_provider::ModelPort;
 use std::sync::Arc;
@@ -16,6 +17,7 @@ use std::sync::Arc;
 use super::graph_runtime::StepExecutor;
 
 pub struct WorkerExecutor {
+    kernel: Option<Arc<dyn KernelPort>>,
     model: Option<Arc<dyn ModelPort>>,
     harness: Option<Arc<dyn AgentRuntimePort>>,
     sandbox: Option<Arc<dyn SandboxPort>>,
@@ -24,10 +26,16 @@ pub struct WorkerExecutor {
 impl WorkerExecutor {
     pub fn new() -> Self {
         Self {
+            kernel: None,
             model: None,
             harness: None,
             sandbox: None,
         }
+    }
+
+    pub fn with_kernel(mut self, kernel: Arc<dyn KernelPort>) -> Self {
+        self.kernel = Some(kernel);
+        self
     }
 
     pub fn with_model(mut self, model: Arc<dyn ModelPort>) -> Self {
@@ -43,6 +51,10 @@ impl WorkerExecutor {
     pub fn with_sandbox(mut self, sandbox: Arc<dyn SandboxPort>) -> Self {
         self.sandbox = Some(sandbox);
         self
+    }
+
+    pub fn kernel(&self) -> Option<&Arc<dyn KernelPort>> {
+        self.kernel.as_ref()
     }
 
     pub fn model(&self) -> Option<&Arc<dyn ModelPort>> {
@@ -128,14 +140,15 @@ impl StepExecutor for WorkerExecutor {
                 );
                 action.assurance = custos_domain::Assurance::CustosMediated;
 
-                let permit = Permit::new(
-                    node_id.to_string(),
-                    action.id.clone(),
-                    sandbox.driver_id().to_string(),
-                    None,
-                    RiskClass::Low,
-                    60,
-                );
+                let permit = if let Some(ref kernel) = self.kernel {
+                    let p = kernel.request_permit(node_id, &action, "worker_executor").await?;
+                    kernel.consume_permit(&p.id, &action).await?
+                } else {
+                    return Err(DomainError::Unauthorized(format!(
+                        "Cannot execute tool call on node '{}': KernelPort required to evaluate policy and mint ExecutionPermit",
+                        node_id
+                    )));
+                };
 
                 let receipt = sandbox.execute(&action, &permit).await?;
                 serde_json::to_value(&receipt)
@@ -275,5 +288,33 @@ mod tests {
             }
             other => panic!("Expected DomainError::Validation, got {:?}", other),
         }
+    }
+
+    struct DummySandbox;
+    #[async_trait]
+    impl SandboxPort for DummySandbox {
+        fn driver_id(&self) -> &str {
+            "dummy"
+        }
+        async fn execute(
+            &self,
+            _intent: &ActionIntent,
+            _permit: &custos_domain::Permit,
+        ) -> Result<custos_domain::ExecutionReceipt, DomainError> {
+            unreachable!()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_worker_executor_tool_call_without_kernel_unauthorized() {
+        let executor = WorkerExecutor::new().with_sandbox(Arc::new(DummySandbox));
+        let inputs = serde_json::json!({ "tool": "developer__bash" });
+
+        let err = executor
+            .execute_step("node_tool", "tool_call", &inputs)
+            .await
+            .expect_err("Tool call without KernelPort must be rejected as Unauthorized");
+
+        assert!(matches!(err, DomainError::Unauthorized(_)));
     }
 }
