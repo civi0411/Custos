@@ -390,6 +390,32 @@ impl RunRepository {
         Ok(attempt)
     }
 
+    pub fn reconcile_runs_on_startup(&self) -> Result<usize, DomainError> {
+        let conn = self.db.lock()?;
+        let now = chrono::Utc::now().to_rfc3339();
+
+        let updated_wruns = conn
+            .execute(
+                "UPDATE worker_runs SET status = 'failed', ended_at = ?1 WHERE status = 'active'",
+                params![now],
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let updated_runs = conn
+            .execute(
+                "UPDATE runs SET status = 'failed', ended_at = ?1 WHERE status = 'active'",
+                params![now],
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let _ = conn.execute(
+            "UPDATE dispatch_claims SET status = 'released', released_at = ?1 WHERE status IN ('pending', 'dispatched')",
+            params![now],
+        );
+
+        Ok(updated_wruns + updated_runs)
+    }
+
     fn parse_claim_status(s: &str) -> ClaimStatus {
         match s {
             "pending" => ClaimStatus::Pending,
@@ -554,5 +580,43 @@ mod tests {
         assert_eq!(loaded.actual_mode.as_deref(), Some("model"));
         assert_eq!(loaded.harness_id.as_deref(), Some("claude-sonnet"));
         assert_eq!(loaded.status, LaunchStatus::Launched);
+    }
+
+    #[test]
+    fn test_reconcile_runs_on_startup() {
+        let db = DbConnection::open_in_memory().unwrap();
+        {
+            let c = db.lock().unwrap();
+            run_migrations(&c).unwrap();
+            c.execute(
+                "INSERT INTO tasks (id, title, status, created_at, updated_at) VALUES ('task_rec_test', 'Rec Task', 'running', 'now', 'now')",
+                [],
+            ).unwrap();
+            c.execute(
+                "INSERT INTO runs (id, task_id, status, attempt, current_span_num, started_at) VALUES ('run_stale', 'task_rec_test', 'active', 1, 1, 'now')",
+                [],
+            ).unwrap();
+            c.execute(
+                "INSERT INTO worker_runs (id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at) VALUES ('wrun_stale', 'run_stale', 'task_rec_test', 'worker_alpha', 1, 3, 'active', 'now')",
+                [],
+            ).unwrap();
+            c.execute(
+                "INSERT INTO dispatch_claims (id, task_id, node_id, assignee, depth, status, claimed_at) VALUES ('claim_stale', 'task_rec_test', '', 'worker_alpha', 1, 'dispatched', 'now')",
+                [],
+            ).unwrap();
+        }
+
+        let repo = RunRepository::new(db);
+        let reconciled_count = repo.reconcile_runs_on_startup().expect("Reconcile should succeed");
+        assert_eq!(reconciled_count, 2);
+
+        let wrun = repo.get_worker_run("wrun_stale").unwrap().unwrap();
+        assert_eq!(wrun.status, RunStatus::Failed);
+
+        let run = repo.get_run("run_stale").unwrap().unwrap();
+        assert_eq!(run.status, RunStatus::Failed);
+
+        let claim = repo.get_claim("claim_stale").unwrap().unwrap();
+        assert_eq!(claim.status, ClaimStatus::Released);
     }
 }

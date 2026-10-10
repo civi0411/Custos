@@ -26,6 +26,36 @@ pub fn resolve_openai_client_id() -> String {
         .unwrap_or_else(|_| DEFAULT_OPENAI_CLIENT_ID.to_string())
 }
 
+/// Resolves standard OpenAI OAuth scope.
+/// Allows OPENAI_OAUTH_SCOPE override, defaulting to standard `openid profile email offline_access`.
+pub fn resolve_openai_scope() -> String {
+    std::env::var("OPENAI_OAUTH_SCOPE")
+        .unwrap_or_else(|_| DEFAULT_OPENAI_SCOPE.to_string())
+}
+
+/// Helper to extract `chatgpt_account_id` from a JWT access token's `https://api.openai.com/auth` claim.
+pub fn extract_chatgpt_account_id(token: &str) -> Option<String> {
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    let raw = parts[1];
+    let padded = match raw.len() % 4 {
+        2 => format!("{raw}=="),
+        3 => format!("{raw}="),
+        _ => raw.to_string(),
+    };
+    let decoded = URL_SAFE_NO_PAD
+        .decode(padded.trim_end_matches('='))
+        .ok()
+        .or_else(|| base64::engine::general_purpose::STANDARD.decode(&padded).ok())?;
+    let val: serde_json::Value = serde_json::from_slice(&decoded).ok()?;
+    val.get("https://api.openai.com/auth")
+        .and_then(|auth| auth.get("chatgpt_account_id"))
+        .and_then(|id| id.as_str())
+        .map(|s| s.to_string())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PkceChallenge {
     pub code_verifier: String,
@@ -121,7 +151,8 @@ impl OAuthPkceManager {
             redirect_uri
         };
 
-        let scope_str = scope.unwrap_or(DEFAULT_OPENAI_SCOPE);
+        let default_scope = resolve_openai_scope();
+        let scope_str = scope.unwrap_or(&default_scope);
 
         parsed_url
             .query_pairs_mut()
@@ -388,5 +419,22 @@ mod tests {
             OAuthPkceManager::extract_code_from_input(url_no_scheme),
             "auth_code_xyz"
         );
+    }
+
+    #[test]
+    fn test_extract_chatgpt_account_id() {
+        // Construct a sample JWT payload with chatgpt_account_id
+        let header = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9";
+        let payload_json = r#"{"https://api.openai.com/auth":{"chatgpt_account_id":"772c9eaf-a4ba-4606-b55a-a15c6b23e52a","chatgpt_plan_type":"plus"}}"#;
+        let payload_b64 = URL_SAFE_NO_PAD.encode(payload_json);
+        let sig = "signature_part";
+        let jwt = format!("{header}.{payload_b64}.{sig}");
+
+        let account_id = extract_chatgpt_account_id(&jwt);
+        assert_eq!(account_id.as_deref(), Some("772c9eaf-a4ba-4606-b55a-a15c6b23e52a"));
+
+        // Invalid JWT returns None
+        assert_eq!(extract_chatgpt_account_id("sk-proj-12345"), None);
+        assert_eq!(extract_chatgpt_account_id("bad.token"), None);
     }
 }

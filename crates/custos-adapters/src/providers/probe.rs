@@ -43,7 +43,18 @@ pub async fn probe_endpoint_models(
     match provider_type {
         "anthropic" => probe_anthropic_endpoint(&client, base, api_key).await,
         "gemini" | "google" => probe_gemini_endpoint(&client, base, api_key).await,
-        _ => probe_openai_endpoint(&client, base, api_key).await,
+        _ => {
+            if let Some(key) = api_key {
+                if key.starts_with("eyJ") {
+                    if let Ok(models) = probe_chatgpt_codex_endpoint(&client, key).await {
+                        if !models.is_empty() {
+                            return Ok(models);
+                        }
+                    }
+                }
+            }
+            probe_openai_endpoint(&client, base, api_key).await
+        }
     }
 }
 
@@ -198,6 +209,80 @@ pub fn parse_openai_models(body: &str) -> Result<Vec<ProbedModel>, DomainError> 
 
     if models.is_empty() {
         return Err(DomainError::Validation("The endpoint listed zero models".into()));
+    }
+
+    Ok(models)
+}
+
+/// Probes the ChatGPT Codex backend models endpoint for OAuth users:
+/// GET https://chatgpt.com/backend-api/codex/models?client_version=0.144.0
+pub async fn probe_chatgpt_codex_endpoint(
+    client: &reqwest::Client,
+    token: &str,
+) -> Result<Vec<ProbedModel>, DomainError> {
+    let url = "https://chatgpt.com/backend-api/codex/models?client_version=0.144.0";
+    let mut req = client
+        .get(url)
+        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .header("User-Agent", "codex-cli/0.144.0")
+        .header("Originator", "codex_cli_rs");
+
+    if let Some(account_id) = crate::providers::oauth_pkce::extract_chatgpt_account_id(token) {
+        req = req.header("ChatGPT-Account-ID", account_id);
+    }
+
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| DomainError::Validation(format!("Failed to reach Codex models at {url}: {e}")))?;
+
+    if !resp.status().is_success() {
+        return Err(DomainError::Validation(format!(
+            "Codex models endpoint returned HTTP status: {}",
+            resp.status()
+        )));
+    }
+
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| DomainError::Validation(format!("Failed reading Codex models response: {e}")))?;
+
+    parse_chatgpt_codex_models(&body)
+}
+
+pub fn parse_chatgpt_codex_models(body: &str) -> Result<Vec<ProbedModel>, DomainError> {
+    let v: Value = serde_json::from_str(body)
+        .map_err(|e| DomainError::Validation(format!("Codex models response was not valid JSON: {e}")))?;
+
+    let list = v
+        .get("models")
+        .and_then(|m| m.as_array())
+        .ok_or_else(|| DomainError::Validation("Codex response has no models array".into()))?;
+
+    let models: Vec<ProbedModel> = list
+        .iter()
+        .filter_map(|m| {
+            let id = m.get("slug")?.as_str()?.to_string();
+            let name = m
+                .get("title")
+                .or_else(|| m.get("name"))
+                .and_then(|n| n.as_str())
+                .map(|s| s.to_string());
+            let description = m.get("description").and_then(|d| d.as_str()).map(|s| s.to_string());
+            let context_window = m.get("max_tokens").and_then(|t| t.as_u64()).or(Some(200_000));
+            Some(ProbedModel {
+                id: id.clone(),
+                name: name.or(Some(id)),
+                context_window,
+                owned_by: Some("openai-chatgpt".into()),
+                description,
+            })
+        })
+        .collect();
+
+    if models.is_empty() {
+        return Err(DomainError::Validation("The Codex endpoint listed zero models".into()));
     }
 
     Ok(models)
@@ -381,5 +466,36 @@ mod tests {
         assert_eq!(models[0].id, "gemini-2.5-pro");
         assert_eq!(models[0].name, Some("Gemini 2.5 Pro".into()));
         assert_eq!(models[0].context_window, Some(1048576));
+    }
+
+    #[test]
+    fn test_parse_chatgpt_codex_models() {
+        let body = r#"{
+            "models": [
+                {
+                    "slug": "gpt-5.6-sol",
+                    "title": "GPT-5.6 Sol",
+                    "description": "Flagship Codex model",
+                    "max_tokens": 200000,
+                    "visibility": "list"
+                },
+                {
+                    "slug": "gpt-5.6-terra",
+                    "title": null,
+                    "description": null,
+                    "max_tokens": null,
+                    "visibility": "list"
+                }
+            ]
+        }"#;
+        let models = parse_chatgpt_codex_models(body).unwrap();
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0].id, "gpt-5.6-sol");
+        assert_eq!(models[0].name, Some("GPT-5.6 Sol".into()));
+        assert_eq!(models[0].context_window, Some(200000));
+        assert_eq!(models[0].owned_by, Some("openai-chatgpt".into()));
+        assert_eq!(models[1].id, "gpt-5.6-terra");
+        assert_eq!(models[1].name, Some("gpt-5.6-terra".into()));
+        assert_eq!(models[1].context_window, Some(200000));
     }
 }

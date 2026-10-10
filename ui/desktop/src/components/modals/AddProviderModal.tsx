@@ -883,8 +883,11 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                       {/* Callback Input & Exchange */}
                       <div className="space-y-1.5">
                         <label className="text-[11px] font-medium text-fg-editor">
-                          2. Manual Fallback (Optional): Paste Callback URL or Authorization Code
+                          2. Manual Fallback: Paste Callback URL or Authorization Code
                         </label>
+                        <p className="text-[11px] text-fg-muted">
+                          If loopback auto-capture is blocked by external software, copy the redirect URL from your browser address bar (containing <code className="text-workbench-accent font-mono text-[10px]">?code=...</code>) and paste it below:
+                        </p>
                         <input
                           type="text"
                           value={callbackInput}

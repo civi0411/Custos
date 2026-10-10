@@ -85,6 +85,7 @@ impl CustosRuntime {
     ) -> Result<Self, DomainError> {
         // Crash Recovery Reconcile (Gate 3): transition any InFlight effects to Uncertain on startup
         store.outbox().reconcile_on_startup()?;
+        store.reconcile_runs_on_startup()?;
         store.seed_canonical_data_if_empty()?;
         let task_service = Arc::new(TaskService::new(store.clone()));
         let session_manager = Arc::new(SessionManager::with_store(store.clone()));

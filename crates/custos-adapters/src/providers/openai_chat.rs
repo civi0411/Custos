@@ -214,9 +214,9 @@ impl ModelProvider for OpenAiChatProvider {
                 .await
                 .unwrap_or_else(|_| "<unreadable body>".into());
             error!(status = %status, body = %body, "OpenAI API returned non-success error");
-            return Err(DomainError::Validation(format!(
-                "OpenAI API error {status}: {body}"
-            )));
+            return Err(DomainError::Validation(
+                crate::providers::router::format_provider_error(status, &body, "OpenAI"),
+            ));
         }
 
         let res_body: ChatCompletionResponse = resp.json().await.map_err(|e| {

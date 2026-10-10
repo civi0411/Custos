@@ -208,11 +208,59 @@ pub fn default_canonical_models() -> Vec<ModelCatalogOption> {
         },
         // OpenAI / Codex
         ModelCatalogOption {
+            id: "gpt-5.6-sol".into(),
+            label: "GPT-5.6 Sol".into(),
+            description: Some("Flagship Codex reasoning and code generation model".into()),
+            provider_type: "openai".into(),
+            is_default: true,
+            default_effort: Some("medium".into()),
+            efforts: vec!["low".into(), "medium".into(), "high".into()],
+            supports_fast_mode: true,
+            context_window: Some(200_000),
+            pricing: lookup_model_pricing("gpt-5.6-sol"),
+        },
+        ModelCatalogOption {
+            id: "gpt-5.6-terra".into(),
+            label: "GPT-5.6 Terra".into(),
+            description: Some("High-throughput coding model optimized for agent workflows".into()),
+            provider_type: "openai".into(),
+            is_default: false,
+            default_effort: Some("medium".into()),
+            efforts: vec!["low".into(), "medium".into(), "high".into()],
+            supports_fast_mode: true,
+            context_window: Some(200_000),
+            pricing: lookup_model_pricing("gpt-5.6-terra"),
+        },
+        ModelCatalogOption {
+            id: "gpt-5.6-luna".into(),
+            label: "GPT-5.6 Luna".into(),
+            description: Some("Ultra-fast low-latency coding model for real-time iterations".into()),
+            provider_type: "openai".into(),
+            is_default: false,
+            default_effort: None,
+            efforts: vec![],
+            supports_fast_mode: true,
+            context_window: Some(200_000),
+            pricing: lookup_model_pricing("gpt-5.6-luna"),
+        },
+        ModelCatalogOption {
+            id: "gpt-5.5".into(),
+            label: "GPT-5.5".into(),
+            description: Some("Codex 5.5 general reasoning and synthesis model".into()),
+            provider_type: "openai".into(),
+            is_default: false,
+            default_effort: Some("medium".into()),
+            efforts: vec!["low".into(), "medium".into(), "high".into()],
+            supports_fast_mode: true,
+            context_window: Some(200_000),
+            pricing: lookup_model_pricing("gpt-5.5"),
+        },
+        ModelCatalogOption {
             id: "gpt-4o".into(),
             label: "GPT-4o".into(),
             description: Some("Flagship multimodal omni model".into()),
             provider_type: "openai".into(),
-            is_default: true,
+            is_default: false,
             default_effort: None,
             efforts: vec![],
             supports_fast_mode: true,
@@ -244,69 +292,57 @@ pub fn default_canonical_models() -> Vec<ModelCatalogOption> {
             pricing: lookup_model_pricing("gpt-4o-mini"),
         },
         ModelCatalogOption {
-            id: "gpt-4.1".into(),
-            label: "gpt-4.1".into(),
-            description: Some("OpenAI GPT-4.1 general model".into()),
-            provider_type: "openai".into(),
-            is_default: false,
-            default_effort: None,
-            efforts: vec![],
-            supports_fast_mode: true,
-            context_window: Some(1_000_000),
-            pricing: lookup_model_pricing("gpt-4.1"),
-        },
-        ModelCatalogOption {
-            id: "gpt-4.1-mini".into(),
-            label: "gpt-4.1-mini".into(),
-            description: Some("OpenAI GPT-4.1 mini model".into()),
-            provider_type: "openai".into(),
-            is_default: false,
-            default_effort: None,
-            efforts: vec![],
-            supports_fast_mode: true,
-            context_window: Some(1_000_000),
-            pricing: lookup_model_pricing("gpt-4.1-mini"),
-        },
-        ModelCatalogOption {
-            id: "gpt-4.1-nano".into(),
-            label: "gpt-4.1-nano".into(),
-            description: Some("OpenAI GPT-4.1 nano model".into()),
-            provider_type: "openai".into(),
-            is_default: false,
-            default_effort: None,
-            efforts: vec![],
-            supports_fast_mode: true,
-            context_window: Some(1_000_000),
-            pricing: lookup_model_pricing("gpt-4.1-nano"),
-        },
-        ModelCatalogOption {
-            id: "o3".into(),
-            label: "o3".into(),
-            description: Some("OpenAI reasoning model".into()),
+            id: "o1".into(),
+            label: "o1".into(),
+            description: Some("OpenAI flagship reasoning model for complex STEM and coding".into()),
             provider_type: "openai".into(),
             is_default: false,
             default_effort: Some("medium".into()),
             efforts: vec!["low".into(), "medium".into(), "high".into()],
             supports_fast_mode: true,
             context_window: Some(200_000),
-            pricing: lookup_model_pricing("o3"),
+            pricing: lookup_model_pricing("o1"),
         },
         ModelCatalogOption {
-            id: "o4-mini".into(),
-            label: "o4-mini".into(),
-            description: Some("OpenAI compact reasoning model".into()),
+            id: "o1-mini".into(),
+            label: "o1-mini".into(),
+            description: Some("Fast, efficient reasoning model for coding and math".into()),
             provider_type: "openai".into(),
             is_default: false,
             default_effort: Some("medium".into()),
             efforts: vec!["low".into(), "medium".into(), "high".into()],
             supports_fast_mode: true,
-            context_window: Some(200_000),
-            pricing: lookup_model_pricing("o4-mini"),
+            context_window: Some(128_000),
+            pricing: lookup_model_pricing("o1-mini"),
+        },
+        ModelCatalogOption {
+            id: "o1-preview".into(),
+            label: "o1-preview".into(),
+            description: Some("OpenAI preview reasoning model".into()),
+            provider_type: "openai".into(),
+            is_default: false,
+            default_effort: Some("medium".into()),
+            efforts: vec!["low".into(), "medium".into(), "high".into()],
+            supports_fast_mode: true,
+            context_window: Some(128_000),
+            pricing: lookup_model_pricing("o1-preview"),
+        },
+        ModelCatalogOption {
+            id: "chatgpt-4o-latest".into(),
+            label: "ChatGPT-4o Latest".into(),
+            description: Some("Dynamic ChatGPT-4o model used in ChatGPT web".into()),
+            provider_type: "openai".into(),
+            is_default: false,
+            default_effort: None,
+            efforts: vec![],
+            supports_fast_mode: true,
+            context_window: Some(128_000),
+            pricing: lookup_model_pricing("chatgpt-4o-latest"),
         },
         ModelCatalogOption {
             id: "gpt-4-turbo".into(),
-            label: "gpt-4-turbo".into(),
-            description: Some("OpenAI GPT-4 Turbo model".into()),
+            label: "GPT-4 Turbo".into(),
+            description: Some("OpenAI GPT-4 Turbo high-intelligence model".into()),
             provider_type: "openai".into(),
             is_default: false,
             default_effort: None,
@@ -499,5 +535,20 @@ mod tests {
         assert_eq!(result.models[0].id, "my-custom-model:8b");
         assert_eq!(result.models[0].context_window, Some(65536));
         assert_eq!(result.origin, "probe");
+    }
+
+    #[test]
+    fn test_openai_catalog_contains_real_models() {
+        let svc = ModelCatalogService::new();
+        let openai = svc.get_catalog(Some("openai"));
+        assert!(!openai.models.is_empty());
+
+        let ids: Vec<&str> = openai.models.iter().map(|m| m.id.as_str()).collect();
+        assert!(ids.contains(&"gpt-4o"));
+        assert!(ids.contains(&"o1"));
+        assert!(ids.contains(&"o1-mini"));
+        assert!(ids.contains(&"chatgpt-4o-latest"));
+        assert!(!ids.contains(&"gpt-4.1"));
+        assert!(!ids.contains(&"o4-mini"));
     }
 }

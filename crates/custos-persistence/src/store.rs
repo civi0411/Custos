@@ -139,6 +139,10 @@ impl SqliteTaskStore {
         &self.run_repo
     }
 
+    pub fn reconcile_runs_on_startup(&self) -> Result<usize, DomainError> {
+        self.run_repo.reconcile_runs_on_startup()
+    }
+
     pub fn decisions(&self) -> &DecisionRepository {
         &self.decision_repo
     }
@@ -582,6 +586,10 @@ impl RunPort for SqliteTaskStore {
         attempt_id: &str,
     ) -> Result<Option<LaunchAttempt>, DomainError> {
         self.run_repo.get_launch_attempt(attempt_id)
+    }
+
+    async fn reconcile_runs_on_startup(&self) -> Result<usize, DomainError> {
+        self.run_repo.reconcile_runs_on_startup()
     }
 }
 
