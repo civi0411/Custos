@@ -385,6 +385,11 @@ Custos/
 | [`src/types/retry.rs`](../../crates/custos-provider/src/types/retry.rs) | 351 | Trait for retry functionality to keep Provider dyn-compatible. | `struct RetryConfig`, `fn default`, `fn new`, `fn transient_only` |
 | [`src/types/thinking.rs`](../../crates/custos-provider/src/types/thinking.rs) | 742 | A single selectable effort value advertised by a provider-managed harness. | `fn split_think_blocks`, `struct FilterOut`, `struct ThinkFilter`, `enum ThinkTag` |
 | [`src/types/utils.rs`](../../crates/custos-provider/src/types/utils.rs) | 29 | Extract the model name from a JSON object. Common with most providers to have this top level attribute. | `fn is_in_unicode_tag_range`, `fn sanitize_unicode_tags`, `fn strip_unicode_tags`, `fn get_model` |
+| [`src/catalog/capabilities.rs`](../../crates/custos-provider/src/catalog/capabilities.rs) | 157 | Modal capability discovery (Vision, Tools, Reasoning, Search) | `struct ModelCapabilities`, `fn get_model_capabilities` |
+| [`src/catalog/combo.rs`](../../crates/custos-provider/src/catalog/combo.rs) | 195 | Virtual model combos and capability-aware routing | `struct ComboPreset`, `struct ComboRegistry`, `enum ModelTier`, `enum RequiredCapability` |
+| [`src/catalog/models.rs`](../../crates/custos-provider/src/catalog/models.rs) | 48 | Standard model registry definitions and metadata | `struct ModelSpec`, `fn default_models` |
+| [`src/catalog/pricing.rs`](../../crates/custos-provider/src/catalog/pricing.rs) | 224 | Model pricing and token cost calculation engine | `struct ModelPricing`, `struct TokenCostCalculator`, `fn calculate_cost` |
+| [`src/turn.rs`](../../crates/custos-provider/src/turn.rs) | 165 | Structured turn contracts with attribution audit | `struct ModelTurnRequest`, `struct ModelTurnEvent`, `enum TurnDelta`, `struct ModelAttribution` |
 
 ### 3.5. Crate `custos-bridge` — Layer 2: IPC & Protocol Bridge
 
@@ -702,6 +707,9 @@ Custos/
 | [`src/workflow/mod.rs`](../../crates/custos-runtime/src/workflow/mod.rs) | 15 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/workflow/outbox.rs`](../../crates/custos-runtime/src/workflow/outbox.rs) | 9 | Module outbox: phục vụ các cấu trúc và chức năng liên quan | `struct OutboxMessage` |
 | [`src/workflow/scheduler.rs`](../../crates/custos-runtime/src/workflow/scheduler.rs) | 250 | Schedule a new workflow job | `struct ScheduledJobId`, `fn new`, `fn generate`, `fn fmt` |
+| [`src/integration/binding.rs`](../../crates/custos-runtime/src/integration/binding.rs) | 103 | Canonical Integration Binding definitions, lifecycle states, and mediation tiers | `enum IntegrationKind`, `enum LifecycleState`, `enum BindingDirection`, `enum MediationLevel`, `struct IntegrationBinding` |
+| [`src/integration/registry.rs`](../../crates/custos-runtime/src/integration/registry.rs) | 116 | Thread-safe registry managing external protocol bindings and lifecycle state transitions | `struct IntegrationRegistry`, `fn register`, `fn get`, `fn update_state`, `fn list_by_kind`, `fn list_enabled` |
+
 
 ### 3.7. Crate `custos-adapters` — Layer 2: External Adapters & Sandbox
 
@@ -875,6 +883,10 @@ Custos/
 | [`src/sandbox/developer.rs`](../../crates/custos-adapters/src/sandbox/developer.rs) | 403 | Validates that a requested file path does not escape the workspace root. | `struct SovereignDeveloperAdapter`, `fn new`, `fn with_timeout`, `fn canonicalize_safe_path` |
 | [`src/sandbox/mod.rs`](../../crates/custos-adapters/src/sandbox/mod.rs) | 7 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/sandbox/seatbelt/mod.rs`](../../crates/custos-adapters/src/sandbox/seatbelt/mod.rs) | 13 | Module mod: phục vụ các cấu trúc và chức năng liên quan | `struct SeatbeltSandbox`, `fn new`, `fn default` |
+| [`src/a2a/mod.rs`](../../crates/custos-adapters/src/a2a/mod.rs) | 212 | Agent-to-Agent protocol, Agent Card discovery, and JSON-RPC task delegation | `struct AgentCard`, `struct AgentInterface`, `struct A2aJsonRpcRequest`, `struct A2aDispatcher` |
+| [`src/mcp/security.rs`](../../crates/custos-adapters/src/mcp/security.rs) | 136 | DNS rebinding protection and localhost origin gate for MCP servers | `fn is_localhost_host`, `fn is_localhost_origin`, `fn is_localhost_request` |
+| [`src/mcp/federation.rs`](../../crates/custos-adapters/src/mcp/federation.rs) | 108 | Multi-server MCP federation gateway with namespace routing | `struct McpFederationGateway`, `fn register_server`, `fn route_tool_call` |
+| [`src/providers/fallback.rs`](../../crates/custos-adapters/src/providers/fallback.rs) | 234 | Resilient provider failover with exponential backoff and error classification | `struct CooldownTracker`, `struct FallbackRouter`, `enum FallbackErrorClass`, `fn classify_fallback_error` |
 
 ### 3.8. Crate `custos-packs` — Layer 3: Domain Workflows
 
