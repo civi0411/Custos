@@ -22,6 +22,8 @@ fn test_all_canonical_schemas_exist_and_valid_json() {
 
     let required_protocol_schemas = [
         "envelope.v1.schema.json",
+        "command-envelope.v1.schema.json",
+        "event-envelope.v1.schema.json",
         "error.v1.schema.json",
         "provider-request.v1.schema.json",
         "provider-event.v1.schema.json",

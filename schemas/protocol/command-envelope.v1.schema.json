@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://custos.dev/schemas/protocol/command-envelope.v1.schema.json",
+  "title": "CommandEnvelope",
+  "description": "Standard envelope for all state-mutating commands in Custos Local API",
+  "type": "object",
+  "required": ["schema_version", "command_id", "correlation_id", "actor", "payload"],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "command_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "actor": {
+      "type": "object",
+      "required": ["actor_id", "actor_type"],
+      "properties": {
+        "actor_id": { "type": "string" },
+        "actor_type": { "type": "string" },
+        "process_id": { "type": ["integer", "null"] },
+        "auth_token_digest": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "task_id": {
+      "type": ["string", "null"]
+    },
+    "expected_revision": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "deadline": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

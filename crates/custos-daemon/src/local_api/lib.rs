@@ -13,6 +13,9 @@ use custos_domain::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+pub mod envelope;
+pub use envelope::*;
+
 pub const METHOD_TASKS_CREATE: &str = "v1.tasks.create";
 pub const METHOD_TASKS_GET: &str = "v1.tasks.get";
 pub const METHOD_TASKS_LIST: &str = "v1.tasks.list";

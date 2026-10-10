@@ -2877,10 +2877,18 @@ impl LocalApiDispatcher {
                     .and_then(|v| v.as_str())
                     .unwrap_or("openai");
                 match providers_repo.get_oauth_token(provider_id) {
-                    Ok(Some(tok)) => match serde_json::to_value(&tok) {
-                        Ok(val) => ApiResponse::success(req.id, val),
-                        Err(e) => ApiResponse::error(req.id, e.to_string()),
-                    },
+                    Ok(Some(tok)) => {
+                        let sanitized = serde_json::json!({
+                            "provider_id": tok.provider_id,
+                            "service_type": tok.service_type,
+                            "connected": !tok.access_token.is_empty(),
+                            "expires_at": tok.expires_at,
+                            "token_type": tok.token_type,
+                            "scope": tok.scope,
+                            "has_refresh_token": tok.refresh_token.is_some(),
+                        });
+                        ApiResponse::success(req.id, sanitized)
+                    }
                     Ok(None) => ApiResponse::success(req.id, serde_json::Value::Null),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
@@ -5460,8 +5468,10 @@ mod tests {
         let get_res_2 = dispatcher.handle_request(get_req_2).await;
         assert!(get_res_2.is_success());
         let tok_val = get_res_2.result.unwrap();
-        assert_eq!(tok_val.get("access_token").unwrap().as_str().unwrap(), "sk-proj-test-oauth-access-token");
-        assert_eq!(tok_val.get("refresh_token").unwrap().as_str().unwrap(), "rt-test-refresh-token");
+        assert_eq!(tok_val.get("connected").unwrap().as_bool(), Some(true));
+        assert_eq!(tok_val.get("has_refresh_token").unwrap().as_bool(), Some(true));
+        assert!(tok_val.get("access_token").is_none());
+        assert!(tok_val.get("refresh_token").is_none());
 
         // 5. Query v1.llm.status -> should report OAuth PKCE active
         let llm_req = ApiRequest {
