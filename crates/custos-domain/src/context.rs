@@ -46,6 +46,17 @@ impl ContextPack {
     }
 }
 
+impl Default for ContextPack {
+    fn default() -> Self {
+        Self {
+            id: crate::ids::new_id("ctx"),
+            items: Vec::new(),
+            total_tokens: 0,
+            context_digest: String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum OmittedContextReason {

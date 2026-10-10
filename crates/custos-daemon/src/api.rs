@@ -909,10 +909,22 @@ impl LocalApiDispatcher {
                     Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
                 };
 
-                let mut cmd = custos_domain::StartRunCommand::new(
-                    params.task_id,
-                    params.actor.unwrap_or_else(|| "daemon_user".into()),
-                );
+                if let Some(ref sid) = params.session_id {
+                    let sess_opt = self.session_manager.get_session(&SessionId(sid.to_string())).await;
+                    if sess_opt.is_none() {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Admission gate refused unverified session_id '{sid}': session does not exist"),
+                        );
+                    }
+                }
+
+                let actor = match params.actor {
+                    Some(ref a) if !a.trim().is_empty() => a.trim().to_string(),
+                    _ => "daemon_user".into(),
+                };
+
+                let mut cmd = custos_domain::StartRunCommand::new(params.task_id, actor);
                 if let Some(rev) = params.workflow_revision {
                     cmd = cmd.with_workflow_revision(rev);
                 }
@@ -2230,7 +2242,18 @@ impl LocalApiDispatcher {
                     };
                     match self.task_service.execute_create(cmd).await {
                         Ok((task, _)) => created_task_ids.push(task.id),
-                        Err(e) => return ApiResponse::error(req.id, format!("Failed to create task: {e}")),
+                        Err(e) => {
+                            // Rollback created tasks in this batch to prevent partial child tasks on failure (B5 Invariant)
+                            for created_id in &created_task_ids {
+                                let _ = self.task_service.execute_advance(AdvanceTask {
+                                    task_id: created_id.clone(),
+                                    next_status: custos_domain::task::TaskStatus::Failed,
+                                    expected_epoch: 1,
+                                    rationale: Some(format!("Handoff aborted due to child task creation failure: {e}")),
+                                }).await;
+                            }
+                            return ApiResponse::error(req.id, format!("Failed to create task: {e}"));
+                        }
                     }
                 }
 
@@ -2262,7 +2285,18 @@ impl LocalApiDispatcher {
                     };
                     match self.task_service.execute_create(cmd).await {
                         Ok((task, _)) => created_task_ids.push(task.id),
-                        Err(e) => return ApiResponse::error(req.id, format!("Failed to create recipe task: {e}")),
+                        Err(e) => {
+                            // Rollback created tasks in this batch to prevent partial child tasks on failure (B5 Invariant)
+                            for created_id in &created_task_ids {
+                                let _ = self.task_service.execute_advance(AdvanceTask {
+                                    task_id: created_id.clone(),
+                                    next_status: custos_domain::task::TaskStatus::Failed,
+                                    expected_epoch: 1,
+                                    rationale: Some(format!("Handoff aborted due to recipe task creation failure: {e}")),
+                                }).await;
+                            }
+                            return ApiResponse::error(req.id, format!("Failed to create recipe task: {e}"));
+                        }
                     }
                 }
 
@@ -4046,6 +4080,20 @@ mod tests {
             serde_json::from_value(cancel_resp.result.unwrap()).unwrap();
         assert_eq!(receipt.run_id, handle.run_id);
         assert_eq!(receipt.reason, "Test cancel via API");
+
+        // 4. Start run with unverified session_id must be refused by admission gate
+        let invalid_sess_req = ApiRequest {
+            id: "req_invalid_sess".into(),
+            method: "v1.workflow.start_run".into(),
+            params: serde_json::json!({
+                "task_id": "task_api_workflow_invalid_sess",
+                "session_id": "non_existent_sess_999",
+                "actor": "tester"
+            }),
+        };
+        let invalid_resp = dispatcher.handle_request(invalid_sess_req).await;
+        assert!(invalid_resp.error.is_some());
+        assert!(invalid_resp.error.unwrap().contains("Admission gate refused unverified session_id"));
     }
 
     #[tokio::test]

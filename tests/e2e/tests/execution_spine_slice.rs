@@ -231,7 +231,8 @@ mod daemon_api_spine_roundtrip {
         std::fs::create_dir_all(&temp_dir).unwrap();
         let db_path = temp_dir.join("spine.db");
 
-        let daemon = CustosRuntime::bootstrap(db_path.to_str().unwrap()).unwrap();
+        let model = Arc::new(FakeProvider::new("fake-model"));
+        let daemon = CustosRuntime::bootstrap_with_model(db_path.to_str().unwrap(), model).unwrap();
 
         // 1. Create task via Local API
         let create_req = ApiRequest {

@@ -49,9 +49,27 @@ impl RepoCoordinator {
         &mut self.graph
     }
 
+    /// Resolve real Git HEAD commit from workspace root if it is a Git repository.
+    fn resolve_head_commit(workspace_root: &std::path::Path) -> Option<String> {
+        let output = std::process::Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(workspace_root)
+            .output()
+            .ok()?;
+        if output.status.success() {
+            let commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !commit.is_empty() {
+                return Some(commit);
+            }
+        }
+        None
+    }
+
     /// Capture current snapshot identity for the workspace.
     pub fn current_snapshot(&self, repo_id: &str, worktree_id: &str) -> RepoSnapshotRef {
-        let mut snapshot = RepoSnapshotRef::new(repo_id, worktree_id, "snapshot_head");
+        let head_commit = Self::resolve_head_commit(&self.workspace_root)
+            .unwrap_or_else(|| "uncommitted_workspace".to_string());
+        let mut snapshot = RepoSnapshotRef::new(repo_id, worktree_id, head_commit);
 
         if let Ok(inventory) = self.scanner.scan_inventory(&self.workspace_root) {
             for entry in inventory {
@@ -189,6 +207,49 @@ mod tests {
             res2.missing_reasons[0],
             MissingReason::StaleSource { .. }
         ));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_repo_coordinator_git_head_resolution() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("custos_git_coord_{}", custos_domain::new_id("gitcoord")));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        // Initialize Git repo and make initial commit
+        let _ = std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&temp_dir)
+            .output();
+        let _ = std::process::Command::new("git")
+            .args(["config", "user.name", "TestUser"])
+            .current_dir(&temp_dir)
+            .output();
+        let _ = std::process::Command::new("git")
+            .args(["config", "user.email", "test@test.com"])
+            .current_dir(&temp_dir)
+            .output();
+
+        let readme = temp_dir.join("README.md");
+        std::fs::write(&readme, "# Test Repo\n").unwrap();
+        let _ = std::process::Command::new("git")
+            .args(["add", "README.md"])
+            .current_dir(&temp_dir)
+            .output();
+        let _ = std::process::Command::new("git")
+            .args(["commit", "-m", "Initial commit"])
+            .current_dir(&temp_dir)
+            .output();
+
+        let coordinator = RepoCoordinator::new(temp_dir.clone());
+        let snapshot = coordinator.current_snapshot("test_git_repo", "main");
+
+        // HEAD commit must be a valid 40-character hex commit SHA, not placeholder
+        assert_ne!(snapshot.head_commit, "snapshot_head");
+        assert_ne!(snapshot.head_commit, "uncommitted_workspace");
+        assert_eq!(snapshot.head_commit.len(), 40);
+        assert!(snapshot.head_commit.chars().all(|c| c.is_ascii_hexdigit()));
 
         let _ = std::fs::remove_dir_all(&temp_dir);
     }

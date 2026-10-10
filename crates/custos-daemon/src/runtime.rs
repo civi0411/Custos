@@ -48,6 +48,41 @@ impl CustosRuntime {
     pub fn bootstrap(database_path: &str) -> Result<Self, DomainError> {
         let store = Arc::new(SqliteTaskStore::new(database_path)?);
 
+        // Wire live OpenAI provider with dynamic OAuth token & proactive refresh
+        let daemon_token_provider = Arc::new(DaemonOAuthTokenProvider {
+            store: store.clone(),
+        });
+        let openai_provider = custos_adapters::providers::openai_chat::OpenAiChatProvider::new()
+            .with_token_provider(daemon_token_provider);
+        let codex_provider = Arc::new(CodexProvider::with_provider(openai_provider));
+
+        // Multi-provider router: dynamically dispatches to OpenAI, Anthropic, Gemini, DeepSeek, or Ollama/local
+        let credential_resolver = Arc::new(DaemonCredentialResolver {
+            store: store.clone(),
+        });
+        let router_provider = Arc::new(RouterModelProvider::new(credential_resolver));
+
+        let provider_name = std::env::var("CUSTOS_PROVIDER").unwrap_or_default();
+        let model: Arc<dyn ModelPort> = match provider_name.to_lowercase().as_str() {
+            "fake" => Arc::new(FakeProvider::new("fake")),
+            "claude" | "anthropic" => Arc::new(ClaudeProvider::new()),
+            "local" => Arc::new(LocalModelProvider::new()),
+            "codex" => codex_provider.clone(),
+            _ => router_provider.clone(),
+        };
+
+        Self::bootstrap_with_store_and_model(store, model)
+    }
+
+    pub fn bootstrap_with_model(database_path: &str, model: Arc<dyn ModelPort>) -> Result<Self, DomainError> {
+        let store = Arc::new(SqliteTaskStore::new(database_path)?);
+        Self::bootstrap_with_store_and_model(store, model)
+    }
+
+    fn bootstrap_with_store_and_model(
+        store: Arc<SqliteTaskStore>,
+        model: Arc<dyn ModelPort>,
+    ) -> Result<Self, DomainError> {
         // Crash Recovery Reconcile (Gate 3): transition any InFlight effects to Uncertain on startup
         store.outbox().reconcile_on_startup()?;
         store.seed_canonical_data_if_empty()?;
@@ -62,14 +97,6 @@ impl CustosRuntime {
 
         let workspace_root = std::env::current_dir().unwrap_or_else(|_| ".".into());
         let sandbox = Arc::new(SovereignDeveloperAdapter::new(workspace_root.clone()));
-
-        // Wire live OpenAI provider with dynamic OAuth token & proactive refresh
-        let daemon_token_provider = Arc::new(DaemonOAuthTokenProvider {
-            store: store.clone(),
-        });
-        let openai_provider = custos_adapters::providers::openai_chat::OpenAiChatProvider::new()
-            .with_token_provider(daemon_token_provider);
-        let codex_provider = Arc::new(CodexProvider::with_provider(openai_provider));
 
         // Background OAuth Token Sweeper Job: runs every 5 minutes and refreshes expiring tokens
         let sweeper_store = store.clone();
@@ -92,21 +119,6 @@ impl CustosRuntime {
                 }
             }
         });
-
-        // Multi-provider router: dynamically dispatches to OpenAI, Anthropic, Gemini, DeepSeek, or Ollama/local
-        let credential_resolver = Arc::new(DaemonCredentialResolver {
-            store: store.clone(),
-        });
-        let router_provider = Arc::new(RouterModelProvider::new(credential_resolver));
-
-        let provider_name = std::env::var("CUSTOS_PROVIDER").unwrap_or_default();
-        let model: Arc<dyn ModelPort> = match provider_name.to_lowercase().as_str() {
-            "fake" => Arc::new(FakeProvider::new("fake")),
-            "claude" | "anthropic" => Arc::new(ClaudeProvider::new()),
-            "local" => Arc::new(LocalModelProvider::new()),
-            "codex" => codex_provider.clone(),
-            _ => router_provider.clone(),
-        };
 
         // Sovereign Coding Harness Adapter & Multi-Harness Registry
         let lease_manager = Arc::new(custos_runtime::workflow::WorkspaceLeaseManager::new(

@@ -30,6 +30,7 @@ impl AgentRuntimePort for TestGovernedHarness {
 
     fn profile(&self) -> HarnessProfile {
         HarnessProfile::new("test-governed", ToolMediationLevel::CustosMediated)
+            .with_supports_cancel(true)
     }
 
     async fn execute_turn(

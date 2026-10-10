@@ -177,6 +177,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   onHandoffToCoding,
 }) => {
   const [capabilities, setCapabilities] = React.useState<CapabilityDescriptor[]>([]);
+  const [fetchFailed, setFetchFailed] = React.useState(false);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -184,10 +185,14 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
       .then((caps) => {
         if (isMounted && Array.isArray(caps)) {
           setCapabilities(caps);
+          setFetchFailed(false);
         }
       })
       .catch((err) => {
         console.warn('Failed to load capability registry from daemon:', err);
+        if (isMounted) {
+          setFetchFailed(true);
+        }
       });
     return () => {
       isMounted = false;
@@ -195,6 +200,14 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   }, []);
 
   const resources = React.useMemo(() => {
+    if (fetchFailed) {
+      return DEFAULT_RESOURCES.map((def) => ({
+        ...def,
+        status: 'unavailable' as const,
+        reason: 'Daemon capability registry offline or fetch failed; operating fail-closed.',
+        supportedOperations: [],
+      }));
+    }
     if (!capabilities.length) return DEFAULT_RESOURCES;
     return DEFAULT_RESOURCES.map((def) => {
       const matched = capabilities.find(
@@ -214,7 +227,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
         supportedOperations: matched.supportedOperations,
       };
     });
-  }, [capabilities]);
+  }, [capabilities, fetchFailed]);
 
   const activeId = resourceTabs.activeTabId;
   const activeResource = resources.find((resource) => resource.id === activeId);

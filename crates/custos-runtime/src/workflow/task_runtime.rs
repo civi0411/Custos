@@ -299,6 +299,12 @@ impl WorkflowPort for TaskRuntime {
             let mut turn_output: Option<String> = None;
             if actual_mode == "native" {
                 if let Some(ref harness) = self.harness {
+                    let mut launch = custos_domain::LaunchAttempt::new(&wrun.id, requested_mode)?;
+                    let harness_id = harness.profile().harness_id.clone();
+                    let _ = launch.mark_launched("native", Some(harness_id));
+                    run.metadata["launch_attempt_id"] = serde_json::json!(launch.id);
+                    wrun.continuation_packet_ref = Some(format!("launch:{}", launch.id));
+
                     let context_pack =
                         ContextPack::new(new_id("ctx"), Vec::new(), 0, "sha256:empty".into());
 
@@ -399,6 +405,7 @@ impl WorkflowPort for TaskRuntime {
                 }
             } else if actual_mode == "model" {
                 if let Some(ref model) = self.model {
+                    let mut launch = custos_domain::LaunchAttempt::new(&wrun.id, requested_mode)?;
                     let prompt_text = cmd
                         .prompt
                         .clone()
@@ -408,6 +415,11 @@ impl WorkflowPort for TaskRuntime {
                         .as_deref()
                         .filter(|m| !m.trim().is_empty())
                         .unwrap_or_else(|| model.provider_id());
+
+                    let _ = launch.mark_launched("model", Some(target_model.to_string()));
+                    run.metadata["launch_attempt_id"] = serde_json::json!(launch.id);
+                    wrun.continuation_packet_ref = Some(format!("launch:{}", launch.id));
+
                     let req = ProviderRequest::new(
                         new_id("req"),
                         &cmd.task_id,
@@ -420,8 +432,6 @@ impl WorkflowPort for TaskRuntime {
                     run.metadata["tokens_used"] = serde_json::json!(resp.tokens_used);
                     run.metadata["model_id"] = serde_json::json!(resp.model_id);
                     turn_output = Some(resp.content);
-                    let _ = run.transition(RunStatus::Completed);
-                    let _ = wrun.transition(RunStatus::Completed);
                     if let Some(ref store) = self.run_store {
                         let _ = store.save_run(&run).await;
                         let _ = store.save_worker_run(&wrun).await;
@@ -738,8 +748,8 @@ mod tests {
 
         let handle = runtime.start_run(cmd).await.unwrap();
         assert_eq!(handle.task_id, "task_chat_01");
-        assert_eq!(handle.status, RunStatus::Completed);
-        assert!(handle.completed_at.is_some());
+        assert_eq!(handle.status, RunStatus::Active);
+        assert!(handle.completed_at.is_none());
         assert!(handle.output.is_some());
         let output = handle.output.unwrap();
         assert!(output.contains("Completed turn response for task task_chat_01"));
@@ -747,20 +757,36 @@ mod tests {
 
         let runs = runtime.active_runs.read().await;
         let run = runs.get(&handle.run_id).unwrap();
-        assert_eq!(run.status, RunStatus::Completed);
+        assert_eq!(run.status, RunStatus::Active);
         assert_eq!(run.metadata["actual_mode"], "model");
         assert_eq!(run.metadata["tokens_used"], 42);
+        assert!(run.metadata["launch_attempt_id"].is_string());
         drop(runs);
 
-        // Since the run is completed, its dispatch claim is automatically released,
-        // allowing a subsequent turn to be started immediately on the same task without Conflict!
+        // While the run is active, a subsequent start_run on the SAME task must be refused by fencing
         let cmd2 = StartRunCommand::new("task_chat_01", "actor_user")
             .with_preferred_mode("model")
             .with_prompt("Second turn follow-up");
-        let handle2 = runtime
+        let err2 = runtime
             .start_run(cmd2)
             .await
-            .expect("Subsequent turn should succeed");
-        assert_eq!(handle2.status, RunStatus::Completed);
+            .expect_err("Double-dispatch on active run must conflict");
+        assert!(matches!(err2, DomainError::Conflict(_)));
+
+        // Graceful cancellation frees the claim and transitions task/run
+        let cancel_receipt = runtime
+            .request_cancel(&handle.run_id, "Turn finished")
+            .await
+            .unwrap();
+        assert_eq!(cancel_receipt.run_id, handle.run_id);
+
+        let cmd3 = StartRunCommand::new("task_chat_01", "actor_user")
+            .with_preferred_mode("model")
+            .with_prompt("Subsequent turn after cancel");
+        let handle3 = runtime
+            .start_run(cmd3)
+            .await
+            .expect("Subsequent turn should succeed after claim release");
+        assert_eq!(handle3.status, RunStatus::Active);
     }
 }
