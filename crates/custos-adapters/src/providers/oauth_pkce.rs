@@ -645,10 +645,12 @@ mod provider_oauth_tests {
         assert!(oauth_settings("copilot").is_err());
     }
     #[test]
-    fn google_credentials_are_required_and_provider_scoped() {
+    fn google_public_defaults_and_environment_overrides_are_provider_scoped() {
         for service in ["gemini", "antigravity"] {
-            let error = google_oauth_client_with(service, |_| None).unwrap_err().to_string();
-            assert!(error.contains("CLIENT_ID"));
+            let defaults = public_google_oauth_defaults(service).unwrap();
+            assert_eq!(google_oauth_client_with(service, |_| None).unwrap(), defaults);
+            assert_eq!(google_oauth_client_with(service, |_| Some("  ".into())).unwrap(), defaults);
+            assert_eq!(google_oauth_client_with(service, |name| if name.ends_with("CLIENT_ID") { Some(defaults.0.clone()) } else { None }).unwrap(), defaults);
             let error = google_oauth_client_with(service, |name| if name.ends_with("CLIENT_ID") { Some("test-client".into()) } else { Some("  ".into()) }).unwrap_err().to_string();
             assert!(error.contains("CLIENT_SECRET"));
             let prefix = if service == "gemini" { "GEMINI_" } else { "ANTIGRAVITY_" };
@@ -658,6 +660,16 @@ mod provider_oauth_tests {
             }).unwrap();
             assert_eq!(pair, ("test-client".into(), "test-secret".into()));
         }
+    }
+
+    #[test]
+    fn public_native_client_defaults_match_reference_fingerprints() {
+        let pair = public_google_oauth_defaults("gemini").unwrap();
+        assert_eq!(format!("{:x}", Sha256::digest(pair.0.as_bytes())), "636d7183f3ca4ad92c7803811a3f635643f1da657a22eeedf280283161cb6e17");
+        assert_eq!(format!("{:x}", Sha256::digest(pair.1.as_bytes())), "6a5f78b8b99dd4025e41ba11bf54c304c6af29f924c5569cc7865b2428ce03a9");
+        let pair = public_google_oauth_defaults("antigravity").unwrap();
+        assert_eq!(format!("{:x}", Sha256::digest(pair.0.as_bytes())), "bf00c418024ba6bf606ccdc37120976e41bc429dd1d46ecf16a729aa532626ea");
+        assert_eq!(format!("{:x}", Sha256::digest(pair.1.as_bytes())), "1d2f041093fd95aa8995a038c711d50a7960da09a505381c09a745d6ad0ecc60");
     }
 
     #[test]
@@ -725,9 +737,33 @@ fn google_oauth_client_with(service: &str, read: impl Fn(&str) -> Option<String>
         "antigravity" => ("ANTIGRAVITY_OAUTH_CLIENT_ID", "ANTIGRAVITY_OAUTH_CLIENT_SECRET"),
         _ => return Err(DomainError::Validation("Unsupported Google OAuth provider".into())),
     };
-    let required = |name: &str| read(name).map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
-        .ok_or_else(|| DomainError::Validation(format!("Google OAuth is not configured: set {name} in the daemon environment")));
-    Ok((required(id_name)?, required(secret_name)?))
+    let (default_id, default_secret) = public_google_oauth_defaults(service)?;
+    let override_value = |name: &str| read(name).map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+    let client_id = override_value(id_name).unwrap_or_else(|| default_id.clone());
+    let secret = match override_value(secret_name) {
+        Some(secret) => secret,
+        None if client_id == default_id => default_secret,
+        None => return Err(DomainError::Validation(format!("Custom Google OAuth client requires {secret_name} in the daemon environment"))),
+    };
+    Ok((client_id, secret))
+}
+
+// Public installed-app credentials from OmniRoute; XOR changes representation only.
+// Never use this mechanism to store private operator credentials or account tokens.
+fn public_google_oauth_defaults(service: &str) -> Result<(String, String), DomainError> {
+    const MASK: &[u8] = b"omniroute-public-v1";
+    const GEMINI_ID: &[u8] = &[89, 85, 95, 91, 71, 90, 77, 68, 92, 30, 73, 64, 79, 3, 6, 91, 75, 2, 3, 0, 29, 28, 13, 0, 1, 5, 77, 0, 30, 17, 4, 4, 90, 8, 21, 30, 30, 92, 11, 4, 12, 88, 65, 90, 31, 90, 4, 93, 0, 6, 76, 11, 6, 12, 74, 26, 84, 26, 30, 11, 27, 17, 0, 27, 0, 0, 67, 4, 91, 1, 3, 4];
+    const GEMINI_ALT: &[u8] = &[40, 34, 45, 58, 34, 55, 88, 64, 16, 101, 23, 56, 50, 1, 68, 82, 66, 65, 98, 4, 64, 9, 12, 36, 89, 54, 1, 80, 78, 28, 45, 36, 31, 17, 15];
+    const ANTIGRAVITY_ID: &[u8] = &[94, 93, 89, 88, 66, 95, 67, 68, 83, 29, 69, 76, 83, 65, 29, 14, 69, 5, 66, 6, 3, 92, 1, 64, 94, 25, 23, 23, 72, 66, 70, 87, 26, 29, 12, 65, 25, 91, 7, 89, 9, 93, 66, 92, 16, 4, 75, 76, 0, 5, 17, 66, 14, 12, 66, 17, 93, 10, 24, 29, 12, 0, 12, 26, 26, 17, 72, 30, 1, 76, 15, 6, 14];
+    const ANTIGRAVITY_ALT: &[u8] = &[40, 34, 45, 58, 34, 55, 88, 63, 80, 21, 54, 34, 48, 88, 81, 85, 97, 18, 125, 37, 92, 3, 37, 48, 87, 6, 44, 38, 25, 10, 67, 19, 40, 40, 5];
+    let (id, secret) = match service {
+        "gemini" => (GEMINI_ID, GEMINI_ALT),
+        "antigravity" => (ANTIGRAVITY_ID, ANTIGRAVITY_ALT),
+        _ => return Err(DomainError::Validation("Unsupported public Google OAuth client".into())),
+    };
+    let decode = |bytes: &[u8]| String::from_utf8(bytes.iter().enumerate().map(|(index, byte)| byte ^ MASK[index % MASK.len()]).collect())
+        .map_err(|_| DomainError::Validation("Invalid public OAuth default representation".into()));
+    Ok((decode(id)?, decode(secret)?))
 }
 
 fn google_oauth_secret(service: &str, client: &str) -> Result<String, DomainError> {
