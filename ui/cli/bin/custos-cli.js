@@ -93,39 +93,88 @@ function getPanelIndent(width = CHAT_WIDTH) {
   return ' '.repeat(Math.max(0, Math.floor((getTerminalWidth() - width) / 2)));
 }
 
-function getBannerLines(version) {
+const BANNER_ART_RAW = [
+  ' ██████╗██╗   ██╗███████╗████████╗ ██████╗ ███████╗',
+  '██╔════╝██║   ██║██╔════╝╚══██╔══╝██╔═══██╗██╔════╝',
+  '██║     ██║   ██║███████╗   ██║   ██║   ██║███████╗',
+  '██║     ██║   ██║╚════██║   ██║   ██║   ██║╚════██║',
+  '╚██████╗╚██████╔╝███████║   ██║   ╚██████╔╝███████║',
+  ' ╚═════╝ ╚═════╝ ╚══════╝   ╚═╝    ╚═════╝ ╚══════╝',
+];
+const BANNER_WIDTH = 52;
+
+function getBannerLogoLines() {
   return [
-    '',
-    chalk.rgb(214, 214, 214).bold(' ██████╗██╗   ██╗███████╗████████╗ ██████╗ ███████╗'),
-    chalk.rgb(198, 198, 198).bold('██╔════╝██║   ██║██╔════╝╚══██╔══╝██╔═══██╗██╔════╝'),
-    chalk.rgb(180, 180, 180).bold('██║     ██║   ██║███████╗   ██║   ██║   ██║███████╗'),
-    chalk.rgb(156, 156, 156).bold('██║     ██║   ██║╚════██║   ██║   ██║   ██║╚════██║'),
-    chalk.rgb(132, 132, 132).bold('╚██████╗╚██████╔╝███████║   ██║   ╚██████╔╝███████║'),
-    chalk.rgb(100, 100, 100).bold(' ╚═════╝ ╚═════╝ ╚══════╝   ╚═╝    ╚═════╝ ╚══════╝'),
-    '',
-    chalk.rgb(92, 92, 92)(`v${version}  agent workspace có kiểm soát`),
-    '',
-    padToWidth(`${chalk.hex('#eab308').bold('build')}  ${chalk.rgb(205, 205, 205)('custos')}  ${chalk.rgb(105, 105, 105)('tab đổi chế độ')}  ${chalk.hex('#eab308')('/ lệnh')}`, CHAT_WIDTH),
+    chalk.rgb(214, 214, 214).bold(BANNER_ART_RAW[0]),
+    chalk.rgb(198, 198, 198).bold(BANNER_ART_RAW[1]),
+    chalk.rgb(180, 180, 180).bold(BANNER_ART_RAW[2]),
+    chalk.rgb(156, 156, 156).bold(BANNER_ART_RAW[3]),
+    chalk.rgb(132, 132, 132).bold(BANNER_ART_RAW[4]),
+    chalk.rgb(100, 100, 100).bold(BANNER_ART_RAW[5]),
   ];
 }
 
 export function printMainBanner() {
-  const bannerLines = getBannerLines(VERSION);
-  const terminalWidth = getTerminalWidth();
-  const terminalHeight = process.stdout.rows || 30;
-  const verticalPadding = Math.max(2, Math.floor((terminalHeight - bannerLines.length - 3) / 2));
-  console.clear();
+  const termW = getTerminalWidth();
+  const termH = process.stdout.rows || 30;
+  const leftIndent = Math.max(2, Math.floor((termW - BANNER_WIDTH) / 2));
+  const indentStr = ' '.repeat(leftIndent);
+
+  const totalLines = BANNER_ART_RAW.length + 3;
+  const verticalPadding = Math.max(1, Math.floor((termH - totalLines) / 2));
+
   console.log('\n'.repeat(verticalPadding));
-  for (const line of bannerLines) {
-    const visibleWidth = stripAnsi(line).length;
-    const leftPadding = Math.max(0, Math.floor((terminalWidth - visibleWidth) / 2));
-    console.log(`${' '.repeat(leftPadding)}${line}`);
+  for (const line of getBannerLogoLines()) {
+    console.log(indentStr + line);
   }
-  console.log('\n');
+  console.log();
+  const subtitleText = `v${VERSION}  agent workspace có kiểm soát`;
+  const subIndent = Math.max(2, Math.floor((termW - subtitleText.length) / 2));
+  console.log(' '.repeat(subIndent) + chalk.rgb(115, 115, 115)(subtitleText));
+  console.log();
 }
 
 function stripAnsi(str) {
-  return str.replace(/\x1b\[[0-9;]*m/g, '');
+  return (str || '').replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '');
+}
+
+function wrapString(str, maxWidth) {
+  if (!str) return [''];
+  const words = str.split(' ');
+  const lines = [];
+  let current = '';
+
+  for (const word of words) {
+    const visibleWordLen = stripAnsi(word).length;
+    if (!current) {
+      if (visibleWordLen > maxWidth) {
+        let remaining = word;
+        while (stripAnsi(remaining).length > maxWidth) {
+          lines.push(remaining.slice(0, maxWidth));
+          remaining = remaining.slice(maxWidth);
+        }
+        current = remaining;
+      } else {
+        current = word;
+      }
+    } else if (stripAnsi(current).length + 1 + visibleWordLen <= maxWidth) {
+      current += ' ' + word;
+    } else {
+      lines.push(current);
+      if (visibleWordLen > maxWidth) {
+        let remaining = word;
+        while (stripAnsi(remaining).length > maxWidth) {
+          lines.push(remaining.slice(0, maxWidth));
+          remaining = remaining.slice(maxWidth);
+        }
+        current = remaining;
+      } else {
+        current = word;
+      }
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length > 0 ? lines : [''];
 }
 
 function printCentered(content = '') {
@@ -252,33 +301,72 @@ function promptCenteredPalette(items, title) {
       return searchText.includes(query.toLowerCase());
     });
 
+    outputDevice.write('\x1b[2J\x1b[H');
+
     const render = () => {
       const visibleItems = filteredItems();
       selectedIndex = Math.min(selectedIndex, Math.max(0, visibleItems.length - 1));
-      printMainBanner();
-      const inputText = ` /${query}`;
-      printPanelLine(chalk.bgRgb(29, 29, 29).rgb(210, 210, 210)(padToWidth(inputText, CHAT_WIDTH)));
 
-      for (const [index, item] of visibleItems.entries()) {
-        const marker = index === selectedIndex ? chalk.white('›') : ' ';
-        const command = chalk.hex('#eab308').bold(item.name.padEnd(12));
-        const description = chalk.rgb(145, 145, 145)(item.description);
-        const row = padToWidth(`${marker} ${command}${description}`, CHAT_WIDTH);
-        const surface = index === selectedIndex
-          ? chalk.bgRgb(38, 38, 38)(row)
-          : chalk.bgRgb(22, 22, 22)(row);
-        printPanelLine(surface);
+      const termW = getTerminalWidth();
+      const termHeight = process.stdout.rows || 30;
+      const paletteWidth = Math.min(74, Math.max(58, termW - 8));
+      const leftIndent = Math.max(2, Math.floor((termW - paletteWidth) / 2));
+      const indentStr = ' '.repeat(leftIndent);
+      const innerW = paletteWidth - 3;
+      const blueBar = chalk.hex('#38bdf8').bold('▌');
+      const bg = (s) => chalk.bgRgb(26, 26, 26)(s);
+
+      const bannerLeft = Math.max(2, Math.floor((termW - BANNER_WIDTH) / 2));
+      const bannerIndentStr = ' '.repeat(bannerLeft);
+
+      const maxListRows = Math.min(visibleItems.length, 9);
+      const totalLines = BANNER_ART_RAW.length + 3 + maxListRows + 3;
+      const verticalPadding = Math.max(0, Math.floor((termHeight - totalLines) / 2));
+
+      const subtitleText = `v${VERSION}  agent workspace có kiểm soát`;
+      const subIndentStr = ' '.repeat(Math.max(2, Math.floor((termW - subtitleText.length) / 2)));
+
+      const output = [];
+      for (let i = 0; i < verticalPadding; i++) output.push('\x1b[K');
+      for (const line of getBannerLogoLines()) output.push(bannerIndentStr + line + '\x1b[K');
+      output.push('\x1b[K');
+      output.push(subIndentStr + chalk.rgb(115, 115, 115)(subtitleText) + '\x1b[K');
+      output.push('\x1b[K');
+
+      // Top search row
+      const inputDisplay = query ? ` /${query}` : ` /${chalk.rgb(100, 100, 100)('gõ để lọc lệnh...')}`;
+      output.push(indentStr + blueBar + bg(padToWidth(inputDisplay, innerW)) + '\x1b[K');
+
+      // Visible items slice with windowing
+      const startIdx = Math.max(0, Math.min(selectedIndex - 3, visibleItems.length - maxListRows));
+      const slice = visibleItems.slice(startIdx, startIdx + maxListRows);
+
+      for (let i = 0; i < slice.length; i++) {
+        const item = slice[i];
+        const actualIdx = startIdx + i;
+        const isSelected = actualIdx === selectedIndex;
+        const marker = isSelected ? chalk.white('›') : ' ';
+        const cmdName = isSelected ? chalk.hex('#38bdf8').bold(item.name.padEnd(12)) : chalk.white(item.name.padEnd(12));
+        const desc = isSelected ? chalk.rgb(220, 220, 220)(item.description) : chalk.rgb(130, 130, 130)(item.description);
+        const rowContent = ` ${marker} ${cmdName} ${desc}`;
+        const rowSurface = isSelected
+          ? chalk.bgRgb(38, 38, 38)(padToWidth(rowContent, innerW))
+          : chalk.bgRgb(24, 24, 24)(padToWidth(rowContent, innerW));
+        output.push(indentStr + blueBar + rowSurface + '\x1b[K');
       }
 
       if (visibleItems.length === 0) {
-        printPanelLine(chalk.bgRgb(22, 22, 22).gray(padToWidth('  Không tìm thấy lệnh phù hợp', CHAT_WIDTH)));
+        output.push(indentStr + blueBar + bg(chalk.rgb(120, 120, 120)(padToWidth('   Không tìm thấy lệnh phù hợp', innerW))) + '\x1b[K');
       }
-      printPanelLine(chalk.rgb(105, 105, 105)(padToWidth('↑↓ chọn   Enter xác nhận   Backspace đóng', CHAT_WIDTH)));
+
+      output.push(indentStr + ' ' + chalk.rgb(105, 105, 105)(padToWidth('↑↓ chọn   Enter xác nhận   Esc đóng', innerW)) + '\x1b[K');
+
+      outputDevice.write('\x1b[?25l\x1b[H' + output.join('\r\n'));
     };
 
     const finish = (value) => {
       inputDevice.removeListener('keypress', onPaletteKeypress);
-      printMainBanner();
+      outputDevice.write('\x1b[2J\x1b[H');
       resolve(value);
     };
 
@@ -325,7 +413,7 @@ function loadTasks() {
     if (fs.existsSync(TASKS_FILE)) {
       return JSON.parse(fs.readFileSync(TASKS_FILE, 'utf8'));
     }
-  } catch {}
+  } catch { }
   return [
     {
       id: 'task-c91f',
@@ -363,7 +451,7 @@ function saveTasks(tasks) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
     fs.writeFileSync(TASKS_FILE, JSON.stringify(tasks, null, 2), 'utf8');
-  } catch {}
+  } catch { }
 }
 
 let tasks = loadTasks();
@@ -399,10 +487,10 @@ export function printUnifiedDiff() {
   console.log(diffBox);
   console.log(
     chalk.bold('  Summary: ') +
-      chalk.green.bold('+5 additions') +
-      chalk.dim(', ') +
-      chalk.red.bold('-2 deletions') +
-      chalk.dim('  (Status: Pending Operator Permit)\n')
+    chalk.green.bold('+5 additions') +
+    chalk.dim(', ') +
+    chalk.red.bold('-2 deletions') +
+    chalk.dim('  (Status: Pending Operator Permit)\n')
   );
 }
 
@@ -430,10 +518,10 @@ export function printTaskList() {
 
     console.log(
       `  ${chalk.bold.white(t.id.padEnd(12))} ` +
-        `${modeColor(t.mode.padEnd(12))} ` +
-        `${statusBadge.padEnd(23)} ` +
-        `${chalk.dim((t.spans + ' spans').padEnd(8))} ` +
-        `${chalk.white(t.title)}`
+      `${modeColor(t.mode.padEnd(12))} ` +
+      `${statusBadge.padEnd(23)} ` +
+      `${chalk.dim((t.spans + ' spans').padEnd(8))} ` +
+      `${chalk.white(t.title)}`
     );
   });
   console.log();
@@ -481,8 +569,8 @@ export function advanceTask(taskId) {
 
   console.log(
     chalk.green(`\n  ✔ Task [${task.id}] đã chuyển trạng thái sang: `) +
-      chalk.hex('#38bdf8').bold(nextState) +
-      chalk.dim(` (+1 audit span)\n`)
+    chalk.hex('#38bdf8').bold(nextState) +
+    chalk.dim(` (+1 audit span)\n`)
   );
 }
 
@@ -554,8 +642,8 @@ export async function runVibeWizard(initialMode = null) {
     default: mode === 'Research'
       ? 'Audit repository architecture and concurrency lock boundaries'
       : mode === 'Assistant'
-      ? 'Coordinate multi-agent task lifecycle and verify audit spans'
-      : 'Refactor handler with verified sandbox & epoch lock guard',
+        ? 'Coordinate multi-agent task lifecycle and verify audit spans'
+        : 'Refactor handler with verified sandbox & epoch lock guard',
   });
 
   console.log();
@@ -601,89 +689,457 @@ export async function runVibeWizard(initialMode = null) {
   console.log();
 }
 
+function getAgentTheme(mode = 'code') {
+  const modeKey = (mode || 'code').toLowerCase();
+  const configs = {
+    code: { name: 'Build', color: '#38bdf8' },
+    research: { name: 'Plan', color: '#f59e0b' },
+    assistant: { name: 'Assistant', color: '#10b981' },
+    custos: { name: 'Build', color: '#38bdf8' },
+  };
+  return configs[modeKey] || configs.code;
+}
+
+export function printUserMessageCard(promptText, mode = 'code') {
+  const termW = getTerminalWidth();
+  const boxW = Math.min(76, Math.max(56, termW - 8));
+  const boxLeft = Math.max(2, Math.floor((termW - boxW) / 2));
+  const indentStr = ' '.repeat(boxLeft);
+  const innerW = boxW - 3;
+  const theme = getAgentTheme(mode);
+  const blueBar = chalk.hex(theme.color).bold('▌');
+  const bg = (s) => chalk.bgRgb(26, 26, 26)(s);
+
+  console.log();
+  const line = indentStr + blueBar + bg(' ' + chalk.white.bold(padToWidth(promptText, innerW)));
+  console.log(line);
+  console.log();
+}
+
+function renderHeroFrame({ currentInput = '', cursorPos = 0, currentMode = 'custos', chatTurns = [], scrollOffset = 0 }) {
+  const termW = getTerminalWidth();
+  const termH = process.stdout.rows || 30;
+
+  const agentTheme = getAgentTheme(currentMode);
+  const modeBadge = agentTheme.name;
+  const agentColor = agentTheme.color;
+  const modelName = 'Claude Opus 4.5';
+  const engineName = 'OpenCode Zen';
+
+  const placeholderText = 'add a new field or task for Custos...';
+  const minBoxW = 60;
+  const maxBoxW = Math.min(76, termW - 6);
+  const inputLen = stripAnsi(currentInput).length;
+  const contentLen = Math.max(inputLen, currentInput.length === 0 ? placeholderText.length : 0);
+  const boxW = Math.min(maxBoxW, Math.max(minBoxW, contentLen + 8));
+
+  const bannerLeft = Math.max(2, Math.floor((termW - BANNER_WIDTH) / 2));
+  const bannerIndentStr = ' '.repeat(bannerLeft);
+
+  const boxLeft = Math.max(2, Math.floor((termW - boxW) / 2));
+  const boxIndentStr = ' '.repeat(boxLeft);
+
+  let renderedInputChars = '';
+  if (currentInput.length === 0) {
+    renderedInputChars = chalk.bgWhite.black(placeholderText[0]) + chalk.rgb(85, 85, 85)(placeholderText.slice(1));
+  } else {
+    for (let i = 0; i < currentInput.length; i++) {
+      if (i === cursorPos) {
+        renderedInputChars += chalk.bgWhite.black(currentInput[i]);
+      } else {
+        renderedInputChars += chalk.rgb(240, 240, 240)(currentInput[i]);
+      }
+    }
+    if (cursorPos >= currentInput.length) {
+      renderedInputChars += chalk.bgWhite.black(' ');
+    }
+  }
+
+  const innerW = boxW - 3;
+  const visibleInputLen = currentInput.length === 0
+    ? placeholderText.length
+    : Math.max(1, currentInput.length + (cursorPos >= currentInput.length ? 1 : 0));
+  const padInputRight = Math.max(0, innerW - visibleInputLen);
+
+  const bg = (s) => chalk.bgRgb(26, 26, 26)(s);
+  const blueBar = chalk.hex(agentColor).bold('▌');
+
+  const line1 = boxIndentStr + blueBar + bg(' ' + renderedInputChars + ' '.repeat(padInputRight));
+  const line2 = boxIndentStr + blueBar + bg(' '.repeat(innerW + 1));
+  const statusContent = ` ${chalk.hex(agentColor).bold(modeBadge)}  ${chalk.white.bold(modelName)}  ${chalk.rgb(115, 115, 115)(engineName)}`;
+  const statusVisibleLen = stripAnsi(statusContent).length;
+  const padStatusRight = Math.max(0, innerW + 1 - statusVisibleLen);
+  const line3 = boxIndentStr + blueBar + bg(statusContent + ' '.repeat(padStatusRight));
+
+  const shortcutHint = (chatTurns && chatTurns.length > 0)
+    ? `${chalk.rgb(150, 150, 150)('pgup/pgdn')} ${chalk.rgb(105, 105, 105)('cuộn')}  ${chalk.rgb(150, 150, 150)('tab')} ${chalk.rgb(105, 105, 105)('switch agent')}  ${chalk.rgb(150, 150, 150)('ctrl+p')} ${chalk.rgb(105, 105, 105)('commands')}`
+    : `${chalk.rgb(150, 150, 150)('tab')} ${chalk.rgb(105, 105, 105)('switch agent')}  ${chalk.rgb(150, 150, 150)('ctrl+p')} ${chalk.rgb(105, 105, 105)('commands')}`;
+
+  const shortcutsVisibleLen = stripAnsi(shortcutHint).length;
+  const padShortcuts = Math.max(0, boxW - shortcutsVisibleLen);
+  const lineShortcuts = ' '.repeat(boxLeft + padShortcuts) + shortcutHint;
+
+  const output = [];
+
+  if (!chatTurns || chatTurns.length === 0) {
+    const totalLines = BANNER_ART_RAW.length + 3 + 5 + 7;
+    const verticalPadding = Math.max(0, Math.floor((termH - totalLines) / 2));
+    const subtitleText = `v${VERSION}  agent workspace có kiểm soát`;
+    const subIndentStr = ' '.repeat(Math.max(2, Math.floor((termW - subtitleText.length) / 2)));
+
+    for (let i = 0; i < verticalPadding; i++) {
+      output.push('\x1b[K');
+    }
+    for (const artLine of getBannerLogoLines()) {
+      output.push(bannerIndentStr + artLine + '\x1b[K');
+    }
+    output.push('\x1b[K');
+    output.push(subIndentStr + chalk.rgb(115, 115, 115)(subtitleText) + '\x1b[K');
+    output.push('\x1b[K');
+
+    // Show initial notification ONCE before human chats
+    output.push(boxIndentStr + chalk.hex('#a855f7')('✔') + ' ' + chalk.rgb(220, 220, 220)('Khởi tạo Worktree Sandbox cô lập (.custos/sandboxes/worktree-live)') + '\x1b[K');
+    output.push(boxIndentStr + chalk.hex('#a855f7')('✔') + ' ' + chalk.rgb(220, 220, 220)('Phân tích AST & tổng hợp bản vá: +5 additions, -2 deletions') + '\x1b[K');
+    output.push(boxIndentStr + chalk.hex('#a855f7')('✔') + ' ' + chalk.rgb(220, 220, 220)('Nhiệm vụ hoàn tất an toàn dưới cơ chế Epoch Lock Guard!') + '\x1b[K');
+    output.push(boxIndentStr + chalk.rgb(115, 115, 115)(`${modeBadge} · Claude Opus 4.5 · 1.2s · 42.1 tok/s`) + '\x1b[K');
+    output.push('\x1b[K');
+  } else {
+    // Build full conversation history for the entire session
+    const allHistoryLines = [];
+
+    if (termH >= 36) {
+      for (const artLine of getBannerLogoLines()) {
+        allHistoryLines.push(bannerIndentStr + artLine);
+      }
+      const subtitleText = `v${VERSION}  agent workspace có kiểm soát`;
+      const subIndentStr = ' '.repeat(Math.max(2, Math.floor((termW - subtitleText.length) / 2)));
+      allHistoryLines.push(subIndentStr + chalk.rgb(115, 115, 115)(subtitleText));
+      allHistoryLines.push('');
+    } else {
+      const topTitle = `${chalk.rgb(214, 214, 214).bold('CUSTOS')}  ${chalk.rgb(115, 115, 115)(`v${VERSION}  agent workspace có kiểm soát`)}`;
+      const topIndent = Math.max(2, Math.floor((termW - stripAnsi(topTitle).length) / 2));
+      allHistoryLines.push(' '.repeat(topIndent) + topTitle);
+      allHistoryLines.push('');
+    }
+
+    const maxTextW = innerW - 3;
+
+    // Render every turn of the session
+    for (let tIdx = 0; tIdx < chatTurns.length; tIdx++) {
+      const turn = chatTurns[tIdx];
+      const turnTheme = getAgentTheme(turn.mode);
+      const turnBar = chalk.hex(turnTheme.color).bold('▌');
+
+      const wrappedQuery = wrapString(turn.query, maxTextW);
+      wrappedQuery.forEach((qLine, i) => {
+        if (i === 0) {
+          allHistoryLines.push(boxIndentStr + turnBar + ' ' + chalk.white.bold(qLine));
+        } else {
+          allHistoryLines.push(boxIndentStr + '  ' + chalk.white.bold(qLine));
+        }
+      });
+
+      for (const rLine of (turn.responseLines || [])) {
+        const wrappedResp = wrapString(rLine, maxTextW);
+        for (const wLine of wrappedResp) {
+          allHistoryLines.push(boxIndentStr + '  ' + chalk.rgb(215, 215, 215)(padToWidth(wLine, innerW - 1)));
+        }
+      }
+
+      if (turn.meta) {
+        allHistoryLines.push(boxIndentStr + '  ' + chalk.rgb(105, 105, 105)(padToWidth(turn.meta, innerW - 1)));
+      }
+      allHistoryLines.push('');
+    }
+
+    const promptRows = 5; // empty row + line1 + line2 + line3 + shortcuts
+    const indicatorRows = 1;
+    const availableHistoryRows = Math.max(4, termH - promptRows - indicatorRows);
+
+    const totalLines = allHistoryLines.length;
+    const maxScroll = Math.max(0, totalLines - availableHistoryRows);
+    const effectiveScroll = Math.max(0, Math.min(scrollOffset, maxScroll));
+
+    if (totalLines <= availableHistoryRows) {
+      for (const hLine of allHistoryLines) {
+        output.push(hLine + '\x1b[K');
+      }
+    } else {
+      const endIndex = totalLines - effectiveScroll;
+      const startIndex = Math.max(0, endIndex - availableHistoryRows);
+      const visibleLines = allHistoryLines.slice(startIndex, endIndex);
+
+      if (startIndex > 0) {
+        output.push(boxIndentStr + chalk.rgb(120, 120, 120)('▲ ') + chalk.dim(`Còn ${startIndex} dòng phía trên [PageUp / Ctrl+↑ để cuộn]`) + '\x1b[K');
+      } else {
+        output.push('\x1b[K');
+      }
+
+      for (const vLine of visibleLines) {
+        output.push(vLine + '\x1b[K');
+      }
+
+      if (effectiveScroll > 0) {
+        output.push(boxIndentStr + chalk.hex('#38bdf8')('▼ ') + chalk.hex('#38bdf8')(`Đang xem lịch sử [${endIndex}/${totalLines}]`) + chalk.dim(' · PageDown / End để về cuối') + '\x1b[K');
+      }
+    }
+  }
+
+  output.push(line1 + '\x1b[K');
+  output.push(line2 + '\x1b[K');
+  output.push(line3 + '\x1b[K');
+  output.push(lineShortcuts + '\x1b[K');
+
+  const currentTotal = output.length;
+  for (let i = currentTotal; i < termH; i++) {
+    output.push('\x1b[K');
+  }
+
+  return output.join('\r\n');
+}
+
+function waitForKeypress() {
+  return new Promise((resolve) => {
+    const onKey = () => {
+      inputDevice.removeListener('keypress', onKey);
+      resolve();
+    };
+    if (inputDevice.isTTY) inputDevice.setRawMode(true);
+    inputDevice.resume();
+    inputDevice.once('keypress', onKey);
+  });
+}
+
+function promptInteractiveChat({ currentMode, history, chatTurns = [] }) {
+  return new Promise((resolve) => {
+    let inputStr = '';
+    let cursorPos = 0;
+    let historyIdx = history.length;
+    let scrollOffset = 0;
+
+    outputDevice.write('\x1b[2J\x1b[H');
+
+    const render = () => {
+      outputDevice.write('\x1b[?25l\x1b[H' + renderHeroFrame({ currentInput: inputStr, cursorPos, currentMode, chatTurns, scrollOffset }));
+    };
+
+    const onResize = () => {
+      render();
+    };
+    process.stdout.on('resize', onResize);
+
+    const cleanup = () => {
+      inputDevice.removeListener('keypress', onKeypress);
+      process.stdout.removeListener('resize', onResize);
+      outputDevice.write('\x1b[?25h');
+    };
+
+    const onKeypress = (str, key) => {
+      if (key?.ctrl && key?.name === 'c') {
+        cleanup();
+        leaveAlternateScreen();
+        process.exit(0);
+      }
+
+      if (key?.name === 'return' || key?.name === 'enter') {
+        scrollOffset = 0;
+        cleanup();
+        resolve({ type: 'submit', value: inputStr });
+        return;
+      }
+
+      if (key?.name === 'tab') {
+        cleanup();
+        resolve({ type: 'tab' });
+        return;
+      }
+
+      if ((key?.ctrl && key?.name === 'p') || (str === '/' && inputStr === '')) {
+        cleanup();
+        resolve({ type: 'slash' });
+        return;
+      }
+
+      // Scrolling controls for browsing session chat history
+      if (key?.name === 'pageup') {
+        const pageSize = Math.max(3, Math.floor((process.stdout.rows || 30) / 2));
+        scrollOffset = scrollOffset + pageSize;
+        render();
+        return;
+      }
+
+      if (key?.name === 'pagedown') {
+        const pageSize = Math.max(3, Math.floor((process.stdout.rows || 30) / 2));
+        scrollOffset = Math.max(0, scrollOffset - pageSize);
+        render();
+        return;
+      }
+
+      if ((key?.ctrl && key?.name === 'up') || (key?.shift && key?.name === 'up')) {
+        scrollOffset = scrollOffset + 1;
+        render();
+        return;
+      }
+
+      if ((key?.ctrl && key?.name === 'down') || (key?.shift && key?.name === 'down')) {
+        scrollOffset = Math.max(0, scrollOffset - 1);
+        render();
+        return;
+      }
+
+      if (key?.name === 'home') {
+        if (scrollOffset > 0 || key?.ctrl) {
+          scrollOffset = 999999;
+          render();
+          return;
+        }
+        cursorPos = 0;
+        render();
+        return;
+      }
+
+      if (key?.name === 'end') {
+        if (scrollOffset > 0) {
+          scrollOffset = 0;
+          render();
+          return;
+        }
+        cursorPos = inputStr.length;
+        render();
+        return;
+      }
+
+      if (key?.name === 'escape') {
+        if (scrollOffset > 0) {
+          scrollOffset = 0;
+          render();
+          return;
+        }
+      }
+
+      if (key?.name === 'up') {
+        if (scrollOffset > 0) {
+          scrollOffset = scrollOffset + 1;
+          render();
+          return;
+        }
+        if (history.length > 0 && historyIdx > 0) {
+          historyIdx--;
+          inputStr = history[historyIdx] || '';
+          cursorPos = inputStr.length;
+          render();
+        }
+        return;
+      }
+
+      if (key?.name === 'down') {
+        if (scrollOffset > 0) {
+          scrollOffset = Math.max(0, scrollOffset - 1);
+          render();
+          return;
+        }
+        if (historyIdx < history.length - 1) {
+          historyIdx++;
+          inputStr = history[historyIdx] || '';
+          cursorPos = inputStr.length;
+          render();
+        } else if (historyIdx === history.length - 1) {
+          historyIdx = history.length;
+          inputStr = '';
+          cursorPos = 0;
+          render();
+        }
+        return;
+      }
+
+      if (key?.name === 'backspace') {
+        scrollOffset = 0;
+        if (cursorPos > 0) {
+          inputStr = inputStr.slice(0, cursorPos - 1) + inputStr.slice(cursorPos);
+          cursorPos--;
+          render();
+        }
+        return;
+      }
+
+      if (key?.name === 'delete') {
+        scrollOffset = 0;
+        if (cursorPos < inputStr.length) {
+          inputStr = inputStr.slice(0, cursorPos) + inputStr.slice(cursorPos + 1);
+          render();
+        }
+        return;
+      }
+
+      if (key?.name === 'left') {
+        cursorPos = Math.max(0, cursorPos - 1);
+        render();
+        return;
+      }
+
+      if (key?.name === 'right') {
+        cursorPos = Math.min(inputStr.length, cursorPos + 1);
+        render();
+        return;
+      }
+
+      if (str && !key?.ctrl && !key?.meta && str.length >= 1) {
+        scrollOffset = 0;
+        inputStr = inputStr.slice(0, cursorPos) + str + inputStr.slice(cursorPos);
+        cursorPos += str.length;
+        render();
+      }
+    };
+
+    if (inputDevice.isTTY) inputDevice.setRawMode(true);
+    inputDevice.resume();
+    inputDevice.on('keypress', onKeypress);
+    render();
+  });
+}
+
 export async function startRepl() {
   enterAlternateScreen();
-  printMainBanner();
 
   let currentMode = 'custos';
   emitKeypressEvents(inputDevice);
-  const rl = readline.createInterface({ input: inputDevice, output: outputDevice });
-
-  let waitingForInput = false;
-
-  const onKeypress = (str, key) => {
-    if (waitingForInput && (key?.name === 'return' || key?.name === 'enter')) {
-      outputDevice.write('\x1b[0m');
-    }
-    if (waitingForInput && str === '/' && (rl.line?.trim() === '/' || rl.line?.trim() === '')) {
-      waitingForInput = false;
-      setImmediate(() => {
-        rl.write('\r\n');
-      });
-      return;
-    }
-    if (waitingForInput && key?.name === 'tab' && !rl.line) {
-      waitingForInput = false;
-      setImmediate(() => {
-        rl.write('mode\r\n');
-      });
-      return;
-    }
-    if (waitingForInput && key?.ctrl && key?.name === 'p') {
-      waitingForInput = false;
-      setImmediate(() => {
-        rl.write('\x15/\r\n');
-      });
-    }
-  };
-
-  inputDevice.on('keypress', onKeypress);
-
-  const getPrompt = () => {
-    const inputLeft = Math.max(0, Math.floor((getTerminalWidth() - CHAT_WIDTH) / 2));
-    const inputPadding = ' '.repeat(inputLeft);
-    if (currentMode === 'custos') {
-      return `${inputPadding}${chalk.bgRgb(29, 29, 29).rgb(205, 205, 205)(' │ ')}\x1b[48;2;29;29;29m\x1b[38;2;205;205;205m`;
-    }
-    return `${inputPadding}${chalk.bgRgb(29, 29, 29).rgb(205, 205, 205)(' │ ')}${chalk.bgRgb(29, 29, 29).hex('#eab308')(`custos-${currentMode} › `)}\x1b[48;2;29;29;29m\x1b[38;2;205;205;205m`;
-  };
+  const history = [];
+  const chatTurns = [];
 
   while (true) {
-    waitingForInput = true;
-    const rawLine = await rl.question(getPrompt());
-    waitingForInput = false;
-    const line = rawLine.trim();
-    if (!line) continue;
+    const res = await promptInteractiveChat({ currentMode, history, chatTurns });
 
-    const [cmd, ...args] = line.split(/\s+/);
-    const argStr = args.join(' ');
-    const lowerCmd = cmd.toLowerCase();
-    const cleanCmd = lowerCmd.startsWith('/') ? lowerCmd.slice(1) : lowerCmd;
+    if (res.type === 'tab') {
+      try {
+        const chosen = await promptModeSelection();
+        if (chosen) {
+          currentMode = chosen;
+        }
+      } catch (err) {
+        if (err.name !== 'ExitPromptError') throw err;
+      }
+      continue;
+    }
 
-    if (cleanCmd === 'exit' || cleanCmd === 'quit' || cleanCmd === 'q') {
-      console.log(chalk.dim('\n  Tạm biệt! Custos Runtime đang bảo vệ hệ thống của bạn.\n'));
-      break;
-    } else if (cleanCmd === 'clear' || cleanCmd === 'cls') {
-      console.clear();
-      printMainBanner();
-    } else if (lowerCmd === '/' || lowerCmd === '/mode' || lowerCmd === 'mode' && !args[0]) {
-      rl.pause();
+    if (res.type === 'slash') {
       try {
         const chosen = await promptSlashSelection();
         if (chosen) {
           if (chosen.type === 'submenu' && chosen.value === 'mode') {
             currentMode = await promptModeSelection();
-            printCentered(chalk.cyan(`Đã chuyển sang custos-${currentMode}`));
           } else if (chosen.type === 'mode') {
             currentMode = chosen.value;
-            printCentered(chalk.cyan(`Đã chuyển sang ${currentMode === 'custos' ? 'custos' : `custos-${currentMode}`}`));
           } else if (chosen.type === 'action') {
             switch (chosen.value) {
               case 'vibe':
                 await runVibeWizard(currentMode !== 'custos' ? currentMode : null);
+                console.log(chalk.dim('\n  Nhấn phím bất kỳ để tiếp tục...'));
+                await waitForKeypress();
                 break;
               case 'list':
                 printTaskList();
+                console.log(chalk.dim('  Nhấn phím bất kỳ để tiếp tục...'));
+                await waitForKeypress();
                 break;
               case 'create': {
                 const title = await input({
@@ -704,75 +1160,105 @@ export async function startRepl() {
                   tasks.unshift(newTask);
                   saveTasks(tasks);
                   console.log(chalk.green(`\n  ✔ Đã tạo task mới [${newTask.id}] (${newTask.mode}): "${newTask.title}"\n`));
+                  console.log(chalk.dim('  Nhấn phím bất kỳ để tiếp tục...'));
+                  await waitForKeypress();
                 }
                 break;
               }
               case 'advance':
                 advanceTask(tasks[0]?.id);
+                console.log(chalk.dim('  Nhấn phím bất kỳ để tiếp tục...'));
+                await waitForKeypress();
                 break;
               case 'diff':
                 console.log();
                 printUnifiedDiff();
+                console.log(chalk.dim('  Nhấn phím bất kỳ để tiếp tục...'));
+                await waitForKeypress();
                 break;
               case 'permit':
                 await promptPermitApproval();
+                console.log(chalk.dim('  Nhấn phím bất kỳ để tiếp tục...'));
+                await waitForKeypress();
                 break;
               case 'status':
                 printStatus();
+                console.log(chalk.dim('  Nhấn phím bất kỳ để tiếp tục...'));
+                await waitForKeypress();
                 break;
               case 'clear':
-                console.clear();
-                printMainBanner();
                 break;
               case 'help':
                 printHelp();
+                console.log(chalk.dim('  Nhấn phím bất kỳ để tiếp tục...'));
+                await waitForKeypress();
                 break;
               case 'exit':
                 console.log(chalk.dim('\n  Tạm biệt! Custos Runtime đang bảo vệ hệ thống của bạn.\n'));
-                inputDevice.removeListener('keypress', onKeypress);
-                rl.close();
                 leaveAlternateScreen();
                 return;
             }
           }
         }
       } catch (err) {
-        if (err.name === 'ExitPromptError') {
-          console.log(chalk.dim('\n  (Đã hủy thao tác)\n'));
-        } else {
-          throw err;
-        }
-      } finally {
-        rl.resume();
+        if (err.name !== 'ExitPromptError') throw err;
       }
+      continue;
+    }
+
+    const line = (res.value || '').trim();
+    if (!line) continue;
+    history.push(line);
+
+    const [cmd, ...args] = line.split(/\s+/);
+    const argStr = args.join(' ');
+    const lowerCmd = cmd.toLowerCase();
+    const cleanCmd = lowerCmd.startsWith('/') ? lowerCmd.slice(1) : lowerCmd;
+
+    if (cleanCmd === 'exit' || cleanCmd === 'quit' || cleanCmd === 'q') {
+      console.log(chalk.dim('\n  Tạm biệt! Custos Runtime đang bảo vệ hệ thống của bạn.\n'));
+      break;
+    } else if (cleanCmd === 'clear' || cleanCmd === 'cls') {
+      chatTurns.length = 0;
+      continue;
+    } else if (lowerCmd === '/' || lowerCmd === '/mode' || lowerCmd === 'mode' && !args[0]) {
+      try {
+        const chosen = await promptModeSelection();
+        if (chosen) {
+          currentMode = chosen;
+        }
+      } catch (err) {
+        if (err.name !== 'ExitPromptError') throw err;
+      }
+      continue;
     } else if (
       cleanCmd === 'code' ||
       cleanCmd === 'custos-code' ||
       (cleanCmd === 'mode' && args[0]?.toLowerCase() === 'code')
     ) {
       currentMode = 'code';
-      printCentered(chalk.cyan('Đã chuyển sang custos-code'));
     } else if (
       cleanCmd === 'research' ||
       cleanCmd === 'custos-research' ||
       (cleanCmd === 'mode' && args[0]?.toLowerCase() === 'research')
     ) {
       currentMode = 'research';
-      printCentered(chalk.cyan('Đã chuyển sang custos-research'));
     } else if (
       cleanCmd === 'assistant' ||
       cleanCmd === 'custos-assistant' ||
       (cleanCmd === 'mode' && args[0]?.toLowerCase() === 'assistant')
     ) {
       currentMode = 'assistant';
-      printCentered(chalk.cyan('Đã chuyển sang custos-assistant'));
     } else if (cleanCmd === 'custos' || cleanCmd === 'exit-mode') {
       currentMode = 'custos';
-      printMainBanner();
     } else if (cleanCmd === 'vibe' || cleanCmd === 'v') {
       await runVibeWizard(currentMode !== 'custos' ? currentMode : null);
+      console.log(chalk.dim('\n  Nhấn phím bất kỳ để tiếp tục...'));
+      await waitForKeypress();
     } else if (cleanCmd === 'list' || cleanCmd === 'tasks' || cleanCmd === 'ls') {
       printTaskList();
+      console.log(chalk.dim('  Nhấn phím bất kỳ để tiếp tục...'));
+      await waitForKeypress();
     } else if (cleanCmd === 'create' || cleanCmd === 'new') {
       const title = argStr || 'New sovereign agentic workflow';
       const modeName = currentMode !== 'custos' ? (currentMode.charAt(0).toUpperCase() + currentMode.slice(1)) : 'Code';
@@ -788,66 +1274,89 @@ export async function startRepl() {
       tasks.unshift(newTask);
       saveTasks(tasks);
       console.log(chalk.green(`  ✔ Đã tạo task mới [${newTask.id}] (${newTask.mode}): "${title}"\n`));
+      console.log(chalk.dim('  Nhấn phím bất kỳ để tiếp tục...'));
+      await waitForKeypress();
     } else if (cleanCmd === 'advance') {
       advanceTask(args[0] || tasks[0]?.id);
+      console.log(chalk.dim('  Nhấn phím bất kỳ để tiếp tục...'));
+      await waitForKeypress();
     } else if (cleanCmd === 'diff' || cleanCmd === 'd') {
       printUnifiedDiff();
+      console.log(chalk.dim('  Nhấn phím bất kỳ để tiếp tục...'));
+      await waitForKeypress();
     } else if (cleanCmd === 'permit' || cleanCmd === 'p') {
       await promptPermitApproval();
+      console.log(chalk.dim('  Nhấn phím bất kỳ để tiếp tục...'));
+      await waitForKeypress();
     } else if (cleanCmd === 'status') {
       printStatus();
+      console.log(chalk.dim('  Nhấn phím bất kỳ để tiếp tục...'));
+      await waitForKeypress();
     } else if (cleanCmd === 'help' || cleanCmd === '?') {
       printHelp();
+      console.log(chalk.dim('  Nhấn phím bất kỳ để tiếp tục...'));
+      await waitForKeypress();
     } else {
       if (currentMode !== 'custos') {
         const fullPrompt = line;
-        console.log(chalk.cyan(`\n  ⚡ [custos-${currentMode.toLowerCase()}] Đang xử lý yêu cầu: "${fullPrompt}"...`));
-        const s1 = ora(chalk.cyan('Khởi tạo sandbox cô lập (Worktree Sandbox)...')).start();
-        await new Promise((r) => setTimeout(r, 500));
-        s1.succeed(chalk.white('Sandbox cô lập đã sẵn sàng: ') + chalk.dim('.custos/sandboxes/worktree-live'));
-
-        const s2 = ora(chalk.cyan('Phân tích AST & tổng hợp bản vá...')).start();
-        await new Promise((r) => setTimeout(r, 700));
-        s2.succeed(chalk.white('Tổng hợp AST hoàn tất: ') + chalk.green('+5 additions, -2 deletions'));
-
-        console.log();
-        printUnifiedDiff();
-
-        const approve = await confirm({
-          message: chalk.bold.white('Phê duyệt Giấy phép Thực thi (ExecutionPermit) để áp dụng vào mã nguồn?'),
-          default: true,
+        const agentName = getAgentTheme(currentMode).name;
+        const lower = fullPrompt.toLowerCase().trim();
+        let responseLines;
+        if (lower === 'hi' || lower === 'hello' || lower === 'chào' || lower === 'hih' || lower === 'hey') {
+          responseLines = [
+            `Xin chào! Tôi là Custos ${agentName}.`,
+            'Tôi đã sẵn sàng hỗ trợ bạn phân tích, lập trình và điều phối nhiệm vụ an toàn.',
+          ];
+        } else {
+          responseLines = [
+            `Đã tiếp nhận yêu cầu: "${fullPrompt}".`,
+            'Đang xử lý trong Sandbox cô lập dưới cơ chế bảo vệ Epoch Lock Guard.',
+          ];
+        }
+        chatTurns.push({
+          query: fullPrompt,
+          mode: currentMode,
+          responseLines,
+          meta: `${agentName} · Claude Opus 4.5 · 0.4s · OpenCode Zen`
         });
 
-        if (approve) {
-          const s3 = ora(chalk.cyan('Ghi nhận audit span vào SQLite & hoàn tất nhiệm vụ...')).start();
-          await new Promise((r) => setTimeout(r, 500));
-          s3.succeed(chalk.green('Nhiệm vụ đã hoàn tất thành công dưới cơ chế bảo vệ Epoch Lock!'));
-
-          const newTask = {
-            id: `task-${Math.random().toString(36).substring(2, 6)}`,
-            title: fullPrompt,
-            mode: currentMode.charAt(0).toUpperCase() + currentMode.slice(1),
-            status: 'Completed',
-            risk: 'Medium',
-            spans: 5,
-            createdAt: 'Just now',
-          };
-          tasks.unshift(newTask);
-          saveTasks(tasks);
-        } else {
-          console.log(chalk.yellow('Đã hủy cấp phép. Sandbox đã được rollback an toàn.'));
-        }
-        console.log();
+        const newTask = {
+          id: `task-${Math.random().toString(36).substring(2, 6)}`,
+          title: fullPrompt,
+          mode: currentMode.charAt(0).toUpperCase() + currentMode.slice(1),
+          status: 'Completed',
+          risk: 'Medium',
+          spans: 5,
+          createdAt: 'Just now',
+        };
+        tasks.unshift(newTask);
+        saveTasks(tasks);
+        continue;
       } else {
-        printCentered(chalk.white(`Bạn: ${line}`));
-        printCentered(chalk.dim("Custos đang ở chế độ hội thoại. Nhấn Tab để chọn agent hoặc '/' để mở lệnh."));
-        console.log();
+        const lower = line.toLowerCase().trim();
+        let responseLines;
+        if (lower === 'hi' || lower === 'hello' || lower === 'chào' || lower === 'hih' || lower === 'hey') {
+          responseLines = [
+            'Xin chào! Custos Sovereign Agentic Runtime đã sẵn sàng.',
+            'Bạn có thể trò chuyện tự do hoặc nhấn Tab để chọn agent chuyên biệt.',
+          ];
+        } else {
+          responseLines = [
+            'Custos Sovereign Agentic Runtime đang ở chế độ hội thoại.',
+            'Nhấn Tab để chọn agent hoặc \'/\' để mở danh mục lệnh.',
+          ];
+        }
+        chatTurns.push({
+          query: line,
+          mode: 'code',
+          responseLines,
+          meta: 'Build · Claude Opus 4.5 · 0.4s · OpenCode Zen'
+        });
+        continue;
       }
     }
   }
 
-  inputDevice.removeListener('keypress', onKeypress);
-  rl.close();
   leaveAlternateScreen();
 }
 
@@ -959,3 +1468,7 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+
+
+

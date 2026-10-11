@@ -1,46 +1,54 @@
 import React from 'react';
-import { Sparkles, Terminal } from 'lucide-react';
+
+const CUSTOS_ASCII_LINES = [
+  ' ██████╗██╗   ██╗███████╗████████╗ ██████╗ ███████╗',
+  '██╔════╝██║   ██║██╔════╝╚══██╔══╝██╔═══██╗██╔════╝',
+  '██║     ██║   ██║███████╗   ██║   ██║   ██║███████╗',
+  '██║     ██║   ██║╚════██║   ██║   ██║   ██║╚════██║',
+  '╚██████╗╚██████╔╝███████║   ██║   ╚██████╔╝███████║',
+  ' ╚═════╝ ╚═════╝ ╚══════╝   ╚═╝    ╚═════╝ ╚══════╝',
+];
 
 interface TerminalBannerProps {
   onOpenModeSelector?: () => void;
   onRunCommand?: (command: string) => void;
+  showNotice?: boolean;
 }
 
-export const TerminalBanner: React.FC<TerminalBannerProps> = ({ onOpenModeSelector, onRunCommand }) => {
+export const TerminalBanner: React.FC<TerminalBannerProps> = ({ showNotice = true }) => {
   return (
     <div className="terminal-hero-banner">
       <div className="banner-content-column">
-        <div className="banner-title-line">
-          <span className="banner-mark">C</span>
-          <span className="banner-brand-name">custos</span>
+        <pre className="banner-ascii-art" aria-label="Custos Logo">
+          {CUSTOS_ASCII_LINES.map((line, idx) => (
+            <span key={idx} className={`ascii-line ascii-line-${idx}`}>
+              {line}
+              {'\n'}
+            </span>
+          ))}
+        </pre>
+
+        <div className="banner-subtitle-line">
           <span className="banner-version">v0.1.1</span>
-          <span className="banner-subtitle">Không gian làm việc có kiểm soát</span>
+          <span className="banner-subtitle">agent workspace có kiểm soát</span>
         </div>
 
-        <div className="banner-tagline">
-          Bạn muốn bắt đầu việc gì? Chọn một gợi ý hoặc nhập yêu cầu bằng ngôn ngữ tự nhiên.
-        </div>
-
-        <div className="banner-quick-actions" aria-label="Gợi ý bắt đầu nhanh">
-          <button type="button" onClick={() => onRunCommand?.('create Viết mục tiêu của bạn ở đây')}>Tạo nhiệm vụ</button>
-          <button type="button" onClick={() => onRunCommand?.('list')}>Xem nhiệm vụ</button>
-          <button type="button" onClick={() => onRunCommand?.('status')}>Kiểm tra hệ thống</button>
-          <button
-            type="button"
-            className="banner-mode-badge-btn"
-            onClick={onOpenModeSelector}
-            title="Mở bảng lệnh (/)"
-          >
-            <Terminal size={12} />
-            <span>/</span>
-            <span className="btn-text">Tất cả lệnh</span>
-          </button>
-        </div>
-
-        <div className="banner-keyboard-hint">
-          <Sparkles size={13} className="hint-icon" />
-          Mẹo: nhấn <kbd>/</kbd> để mở lệnh nhanh, <kbd>↑</kbd> để gọi lại lệnh trước.
-        </div>
+        {showNotice && (
+          <div className="banner-initial-notice">
+            <div className="notice-line">
+              <span className="notice-icon">✔</span> Khởi tạo Worktree Sandbox cô lập (.custos/sandboxes/worktree-live)
+            </div>
+            <div className="notice-line">
+              <span className="notice-icon">✔</span> Phân tích AST & tổng hợp bản vá: +5 additions, -2 deletions
+            </div>
+            <div className="notice-line">
+              <span className="notice-icon">✔</span> Nhiệm vụ hoàn tất an toàn dưới cơ chế Epoch Lock Guard!
+            </div>
+            <div className="notice-meta">
+              Assistant · Claude Opus 4.5 · 1.2s · 42.1 tok/s
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

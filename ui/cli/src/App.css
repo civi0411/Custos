@@ -425,8 +425,28 @@ code, pre, kbd {
 }
 
 .terminal-output-line.line-input {
-  color: #fff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 14px auto 12px;
+  text-align: center;
+  width: 100%;
+}
+
+.terminal-output-line.line-input .line-content {
+  display: inline-flex;
+  align-items: center;
+  background: #1c1c1c;
+  border: 1px solid #2d2d2d;
+  border-left: 3px solid #38bdf8;
+  border-radius: 4px;
+  padding: 8px 18px;
+  color: #f1f5f9;
   font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  max-width: min(800px, 92%);
 }
 
 .terminal-output-line.line-prompt {
@@ -2694,6 +2714,12 @@ input:focus-visible {
 .view-container-terminal {
   padding: 0;
   background: #080808;
+  height: 100%;
+  max-height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .terminal-view-card.is-welcome {
@@ -2702,110 +2728,358 @@ input:focus-visible {
   border-radius: 0;
   background: #080808;
   box-shadow: none;
+  height: 100%;
+  max-height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .terminal-view-card.is-welcome .terminal-top-bar {
   display: none;
 }
 
-.terminal-view-card.is-welcome .terminal-screen {
+.opencode-top-actions {
+  position: absolute;
+  top: 14px;
+  right: 20px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 0 24px 92px;
-  overflow: visible;
+  gap: 8px;
+  z-index: 40;
+}
+
+.terminal-view-card.is-welcome .terminal-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 30px 24px 80px 24px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  height: 100%;
+  max-height: 100%;
+  flex: 1;
+  box-sizing: border-box;
+}
+
+.terminal-view-card.is-welcome .terminal-screen::-webkit-scrollbar {
+  width: 6px;
+}
+
+.terminal-view-card.is-welcome .terminal-screen::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.terminal-view-card.is-welcome .terminal-screen::-webkit-scrollbar-thumb {
+  background: #262626;
+  border-radius: 3px;
+}
+
+.terminal-view-card.is-welcome .terminal-screen::-webkit-scrollbar-thumb:hover {
+  background: #404040;
+}
+
+.opencode-flow-column {
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.opencode-user-card {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-left: 3px solid #38bdf8;
+  border-radius: 0;
+  padding: 4px 14px;
+  color: #f1f5f9;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: left;
+  box-shadow: none;
+  margin-top: 14px;
+  margin-bottom: 6px;
+}
+
+.opencode-user-text {
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.opencode-assistant-msg {
+  width: 100%;
+  padding: 2px 0 14px 14px;
+  color: #d4d4d4;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.opencode-assistant-msg.line-spinner {
+  color: #38bdf8;
+}
+
+.opencode-assistant-msg.line-success {
+  color: #34d399;
+}
+
+.opencode-assistant-msg.line-warning {
+  color: #fbbf24;
+}
+
+.opencode-assistant-msg.line-error {
+  color: #f87171;
+}
+
+.assistant-msg-content {
+  line-height: 1.55;
 }
 
 .terminal-view-card.is-welcome .terminal-hero-banner {
-  width: min(640px, 92vw);
-  margin: 0;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
   padding: 0;
   border: 0;
   background: transparent;
   backdrop-filter: none;
+  display: flex;
+  justify-content: center;
 }
 
 .terminal-view-card.is-welcome .banner-content-column {
+  display: flex;
+  flex-direction: column;
   align-items: center;
+  text-align: center;
   gap: 0;
+  margin: 0 auto;
 }
 
-.terminal-view-card.is-welcome .banner-title-line {
-  justify-content: center;
-  margin: 0 0 22px;
-}
-
-.terminal-view-card.is-welcome .banner-mark,
-.terminal-view-card.is-welcome .banner-version,
-.terminal-view-card.is-welcome .banner-subtitle,
-.terminal-view-card.is-welcome .banner-tagline,
-.terminal-view-card.is-welcome .banner-quick-actions,
-.terminal-view-card.is-welcome .banner-keyboard-hint {
-  display: none;
-}
-
-.terminal-view-card.is-welcome .banner-brand-name {
-  color: #d7d7d7;
+.terminal-view-card.is-welcome .banner-ascii-art {
   font-family: var(--font-mono);
-  font-size: clamp(2.65rem, 7vw, 4.5rem);
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.09em;
-  text-shadow: 0 0 24px rgba(255, 255, 255, 0.04);
+  font-size: clamp(0.68rem, 1.15vw, 0.92rem);
+  line-height: 1.18;
+  font-weight: 700;
+  margin: 0 auto 10px auto;
+  text-align: left;
+  white-space: pre;
+  letter-spacing: 0.01em;
+  display: inline-block;
+}
+
+.terminal-view-card.is-welcome .ascii-line-0 { color: #d6d6d6; }
+.terminal-view-card.is-welcome .ascii-line-1 { color: #c6c6c6; }
+.terminal-view-card.is-welcome .ascii-line-2 { color: #b4b4b4; }
+.terminal-view-card.is-welcome .ascii-line-3 { color: #9c9c9c; }
+.terminal-view-card.is-welcome .ascii-line-4 { color: #848484; }
+.terminal-view-card.is-welcome .ascii-line-5 { color: #646464; }
+
+.terminal-view-card.is-welcome .banner-subtitle-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: #737373;
+  margin-bottom: 22px;
+  text-align: center;
+}
+
+.terminal-view-card.is-welcome .banner-version {
+  color: #737373;
+}
+
+.terminal-view-card.is-welcome .banner-subtitle {
+  color: #737373;
+}
+
+.banner-initial-notice {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  text-align: left;
+  width: 100%;
+  max-width: 620px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-bottom: 12px;
+}
+
+.notice-line {
+  color: #d4d4d4;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notice-icon {
+  color: #a855f7;
+  font-weight: 700;
+}
+
+.notice-meta {
+  color: #737373;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  margin-top: 2px;
 }
 
 .terminal-view-card.is-welcome .terminal-bottom-container {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: min(640px, calc(100vw - 36px));
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  margin-top: 4px;
   padding: 0;
-  transform: translate(-50%, 34px);
   border: 0;
   background: transparent;
 }
 
-.terminal-view-card.is-welcome .gpt-chat-bar {
-  min-height: 52px;
-  padding: 5px 7px 5px 12px;
-  border: 1px solid #2a2a2a;
-  border-left: 2px solid #5078c8;
-  border-radius: 2px;
-  background: #151515;
-  box-shadow: none;
+.terminal-view-card.is-welcome .terminal-prompt-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  position: relative;
 }
 
-.terminal-view-card.is-welcome .gpt-chat-bar:focus-within {
-  border-color: #343434;
-  border-left-color: #6b91df;
-  background: #181818;
-  box-shadow: 0 0 0 1px rgba(107, 145, 223, 0.08);
+.opencode-prompt-container {
+  display: flex;
+  flex-direction: column;
+  margin: 0 auto;
 }
 
-.terminal-view-card.is-welcome .gpt-plus-btn,
-.terminal-view-card.is-welcome .gpt-mic-btn,
-.terminal-view-card.is-welcome .gpt-send-btn {
-  display: none;
+/* OpenCode-style box */
+.opencode-chat-box {
+  width: 100%;
+  min-height: 66px;
+  background: #1c1c1c;
+  border: 1px solid #2d2d2d;
+  border-left: 3px solid #38bdf8;
+  border-radius: 3px;
+  padding: 10px 14px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  transition: border-color 0.2s ease, background 0.2s ease;
+  text-align: left;
+  margin: 0 auto;
 }
 
-.terminal-view-card.is-welcome .gpt-chat-input {
-  color: #d4d4d4;
+.opencode-chat-box:focus-within {
+  border-color: #3a3a3a;
+  border-left-color: #38bdf8;
+  background: #1e1e1e;
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.12), 0 6px 24px rgba(0, 0, 0, 0.45);
+}
+
+.opencode-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.opencode-input-row .gpt-chat-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #f1f5f9;
   font-family: var(--font-mono);
-  font-size: 0.86rem;
+  font-size: 0.95rem;
+  caret-color: #38bdf8;
+  text-align: left;
+  padding: 0;
 }
 
-.terminal-view-card.is-welcome .gpt-chat-input::placeholder {
-  color: #5d5d5d;
+.opencode-input-row .gpt-chat-input::placeholder {
+  color: #555555;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+}
+
+.opencode-action-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.opencode-tool-btn,
+.opencode-send-btn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.opencode-tool-btn:hover,
+.opencode-send-btn:hover:not(:disabled) {
+  color: #f1f5f9;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.opencode-send-btn.active {
+  color: #38bdf8;
+}
+
+.opencode-send-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.opencode-status-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
   font-family: var(--font-mono);
   font-size: 0.8rem;
+  text-align: left;
 }
 
-.terminal-view-card.is-welcome .gpt-mode-pill {
-  padding: 4px 8px;
-  border: 0;
-  border-radius: 3px;
-  background: transparent !important;
-  font-size: 0.68rem;
+.opencode-mode-badge {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-family: inherit;
+  transition: opacity 0.15s;
+}
+
+.opencode-mode-badge:hover {
+  opacity: 0.8;
+}
+
+.opencode-model-tag {
+  color: #f1f5f9;
+  font-weight: 600;
+}
+
+.opencode-engine-tag {
+  color: #737373;
 }
 
 .focus-shortcuts {
@@ -2821,8 +3095,11 @@ input:focus-visible {
   background: transparent;
   color: #686868;
   font-family: var(--font-mono);
-  font-size: 0.67rem;
+  font-size: 0.72rem;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .focus-shortcuts button:hover,
@@ -2832,7 +3109,8 @@ input:focus-visible {
 }
 
 .focus-shortcuts kbd {
-  color: #909090;
+  color: #94a3b8;
+  font-weight: 600;
 }
 
 .terminal-view-card.is-welcome .slash-palette-dropdown {

@@ -230,104 +230,93 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   };
 
   return (
-    <div className={`terminal-view-card ${isWelcome ? 'is-welcome' : 'is-active'}`}>
-      <div className="terminal-top-bar">
-        <div className="terminal-controls">
-          <span className="dot dot-red" />
-          <span className="dot dot-yellow" />
-          <span className="dot dot-green" />
-          <span className="terminal-title">
-            custos:~/workspace ({modeSlug}) — bash 80x24
-          </span>
-        </div>
-
-        <div className="terminal-actions">
-          <button
-            className="term-action-btn mode-pill-btn"
-            onClick={() => setShowModeSelector((prev) => !prev)}
-            title="Chọn mode (/)"
-          >
-            <Sliders size={12} />
-            <span>{modeSlug}</span>
+    <div className="terminal-view-card is-welcome">
+      <div className="opencode-top-actions">
+        <button
+          className="term-action-btn mode-pill-btn"
+          onClick={() => setShowModeSelector((prev) => !prev)}
+          title="Chọn mode (/)"
+        >
+          <Sliders size={12} />
+          <span>{modeSlug}</span>
+        </button>
+        <button className="term-action-btn" onClick={() => executeCommand('vibe')}>
+          <Sparkles size={12} />
+          <span>vibe</span>
+        </button>
+        <button className="term-action-btn" onClick={() => executeCommand('list')}>
+          <span>list</span>
+        </button>
+        <button className="term-action-btn" onClick={() => executeCommand('help')}>
+          <HelpCircle size={12} />
+        </button>
+        {onOpenWorkspace && (
+          <button className="term-action-btn" onClick={onOpenWorkspace} title="Mở không gian làm việc">
+            <span>workspace</span>
           </button>
-          <button className="term-action-btn" onClick={() => executeCommand('vibe')}>
-            <Sparkles size={12} />
-            <span>vibe</span>
-          </button>
-          <button className="term-action-btn" onClick={() => executeCommand('list')}>
-            <span>list</span>
-          </button>
-          <button className="term-action-btn" onClick={() => executeCommand('help')}>
-            <HelpCircle size={12} />
-          </button>
-          <button className="term-action-btn" onClick={handleCopyLogs} title="Copy logs">
-            {copied ? <Check size={12} className="copy-ok" /> : <Copy size={12} />}
-          </button>
-          <button className="term-action-btn" onClick={clearTerminal} title="Clear terminal">
-            <Trash2 size={12} />
-          </button>
-        </div>
+        )}
+        <button className="term-action-btn" onClick={handleCopyLogs} title="Copy logs">
+          {copied ? <Check size={12} className="copy-ok" /> : <Copy size={12} />}
+        </button>
+        <button className="term-action-btn" onClick={clearTerminal} title="Clear terminal">
+          <Trash2 size={12} />
+        </button>
       </div>
 
-      <div className="terminal-screen" onClick={() => inputRef.current?.focus()}>
-        {lines.map((line) => (
-          <TerminalLineItem
-            key={line.id}
-            line={line}
-            currentMode={currentMode}
-            isPermitPending={vibeSession.step === 'permit'}
-            onOpenModeSelector={() => setShowModeSelector(true)}
-            onRunCommand={executeCommand}
-            onPermitDecision={handlePermitDecision}
-          />
-        ))}
-        <div ref={terminalEndRef} />
-      </div>
-
-      <div className="terminal-bottom-container">
-        <div className="terminal-prompt-wrapper">
-          {showModeSelector && (
-            <ModeSelectorPalette
-              items={paletteItems}
-              title={paletteLevel === 'mode' ? 'CHỌN MODE' : 'LỆNH & CHỨC NĂNG CUSTOS'}
-              filterQuery={filterQuery}
-              selectedIndex={selectedModeIndex}
-              onSelectIndex={setSelectedModeIndex}
-              onSelectItem={handleSelectSlashItem}
+      <div
+        className="terminal-screen opencode-screen"
+        onClick={(e) => {
+          if (window.getSelection()?.toString()) return;
+          if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('opencode-flow-column')) {
+            inputRef.current?.focus();
+          }
+        }}
+      >
+        <div className="opencode-flow-column">
+          {lines.map((line) => (
+            <TerminalLineItem
+              key={line.id}
+              line={line}
+              currentMode={currentMode}
+              isPermitPending={vibeSession.step === 'permit'}
+              hasChatted={lines.some((l) => l.type === 'input')}
+              onOpenModeSelector={() => setShowModeSelector(true)}
+              onRunCommand={executeCommand}
+              onPermitDecision={handlePermitDecision}
             />
-          )}
+          ))}
 
-          <TerminalPrompt
-            currentMode={currentMode}
-            inputVal={inputVal}
-            isProcessing={isProcessing}
-            showModeSelector={showModeSelector}
-            vibeSession={vibeSession}
-            inputRef={inputRef}
-            onInputChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            onToggleModeSelector={() => {
-              setPaletteLevel('root');
-              setShowModeSelector((prev) => !prev);
-              setSelectedModeIndex(0);
-              inputRef.current?.focus();
-            }}
-            onSend={handleSend}
-          />
+          <div className="terminal-prompt-wrapper">
+            {showModeSelector && (
+              <ModeSelectorPalette
+                items={paletteItems}
+                title={paletteLevel === 'mode' ? 'CHỌN MODE' : 'LỆNH & CHỨC NĂNG CUSTOS'}
+                filterQuery={filterQuery}
+                selectedIndex={selectedModeIndex}
+                onSelectIndex={setSelectedModeIndex}
+                onSelectItem={handleSelectSlashItem}
+              />
+            )}
 
-          {isWelcome && (
-            <div className="focus-shortcuts" aria-label="Phím tắt và điều hướng">
-              <button type="button" onClick={() => setShowModeSelector(true)}>
-                <kbd>/</kbd> lệnh
-              </button>
-              <button type="button" onClick={() => setShowModeSelector(true)}>
-                <kbd>Tab</kbd> đổi chế độ
-              </button>
-              <button type="button" onClick={onOpenWorkspace}>
-                không gian làm việc
-              </button>
-            </div>
-          )}
+            <TerminalPrompt
+              currentMode={currentMode}
+              inputVal={inputVal}
+              isProcessing={isProcessing}
+              showModeSelector={showModeSelector}
+              vibeSession={vibeSession}
+              inputRef={inputRef}
+              onInputChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              onToggleModeSelector={() => {
+                setPaletteLevel('root');
+                setShowModeSelector((prev) => !prev);
+                setSelectedModeIndex(0);
+                inputRef.current?.focus();
+              }}
+              onSend={handleSend}
+            />
+          </div>
+          <div ref={terminalEndRef} />
         </div>
       </div>
     </div>

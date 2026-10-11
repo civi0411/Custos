@@ -143,7 +143,7 @@ export function useTerminalCommands({ currentMode, onModeChange }: UseTerminalCo
     setHistoryIndex(-1);
 
     const activeSlug = getModeSlug(currentMode as OperationalMode);
-    addLine('input', `${activeSlug} ❯ ${trimmed}`);
+    addLine('input', trimmed);
 
     if (trimmed === '/' || trimmed === '/mode' || trimmed === 'mode') {
       setShowModeSelector(true);
@@ -320,8 +320,7 @@ export function useTerminalCommands({ currentMode, onModeChange }: UseTerminalCo
           setIsProcessing(false);
           addLine(
             'info',
-            `💬 Custos: "${trimmed}"\n` +
-            `Hệ thống đang ở chế độ giao tiếp chung. Bạn có thể trò chuyện tự do hoặc nhấn '/' để kích hoạt engine chuyên biệt (custos-code, custos-research, custos-assistant).`
+            'Custos Sovereign Agentic Runtime đang ở chế độ giao tiếp chung. Bạn có thể trò chuyện tự do hoặc nhấn \'/\' để kích hoạt engine chuyên biệt (custos-code, custos-research, custos-assistant).'
           );
         }
         break;
