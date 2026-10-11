@@ -1315,7 +1315,8 @@ impl LocalApiDispatcher {
                         return ApiResponse::error(req.id, format!("Invalid source payload: {e}"))
                     }
                 };
-                let src = match custos_core::research_ingress::source_draft(src) {
+                let file_bytes = src.local_path.as_ref().and_then(|p| std::fs::read(p).ok());
+                let src = match custos_core::research_ingress::source_draft_with_bytes(src, file_bytes.as_deref()) {
                     Ok(src) => src,
                     Err(e) => return ApiResponse::error(req.id, e),
                 };

@@ -12,6 +12,7 @@ pub fn assistant_profile() -> PackProfile {
         vec![
             ExecutionTopology::T0Direct,
             ExecutionTopology::T1SingleWorker,
+            ExecutionTopology::T2StagedPipeline,
         ],
         "user_acceptance_oracle",
         5_000,

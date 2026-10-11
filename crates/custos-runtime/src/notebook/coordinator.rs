@@ -420,6 +420,11 @@ impl PythonKernelCoordinator {
             let _ = r.save_notebook_cell(&cell);
         }
 
+        let execution_record_id = params
+            .task_id
+            .as_ref()
+            .map(|tid| format!("exec_{}_{}", tid, execution_count));
+
         Ok(ExecuteCellResult {
             cell_id: params.cell_id,
             execution_count,
@@ -429,6 +434,7 @@ impl PythonKernelCoordinator {
             output_image,
             wall_ms,
             epoch,
+            execution_record_id,
         })
     }
 
@@ -544,6 +550,7 @@ mod tests {
                     code: "print('Custos Kernel Epoch Test')".into(),
                     workspace_id: None,
                     cwd: None,
+                    task_id: None,
                 },
                 None,
             )
@@ -569,6 +576,7 @@ mod tests {
                     code: "x = 42\nprint(f'x is {x}')".into(),
                     workspace_id: None,
                     cwd: None,
+                    task_id: None,
                 },
                 None,
             )
@@ -589,6 +597,7 @@ mod tests {
                     code: "print(f'persisted x: {x * 2}')".into(),
                     workspace_id: None,
                     cwd: None,
+                    task_id: None,
                 },
                 None,
             )

@@ -64,6 +64,8 @@ pub struct ExecuteCellParams {
     pub code: String,
     pub workspace_id: Option<String>,
     pub cwd: Option<String>,
+    #[serde(default)]
+    pub task_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -76,6 +78,8 @@ pub struct ExecuteCellResult {
     pub output_image: Option<String>,
     pub wall_ms: u64,
     pub epoch: u32,
+    #[serde(default)]
+    pub execution_record_id: Option<String>,
 }
 
 #[cfg(test)]
