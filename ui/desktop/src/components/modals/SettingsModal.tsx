@@ -1,3 +1,4 @@
+import { ProviderBrandIcon } from '@/components/common/AgentIcons';
 import React, { useEffect, useState } from 'react';
 import {
   Cpu,
@@ -77,6 +78,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     handleGenerateClientKey,
     handleRevokeClientKey,
     handleDeleteProvider,
+    refreshModels,
   } = useAppContext();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [providersSubTab, setProvidersSubTab] = useState<'providers' | 'combos' | 'usage'>('providers');
@@ -298,6 +300,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div key={provider.id} className="flex items-center justify-between rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3">
                           <div>
                             <div className="text-xs font-semibold flex items-center gap-2">
+                              <ProviderBrandIcon provider={provider.iconType} size={16} />
                               <span>{provider.name}</span>
                               {provider.fastMode && (
                                 <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1 py-0.2 rounded font-mono">
@@ -312,7 +315,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   {Math.round(provider.contextWindow / 1000)}k ctx
                                 </span>
                               )}
-                              <span>· {provider.statusLabel}</span>
+                              <span>· {connectedAccounts.find(a => a.id === provider.id && a.providerId === 'local')?.status === 'active' ? 'Online' : connectedAccounts.some(a => a.id === provider.id && a.providerId === 'local') ? 'Offline' : provider.statusLabel}</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-3">
@@ -343,9 +346,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div key={account.id} className="flex items-center justify-between rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3">
                           <div>
                             <div className="text-xs font-semibold flex items-center gap-2">
+                              <ProviderBrandIcon provider={account.providerId} size={16} />
                               <span>{account.accountName}</span>
                               <span className="text-[9px] px-1.5 py-0.2 rounded font-mono border bg-surface-2 text-fg-editor border-border-default">
-                                {account.authType === 'oauth' ? 'OAuth 2.0' : 'API Key'}
+                                {account.providerId === 'local' ? 'Local' : account.authType === 'oauth' ? 'OAuth 2.0' : 'API Key'}
                               </span>
                               {account.oauthTier && (
                                 <span className="text-[9px] px-1.5 py-0.2 rounded font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/20">
@@ -357,14 +361,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               <span>{account.providerName}</span>
                               {account.oauthEmail && <span>· {account.oauthEmail}</span>}
                               <span>· {account.defaultModel}</span>
+                              {account.providerId === 'local' && <span className={account.status === 'active' ? 'text-emerald-400' : 'text-fg-muted'}>· {account.status === 'active' ? 'Online' : 'Offline'}</span>}
                             </div>
                           </div>
                           <div className="flex items-center gap-3">
                             <span
                               className="w-2 h-2 rounded-full shrink-0"
                               style={{ backgroundColor: account.badgeColor || '#10b981' }}
-                              title={account.statusLabel || account.status}
+                              title={account.providerId === 'local' ? (account.status === 'active' ? 'Online' : 'Offline') : account.statusLabel || account.status}
                             />
+                            {account.providerId === 'local' && account.status !== 'active' && <button type="button" onClick={() => void refreshModels()} className="provider-oauth-action rounded px-2 py-1 text-[10px]">Retry</button>}
                             <button
                               type="button"
                               onClick={() => {

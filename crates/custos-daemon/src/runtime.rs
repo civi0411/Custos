@@ -191,6 +191,7 @@ impl CustosRuntime {
                 bridge_service.clone(),
             )
             .with_workflow(workflow.clone())
+            .with_usage_runs(store.clone())
             .with_workspace(workspace_coordinator.clone())
             .with_terminal(terminal_coordinator.clone())
             .with_python_kernel(python_coordinator.clone())
@@ -229,6 +230,13 @@ struct DaemonCredentialResolver {
 
 #[async_trait::async_trait]
 impl CredentialResolver for DaemonCredentialResolver {
+    async fn validate_account(&self, account_id: &str, service: &str) -> Result<(), DomainError> {
+        let record = self.store.providers().get_provider(account_id)?.ok_or_else(|| DomainError::Validation("Selected provider account no longer exists".into()))?;
+        if record.service_type != service {
+            return Err(DomainError::Validation("Selected account does not belong to the requested model provider".into()));
+        }
+        Ok(())
+    }
     async fn uses_oauth(&self, provider_id: &str) -> Result<bool, DomainError> {
         Ok(self
             .store

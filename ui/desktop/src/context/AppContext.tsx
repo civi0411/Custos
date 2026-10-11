@@ -6,7 +6,6 @@ import {
   ClientApiKey,
   Session,
   ModelCombo,
-  UsageRecord,
   ConnectedAccount,
   ProviderServiceId,
 } from '../types';
@@ -52,8 +51,6 @@ interface AppContextType {
   handleCreateCombo: (combo: Omit<ModelCombo, 'id' | 'createdAt'>) => void;
   handleUpdateCombo: (id: string, updates: Partial<ModelCombo>) => void;
   handleDeleteCombo: (id: string) => void;
-  usageRecords: UsageRecord[];
-  handleResetUsage: () => void;
   connectedAccounts: ConnectedAccount[];
   refreshModels: () => Promise<void>;
   setConnectedAccounts: React.Dispatch<React.SetStateAction<ConnectedAccount[]>>;
@@ -96,7 +93,7 @@ interface AppContextType {
   handleSaveProvider: (
     serviceOrParams: string | { service: string; apiKey?: string; endpointUrl?: string; model?: string; contextWindow?: number; fastMode?: boolean },
     apiKey?: string
-  ) => Promise<void> | void;
+  ) => Promise<void>;
   handleDeleteProvider: (id: string) => Promise<void> | void;
   handleTestConnection: (providerNameOrId: string) => Promise<void> | void;
   handleGenerateClientKey: () => Promise<void> | void;
@@ -293,85 +290,6 @@ const DEFAULT_COMBOS: ModelCombo[] = [
   },
 ];
 
-const DEFAULT_USAGE_RECORDS: UsageRecord[] = [
-  {
-    id: 'usage-1',
-    modelId: 'claude-3-7-sonnet',
-    modelName: 'Claude 3.7 Sonnet',
-    providerId: 'anthropic',
-    providerName: 'Anthropic',
-    accountName: 'Production Org',
-    inputTokens: 142500,
-    outputTokens: 38200,
-    totalTokens: 180700,
-    estimatedCostUsd: 1.02,
-    requestCount: 48,
-    quotaLimitTokens: 1000000,
-    quotaUsedTokens: 180700,
-    quotaPercent: 18,
-    rateLimitStatus: 'normal',
-    resetPeriod: 'Resets daily at 00:00 UTC',
-    lastUsedAt: 'Just now',
-  },
-  {
-    id: 'usage-2',
-    modelId: 'gpt-4o',
-    modelName: 'GPT-4o',
-    providerId: 'openai',
-    providerName: 'OpenAI',
-    accountName: 'Personal Key',
-    inputTokens: 215400,
-    outputTokens: 41600,
-    totalTokens: 257000,
-    estimatedCostUsd: 0.95,
-    requestCount: 62,
-    quotaLimitTokens: 500000,
-    quotaUsedTokens: 257000,
-    quotaPercent: 51,
-    rateLimitStatus: 'normal',
-    resetPeriod: 'Resets daily at 00:00 UTC',
-    lastUsedAt: '12m ago',
-  },
-  {
-    id: 'usage-3',
-    modelId: 'gemini-2.5-flash',
-    modelName: 'Gemini 2.5 Flash',
-    providerId: 'gemini',
-    providerName: 'Google Gemini',
-    accountName: 'Free Tier OAuth',
-    inputTokens: 820000,
-    outputTokens: 120000,
-    totalTokens: 940000,
-    estimatedCostUsd: 0.14,
-    requestCount: 155,
-    quotaLimitTokens: 1000000,
-    quotaUsedTokens: 940000,
-    quotaPercent: 94,
-    rateLimitStatus: 'throttled',
-    resetPeriod: 'Resets daily at 00:00 UTC',
-    lastUsedAt: '4m ago',
-  },
-  {
-    id: 'usage-4',
-    modelId: 'deepseek-chat',
-    modelName: 'DeepSeek Chat',
-    providerId: 'deepseek',
-    providerName: 'DeepSeek',
-    accountName: 'DeepSeek Dev',
-    inputTokens: 64000,
-    outputTokens: 18000,
-    totalTokens: 82000,
-    estimatedCostUsd: 0.03,
-    requestCount: 19,
-    quotaLimitTokens: 10000000,
-    quotaUsedTokens: 82000,
-    quotaPercent: 1,
-    rateLimitStatus: 'normal',
-    resetPeriod: 'Prepaid Balance',
-    lastUsedAt: '2h ago',
-  },
-];
-
 const AppContext = createContext<AppContextType | null>(null);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -423,23 +341,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Failed to save connected accounts to localStorage', e);
     }
   }, [connectedAccounts]);
-
-  const [usageRecords, setUsageRecords] = useState<UsageRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('custos_usage_records');
-      return saved ? JSON.parse(saved) : DEFAULT_USAGE_RECORDS;
-    } catch {
-      return DEFAULT_USAGE_RECORDS;
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('custos_usage_records', JSON.stringify(usageRecords));
-    } catch (e) {
-      console.warn('Failed to save usage records to localStorage', e);
-    }
-  }, [usageRecords]);
 
   // Modals state
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
@@ -565,7 +466,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           try {
             const probed = await daemonClient.probeModels(
               endpointUrl,
-              provider.service_type || serviceId,
+              serviceId === 'local' && provider.default_model?.startsWith('ollama/') ? 'ollama' : provider.service_type || serviceId,
               undefined,
               provider.id
             );
@@ -607,14 +508,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return null;
         }
 
-        const defaultModel =
-          provider.default_model && supportedModels.includes(provider.default_model)
-            ? provider.default_model
-            : supportedModels[0] || '';
+        const savedDefault = serviceId === 'local' && provider.default_model && !provider.default_model.startsWith('ollama/') && supportedModels.includes(`ollama/${provider.default_model}`)
+          ? `ollama/${provider.default_model}` : provider.default_model;
+        const defaultModel = savedDefault && supportedModels.includes(savedDefault)
+          ? savedDefault : supportedModels[0] || '';
         const contextWindow =
           catalogModels.find((model) => model.id === defaultModel)?.context_window ||
           provider.context_window ||
           catalogModels[0]?.context_window;
+        const available = connected && !(serviceId === 'local' && catalogSource !== 'live');
         const authType = tokenLooksOauth(tokenMeta)
           ? 'oauth'
           : 'api_key';
@@ -630,9 +532,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           oauthEmail: authType === 'oauth' && provider.name.includes('@') ? provider.name : undefined,
           oauthTier: authType === 'oauth' ? (serviceId === 'copilot' ? 'Connected via Device Flow' : 'Connected via PKCE') : undefined,
           oauthExpiresAt: tokenMeta?.expires_at ? safeIsoFromMillis(tokenMeta.expires_at) : undefined,
-          status: connected ? 'active' : 'offline',
-          statusLabel: connected ? 'Connected' : 'Offline',
-          badgeColor: connected ? '#10b981' : '#6b7280',
+          status: available ? 'active' : 'offline',
+          statusLabel: available ? 'Connected' : 'Ollama offline — start Ollama and retry',
+          badgeColor: available ? '#10b981' : '#6b7280',
           defaultModel,
           supportedModels,
           catalogModels, catalogSource, catalogError, catalogFetchedAt,
@@ -658,7 +560,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setSelectedModel((previous) => {
       const current = previous || localStorage.getItem('custos_selected_model') || '';
-      if (current && liveModelIds.has(current.toLowerCase())) {
+      if (current.startsWith('ollama/') || (current && liveModelIds.has(current.toLowerCase()))) {
         return current;
       }
       localStorage.setItem('custos_selected_model', fallbackModel);
@@ -667,6 +569,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return { providers: providerRecords, keys: fetchedKeys, accounts: liveAccounts };
   }, []);
+
+  // Availability does not mutate saved configuration or switch the chosen model.
+  useEffect(() => {
+    const accounts = connectedAccounts.filter(a => a.providerId === 'local' && a.endpointUrl && (a.endpointUrl?.includes(':11434') || a.defaultModel?.startsWith('ollama/') || a.supportedModels.some(m => m.startsWith('ollama/'))));
+    if (!accounts.length) return;
+    let cancelled = false;
+    let probing = false;
+    const check = async () => {
+      if (probing || document.hidden) return;
+      probing = true;
+      try {
+        await Promise.all(accounts.map(async account => {
+          let updates: Partial<ConnectedAccount>;
+          try {
+            const result = await daemonClient.probeModels(account.endpointUrl!, 'ollama');
+            updates = {
+              status: 'active', statusLabel: 'Connected', badgeColor: '#10b981', catalogSource: 'live', catalogError: undefined, catalogFetchedAt: Date.now(),
+              supportedModels: result.models.map(m => m.id),
+              catalogModels: result.models.map((m, i) => ({ id: m.id, label: m.name || m.id, provider_type: 'local', is_default: i === 0, efforts: [], supports_fast_mode: false, context_window: m.context_window })),
+            };
+          } catch {
+            updates = { status: 'offline', statusLabel: 'Ollama offline', badgeColor: '#6b7280', catalogSource: account.catalogModels?.length ? 'cached' : 'unavailable', catalogError: 'Ollama is unavailable. Start Ollama, then retry. The selected model has not changed.' };
+          }
+          if (!cancelled) setConnectedAccounts(previous => previous.map(a => a.id === account.id && a.endpointUrl === account.endpointUrl ? { ...a, ...updates } : a));
+        }));
+      } finally { probing = false; }
+    };
+    const timer = window.setInterval(() => { void check(); }, 15000);
+    const onVisible = () => { if (!document.hidden) void check(); };
+    window.addEventListener('focus', onVisible);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', onVisible); document.removeEventListener('visibilitychange', onVisible); };
+  }, [connectedAccounts]);
 
   const handleSelectModel = useCallback((modelName: string) => {
     setSelectedModel(modelName);
@@ -939,6 +874,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
+      if (chosenModel.startsWith('ollama/')) {
+        const account = connectedAccounts.find(a => a.providerId === 'local' && a.status === 'active' && a.supportedModels.includes(chosenModel));
+        if (!account) {
+          appendAssistantMessage({ role: 'assistant', author: 'Custos Engine', badge: 'Ollama Unavailable', stepName: 'Model Gateway', text: 'Ollama is offline or the selected model is no longer installed. Start Ollama and use Retry models. Your prompt will not be sent to another provider.' });
+          showToast('Ollama unavailable — start Ollama and retry');
+          return;
+        }
+        // Recheck before dispatch to catch shutdowns between periodic probes.
+        try {
+          const probe = await daemonClient.probeModels(account.endpointUrl || 'http://localhost:11434', 'ollama');
+          if (!probe.models.some(model => model.id === chosenModel)) {
+            appendAssistantMessage({ role: 'assistant', author: 'Custos Engine', badge: 'Model Removed', text: 'The selected Ollama model is no longer installed. Refresh models and choose an installed model.' });
+            return;
+          }
+        } catch {
+          setConnectedAccounts(previous => previous.map(a => a.id === account.id ? { ...a, status: 'offline', statusLabel: 'Ollama offline', badgeColor: '#6b7280', catalogSource: 'cached', catalogError: 'Ollama is unavailable. Start Ollama and retry models.' } : a));
+          appendAssistantMessage({ role: 'assistant', author: 'Custos Engine', badge: 'Ollama Offline', text: 'Cannot connect to Ollama. Start Ollama and retry models, then resend your prompt. No other provider was used.' });
+          return;
+        }
+      }
+
       const hasActiveAccount = connectedAccounts.some((account) => account.status === 'active');
       if (!hasActiveAccount) {
         appendAssistantMessage({
@@ -1012,6 +968,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             conversation_session_id: targetSessionId || activeSession.id,
             source_task_id: activeSession.taskId || activeSession.id,
             model: chosenModel,
+            provider_account_id: connectedAccounts.find(a => a.status === 'active' && a.supportedModels.includes(chosenModel))?.id,
           },
         });
         runTaskId = createdTask.id;
@@ -1048,6 +1005,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       const runId = run.run_id;
+      if (chosenModel.startsWith('ollama/') && run.output?.includes('Ollama connection failed')) {
+        setConnectedAccounts(previous => previous.map(a => a.providerId === 'local' && a.supportedModels.includes(chosenModel) ? { ...a, status: 'offline', statusLabel: 'Ollama offline', badgeColor: '#6b7280', catalogSource: 'cached', catalogError: 'Ollama stopped during the request. Start Ollama and resend your prompt.' } : a));
+      }
       const outputText = run.output;
       const isCompleted = run.status === 'completed';
 
@@ -1082,6 +1042,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       showToast(`Run ${runId.slice(0, 8)}: ${run.status}`);
     } catch (err: any) {
+      if ((selectedModel || activeSession.model || '').startsWith('ollama/') && String(err?.message || err).includes('Ollama connection failed')) {
+        setConnectedAccounts(previous => previous.map(a => a.providerId === 'local' ? { ...a, status: 'offline', statusLabel: 'Ollama offline', badgeColor: '#6b7280', catalogSource: 'cached', catalogError: 'Ollama stopped during the request. Start Ollama and resend your prompt.' } : a));
+      }
       const errMsg = {
         role: 'assistant' as const,
         author: 'Custos Kernel',
@@ -1304,6 +1267,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err: any) {
       console.error('[SaveProvider] Error:', err);
       showToast(`Lỗi lưu provider: ${err?.message || err}`);
+      throw err;
     }
   };
 
@@ -1394,24 +1358,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('Routing Combo deleted');
   }, [selectedModel, showToast]);
 
-  const handleResetUsage = useCallback(() => {
-    setUsageRecords((prev) =>
-      prev.map((r) => ({
-        ...r,
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-        estimatedCostUsd: 0,
-        requestCount: 0,
-        quotaUsedTokens: 0,
-        quotaPercent: 0,
-        rateLimitStatus: 'normal' as const,
-        lastUsedAt: 'Reset just now',
-      }))
-    );
-    showToast('Usage metrics reset successfully');
-  }, [showToast]);
-
   const ensureOAuthProviderRecord = useCallback(async (
     providerId: ProviderServiceId,
     accountName?: string
@@ -1495,8 +1441,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         handleCreateCombo,
         handleUpdateCombo,
         handleDeleteCombo,
-        usageRecords,
-        handleResetUsage,
         connectedAccounts,
         refreshModels: async () => { await refreshProviderState(); },
         setConnectedAccounts,
