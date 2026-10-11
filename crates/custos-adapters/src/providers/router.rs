@@ -17,6 +17,7 @@ pub trait CredentialResolver: Send + Sync {
     async fn uses_oauth(&self, _provider_id: &str) -> Result<bool, DomainError> {
         Ok(false)
     }
+    async fn validate_account(&self, _account_id: &str, _service: &str) -> Result<(), DomainError> { Ok(()) }
     /// Return custom endpoint URL for a given provider
     async fn get_endpoint_url(&self, provider_id: &str) -> Result<Option<String>, DomainError>;
 }
@@ -73,6 +74,8 @@ struct OpenAiChatChoice {
 struct OpenAiChatUsage {
     #[serde(default)]
     total_tokens: Option<usize>,
+    prompt_tokens: Option<usize>,
+    completion_tokens: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -158,6 +161,7 @@ impl RouterModelProvider {
         {
             return "mock";
         }
+        if m.starts_with("ollama/") { return "local"; }
         if m.starts_with("copilot/") { return "copilot"; }
         if m.starts_with("gemini-oauth/") { return "gemini-oauth"; }
         if m.starts_with("antigravity/") { return "antigravity"; }
@@ -271,7 +275,11 @@ impl RouterModelProvider {
             .ok_or_else(|| DomainError::Validation(format!("{provider_label} returned no completion choices")))?;
 
         let content = choice.message.content.unwrap_or_default();
-        let tokens_used = res_body.usage.and_then(|u| u.total_tokens).unwrap_or(0);
+        let usage = res_body.usage;
+        let input = usage.as_ref().and_then(|u| u.prompt_tokens);
+        let output = usage.as_ref().and_then(|u| u.completion_tokens);
+        let total = usage.as_ref().and_then(|u| u.total_tokens);
+        let tokens_used = total.unwrap_or(0);
         let resolved_model = res_body.model.unwrap_or_else(|| model.to_string());
 
         debug!(
@@ -282,7 +290,68 @@ impl RouterModelProvider {
             "Received live response from {provider_label}"
         );
 
-        Ok(ModelResponse::text(content, resolved_model, tokens_used))
+        Ok(ModelResponse::text(content, resolved_model, tokens_used).with_usage(input, output, total))
+    }
+
+    async fn execute_ollama(
+        &self,
+        base: &str,
+        model: &str,
+        req: &ProviderRequest,
+    ) -> Result<ModelResponse, DomainError> {
+        let root = super::probe::ollama_root(base)?;
+        if model.is_empty() || matches!(model, "default" | "local" | "ollama") {
+            return Err(DomainError::Validation(
+                "Select an installed Ollama model in Settings > Providers".into(),
+            ));
+        }
+        let mut options = serde_json::Map::new();
+        if let Some(value) = req.temperature {
+            options.insert("temperature".into(), serde_json::json!(value));
+        }
+        if let Some(value) = req.max_tokens {
+            options.insert("num_predict".into(), serde_json::json!(value));
+        }
+        info!(task_id = %req.task_id, request_id = %req.request_id, model, "Dispatching Ollama chat");
+        let response = self.http_client.post(format!("{root}/api/chat")).json(&serde_json::json!({
+            "model": model, "messages": [{"role": "user", "content": req.prompt}], "stream": false, "options": options
+        })).send().await.map_err(|e| DomainError::Validation(format!("Ollama connection failed; ensure Ollama is running: {e}")))?;
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .map_err(|e| DomainError::Validation(format!("Ollama response read failed: {e}")))?;
+        if !status.is_success() {
+            return Err(DomainError::Validation(format!("Ollama chat returned {status}: {body}. Refresh models if the selected model was removed.")));
+        }
+        let value: serde_json::Value = serde_json::from_str(&body)
+            .map_err(|e| DomainError::Validation(format!("Invalid Ollama chat response: {e}")))?;
+        let content = value
+            .pointer("/message/content")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                DomainError::Validation("Ollama response has no message content".into())
+            })?;
+        if value.get("done").and_then(|v| v.as_bool()) != Some(true) {
+            return Err(DomainError::Validation(
+                "Ollama response did not complete".into(),
+            ));
+        }
+        let tokens = value
+            .get("prompt_eval_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            .saturating_add(
+                value
+                    .get("eval_count")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0),
+            );
+        Ok(ModelResponse::text(
+            content,
+            format!("ollama/{model}"),
+            usize::try_from(tokens).unwrap_or(usize::MAX),
+        ).with_usage(value.get("prompt_eval_count").and_then(|v| v.as_u64()).and_then(|v| usize::try_from(v).ok()), value.get("eval_count").and_then(|v| v.as_u64()).and_then(|v| usize::try_from(v).ok()), None))
     }
 
     async fn execute_chatgpt_codex(
@@ -355,6 +424,9 @@ impl RouterModelProvider {
         })?;
 
         let (content, tokens_used) = parse_codex_sse_stream(&text_body)?;
+        let reported = text_body.lines().filter_map(|line| line.strip_prefix("data:")).filter_map(|line| serde_json::from_str::<serde_json::Value>(line.trim()).ok()).find(|v| v.get("type").and_then(|v| v.as_str()) == Some("response.completed"));
+        let usage = reported.as_ref().and_then(|v| v.pointer("/response/usage"));
+        let count = |key: &str| usage.and_then(|v| v.get(key)).and_then(|v| v.as_u64()).and_then(|v| usize::try_from(v).ok());
 
         debug!(
             model = %target_model,
@@ -363,7 +435,7 @@ impl RouterModelProvider {
             "Received live response from ChatGPT Codex"
         );
 
-        Ok(ModelResponse::text(content, target_model.to_string(), tokens_used))
+        Ok(ModelResponse::text(content, target_model.to_string(), tokens_used).with_usage(count("input_tokens"), count("output_tokens"), count("total_tokens")))
     }
 
     async fn execute_anthropic(
@@ -397,7 +469,7 @@ impl RouterModelProvider {
             "Dispatching live Anthropic Claude completion"
         );
 
-        let oauth = self.resolver.uses_oauth("anthropic").await?;
+        let oauth = self.resolver.uses_oauth(req.provider_account_id.as_deref().unwrap_or("anthropic")).await?;
         let mut builder = self.http_client.post(&endpoint).header("anthropic-version", "2023-06-01").json(&payload);
         builder = if oauth { builder.bearer_auth(token).header("anthropic-beta", "oauth-2025-04-20").header("User-Agent", "claude-cli/2.1.280 (external, cli)").header("X-App", "cli") } else { builder.header("x-api-key", token) };
         let resp = builder.send().await.map_err(|e| DomainError::Validation(format!("Anthropic transport error: {e}")))?;
@@ -422,13 +494,12 @@ impl RouterModelProvider {
             .collect::<Vec<_>>()
             .join("");
 
-        let tokens_used = res_body
-            .usage
-            .map(|u| u.input_tokens.unwrap_or(0) + u.output_tokens.unwrap_or(0))
-            .unwrap_or(0);
+        let input = res_body.usage.as_ref().and_then(|u| u.input_tokens);
+        let output = res_body.usage.as_ref().and_then(|u| u.output_tokens);
+        let tokens_used = input.unwrap_or(0).saturating_add(output.unwrap_or(0));
         let resolved_model = res_body.model.unwrap_or_else(|| target_model.to_string());
 
-        Ok(ModelResponse::text(content, resolved_model, tokens_used))
+        Ok(ModelResponse::text(content, resolved_model, tokens_used).with_usage(input, output, None))
     }
 }
 
@@ -442,29 +513,35 @@ impl ModelProvider for RouterModelProvider {
         let requested_model = req.model.trim();
         debug!(task_id = %req.task_id, request_id = %req.request_id, model = %requested_model, "Routing model request");
         let target_provider = Self::classify_provider(requested_model);
+        if let Some(account) = &req.provider_account_id {
+            let service = if target_provider == "gemini-oauth" { "gemini" } else { target_provider };
+            self.resolver.validate_account(account, service).await?;
+        }
 
         match target_provider {
             "copilot" => {
-                let github = self.resolver.get_token("copilot").await?.ok_or_else(|| DomainError::Validation("Connect GitHub Copilot first".into()))?;
+                let github = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or("copilot")).await?.ok_or_else(|| DomainError::Validation("Connect GitHub Copilot first".into()))?;
                 let token = super::oauth_pkce::copilot_session_token(&github).await?;
                 let model = requested_model.strip_prefix("copilot/").ok_or_else(|| DomainError::Validation("Invalid Copilot model".into()))?;
                 self.execute_openai_compatible("https://api.githubcopilot.com", Some(&token), model, req, "GitHub Copilot").await
             }
             "gemini-oauth" => {
-                let token = self.resolver.get_token("gemini").await?.ok_or_else(|| DomainError::Validation("Connect Gemini OAuth first".into()))?;
+                let token = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or("gemini")).await?.ok_or_else(|| DomainError::Validation("Connect Gemini OAuth first".into()))?;
                 super::antigravity::generate_codeassist_content("gemini", "https://cloudcode-pa.googleapis.com", &token, req).await
             }
             "antigravity" => {
-                let token = self.resolver.get_token("antigravity").await?.ok_or_else(|| DomainError::Validation("Connect Antigravity with OAuth first".into()))?;
-                let base = self.resolver.get_endpoint_url("antigravity").await?.unwrap_or_else(|| "https://cloudcode-pa.googleapis.com".into());
+                let token = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or("antigravity")).await?.ok_or_else(|| DomainError::Validation("Connect Antigravity with OAuth first".into()))?;
+                let base = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("antigravity")).await?.unwrap_or_else(|| "https://cloudcode-pa.googleapis.com".into());
                 super::antigravity::generate_content(&base, &token, req).await
             }
             "openai" => {
-                let oauth = self.resolver.uses_oauth("openai").await?;
-                let token_res = self.resolver.get_token("openai").await;
-                let token = match token_res {
-                    Ok(Some(tok)) if !tok.trim().is_empty() => Some(tok),
-                    _ => self.resolve_token_with_fallback("openai").await,
+                let oauth = self.resolver.uses_oauth(req.provider_account_id.as_deref().unwrap_or("openai")).await?;
+                let account = req.provider_account_id.as_deref().unwrap_or("openai");
+                let token_res = self.resolver.get_token(account).await;
+                let token = if oauth || req.provider_account_id.is_some() {
+                    token_res?.filter(|tok| !tok.trim().is_empty())
+                } else {
+                    match token_res { Ok(Some(tok)) if !tok.trim().is_empty() => Some(tok), _ => self.resolve_token_with_fallback(account).await }
                 };
                 let token = match token {
                     Some(t) => t,
@@ -486,7 +563,7 @@ impl ModelProvider for RouterModelProvider {
                         ));
                     }
                 };
-                let custom_url = self.resolver.get_endpoint_url("openai").await.ok().flatten();
+                let custom_url = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("openai")).await.ok().flatten();
                 if oauth {
                     return self.execute_chatgpt_codex(&token, requested_model, req).await;
                 }
@@ -499,22 +576,22 @@ impl ModelProvider for RouterModelProvider {
                 self.execute_openai_compatible(&base_url, Some(&token), model, req, "OpenAI").await
             }
             "anthropic" => {
-                let token = self.resolve_token_with_fallback("anthropic").await.ok_or_else(|| {
+                let token = (if let Some(account) = req.provider_account_id.as_deref() { self.resolver.get_token(account).await? } else { self.resolve_token_with_fallback("anthropic").await }).ok_or_else(|| {
                     DomainError::Validation(
                         "Anthropic Claude API key not configured. Please enter your API key in Settings > Providers to chat with Claude models.".into(),
                     )
                 })?;
-                let custom_url = self.resolver.get_endpoint_url("anthropic").await.ok().flatten();
+                let custom_url = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("anthropic")).await.ok().flatten();
                 let base_url = custom_url.unwrap_or_else(|| "https://api.anthropic.com/v1".to_string());
                 self.execute_anthropic(&base_url, &token, requested_model, req).await
             }
             "gemini" => {
-                let token = self.resolve_token_with_fallback("gemini").await.ok_or_else(|| {
+                let token = (if let Some(account) = req.provider_account_id.as_deref() { self.resolver.get_token(account).await? } else { self.resolve_token_with_fallback("gemini").await }).ok_or_else(|| {
                     DomainError::Validation(
                         "Google Gemini API key not configured. Please enter your API key in Settings > Providers to chat with Gemini models.".into(),
                     )
                 })?;
-                let custom_url = self.resolver.get_endpoint_url("gemini").await.ok().flatten();
+                let custom_url = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("gemini")).await.ok().flatten();
                 let base_url = custom_url.unwrap_or_else(|| {
                     "https://generativelanguage.googleapis.com/v1beta/openai".to_string()
                 });
@@ -526,12 +603,12 @@ impl ModelProvider for RouterModelProvider {
                 self.execute_openai_compatible(&base_url, Some(&token), model, req, "Google Gemini").await
             }
             "deepseek" => {
-                let token = self.resolve_token_with_fallback("deepseek").await.ok_or_else(|| {
+                let token = (if let Some(account) = req.provider_account_id.as_deref() { self.resolver.get_token(account).await? } else { self.resolve_token_with_fallback("deepseek").await }).ok_or_else(|| {
                     DomainError::Validation(
                         "DeepSeek API key not configured. Please enter your API key in Settings > Providers to chat with DeepSeek models.".into(),
                     )
                 })?;
-                let custom_url = self.resolver.get_endpoint_url("deepseek").await.ok().flatten();
+                let custom_url = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("deepseek")).await.ok().flatten();
                 let base_url = custom_url.unwrap_or_else(|| "https://api.deepseek.com/v1".to_string());
                 let model = if requested_model.is_empty() || requested_model == "default" || requested_model == "deepseek" {
                     "deepseek-chat"
@@ -541,15 +618,16 @@ impl ModelProvider for RouterModelProvider {
                 self.execute_openai_compatible(&base_url, Some(&token), model, req, "DeepSeek").await
             }
             "local" => {
-                let custom_url = self.resolver.get_endpoint_url("local").await.ok().flatten();
-                let base_url = custom_url.unwrap_or_else(|| "http://localhost:11434/v1".to_string());
-                let token = self.resolve_token_with_fallback("local").await;
-                let model = if requested_model.is_empty() || requested_model == "default" || requested_model == "local" {
-                    "llama3.3:70b"
-                } else {
-                    requested_model
-                };
-                self.execute_openai_compatible(&base_url, token.as_deref(), model, req, "Local Inference").await
+                let custom_url = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("local")).await?;
+                let base_url = custom_url.unwrap_or_else(|| "http://localhost:11434".to_string());
+                if let Some(model) = requested_model.strip_prefix("ollama/") {
+                    return self.execute_ollama(&base_url, model, req).await;
+                }
+                if base_url.contains(":11434") {
+                    return self.execute_ollama(&base_url, requested_model, req).await;
+                }
+                let token = if let Some(account) = req.provider_account_id.as_deref() { self.resolver.get_token(account).await? } else { self.resolve_token_with_fallback("local").await };
+                self.execute_openai_compatible(&base_url, token.as_deref(), requested_model, req, "Local Inference").await
             }
             "mock" => {
                 let content = format!(
@@ -637,6 +715,134 @@ pub fn parse_codex_sse_stream(raw: &str) -> Result<(String, usize), DomainError>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ollama_namespace_wins_over_cloud_model_names() {
+        for model in [
+            "ollama/gpt-custom:latest",
+            "ollama/claude-local",
+            "ollama/gemini",
+            "ollama/custom:tag",
+        ] {
+            assert_eq!(RouterModelProvider::classify_provider(model), "local");
+        }
+    }
+
+    #[tokio::test]
+    async fn ollama_native_request_and_errors() {
+        use std::io::{Read, Write};
+        for (status, body) in [
+            (
+                "200 OK",
+                r#"{"message":{"content":"Local answer"},"done":true,"prompt_eval_count":7,"eval_count":3}"#,
+            ),
+            ("404 Not Found", r#"{"error":"model not found"}"#),
+            ("200 OK", r#"{"message":{},"done":true}"#),
+        ] {
+            let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+            let base = format!("http://{}", listener.local_addr().unwrap());
+            let server = std::thread::spawn(move || {
+                let (mut socket, _) = listener.accept().unwrap();
+                socket
+                    .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                    .unwrap();
+                let mut request = Vec::new();
+                loop {
+                    let mut buf = [0; 4096];
+                    let n = socket.read(&mut buf).unwrap();
+                    if n == 0 {
+                        break;
+                    }
+                    request.extend_from_slice(&buf[..n]);
+                    let text = String::from_utf8_lossy(&request);
+                    if let Some((headers, payload)) = text.split_once("\r\n\r\n") {
+                        let length: usize = headers
+                            .lines()
+                            .find_map(|line| {
+                                line.to_lowercase()
+                                    .strip_prefix("content-length: ")
+                                    .and_then(|v| v.parse().ok())
+                            })
+                            .unwrap_or(0);
+                        if payload.len() >= length {
+                            break;
+                        }
+                    }
+                }
+                write!(socket, "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+                String::from_utf8(request).unwrap()
+            });
+            let provider = RouterModelProvider::new(Arc::new(TestCredentialResolver {
+                oauth: false,
+                endpoint: format!("{base}/v1/"),
+                fail: true,
+            }));
+            let mut req = ProviderRequest::simple("hello local");
+            req.model = "ollama/gpt-custom:tag".into();
+            let result = provider.generate(&req).await;
+            if body.contains("Local answer") {
+                let result = result.unwrap();
+                assert_eq!(result.content, "Local answer");
+                assert_eq!(result.tokens_used, 10);
+                assert_eq!(result.model_id, req.model);
+            } else {
+                assert!(result.is_err());
+            }
+            let request = server.join().unwrap();
+            assert!(request.starts_with("POST /api/chat "));
+            assert!(!request.to_lowercase().contains("authorization:"));
+            let payload: serde_json::Value =
+                serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
+            assert_eq!(payload["model"], "gpt-custom:tag");
+            assert_eq!(payload["stream"], false);
+            assert_eq!(payload["options"]["num_predict"], 4096);
+        }
+    }
+
+    #[tokio::test]
+    async fn ollama_request_timeout_is_reported() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (_socket, _) = listener.accept().unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(150));
+        });
+        let mut provider = RouterModelProvider::new(Arc::new(TestCredentialResolver {
+            oauth: false,
+            endpoint: base,
+            fail: true,
+        }));
+        provider.http_client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_millis(30))
+            .build()
+            .unwrap();
+        let mut req = ProviderRequest::simple("hello");
+        req.model = "ollama/custom".into();
+        assert!(provider
+            .generate(&req)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("Ollama connection failed"));
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore = "requires a running local Ollama with qwen2.5:0.5b installed"]
+    async fn ollama_live_smoke() {
+        let models =
+            super::super::probe::probe_endpoint_models("http://localhost:11434/v1", None, "ollama")
+                .await
+                .unwrap();
+        assert!(models.iter().any(|m| m.id == "ollama/qwen2.5:0.5b"));
+        let provider = RouterModelProvider::new(Arc::new(EnvCredentialResolver));
+        let mut req = ProviderRequest::simple("Reply with the word hello.");
+        req.model = "ollama/qwen2.5:0.5b".into();
+        req.max_tokens = Some(32);
+        let response = provider.generate(&req).await.unwrap();
+        assert!(!response.content.trim().is_empty());
+        assert!(response.tokens_used > 0);
+    }
 
     struct TestCredentialResolver {
         oauth: bool,
@@ -750,6 +956,28 @@ mod tests {
             .join()
             .unwrap()
             .starts_with("POST /custom/v1/chat/completions "));
+    }
+
+    struct AccountResolver { endpoint: String }
+    #[async_trait]
+    impl CredentialResolver for AccountResolver {
+        async fn get_token(&self, id: &str) -> Result<Option<String>,DomainError> { Ok(Some(format!("{id}-key"))) }
+        async fn get_endpoint_url(&self, id: &str) -> Result<Option<String>,DomainError> { assert!(id.starts_with("account-")); Ok(Some(self.endpoint.clone())) }
+    }
+    #[tokio::test]
+    async fn explicitly_selected_accounts_use_their_own_credentials_and_usage() {
+        use wiremock::{Mock,MockServer,ResponseTemplate};
+        use wiremock::matchers::{method,path,header};
+        let server=MockServer::start().await;
+        for account in ["account-A","account-B"] {
+            Mock::given(method("POST")).and(path("/chat/completions")).and(header("authorization",format!("Bearer {account}-key"))).respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"model":"gpt-test","choices":[{"message":{"content":"answer"}}],"usage":{"prompt_tokens":7,"completion_tokens":5,"total_tokens":12}}))).expect(1).mount(&server).await;
+        }
+        let provider=RouterModelProvider::new(Arc::new(AccountResolver { endpoint:server.uri() }));
+        for account in ["account-A","account-B"] {
+            let mut req=ProviderRequest::simple("hello"); req.model="gpt-test".into(); req.provider_account_id=Some(account.into());
+            let response=provider.generate(&req).await.unwrap();
+            assert_eq!(response.input_tokens,Some(7)); assert_eq!(response.output_tokens,Some(5)); assert_eq!(response.total_tokens,Some(12));
+        }
     }
 
     #[tokio::test]

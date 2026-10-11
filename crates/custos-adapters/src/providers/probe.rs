@@ -32,13 +32,15 @@ pub async fn probe_endpoint_models(
         .build()
         .map_err(|e| DomainError::Validation(format!("Failed to build probe HTTP client: {e}")))?;
 
-    // 1. If provider_type is ollama or url hints at ollama (:11434), try Ollama native probe first
-    if provider_type == "ollama" || provider_type == "local" || base.contains(":11434") {
-        let ollama_root = base.trim_end_matches("/v1");
-        if let Ok(models) = probe_ollama_endpoint(&client, ollama_root).await {
-            if !models.is_empty() {
-                return Ok(models);
-            }
+    // Explicit Ollama discovery must preserve empty lists and transport failures.
+    if provider_type == "ollama" || base.contains(":11434") {
+        let root = ollama_root(base)?;
+        return probe_ollama_endpoint(&client, &root).await;
+    }
+    if provider_type == "local" {
+        let root = ollama_root(base)?;
+        if let Ok(models) = probe_ollama_endpoint(&client, &root).await {
+            return Ok(models);
         }
     }
 
@@ -49,6 +51,23 @@ pub async fn probe_endpoint_models(
         "gemini" | "google" => probe_gemini_endpoint(&client, base, api_key).await,
         _ => probe_openai_endpoint(&client, base, api_key).await,
     }
+}
+
+/// Normalize an Ollama root without duplicating compatibility API suffixes.
+pub(crate) fn ollama_root(base: &str) -> Result<String, DomainError> {
+    let root = base.trim().trim_end_matches('/').trim_end_matches("/v1");
+    let url = reqwest::Url::parse(root)
+        .map_err(|e| DomainError::Validation(format!("Invalid Ollama URL: {e}")))?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(DomainError::Validation(
+            "Ollama URL must be an HTTP(S) base URL without query or fragment".into(),
+        ));
+    }
+    Ok(root.to_string())
 }
 
 /// Ollama native API:
@@ -102,7 +121,7 @@ async fn probe_ollama_endpoint(
         };
 
         probed.push(ProbedModel {
-            id: name.clone(),
+            id: format!("ollama/{name}"),
             name: Some(name),
             context_window: context,
             owned_by: Some("ollama".into()),
@@ -514,4 +533,138 @@ pub async fn probe_copilot_models(github_token: &str) -> Result<Vec<ProbedModel>
     let mut models = probe_openai_endpoint(&client, "https://api.githubcopilot.com", Some(&token)).await?;
     for model in &mut models { model.id = format!("copilot/{}", model.id); model.owned_by = Some("copilot".into()); }
     Ok(models)
+}
+
+#[cfg(test)]
+mod ollama_connection_tests {
+    use super::*;
+    #[test]
+    fn roots_and_empty_models() {
+        assert_eq!(
+            ollama_root(" http://localhost:11434/v1/ ").unwrap(),
+            "http://localhost:11434"
+        );
+        assert!(ollama_root("file:///models").is_err());
+        assert!(ollama_root("http://localhost:11434?key=x").is_err());
+        assert_eq!(parse_ollama_tags(r#"{"models":[]}"#), Some(vec![]));
+    }
+    #[tokio::test]
+    async fn empty_native_discovery_does_not_fall_back() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut buf = [0; 4096];
+            let n = socket.read(&mut buf).unwrap();
+            let body = r#"{"models":[]}"#;
+            write!(
+                socket,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            )
+            .unwrap();
+            assert!(String::from_utf8_lossy(&buf[..n]).starts_with("GET /api/tags "));
+        });
+        assert!(probe_endpoint_models(&base, None, "ollama")
+            .await
+            .unwrap()
+            .is_empty());
+        server.join().unwrap();
+    }
+}
+
+/// Fetch account quota independently of observed inference usage.
+pub async fn probe_account_quota(service: &str, token: &str) -> Result<Value, DomainError> {
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(8)).build().map_err(|e| DomainError::Validation(e.to_string()))?;
+    // Quota reads must not onboard or create a project.
+    if matches!(service, "antigravity" | "gemini") {
+        let metadata = if service == "antigravity" { serde_json::json!({"ideType":"ANTIGRAVITY"}) } else { serde_json::json!({"ideType":"GEMINI_CLI","platform":"WINDOWS_AMD64","pluginType":"GEMINI"}) };
+        if let Ok(response) = client.post("https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist").bearer_auth(token).json(&serde_json::json!({"metadata":metadata})).send().await {
+            if response.status().is_success() {
+                if let Ok(value) = response.json::<Value>().await {
+                    if let Some(project) = value.get("cloudaicompanionProject").and_then(|v| v.as_str().or_else(||v.get("id").and_then(Value::as_str))) {
+                        if let Ok(response) = client.post("https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota").bearer_auth(token).json(&serde_json::json!({"project":project})).send().await {
+                            if response.status().is_success() {
+                                if let Ok(value) = response.json::<Value>().await {
+                                    let parsed = parse_account_quota("google-live", &value);
+                                    if parsed["status"] == "available" { return Ok(parsed); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let request = match service {
+        "openai" => {
+            let mut request = client.get("https://chatgpt.com/backend-api/wham/usage").bearer_auth(token);
+            if let Some(id) = super::oauth_pkce::extract_chatgpt_account_id(token) { request = request.header("ChatGPT-Account-ID", id); }
+            request
+        }
+        "anthropic" => client.get("https://api.anthropic.com/api/oauth/usage").bearer_auth(token).header("anthropic-beta", "oauth-2025-04-20"),
+        "copilot" => client.get("https://api.github.com/copilot_internal/user").bearer_auth(token).header("User-Agent", "Custos").header("Accept", "application/json"),
+        "antigravity" | "gemini" => client.post("https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels").bearer_auth(token).header("User-Agent", "antigravity/1.15.8 windows/amd64").json(&serde_json::json!({})),
+        _ => return Ok(serde_json::json!({"status":"unsupported", "windows":[]})),
+    };
+    let response = request.send().await.map_err(|_| DomainError::Validation("Quota service unavailable".into()))?;
+    if !response.status().is_success() { return Err(DomainError::Validation(format!("Quota service returned {}", response.status()))); }
+    let body: Value = response.json().await.map_err(|_| DomainError::Validation("Invalid quota response".into()))?;
+    Ok(parse_account_quota(service, &body))
+}
+
+pub fn parse_account_quota(service: &str, body: &Value) -> Value {
+    let mut windows = Vec::new();
+    let mut push = |name: &str, used: Option<f64>, reset: Value| {
+        if let Some(used) = used.filter(|v| v.is_finite() && *v >= 0.0 && *v <= 100.0) {
+            windows.push(serde_json::json!({"name":name,"used_percent":used,"resets_at":reset}));
+        }
+    };
+    match service {
+        "openai" => for (name, key) in [("Session", "primary_window"), ("Weekly", "secondary_window")] {
+            if let Some(window) = body.pointer(&format!("/rate_limit/{key}")) { push(name, window.get("used_percent").and_then(Value::as_f64), window.get("reset_at").cloned().unwrap_or(Value::Null)); }
+        },
+        "anthropic" => for key in ["five_hour", "seven_day", "seven_day_sonnet", "seven_day_opus"] {
+            if let Some(window) = body.get(key) { push(key, window.get("utilization").and_then(Value::as_f64), window.get("resets_at").cloned().unwrap_or(Value::Null)); }
+        },
+        "copilot" => if let Some(snapshots) = body.get("quota_snapshots").and_then(Value::as_object) {
+            for (key, window) in snapshots {
+                if window.get("unlimited").and_then(Value::as_bool) != Some(true) { push(key, window.get("percent_remaining").and_then(Value::as_f64).map(|v| 100.0 - v), body.get("quota_reset_date").cloned().unwrap_or(Value::Null)); }
+            }
+        },
+        "google-live" => if let Some(buckets) = body.get("buckets").and_then(Value::as_array) {
+            for bucket in buckets { if let Some(name) = bucket.get("modelId").and_then(Value::as_str) { push(name, bucket.get("remainingFraction").and_then(Value::as_f64).map(|v| (1.0-v)*100.0), bucket.get("resetTime").cloned().unwrap_or(Value::Null)); } }
+        },
+        "antigravity" | "gemini" => if let Some(models) = body.get("models").and_then(Value::as_object) {
+            for (key, model) in models { if let Some(quota) = model.get("quotaInfo") { push(key, quota.get("remainingFraction").and_then(Value::as_f64).map(|v| (1.0-v)*100.0), quota.get("resetTime").cloned().unwrap_or(Value::Null)); } }
+        },
+        _ => {}
+    }
+    serde_json::json!({"status": if windows.is_empty() {"unavailable"} else {"available"}, "source": if matches!(service, "antigravity" | "gemini") {"provider_catalog"} else {"provider"}, "windows": windows})
+}
+
+#[cfg(test)]
+mod quota_monitor_tests {
+    use super::*;
+    #[test]
+    fn missing_quota_is_unknown_and_windows_remain_distinct() {
+        let empty = parse_account_quota("openai", &serde_json::json!({"rate_limit":{}}));
+        assert_eq!(empty["status"], "unavailable");
+        let parsed = parse_account_quota("openai", &serde_json::json!({"rate_limit":{"primary_window":{"used_percent":0,"reset_at":123},"secondary_window":{"used_percent":83}}}));
+        assert_eq!(parsed["windows"].as_array().unwrap().len(),2);
+        assert_eq!(parsed["windows"][0]["used_percent"],0.0);
+        assert!(parsed["windows"][1]["resets_at"].is_null());
+    }
+    #[test]
+    fn provider_quota_units_are_normalized_without_inventing_limits() {
+        let google = parse_account_quota("google-live", &serde_json::json!({"buckets":[{"modelId":"gemini-flash","remainingFraction":0.25,"resetTime":"2026-10-12T00:00:00Z"},{"modelId":"unknown"}]}));
+        assert_eq!(google["windows"].as_array().unwrap().len(),1);
+        assert_eq!(google["windows"][0]["used_percent"],75.0);
+        assert_eq!(google["source"],"provider");
+        let claude = parse_account_quota("anthropic", &serde_json::json!({"five_hour":{"utilization":50},"seven_day":{"utilization":999}}));
+        assert_eq!(claude["windows"].as_array().unwrap().len(),1);
+        let copilot = parse_account_quota("copilot", &serde_json::json!({"quota_snapshots":{"premium_interactions":{"percent_remaining":20}}}));
+        assert_eq!(copilot["windows"][0]["used_percent"],80.0);
+    }
 }

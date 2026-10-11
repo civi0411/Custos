@@ -22,6 +22,10 @@
     "model": {
       "type": "string"
     },
+    "provider_account_id": {
+      "type": "string",
+      "minLength": 1
+    },
     "temperature": {
       "type": "number",
       "minimum": 0.0,

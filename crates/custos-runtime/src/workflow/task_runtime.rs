@@ -279,6 +279,7 @@ impl WorkflowPort for TaskRuntime {
             .claim_ready_task(&cmd.task_id, None, &cmd.actor, 1)
             .await?;
 
+        let mut provider_account_id = serde_json::Value::Null;
         // 2. Verify and drive Task lifecycle if KernelPort is available
         if let Some(ref kernel) = self.kernel {
             let task = match kernel.get_task(&cmd.task_id).await {
@@ -296,6 +297,7 @@ impl WorkflowPort for TaskRuntime {
                 }
             };
 
+            provider_account_id = task.metadata.get("provider_account_id").cloned().unwrap_or(serde_json::Value::Null);
             if task.status == TaskStatus::Draft {
                 if let Err(e) = kernel.transition_task(&task.id, TaskStatus::Queued).await {
                     let _ = self.dispatcher.release_claim(&claim.id).await;
@@ -364,6 +366,8 @@ impl WorkflowPort for TaskRuntime {
         run.workflow_revision = cmd.workflow_revision;
         run.transition(RunStatus::Active)?;
 
+        run.metadata["provider_account_id"] = provider_account_id;
+        run.metadata["requested_model"] = serde_json::json!(cmd.model);
         run.metadata["requested_mode"] = serde_json::json!(requested_mode);
         run.metadata["actual_mode"] = serde_json::json!(actual_mode);
         if downgraded {
@@ -611,20 +615,22 @@ impl WorkflowPort for TaskRuntime {
                         prompt_text = compiled.prompt;
                     }
 
-                    let req = ProviderRequest::new(
+                    let mut req = ProviderRequest::new(
                         new_id("req"),
                         &cmd.task_id,
                         1,
                         prompt_text,
                         target_model,
                     );
+                    req.provider_account_id = run.metadata.get("provider_account_id").and_then(|v| v.as_str()).map(str::to_string);
                     let resp = model.generate(&req).await?;
+                    run.metadata["usage"] = serde_json::json!({ "input_tokens": resp.input_tokens, "output_tokens": resp.output_tokens, "total_tokens": resp.total_tokens });
                     run.metadata["output"] = serde_json::json!(resp.content);
                     run.metadata["tokens_used"] = serde_json::json!(resp.tokens_used);
                     run.metadata["model_id"] = serde_json::json!(resp.model_id);
                     turn_output = Some(resp.content);
                     if let Some(ref store) = self.run_store {
-                        let _ = store.save_run(&run).await;
+                        store.save_run(&run).await?;
                         let _ = store.save_worker_run(&wrun).await;
                     }
                 }
@@ -1141,6 +1147,33 @@ mod tests {
             .await
             .unwrap()
             .is_none());
+    }
+
+    struct MeasuredAccountModel;
+    #[async_trait]
+    impl ModelPort for MeasuredAccountModel {
+        fn provider_id(&self) -> &str { "test" }
+        async fn generate(&self, req: &ProviderRequest) -> Result<custos_provider::ModelResponse,DomainError> {
+            assert_eq!(req.provider_account_id.as_deref(),Some("account-A"));
+            Ok(custos_provider::ModelResponse::text("answer","ollama/test",10).with_usage(Some(7),Some(3),Some(10)))
+        }
+    }
+    #[tokio::test]
+    async fn measured_usage_and_account_are_persisted_with_model_run() {
+        use custos_core::contracts::kernel::TrustedKernel;
+        use custos_core::TaskStore;
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let mut task = custos_domain::Task::new("usage-task".into(),"Measured usage".into());
+        task.metadata=serde_json::json!({"provider_account_id":"account-A"});
+        store.save_task(&task).await.unwrap();
+        let runtime=TaskRuntime::new().with_kernel(Arc::new(TrustedKernel::new(store.clone()))).with_model(Arc::new(MeasuredAccountModel)).with_run_store(store.clone());
+        let handle=runtime.start_run(StartRunCommand::new(&task.id,"actor").with_preferred_mode("model").with_model("ollama/test").with_prompt("hello")).await.unwrap();
+        drop(runtime);
+        let run=store.get_run(&handle.run_id).await.unwrap().unwrap();
+        assert_eq!(run.metadata["provider_account_id"],"account-A");
+        assert_eq!(run.metadata["usage"]["total_tokens"],10);
+        assert_eq!(run.metadata["usage"]["input_tokens"],7);
+        assert_eq!(run.metadata["requested_model"],"ollama/test");
     }
 
     struct TestFailingModel;

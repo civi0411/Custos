@@ -121,6 +121,10 @@ export class DaemonClient {
         Boolean((window as any).__TAURI__));
   }
 
+  async getProviderUsage(includeQuota = false): Promise<import('../types/provider_types').ProviderUsageReport> {
+    return this.request('v1.providers.usage', { include_quota: includeQuota });
+  }
+
   async checkHealth(): Promise<boolean> {
     try {
       const res = await fetch(`${this.baseUrl}/api/health`, { method: 'GET' });

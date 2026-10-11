@@ -125,6 +125,7 @@ pub struct LocalApiDispatcher {
     session_manager: Arc<SessionManager>,
     bridge_service: Arc<BridgeService>,
     workflow: Option<Arc<dyn WorkflowPort>>,
+    usage_runs: Option<Arc<dyn custos_core::contracts::storage::RunPort>>,
     workspace: Option<Arc<WorkspaceCoordinator>>,
     research: Option<Arc<ResearchRepository>>,
     providers: Option<Arc<ProviderRepository>>,
@@ -148,6 +149,7 @@ impl LocalApiDispatcher {
             session_manager,
             bridge_service,
             workflow: None,
+            usage_runs: None,
             workspace: None,
             research: None,
             providers: None,
@@ -178,6 +180,11 @@ impl LocalApiDispatcher {
 
     pub fn with_terminal(mut self, terminal: Arc<TerminalCoordinator>) -> Self {
         self.terminal = terminal;
+        self
+    }
+
+    pub fn with_usage_runs(mut self, runs: Arc<dyn custos_core::contracts::storage::RunPort>) -> Self {
+        self.usage_runs = Some(runs);
         self
     }
 
@@ -2823,6 +2830,52 @@ impl LocalApiDispatcher {
                     Ok(val) => ApiResponse::success(req.id, val),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
+            }
+            "v1.providers.usage" => {
+                let Some(store) = &self.usage_runs else { return ApiResponse::error(req.id, "Usage store unavailable"); };
+                let tasks = match self.task_service.list_tasks().await { Ok(tasks) => tasks, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
+                let mut records = Vec::new();
+                for task in tasks {
+                    let runs = match store.list_runs_for_task(&task.id).await { Ok(runs) => runs, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
+                    for run in runs {
+                        if run.metadata.get("actual_mode").and_then(|v| v.as_str()) != Some("model") { continue; }
+                        if run.metadata.get("model_id").and_then(|v| v.as_str()).is_some_and(|id| id.starts_with("custos-")) { continue; }
+                        let usage = run.metadata.get("usage").cloned().unwrap_or(serde_json::Value::Null);
+                        let failure = run.metadata.get("failure_reason").and_then(|v| v.as_str()).unwrap_or("");
+                        records.push(serde_json::json!({"id":run.id,"account_id":run.metadata.get("provider_account_id"),"model":run.metadata.get("model_id").or_else(||run.metadata.get("requested_model")),"status":run.status.to_string(),"recorded_at":run.started_at,"input_tokens":usage.get("input_tokens"),"output_tokens":usage.get("output_tokens"),"total_tokens":usage.get("total_tokens"),"rate_limited":failure.contains("429") || failure.contains("RESOURCE_EXHAUSTED")}));
+                    }
+                }
+                let mut quotas = Vec::new();
+                if req.params.get("include_quota").and_then(|v| v.as_bool()) == Some(true) {
+                    if let Some(repo) = &self.providers {
+                        let providers = match repo.list_providers() { Ok(p) => p, Err(e) => return ApiResponse::error(req.id,e.to_string()) };
+                        for provider in providers {
+                            let mut snapshot = serde_json::json!({"account_id":provider.id,"status":if provider.service_type == "local" {"not_applicable"} else {"unsupported"},"windows":[],"fetched_at":chrono::Utc::now()});
+                            if provider.service_type != "local" {
+                                match repo.get_oauth_token(&provider.id) {
+                                    Ok(Some(mut token)) if token.refresh_token.is_some() || provider.service_type == "copilot" => {
+                                        if token.is_expired(120) && token.refresh_token.is_some() {
+                                            let refreshed = match custos_adapters::providers::oauth_pkce::oauth_settings(&token.service_type) {
+                                                Ok(settings) => custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(&settings.0,&settings.1).refresh_token(&settings.2,&token).await,
+                                                Err(e) => Err(e),
+                                            };
+                                            match refreshed { Ok(value) => { if let Err(e)=repo.save_oauth_token(&value) { return ApiResponse::error(req.id,e.to_string()); } token=value; }, Err(_) => { snapshot["status"]=serde_json::json!("unavailable"); snapshot["error"]=serde_json::json!("Reconnect account to refresh quota"); quotas.push(snapshot); continue; } }
+                                        }
+                                        match custos_adapters::providers::probe::probe_account_quota(&provider.service_type,&token.access_token).await {
+                                            Ok(value) => { snapshot["status"]=value["status"].clone(); snapshot["windows"]=value["windows"].clone(); snapshot["source"]=value["source"].clone(); },
+                                            Err(e) => { snapshot["status"]=serde_json::json!("unavailable"); snapshot["error"]=serde_json::json!(e.to_string()); }
+                                        }
+                                    },
+                                    Err(_) => { snapshot["status"]=serde_json::json!("unavailable"); },
+                                    _ => {}
+                                }
+                            }
+                            quotas.push(snapshot);
+                        }
+                    }
+                }
+                tracing::debug!(request_id = %req.id, records = records.len(), quota_accounts = quotas.len(), "Provider usage snapshot loaded");
+                ApiResponse::success(req.id, serde_json::json!({"records":records,"quotas":quotas,"fetched_at":chrono::Utc::now()}))
             }
             "v1.models.pricing" => {
                 let model_id = req
@@ -6379,6 +6432,36 @@ mod tests {
             .unwrap();
         assert_eq!(persisted.status, HeadlessJobStatus::Pending);
         assert_eq!(persisted.exit_code, None);
+    }
+
+    #[tokio::test]
+    async fn provider_usage_reads_durable_runs_without_duplicates_or_secrets() {
+        use custos_core::contracts::storage::RunPort;
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let service = Arc::new(TaskService::new(store.clone()));
+        let sessions = Arc::new(SessionManager::with_store(store.clone()));
+        let bridge = Arc::new(BridgeService::new(sessions.clone(),service.clone()));
+        let dispatcher = LocalApiDispatcher::new(service,sessions,bridge).with_usage_runs(store.clone()).with_providers(Arc::new(store.providers().clone()));
+        let response = dispatcher.handle_request(ApiRequest::new("task", "v1.tasks.create", serde_json::json!({"title":"Usage fixture"}))).await;
+        let id = response.result.as_ref().unwrap()["id"].as_str().unwrap().to_string();
+        let mut run = custos_domain::Run::new(id,1);
+        run.metadata=serde_json::json!({"actual_mode":"model","provider_account_id":"account-A","requested_model":"ollama/test","usage":{"input_tokens":7,"output_tokens":3,"total_tokens":10},"secret":"never-export"});
+        store.save_run(&run).await.unwrap();
+        for _ in 0..2 {
+            let report=dispatcher.handle_request(ApiRequest::new("usage", "v1.providers.usage",serde_json::json!({}))).await;
+            assert!(report.is_success());
+            let value=report.result.unwrap();
+            assert_eq!(value["records"].as_array().unwrap().len(),1);
+            assert_eq!(value["records"][0]["account_id"],"account-A");
+            assert_eq!(value["records"][0]["total_tokens"],10);
+            assert!(!value.to_string().contains("never-export"));
+        }
+        run.metadata["usage"]=serde_json::Value::Null;
+        run.metadata["failure_reason"]=serde_json::json!("429 RESOURCE_EXHAUSTED");
+        store.save_run(&run).await.unwrap();
+        let value=dispatcher.handle_request(ApiRequest::new("usage", "v1.providers.usage",serde_json::json!({}))).await.result.unwrap();
+        assert!(value["records"][0]["total_tokens"].is_null());
+        assert_eq!(value["records"][0]["rate_limited"],true);
     }
 
     #[tokio::test]
