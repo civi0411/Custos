@@ -11,9 +11,10 @@ use custos_core::contracts::storage::{
     EffectLedgerPort, OutboxEntry, OutboxPort, OutboxStatus, RunPort,
 };
 use custos_core::contracts::workflow::WorkflowPort;
+use custos_core::SessionStore;
 use custos_domain::{
-    new_id, Assurance, CancelReceipt, ContextPack, ContinuationPacket, DomainError, Run, RunHandle,
-    RunStatus, StartRunCommand, TaskStatus, WorkerRun,
+    new_id, Assurance, CancelReceipt, ContinuationPacket, DomainError, Run, RunHandle,
+    RunStatus, SessionId, StartRunCommand, TaskStatus, WorkerRun,
 };
 use custos_provider::request::ProviderRequest;
 use custos_provider::ModelPort;
@@ -22,10 +23,12 @@ pub struct TaskRuntime {
     kernel: Option<Arc<dyn KernelPort>>,
     model: Option<Arc<dyn ModelPort>>,
     harness: Option<Arc<dyn AgentRuntimePort>>,
+    harnesses: HashMap<String, Arc<dyn AgentRuntimePort>>,
     sandbox: Option<Arc<dyn SandboxPort>>,
     outbox: Option<Arc<dyn OutboxPort>>,
     effect_ledger: Option<Arc<dyn EffectLedgerPort>>,
     run_store: Option<Arc<dyn RunPort>>,
+    session_store: Option<Arc<dyn SessionStore>>,
     dispatcher: Arc<super::dispatcher::WorkflowDispatcher>,
     lease_manager: Option<Arc<super::lease::WorkspaceLeaseManager>>,
     active_runs: Arc<RwLock<HashMap<String, Run>>>,
@@ -38,10 +41,12 @@ impl TaskRuntime {
             kernel: None,
             model: None,
             harness: None,
+            harnesses: HashMap::new(),
             sandbox: None,
             outbox: None,
             effect_ledger: None,
             run_store: None,
+            session_store: None,
             dispatcher: Arc::new(super::dispatcher::WorkflowDispatcher::new()),
             lease_manager: None,
             active_runs: Arc::new(RwLock::new(HashMap::new())),
@@ -54,10 +59,12 @@ impl TaskRuntime {
             kernel: Some(kernel),
             model: Some(model),
             harness: None,
+            harnesses: HashMap::new(),
             sandbox: None,
             outbox: None,
             effect_ledger: None,
             run_store: None,
+            session_store: None,
             dispatcher: Arc::new(super::dispatcher::WorkflowDispatcher::new()),
             lease_manager: None,
             active_runs: Arc::new(RwLock::new(HashMap::new())),
@@ -76,8 +83,39 @@ impl TaskRuntime {
     }
 
     pub fn with_harness(mut self, harness: Arc<dyn AgentRuntimePort>) -> Self {
+        let harness_id = harness.harness_id().to_string();
+        self.harnesses.insert(harness_id, harness.clone());
         self.harness = Some(harness);
         self
+    }
+
+    pub fn with_harnesses(
+        mut self,
+        harnesses: HashMap<String, Arc<dyn AgentRuntimePort>>,
+        default_harness_id: Option<&str>,
+    ) -> Self {
+        self.harness = default_harness_id
+            .and_then(|id| harnesses.get(id).cloned())
+            .or_else(|| harnesses.values().next().cloned());
+        self.harnesses = harnesses;
+        self
+    }
+
+    fn resolve_harness(
+        &self,
+        requested_harness_id: Option<&str>,
+    ) -> Result<Arc<dyn AgentRuntimePort>, DomainError> {
+        if let Some(id) = requested_harness_id.filter(|id| !id.trim().is_empty()) {
+            return self.harnesses.get(id).cloned().ok_or_else(|| {
+                DomainError::Validation(format!(
+                    "Requested harness '{id}' is not composed into this runtime"
+                ))
+            });
+        }
+
+        self.harness.clone().ok_or_else(|| {
+            DomainError::Validation("No native harness is composed into this runtime".into())
+        })
     }
 
     pub fn with_sandbox(mut self, sandbox: Arc<dyn SandboxPort>) -> Self {
@@ -100,6 +138,11 @@ impl TaskRuntime {
             super::dispatcher::WorkflowDispatcher::new().with_run_store(run_store.clone()),
         );
         self.run_store = Some(run_store);
+        self
+    }
+
+    pub fn with_session_store(mut self, session_store: Arc<dyn SessionStore>) -> Self {
+        self.session_store = Some(session_store);
         self
     }
 
@@ -349,8 +392,12 @@ impl WorkflowPort for TaskRuntime {
         let _ = self.dispatcher.mark_dispatched(&claim.id, &wrun.id).await;
 
         // 6. Allocate isolated workspace lease if lease manager is configured
-        let mut lease = if let Some(ref lm) = self.lease_manager {
-            lm.acquire_lease(&cmd.task_id, &wrun.id).ok()
+        let mut lease = if cmd.workspace_root.is_none() {
+            if let Some(ref lm) = self.lease_manager {
+                lm.acquire_lease(&cmd.task_id, &wrun.id).ok()
+            } else {
+                None
+            }
         } else {
             None
         };
@@ -367,17 +414,66 @@ impl WorkflowPort for TaskRuntime {
         let turn_result = async {
             let mut turn_output: Option<String> = None;
             if actual_mode == "native" {
-                if let Some(ref harness) = self.harness {
-                    let mut launch = custos_domain::LaunchAttempt::new(&wrun.id, requested_mode)?;
-                    let harness_id = harness.profile().harness_id.clone();
-                    let _ = launch.mark_launched("native", Some(harness_id));
-                    run.metadata["launch_attempt_id"] = serde_json::json!(launch.id);
-                    wrun.continuation_packet_ref = Some(format!("launch:{}", launch.id));
+                let harness = self.resolve_harness(cmd.harness_id.as_deref())?;
+                let profile = harness.profile();
+                let harness_id = profile.harness_id.clone();
+                let workspace_root = cmd.workspace_root.as_deref().ok_or_else(|| {
+                    DomainError::Validation(
+                        "Native Task runs require a daemon-resolved ExecutionWorkspace".into(),
+                    )
+                })?;
+                let prompt_text = cmd.prompt.as_deref().ok_or_else(|| {
+                    DomainError::Validation("Native Task runs require an instruction".into())
+                })?;
 
-                    let context_pack =
-                        ContextPack::new(new_id("ctx"), Vec::new(), 0, "sha256:empty".into());
+                let mut launch = custos_domain::LaunchAttempt::new(&wrun.id, requested_mode)?;
+                if let Some(ref store) = self.run_store {
+                    store.save_launch_attempt(&launch).await?;
+                }
+                run.metadata["launch_attempt_id"] = serde_json::json!(launch.id);
+                run.metadata["harness_id"] = serde_json::json!(harness_id);
+                run.metadata["tool_mediation"] =
+                    serde_json::json!(profile.tool_mediation.to_string());
+                wrun.continuation_packet_ref = Some(format!("launch:{}", launch.id));
 
-                    let intents = harness.execute_turn(&wrun, &context_pack).await?;
+                let native_result = harness
+                    .run_native(prompt_text, std::path::Path::new(workspace_root))
+                    .await;
+                let execution = match native_result {
+                    Ok(result) => {
+                        launch.mark_launched("native", Some(harness_id.clone()))?;
+                        if let Some(ref store) = self.run_store {
+                            store.save_launch_attempt(&launch).await?;
+                        }
+                        result
+                    }
+                    Err(err) => {
+                        launch.mark_failed(err.to_string())?;
+                        if let Some(ref store) = self.run_store {
+                            store.save_launch_attempt(&launch).await?;
+                        }
+                        return Err(err);
+                    }
+                };
+
+                for intent in &execution.observed_effects {
+                    profile.validate_intent_assurance(intent)?;
+                }
+
+                run.metadata["exit_code"] = serde_json::json!(execution.exit_code);
+                run.metadata["native_success"] = serde_json::json!(execution.success);
+                run.metadata["stderr"] = serde_json::json!(execution.stderr.clone());
+                run.metadata["observed_effect_count"] =
+                    serde_json::json!(execution.observed_effects.len());
+                let combined_output = if execution.stdout.trim().is_empty() {
+                    execution.stderr.clone()
+                } else {
+                    execution.stdout.clone()
+                };
+                run.metadata["output"] = serde_json::json!(combined_output);
+                turn_output = Some(combined_output);
+
+                let intents = execution.observed_effects;
 
                     // Process generated action intents through Gate 4, Kernel, Outbox, and Sandbox
                     for mut intent in intents {
@@ -456,7 +552,8 @@ impl WorkflowPort for TaskRuntime {
                                 }
                             }
                         } else if let Some(ref ledger) = self.effect_ledger {
-                            // For observe-only or provider-governed effects, record observation in ledger
+                            // Native/provider-governed effects have no Custos dispatch receipt.
+                            // Keep them uncertain until a post-read verifier reconciles the effect.
                             let idempotency_key = intent
                                 .idempotency_key
                                 .clone()
@@ -466,16 +563,14 @@ impl WorkflowPort for TaskRuntime {
                                 "native-unmediated",
                                 idempotency_key,
                             );
-                            effect.status = custos_domain::EffectStatus::Succeeded;
-                            effect.ended_at = Some(Utc::now());
+                            effect.status = custos_domain::EffectStatus::Uncertain;
                             let _ = ledger.record_effect(&effect).await;
                         }
                     }
-                }
             } else if actual_mode == "model" {
                 if let Some(ref model) = self.model {
                     let mut launch = custos_domain::LaunchAttempt::new(&wrun.id, requested_mode)?;
-                    let prompt_text = cmd
+                    let mut prompt_text = cmd
                         .prompt
                         .clone()
                         .unwrap_or_else(|| format!("Initial run turn for task {}", cmd.task_id));
@@ -488,6 +583,33 @@ impl WorkflowPort for TaskRuntime {
                     let _ = launch.mark_launched("model", Some(target_model.to_string()));
                     run.metadata["launch_attempt_id"] = serde_json::json!(launch.id);
                     wrun.continuation_packet_ref = Some(format!("launch:{}", launch.id));
+
+                    if let (Some(session_id), Some(session_store)) =
+                        (cmd.session_id.as_ref(), self.session_store.as_ref())
+                    {
+                        let session_id = SessionId::new(session_id.clone());
+                        if session_store.get_session(&session_id).await?.is_none() {
+                            return Err(DomainError::Validation(format!(
+                                "Unknown session '{}' for model run",
+                                session_id
+                            )));
+                        }
+                        let journal = session_store.get_journal(&session_id).await?;
+                        let compiled = crate::context::compile_session_history(
+                            &journal,
+                            &prompt_text,
+                            12_000,
+                        );
+                        run.metadata["session_context"] = serde_json::json!({
+                            "compiler_version": "journal-recent-v1",
+                            "session_id": session_id.0,
+                            "included_entry_ids": compiled.included_entry_ids,
+                            "omitted_entry_ids": compiled.omitted_entry_ids,
+                            "estimated_tokens": compiled.estimated_tokens,
+                            "destination_model": target_model,
+                        });
+                        prompt_text = compiled.prompt;
+                    }
 
                     let req = ProviderRequest::new(
                         new_id("req"),
@@ -529,13 +651,45 @@ impl WorkflowPort for TaskRuntime {
             }
         };
 
-        if actual_mode == "model" && run.status == RunStatus::Active {
+        let is_chat_turn = cmd.session_id.is_some()
+            || cmd.turn_id.is_some()
+            || cmd.actor == "chat"
+            || cmd.actor == "actor_user";
+
+        if is_chat_turn && actual_mode == "model" && run.status == RunStatus::Active {
             run.transition(RunStatus::Completed)?;
             wrun.transition(RunStatus::Completed)?;
             run.metadata["completion_reason"] = serde_json::json!("model_turn_completed");
             if let Some(ref store) = self.run_store {
                 let _ = store.save_run(&run).await;
                 let _ = store.save_worker_run(&wrun).await;
+            }
+        }
+
+        if actual_mode == "native" && run.status == RunStatus::Active {
+            let native_succeeded = run
+                .metadata
+                .get("native_success")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false);
+            run.transition(if native_succeeded {
+                RunStatus::Completed
+            } else {
+                RunStatus::Failed
+            })?;
+            wrun.transition(if native_succeeded {
+                RunStatus::Completed
+            } else {
+                RunStatus::Failed
+            })?;
+            run.metadata["completion_reason"] = serde_json::json!(if native_succeeded {
+                "native_process_completed"
+            } else {
+                "native_process_failed"
+            });
+            if let Some(ref store) = self.run_store {
+                store.save_run(&run).await?;
+                store.save_worker_run(&wrun).await?;
             }
         }
 
@@ -604,7 +758,13 @@ impl WorkflowPort for TaskRuntime {
             }
         }
 
-        if let Some(ref harness) = self.harness {
+        let selected_harness = run
+            .metadata
+            .get("harness_id")
+            .and_then(|value| value.as_str())
+            .and_then(|id| self.harnesses.get(id).cloned())
+            .or_else(|| self.harness.clone());
+        if let Some(harness) = selected_harness {
             let _ = harness.cancel_run(run_id).await;
         }
 
@@ -734,6 +894,55 @@ impl WorkflowPort for TaskRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use custos_core::contracts::harness::{
+        HarnessExecutionResult, HarnessProfile, ToolMediationLevel,
+    };
+    use custos_domain::{ActionIntent, ContextPack};
+    use std::path::Path;
+    use std::sync::Mutex;
+
+    struct RecordingHarness {
+        id: String,
+        calls: Arc<Mutex<Vec<(String, String)>>>,
+    }
+
+    #[async_trait]
+    impl AgentRuntimePort for RecordingHarness {
+        fn harness_id(&self) -> &str {
+            &self.id
+        }
+
+        fn profile(&self) -> HarnessProfile {
+            HarnessProfile::new(&self.id, ToolMediationLevel::ProviderGoverned)
+        }
+
+        async fn execute_turn(
+            &self,
+            _worker_run: &WorkerRun,
+            _context_pack: &ContextPack,
+        ) -> Result<Vec<ActionIntent>, DomainError> {
+            Ok(Vec::new())
+        }
+
+        async fn run_native(
+            &self,
+            instruction: &str,
+            cwd: &Path,
+        ) -> Result<HarnessExecutionResult, DomainError> {
+            self.calls
+                .lock()
+                .map_err(|_| DomainError::Validation("recording harness lock poisoned".into()))?
+                .push((instruction.to_string(), cwd.display().to_string()));
+            Ok(HarnessExecutionResult {
+                success: true,
+                exit_code: Some(0),
+                stdout: format!("{} completed", self.id),
+                stderr: String::new(),
+                observed_effects: Vec::new(),
+                mediation_level: ToolMediationLevel::ProviderGoverned,
+            })
+        }
+    }
 
     #[tokio::test]
     async fn test_task_runtime_lifecycle() {
@@ -1006,5 +1215,45 @@ mod tests {
             .await
             .expect("Retry turn should succeed without Conflict error");
         assert_eq!(handle2.status, RunStatus::Completed);
+    }
+
+    #[tokio::test]
+    async fn native_run_uses_requested_harness_and_workspace() {
+        let alpha_calls = Arc::new(Mutex::new(Vec::new()));
+        let beta_calls = Arc::new(Mutex::new(Vec::new()));
+        let mut harnesses: HashMap<String, Arc<dyn AgentRuntimePort>> = HashMap::new();
+        harnesses.insert(
+            "alpha".into(),
+            Arc::new(RecordingHarness {
+                id: "alpha".into(),
+                calls: alpha_calls.clone(),
+            }),
+        );
+        harnesses.insert(
+            "beta".into(),
+            Arc::new(RecordingHarness {
+                id: "beta".into(),
+                calls: beta_calls.clone(),
+            }),
+        );
+
+        let runtime = TaskRuntime::new().with_harnesses(harnesses, Some("alpha"));
+        let command = StartRunCommand::new("task_native", "actor_user")
+            .with_preferred_mode("native")
+            .with_harness_id("beta")
+            .with_workspace_root("/tmp/custos-native-test")
+            .with_prompt("inspect the repository");
+
+        let handle = runtime.start_run(command).await.unwrap();
+        assert_eq!(handle.status, RunStatus::Completed);
+        assert_eq!(handle.output.as_deref(), Some("beta completed"));
+        assert!(alpha_calls.lock().unwrap().is_empty());
+        assert_eq!(
+            beta_calls.lock().unwrap().as_slice(),
+            &[(
+                "inspect the repository".to_string(),
+                "/tmp/custos-native-test".to_string()
+            )]
+        );
     }
 }

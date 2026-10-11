@@ -152,18 +152,38 @@ pub fn validate_browser_url(raw_url: &str) -> Result<(), DomainError> {
         )));
     };
 
-    // Extract host (up to next '/', ':', '?', or '#')
-    let host = rest
-        .split(['/', ':', '?', '#'])
+    // Extract authority (host + optional port) up to next '/', '?', or '#'
+    let authority = rest
+        .split(['/', '?', '#'])
         .next()
         .unwrap_or("")
         .trim();
+
+    if authority.is_empty() {
+        return Err(DomainError::Validation("URL must contain a valid hostname.".to_string()));
+    }
+
+    let (host, maybe_port) = if let Some((h, p)) = authority.rsplit_once(':') {
+        (h.trim(), p.trim().parse::<u16>().ok())
+    } else {
+        (authority, None)
+    };
 
     if host.is_empty() {
         return Err(DomainError::Validation("URL must contain a valid hostname.".to_string()));
     }
 
     let lower = host.to_lowercase();
+
+    // Permit scoped loopback development servers and SSH port forward targets (ports 1024..=65535)
+    let is_loopback = lower == "localhost"
+        || lower == "127.0.0.1"
+        || lower == "[::1]";
+    if is_loopback && maybe_port.is_some_and(|p| p >= 1024) {
+        let _ = scheme;
+        return Ok(());
+    }
+
     let private_ipv4 = lower == "0.0.0.0"
         || lower.starts_with("127.")
         || lower.starts_with("10.")
@@ -206,7 +226,10 @@ mod tests {
         assert!(validate_browser_url("file:///etc/passwd").is_err());
         assert!(validate_browser_url("javascript:alert(1)").is_err());
         assert!(validate_browser_url("http://169.254.169.254/latest/meta-data").is_err());
-        assert!(validate_browser_url("http://localhost:8080").is_err());
+        assert!(validate_browser_url("http://localhost:8080").is_ok());
+        assert!(validate_browser_url("http://127.0.0.1:5173").is_ok());
+        assert!(validate_browser_url("http://localhost:80").is_err());
+        assert!(validate_browser_url("http://localhost").is_err());
         assert!(validate_browser_url("http://127.0.0.1").is_err());
         assert!(validate_browser_url("http://10.0.0.1").is_err());
         assert!(validate_browser_url("http://172.16.1.2").is_err());

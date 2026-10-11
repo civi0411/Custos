@@ -37,6 +37,7 @@ pub struct CustosRuntime {
     pub workspace_coordinator: Arc<custos_runtime::workspace::WorkspaceCoordinator>,
     pub terminal_coordinator: Arc<custos_runtime::TerminalCoordinator>,
     pub python_coordinator: Arc<custos_runtime::PythonKernelCoordinator>,
+    pub pack_registry: Arc<custos_packs::DomainPackRegistry>,
 }
 
 impl CustosRuntime {
@@ -131,6 +132,8 @@ impl CustosRuntime {
             "Custos kernel-mediated autonomous agent runtime with ExecutionPermits.",
             "internal",
         );
+        let default_harness_id = harness_reg.default_harness_id().map(str::to_string);
+        let harness_runtimes = harness_reg.runtimes();
         let harnesses = Arc::new(harness_reg);
         let harness = harnesses
             .get("claude-code")
@@ -140,11 +143,12 @@ impl CustosRuntime {
             TaskRuntime::new()
                 .with_kernel(kernel.clone())
                 .with_model(model.clone())
-                .with_harness(harness.clone())
+                .with_harnesses(harness_runtimes, default_harness_id.as_deref())
                 .with_sandbox(sandbox.clone())
                 .with_outbox(store.clone())
                 .with_effect_ledger(store.clone())
                 .with_run_store(store.clone())
+                .with_session_store(store.clone())
                 .with_lease_manager(lease_manager.clone()),
         );
 
@@ -177,6 +181,8 @@ impl CustosRuntime {
             .with_harnesses(harnesses.clone()),
         );
 
+        let pack_registry = Arc::new(custos_packs::create_default_pack_registry());
+
         Ok(Self {
             store,
             task_service,
@@ -193,6 +199,7 @@ impl CustosRuntime {
             workspace_coordinator,
             terminal_coordinator,
             python_coordinator,
+            pack_registry,
         })
     }
 }
