@@ -20,12 +20,20 @@ import { daemonClient } from '@/api/daemon_client';
 interface BrowserWorkbenchPaneProps {
   onShowToast?: (message: string) => void;
   workspaceId?: string;
+  supportedOperations: string[];
+  capabilityReason?: string;
 }
 
 export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
   onShowToast,
   workspaceId,
+  supportedOperations,
+  capabilityReason,
 }) => {
+  const can = useCallback(
+    (operation: string) => supportedOperations.includes(operation),
+    [supportedOperations]
+  );
   const [sessions, setSessions] = useState<BrowserSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [tabs, setTabs] = useState<BrowserTab[]>([]);
@@ -35,6 +43,9 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
   const [activeDrawer, setActiveDrawer] = useState<'snapshot' | 'console' | 'network'>('snapshot');
   const [newSessionName, setNewSessionName] = useState<string>('');
   const [isCreatingSession, setIsCreatingSession] = useState<boolean>(false);
+  const [actionRef, setActionRef] = useState<string>('@e1');
+  const [actionText, setActionText] = useState<string>('');
+  const [isActionRunning, setIsActionRunning] = useState<boolean>(false);
 
   const activeTab = tabs.find((t) => t.id === activeTabId) ?? tabs[0] ?? null;
 
@@ -111,11 +122,62 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
 
   const handleNavigate = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    onShowToast?.('Browser navigation unavailable: scoped browser execution adapter is not connected.');
+    if (!activeTabId || !urlInput.trim()) return;
+    try {
+      const updatedTab = await daemonClient.navigateBrowserTab(activeTabId, urlInput.trim());
+      setTabs((prev) => prev.map((t) => (t.id === activeTabId ? updatedTab : t)));
+      setUrlInput(updatedTab.url);
+      onShowToast?.(`Navigated to: ${updatedTab.url}`);
+    } catch (err) {
+      onShowToast?.(`Navigation failed: ${String(err)}`);
+    }
   };
 
   const handleCaptureSnapshot = async () => {
-    onShowToast?.('DOM snapshot capture unavailable: scoped browser execution adapter is not connected.');
+    if (!activeTabId) return;
+    try {
+      await daemonClient.snapshotBrowserTab({ tab_id: activeTabId } as any);
+      if (activeSessionId) {
+        await loadTabs(activeSessionId);
+      }
+      onShowToast?.('Page snapshot captured.');
+    } catch (err) {
+      onShowToast?.(`Snapshot failed: ${String(err)}`);
+    }
+  };
+
+  const handleElementClick = async (refToClick: string) => {
+    if (!activeTabId || !refToClick.trim()) return;
+    setIsActionRunning(true);
+    try {
+      const updated = await daemonClient.clickBrowserTab(activeTabId, refToClick.trim());
+      setTabs((prev) => prev.map((t) => (t.id === activeTabId ? updated : t)));
+      onShowToast?.(`Clicked element ${refToClick}.`);
+      if (activeSessionId) {
+        await loadTabs(activeSessionId);
+      }
+    } catch (err) {
+      onShowToast?.(`Click failed: ${String(err)}`);
+    } finally {
+      setIsActionRunning(false);
+    }
+  };
+
+  const handleElementFill = async () => {
+    if (!activeTabId || !actionRef.trim() || !actionText.trim()) return;
+    setIsActionRunning(true);
+    try {
+      await daemonClient.fillBrowserTab(activeTabId, actionRef.trim(), actionText.trim());
+      onShowToast?.(`Filled ${actionRef} with "${actionText}".`);
+      setActionText('');
+      if (activeSessionId) {
+        await loadTabs(activeSessionId);
+      }
+    } catch (err) {
+      onShowToast?.(`Fill failed: ${String(err)}`);
+    } finally {
+      setIsActionRunning(false);
+    }
   };
 
   const handleCloseTab = async (tabId: string, e: React.MouseEvent) => {
@@ -195,8 +257,10 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
             </div>
           ) : (
             <button
+              disabled={!can('sessions.create')}
               onClick={() => setIsCreatingSession(true)}
-              className="flex items-center gap-1 px-2 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-zinc-300 text-[11px] transition"
+              title={can('sessions.create') ? 'Create browser session' : 'Session creation is not available'}
+              className="flex items-center gap-1 px-2 py-1 bg-zinc-800 hover:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed border border-zinc-700 rounded text-zinc-300 text-[11px] transition"
             >
               <Plus size={11} />
               <span>New Session</span>
@@ -209,7 +273,7 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
       <div className="bg-amber-500/10 border-b border-amber-500/20 px-3 py-1.5 flex items-center justify-between text-[11px] text-amber-400 shrink-0">
         <div className="flex items-center gap-1.5">
           <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-          <span>Browser Execution Gated: Headless browser driver is not connected (metadata/session inspect mode only).</span>
+          <span>{capabilityReason || 'Browser execution is degraded; only advertised operations are enabled.'}</span>
         </div>
         <span className="font-mono text-[10px] text-amber-400/80">Fail-Closed</span>
       </div>
@@ -233,8 +297,10 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
             >
               <span className="truncate">{tab.title || tab.url}</span>
               <button
+                disabled={!can('tabs.close')}
                 onClick={(e) => handleCloseTab(tab.id, e)}
-                className="hover:text-red-400 text-zinc-500 rounded p-0.5"
+                title={can('tabs.close') ? 'Close tab' : 'Tab closing is not available'}
+                className="hover:text-red-400 disabled:hover:text-zinc-500 disabled:cursor-not-allowed text-zinc-500 rounded p-0.5"
               >
                 <X size={11} />
               </button>
@@ -243,8 +309,9 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
         })}
         {activeSessionId && (
           <button
+            disabled={!can('tabs.create')}
             onClick={() => handleCreateTab('https://example.com')}
-            className="p-1 text-zinc-500 hover:text-zinc-200 rounded hover:bg-zinc-800 transition mb-0.5"
+            className="p-1 text-zinc-500 hover:text-zinc-200 disabled:hover:text-zinc-500 disabled:cursor-not-allowed rounded hover:bg-zinc-800 transition mb-0.5"
             title="Open New Tab"
           >
             <Plus size={13} />
@@ -256,7 +323,7 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
       <div className="flex items-center gap-2 px-3 py-2 bg-[#18181b] border-b border-zinc-800">
         <button
           onClick={() => handleNavigate()}
-          disabled={true}
+          disabled={!can('tabs.navigate')}
           className="p-1.5 rounded bg-zinc-800/50 text-zinc-500 cursor-not-allowed transition"
           title="Browser navigation unavailable: scoped browser execution adapter is not connected"
         >
@@ -268,13 +335,13 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
             type="text"
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
-            disabled={true}
+            disabled={!can('tabs.navigate')}
             placeholder="Browser navigation unavailable (headless browser driver not connected)..."
             className="w-full bg-zinc-950/60 border border-zinc-850 rounded-md px-3 py-1 text-xs text-zinc-500 font-mono tracking-tight focus:outline-none cursor-not-allowed"
           />
           <button
             type="submit"
-            disabled={true}
+            disabled={!can('tabs.navigate')}
             title="Browser navigation unavailable: scoped browser execution adapter is not connected"
             className="absolute right-1 px-2 py-0.5 bg-zinc-850 border border-zinc-800 text-zinc-500 rounded text-[11px] cursor-not-allowed"
           >
@@ -284,7 +351,7 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
 
         <button
           onClick={handleCaptureSnapshot}
-          disabled={true}
+          disabled={!can('tabs.snapshot')}
           title="DOM snapshot capture unavailable: authenticated browser adapter is not connected"
           className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800/50 border border-zinc-800 rounded text-zinc-500 font-medium text-[11px] cursor-not-allowed"
         >
@@ -310,15 +377,17 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
               </p>
               {activeSessionId ? (
                 <button
+                  disabled={!can('tabs.create')}
                   onClick={() => handleCreateTab('https://example.com')}
-                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-zinc-200 text-xs font-medium transition"
+                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed border border-zinc-700 rounded text-zinc-200 text-xs font-medium transition"
                 >
                   Open First Tab
                 </button>
               ) : (
                 <button
+                  disabled={!can('sessions.create')}
                   onClick={handleCreateSession}
-                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-zinc-200 text-xs font-medium transition"
+                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed border border-zinc-700 rounded text-zinc-200 text-xs font-medium transition"
                 >
                   Create Initial Session
                 </button>
@@ -343,18 +412,60 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
                 </div>
               </div>
 
-              {/* Simulated Rendered Preview / Snapshot Output */}
-              <div className="rounded-lg bg-zinc-900/40 border border-zinc-800 p-4 space-y-3 font-mono text-[11px]">
-                <div className="flex items-center justify-between text-zinc-400 border-b border-zinc-800 pb-2">
-                  <span className="text-[10px] uppercase font-sans tracking-wider text-zinc-500">
-                    Live DOM Render Simulation
-                  </span>
-                  <span className="text-zinc-500 text-[10px]">Viewport: 1280 × 800</span>
+              {/* Interactive Web Viewport */}
+              <div className="rounded-lg bg-zinc-950 border border-zinc-800 overflow-hidden flex flex-col h-[480px]">
+                <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-900 border-b border-zinc-800 text-zinc-400 text-[10px]">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="font-sans font-medium text-zinc-300">Live Viewport</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-zinc-400">1280 × 800</span>
+                    {activeTab.url && activeTab.url !== 'about:blank' && (
+                      <a
+                        href={activeTab.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-zinc-400 hover:text-amber-400 underline font-sans"
+                      >
+                        External Tab
+                      </a>
+                    )}
+                  </div>
                 </div>
-                <div className="p-3 bg-zinc-950 rounded border border-zinc-900 text-zinc-300 whitespace-pre-wrap leading-relaxed text-xs">
+                {activeTab.url.startsWith('http://') || activeTab.url.startsWith('https://') ? (
+                  <iframe
+                    key={activeTab.url}
+                    src={activeTab.url}
+                    title={activeTab.title}
+                    className="w-full flex-1 bg-white border-0"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+                  />
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-zinc-500 space-y-2">
+                    <Globe size={32} className="text-zinc-600" />
+                    <p className="text-xs font-medium text-zinc-400">Enter a URL in the address bar above</p>
+                    <p className="text-[11px] text-zinc-500">
+                      Supports local development servers (e.g., http://localhost:5173, http://localhost:3000) and external websites.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Rendered Snapshot Summary */}
+              <div className="rounded-lg bg-zinc-900/40 border border-zinc-800 p-4 space-y-2 font-mono text-[11px]">
+                <div className="flex items-center justify-between text-zinc-400 border-b border-zinc-800 pb-1.5">
+                  <span className="text-[10px] uppercase font-sans tracking-wider text-zinc-500">
+                    DOM Tree &amp; Semantic Summary
+                  </span>
+                  <span className="text-zinc-500 text-[10px]">
+                    Links: {activeTab.last_snapshot?.links?.length ?? 0}
+                  </span>
+                </div>
+                <div className="p-3 bg-zinc-950 rounded border border-zinc-900 text-zinc-300 whitespace-pre-wrap leading-relaxed text-xs max-h-36 overflow-y-auto">
                   {activeTab.last_snapshot?.dom_tree_summary || (
                     <span className="text-zinc-600 font-sans">
-                      No DOM snapshot captured yet. Click &apos;DOM Snapshot&apos; above to record page elements and links into persistence.
+                      No DOM snapshot recorded yet. Click &apos;DOM Snapshot&apos; above to record page elements into persistence.
                     </span>
                   )}
                 </div>
@@ -411,25 +522,75 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
                 </span>
                 {activeTab?.last_snapshot ? (
                   <div className="space-y-2">
-                    <div className="p-2.5 rounded bg-zinc-900 border border-zinc-800 space-y-1">
-                      <span className="text-zinc-500 text-[10px] block">Page Title</span>
-                      <p className="text-zinc-200 font-medium text-xs">
-                        {activeTab.last_snapshot.title}
-                      </p>
+                    {/* Element Interaction Tool */}
+                    <div className="p-2.5 rounded bg-zinc-900 border border-zinc-800 space-y-2">
+                      <span className="text-amber-400 font-semibold text-[10px] uppercase tracking-wider block">
+                        Agent AX Actions
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={actionRef}
+                          onChange={(e) => setActionRef(e.target.value)}
+                          disabled={!can('tabs.click')}
+                          placeholder="@e1"
+                          className="w-16 bg-zinc-950 border border-zinc-800 rounded px-1.5 py-1 text-center font-mono text-[11px] text-zinc-500 cursor-not-allowed"
+                        />
+                        <button
+                          disabled={!can('tabs.click') || isActionRunning}
+                          onClick={() => handleElementClick(actionRef)}
+                          title="Click unavailable until the governed browser adapter is connected"
+                          className="flex-1 py-1 px-2 bg-zinc-800 text-zinc-500 cursor-not-allowed rounded text-[10px] font-medium transition"
+                        >
+                          {isActionRunning ? 'Running...' : 'Click Ref'}
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={actionText}
+                          onChange={(e) => setActionText(e.target.value)}
+                          disabled={!can('tabs.fill')}
+                          placeholder="Text to fill..."
+                          className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-2 py-1 font-mono text-[11px] text-zinc-500 cursor-not-allowed"
+                        />
+                        <button
+                          disabled={!can('tabs.fill') || isActionRunning || !actionText.trim()}
+                          onClick={handleElementFill}
+                          title="Fill unavailable until the governed browser adapter is connected"
+                          className="py-1 px-2 bg-zinc-800 text-zinc-500 cursor-not-allowed rounded text-[10px] font-medium transition"
+                        >
+                          Fill
+                        </button>
+                      </div>
                     </div>
+
+                    {activeTab.last_snapshot.screenshot_uri && (
+                      <div className="p-2.5 rounded bg-zinc-900 border border-zinc-800 space-y-1">
+                        <span className="text-zinc-500 text-[10px] block">Live Screenshot</span>
+                        <p className="text-zinc-400 font-mono text-[10px] truncate">
+                          {activeTab.last_snapshot.screenshot_uri}
+                        </p>
+                      </div>
+                    )}
+
                     <div className="p-2.5 rounded bg-zinc-900 border border-zinc-800 space-y-1">
-                      <span className="text-zinc-500 text-[10px] block">Text Extract</span>
-                      <p className="text-zinc-300 font-mono text-[10px] whitespace-pre-wrap">
-                        {activeTab.last_snapshot.text_content}
-                      </p>
-                    </div>
-                    <div className="p-2.5 rounded bg-zinc-900 border border-zinc-800 space-y-1">
-                      <span className="text-zinc-500 text-[10px] block">Discovered Links</span>
-                      {activeTab.last_snapshot.links.map((link, idx) => (
-                        <div key={idx} className="text-emerald-400 font-mono text-[10px] truncate">
-                          • {link}
-                        </div>
-                      ))}
+                      <span className="text-zinc-500 text-[10px] block">Interactive Elements (@refs)</span>
+                      <div className="space-y-1 max-h-48 overflow-y-auto">
+                        {activeTab.last_snapshot.links.map((link, idx) => (
+                          <div
+                            key={idx}
+                            onClick={() => {
+                              const match = link.match(/^(@\w+)/);
+                              if (match) setActionRef(match[1]);
+                            }}
+                            className="p-1 rounded bg-zinc-950/60 hover:bg-zinc-800 border border-zinc-850 hover:border-amber-500/40 text-emerald-400 font-mono text-[10px] cursor-pointer transition truncate"
+                            title="Click to select this ref"
+                          >
+                            {link}
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 ) : (

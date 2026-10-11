@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { PlusCircle, X } from 'lucide-react';
 
 interface NewSessionModalProps {
@@ -14,6 +14,14 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [pack, setPack] = useState<'engineering' | 'research' | 'assistant'>('engineering');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    try {
+      const lens = localStorage.getItem('custos.workspace.mode.v2');
+      setPack(lens === 'research' ? 'research' : lens === 'chat' ? 'assistant' : 'engineering');
+    } catch { setPack('engineering'); }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

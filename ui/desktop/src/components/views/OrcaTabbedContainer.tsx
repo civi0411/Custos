@@ -178,6 +178,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
 }) => {
   const [capabilities, setCapabilities] = React.useState<CapabilityDescriptor[]>([]);
   const [fetchFailed, setFetchFailed] = React.useState(false);
+  const [capabilitiesLoaded, setCapabilitiesLoaded] = React.useState(false);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -186,12 +187,14 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
         if (isMounted && Array.isArray(caps)) {
           setCapabilities(caps);
           setFetchFailed(false);
+          setCapabilitiesLoaded(true);
         }
       })
       .catch((err) => {
         console.warn('Failed to load capability registry from daemon:', err);
         if (isMounted) {
           setFetchFailed(true);
+          setCapabilitiesLoaded(true);
         }
       });
     return () => {
@@ -200,20 +203,28 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   }, []);
 
   const resources = React.useMemo(() => {
-    if (fetchFailed) {
+    if (!capabilitiesLoaded || fetchFailed) {
       return DEFAULT_RESOURCES.map((def) => ({
         ...def,
         status: 'unavailable' as const,
-        reason: 'Daemon capability registry offline or fetch failed; operating fail-closed.',
+        reason: capabilitiesLoaded
+          ? 'Daemon capability registry offline or fetch failed; operating fail-closed.'
+          : 'Loading daemon capability registry; operations remain fail-closed.',
         supportedOperations: [],
       }));
     }
-    if (!capabilities.length) return DEFAULT_RESOURCES;
     return DEFAULT_RESOURCES.map((def) => {
       const matched = capabilities.find(
-        (c) => c.resourceId === def.id || c.id === def.id
+        (c) => (c.resourceId ?? c.resource_id) === def.id
       );
-      if (!matched) return def;
+      if (!matched) {
+        return {
+          ...def,
+          status: 'unavailable' as const,
+          reason: 'No daemon capability descriptor is registered for this resource.',
+          supportedOperations: [],
+        };
+      }
 
       const status = matched.status.type;
       const reason = 'reason' in matched.status ? matched.status.reason : undefined;
@@ -224,10 +235,10 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
         description: matched.description || def.description,
         status,
         reason,
-        supportedOperations: matched.supportedOperations,
+        supportedOperations: matched.supportedOperations ?? matched.supported_operations ?? [],
       };
     });
-  }, [capabilities, fetchFailed]);
+  }, [capabilities, capabilitiesLoaded, fetchFailed]);
 
   const activeId = resourceTabs.activeTabId;
   const activeResource = resources.find((resource) => resource.id === activeId);
@@ -297,24 +308,68 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     );
   }
 
+  if (!activeResource || activeResource.status === 'unavailable') {
+    return activeResource
+      ? <UnavailableResource resource={activeResource} />
+      : <UnavailableResource resource={{ id: 'tools', title: 'Unknown resource', description: 'The selected resource is not supported by this client.', icon: Wrench, group: 'Shared', status: 'unavailable', reason: 'The selected resource is not supported by this client.' }} />;
+  }
+
+  const frameResource = (content: React.ReactNode) => (
+    <div className="flex h-full min-h-0 flex-col bg-[var(--color-canvas)]">
+      <div className="flex shrink-0 items-center gap-3 border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-3 py-1.5 text-[10px] text-[var(--color-fg-muted)]">
+        <span className="font-semibold text-[var(--color-fg-default)]">{activeResource.title}</span>
+        <span className={`rounded-full px-1.5 py-0.5 font-semibold uppercase tracking-[0.06em] ${activeResource.status === 'available'
+            ? 'bg-emerald-500/10 text-emerald-500'
+            : 'bg-amber-500/10 text-amber-500'
+          }`}>
+          {activeResource.status}
+        </span>
+        <span className="truncate">Session: {session?.id || 'unbound'}</span>
+        <span className="ml-auto truncate font-mono">
+          {(activeResource.supportedOperations ?? []).length > 0
+            ? (activeResource.supportedOperations ?? []).join(' · ')
+            : 'No operations advertised'}
+        </span>
+      </div>
+      {activeResource.reason && activeResource.status === 'degraded' && (
+        <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/5 px-3 py-1 text-[10px] text-amber-600 dark:text-amber-300">
+          {activeResource.reason}
+        </div>
+      )}
+      <div className="min-h-0 flex-1">{content}</div>
+    </div>
+  );
+
   if (activeId === 'browser') {
-    return <BrowserWorkbenchPane onShowToast={onShowToast} />;
+    return frameResource(
+      <BrowserWorkbenchPane
+        onShowToast={onShowToast}
+        supportedOperations={activeResource.supportedOperations ?? []}
+        capabilityReason={activeResource.reason}
+      />
+    );
   }
 
   if (activeId === 'emulator') {
-    return <MobileSimulatorWorkbenchPane onShowToast={onShowToast} />;
+    return frameResource(<MobileSimulatorWorkbenchPane onShowToast={onShowToast} />);
   }
 
   if (activeId === 'fleet') {
-    return <RemoteFleetWorkbenchPane onShowToast={onShowToast} />;
+    return frameResource(
+      <RemoteFleetWorkbenchPane
+        onShowToast={onShowToast}
+        supportedOperations={activeResource.supportedOperations ?? []}
+        capabilityReason={activeResource.reason}
+      />
+    );
   }
 
   if (activeId === 'literature') {
-    return <LiteraturePane onShowToast={onShowToast} />;
+    return frameResource(<LiteraturePane onShowToast={onShowToast} />);
   }
 
   if (activeId === 'claims') {
-    return (
+    return frameResource(
       <ClaimsMatrixPane
         onHandoffToCoding={(claims) => onHandoffToCoding?.(claims)}
         onShowToast={onShowToast}
@@ -323,39 +378,39 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   }
 
   if (activeId === 'knowledge') {
-    return <ResearchMethodsPane />;
+    return frameResource(<ResearchMethodsPane />);
   }
 
   if (activeId === 'experiments') {
-    return <NotebookWorkspacePane sessionId={session?.id} onAskAgent={onAskAgent} onShowToast={onShowToast} />;
+    return frameResource(<NotebookWorkspacePane sessionId={session?.id} onAskAgent={onAskAgent} onShowToast={onShowToast} />);
   }
 
   if (activeId === 'worktrees') {
-    return <ExecutionWorkspacesPane />;
+    return frameResource(<ExecutionWorkspacesPane />);
   }
 
   if (activeId === 'terminal') {
-    return <TerminalWorkbenchPane />;
+    return frameResource(<TerminalWorkbenchPane />);
   }
 
   if (activeId === 'files') {
-    return <FilesWorkbenchPane />;
+    return frameResource(<FilesWorkbenchPane />);
   }
 
   if (activeId === 'changes') {
-    return <ChangesWorkbenchPane />;
+    return frameResource(<ChangesWorkbenchPane />);
   }
 
   if (activeId === 'kanban') {
-    return <AgentsWorkbenchPane />;
+    return frameResource(<AgentsWorkbenchPane />);
   }
 
   if (activeId === 'evidence') {
-    return <EvidenceWorkbenchPane onShowToast={onShowToast} />;
+    return frameResource(<EvidenceWorkbenchPane onShowToast={onShowToast} />);
   }
 
   if (activeId === 'runs') {
-    return (
+    return frameResource(
       <RunsLedgerPane
         onReproduce={(run) => onAskAgent?.(`Reproduce run ${run.runId}:\n\`${run.command}\``)}
         onShowToast={onShowToast}
@@ -364,15 +419,15 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   }
 
   if (activeId === 'synthesis') {
-    return <ResearchSynthesisPane onShowToast={onShowToast} />;
+    return frameResource(<ResearchSynthesisPane onShowToast={onShowToast} />);
   }
 
   if (activeId === 'artifacts') {
-    return <ArtifactsWorkbenchPane onShowToast={onShowToast} />;
+    return frameResource(<ArtifactsWorkbenchPane onShowToast={onShowToast} />);
   }
 
   if (activeId === 'notes') {
-    return <NotesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} />;
+    return frameResource(<NotesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} />);
   }
 
   return activeResource

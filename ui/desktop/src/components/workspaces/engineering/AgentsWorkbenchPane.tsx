@@ -11,7 +11,6 @@ import {
   FolderGit2,
   Zap,
   Eye,
-  Send,
   Copy,
   Check,
 } from 'lucide-react';
@@ -19,7 +18,7 @@ import { daemonClient } from '@/api/daemon_client';
 import {
   HarnessDescriptor,
   ExecutionWorkspace,
-  HarnessExecutionResult,
+  RunHandle,
   ToolMediationLevel,
 } from '@/types/domain';
 
@@ -33,14 +32,10 @@ export const AgentsWorkbenchPane: React.FC = () => {
 
   const [instruction, setInstruction] = useState<string>('');
   const [running, setRunning] = useState<boolean>(false);
-  const [runResult, setRunResult] = useState<HarnessExecutionResult | null>(null);
+  const [runResult, setRunResult] = useState<RunHandle | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [copiedStdout, setCopiedStdout] = useState<boolean>(false);
-
-  // Steer guidance input
-  const [steerGuidance, setSteerGuidance] = useState<string>('');
-  const [steering, setSteering] = useState<boolean>(false);
 
   const fetchHarnesses = useCallback(async () => {
     try {
@@ -81,6 +76,10 @@ export const AgentsWorkbenchPane: React.FC = () => {
       setErrorMessage('Please provide an instruction for the native harness run');
       return;
     }
+    if (!selectedWorkspaceId) {
+      setErrorMessage('Select a ready execution workspace before starting a native agent');
+      return;
+    }
 
     setRunning(true);
     setErrorMessage(null);
@@ -88,36 +87,32 @@ export const AgentsWorkbenchPane: React.FC = () => {
     setRunResult(null);
 
     try {
-      const result = await daemonClient.runNativeHarness({
-        harnessId: selectedHarnessId,
-        instruction: instruction.trim(),
-        workspaceId: selectedWorkspaceId || undefined,
+      const task = await daemonClient.createTask({
+        title: instruction.trim().slice(0, 120),
+        metadata: {
+          kind: 'native_coding_agent',
+          harness_id: selectedHarnessId,
+          workspace_id: selectedWorkspaceId,
+        },
+      });
+      const result = await daemonClient.startRun({
+        task_id: task.id,
+        preferred_mode: 'native',
+        harness_id: selectedHarnessId,
+        workspace_id: selectedWorkspaceId,
+        prompt: instruction.trim(),
       });
       setRunResult(result);
       setStatusMessage(
-        result.success
-          ? `Run finished successfully (exit code ${result.exit_code ?? 0})`
-          : `Run failed (exit code ${result.exit_code ?? 'non-zero'})`
+        result.status === 'completed'
+          ? `Task-backed run ${result.run_id.slice(0, 8)} completed; verification is still separate.`
+          : `Run ${result.run_id.slice(0, 8)} finished with status ${result.status}.`
       );
     } catch (err: any) {
       setErrorMessage(err?.message || 'Execution error encountered');
       setStatusMessage(null);
     } finally {
       setRunning(false);
-    }
-  };
-
-  const handleSteer = async () => {
-    if (!steerGuidance.trim()) return;
-    setSteering(true);
-    try {
-      await daemonClient.steerHarness(selectedHarnessId, 'active_run', steerGuidance.trim());
-      setStatusMessage('Guidance injected into harness session');
-      setSteerGuidance('');
-    } catch (err: any) {
-      setErrorMessage(err?.message || 'Failed to steer harness');
-    } finally {
-      setSteering(false);
     }
   };
 
@@ -164,14 +159,14 @@ export const AgentsWorkbenchPane: React.FC = () => {
           <div className="flex items-center gap-2">
             <span className="workbench-kicker">Native Coding Runtimes</span>
             <span className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-fg-muted)]">
-              Gate 4 Enforced
+              Task-backed
             </span>
           </div>
           <h1 className="text-base font-semibold tracking-[-0.01em] text-[var(--color-fg-default)]">
             Coding Agents & Native Harnesses
           </h1>
           <p className="mt-0.5 text-xs text-[var(--color-fg-muted)]">
-            Unified execution path for Claude Code CLI, OpenAI Codex, and Block Goose under Custos Task & Assurance kernel.
+            Task, Run, workspace and launch identity for provider-governed coding harnesses.
           </p>
         </div>
         <button
@@ -357,7 +352,7 @@ export const AgentsWorkbenchPane: React.FC = () => {
                     ) : (
                       <>
                         <Play className="h-3.5 w-3.5 fill-current" />
-                        Dispatch Native Run
+                        Start Task Run
                       </>
                     )}
                   </button>
@@ -382,7 +377,7 @@ export const AgentsWorkbenchPane: React.FC = () => {
             </div>
           )}
 
-          {/* Live Run Output & Observed Effects */}
+          {/* Task-backed run output */}
           {runResult && (
             <div className="space-y-4">
               {/* Output terminal */}
@@ -391,21 +386,21 @@ export const AgentsWorkbenchPane: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <Terminal className="h-4 w-4 text-[var(--color-fg-muted)]" />
                     <span className="text-xs font-semibold text-[var(--color-fg-default)]">
-                      Harness Execution Output
+                      Task Run Output
                     </span>
                     <span
                       className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                        runResult.success
+                        runResult.status === 'completed'
                           ? 'bg-emerald-500/10 text-emerald-400'
                           : 'bg-rose-500/10 text-rose-400'
                       }`}
                     >
-                      Exit Code: {runResult.exit_code ?? 0}
+                      {runResult.status}
                     </span>
                   </div>
                   <button
                     type="button"
-                    onClick={() => handleCopy(runResult.stdout || runResult.stderr)}
+                    onClick={() => handleCopy(runResult.output || '')}
                     className="flex items-center gap-1 rounded bg-[var(--color-surface-1)] px-2 py-1 text-[11px] text-[var(--color-fg-muted)] hover:text-[var(--color-fg-default)]"
                   >
                     {copiedStdout ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
@@ -413,85 +408,35 @@ export const AgentsWorkbenchPane: React.FC = () => {
                   </button>
                 </div>
                 <pre className="mt-3 max-h-64 overflow-y-auto font-mono text-[11px] leading-relaxed text-[var(--color-fg-default)]">
-                  {runResult.stdout || runResult.stderr || '(No output produced)'}
+                  {runResult.output || '(No output produced)'}
                 </pre>
               </div>
 
-              {/* Observed Effects Under Gate 4 */}
+              {/* Assurance boundary */}
               <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-surface-1)] p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <div>
                     <h3 className="text-xs font-semibold text-[var(--color-fg-default)]">
-                      Observed Action Intents ({runResult.observed_effects?.length || 0})
+                      Run identity and assurance
                     </h3>
                     <p className="text-[11px] text-[var(--color-fg-muted)]">
-                      Normalized actions emitted during execution, tagged with honest Gate 4 assurance.
+                      Process completion is recorded, but patch acceptance still requires independent diff and test evidence.
                     </p>
                   </div>
                   <span className="rounded bg-[var(--color-surface-2)] px-2 py-0.5 text-[10px] font-medium text-[var(--color-fg-muted)]">
-                    Mediation: {runResult.mediation_level}
+                    {selectedHarness?.profile.tool_mediation || 'unknown'}
                   </span>
                 </div>
-
-                {runResult.observed_effects && runResult.observed_effects.length > 0 ? (
-                  <div className="space-y-2">
-                    {runResult.observed_effects.map((intent, idx) => (
-                      <div
-                        key={intent.id || idx}
-                        className="flex items-center justify-between rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-canvas)] p-2.5 text-xs"
-                      >
-                        <div className="flex items-center gap-2">
-                          <code className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-sky-400">
-                            {intent.name}
-                          </code>
-                          <span className="font-mono text-[11px] text-[var(--color-fg-default)]">
-                            {intent.target}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-[var(--color-fg-muted)]">
-                            Risk: {intent.risk_level || (intent as any).riskLevel || 'Medium'}
-                          </span>
-                          <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[9px] font-semibold uppercase text-amber-400">
-                            {intent.assurance}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed border-[var(--color-border-muted)] p-4 text-center text-xs text-[var(--color-fg-muted)]">
-                    No discrete tool calls or mutations observed for this run.
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-[var(--color-fg-muted)]">
+                  <div>Task <code className="text-[var(--color-fg-default)]">{runResult.task_id}</code></div>
+                  <div>Run <code className="text-[var(--color-fg-default)]">{runResult.run_id}</code></div>
+                </div>
+                {selectedHarness?.profile.supports_steer && (
+                  <div className="mt-3 rounded-lg border border-dashed border-[var(--color-border-muted)] p-3 text-[11px] text-[var(--color-fg-muted)]">
+                    Steering will appear only when the backend exposes a real active harness session ID. Placeholder steering is disabled.
                   </div>
                 )}
               </div>
-
-              {/* Dynamic Steering Interface */}
-              {selectedHarness?.profile.supports_steer && (
-                <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-surface-1)] p-4">
-                  <div className="mb-2 text-xs font-semibold text-[var(--color-fg-default)]">
-                    Inject Run Steering Guidance
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={steerGuidance}
-                      onChange={(e) => setSteerGuidance(e.target.value)}
-                      placeholder="e.g. Focus on edge cases in parse_turn..."
-                      className="flex-1 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-3 py-1.5 text-xs text-[var(--color-fg-default)] focus:border-[var(--color-border-focus)] focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSteer}
-                      disabled={steering || !steerGuidance.trim()}
-                      className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-default)] hover:bg-[var(--color-surface-3)] disabled:opacity-50"
-                    >
-                      <Send className="h-3 w-3" />
-                      Steer
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
