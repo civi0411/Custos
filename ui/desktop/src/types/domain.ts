@@ -155,12 +155,22 @@ export interface StartRunParams {
   task_id: string;
   instruction?: string;
   preferred_mode?: 'model' | 'native' | 'terminal';
+  workspace_id?: string;
   workspace_root?: string;
   harness_id?: string;
   session_id?: string;
   turn_id?: string;
   prompt?: string;
   model?: string;
+}
+
+export interface RunHandle {
+  run_id: string;
+  task_id: string;
+  status: RunStatus;
+  started_at: string;
+  completed_at?: string;
+  output?: string;
 }
 
 export interface AttachSessionParams {

@@ -3,7 +3,7 @@ import {
   Task,
   Session,
   SessionJournalEntry,
-  Run,
+  RunHandle,
   SessionMode,
   CreateTaskParams,
   StartRunParams,
@@ -212,8 +212,8 @@ export class DaemonClient {
   // Workflow & Execution API
   // ---------------------------------------------------------
 
-  async startRun(params: StartRunParams): Promise<Run> {
-    return this.request<Run>('v1.workflow.start_run', params);
+  async startRun(params: StartRunParams): Promise<RunHandle> {
+    return this.request<RunHandle>('v1.workflow.start_run', params);
   }
 
   async cancelRun(params: CancelRunParams): Promise<void> {
@@ -250,6 +250,13 @@ export class DaemonClient {
   async getSessionJournal(sessionId: string): Promise<SessionJournalEntry[]> {
     return this.request<SessionJournalEntry[]>('v1.sessions.journal', {
       session_id: sessionId,
+    });
+  }
+
+  async openSessionInLens(sessionId: string, lens: 'assistant' | 'coding' | 'research'): Promise<void> {
+    await this.request<{ status: string }>('v1.sessions.open_in_lens', {
+      session_id: sessionId,
+      lens,
     });
   }
 
@@ -893,8 +900,29 @@ export class DaemonClient {
     });
   }
 
-  async snapshotBrowserTab(snapshot: BrowserPageSnapshot): Promise<{ saved: boolean; tab_id: string }> {
-    return this.request<{ saved: boolean; tab_id: string }>('v1.browser.tabs.snapshot', snapshot);
+  async snapshotBrowserTab(snapshot: BrowserPageSnapshot | { tab_id: string }): Promise<{ saved: boolean; tab_id: string; snapshot?: BrowserPageSnapshot }> {
+    return this.request<{ saved: boolean; tab_id: string; snapshot?: BrowserPageSnapshot }>('v1.browser.tabs.snapshot', snapshot);
+  }
+
+  async clickBrowserTab(tabId: string, ref: string): Promise<BrowserTab> {
+    return this.request<BrowserTab>('v1.browser.tabs.click', {
+      tab_id: tabId,
+      ref,
+    });
+  }
+
+  async fillBrowserTab(tabId: string, ref: string, text: string): Promise<BrowserTab> {
+    return this.request<BrowserTab>('v1.browser.tabs.fill', {
+      tab_id: tabId,
+      ref,
+      text,
+    });
+  }
+
+  async screenshotBrowserTab(tabId: string): Promise<{ path: string }> {
+    return this.request<{ path: string }>('v1.browser.tabs.screenshot', {
+      tab_id: tabId,
+    });
   }
 
   async closeBrowserTab(tabId: string): Promise<{ closed: boolean; tab_id: string }> {

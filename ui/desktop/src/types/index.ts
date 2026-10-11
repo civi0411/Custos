@@ -19,6 +19,7 @@ export interface DiffLine {
 
 export interface Session {
   id: string;
+  openedLenses?: Array<'chat' | 'code' | 'research'>;
   taskId?: string;
   source?: 'daemon';
   taskStatus?: string;

@@ -85,7 +85,7 @@ interface AppContextType {
   handleSelectModel: (model: string) => void;
 
   // Actions
-  handleSendMessage: (text: string) => Promise<void>;
+  handleSendMessage: (text: string, lens?: 'assistant' | 'coding' | 'research') => Promise<void>;
   handleClearHistory: () => void;
   handleDeleteConversation: (sessionId: string) => Promise<void>;
   handleAcceptAndRun: () => Promise<void>;
@@ -492,7 +492,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Check active session object
   const currentSessions = projectData[currentProject] || [];
   const activeSession: Session | null =
-    currentSessions.find((s) => s.id === activeSessionId) || currentSessions[0] || null;
+    currentSessions.find((s) => s.id === activeSessionId) || null;
 
   // Selected Model state: default empty string means "No model selected"
   const [selectedModel, setSelectedModel] = useState<string>(() => {
@@ -740,16 +740,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         );
         const journalBySession = new Map(journals);
 
-        if (fetchedTasks.length > 0) {
-          setTasks(fetchedTasks);
+        setTasks(fetchedTasks);
 
-          // Project daemon tasks and sessions into UI sessions
-          const projectedSessions: Session[] = fetchedTasks.flatMap((t) => {
-            const domainSession = fetchedSessions.find((s) => (s.task_id || s.attached_to) === t.id);
-            if (!domainSession) {
-              return [];
-            }
-            const taskId = t.id;
+        if (fetchedSessions.length > 0) {
+          // Keep every canonical session, including multiple sessions bound to one Task.
+          const projectedSessions: Session[] = fetchedSessions.map((domainSession) => {
+            const attachedTaskId = domainSession.task_id || domainSession.attached_to
+              || (typeof domainSession.mode === 'object' ? domainSession.mode.attached?.task_id : undefined);
+            const t = fetchedTasks.find((task) => task.id === attachedTaskId);
+            const taskId = t?.id;
             const sessionId = domainSession.id;
             const rawJournal = journalBySession.get(domainSession.id) || domainSession.journal || [];
             const journalList: any[] = Array.isArray(rawJournal)
@@ -760,22 +759,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ? (rawJournal as any).journal
               : [];
 
-            return [{
+            return {
               id: sessionId,
+              openedLenses: Array.from(new Set(journalList
+                .filter((entry) => entry.entry_type === 'workbench_opened')
+                .map((entry) => entry.entry_data)
+                .filter((lens): lens is 'chat' | 'code' | 'research' =>
+                  lens === 'chat' || lens === 'code' || lens === 'research'))),
               taskId,
               source: 'daemon',
-              taskStatus: String(t.status),
+              taskStatus: t ? String(t.status) : undefined,
               sessionId,
-              pack: t.contract?.pack_id || t.contract?.pack,
-              title: t.title,
+              pack: t?.contract?.pack_id || t?.contract?.pack || 'assistant',
+              title: t?.title || domainSession.title || domainSession.current_goal || `Conversation ${sessionId.slice(0, 8)}`,
               time: 'Live',
-              preview: `Status: ${t.status} | Contract: ${t.contract?.pack || 'general'}`,
-              model: (t.contract as any)?.model || selectedModel || '',
+              preview: t ? `Status: ${t.status} | Contract: ${t.contract?.pack_id || 'general'}` : 'Unbound conversation',
+              model: (t?.contract as any)?.model || selectedModel || '',
               fileName: '',
               diffHunk: '',
               diffLinesCount: '',
-              summary: `Task ${t.id}: ${t.status}`,
-              messages: journalList.map((j) => {
+              summary: t ? `Task ${t.id}: ${t.status}` : 'No Task bound',
+              messages: journalList.filter((j) =>
+                j.entry_type === 'user_message' || j.entry_type === 'assistant_message' ||
+                j.entry_type === 'user' || j.entry_type === 'assistant' ||
+                j.role === 'user' || j.role === 'assistant'
+              ).map((j) => {
                 const isUser =
                   j.role === 'user' ||
                   j.entry_type === 'user' ||
@@ -791,7 +799,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 };
               }),
               diffCode: [],
-            }];
+            };
           });
 
           setProjectData((prev) => ({
@@ -799,10 +807,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             'Custos Workspace': projectedSessions,
           }));
 
-          if (projectedSessions.length > 0) {
-            setCurrentProject('Custos Workspace');
-            setActiveSessionId(projectedSessions[0].id);
-          }
+          setCurrentProject('Custos Workspace');
+          setActiveSessionId((previous) => projectedSessions.some((session) => session.id === previous)
+            ? previous : '');
         }
       } catch (err) {
         console.warn('[DaemonClient] Could not load data from daemon:', err);
@@ -853,7 +860,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [uiScale]);
 
   // Actions
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, lens?: 'assistant' | 'coding' | 'research') => {
     if (!activeSession) return;
     const userMsg = {
       role: 'user' as const,
@@ -1001,7 +1008,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           title: turnTitle,
           metadata: {
             kind: 'conversation_chat_turn',
-            pack_id: activeSession.pack || 'assistant',
+            pack_id: lens || activeSession.pack || 'assistant',
             conversation_session_id: targetSessionId || activeSession.id,
             source_task_id: activeSession.taskId || activeSession.id,
             model: chosenModel,
@@ -1040,8 +1047,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         model: chosenModel,
       });
 
-      const runId = (run as any).run_id || run.id || 'unknown';
-      const outputText = (run as any).output || run.metadata?.output;
+      const runId = run.run_id;
+      const outputText = run.output;
       const isCompleted = run.status === 'completed';
 
       const assistantMsg = {

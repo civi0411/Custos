@@ -25,6 +25,7 @@ export interface WorkspaceSidebarProps {
   sessions: Session[];
   activeSessionId: string;
   onSelectSession: (id: string) => void;
+  onOpenFullChatIn?: (mode: 'chat' | 'code' | 'research') => void;
   onDeleteSession?: (id: string) => void | Promise<void>;
 
   // Header button
@@ -61,6 +62,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   sessions,
   activeSessionId,
   onSelectSession,
+  onOpenFullChatIn,
   onDeleteSession,
   newTaskLabel,
   newTaskIcon: NewTaskIcon,
@@ -148,6 +150,29 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             <SlidersHorizontal className="w-3.5 h-3.5" />
           </button>
         </div>
+
+        {activeSessionId && onOpenFullChatIn && (
+          <label className="block px-2 pb-2 text-[11px] text-fg-subtle">
+            Open full chat in
+            <select
+              aria-label="Open complete conversation in another workbench"
+              value=""
+              onChange={(event) => {
+                const destination = event.target.value;
+                if (destination === 'chat' || destination === 'code' || destination === 'research') {
+                  onOpenFullChatIn(destination);
+                }
+              }}
+              className="mt-1 w-full rounded-md border border-border-default bg-surface-1 px-2 py-1 text-fg-editor"
+            >
+              <option value="" disabled>Choose workbench…</option>
+              <option value="chat">Copilot</option>
+              <option value="code">Coding</option>
+              <option value="research">Research</option>
+            </select>
+            <span className="mt-1 block text-[10px] leading-snug">Full saved chat is visible here. A model receives only recent bounded history; older turns and native-agent hidden state are not transferred. Check the selected provider before sending.</span>
+          </label>
+        )}
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-0.5 pr-1 no-scrollbar min-h-0 text-[12.5px]">
           {sessions.length === 0 ? (
