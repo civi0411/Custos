@@ -26,6 +26,7 @@ pub const METHOD_SESSIONS_CREATE: &str = "v1.sessions.create";
 pub const METHOD_SESSIONS_GET: &str = "v1.sessions.get";
 pub const METHOD_SESSIONS_LIST: &str = "v1.sessions.list";
 pub const METHOD_SESSIONS_JOURNAL: &str = "v1.sessions.journal";
+pub const METHOD_SESSIONS_OPEN_IN_LENS: &str = "v1.sessions.open_in_lens";
 pub const METHOD_SESSIONS_MESSAGE: &str = "v1.sessions.message";
 pub const METHOD_SESSIONS_PROMOTE: &str = "v1.sessions.promote";
 pub const METHOD_SESSIONS_DELETE: &str = "v1.sessions.delete";
@@ -108,6 +109,9 @@ pub const METHOD_BROWSER_TABS_LIST: &str = "v1.browser.tabs.list";
 pub const METHOD_BROWSER_TABS_CREATE: &str = "v1.browser.tabs.create";
 pub const METHOD_BROWSER_TABS_NAVIGATE: &str = "v1.browser.tabs.navigate";
 pub const METHOD_BROWSER_TABS_SNAPSHOT: &str = "v1.browser.tabs.snapshot";
+pub const METHOD_BROWSER_TABS_CLICK: &str = "v1.browser.tabs.click";
+pub const METHOD_BROWSER_TABS_FILL: &str = "v1.browser.tabs.fill";
+pub const METHOD_BROWSER_TABS_SCREENSHOT: &str = "v1.browser.tabs.screenshot";
 pub const METHOD_BROWSER_TABS_CLOSE: &str = "v1.browser.tabs.close";
 
 pub const METHOD_FLEET_HOSTS_LIST: &str = "v1.fleet.hosts.list";
@@ -319,6 +323,8 @@ pub struct StartRunRequest {
     pub preferred_mode: Option<String>,
     #[serde(default)]
     pub harness_id: Option<String>,
+    #[serde(default)]
+    pub workspace_id: Option<String>,
     #[serde(default)]
     pub workspace_root: Option<String>,
     #[serde(default)]

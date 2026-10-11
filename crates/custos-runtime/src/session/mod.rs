@@ -16,6 +16,7 @@ mod tests {
     use async_trait::async_trait;
     use custos_domain::{
         DomainError, Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus,
+        WorkbenchLens,
     };
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex};
@@ -127,6 +128,20 @@ mod tests {
 
         let restored_journal = fresh_manager.get_journal(&session.id).await.unwrap();
         assert_eq!(restored_journal.entries.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn opening_session_in_another_lens_is_durable_and_idempotent() {
+        let store = Arc::new(MockSessionStore::new());
+        let manager = SessionManager::with_store(store.clone());
+        let session = manager.create_session(SessionMode::Assisted).await;
+        manager.open_in_lens(&session.id, WorkbenchLens::Coding).await.unwrap();
+        manager.open_in_lens(&session.id, WorkbenchLens::Coding).await.unwrap();
+        let restored = SessionManager::with_store(store);
+        let journal = restored.get_journal(&session.id).await.unwrap();
+        assert_eq!(journal.entries.len(), 1);
+        assert_eq!(journal.entries[0].entry_type, "workbench_opened");
+        assert_eq!(journal.entries[0].entry_data, "code");
     }
 
     #[tokio::test]

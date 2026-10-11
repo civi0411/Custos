@@ -12,7 +12,8 @@
 //! 3. Honest Assurance: All observed tool invocations carry `Assurance::ProviderGoverned`
 //!    or `Assurance::ObserveOnly`, satisfying Gate 4 invariants.
 //! 4. Usage Truthfulness: If usage metrics are omitted, usage remains `unknown`, never 0.
-//! 5. Lifecycle Control: Supports cancellation and steering injection.
+//! 5. Lifecycle Honesty: Cancellation, steering, and server-session continuation
+//!    remain disabled until a real, conformance-tested OpenCode transport is wired.
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -270,9 +271,9 @@ impl AgentRuntimePort for OpenCodeHarnessAdapter {
 
     fn profile(&self) -> HarnessProfile {
         HarnessProfile::new("opencode", ToolMediationLevel::ProviderGoverned)
-            .with_supports_cancel(true)
-            .with_supports_steer(true)
-            .with_cost_visibility(CostVisibility::ExactTokens)
+            .with_supports_cancel(false)
+            .with_supports_steer(false)
+            .with_cost_visibility(CostVisibility::None)
             .with_worktree_ownership(WorktreeOwnership::SharedLive)
     }
 
@@ -300,11 +301,18 @@ impl AgentRuntimePort for OpenCodeHarnessAdapter {
             return Ok(intents);
         }
 
-        // Real HTTP invocation fallback or stub
-        Ok(Vec::new())
+        Err(DomainError::Validation(format!(
+            "OpenCode HTTP/SSE turn transport is not connected at {}; use a bounded native run or configure a tested server adapter",
+            self.endpoint
+        )))
     }
 
     async fn cancel_run(&self, run_id: &str) -> Result<(), DomainError> {
+        if !self.mock_mode {
+            return Err(DomainError::Validation(
+                "OpenCode remote cancellation is not connected".into(),
+            ));
+        }
         let mut lock = self.active_sessions.lock().await;
         if lock.remove(run_id).is_some() {
             Ok(())
@@ -317,6 +325,11 @@ impl AgentRuntimePort for OpenCodeHarnessAdapter {
     }
 
     async fn steer_run(&self, run_id: &str, guidance: &str) -> Result<(), DomainError> {
+        if !self.mock_mode {
+            return Err(DomainError::Validation(
+                "OpenCode remote steering is not connected".into(),
+            ));
+        }
         let lock = self.active_sessions.lock().await;
         if lock.contains_key(run_id) {
             let mut steers = self.steer_messages.lock().await;
@@ -358,11 +371,22 @@ impl AgentRuntimePort for OpenCodeHarnessAdapter {
 
         // Native command execution with opencode
         let mut cmd = tokio::process::Command::new(&self.binary_path);
-        cmd.arg("prompt").arg(instruction).current_dir(cwd);
+        cmd.arg("prompt")
+            .arg(instruction)
+            .current_dir(cwd)
+            .kill_on_drop(true);
 
-        let output = cmd.output().await.map_err(|e| {
-            DomainError::Validation(format!("Failed to execute opencode command: {}", e))
-        })?;
+        let output = tokio::time::timeout(self.default_timeout, cmd.output())
+            .await
+            .map_err(|_| {
+                DomainError::Validation(format!(
+                    "OpenCode native run exceeded timeout of {} seconds",
+                    self.default_timeout.as_secs()
+                ))
+            })?
+            .map_err(|e| {
+                DomainError::Validation(format!("Failed to execute opencode command: {}", e))
+            })?;
 
         Ok(HarnessExecutionResult {
             success: output.status.success(),
@@ -386,9 +410,9 @@ mod tests {
 
         assert_eq!(profile.harness_id, "opencode");
         assert_eq!(profile.tool_mediation, ToolMediationLevel::ProviderGoverned);
-        assert!(profile.supports_cancel);
-        assert!(profile.supports_steer);
-        assert_eq!(profile.cost_visibility, CostVisibility::ExactTokens);
+        assert!(!profile.supports_cancel);
+        assert!(!profile.supports_steer);
+        assert_eq!(profile.cost_visibility, CostVisibility::None);
 
         // Fraudulent claim of custos-mediated assurance must fail Gate 4
         let fraudulent = ActionIntent::new(
@@ -464,5 +488,18 @@ mod tests {
 
         // Second cancel fails because run was already removed
         assert!(adapter.cancel_run(&run.id).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_unconnected_production_turn_fails_explicitly() {
+        let adapter = OpenCodeHarnessAdapter::new("/tmp");
+        let run = WorkerRun::new("task_1".to_string(), "opencode".to_string(), 3);
+
+        let error = adapter
+            .execute_turn(&run, &ContextPack::default())
+            .await
+            .expect_err("unconnected transport must not look like a successful empty turn");
+
+        assert!(error.to_string().contains("HTTP/SSE turn transport is not connected"));
     }
 }

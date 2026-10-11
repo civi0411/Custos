@@ -110,6 +110,16 @@ impl HarnessRegistry {
         self.harnesses.get(id).map(|e| e.harness.clone())
     }
 
+    /// Returns the composed runtimes keyed by their stable harness identifiers.
+    /// The runtime receives only the abstract port; registry metadata and binary
+    /// probing remain adapter concerns.
+    pub fn runtimes(&self) -> HashMap<String, Arc<dyn AgentRuntimePort>> {
+        self.harnesses
+            .iter()
+            .map(|(id, entry)| (id.clone(), entry.harness.clone()))
+            .collect()
+    }
+
     pub fn get_descriptor(&self, id: &str) -> Option<HarnessDescriptor> {
         self.harnesses.get(id).map(|e| {
             let profile = e.harness.profile();
@@ -188,6 +198,10 @@ mod tests {
 
         let opencode = registry.get("opencode").expect("OpenCode must be found");
         assert_eq!(opencode.harness_id(), "opencode");
+
+        let runtimes = registry.runtimes();
+        assert_eq!(runtimes.len(), 4);
+        assert!(runtimes.contains_key("codex"));
 
         let desc = registry.get_descriptor("opencode").expect("OpenCode descriptor");
         assert_eq!(desc.id, "opencode");
