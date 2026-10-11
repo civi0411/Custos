@@ -55,9 +55,10 @@ interface AppContextType {
   usageRecords: UsageRecord[];
   handleResetUsage: () => void;
   connectedAccounts: ConnectedAccount[];
+  refreshModels: () => Promise<void>;
   setConnectedAccounts: React.Dispatch<React.SetStateAction<ConnectedAccount[]>>;
   handleConnectOAuth: (providerId: ProviderServiceId, accountName: string, email?: string) => Promise<void>;
-  handleDeleteAccount: (accountId: string) => void;
+  handleDeleteAccount: (accountId: string) => Promise<void>;
 
   // Modals
   isSettingsOpen: boolean;
@@ -212,7 +213,7 @@ const safeIsoFromMillis = (value?: number): string => {
 };
 
 const tokenLooksOauth = (token?: OAuthTokenRecord | null): boolean =>
-  Boolean(token?.has_refresh_token || token?.refresh_token || token?.scope?.includes('openid'));
+  Boolean(token?.has_refresh_token || token?.refresh_token || token?.scope?.split(/\s+/).includes('openid'));
 
 const uniqueModels = (models: string[]): string[] => {
   const seen = new Set<string>();
@@ -224,20 +225,6 @@ const uniqueModels = (models: string[]): string[] => {
   });
 };
 
-const mergeCatalogModels = (
-  primary: ModelCatalogOption[],
-  fallback: ModelCatalogOption[]
-): ModelCatalogOption[] => {
-  const seen = new Set<string>();
-  const merged: ModelCatalogOption[] = [];
-  for (const model of [...primary, ...fallback]) {
-    const key = model.id.trim().toLowerCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    merged.push(model);
-  }
-  return merged;
-};
 
 const DEFAULT_COMBOS: ModelCombo[] = [
   {
@@ -525,7 +512,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       const token = await daemonClient.getOAuthToken(providerId).catch(() => null);
-      if (!token?.connected && !token?.access_token) {
+      if (!tokenLooksOauth(token) || (!token?.connected && !token?.access_token)) {
         continue;
       }
 
@@ -564,6 +551,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         let catalogModels: ModelCatalogOption[] = [];
+        let catalogSource: 'live' | 'cached' | 'unavailable' = 'unavailable';
+        let catalogError: string | undefined;
+        let catalogFetchedAt: number | undefined;
         if (connected && endpointUrl) {
           try {
             const probed = await daemonClient.probeModels(
@@ -572,6 +562,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               undefined,
               provider.id
             );
+            catalogSource = 'live';
+            catalogFetchedAt = Date.now();
             catalogModels = probed.models.map((model, index) => ({
               id: model.id,
               label: model.name || model.id,
@@ -580,32 +572,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               is_default: index === 0,
               default_effort: undefined,
               efforts: [],
-              supports_fast_mode: true,
+              supports_fast_mode: false,
               context_window: model.context_window || provider.context_window,
               pricing: undefined,
             }));
           } catch (err) {
-            console.warn(`[ProviderHydrate] Live model probe failed for ${provider.id}:`, err);
+            catalogError = err instanceof Error ? err.message : String(err);
           }
         }
 
-        try {
-          const providerCatalog = await daemonClient.getModelCatalog(provider.service_type || serviceId, provider.id);
-          const canonicalCatalog =
-            providerCatalog.origin === 'catalog'
-              ? providerCatalog
-              : await daemonClient.getModelCatalog(provider.service_type || serviceId);
-          catalogModels = mergeCatalogModels(catalogModels, [
-            ...(providerCatalog.models || []),
-            ...(canonicalCatalog.models || []),
-          ]);
-        } catch {
-          catalogModels = catalogModels;
+        if (connected && catalogSource !== 'live') {
+          try {
+            const cached = await daemonClient.getModelCatalog(provider.service_type || serviceId, provider.id);
+            if (cached.origin === 'cached' && cached.models.length) {
+              catalogModels = cached.models;
+              catalogSource = 'cached';
+              catalogFetchedAt = cached.fetched_at;
+            }
+          } catch (err) {
+            catalogError = err instanceof Error ? err.message : String(err);
+          }
         }
 
         const supportedModels = uniqueModels(catalogModels.map((model) => model.id));
 
-        if (!connected) {
+        if (!connected || (provider.api_key_masked === 'oauth' && !tokenMeta?.connected)) {
           return null;
         }
 
@@ -617,7 +608,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           catalogModels.find((model) => model.id === defaultModel)?.context_window ||
           provider.context_window ||
           catalogModels[0]?.context_window;
-        const authType = tokenLooksOauth(tokenMeta) || provider.name.toLowerCase().includes('oauth')
+        const authType = tokenLooksOauth(tokenMeta)
           ? 'oauth'
           : 'api_key';
 
@@ -636,6 +627,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           badgeColor: connected ? '#10b981' : '#6b7280',
           defaultModel,
           supportedModels,
+          catalogModels, catalogSource, catalogError, catalogFetchedAt,
           contextWindow,
           fastMode: provider.fast_mode,
           latencyMs: 0,
@@ -1446,15 +1438,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(`Connected ${account?.accountName || accountName || PROVIDER_LABELS[providerId]} via OAuth`);
   }, [ensureOAuthProviderRecord, refreshProviderState, showToast]);
 
-  const handleDeleteAccount = useCallback((accountId: string) => {
+  const handleDeleteAccount = useCallback(async (accountId: string) => {
     const account = connectedAccounts.find((item) => item.id === accountId);
-    if (account) {
-      void daemonClient.deleteOAuthToken(account.id).finally(() => {
-        void refreshProviderState();
-      });
+    if (!account) return;
+    try {
+      await daemonClient.deleteOAuthToken(account.id);
+      await daemonClient.deleteProvider(account.id);
+      if (account.id !== account.providerId) await daemonClient.deleteOAuthToken(account.providerId);
+      await refreshProviderState();
+      showToast('Account disconnected');
+    } catch (err) {
+      showToast(`Could not disconnect account: ${err instanceof Error ? err.message : String(err)}`);
     }
-    setConnectedAccounts((prev) => prev.filter((a) => a.id !== accountId));
-    showToast('Account disconnected');
   }, [connectedAccounts, refreshProviderState, showToast]);
 
   return (
@@ -1488,6 +1483,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         usageRecords,
         handleResetUsage,
         connectedAccounts,
+        refreshModels: async () => { await refreshProviderState(); },
         setConnectedAccounts,
         handleConnectOAuth,
         handleDeleteAccount,

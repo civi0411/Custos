@@ -20,7 +20,7 @@
 
 > **Desktop resource-tab ownership:** [`AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) and [`OrcaTabbedContainer.tsx`](../../ui/desktop/src/components/views/OrcaTabbedContainer.tsx) render one shared shell/resource catalog for all three lenses. Research, workspace, notebook, terminal, files, changes, agents, evidence, browser and fleet panes now exist at different realization levels. A rendered pane is not proof that its physical operations work: browser/fleet/automation deliberately advertise degraded metadata-only operation while their effects fail closed. The container must gate every pane action from daemon `supported_operations`, not from its static resource table.
 
-**Provider UI and 9Router study:** [Source-to-Custos feature and delivery plan](9router-custos-integration-plan.md) maps 9Router catalog, capability, translation, fallback, usage, price, diagnostics, search and Desktop patterns to the **existing** Custos crates and three workbenches. Its first-party core is distinct from an optional 9Router proxy sidecar. [`ProvidersView.tsx`](../../ui/desktop/src/components/providers/ProvidersView.tsx) has daemon-backed provider CRUD/probe alongside UI-only account state; [`CombosManager.tsx`](../../ui/desktop/src/components/providers/CombosManager.tsx) and [`UsageMonitor.tsx`](../../ui/desktop/src/components/providers/UsageMonitor.tsx) currently read localStorage/default data through [`AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx). The OAuth handler fabricates an active account record. These are visual/proposal surfaces, not a live routing, quota or OAuth integration. [`ModelSelector.tsx`](../../ui/desktop/src/components/chat/ModelSelector.tsx) defaults to `"No model selected"` when unassigned. This documentation pass adds no Rust or UI source files; physical file counts remain historical.
+**Provider UI and OAuth transport:** [Provider blueprint](9router-custos-integration-plan.md#live-account-catalog-and-oauth-transport) specifies account-scoped live discovery and verified cache fallback. Desktop hydration probes models at startup, after provider changes and on retry. ModelSelector and CombosManager share discovered IDs; canonical metadata never expands the selectable list. CredentialResolver distinguishes stored OAuth metadata from API keys, and both model discovery and chat use Codex for OpenAI OAuth. Cache snapshots replace prior IDs atomically with an outbox record, preserve the probe timestamp, exclude legacy cache and bind the account, endpoint, auth method and credential creation time. OAuth failures never switch to developer API billing. `CUSTOS_PROVIDER=codex` uses the same router path.
 
 | New documentation file | Lines | Architectural responsibility | Key code exports |
 |---|---:|---|---|
@@ -295,7 +295,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-persistence`
 - **Chủ sở hữu chính (Owner):** **Trường (Systems & Persistence Lead)**
 - **Quy tắc ranh giới:** Triệt tiêu lỗi đói WAL (P0), single-writer connection, runtime version check.
-- **Tổng số file:** 49 files | **Tổng số dòng mã:** 7,690 lines
+- **Tổng số file:** 49 tracked files | **Tổng số dòng mã:** 7,926 lines (Rust sources and Cargo manifest; 22 files)
 - **Mô tả chức năng:** Hạ tầng lưu trữ bền vững SQLite WAL mode, schema migrations, Event Store, Transactional Outbox, và CAS Content-Addressable Storage.
 
 #### Danh mục các file bên trong `crates/custos-persistence/`:
@@ -320,7 +320,7 @@ Custos/
 | [`src/migrations.rs`](../../crates/custos-persistence/src/migrations.rs) | 35 | Thực thi các script migration tự động | `fn run_migrations` |
 | [`src/repositories/continuation.rs`](../../crates/custos-persistence/src/repositories/continuation.rs) | 124 | Gói tiếp tục ContinuationPacket kèm mã băm SHA-256 bảo đảm an toàn khi tiếp tục | `struct ContinuationRepository`, `fn new`, `fn save_continuation`, `fn get_latest_continuation` |
 | [`src/repositories/mod.rs`](../../crates/custos-persistence/src/repositories/mod.rs) | 9 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
-| [`src/repositories/providers.rs`](../../crates/custos-persistence/src/repositories/providers.rs) | 360 | Quản lý cấu hình AI Providers, OAuth 2.0 tokens và Catalog models | `struct ProviderRepository`, `fn save_oauth_token`, `fn get_oauth_token`, `fn list_expiring_oauth_tokens` |
+| [`src/repositories/providers.rs`](../../crates/custos-persistence/src/repositories/providers.rs) | 455 | Provider configuration, OAuth credentials and atomic verified model snapshots with outbox records and original timestamps. | `struct ProviderRepository`, `fn save_catalog_models`, `fn catalog_fetched_at`, `fn save_oauth_token` |
 | [`src/repositories/session.rs`](../../crates/custos-persistence/src/repositories/session.rs) | 226 | SQLite Session and canonical journal repository, including session+journal deletion | `struct SessionRepository`, `fn new`, `fn get_session`, `fn list_sessions`, `fn delete_session` |
 | [`src/repositories/span.rs`](../../crates/custos-persistence/src/repositories/span.rs) | 134 | Quản lý phân đoạn thực thi Span, SpanState | `struct SpanRepository`, `fn new`, `fn get_span`, `fn save_span` |
 | [`src/repositories/task.rs`](../../crates/custos-persistence/src/repositories/task.rs) | 312 | Mô hình nhiệm vụ cốt lõi: Task, TaskContract, TaskStatus, ContractEvidence | `struct TaskRepository`, `fn new`, `fn get_task`, `fn read_task` |
@@ -717,7 +717,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-adapters`
 - **Chủ sở hữu chính (Owner):** **Trường (Sandbox) & Vinh (MCP/Harnesses) & Vĩ (Providers)**
 - **Quy tắc ranh giới:** Mọi dữ liệu ngoại vi đều là untrusted; cô lập an toàn trong sandbox.
-- **Tổng số file:** 159 files | **Tổng số dòng mã:** 50,750 lines
+- **Tổng số file:** 175 tracked files | **Tổng số dòng mã:** 43,480 lines (Rust sources and Cargo manifest; 107 files)
 - **Mô tả chức năng:** Bộ điều hợp thế giới thực: OS Sandbox (Seatbelt macOS, Bubblewrap Linux), MCP Client STDIO/SSE, inference cục bộ (llama.cpp/MLX) và external harnesses.
 
 #### Danh mục các file bên trong `crates/custos-adapters/`:
@@ -791,12 +791,12 @@ Custos/
 | [`src/providers/codex/mod.rs`](../../crates/custos-adapters/src/providers/codex/mod.rs) | 36 | Unconfigured placeholder; fails closed instead of impersonating a Codex response. | `struct CodexProvider`, `fn new`, `fn default`, `fn provider_id` |
 | [`src/providers/fake/mod.rs`](../../crates/custos-adapters/src/providers/fake/mod.rs) | 146 | A fake provider for testing, replay fixtures, and end-to-end simulation. | `struct FakeProvider`, `fn new`, `fn with_default_text`, `fn enqueue_response` |
 | [`src/providers/local_model/mod.rs`](../../crates/custos-adapters/src/providers/local_model/mod.rs) | 45 | Unconfigured placeholder; real local inference uses separate backend integration. Fails closed instead of fabricating output. | `struct LocalModelProvider`, `fn new`, `fn with_model`, `fn default` |
-| [`src/providers/catalog.rs`](../../crates/custos-adapters/src/providers/catalog.rs) | 554 | Service cung cấp danh mục mô hình chuẩn hóa (canonical catalog: GPT-5.6 Sol/Terra/Luna, GPT-5.5, Claude 3.7, v.v.), reasoning efforts, pricing và merge probed models | `struct ModelCatalogService`, `fn default_canonical_models`, `fn get_catalog`, `fn merge_probed_models` |
+| [`src/providers/catalog.rs`](../../crates/custos-adapters/src/providers/catalog.rs) | 554 | Canonical metadata service and enrichment of discovered IDs; missing context window stays unknown. | `struct ModelCatalogService`, `fn get_catalog`, `fn merge_probed_models` |
 | [`src/providers/mod.rs`](../../crates/custos-adapters/src/providers/mod.rs) | 38 | Provider exports and regression test that unconfigured adapters do not fabricate model output. | `mod placeholder_tests` |
 | [`src/providers/oauth_pkce.rs`](../../crates/custos-adapters/src/providers/oauth_pkce.rs) | 440 | Quản lý luồng OAuth 2.0 PKCE (RFC 7636) cho OpenAI, trích xuất ChatGPT Account ID từ JWT, exchange code và refresh token | `struct OAuthPkceManager`, `fn extract_chatgpt_account_id`, `fn resolve_openai_scope`, `fn build_authorization_url`, `fn exchange_code`, `fn refresh_token` |
 | [`src/providers/openai_chat.rs`](../../crates/custos-adapters/src/providers/openai_chat.rs) | 279 | Live ModelPort adapter kết nối trực tiếp endpoint OpenAI Chat Completions với Bearer OAuth/API Key và chẩn đoán quota API | `struct OpenAiChatProvider`, `trait TokenProvider`, `fn new`, `fn generate` |
-| [`src/providers/probe.rs`](../../crates/custos-adapters/src/providers/probe.rs) | 501 | Dò tìm mô hình động (live model discovery) từ endpoint backend Codex (`chatgpt.com/backend-api/codex/models`) cho OAuth và standard API (`api.openai.com/v1/models`) cho API key | `fn probe_endpoint_models`, `fn probe_chatgpt_codex_endpoint`, `fn parse_chatgpt_codex_models`, `fn probe_openai_endpoint` |
-| [`src/providers/router.rs`](../../crates/custos-adapters/src/providers/router.rs) | 645 | Multi-provider router điều phối suy luận trực tiếp tới ChatGPT Codex (`backend-api/codex/responses` dùng quota subscription), OpenAI Platform API, Anthropic, Gemini, DeepSeek, Local/Ollama | `struct RouterModelProvider`, `trait CredentialResolver`, `fn parse_codex_sse_stream`, `fn format_provider_error` |
+| [`src/providers/probe.rs`](../../crates/custos-adapters/src/providers/probe.rs) | 496 | Bounded model discovery; explicit Codex OAuth probe and standard API-key endpoint probe, without cross-transport fallback. | `fn probe_endpoint_models`, `fn probe_oauth_models`, `fn probe_chatgpt_codex_endpoint`, `fn parse_chatgpt_codex_models` |
+| [`src/providers/router.rs`](../../crates/custos-adapters/src/providers/router.rs) | 808 | Routes explicit OAuth credentials to Codex responses despite a configured API URL; retains API-key endpoints and rejects failed or incomplete SSE. | `struct RouterModelProvider`, `trait CredentialResolver`, `fn uses_oauth`, `fn parse_codex_sse_stream`, `fn format_provider_error` |
 | [`src/providers/providers/anthropic.rs`](../../crates/custos-adapters/src/providers/providers/anthropic.rs) | 856 | Builder for [`AnthropicProvider`]. | `struct AnthropicProvider`, `struct AnthropicProviderBuilder`, `fn new`, `fn api_client` |
 | [`src/providers/providers/api_client.rs`](../../crates/custos-adapters/src/providers/providers/api_client.rs) | 1092 | Configure TLS settings on a reqwest ClientBuilder | `type RequestBuilderDecorator`, `struct ApiClient`, `enum TransportPolicy`, `enum AuthMethod` |
 | [`src/providers/providers/azure_foundry.rs`](../../crates/custos-adapters/src/providers/providers/azure_foundry.rs) | 1395 | Module azure_foundry: phục vụ các cấu trúc và chức năng liên quan | `enum EndpointKind`, `fn endpoint_kind`, `fn is_project_endpoint`, `enum ModelPublisher` |
@@ -937,7 +937,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-daemon`
 - **Chủ sở hữu chính (Owner):** **Vĩ (Chief Architect)**
 - **Quy tắc ranh giới:** Daemon crate là composition root; `runtime.rs` ráp concrete storage/runtime/adapters, `main.rs` chỉ sở hữu listener/process lifecycle.
-- **Tổng số file:** 10 files | **Tổng số dòng hiện hành:** 8,519 lines (gồm manifest)
+- **Tổng số file:** 10 tracked files | **Tổng số dòng mã:** 9,484 lines (Rust sources and Cargo manifest; 10 files)
 - **Mô tả chức năng:** Tiến trình dịch vụ Custos phục vụ TCP, HTTP và stdio JSONL; sở hữu profile, SQLite, Local API dispatcher, OAuth loopback listener và recovery. HTTP RPC hiện cần auth/origin hardening.
 
 #### Danh mục các file bên trong `crates/custos-daemon/`:
@@ -945,14 +945,14 @@ Custos/
 | Tập tin | Số dòng | Vai trò & Trách nhiệm kiến trúc | Các Struct / Trait / Hàm cốt lõi |
 |---|:---:|---|---|
 | [`Cargo.toml`](../../crates/custos-daemon/Cargo.toml) | 40 | Manifest của composition root và các concrete dependency được phép ráp tại daemon. | None |
-| [`src/api.rs`](../../crates/custos-daemon/src/api.rs) | 5,773 | Local API dispatcher cho Task/Session/Run, capability/resource, workspace, research, notebook, provider, fleet và automation; owns `v1.sessions.delete` composition. Kích thước hiện tại là tín hiệu cần tách command handlers theo chủ đề bên trong cùng crate, không tạo thêm source-of-truth. | `struct LocalApiDispatcher`, `fn list_capabilities`, `fn handle_request` |
+| [`src/api.rs`](../../crates/custos-daemon/src/api.rs) | 5946 | Local API dispatcher; models probe selects transport from credential metadata and exposes only verified account-scoped cache snapshots. | `struct LocalApiDispatcher`, `fn list_capabilities`, `fn handle_request` |
 | [`src/http_server.rs`](../../crates/custos-daemon/src/http_server.rs) | 165 | Loopback HTTP RPC/health listener; `POST /api/request` chuyển trực tiếp vào Local API, hiện cho wildcard CORS và thiếu caller/origin admission. | `fn start_http_server`, `fn handle_http_client` |
 | [`src/lib.rs`](../../crates/custos-daemon/src/lib.rs) | 18 | Export API, HTTP adapter, profile, runtime và Local API client/transport. | None |
 | [`src/local_api/lib.rs`](../../crates/custos-daemon/src/local_api/lib.rs) | 1,690 | Versioned request/response DTO, process/TCP transports và typed client methods, including session deletion request/client helper. Cần được tách module cơ học theo domain trong cùng crate khi refactor. | `struct ApiRequest`, `struct ApiResponse`, `struct ProcessTransport`, `struct TcpTransport`, `struct LocalApiClient` |
 | [`src/main.rs`](../../crates/custos-daemon/src/main.rs) | 121 | Composition/process entry point: singleton lock và loopback TCP + HTTP + stdio JSONL listeners. | `fn main` |
 | [`src/oauth_callback_server.rs`](../../crates/custos-daemon/src/oauth_callback_server.rs) | 527 | Dual-stack loopback HTTP callback server (IPv4 127.0.0.1 và IPv6 [::1] trên cổng 1455) đón nhận mã ủy quyền OAuth PKCE của OpenAI/Codex, tự động trao đổi và lưu trữ token SQLite. | `struct OAuthCallbackServer`, `enum CallbackServerStatus`, `fn start`, `fn status`, `fn stop` |
 | [`src/profile.rs`](../../crates/custos-daemon/src/profile.rs) | 381 | Profile directory resolver, TCP/HTTP port discovery, singleton file lock và auto-connect helper. | `struct ProfileResolver`, `struct DaemonLock`, `fn ensure_daemon_client` |
-| [`src/runtime.rs`](../../crates/custos-daemon/src/runtime.rs) | 151 | Composition root ráp store, kernel, sandbox, model, harness registry, workflow, workspace, terminal, notebook và Local API. | `struct CustosRuntime`, `fn bootstrap`, `fn bootstrap_profile` |
+| [`src/runtime.rs`](../../crates/custos-daemon/src/runtime.rs) | 288 | Sole composition root with unified Codex/router selection and fail-closed credential refresh. | `struct CustosRuntime`, `struct DaemonCredentialResolver`, `fn uses_oauth`, `fn bootstrap` |
 
 
 ### 3.10. Crate `custos-sdk` — Layer 4: Client Bindings
@@ -1034,6 +1034,16 @@ Custos/
 | [`desktop/build.rs`](../../crates/custos-app/desktop/build.rs) | 4 | Build script Tauri cho desktop backend | `fn main` |
 | [`desktop/src/lib.rs`](../../crates/custos-app/desktop/src/lib.rs) | 55 | Tauri thin host: lấy `Arc<LocalApiClient>` theo profile, forward `custos_request`/`custos_dispatch` qua Local API; không bootstrap backend riêng | `fn greet`, `fn custos_request`, `fn custos_dispatch`, `fn run` |
 | [`desktop/src/main.rs`](../../crates/custos-app/desktop/src/main.rs) | 7 | Điểm khởi đầu thực thi duy nhất của `custos-desktop` | None |
+
+#### Desktop provider projection files (Owner: Vinh)
+
+| File | Lines | Responsibility | Exports |
+|---|---:|---|---|
+| [AppContext.tsx](../../ui/desktop/src/context/AppContext.tsx) | 1532 | Provider hydration, verified cache fallback, retry and disconnect | `AppProvider`, `useAppContext` |
+| [ModelSelector.tsx](../../ui/desktop/src/components/chat/ModelSelector.tsx) | 373 | Discovered model picker with cache/error status and retry | `ModelSelector`, `getConnectedModelOptions`, `ModelOption` |
+| [CombosManager.tsx](../../ui/desktop/src/components/providers/CombosManager.tsx) | 530 | Combo targets from the same discovered account catalogs | `CombosManager` |
+| [provider_types.ts](../../ui/desktop/src/types/provider_types.ts) | 83 | Account catalog source, original timestamp and failure metadata | `ConnectedAccount` |
+
 
 ---
 

@@ -2571,29 +2571,86 @@ impl LocalApiDispatcher {
                     return ApiResponse::error(req.id, "Missing base_url parameter for models probe");
                 }
 
-                let api_key_owned = req
+                let token_record = if let Some(repo) = self.providers.as_ref() {
+                    let result = provider_id
+                        .as_deref()
+                        .map(|pid| repo.get_oauth_token(pid))
+                        .unwrap_or(Ok(None))
+                        .and_then(|token| match token {
+                            Some(token) => Ok(Some(token)),
+                            None => repo.get_oauth_token(provider_type),
+                        });
+                    match result {
+                        Ok(token) => token,
+                        Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                    }
+                } else {
+                    None
+                };
+                let explicit_key = req
                     .params
                     .get("api_key")
                     .and_then(|v| v.as_str())
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-                    .map(str::to_string)
-                    .or_else(|| {
-                        self.providers.as_ref().and_then(|repo| {
-                            provider_id
+                    .filter(|s| !s.trim().is_empty());
+                let oauth = explicit_key.is_none()
+                    && token_record.as_ref().is_some_and(|tok| {
+                        tok.refresh_token.is_some()
+                            || tok
+                                .scope
                                 .as_deref()
-                                .and_then(|pid| repo.get_oauth_token(pid).ok().flatten())
-                                .or_else(|| repo.get_oauth_token(provider_type).ok().flatten())
-                                .map(|tok| tok.access_token)
-                        })
+                                .is_some_and(|s| s.split_whitespace().any(|v| v == "openid"))
                     });
-                let api_key = api_key_owned.as_deref();
-
-                match custos_adapters::providers::probe::probe_endpoint_models(&base_url, api_key, provider_type).await {
+                let mut api_key_owned = explicit_key
+                    .map(str::to_string)
+                    .or_else(|| token_record.as_ref().map(|tok| tok.access_token.clone()));
+                if oauth {
+                    if let Some(tok) = token_record.as_ref().filter(|tok| tok.is_expired(120)) {
+                        let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::default();
+                        match manager
+                            .refresh_token(
+                                &custos_adapters::providers::oauth_pkce::resolve_openai_client_id(),
+                                tok,
+                            )
+                            .await
+                        {
+                            Ok(refreshed) => {
+                                if let Some(repo) = self.providers.as_ref() {
+                                    if let Err(e) = repo.save_oauth_token(&refreshed) {
+                                        return ApiResponse::error(req.id, e.to_string());
+                                    }
+                                }
+                                api_key_owned = Some(refreshed.access_token);
+                            }
+                            Err(_) => {
+                                return ApiResponse::error(
+                                    req.id,
+                                    "OAuth refresh failed; reconnect the account",
+                                )
+                            }
+                        }
+                    }
+                }
+                let probe = if oauth && matches!(provider_type, "openai" | "codex") {
+                    match api_key_owned.as_deref() {
+                        Some(token) => custos_adapters::providers::probe::probe_oauth_models(token).await,
+                        None => Err(custos_domain::DomainError::Validation(
+                            "OAuth credentials missing".into(),
+                        )),
+                    }
+                } else {
+                    custos_adapters::providers::probe::probe_endpoint_models(
+                        &base_url,
+                        api_key_owned.as_deref(),
+                        provider_type,
+                    )
+                    .await
+                };
+                match probe {
                     Ok(models) => {
                         if let (Some(repo), Some(pid)) = (self.providers.as_ref(), provider_id.as_deref()) {
                             let catalog_result = self.model_catalog.merge_probed_models(provider_type, models.clone());
-                            let _ = repo.save_catalog_models(pid, &catalog_result.models);
+                            let cache_key = format!("verified-probe:{}:{}:{}:{}", pid, base_url.trim().trim_end_matches('/'), if oauth { "oauth" } else { "api_key" }, token_record.as_ref().map(|t| t.created_at).unwrap_or(0));
+                            if let Err(e) = repo.save_catalog_models(&cache_key, &catalog_result.models) { return ApiResponse::error(req.id, e.to_string()); }
                         }
                         match serde_json::to_value(&models) {
                             Ok(val) => ApiResponse::success(
@@ -2623,20 +2680,51 @@ impl LocalApiDispatcher {
                     .and_then(|v| v.as_str());
 
                 if let (Some(repo), Some(pid)) = (self.providers.as_ref(), provider_id) {
-                    if let Ok(cached) = repo.list_catalog_models(Some(pid)) {
-                        if !cached.is_empty() {
-                            return ApiResponse::success(
-                                req.id,
-                                serde_json::json!({
-                                    "origin": "cached",
-                                    "models": cached,
-                                    "fetched_at": chrono::Utc::now().timestamp_millis(),
-                                }),
-                            );
-                        }
-                    }
+                    let record = repo.get_provider(pid).ok().flatten();
+                    let service = record
+                        .as_ref()
+                        .map(|p| p.service_type.as_str())
+                        .or(provider_type)
+                        .unwrap_or("local");
+                    let endpoint = record
+                        .as_ref()
+                        .and_then(|p| p.endpoint_url.as_deref())
+                        .filter(|s| !s.trim().is_empty())
+                        .or_else(|| default_model_probe_base_url(service))
+                        .unwrap_or("");
+                    let token = match repo.get_oauth_token(pid).and_then(|token| match token {
+                        Some(token) => Ok(Some(token)),
+                        None => repo.get_oauth_token(service),
+                    }) {
+                        Ok(token) => token,
+                        Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                    };
+                    let oauth = token.as_ref().is_some_and(|tok| {
+                        tok.refresh_token.is_some()
+                            || tok
+                                .scope
+                                .as_deref()
+                                .is_some_and(|s| s.split_whitespace().any(|v| v == "openid"))
+                    });
+                    let cache_key = format!(
+                        "verified-probe:{}:{}:{}:{}",
+                        pid,
+                        endpoint.trim().trim_end_matches('/'),
+                        if oauth { "oauth" } else { "api_key" },
+                        token.as_ref().map(|t| t.created_at).unwrap_or(0)
+                    );
+                    let fetched_at = match repo.catalog_fetched_at(&cache_key) {
+                        Ok(timestamp) => timestamp,
+                        Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                    };
+                    return match repo.list_catalog_models(Some(&cache_key)) {
+                        Ok(mut cached) => {
+                            for model in &mut cached { model.provider_type = service.to_string(); }
+                            ApiResponse::success(req.id, serde_json::json!({ "origin": "cached", "models": cached, "fetched_at": fetched_at }))
+                        },
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    };
                 }
-
                 let catalog = self.model_catalog.get_catalog(provider_type);
                 match serde_json::to_value(&catalog) {
                     Ok(val) => ApiResponse::success(req.id, val),
@@ -5545,6 +5633,86 @@ mod tests {
         assert_eq!(persisted.exit_code, None);
     }
 
+    #[tokio::test]
+    async fn discovered_catalog_ignores_legacy_cache_and_preserves_verified_snapshot() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}/v1", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut buf = [0; 4096];
+            socket.read(&mut buf).unwrap();
+            let body = r#"{"data":[{"id":"only-live-model","name":"Live Model"}]}"#;
+            write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+        });
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let task_service = Arc::new(TaskService::new(store.clone()));
+        let session_manager = Arc::new(SessionManager::with_store(store.clone()));
+        let bridge = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
+        let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge)
+            .with_providers(Arc::new(store.providers().clone()));
+        let save = dispatcher.handle_request(ApiRequest { id: "save".into(), method: METHOD_PROVIDERS_SAVE.into(),
+            params: serde_json::json!({"id":"account", "service_type":"openai", "name":"Account", "endpoint_url":base, "api_key":"eyJ-api-key", "status":"active"}) }).await;
+        assert!(save.is_success());
+        let baseline = custos_adapters::providers::catalog::default_canonical_models();
+        store
+            .providers()
+            .save_catalog_models("account", &baseline)
+            .unwrap();
+        let catalog_request = || ApiRequest {
+            id: "catalog".into(),
+            method: METHOD_MODELS_CATALOG.into(),
+            params: serde_json::json!({"provider_id":"account"}),
+        };
+        let legacy = dispatcher
+            .handle_request(catalog_request())
+            .await
+            .result
+            .unwrap();
+        assert!(legacy["models"].as_array().unwrap().is_empty());
+        let probe_request = || ApiRequest {
+            id: "probe".into(),
+            method: METHOD_MODELS_PROBE.into(),
+            params: serde_json::json!({"provider_id":"account"}),
+        };
+        let live = dispatcher.handle_request(probe_request()).await;
+        assert!(live.is_success(), "{:?}", live.error);
+        server.join().unwrap();
+        let snapshot = dispatcher
+            .handle_request(catalog_request())
+            .await
+            .result
+            .unwrap();
+        assert_eq!(snapshot["models"].as_array().unwrap().len(), 1);
+        assert_eq!(snapshot["models"][0]["id"], "only-live-model");
+        assert_eq!(snapshot["models"][0]["provider_type"], "openai");
+        assert!(snapshot["fetched_at"].as_i64().unwrap() > 0);
+        assert!(!dispatcher
+            .handle_request(probe_request())
+            .await
+            .is_success());
+        assert_eq!(
+            dispatcher
+                .handle_request(catalog_request())
+                .await
+                .result
+                .unwrap(),
+            snapshot
+        );
+        let other = dispatcher
+            .handle_request(ApiRequest {
+                id: "other".into(),
+                method: METHOD_MODELS_CATALOG.into(),
+                params: serde_json::json!({"provider_id":"other-account"}),
+            })
+            .await
+            .result
+            .unwrap();
+        assert!(other["models"].as_array().unwrap().is_empty());
+    }
     #[tokio::test]
     async fn test_provider_and_model_catalog_api_lifecycle() {
         let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());

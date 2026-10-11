@@ -28,238 +28,6 @@ export interface ModelOption {
   isConfigured?: boolean;
 }
 
-export const CANONICAL_MODELS: ModelOption[] = [
-  // Anthropic
-  {
-    id: 'claude-3-7-sonnet',
-    name: 'Claude 3.7 Sonnet',
-    provider: 'anthropic',
-    providerName: 'Anthropic',
-    badge: 'Hybrid Thinking',
-    badgeColor: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-    description: 'State-of-the-art reasoning & agentic coding',
-    contextWindow: '200k tokens'
-  },
-  {
-    id: 'claude-3-5-sonnet',
-    name: 'Claude 3.5 Sonnet',
-    provider: 'anthropic',
-    providerName: 'Anthropic',
-    badge: 'Standard',
-    badgeColor: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-    description: 'Industry benchmark for software engineering',
-    contextWindow: '200k tokens'
-  },
-  {
-    id: 'claude-3-5-haiku',
-    name: 'Claude 3.5 Haiku',
-    provider: 'anthropic',
-    providerName: 'Anthropic',
-    badge: 'Fast',
-    badgeColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-    description: 'Ultra-fast inference & responsive interactions',
-    contextWindow: '200k tokens'
-  },
-
-  // OpenAI / Codex
-  {
-    id: 'gpt-5.6-sol',
-    name: 'GPT-5.6 Sol',
-    provider: 'openai',
-    providerName: 'OpenAI (Codex)',
-    badge: 'Codex Flagship',
-    badgeColor: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-    description: 'Flagship reasoning & agentic code generation',
-    contextWindow: '200k tokens'
-  },
-  {
-    id: 'gpt-5.6-terra',
-    name: 'GPT-5.6 Terra',
-    provider: 'openai',
-    providerName: 'OpenAI (Codex)',
-    badge: 'Codex High-Throughput',
-    badgeColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-    description: 'High-throughput coding model optimized for agent workflows',
-    contextWindow: '200k tokens'
-  },
-  {
-    id: 'gpt-5.6-luna',
-    name: 'GPT-5.6 Luna',
-    provider: 'openai',
-    providerName: 'OpenAI (Codex)',
-    badge: 'Codex Fast',
-    badgeColor: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
-    description: 'Ultra-fast low-latency coding model for real-time iterations',
-    contextWindow: '200k tokens'
-  },
-  {
-    id: 'gpt-5.5',
-    name: 'GPT-5.5',
-    provider: 'openai',
-    providerName: 'OpenAI (Codex)',
-    badge: 'Codex General',
-    badgeColor: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
-    description: 'General reasoning and synthesis model',
-    contextWindow: '200k tokens'
-  },
-  {
-    id: 'gpt-4o',
-    name: 'GPT-4o',
-    provider: 'openai',
-    providerName: 'OpenAI',
-    badge: 'Omni',
-    badgeColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-    description: 'Versatile multimodal intelligence & analysis',
-    contextWindow: '128k tokens'
-  },
-  {
-    id: 'o3-mini',
-    name: 'o3-mini',
-    provider: 'openai',
-    providerName: 'OpenAI',
-    badge: 'Reasoning',
-    badgeColor: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
-    description: 'Deep mathematical & algorithmic reasoning',
-    contextWindow: '200k tokens'
-  },
-  {
-    id: 'gpt-4o-mini',
-    name: 'GPT-4o mini',
-    provider: 'openai',
-    providerName: 'OpenAI',
-    badge: 'Efficient',
-    badgeColor: 'text-zinc-400 bg-zinc-500/10 border-zinc-500/20',
-    description: 'Affordable fast coding and quick lookups',
-    contextWindow: '128k tokens'
-  },
-  {
-    id: 'o1',
-    name: 'o1',
-    provider: 'openai',
-    providerName: 'OpenAI',
-    badge: 'Flagship Reasoning',
-    badgeColor: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
-    description: 'OpenAI flagship reasoning for complex STEM & code',
-    contextWindow: '200k tokens'
-  },
-  {
-    id: 'o1-mini',
-    name: 'o1-mini',
-    provider: 'openai',
-    providerName: 'OpenAI',
-    badge: 'Fast Reasoning',
-    badgeColor: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
-    description: 'Fast, efficient reasoning model for coding and math',
-    contextWindow: '128k tokens'
-  },
-  {
-    id: 'o1-preview',
-    name: 'o1-preview',
-    provider: 'openai',
-    providerName: 'OpenAI',
-    badge: 'Reasoning Preview',
-    badgeColor: 'text-sky-400 bg-sky-500/10 border-sky-500/20',
-    description: 'OpenAI preview reasoning model',
-    contextWindow: '128k tokens'
-  },
-  {
-    id: 'chatgpt-4o-latest',
-    name: 'ChatGPT-4o Latest',
-    provider: 'openai',
-    providerName: 'OpenAI',
-    badge: 'ChatGPT Omni',
-    badgeColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-    description: 'Continuously updated ChatGPT-4o model',
-    contextWindow: '128k tokens'
-  },
-  {
-    id: 'gpt-4-turbo',
-    name: 'GPT-4 Turbo',
-    provider: 'openai',
-    providerName: 'OpenAI',
-    badge: 'Turbo',
-    badgeColor: 'text-zinc-400 bg-zinc-500/10 border-zinc-500/20',
-    description: 'High-capability multimodal GPT-4 Turbo',
-    contextWindow: '128k tokens'
-  },
-
-  // Google Gemini
-  {
-    id: 'gemini-2.5-pro',
-    name: 'Gemini 2.5 Pro',
-    provider: 'gemini',
-    providerName: 'Google',
-    badge: '2M Context',
-    badgeColor: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20',
-    description: 'Extensive codebase understanding & deep reasoning',
-    contextWindow: '2M tokens'
-  },
-  {
-    id: 'gemini-2.5-flash',
-    name: 'Gemini 2.5 Flash',
-    provider: 'gemini',
-    providerName: 'Google',
-    badge: '1M Context',
-    badgeColor: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
-    description: 'Sub-second latency with massive context capacity',
-    contextWindow: '1M tokens'
-  },
-
-  // DeepSeek
-  {
-    id: 'deepseek-chat',
-    name: 'DeepSeek V3',
-    provider: 'deepseek',
-    providerName: 'DeepSeek',
-    badge: 'V3',
-    badgeColor: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
-    description: 'High-capability 671B MoE model',
-    contextWindow: '64k tokens'
-  },
-  {
-    id: 'deepseek-reasoner',
-    name: 'DeepSeek R1',
-    provider: 'deepseek',
-    providerName: 'DeepSeek',
-    badge: 'R1 Chain',
-    badgeColor: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
-    description: 'Open verified chain-of-thought reasoner',
-    contextWindow: '64k tokens'
-  },
-
-  // Local / Sovereign
-  {
-    id: 'llama3.3:70b',
-    name: 'Llama 3.3 70B',
-    provider: 'local',
-    providerName: 'Local (Ollama)',
-    badge: 'Local Offline',
-    badgeColor: 'text-teal-400 bg-teal-500/10 border-teal-500/20',
-    description: 'Meta flagship sovereign local inference',
-    contextWindow: '128k tokens'
-  },
-  {
-    id: 'qwen2.5-coder:32b',
-    name: 'Qwen 2.5 Coder 32B',
-    provider: 'local',
-    providerName: 'Local (Ollama)',
-    badge: 'Coding Specialist',
-    badgeColor: 'text-teal-400 bg-teal-500/10 border-teal-500/20',
-    description: 'Specialized local code architecture engine',
-    contextWindow: '32k tokens'
-  },
-  {
-    id: 'deepseek-r1:14b',
-    name: 'DeepSeek R1 14B Distill',
-    provider: 'local',
-    providerName: 'Local (Ollama)',
-    badge: 'Local Reasoning',
-    badgeColor: 'text-teal-400 bg-teal-500/10 border-teal-500/20',
-    description: 'Lightweight local reasoning model',
-    contextWindow: '32k tokens'
-  }
-];
-
 export function getProviderInfo(modelId: string): {
   provider: ModelOption['provider'];
   label: string;
@@ -307,6 +75,25 @@ export interface ModelSelectorProps {
   compact?: boolean;
 }
 
+export function getConnectedModelOptions(accounts: import('@/types').ConnectedAccount[]): ModelOption[] {
+  const seen = new Set<string>();
+  return accounts.filter((a) => a.status === 'active').flatMap((account) =>
+    account.supportedModels.filter((id) => {
+      if (seen.has(id.toLowerCase())) return false;
+      seen.add(id.toLowerCase()); return true;
+    }).map((id) => {
+      const metadata = account.catalogModels?.find((m) => m.id === id);
+      return {
+        id, name: metadata?.label || id, provider: account.providerId as ModelOption['provider'],
+        providerName: account.providerName, badge: account.catalogSource === 'cached' ? 'Cached' : 'Live',
+        description: metadata?.description || `Account: ${account.accountName}`,
+        contextWindow: metadata?.context_window ? `${Math.round(metadata.context_window / 1000)}k tokens` : undefined,
+        isConfigured: true,
+      };
+    })
+  );
+}
+
 export const ModelSelector: React.FC<ModelSelectorProps> = ({
   currentModel,
   onSelectModel,
@@ -315,6 +102,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const {
     openSettings,
     connectedAccounts,
+    refreshModels,
     selectedModel: contextSelectedModel,
     handleSelectModel: contextHandleSelectModel
   } = useAppContext();
@@ -359,39 +147,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     activeModelId !== 'Model not reported'
   );
 
-  // Build the selectable list only from connected account catalogs.
-  const allModels: ModelOption[] = useMemo(() => {
-    const list = CANONICAL_MODELS.map((m) => ({ ...m }));
-
-    connectedAccounts?.forEach((acc) => {
-      if (acc.status === 'active') {
-        acc.supportedModels?.forEach((sm) => {
-          const match = list.find((m) => m.id.toLowerCase() === sm.toLowerCase());
-          if (match) {
-            match.isConfigured = true;
-          } else {
-            const info = getProviderInfo(sm);
-            list.unshift({
-              id: sm,
-              name: sm,
-              provider: info.provider,
-              providerName: acc.providerName || info.label,
-              badge: acc.authType === 'oauth' ? 'OAuth PKCE' : 'API key',
-              badgeColor:
-                acc.authType === 'oauth'
-                  ? 'text-sky-400 bg-sky-500/10 border-sky-500/20'
-                  : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
-              description: `Live account: ${acc.accountName}`,
-              contextWindow: acc.contextWindow ? `${Math.round(acc.contextWindow / 1000)}k tokens` : undefined,
-              isConfigured: true,
-            });
-          }
-        });
-      }
-    });
-
-    return list.filter((m) => m.isConfigured);
-  }, [connectedAccounts]);
+  const allModels = useMemo(() => getConnectedModelOptions(connectedAccounts), [connectedAccounts]);
 
   // Find active model details.
   const activeModel = useMemo(() => {
@@ -475,6 +231,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           className="absolute bottom-full mb-2 left-0 z-50 w-72 md:w-72 rounded-xl border border-border-default bg-surface-1/95 backdrop-blur-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150"
           style={{ maxHeight: '420px' }}
         >
+      {connectedAccounts.some((a) => a.catalogError) && (
+        <div className="px-3 py-2 text-xs text-amber-400 break-words border-b border-border-muted" role="status">
+          {connectedAccounts.filter((a) => a.catalogError).map((a) => (
+            <div key={a.id}>{a.providerName}: {a.catalogSource === 'cached' ? `Cached (${a.catalogFetchedAt ? new Date(a.catalogFetchedAt).toLocaleString() : 'unknown time'})` : 'Models unavailable'}: {a.catalogError}</div>
+          ))}
+          <button type="button" onClick={() => void refreshModels()}>Retry models</button>
+        </div>
+      )}
           {/* Header & Search */}
           <div className="p-2.5 border-b border-border-muted bg-surface-0/60">
             <div className="flex items-center justify-between mb-2 px-1">

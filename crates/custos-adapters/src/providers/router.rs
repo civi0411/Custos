@@ -14,6 +14,9 @@ use tracing::{debug, error, info};
 pub trait CredentialResolver: Send + Sync {
     /// Return access token or API key for a given provider
     async fn get_token(&self, provider_id: &str) -> Result<Option<String>, DomainError>;
+    async fn uses_oauth(&self, _provider_id: &str) -> Result<bool, DomainError> {
+        Ok(false)
+    }
     /// Return custom endpoint URL for a given provider
     async fn get_endpoint_url(&self, provider_id: &str) -> Result<Option<String>, DomainError>;
 }
@@ -125,12 +128,14 @@ struct AnthropicMessagesResponse {
 pub struct RouterModelProvider {
     resolver: Arc<dyn CredentialResolver>,
     http_client: reqwest::Client,
+    codex_endpoint: String,
 }
 
 impl RouterModelProvider {
     pub fn new(resolver: Arc<dyn CredentialResolver>) -> Self {
         Self {
             resolver,
+            codex_endpoint: "https://chatgpt.com/backend-api/codex/responses".into(),
             http_client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(120))
                 .build()
@@ -272,14 +277,14 @@ impl RouterModelProvider {
         model: &str,
         req: &ProviderRequest,
     ) -> Result<ModelResponse, DomainError> {
-        let endpoint = "https://chatgpt.com/backend-api/codex/responses";
+        let endpoint = self.codex_endpoint.as_str();
 
         // Map generic/openai model names to Codex flagship model
         let target_model = if model.is_empty()
             || model == "default"
             || model == "openai"
-            || model == "gpt-4o"
-            || model == "gpt-4o-mini"
+            || model == "codex"
+            || model == "openai-codex"
         {
             "gpt-5.6-sol"
         } else {
@@ -291,9 +296,10 @@ impl RouterModelProvider {
             "input": [
                 {
                     "role": "user",
-                    "content": req.prompt
+                    "content": [{"type": "input_text", "text": req.prompt}]
                 }
             ],
+            "instructions": "You are a helpful assistant.",
             "store": false,
             "stream": true
         });
@@ -326,7 +332,7 @@ impl RouterModelProvider {
         let status = resp.status();
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_else(|_| "<unreadable body>".into());
-            error!(status = %status, body = %body, "ChatGPT Codex returned error response");
+            error!(status = %status, "ChatGPT Codex returned error response");
             return Err(DomainError::Validation(format_provider_error(status, &body, "ChatGPT Codex")));
         }
 
@@ -426,17 +432,19 @@ impl ModelProvider for RouterModelProvider {
 
     async fn generate(&self, req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
         let requested_model = req.model.trim();
+        debug!(task_id = %req.task_id, request_id = %req.request_id, model = %requested_model, "Routing model request");
         let target_provider = Self::classify_provider(requested_model);
 
         match target_provider {
             "openai" => {
-                let token = self.resolve_token_with_fallback("openai").await.ok_or_else(|| {
+                let oauth = self.resolver.uses_oauth("openai").await?;
+                let token = self.resolver.get_token("openai").await?.ok_or_else(|| {
                     DomainError::Validation(
                         "OpenAI credentials not configured. Please log in with OpenAI via OAuth 2.0 PKCE or enter an API key in Settings > Providers.".into(),
                     )
                 })?;
                 let custom_url = self.resolver.get_endpoint_url("openai").await.ok().flatten();
-                if custom_url.is_none() && token.starts_with("eyJ") {
+                if oauth {
                     return self.execute_chatgpt_codex(&token, requested_model, req).await;
                 }
                 let base_url = custom_url.unwrap_or_else(|| "https://api.openai.com/v1".to_string());
@@ -513,7 +521,7 @@ impl ModelProvider for RouterModelProvider {
 /// Formats non-success provider API errors, decorating known credit/quota balance issues
 /// with actionable instructions.
 pub fn format_provider_error(status: reqwest::StatusCode, body: &str, provider_label: &str) -> String {
-    if body.contains("credit_balance_exhausted") || body.contains("insufficient_quota") {
+    if provider_label == "OpenAI" && (body.contains("credit_balance_exhausted") || body.contains("insufficient_quota")) {
         "OpenAI API error 429 (credit_balance_exhausted): You have no prepaid API credits remaining on your OpenAI Platform organization.\n\n\
         Note: ChatGPT Plus subscription ($20/mo) only covers web/app ChatGPT and does NOT cover OpenAI Platform Developer API usage. \
         Please add credits ($5+) at https://platform.openai.com/settings/organization/billing/ or switch to Google Gemini (free tier) / Ollama.".to_string()
@@ -527,6 +535,7 @@ pub fn format_provider_error(status: reqwest::StatusCode, body: &str, provider_l
 pub fn parse_codex_sse_stream(raw: &str) -> Result<(String, usize), DomainError> {
     let mut content = String::new();
     let mut tokens_used: Option<usize> = None;
+    let mut completed = false;
 
     for line in raw.lines() {
         let line = line.trim();
@@ -535,6 +544,11 @@ pub fn parse_codex_sse_stream(raw: &str) -> Result<(String, usize), DomainError>
                 break;
             }
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                if matches!(val.get("type").and_then(|t| t.as_str()), Some("error" | "response.failed" | "response.incomplete")) {
+                    let message = val.pointer("/error/message").or_else(|| val.pointer("/response/error/message")).or_else(|| val.get("message")).and_then(|m| m.as_str()).unwrap_or("Response failed or incomplete");
+                    return Err(DomainError::Validation(format!("ChatGPT Codex stream error: {message}")));
+                }
+                completed |= val.get("type").and_then(|t| t.as_str()) == Some("response.completed");
                 if let Some(delta) = val.get("delta").and_then(|d| d.as_str()) {
                     content.push_str(delta);
                 }
@@ -549,6 +563,9 @@ pub fn parse_codex_sse_stream(raw: &str) -> Result<(String, usize), DomainError>
         }
     }
 
+    if !completed {
+        return Err(DomainError::Validation("ChatGPT Codex stream ended before completion".into()));
+    }
     if content.is_empty() {
         return Err(DomainError::Validation(
             "ChatGPT Codex returned an empty stream response".into(),
@@ -563,6 +580,152 @@ pub fn parse_codex_sse_stream(raw: &str) -> Result<(String, usize), DomainError>
 mod tests {
     use super::*;
 
+    struct TestCredentialResolver {
+        oauth: bool,
+        endpoint: String,
+        fail: bool,
+    }
+    #[async_trait]
+    impl CredentialResolver for TestCredentialResolver {
+        async fn uses_oauth(&self, _: &str) -> Result<bool, DomainError> {
+            Ok(self.oauth)
+        }
+        async fn get_token(&self, _: &str) -> Result<Option<String>, DomainError> {
+            if self.fail {
+                return Err(DomainError::Validation("OAuth refresh failed".into()));
+            }
+            Ok(Some(
+                if self.oauth {
+                    "opaque-credential"
+                } else {
+                    "eyJ-api-key"
+                }
+                .into(),
+            ))
+        }
+        async fn get_endpoint_url(&self, _: &str) -> Result<Option<String>, DomainError> {
+            Ok(Some(self.endpoint.clone()))
+        }
+    }
+
+    #[tokio::test]
+    async fn oauth_with_configured_endpoint_uses_codex_and_preserves_model() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut buf = [0; 4096];
+            loop {
+                let n = socket.read(&mut buf).unwrap();
+                if n == 0 {
+                    break;
+                }
+                request.extend_from_slice(&buf[..n]);
+                let text = String::from_utf8_lossy(&request);
+                if let Some((headers, body)) = text.split_once("\r\n\r\n") {
+                    let len: usize = headers
+                        .lines()
+                        .find_map(|l| {
+                            l.to_lowercase()
+                                .strip_prefix("content-length: ")
+                                .and_then(|v| v.parse().ok())
+                        })
+                        .unwrap_or(0);
+                    if body.len() >= len {
+                        break;
+                    }
+                }
+            }
+            let body = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"OAuth answer\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"usage\":{\"total_tokens\":5}}}\n\n";
+            write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+            String::from_utf8(request).unwrap()
+        });
+        let mut provider = RouterModelProvider::new(Arc::new(TestCredentialResolver {
+            oauth: true,
+            endpoint: format!("{base}/v1"),
+            fail: false,
+        }));
+        provider.codex_endpoint = format!("{base}/codex/responses");
+        let mut req = ProviderRequest::simple("hello OAuth");
+        req.model = "gpt-4o".into();
+        let result = provider.generate(&req).await.unwrap();
+        assert_eq!(result.content, "OAuth answer");
+        let request = server.join().unwrap();
+        assert!(request.starts_with("POST /codex/responses "));
+        let payload: serde_json::Value =
+            serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
+        assert_eq!(payload["model"], "gpt-4o");
+        assert_eq!(payload["input"][0]["content"][0]["text"], "hello OAuth");
+    }
+
+    #[tokio::test]
+    async fn api_key_uses_custom_api_endpoint_even_for_jwt_shaped_keys() {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .unwrap();
+            let mut buf = [0; 4096];
+            let n = socket.read(&mut buf).unwrap();
+            let request = String::from_utf8_lossy(&buf[..n]).to_string();
+            let body = r#"{"model":"gpt-4o","choices":[{"message":{"content":"API answer"}}],"usage":{"total_tokens":5}}"#;
+            write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
+            request
+        });
+        let provider = RouterModelProvider::new(Arc::new(TestCredentialResolver {
+            oauth: false,
+            endpoint: format!("{base}/custom/v1"),
+            fail: false,
+        }));
+        let mut req = ProviderRequest::simple("hello API");
+        req.model = "gpt-4o".into();
+        assert_eq!(provider.generate(&req).await.unwrap().content, "API answer");
+        assert!(server
+            .join()
+            .unwrap()
+            .starts_with("POST /custom/v1/chat/completions "));
+    }
+
+    #[tokio::test]
+    async fn oauth_refresh_failure_never_falls_back() {
+        let provider = RouterModelProvider::new(Arc::new(TestCredentialResolver {
+            oauth: true,
+            endpoint: "http://127.0.0.1:1/v1".into(),
+            fail: true,
+        }));
+        let mut req = ProviderRequest::simple("hello");
+        req.model = "gpt-4o".into();
+        assert!(provider
+            .generate(&req)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("OAuth refresh failed"));
+    }
+
+    #[test]
+    fn codex_errors_keep_subscription_identity_and_reject_partial_streams() {
+        let formatted = format_provider_error(
+            reqwest::StatusCode::TOO_MANY_REQUESTS,
+            "insufficient_quota",
+            "ChatGPT Codex",
+        );
+        assert!(!formatted.contains("platform.openai.com"));
+        assert!(formatted.contains("ChatGPT Codex"));
+        for terminal in ["error", "response.failed", "response.incomplete"] {
+            let stream = format!("data: {{\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}}\n\ndata: {{\"type\":\"{terminal}\"}}\n\n");
+            assert!(parse_codex_sse_stream(&stream).is_err());
+        }
+        assert!(parse_codex_sse_stream("data: {\"delta\":\"partial\"}\n").is_err());
+    }
     #[test]
     fn test_format_provider_error_credit_balance_exhausted() {
         let err_body = r#"{ "error": { "message": "You have no credits remaining.", "type": "insufficient_quota", "code": "credit_balance_exhausted" } }"#;

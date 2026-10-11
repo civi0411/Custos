@@ -43,18 +43,7 @@ pub async fn probe_endpoint_models(
     match provider_type {
         "anthropic" => probe_anthropic_endpoint(&client, base, api_key).await,
         "gemini" | "google" => probe_gemini_endpoint(&client, base, api_key).await,
-        _ => {
-            if let Some(key) = api_key {
-                if key.starts_with("eyJ") {
-                    if let Ok(models) = probe_chatgpt_codex_endpoint(&client, key).await {
-                        if !models.is_empty() {
-                            return Ok(models);
-                        }
-                    }
-                }
-            }
-            probe_openai_endpoint(&client, base, api_key).await
-        }
+        _ => probe_openai_endpoint(&client, base, api_key).await,
     }
 }
 
@@ -214,6 +203,12 @@ pub fn parse_openai_models(body: &str) -> Result<Vec<ProbedModel>, DomainError> 
     Ok(models)
 }
 
+pub async fn probe_oauth_models(token: &str) -> Result<Vec<ProbedModel>, DomainError> {
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(PROBE_TIMEOUT_SECS))
+        .build().map_err(|e| DomainError::Validation(format!("Failed to build OAuth probe client: {e}")))?;
+    probe_chatgpt_codex_endpoint(&client, token).await
+}
+
 /// Probes the ChatGPT Codex backend models endpoint for OAuth users:
 /// GET https://chatgpt.com/backend-api/codex/models?client_version=0.144.0
 pub async fn probe_chatgpt_codex_endpoint(
@@ -270,7 +265,7 @@ pub fn parse_chatgpt_codex_models(body: &str) -> Result<Vec<ProbedModel>, Domain
                 .and_then(|n| n.as_str())
                 .map(|s| s.to_string());
             let description = m.get("description").and_then(|d| d.as_str()).map(|s| s.to_string());
-            let context_window = m.get("max_tokens").and_then(|t| t.as_u64()).or(Some(200_000));
+            let context_window = m.get("context_window").or_else(|| m.get("max_tokens")).and_then(|t| t.as_u64());
             Some(ProbedModel {
                 id: id.clone(),
                 name: name.or(Some(id)),
@@ -496,6 +491,6 @@ mod tests {
         assert_eq!(models[0].owned_by, Some("openai-chatgpt".into()));
         assert_eq!(models[1].id, "gpt-5.6-terra");
         assert_eq!(models[1].name, Some("gpt-5.6-terra".into()));
-        assert_eq!(models[1].context_window, Some(200000));
+        assert_eq!(models[1].context_window, None);
     }
 }
