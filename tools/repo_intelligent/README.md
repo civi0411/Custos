@@ -2,7 +2,7 @@
 
 Custos Nexus is the repository intelligence utility maintained with Custos. It indexes source structure, symbols, imports, call references and searchable chunks into a local SQLite database (`nexus_index.db`).
 
-Nexus acts as the **Context & Memory Layer** for Custos agents (including the Goose-derived engine), providing AST analysis, call-graph tracking, and contextual repository maps.
+Nexus is a **developer utility and optional external MCP surface**. Its local SQLite index is derived data for source exploration; it is not Custos's canonical context or memory store. The product-facing Repo Intelligence home is `crates/custos-runtime/src/context/repo_intelligence/`, with persistence/adapters for indexing and Engineering pack recipes for use. The product path is not yet fully composed end to end. Agents may use Nexus explicitly during development, but a Nexus MCP response is not automatically an admitted Custos ContextPack or verified evidence.
 
 ## Capabilities
 
