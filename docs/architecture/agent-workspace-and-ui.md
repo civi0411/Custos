@@ -14,6 +14,8 @@ Triết lý: **tối đa kết quả hữu ích trong ngân sách người dùng
 
 [Audit OrCa ở commit đã pin](../development/orca-source-study.md) xác nhận OrCa có runtime Run/Task/Dispatch, durable messages/receipts, structured Claude/Codex session, worktree/SSH và automation, không phải chỉ UI. Vì vậy UI Custos phải tách **resource workspace** (pane/host/checkout), **Task** (goal/scope/criteria), **Run/Dispatch** (attempt) và **Outcome** (verification) ngay trong navigation. Agent status dot và `worker_done` là trạng thái vận hành, không phải completion của criterion. Hai agent có thể chạy cùng Task nhưng tổng budget và source baseline phải hiện chung.
 
+Hợp đồng chi tiết về executor picker, Custos worker so với native harness, subagent, shared retrieval/context service, các journey và empty/recovery states của ba lens nằm ở [SADE agent system design](sade-agent-system-design.md). Tài liệu này tiếp tục sở hữu layout và continuity UX; hai tài liệu dùng cùng Task/Run/resource IDs.
+
 ## 2. Những đối tượng không được trộn
 
 | Đối tượng | Ý nghĩa | Không phải |
@@ -30,6 +32,8 @@ Triết lý: **tối đa kết quả hữu ích trong ngân sách người dùng
 Workspace có nhiều Task; Task liên kết nhiều session; một session có thể chứa nhiều Task. Một Task có thể có nhiều candidate runs hoặc nhiều bước xuyên pack. Quan hệ này phải được map từ IDs hiện có; tên trong bảng là vocabulary thiết kế, không yêu cầu sinh thêm schema nếu contract hiện hữu đã đủ.
 
 **Bất biến UX quan trọng nhất:** đổi workbench không được đổi chủ thể công việc. `task_id`, revision, selected source/artifact references, decisions, criteria, budget và pending effects vẫn giữ nguyên; chỉ pane tree, công cụ nổi bật và context recipe thay đổi. Nếu mục tiêu thật sự tách nhánh, user tạo child Task/fork tường minh. Nếu chỉ hỏi ngoài lề, side conversation giữ liên kết tới Task nhưng không làm nhiễu goal chính.
+
+**Session theo từng lens:** Copilot, Coding và Research có danh sách chat và lựa chọn gần nhất riêng. Bấm icon lens khôi phục chat cuối của lens đích; nếu chưa có thì là trạng thái `No conversation`, không tự đem chat từ lens vừa rời đi. `Open full chat in…` gắn cùng session vào danh sách đích và hiển thị mọi turn còn được giữ trong canonical journal. `Continue as linked chat` tạo session mới có lineage và bản hiển thị timeline nguồn; model-visible context vẫn phải qua compiler, privacy và budget với receipt. Không gọi lịch sử hiển thị đầy đủ là inference context đầy đủ. Khi tiếp tục từ Research sang Coding, notebook code/dataset/figure là nguồn và artifact để kiểm, không phải patch repo được áp dụng tự động.
 
 ## 3. Luồng và nơi ra quyết định
 
@@ -109,7 +113,7 @@ Khi user bấm **Continue in Research** hoặc **Continue in Coding**, UI trư�
 3. tạo/revise obligation của pack đích cùng acceptance cần thiết, không tự biến finding thành requirement;
 4. compile ContextPack cho worker đích từ references, decisions và omissions **nếu user thực sự khởi chạy worker**; layout có thể mở lens đích sau khi continuation được ack mà không tự dispatch.
 
-Transcript gốc vẫn ở session; workbench mới nhìn thấy summary có nguồn, selected artifacts, decisions và unresolved questions. Grant, permit, secret, native hidden state và toàn bộ raw transcript **không được kế thừa ngầm**. Native agent không hỗ trợ resume tương đương thì tạo WorkerRun mới, ghi rõ phần context đã chuyển và phần không chuyển được.
+Transcript gốc vẫn ở session; workbench mới nhìn thấy summary có nguồn, selected artifacts, decisions và unresolved questions. Grant, permit, secret, native hidden state và toàn bộ raw transcript **không được kế thừa ngầm**. Native agent không hỗ trợ resume tương đương thì tạo WorkerRun mới, ghi rõ phần context đã chuyển và phần không chuyển được. Slice chat hiện tại cho phép mở cùng session trong lens khác; `workbench_opened` được ghi trong session journal SQLite qua Local API, và model run biên soạn tối đa 12.000 ký tự lịch sử gần nhất từ journal, ghi entry IDs được dùng/bỏ trong run metadata. Đây chưa phải handoff chọn nguồn có privacy filter/egress review và ContextReceipt đầy đủ; last-selected session còn device-local.
 
 ### 4.3. Ba lựa chọn khi chuyển hướng
 
@@ -132,6 +136,12 @@ Luồng: mở repo → đọc snapshot → chat/explore → giao patch/refactor 
 Panes: repo explorer, source anchors, agent chat/terminal, diff comments, test matrix, browser preview. Terminal phải hiện rõ cwd, run owner, local/remote host và assurance; manual terminal input không mặc nhiên nằm trong mediated path.
 
 Coding lens không tạo một “Codex session” riêng khỏi Custos Task. Header của mỗi editor/diff/terminal hiển thị `task_id`, execution workspace/worktree, host và run owner; chat bên cạnh có thể **steer active run** hoặc **queue lượt sau** bằng hai action tách biệt. Từ Research, action `Implement selected claims` tạo `EngineeringBrief/Spec` từ đúng claim IDs/caveats rồi mở Coding; source passages vẫn mở lại được trong Inspector.
+
+Native Agents pane submits a Task-backed `StartRun`, never an unscoped filesystem path. The selected workspace is resolved by daemon from `workspace_id`; the chosen harness is resolved by runtime from the composed registry and persisted with its launch attempt. Provider-governed native completion means only that the harness process returned successfully. It does not pass the Task criterion, verify the patch, or upgrade tool mediation. Steering is shown only when a real active run/session identifier is available; a placeholder such as `active_run` is not a protocol value.
+
+Resource discovery is fail-closed and capability-driven. `resource_id` is a stable UI projection key, while capability `id` identifies the backend contract; they are not interchangeable with pane IDs, Task IDs or Run IDs. Before the capability registry resolves, every operational resource is unavailable. A degraded resource may render its durable metadata surface, but controls are enabled only when their exact operation name appears in `supported_operations`. Missing descriptors never inherit optimistic operations from the client catalog. Browser and Fleet therefore remain useful inventories while navigation, AX actions, probes and execution stay disabled until governed adapters are composed.
+
+Agent controls follow the same rule at harness scope. A discovered OpenCode/Codex/Claude binary may be offered for a bounded native run, but Resume, Steer, Cancel-confirmed and exact usage remain hidden unless the tested harness profile advertises them. A local map entry is not an external session, and removing it is not cancellation. An empty result from an unimplemented event transport is an error rather than a completed agent turn.
 
 ### Worktree và candidate comparison
 
@@ -271,7 +281,7 @@ Phần này là **kiểm tra checkout hiện tại**, không thay thế đích �
 | Bề mặt | Đã hiện hữu | Khoảng cách tới UX đích |
 |---|---|---|
 | Shell | Header chuyển Chat/Code/Research bằng nút và phím; ba view có sidebar, transcript, composer; right tab container có nhiều loại resource. | `StudioPage` mount ba view riêng và chỉ lưu lens vào `localStorage`; shell chưa có Task strip, inspector, pane state và resource identity dùng chung. |
-| Data/continuity | Desktop host gọi daemon; `AppContext` thử hydrate Tasks và Sessions. | UI projection dùng `Task.id` làm `Session.id`, ghép session theo `task_id` đơn; không có turn binding, selected references hoặc backend ack khi bấm `Send to Code/Research`. Toast `Transferred context` hiện chỉ là đổi lens. |
+| Data/continuity | Desktop host gọi daemon; `AppContext` hydrate mọi Session và journal, `Open full chat in…` chờ backend ack và ghi membership event. | Chưa có turn-to-Task binding, selected references, privacy-filtered transfer hay backend ack cho `Continue as linked chat`; chỉ mở cùng session, không gọi đó là Task handoff. |
 | Coding | Có chat, worktree modal và tab file/diff/terminal/changes. | Khi right tab đóng, chat vẫn chiếm khoảng 45% canvas và phần còn lại trống. Branch `wt-simd`, repo files, terminal/evidence trong OrCa tab là fixture; không được hiện như trạng thái live. |
 | Research | Có Research chat và chỗ mở source/claim/experiment. | Nút corpus/experiment/claim hiện chủ yếu ra toast; một transcript Engineering có thể hiện y nguyên ở Research mà không có corpus/claim handoff, provenance hoặc acceptance Research. |
 | Copilot/Assistant | Chat, action chuyển lens, prototype assistant/fleet. | Assistant effect/draft/identity/outbox chưa gắn Task/effect projections; tên model và mode ở một số view bị hard-code theo thương hiệu khác, không phản ánh executor thực. |
@@ -366,7 +376,7 @@ flowchart TD
 
 **Atomicity và recovery:** client gửi `command_id`, source journal checkpoint/`expected_revision`, destination lens, selected stable IDs và transfer policy. Backend tạo destination session + provenance link + Task binding trong một canonical transaction; sau commit mới compile context/start run. Retry cùng command trả cùng destination ID, không nhân đôi chat. Nếu provider/context compilation fail, linked chat vẫn tồn tại ở trạng thái `needs_context` với manifest và lỗi; không giả message đầu tiên đã được model đọc. Source bị xóa/hết quyền/stale → `omitted/blocked`, không copy cache cũ. UI reload lấy server projection; local tab layout không là nguồn sự thật.
 
-**Gap của checkout hiện tại:** `crates/custos-domain/src/session.rs` chỉ có `attached_to: Option<TaskId>`; `v1.sessions.attach` nhận một Task và journal entry chỉ có `entry_type/entry_data`, chưa có typed turn-to-task/lens/source binding. `ui/desktop/src/app/studio/page.tsx` đang giữ resource-tab state trong React memory theo project/session, nên đổi lens giữ tab nhưng restart sẽ mất layout. Không dùng `ContinuationPacket` hiện tại (`task_summary` + free-form `current_state`) như hợp đồng transcript transfer hoàn chỉnh. Cần migration/versioned DTO và golden fixtures trước khi bật nút `Continue as linked chat`; không nên chỉ ghép hai transcript trong frontend.
+**Gap của checkout hiện tại:** `crates/custos-domain/src/session.rs` chỉ có `attached_to: Option<TaskId>`; `v1.sessions.attach` nhận một Task và journal entry chỉ có `entry_type/entry_data`, chưa có typed turn-to-task/lens/source binding. Desktop filter lịch sử theo lens và `Open full chat in…` ghi `workbench_opened` vào journal; last selection vẫn chỉ lưu localStorage trên thiết bị. `ui/desktop/src/app/studio/page.tsx` giữ resource-tab state trong React memory theo project/session, nên restart sẽ mất layout. Model turn đã nhận tối đa 12.000 ký tự lịch sử gần nhất và ghi included/omitted IDs trong Run metadata; full transcript hiển thị vẫn không đồng nghĩa model thấy toàn bộ hoặc context đã qua privacy/egress filter. Không dùng `ContinuationPacket` hiện tại (`task_summary` + free-form `current_state`) như hợp đồng transcript transfer hoàn chỉnh. Cần migration/versioned DTO và golden fixtures trước khi bật nút `Continue as linked chat`; không nên chỉ ghép hai transcript trong frontend.
 
 ### 12.2. Research có code như Colab nhưng không là Coding checkout
 
