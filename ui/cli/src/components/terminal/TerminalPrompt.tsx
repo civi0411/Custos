@@ -1,7 +1,7 @@
 import React, { RefObject } from 'react';
 import { OperationalMode } from '../../types';
 import { AVAILABLE_MODES, getModeSlug, VibeSessionState } from './types';
-import { Plus, ChevronDown, Mic, ArrowUp } from 'lucide-react';
+import { Plus, ArrowUp } from 'lucide-react';
 
 interface TerminalPromptProps {
   currentMode: OperationalMode | string;
@@ -29,82 +29,94 @@ export const TerminalPrompt: React.FC<TerminalPromptProps> = ({
   onSend,
 }) => {
   const normalizedMode = String(currentMode).toLowerCase();
-  const isSpecialized = normalizedMode !== 'standard' && normalizedMode !== 'custos';
   const modeSlug = getModeSlug(currentMode as OperationalMode);
   const cfg = AVAILABLE_MODES.find((m) => m.slug === modeSlug);
-  const badgeColor = cfg ? cfg.color : '#38bdf8';
+  const badgeColor = cfg ? cfg.color : '#60a5fa';
 
   const getPlaceholder = () => {
     if (showModeSelector) return "Gõ để lọc mode hoặc lệnh... (Esc để đóng)";
     if (vibeSession.step === 'mode') return 'Nhập 1 (Code), 2 (Research), 3 (Assistant)...';
     if (vibeSession.step === 'goal') return 'Nhập mục tiêu nhiệm vụ...';
     if (vibeSession.step === 'permit') return 'Nhập y (đồng ý) hoặc n (từ chối)...';
-    if (!isSpecialized) {
-      return "Bạn muốn Custos làm gì?";
-    }
-    return `[${modeSlug}] Nhập yêu cầu, câu hỏi hoặc gõ '/' để đổi mode...`;
+    return "add a new field or task for Custos...";
   };
 
+  const dynamicWidth = Math.max(540, Math.min(window.innerWidth - 60, inputVal.length * 9.5 + 85));
+  const modeLabel = normalizedMode === 'custos' ? 'Build' : modeSlug.charAt(0).toUpperCase() + modeSlug.slice(1);
+
   return (
-    <div className="gpt-chat-bar">
-      <button
-        type="button"
-        className="gpt-plus-btn"
-        onClick={onToggleModeSelector}
-        title="Chọn mode hoạt động hoặc công cụ (/)"
-        aria-label="Thêm công cụ"
+    <div
+      className="opencode-prompt-container"
+      style={{
+        width: `${dynamicWidth}px`,
+        maxWidth: 'calc(100vw - 48px)',
+      }}
+    >
+      <div
+        className="gpt-chat-bar opencode-chat-box"
+        style={{
+          borderLeftColor: badgeColor,
+        }}
       >
-        <Plus size={18} />
-      </button>
+        <div className="opencode-input-row">
+          <input
+            ref={inputRef}
+            type="text"
+            className="gpt-chat-input"
+            value={inputVal}
+            onChange={onInputChange}
+            onKeyDown={onKeyDown}
+            placeholder={getPlaceholder()}
+            autoFocus
+            disabled={isProcessing}
+            spellCheck={false}
+          />
 
-      <input
-        ref={inputRef}
-        type="text"
-        className="gpt-chat-input"
-        value={inputVal}
-        onChange={onInputChange}
-        onKeyDown={onKeyDown}
-        placeholder={getPlaceholder()}
-        autoFocus
-        disabled={isProcessing}
-        spellCheck={false}
-      />
+          <div className="opencode-action-btns">
+            <button
+              type="button"
+              className="opencode-tool-btn"
+              onClick={onToggleModeSelector}
+              title="Thêm công cụ hoặc lệnh (/)"
+              aria-label="Thêm công cụ"
+            >
+              <Plus size={15} />
+            </button>
 
-      <div className="gpt-chat-actions">
-        <button
-          type="button"
-          className="gpt-mode-pill"
-          onClick={onToggleModeSelector}
-          title="Chọn mode (/)"
-          style={{
-            color: badgeColor,
-            borderColor: `${badgeColor}35`,
-            backgroundColor: `${badgeColor}12`,
-          }}
-        >
-          <span>{modeSlug}</span>
-          <ChevronDown size={14} />
+            <button
+              type="button"
+              className={`opencode-send-btn ${inputVal.trim() ? 'active' : ''}`}
+              onClick={onSend}
+              disabled={isProcessing || !inputVal.trim()}
+              title="Gửi (Enter)"
+              aria-label="Gửi yêu cầu"
+            >
+              <ArrowUp size={15} />
+            </button>
+          </div>
+        </div>
+
+        <div className="opencode-status-row">
+          <button
+            type="button"
+            className="opencode-mode-badge"
+            onClick={onToggleModeSelector}
+            title="Chọn mode (Tab)"
+            style={{ color: badgeColor }}
+          >
+            {modeLabel}
+          </button>
+          <span className="opencode-model-tag">Claude Opus 4.5</span>
+          <span className="opencode-engine-tag">OpenCode Zen</span>
+        </div>
+      </div>
+
+      <div className="focus-shortcuts" aria-label="Phím tắt và điều hướng">
+        <button type="button" onClick={onToggleModeSelector}>
+          <kbd>tab</kbd> switch agent
         </button>
-
-        <button
-          type="button"
-          className="gpt-mic-btn"
-          onClick={onToggleModeSelector}
-          title="Lệnh nhanh (/)"
-          aria-label="Lệnh nhanh"
-        >
-          <Mic size={16} />
-        </button>
-
-        <button
-          type="button"
-          className={`gpt-send-btn ${inputVal.trim() ? 'active' : ''}`}
-          onClick={onSend}
-          disabled={isProcessing || !inputVal.trim()}
-          title="Gửi (Enter)"
-          aria-label="Gửi yêu cầu"
-        >
-          <ArrowUp size={16} />
+        <button type="button" onClick={onToggleModeSelector}>
+          <kbd>ctrl+p</kbd> commands
         </button>
       </div>
     </div>
