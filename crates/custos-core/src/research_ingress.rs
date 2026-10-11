@@ -6,11 +6,41 @@ use custos_domain::{
 };
 use sha2::{Digest, Sha256};
 
-pub fn source_draft(mut source: SourceRecord) -> Result<SourceRecord, String> {
+pub fn source_draft(source: SourceRecord) -> Result<SourceRecord, String> {
+    source_draft_with_bytes(source, None)
+}
+
+pub fn source_draft_with_bytes(
+    mut source: SourceRecord,
+    bytes: Option<&[u8]>,
+) -> Result<SourceRecord, String> {
     if source.id.trim().is_empty() || source.title.trim().is_empty() {
         return Err("Source id and title are required".into());
     }
     source.verified = false;
+
+    if let Some(b) = bytes {
+        let digest = Sha256::digest(b);
+        source.content_hash = format!(
+            "sha256:{}",
+            digest
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        );
+    } else if source.content_hash.trim().is_empty() {
+        if let Some(ref text) = source.abstract_text {
+            let digest = Sha256::digest(text.as_bytes());
+            source.content_hash = format!(
+                "sha256:{}",
+                digest
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>()
+            );
+        }
+    }
+
     Ok(source)
 }
 

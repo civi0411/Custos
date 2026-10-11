@@ -95,8 +95,13 @@ impl PackVerifier for CitationCoverageOracle {
             let is_unsupported = claim
                 .get("semantic_status")
                 .or_else(|| claim.get("support_status"))
+                .or_else(|| claim.get("evidence_support"))
                 .and_then(Value::as_str)
-                .map(|s| s.eq_ignore_ascii_case("unsupported") || s.eq_ignore_ascii_case("contradicted"))
+                .map(|s| {
+                    s.eq_ignore_ascii_case("unsupported")
+                        || s.eq_ignore_ascii_case("contradicted")
+                        || s.eq_ignore_ascii_case("unknown")
+                })
                 .unwrap_or(false);
 
             let is_locator_invalid = claim
@@ -218,6 +223,19 @@ mod tests {
             "claims": [
                 { "id": "c1", "doi": "10.1038/s41586-020-2649-2", "verified": true, "level": "l0_ungrounded" },
                 { "id": "c2", "doi": "10.1126/science.1234567", "verified": true, "semantic_status": "unsupported" }
+            ]
+        }));
+        let res = oracle.verify(&ctx).await;
+        assert!(matches!(res, VerificationResult::Fail { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_citation_coverage_rejects_unknown_support_status() {
+        let oracle = CitationCoverageOracle::new();
+        // Claims have valid DOI, but support_status is unknown -> must FAIL
+        let ctx = VerificationContext::new("task_res_5").with_metadata(json!({
+            "claims": [
+                { "id": "c1", "doi": "10.1038/s41586-020-2649-2", "verified": true, "support_status": "unknown" }
             ]
         }));
 
