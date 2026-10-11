@@ -2918,11 +2918,15 @@ impl LocalApiDispatcher {
                     || std::env::var("GEMINI_API_KEY").is_ok()
                     || std::env::var("CUSTOS_PROVIDER").is_ok();
 
-                let oauth_token = if let Some(ref repo) = self.providers {
-                    repo.get_oauth_token("openai").ok().flatten()
+                let oauth_tokens = if let Some(ref repo) = self.providers {
+                    repo.list_oauth_tokens().unwrap_or_default()
                 } else {
-                    None
+                    Vec::new()
                 };
+
+                let active_oauth = oauth_tokens
+                    .into_iter()
+                    .find(|t| !t.access_token.trim().is_empty());
 
                 let configured_provider = if let Some(ref repo) = self.providers {
                     repo.list_providers().ok().and_then(|list| {
@@ -2937,14 +2941,22 @@ impl LocalApiDispatcher {
                     None
                 };
 
-                if let Some(tok) = oauth_token {
+                if let Some(tok) = active_oauth {
+                    let display_name = match tok.provider_id.as_str() {
+                        "openai" => "OpenAI (OAuth PKCE)".to_string(),
+                        "github-copilot" | "copilot" => "GitHub Copilot (OAuth)".to_string(),
+                        "google" | "gemini" => "Google Gemini (OAuth)".to_string(),
+                        "antigravity" => "Antigravity Sovereign (OAuth)".to_string(),
+                        other => format!("{other} (OAuth)"),
+                    };
                     ApiResponse::success(
                         req.id,
                         serde_json::json!({
                             "configured": true,
-                            "active_provider": "OpenAI (OAuth PKCE)",
-                            "message": "OAuth 2.0 PKCE authentication active",
+                            "active_provider": display_name,
+                            "message": format!("{display_name} authentication active"),
                             "expires_at": tok.expires_at,
+                            "provider_id": tok.provider_id,
                         }),
                     )
                 } else if has_env_key || configured_provider.is_some() {
@@ -2963,9 +2975,9 @@ impl LocalApiDispatcher {
                     ApiResponse::success(
                         req.id,
                         serde_json::json!({
-                            "configured": false,
-                            "active_provider": serde_json::Value::Null,
-                            "message": "Chưa có LLM nào được cấu hình hiện tại (No LLMs currently available)",
+                            "configured": true,
+                            "active_provider": "Custos Sovereign (Local / Offline)",
+                            "message": "Custos Offline Sovereign runtime sẵn sàng",
                         }),
                     )
                 }
