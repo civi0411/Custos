@@ -4,11 +4,11 @@ import {
   Check,
   Search,
   Settings,
-  Server,
   Cpu,
   Ban
 } from 'lucide-react';
 import {
+  ProviderBrandIcon,
   OpenAIIcon,
   ClaudeIcon,
   GeminiIcon,
@@ -33,6 +33,7 @@ export function getProviderInfo(modelId: string): {
   label: string;
 } {
   const m = (modelId || '').toLowerCase();
+  if (m.startsWith('ollama/')) return { provider: 'local', label: 'Ollama' };
   if (m.startsWith('copilot/')) return { provider: 'copilot', label: 'GitHub Copilot' };
   if (m.startsWith('antigravity/')) return { provider: 'antigravity', label: 'Antigravity' };
   if (m.includes('claude') || m.includes('anthropic')) return { provider: 'anthropic', label: 'Anthropic' };
@@ -64,11 +65,11 @@ export function ProviderIcon({
     case 'deepseek':
       return <DeepSeekIcon size={size} className={className} />;
     case 'copilot':
-      return <img src="/assets/provider-logo/github-copilot.jpg" alt="GitHub Copilot" width={size} height={size} className={className} />;
+      return <ProviderBrandIcon provider="copilot" size={size} className={className} />;
     case 'antigravity':
-      return <GeminiIcon size={size} className={className} />;
+      return <ProviderBrandIcon provider="antigravity" size={size} className={className} />;
     case 'local':
-      return <Server size={size} className={className || 'text-teal-400'} />;
+      return <ProviderBrandIcon provider="local" size={size} className={className || 'text-teal-400'} />;
     default:
       return <Cpu size={size} className={className || 'text-zinc-400'} />;
   }
@@ -83,7 +84,7 @@ export interface ModelSelectorProps {
 
 export function getConnectedModelOptions(accounts: import('@/types').ConnectedAccount[]): ModelOption[] {
   const seen = new Set<string>();
-  return accounts.filter((a) => a.status === 'active').flatMap((account) =>
+  return accounts.filter((a) => a.status === 'active' || a.providerId === 'local').flatMap((account) =>
     account.supportedModels.filter((id) => {
       if (seen.has(id.toLowerCase())) return false;
       seen.add(id.toLowerCase()); return true;
@@ -91,10 +92,10 @@ export function getConnectedModelOptions(accounts: import('@/types').ConnectedAc
       const metadata = account.catalogModels?.find((m) => m.id === id);
       return {
         id, name: metadata?.label || id, provider: account.providerId as ModelOption['provider'],
-        providerName: account.providerName, badge: account.catalogSource === 'cached' ? 'Cached' : 'Live',
+        providerName: account.providerName, badge: account.status === 'offline' ? 'Offline' : account.catalogSource === 'cached' ? 'Cached' : 'Live',
         description: metadata?.description || `Account: ${account.accountName}`,
         contextWindow: metadata?.context_window ? `${Math.round(metadata.context_window / 1000)}k tokens` : undefined,
-        isConfigured: true,
+        isConfigured: account.status === 'active',
       };
     })
   );
@@ -175,7 +176,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       name: activeModelId,
       provider: info.provider,
       providerName: info.label,
-      badge: 'Active'
+      badge: activeModelId.startsWith('ollama/') ? 'Unavailable' : 'Active',
+      isConfigured: !activeModelId.startsWith('ollama/')
     };
   }, [allModels, activeModelId, hasModel]);
 
@@ -222,6 +224,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         <span className="font-mono text-[11px] truncate max-w-[140px] text-fg-editor">
           {!hasModel ? 'No model selected' : activeModel.id}
         </span>
+        {hasModel && activeModel.isConfigured === false && <span className="shrink-0 text-[10px] text-fg-muted">Offline</span>}
 
         <ChevronDown
           size={12}
@@ -237,9 +240,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           className="absolute bottom-full mb-2 left-0 z-50 w-72 md:w-72 rounded-xl border border-border-default bg-surface-1/95 backdrop-blur-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150"
           style={{ maxHeight: '420px' }}
         >
-      {connectedAccounts.some((a) => a.catalogError) && (
+      {connectedAccounts.some((a) => a.catalogError && a.providerId !== 'local') && (
         <div className="px-3 py-2 text-xs text-amber-400 break-words border-b border-border-muted" role="status">
-          {connectedAccounts.filter((a) => a.catalogError).map((a) => (
+          {connectedAccounts.filter((a) => a.catalogError && a.providerId !== 'local').map((a) => (
             <div key={a.id}>{a.providerName}: {a.catalogSource === 'cached' ? `Cached (${a.catalogFetchedAt ? new Date(a.catalogFetchedAt).toLocaleString() : 'unknown time'})` : 'Models unavailable'}: {a.catalogError}</div>
           ))}
           <button type="button" onClick={() => void refreshModels()}>Retry models</button>
@@ -335,6 +338,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                       <button
                         key={m.id}
                         type="button"
+                        disabled={!m.isConfigured}
+                        title={!m.isConfigured ? `${m.id} Offline` : m.name}
                         onClick={() => {
                           handleSelect(m.id);
                           setIsOpen(false);
@@ -346,6 +351,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                         }`}
                       >
                         <span className="font-mono text-xs truncate pr-2">{m.id}</span>
+                        {!m.isConfigured && <span className="ml-auto mr-2 shrink-0 text-[10px] text-fg-muted">Offline</span>}
                         {isSelected && <Check size={13} className="text-emerald-400 stroke-[2.5] shrink-0" />}
                       </button>
                     );

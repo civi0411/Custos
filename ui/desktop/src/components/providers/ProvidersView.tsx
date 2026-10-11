@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Plus,
-  Cpu,
   Laptop,
   Terminal,
   Trash2,
@@ -15,6 +14,8 @@ import { useAppContext } from '@/context/AppContext';
 import { CombosManager } from '@/components/providers/CombosManager';
 import { UsageMonitor } from '@/components/providers/UsageMonitor';
 
+import { ProviderBrandIcon } from '@/components/common/AgentIcons';
+
 interface ProvidersViewProps {
   providers: ProviderItem[];
   clientKeys: ClientApiKey[];
@@ -25,24 +26,6 @@ interface ProvidersViewProps {
   onDeleteProvider?: (id: string) => void;
 }
 
-const getProviderLogo = (iconType: string): string | null => {
-  switch (iconType) {
-    case 'anthropic':
-      return '/assets/provider-logo/anthropic.jpg';
-    case 'copilot':
-      return '/assets/provider-logo/github-copilot.jpg';
-    case 'antigravity':
-      return '/assets/provider-logo/gemini.jpg';
-    case 'openai':
-      return '/assets/provider-logo/openai.jpg';
-    case 'gemini':
-      return '/assets/provider-logo/gemini.jpg';
-    case 'deepseek':
-      return '/assets/provider-logo/deepseek.jpg';
-    default:
-      return null;
-  }
-};
 
 export const ProvidersView: React.FC<ProvidersViewProps> = ({
   providers,
@@ -53,7 +36,7 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
   onTestConnection,
   onDeleteProvider,
 }) => {
-  const { connectedAccounts, handleDeleteAccount } = useAppContext();
+  const { connectedAccounts, handleDeleteAccount, refreshModels } = useAppContext();
   const [activeSubTab, setActiveSubTab] = useState<'providers' | 'combos' | 'usage'>('providers');
 
   return (
@@ -148,7 +131,7 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {providers.map((p) => {
-                  const logoUrl = getProviderLogo(p.iconType);
+                  const localAccount = connectedAccounts.find(a => a.id === p.id && a.providerId === 'local');
                   const ctxK = p.contextWindow ? `${Math.round(p.contextWindow / 1000)}k ctx` : null;
 
                   return (
@@ -158,19 +141,7 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3 min-w-0">
-                          {logoUrl ? (
-                            <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-xs border border-border-default bg-surface-2">
-                              <img
-                                src={logoUrl}
-                                alt={p.name}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                          ) : (
-                            <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center workbench-accent font-bold text-sm shrink-0 border border-border-default">
-                              <Cpu className="w-5 h-5" />
-                            </div>
-                          )}
+                          <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center shrink-0 border border-border-default"><ProviderBrandIcon provider={p.iconType} size={24} /></div>
 
                           <div className="min-w-0">
                             <h4 className="text-sm font-semibold text-fg-editor truncate">{p.name}</h4>
@@ -190,7 +161,7 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
                             className="w-2 h-2 rounded-full"
                             style={{ backgroundColor: p.badgeColor }}
                           />
-                          <span className="text-xs font-mono text-fg-subtle">{p.statusLabel}</span>
+                          <span className="text-xs font-mono text-fg-subtle">{localAccount ? (localAccount.status === 'active' ? 'Online' : 'Offline') : p.statusLabel}</span>
                         </div>
                       </div>
 
@@ -263,7 +234,7 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
                         <div className="flex items-center gap-2">
                           <h4 className="text-sm font-semibold text-fg-editor">{account.accountName}</h4>
                           <span className="text-[9px] font-mono px-1.5 py-0.2 rounded border bg-surface-2 border-border-default text-fg-editor">
-                            {account.authType === 'oauth' ? 'OAuth 2.0' : 'API Key'}
+                            {account.providerId === 'local' ? 'Local' : account.authType === 'oauth' ? 'OAuth 2.0' : 'API Key'}
                           </span>
                           {account.oauthTier && (
                             <span className="text-[9px] font-mono px-1.5 py-0.2 rounded text-indigo-400 bg-indigo-500/10 border border-indigo-500/20">
@@ -283,6 +254,8 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
                         title={account.statusLabel || account.status}
                       />
                     </div>
+
+                    {account.providerId === 'local' && <div className="flex items-center justify-between text-xs"><span className={account.status === 'active' ? 'text-emerald-400' : 'text-fg-muted'}>{account.status === 'active' ? 'Online' : 'Offline'}</span>{account.status !== 'active' && <button type="button" onClick={() => void refreshModels()} className="provider-oauth-action px-2 py-1 rounded">Retry</button>}</div>}
 
                     <div className="flex items-center justify-between pt-2 border-t border-border-muted/50 text-[11px] font-mono text-fg-subtle">
                       <span>Default: {account.defaultModel}</span>

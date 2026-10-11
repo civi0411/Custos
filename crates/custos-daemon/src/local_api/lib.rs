@@ -129,6 +129,7 @@ pub const METHOD_PROVIDERS_SAVE: &str = "v1.providers.save";
 pub const METHOD_PROVIDERS_DELETE: &str = "v1.providers.delete";
 pub const METHOD_MODELS_PROBE: &str = "v1.models.probe";
 pub const METHOD_MODELS_CATALOG: &str = "v1.models.catalog";
+pub const METHOD_PROVIDERS_USAGE: &str = "v1.providers.usage";
 pub const METHOD_MODELS_PRICING: &str = "v1.models.pricing";
 
 pub const METHOD_OAUTH_AUTHORIZE: &str = "v1.oauth.authorize";

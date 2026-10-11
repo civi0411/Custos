@@ -373,7 +373,7 @@ pub async fn generate_codeassist_content(
             .pointer("/usageMetadata/totalTokenCount")
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as usize,
-    ))
+    ).with_usage(response.pointer("/usageMetadata/promptTokenCount").and_then(|v| v.as_u64()).and_then(|v| usize::try_from(v).ok()), response.pointer("/usageMetadata/candidatesTokenCount").and_then(|v| v.as_u64()).and_then(|v| usize::try_from(v).ok()), response.pointer("/usageMetadata/totalTokenCount").and_then(|v| v.as_u64()).and_then(|v| usize::try_from(v).ok())))
 }
 
 #[cfg(test)]
