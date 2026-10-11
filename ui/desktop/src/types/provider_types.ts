@@ -29,6 +29,10 @@ export interface ConnectedAccount {
   badgeColor?: string;
   defaultModel: string;
   supportedModels: string[];
+  catalogModels?: import('./domain').ModelCatalogOption[];
+  catalogSource?: 'live' | 'cached' | 'unavailable';
+  catalogError?: string;
+  catalogFetchedAt?: number;
   contextWindow?: number;
   fastMode?: boolean;
   latencyMs?: number;

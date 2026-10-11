@@ -138,7 +138,15 @@ impl ProviderRepository {
         provider_id: &str,
         models: &[ModelCatalogOption],
     ) -> Result<(), DomainError> {
-        let conn = self.db.lock()?;
+        let mut conn = self.db.lock()?;
+        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let now = chrono::Utc::now().to_rfc3339();
+        let payload = serde_json::to_string(&serde_json::json!({"provider_id": provider_id, "models": models})).map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.execute("INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![custos_domain::new_id("catalog"), "provider.models.probed", payload, now])
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.execute("DELETE FROM provider_model_catalog WHERE provider_id = ?1", params![provider_id])
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         for m in models {
             let row_id = format!("{}:{}", provider_id, m.id);
             let ctx_int = m.context_window.map(|w| w as i64);
@@ -146,7 +154,7 @@ impl ProviderRepository {
             let pricing_json = m.pricing.as_ref().and_then(|p| serde_json::to_string(p).ok());
             let fetched_at = chrono::Utc::now().timestamp_millis();
 
-            conn.execute(
+            tx.execute(
                 "INSERT INTO provider_model_catalog (id, provider_id, model_id, label, description, context_window,
                                                     default_effort, supports_fast_mode, pricing_json, fetched_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
@@ -173,7 +181,15 @@ impl ProviderRepository {
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
         }
+        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
+    }
+
+    pub fn catalog_fetched_at(&self, provider_id: &str) -> Result<i64, DomainError> {
+        let conn = self.db.lock()?;
+        conn.query_row("SELECT COALESCE(MAX(fetched_at), 0) FROM provider_model_catalog WHERE provider_id = ?1",
+            params![provider_id], |row| row.get(0))
+            .map_err(|e| DomainError::Validation(e.to_string()))
     }
 
     pub fn list_catalog_models(
@@ -300,8 +316,13 @@ impl ProviderRepository {
     }
 
     pub fn save_oauth_token(&self, token: &OAuthTokenRecord) -> Result<(), DomainError> {
-        let conn = self.db.lock()?;
-        conn.execute(
+        let mut conn = self.db.lock()?;
+        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let payload = serde_json::json!({"provider_id": token.provider_id, "service_type": token.service_type, "updated_at": token.updated_at}).to_string();
+        tx.execute("INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![custos_domain::new_id("credential"), "provider.credentials.updated", payload, chrono::Utc::now().to_rfc3339()])
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.execute(
             "INSERT INTO provider_oauth_tokens (
                 provider_id, service_type, access_token, refresh_token,
                 expires_at, token_type, scope, created_at, updated_at
@@ -313,6 +334,7 @@ impl ProviderRepository {
                 expires_at = excluded.expires_at,
                 token_type = excluded.token_type,
                 scope = excluded.scope,
+                created_at = excluded.created_at,
                 updated_at = excluded.updated_at",
             params![
                 token.provider_id,
@@ -327,6 +349,7 @@ impl ProviderRepository {
             ],
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
     }
 
@@ -404,5 +427,29 @@ impl ProviderRepository {
             list.push(r.map_err(|e| DomainError::Validation(e.to_string()))?);
         }
         Ok(list)
+    }
+}
+
+#[cfg(test)]
+mod catalog_snapshot_tests {
+    use super::*;
+    #[test]
+    fn verified_snapshot_replaces_models_and_records_outbox_atomically() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = crate::SqliteTaskStore::new(dir.path().join("catalog.db").to_str().unwrap()).unwrap();
+        let repo = store.providers();
+        let model = |id: &str| ModelCatalogOption { id: id.into(), label: id.into(), description: None,
+            provider_type: "openai".into(), is_default: false, default_effort: None, efforts: vec![],
+            supports_fast_mode: false, context_window: None, pricing: None };
+        repo.save_catalog_models("verified-probe:account", &[model("removed"), model("kept")]).unwrap();
+        let timestamp = repo.catalog_fetched_at("verified-probe:account").unwrap();
+        assert!(timestamp > 0);
+        repo.save_catalog_models("verified-probe:account", &[model("kept")]).unwrap();
+        let cached = repo.list_catalog_models(Some("verified-probe:account")).unwrap();
+        assert_eq!(cached.len(), 1); assert_eq!(cached[0].id, "kept");
+        assert!(repo.list_catalog_models(Some("other-account")).unwrap().is_empty());
+        let conn = repo.db.lock().unwrap();
+        let events: i64 = conn.query_row("SELECT COUNT(*) FROM outbox_messages WHERE topic = 'provider.models.probed'", [], |r| r.get(0)).unwrap();
+        assert_eq!(events, 2);
     }
 }

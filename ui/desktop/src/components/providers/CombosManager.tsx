@@ -16,10 +16,11 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { ModelCombo, ComboStrategy, ComboModelTarget, ProviderServiceId } from '@/types';
-import { CANONICAL_MODELS, ProviderIcon, getProviderInfo } from '@/components/chat/ModelSelector';
+import { getConnectedModelOptions, ProviderIcon, getProviderInfo } from '@/components/chat/ModelSelector';
 
 export const CombosManager: React.FC = () => {
-  const { combos, handleCreateCombo, handleUpdateCombo, handleDeleteCombo, showToast } = useAppContext();
+  const { combos, handleCreateCombo, handleUpdateCombo, handleDeleteCombo, showToast, connectedAccounts } = useAppContext();
+  const availableModels = getConnectedModelOptions(connectedAccounts);
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingCombo, setEditingCombo] = useState<ModelCombo | null>(null);
@@ -44,23 +45,8 @@ export const CombosManager: React.FC = () => {
     setName('');
     setDescription('');
     setStrategy('fallback');
-    setTargets([
-      {
-        modelId: 'claude-3-7-sonnet',
-        modelName: 'Claude 3.7 Sonnet',
-        providerId: 'anthropic',
-        providerName: 'Anthropic',
-        priority: 1,
-      },
-      {
-        modelId: 'gpt-4o',
-        modelName: 'GPT-4o',
-        providerId: 'openai',
-        providerName: 'OpenAI',
-        priority: 2,
-      },
-    ]);
-    setSelectedAddModel(CANONICAL_MODELS[2]?.id || 'gemini-2.5-flash');
+    setTargets([]);
+    setSelectedAddModel(availableModels[0]?.id || '');
     setEditingCombo(null);
     setIsCreateModalOpen(true);
   };
@@ -71,13 +57,13 @@ export const CombosManager: React.FC = () => {
     setDescription(combo.description);
     setStrategy(combo.strategy);
     setTargets([...combo.targets]);
-    setSelectedAddModel(CANONICAL_MODELS[0]?.id || '');
+    setSelectedAddModel(availableModels[0]?.id || '');
     setIsCreateModalOpen(true);
   };
 
   const handleAddTarget = () => {
     if (!selectedAddModel) return;
-    const model = CANONICAL_MODELS.find((m) => m.id === selectedAddModel);
+    const model = availableModels.find((m) => m.id === selectedAddModel);
     if (!model) return;
 
     if (targets.some((t) => t.modelId === model.id)) {
@@ -501,9 +487,9 @@ export const CombosManager: React.FC = () => {
                       onChange={(e) => setSelectedAddModel(e.target.value)}
                       className="flex-1 bg-surface-0 border border-border-default rounded-lg px-3 py-1.5 text-xs text-fg-editor focus:outline-none"
                     >
-                      {CANONICAL_MODELS.map((m) => (
+                      {availableModels.map((m) => (
                         <option key={m.id} value={m.id}>
-                          {m.name} ({m.providerName})
+                          {m.name} ({m.providerName}){m.badge === 'Cached' ? ' — Cached' : ''}
                         </option>
                       ))}
                     </select>

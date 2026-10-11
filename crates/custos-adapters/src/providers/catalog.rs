@@ -117,7 +117,7 @@ impl ModelCatalogService {
                 default_effort,
                 efforts,
                 supports_fast_mode: true,
-                context_window: pm.context_window.or(Some(128_000)),
+                context_window: pm.context_window,
                 pricing,
             });
         }

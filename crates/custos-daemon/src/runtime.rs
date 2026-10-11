@@ -1,7 +1,7 @@
 use crate::api::LocalApiDispatcher;
 use custos_adapters::harness::{ClaudeCodeHarnessAdapter, HarnessRegistry};
 use custos_adapters::providers::{
-    ClaudeProvider, CodexProvider, CredentialResolver, FakeProvider, LocalModelProvider,
+    ClaudeProvider, CredentialResolver, FakeProvider, LocalModelProvider,
     RouterModelProvider,
 };
 use custos_adapters::sandbox::SovereignDeveloperAdapter;
@@ -48,14 +48,6 @@ impl CustosRuntime {
     pub fn bootstrap(database_path: &str) -> Result<Self, DomainError> {
         let store = Arc::new(SqliteTaskStore::new(database_path)?);
 
-        // Wire live OpenAI provider with dynamic OAuth token & proactive refresh
-        let daemon_token_provider = Arc::new(DaemonOAuthTokenProvider {
-            store: store.clone(),
-        });
-        let openai_provider = custos_adapters::providers::openai_chat::OpenAiChatProvider::new()
-            .with_token_provider(daemon_token_provider);
-        let codex_provider = Arc::new(CodexProvider::with_provider(openai_provider));
-
         // Multi-provider router: dynamically dispatches to OpenAI, Anthropic, Gemini, DeepSeek, or Ollama/local
         let credential_resolver = Arc::new(DaemonCredentialResolver {
             store: store.clone(),
@@ -67,7 +59,7 @@ impl CustosRuntime {
             "fake" => Arc::new(FakeProvider::new("fake")),
             "claude" | "anthropic" => Arc::new(ClaudeProvider::new()),
             "local" => Arc::new(LocalModelProvider::new()),
-            "codex" => codex_provider.clone(),
+            "codex" => router_provider.clone(),
             _ => router_provider.clone(),
         };
 
@@ -204,63 +196,29 @@ impl CustosRuntime {
     }
 }
 
-struct DaemonOAuthTokenProvider {
-    store: Arc<SqliteTaskStore>,
-}
-
-#[async_trait::async_trait]
-impl custos_adapters::providers::openai_chat::TokenProvider for DaemonOAuthTokenProvider {
-    async fn get_access_token(&self) -> Result<String, DomainError> {
-        let repo = self.store.providers();
-        if let Ok(Some(tok)) = repo.get_oauth_token("openai") {
-            if tok.is_expired(120) {
-                if tok.refresh_token.is_some() {
-                    let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::default();
-                    if let Ok(refreshed) = manager.refresh_token("custos-openai-desktop", &tok).await {
-                        let _ = repo.save_oauth_token(&refreshed);
-                        tracing::info!("Proactively refreshed OAuth token before inference turn");
-                        return Ok(refreshed.access_token);
-                    }
-                }
-            }
-            return Ok(tok.access_token);
-        }
-
-        if let Ok(env_key) = std::env::var("OPENAI_API_KEY") {
-            if !env_key.trim().is_empty() {
-                return Ok(env_key.trim().to_string());
-            }
-        }
-
-        Err(DomainError::Validation(
-            "No OpenAI credentials found. Please authenticate via OAuth 2.0 PKCE or configure an API key in Settings.".into(),
-        ))
-    }
-}
-
 struct DaemonCredentialResolver {
     store: Arc<SqliteTaskStore>,
 }
 
 #[async_trait::async_trait]
 impl CredentialResolver for DaemonCredentialResolver {
+    async fn uses_oauth(&self, provider_id: &str) -> Result<bool, DomainError> {
+        Ok(self.store.providers().get_oauth_token(provider_id)?
+            .is_some_and(|tok| tok.refresh_token.is_some() || tok.scope.as_deref().is_some_and(|s| s.split_whitespace().any(|v| v == "openid"))))
+    }
     async fn get_token(&self, provider_id: &str) -> Result<Option<String>, DomainError> {
         let repo = self.store.providers();
-        if let Ok(Some(tok)) = repo.get_oauth_token(provider_id) {
+        if let Some(tok) = repo.get_oauth_token(provider_id)? {
             if tok.is_expired(120) {
-                if tok.refresh_token.is_some() {
-                    let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::default();
-                    let client_id = if provider_id == "openai" {
-                        "custos-openai-desktop"
-                    } else {
-                        "custos-desktop"
-                    };
-                    if let Ok(refreshed) = manager.refresh_token(client_id, &tok).await {
-                        let _ = repo.save_oauth_token(&refreshed);
-                        tracing::info!(provider = %provider_id, "Proactively refreshed OAuth token before model inference turn");
-                        return Ok(Some(refreshed.access_token));
-                    }
+                if tok.refresh_token.is_none() {
+                    return Err(DomainError::Validation("Provider credentials expired; reconnect the account".into()));
                 }
+                let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::default();
+                let refreshed = manager.refresh_token(
+                    &custos_adapters::providers::oauth_pkce::resolve_openai_client_id(), &tok
+                ).await?;
+                repo.save_oauth_token(&refreshed)?;
+                return Ok(Some(refreshed.access_token));
             }
             return Ok(Some(tok.access_token));
         }
@@ -297,3 +255,34 @@ impl CredentialResolver for DaemonCredentialResolver {
 }
 
 
+
+#[cfg(test)]
+mod credential_tests {
+    use super::*;
+    fn token(oauth: bool) -> custos_domain::OAuthTokenRecord {
+        custos_domain::OAuthTokenRecord { provider_id: "openai".into(), service_type: "openai".into(),
+            access_token: if oauth { "opaque-oauth" } else { "eyJ-api-key" }.into(),
+            refresh_token: if oauth { Some("refresh".into()) } else { None },
+            expires_at: i64::MAX / 2, token_type: "bearer".into(), scope: None, created_at: 1, updated_at: 1 }
+    }
+    #[tokio::test]
+    async fn credential_metadata_controls_authentication_not_token_prefix() {
+        let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+        let resolver = DaemonCredentialResolver { store: store.clone() };
+        store.providers().save_oauth_token(&token(true)).unwrap();
+        assert!(resolver.uses_oauth("openai").await.unwrap());
+        assert_eq!(resolver.get_token("openai").await.unwrap().unwrap(), "opaque-oauth");
+        store.providers().save_oauth_token(&token(false)).unwrap();
+        assert!(!resolver.uses_oauth("openai").await.unwrap());
+        assert_eq!(resolver.get_token("openai").await.unwrap().unwrap(), "eyJ-api-key");
+    }
+    #[tokio::test]
+    async fn expired_oauth_without_refresh_fails_closed() {
+        let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+        let resolver = DaemonCredentialResolver { store: store.clone() };
+        let mut expired = token(false); expired.scope = Some("openid".into()); expired.expires_at = 0;
+        store.providers().save_oauth_token(&expired).unwrap();
+        assert!(resolver.uses_oauth("openai").await.unwrap());
+        assert!(resolver.get_token("openai").await.unwrap_err().to_string().contains("expired"));
+    }
+}
