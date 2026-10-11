@@ -1,6 +1,7 @@
 export type ProviderAuthType = 'oauth' | 'api_key';
 
 export type ProviderServiceId =
+  | 'antigravity'
   | 'anthropic'
   | 'openai'
   | 'gemini'

@@ -1527,3 +1527,7 @@ input[type="checkbox"]:disabled {
   color: #e6edf3;
   tab-size: 2;
 }
+/* Provider authorization actions remain visible in every workbench theme. */
+.provider-oauth-action { background: #c98970; color: #171717; border: 1px solid #e3ad98; }
+.provider-oauth-action:hover { filter: brightness(1.12); }
+.provider-oauth-action:focus-visible { outline: 2px solid #f3d7cb; outline-offset: 2px; }

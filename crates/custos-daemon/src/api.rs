@@ -23,7 +23,7 @@ pub use crate::custos_local_api::{
     METHOD_NOTEBOOK_EXECUTE, METHOD_NOTEBOOK_INTERRUPT, METHOD_NOTEBOOK_RESET,
     METHOD_NOTEBOOK_STATUS, METHOD_NOTES_GET, METHOD_NOTES_HISTORY, METHOD_NOTES_LIST,
     METHOD_NOTES_SAVE, METHOD_OAUTH_AUTHORIZE, METHOD_OAUTH_DELETE, METHOD_OAUTH_EXCHANGE,
-    METHOD_OAUTH_GET, METHOD_OAUTH_REFRESH, METHOD_OAUTH_STATUS, METHOD_PROVIDERS_DELETE,
+    METHOD_OAUTH_GET, METHOD_OAUTH_REFRESH, METHOD_OAUTH_CANCEL, METHOD_OAUTH_STATUS, METHOD_PROVIDERS_DELETE,
     METHOD_PROVIDERS_GET, METHOD_PROVIDERS_LIST, METHOD_PROVIDERS_SAVE,
     METHOD_RESEARCH_ANCHORS_LIST, METHOD_RESEARCH_ANCHORS_SAVE, METHOD_RESEARCH_CLAIMS_LIST,
     METHOD_RESEARCH_CLAIMS_SAVE, METHOD_RESEARCH_HANDOFF_CODING, METHOD_RESEARCH_LINEAGE_LIST,
@@ -67,6 +67,8 @@ fn default_model_probe_base_url(provider_type: &str) -> Option<&'static str> {
         "openai" | "codex" => Some("https://api.openai.com/v1"),
         "anthropic" | "claude" => Some("https://api.anthropic.com/v1"),
         "gemini" | "google" => Some("https://generativelanguage.googleapis.com"),
+        "copilot" => Some("https://api.githubcopilot.com"),
+        "antigravity" => Some("https://cloudcode-pa.googleapis.com"),
         "deepseek" => Some("https://api.deepseek.com/v1"),
         "local" | "ollama" => Some("http://localhost:11434"),
         _ => None,
@@ -2598,17 +2600,18 @@ impl LocalApiDispatcher {
                             || tok
                                 .scope
                                 .as_deref()
-                                .is_some_and(|s| s.split_whitespace().any(|v| v == "openid"))
+                                .is_some_and(|s| !s.trim().is_empty())
                     });
                 let mut api_key_owned = explicit_key
                     .map(str::to_string)
                     .or_else(|| token_record.as_ref().map(|tok| tok.access_token.clone()));
                 if oauth {
                     if let Some(tok) = token_record.as_ref().filter(|tok| tok.is_expired(120)) {
-                        let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::default();
+                        let settings = match custos_adapters::providers::oauth_pkce::oauth_settings(&tok.service_type) { Ok(v) => v, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
+                        let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(&settings.0, &settings.1);
                         match manager
                             .refresh_token(
-                                &custos_adapters::providers::oauth_pkce::resolve_openai_client_id(),
+                                &settings.2,
                                 tok,
                             )
                             .await
@@ -2630,7 +2633,11 @@ impl LocalApiDispatcher {
                         }
                     }
                 }
-                let probe = if oauth && matches!(provider_type, "openai" | "codex") {
+                let probe = if oauth && provider_type == "copilot" {
+                    match api_key_owned.as_deref() { Some(token) => custos_adapters::providers::probe::probe_copilot_models(token).await, None => Err(custos_domain::DomainError::Validation("Copilot OAuth credentials missing".into())) }
+                } else if oauth && provider_type == "gemini" {
+                    match api_key_owned.as_deref() { Some(token) => custos_adapters::providers::antigravity::probe_codeassist_models("gemini", "https://cloudcode-pa.googleapis.com", token).await, None => Err(custos_domain::DomainError::Validation("Gemini OAuth credentials missing".into())) }
+                } else if oauth && matches!(provider_type, "openai" | "codex") {
                     match api_key_owned.as_deref() {
                         Some(token) => custos_adapters::providers::probe::probe_oauth_models(token).await,
                         None => Err(custos_domain::DomainError::Validation(
@@ -2641,7 +2648,7 @@ impl LocalApiDispatcher {
                     custos_adapters::providers::probe::probe_endpoint_models(
                         &base_url,
                         api_key_owned.as_deref(),
-                        provider_type,
+                        if oauth && provider_type == "anthropic" { "anthropic-oauth" } else { provider_type },
                     )
                     .await
                 };
@@ -2704,7 +2711,7 @@ impl LocalApiDispatcher {
                             || tok
                                 .scope
                                 .as_deref()
-                                .is_some_and(|s| s.split_whitespace().any(|v| v == "openid"))
+                                .is_some_and(|s| !s.trim().is_empty())
                     });
                     let cache_key = format!(
                         "verified-probe:{}:{}:{}:{}",
@@ -2883,23 +2890,40 @@ impl LocalApiDispatcher {
                     Ok(p) => p,
                     Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
                 };
+                if params.service_type.as_deref().or(params.provider_id.as_deref()) == Some("copilot") {
+                    let server = match self.oauth_callback_server.as_ref() { Some(v) => v, None => return ApiResponse::error(req.id, "OAuth callback server not configured") };
+                    return match custos_adapters::providers::oauth_pkce::start_copilot_device().await {
+                        Ok(mut device) => {
+                            if device.get("device_code").and_then(|v| v.as_str()).is_none() || device.get("user_code").and_then(|v| v.as_str()).is_none() { return ApiResponse::error(req.id, "Invalid GitHub device authorization response"); }
+                            server.start_copilot_device(device.clone());
+                            if let Some(object) = device.as_object_mut() { object.remove("device_code"); }
+                            device["flow_type"] = serde_json::json!("device_code");
+                            device["authorization_url"] = device.get("verification_uri").cloned().unwrap_or(serde_json::json!("https://github.com/login/device"));
+                            ApiResponse::success(req.id, device)
+                        }
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    };
+                }
+                let service = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
+                let settings = match custos_adapters::providers::oauth_pkce::oauth_settings(service) { Ok(v) => v, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
                 let auth_url = params
                     .auth_endpoint
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_AUTH_URL);
+                    .unwrap_or(&settings.0);
                 let token_url = params
                     .token_endpoint
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_TOKEN_URL);
+                    .unwrap_or(&settings.1);
                 let client_id = params
                     .client_id
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_CLIENT_ID);
+                    .unwrap_or(&settings.2);
+                let service_type_or_default = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
                 let redirect_uri = params
                     .redirect_uri
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_REDIRECT_URI);
-                let scope = params.scope.as_deref();
+                    .unwrap_or(if service_type_or_default == "anthropic" { "https://platform.claude.com/oauth/code/callback" } else if service_type_or_default == "antigravity" { "http://localhost:51121/oauth-callback" } else { custos_adapters::providers::oauth_pkce::DEFAULT_REDIRECT_URI });
+                let scope = params.scope.as_deref().or(Some(settings.3.as_str()));
 
                 let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(auth_url, token_url);
                 let challenge = custos_adapters::providers::oauth_pkce::OAuthPkceManager::generate_pkce_challenge();
@@ -2909,7 +2933,7 @@ impl LocalApiDispatcher {
                         // Start the loopback callback server on port 1455 if available
                         if let Some(ref cb_server) = self.oauth_callback_server {
                             let provider_id = params.provider_id.as_deref().unwrap_or("openai");
-                            let service_type = params.service_type.as_deref().unwrap_or("openai");
+                            let service_type = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
                             let pending = crate::oauth_callback_server::PendingOAuthContext {
                                 provider_id: provider_id.to_string(),
                                 service_type: service_type.to_string(),
@@ -2917,6 +2941,7 @@ impl LocalApiDispatcher {
                                 code_verifier: challenge.code_verifier.clone(),
                                 state: challenge.state.clone(),
                                 redirect_uri: redirect_uri.to_string(),
+                                expires_at: chrono::Utc::now().timestamp_millis() + 600_000,
                             };
                             if let Err(e) = cb_server.start_listening(pending).await {
                                 tracing::warn!(
@@ -2945,27 +2970,31 @@ impl LocalApiDispatcher {
                 };
 
                 let provider_id = params.provider_id.as_deref().unwrap_or("openai");
-                let service_type = params.service_type.as_deref().unwrap_or("openai");
+                let service_type = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
+                let settings = match custos_adapters::providers::oauth_pkce::oauth_settings(service_type) { Ok(v) => v, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
                 let client_id = params
                     .client_id
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_CLIENT_ID);
+                    .unwrap_or(&settings.2);
+                let service_type_or_default = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
                 let redirect_uri = params
                     .redirect_uri
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_REDIRECT_URI);
+                    .unwrap_or(if service_type_or_default == "anthropic" { "https://platform.claude.com/oauth/code/callback" } else if service_type_or_default == "antigravity" { "http://localhost:51121/oauth-callback" } else { custos_adapters::providers::oauth_pkce::DEFAULT_REDIRECT_URI });
                 let token_url = params
                     .token_endpoint
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_TOKEN_URL);
+                    .unwrap_or(&settings.1);
 
+                let callback_server = match self.oauth_callback_server.as_ref() { Some(v) => v, None => return ApiResponse::error(req.id, "OAuth callback server not configured") };
+                if let Err(e) = callback_server.validate_manual_callback(provider_id, &params.code_verifier, redirect_uri, &params.code_or_url) { return ApiResponse::error(req.id, e.to_string()); }
                 let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(
                     custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_AUTH_URL,
                     token_url,
                 );
 
                 match manager
-                    .exchange_code(
+                    .exchange_code_with_identity(
                         provider_id,
                         service_type,
                         client_id,
@@ -2975,35 +3004,30 @@ impl LocalApiDispatcher {
                     )
                     .await
                 {
-                    Ok(token_record) => {
-                        // Persist in provider_oauth_tokens
-                        if let Err(e) = providers_repo.save_oauth_token(&token_record) {
-                            return ApiResponse::error(req.id, format!("Failed to save OAuth token: {e}"));
-                        }
-
+                    Ok((token_record, identity)) => {
                         // Upsert matching provider config so it appears in UI as active
                         let now = chrono::Utc::now().timestamp_millis();
                         let masked = if token_record.access_token.len() > 8 {
-                            format!("{}••••••••", &token_record.access_token[..6])
+                            format!("{}••••••••", token_record.access_token.chars().take(6).collect::<String>())
                         } else {
                             "••••••••".to_string()
                         };
                         let prov_cfg = custos_domain::ProviderConfig {
                             id: provider_id.to_string(),
-                            name: format!("{} (OAuth)", if provider_id == "openai" { "OpenAI" } else { provider_id }),
+                            name: identity.unwrap_or_else(|| format!("{provider_id} (OAuth)")),
                             service_type: service_type.to_string(),
                             api_key_masked: masked,
                             status: "active".to_string(),
-                            endpoint_url: default_model_probe_base_url(service_type).map(str::to_string),
+                            endpoint_url: if service_type == "gemini" { Some("https://cloudcode-pa.googleapis.com".into()) } else { default_model_probe_base_url(service_type).map(str::to_string) },
                             default_model: None,
                             context_window: None,
                             fast_mode: Some(false),
                             created_at: now,
                             updated_at: now,
                         };
-                        let _ = providers_repo.save_provider(&prov_cfg);
+                        if let Err(e) = providers_repo.save_oauth_connection(&token_record, &prov_cfg) { return ApiResponse::error(req.id, e.to_string()); }
 
-                        match serde_json::to_value(&token_record) {
+                        match serde_json::to_value(serde_json::json!({"provider_id":token_record.provider_id,"service_type":token_record.service_type,"connected":true,"expires_at":token_record.expires_at,"scope":token_record.scope,"has_refresh_token":token_record.refresh_token.is_some()})) {
                             Ok(val) => ApiResponse::success(req.id, val),
                             Err(e) => ApiResponse::error(req.id, e.to_string()),
                         }
@@ -3027,11 +3051,12 @@ impl LocalApiDispatcher {
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
 
-                let client_id = params.client_id.as_deref().unwrap_or("custos-openai-desktop");
+                let settings = match custos_adapters::providers::oauth_pkce::oauth_settings(&existing.service_type) { Ok(v) => v, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
+                let client_id = params.client_id.as_deref().unwrap_or(&settings.2);
                 let token_url = params
                     .token_endpoint
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_TOKEN_URL);
+                    .unwrap_or(&settings.1);
                 let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(
                     custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_AUTH_URL,
                     token_url,
@@ -3042,7 +3067,7 @@ impl LocalApiDispatcher {
                         if let Err(e) = providers_repo.save_oauth_token(&refreshed) {
                             return ApiResponse::error(req.id, format!("Failed to update token: {e}"));
                         }
-                        match serde_json::to_value(&refreshed) {
+                        match serde_json::to_value(serde_json::json!({"provider_id":refreshed.provider_id,"service_type":refreshed.service_type,"connected":true,"expires_at":refreshed.expires_at,"scope":refreshed.scope,"has_refresh_token":refreshed.refresh_token.is_some()})) {
                             Ok(val) => ApiResponse::success(req.id, val),
                             Err(e) => ApiResponse::error(req.id, e.to_string()),
                         }
@@ -3097,6 +3122,10 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
+            METHOD_OAUTH_CANCEL => {
+                if let Some(server) = self.oauth_callback_server.as_ref() { server.cancel(); }
+                ApiResponse::success(req.id, serde_json::json!({"cancelled":true}))
+            }
             METHOD_OAUTH_STATUS => {
                 if let Some(ref cb_server) = self.oauth_callback_server {
                     let status_val = match cb_server.status() {
@@ -3106,8 +3135,8 @@ impl LocalApiDispatcher {
                         crate::oauth_callback_server::CallbackServerStatus::Listening { port } => {
                             serde_json::json!({ "status": "listening", "port": port })
                         }
-                        crate::oauth_callback_server::CallbackServerStatus::Exchanging { code } => {
-                            serde_json::json!({ "status": "exchanging", "code": code })
+                        crate::oauth_callback_server::CallbackServerStatus::Exchanging { .. } => {
+                            serde_json::json!({ "status": "exchanging" })
                         }
                         crate::oauth_callback_server::CallbackServerStatus::Completed { provider_id } => {
                             serde_json::json!({ "status": "completed", "provider_id": provider_id })

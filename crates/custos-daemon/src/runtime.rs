@@ -101,10 +101,11 @@ impl CustosRuntime {
                 // Check tokens expiring within the next 10 minutes (600 seconds)
                 let threshold_ms = now_ms + (600 * 1000);
                 if let Ok(expiring) = sweeper_store.providers().list_expiring_oauth_tokens(threshold_ms) {
-                    let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::default();
                     for tok in expiring {
+                        let settings = match custos_adapters::providers::oauth_pkce::oauth_settings(&tok.service_type) { Ok(v) => v, Err(_) => continue };
+                        let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(&settings.0, &settings.1);
                         tracing::info!(provider_id = %tok.provider_id, "Sweeper job refreshing expiring OAuth token");
-                        if let Ok(refreshed) = manager.refresh_token("custos-openai-desktop", &tok).await {
+                        if let Ok(refreshed) = manager.refresh_token(&settings.2, &tok).await {
                             let _ = sweeper_store.providers().save_oauth_token(&refreshed);
                             tracing::info!(provider_id = %tok.provider_id, "Sweeper job updated refreshed OAuth token in database");
                         }
@@ -204,7 +205,7 @@ struct DaemonCredentialResolver {
 impl CredentialResolver for DaemonCredentialResolver {
     async fn uses_oauth(&self, provider_id: &str) -> Result<bool, DomainError> {
         Ok(self.store.providers().get_oauth_token(provider_id)?
-            .is_some_and(|tok| tok.refresh_token.is_some() || tok.scope.as_deref().is_some_and(|s| s.split_whitespace().any(|v| v == "openid"))))
+            .is_some_and(|tok| tok.refresh_token.is_some() || tok.scope.as_deref().is_some_and(|s| !s.trim().is_empty())))
     }
     async fn get_token(&self, provider_id: &str) -> Result<Option<String>, DomainError> {
         let repo = self.store.providers();
@@ -213,9 +214,10 @@ impl CredentialResolver for DaemonCredentialResolver {
                 if tok.refresh_token.is_none() {
                     return Err(DomainError::Validation("Provider credentials expired; reconnect the account".into()));
                 }
-                let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::default();
+                let settings = custos_adapters::providers::oauth_pkce::oauth_settings(&tok.service_type)?;
+                let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(&settings.0, &settings.1);
                 let refreshed = manager.refresh_token(
-                    &custos_adapters::providers::oauth_pkce::resolve_openai_client_id(), &tok
+                    &settings.2, &tok
                 ).await?;
                 repo.save_oauth_token(&refreshed)?;
                 return Ok(Some(refreshed.access_token));

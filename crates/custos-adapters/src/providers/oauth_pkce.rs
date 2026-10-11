@@ -29,8 +29,7 @@ pub fn resolve_openai_client_id() -> String {
 /// Resolves standard OpenAI OAuth scope.
 /// Allows OPENAI_OAUTH_SCOPE override, defaulting to standard `openid profile email offline_access`.
 pub fn resolve_openai_scope() -> String {
-    std::env::var("OPENAI_OAUTH_SCOPE")
-        .unwrap_or_else(|_| DEFAULT_OPENAI_SCOPE.to_string())
+    std::env::var("OPENAI_OAUTH_SCOPE").unwrap_or_else(|_| DEFAULT_OPENAI_SCOPE.to_string())
 }
 
 /// Helper to extract `chatgpt_account_id` from a JWT access token's `https://api.openai.com/auth` claim.
@@ -48,7 +47,11 @@ pub fn extract_chatgpt_account_id(token: &str) -> Option<String> {
     let decoded = URL_SAFE_NO_PAD
         .decode(padded.trim_end_matches('='))
         .ok()
-        .or_else(|| base64::engine::general_purpose::STANDARD.decode(&padded).ok())?;
+        .or_else(|| {
+            base64::engine::general_purpose::STANDARD
+                .decode(&padded)
+                .ok()
+        })?;
     let val: serde_json::Value = serde_json::from_slice(&decoded).ok()?;
     val.get("https://api.openai.com/auth")
         .and_then(|auth| auth.get("chatgpt_account_id"))
@@ -75,6 +78,7 @@ pub struct OAuthAuthorizeUrlResult {
 #[derive(Debug, Clone, Deserialize)]
 struct TokenEndpointResponse {
     pub access_token: String,
+    pub id_token: Option<String>,
     pub token_type: Option<String>,
     pub expires_in: Option<i64>,
     pub refresh_token: Option<String>,
@@ -108,11 +112,11 @@ impl OAuthPkceManager {
 
     /// Generates high-entropy PKCE code_verifier and SHA-256 code_challenge per RFC 7636.
     pub fn generate_pkce_challenge() -> PkceChallenge {
-        let mut verifier_bytes = [0u8; 48];
+        let mut verifier_bytes = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut verifier_bytes);
         let code_verifier = URL_SAFE_NO_PAD.encode(verifier_bytes);
 
-        let mut state_bytes = [0u8; 16];
+        let mut state_bytes = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut state_bytes);
         let state = URL_SAFE_NO_PAD.encode(state_bytes);
 
@@ -163,6 +167,18 @@ impl OAuthPkceManager {
             .append_pair("code_challenge", &challenge.code_challenge)
             .append_pair("code_challenge_method", "S256")
             .append_pair("state", &challenge.state);
+        if self.auth_endpoint.contains("claude.ai") {
+            parsed_url
+                .query_pairs_mut()
+                .append_pair("code", "true")
+                .append_pair("prompt", "login");
+        }
+        if self.auth_endpoint.contains("accounts.google.com") {
+            parsed_url
+                .query_pairs_mut()
+                .append_pair("access_type", "offline")
+                .append_pair("prompt", "consent");
+        }
 
         Ok(OAuthAuthorizeUrlResult {
             authorization_url: parsed_url.to_string(),
@@ -202,10 +218,31 @@ impl OAuthPkceManager {
         provider_id: &str,
         service_type: &str,
         client_id: &str,
-        code_or_url: &str,
+        raw_code_or_url: &str,
         redirect_uri: &str,
         code_verifier: &str,
     ) -> Result<OAuthTokenRecord, DomainError> {
+        self.exchange_code_with_identity(
+            provider_id,
+            service_type,
+            client_id,
+            raw_code_or_url,
+            redirect_uri,
+            code_verifier,
+        )
+        .await
+        .map(|v| v.0)
+    }
+
+    pub async fn exchange_code_with_identity(
+        &self,
+        provider_id: &str,
+        service_type: &str,
+        client_id: &str,
+        code_or_url: &str,
+        redirect_uri: &str,
+        code_verifier: &str,
+    ) -> Result<(OAuthTokenRecord, Option<String>), DomainError> {
         let code = Self::extract_code_from_input(code_or_url);
         if code.is_empty() {
             return Err(DomainError::Validation(
@@ -233,15 +270,42 @@ impl OAuthPkceManager {
             ("code_verifier", code_verifier),
         ];
 
-        let form_body = url::form_urlencoded::Serializer::new(String::new())
+        let mut form_body = url::form_urlencoded::Serializer::new(String::new())
             .extend_pairs(params)
             .finish();
 
+        if service_google(&self.token_endpoint) {
+            let secret = google_oauth_secret(service_type, &effective_client_id)?;
+            form_body.push_str("&client_secret=");
+            form_body.push_str(
+                &url::form_urlencoded::byte_serialize(secret.as_bytes()).collect::<String>(),
+            );
+        }
+        let (content_type, request_body) =
+            if self.token_endpoint == "https://api.anthropic.com/v1/oauth/token" {
+                let mut object: std::collections::HashMap<String, String> =
+                    url::form_urlencoded::parse(form_body.as_bytes())
+                        .into_owned()
+                        .collect();
+                if let Some(code) = object.get("code").cloned() {
+                    if let Some((code, state)) = code.split_once('#') {
+                        object.insert("state".into(), state.into());
+                        object.insert("code".into(), code.into());
+                    }
+                }
+                (
+                    "application/json",
+                    serde_json::to_string(&object)
+                        .map_err(|e| DomainError::Validation(e.to_string()))?,
+                )
+            } else {
+                ("application/x-www-form-urlencoded", form_body)
+            };
         let resp = self
             .http_client
             .post(&self.token_endpoint)
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .body(form_body)
+            .header("Content-Type", content_type)
+            .body(request_body)
             .send()
             .await
             .map_err(|e| DomainError::Validation(format!("OAuth token request failed: {e}")))?;
@@ -265,17 +329,25 @@ impl OAuthPkceManager {
         let expires_in_secs = body.expires_in.unwrap_or(3600);
         let expires_at = now_ms + (expires_in_secs * 1000);
 
-        Ok(OAuthTokenRecord {
-            provider_id: provider_id.to_string(),
-            service_type: service_type.to_string(),
-            access_token: body.access_token,
-            refresh_token: body.refresh_token,
-            expires_at,
-            token_type: body.token_type.unwrap_or_else(|| "Bearer".into()),
-            scope: body.scope,
-            created_at: now_ms,
-            updated_at: now_ms,
-        })
+        let identity = oauth_identity(
+            service_type,
+            identity_token(service_type, &body.access_token, body.id_token.as_deref()),
+        )
+        .await?;
+        Ok((
+            OAuthTokenRecord {
+                provider_id: provider_id.to_string(),
+                service_type: service_type.to_string(),
+                access_token: body.access_token,
+                refresh_token: body.refresh_token,
+                expires_at,
+                token_type: body.token_type.unwrap_or_else(|| "Bearer".into()),
+                scope: body.scope.or_else(|| oauth_settings(service_type).ok().map(|v| v.3)),
+                created_at: now_ms,
+                updated_at: now_ms,
+            },
+            identity,
+        ))
     }
 
     /// Refreshes an expired access token using the stored refresh_token.
@@ -303,15 +375,42 @@ impl OAuthPkceManager {
             ("refresh_token", refresh_token.as_str()),
         ];
 
-        let form_body = url::form_urlencoded::Serializer::new(String::new())
+        let mut form_body = url::form_urlencoded::Serializer::new(String::new())
             .extend_pairs(params)
             .finish();
 
+        if service_google(&self.token_endpoint) {
+            let secret = google_oauth_secret(&existing.service_type, &effective_client_id)?;
+            form_body.push_str("&client_secret=");
+            form_body.push_str(
+                &url::form_urlencoded::byte_serialize(secret.as_bytes()).collect::<String>(),
+            );
+        }
+        let (content_type, request_body) =
+            if self.token_endpoint == "https://api.anthropic.com/v1/oauth/token" {
+                let mut object: std::collections::HashMap<String, String> =
+                    url::form_urlencoded::parse(form_body.as_bytes())
+                        .into_owned()
+                        .collect();
+                if let Some(code) = object.get("code").cloned() {
+                    if let Some((code, state)) = code.split_once('#') {
+                        object.insert("state".into(), state.into());
+                        object.insert("code".into(), code.into());
+                    }
+                }
+                (
+                    "application/json",
+                    serde_json::to_string(&object)
+                        .map_err(|e| DomainError::Validation(e.to_string()))?,
+                )
+            } else {
+                ("application/x-www-form-urlencoded", form_body)
+            };
         let resp = self
             .http_client
             .post(&self.token_endpoint)
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .body(form_body)
+            .header("Content-Type", content_type)
+            .body(request_body)
             .send()
             .await
             .map_err(|e| DomainError::Validation(format!("OAuth refresh request failed: {e}")))?;
@@ -339,9 +438,13 @@ impl OAuthPkceManager {
             provider_id: existing.provider_id.clone(),
             service_type: existing.service_type.clone(),
             access_token: body.access_token,
-            refresh_token: body.refresh_token.or_else(|| existing.refresh_token.clone()),
+            refresh_token: body
+                .refresh_token
+                .or_else(|| existing.refresh_token.clone()),
             expires_at,
-            token_type: body.token_type.unwrap_or_else(|| existing.token_type.clone()),
+            token_type: body
+                .token_type
+                .unwrap_or_else(|| existing.token_type.clone()),
             scope: body.scope.or_else(|| existing.scope.clone()),
             created_at: existing.created_at,
             updated_at: now_ms,
@@ -390,23 +493,25 @@ mod tests {
         let manager = OAuthPkceManager::default();
         let challenge = OAuthPkceManager::generate_pkce_challenge();
         let res = manager
-            .build_authorization_url(
-                "",
-                "",
-                None,
-                &challenge,
-            )
+            .build_authorization_url("", "", None, &challenge)
             .unwrap();
 
-        assert!(res.authorization_url.contains("client_id=app_EMoamEEZ73f0CkXaXp7hrann"));
-        assert!(res.authorization_url.contains("redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback"));
+        assert!(res
+            .authorization_url
+            .contains("client_id=app_EMoamEEZ73f0CkXaXp7hrann"));
+        assert!(res
+            .authorization_url
+            .contains("redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback"));
         assert_eq!(res.redirect_uri, "http://localhost:1455/auth/callback");
     }
 
     #[test]
     fn test_extract_code_from_input() {
         let raw = "code_123456789";
-        assert_eq!(OAuthPkceManager::extract_code_from_input(raw), "code_123456789");
+        assert_eq!(
+            OAuthPkceManager::extract_code_from_input(raw),
+            "code_123456789"
+        );
 
         let url = "http://localhost:1420/auth/callback?code=auth_code_abc&state=xyz";
         assert_eq!(
@@ -431,10 +536,408 @@ mod tests {
         let jwt = format!("{header}.{payload_b64}.{sig}");
 
         let account_id = extract_chatgpt_account_id(&jwt);
-        assert_eq!(account_id.as_deref(), Some("772c9eaf-a4ba-4606-b55a-a15c6b23e52a"));
+        assert_eq!(
+            account_id.as_deref(),
+            Some("772c9eaf-a4ba-4606-b55a-a15c6b23e52a")
+        );
 
         // Invalid JWT returns None
         assert_eq!(extract_chatgpt_account_id("sk-proj-12345"), None);
         assert_eq!(extract_chatgpt_account_id("bad.token"), None);
+    }
+}
+
+/// Provider-specific OAuth defaults; absent configuration never uses another issuer.
+pub fn oauth_settings(service: &str) -> Result<(String, String, String, String), DomainError> {
+    match service {
+        "openai" | "codex" => Ok((DEFAULT_OPENAI_AUTH_URL.into(), DEFAULT_OPENAI_TOKEN_URL.into(), resolve_openai_client_id(), resolve_openai_scope())),
+        "anthropic" => Ok(("https://claude.ai/oauth/authorize".into(), "https://api.anthropic.com/v1/oauth/token".into(), std::env::var("CLAUDE_OAUTH_CLIENT_ID").unwrap_or_else(|_| "9d1c250a-e61b-44d9-88ed-5944d1962f5e".into()), "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers".into())),
+        "gemini" => Ok(("https://accounts.google.com/o/oauth2/v2/auth".into(), "https://oauth2.googleapis.com/token".into(), google_oauth_client("gemini")?.0, "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile".into())),
+        "antigravity" => Ok(("https://accounts.google.com/o/oauth2/v2/auth".into(), "https://oauth2.googleapis.com/token".into(), google_oauth_client("antigravity")?.0, "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/cclog https://www.googleapis.com/auth/experimentsandconfigs".into())),
+        _ => Err(DomainError::Validation(format!("OAuth for {service} requires a verified client and inference configuration; this provider is not configured"))),
+    }
+}
+
+// ID tokens supply display claims for Codex; network identity APIs require access tokens.
+fn identity_token<'a>(service: &str, access_token: &'a str, id_token: Option<&'a str>) -> &'a str {
+    if matches!(service, "openai" | "codex") {
+        id_token.unwrap_or(access_token)
+    } else {
+        access_token
+    }
+}
+
+pub async fn oauth_identity(service: &str, token: &str) -> Result<Option<String>, DomainError> {
+    let endpoint = if service == "anthropic" {
+        "https://api.anthropic.com/api/claude_cli/bootstrap"
+    } else {
+        "https://www.googleapis.com/oauth2/v2/userinfo"
+    };
+    oauth_identity_at(service, token, endpoint).await
+}
+
+async fn oauth_identity_at(service: &str, token: &str, endpoint: &str) -> Result<Option<String>, DomainError> {
+    if matches!(service, "antigravity" | "gemini" | "anthropic") {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(15))
+            .build()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let response = client
+            .get(endpoint)
+            .header("anthropic-beta", "oauth-2025-04-20")
+            .header("User-Agent", "claude-cli/2.1.280 (external, cli)")
+            .bearer_auth(token)
+            .send()
+            .await
+            .map_err(|e| DomainError::Validation(format!("OAuth {service} identity lookup failed: {e}")))?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(DomainError::Validation(format!("OAuth {service} identity lookup returned HTTP {status}; token exchange succeeded, but account identity could not be fetched")));
+        }
+        let value: serde_json::Value = response
+            .json()
+            .await
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        return Ok(value
+            .get("email")
+            .or_else(|| value.pointer("/oauth_account/account_email"))
+            .and_then(|v| v.as_str())
+            .map(str::to_string));
+    }
+    let raw = token
+        .split('.')
+        .nth(1)
+        .and_then(|v| URL_SAFE_NO_PAD.decode(v).ok());
+    Ok(raw
+        .and_then(|v| serde_json::from_slice::<serde_json::Value>(&v).ok())
+        .and_then(|v| v.get("email").and_then(|v| v.as_str()).map(str::to_string)))
+}
+
+fn service_google(endpoint: &str) -> bool {
+    endpoint == "https://oauth2.googleapis.com/token"
+}
+
+#[cfg(test)]
+mod provider_oauth_tests {
+    use super::*;
+    #[test]
+    fn antigravity_authorization_has_google_issuer_and_pkce() {
+        let settings = ("https://accounts.google.com/o/oauth2/v2/auth", "https://oauth2.googleapis.com/token", "test-google-client", "https://www.googleapis.com/auth/cloud-platform");
+        let result = OAuthPkceManager::new(settings.0, settings.1)
+            .build_authorization_url(
+                &settings.2,
+                "http://localhost:51121/oauth-callback",
+                Some(&settings.3),
+                &OAuthPkceManager::generate_pkce_challenge(),
+            )
+            .unwrap();
+        let url = Url::parse(&result.authorization_url).unwrap();
+        assert_eq!(url.host_str(), Some("accounts.google.com"));
+        let query: std::collections::HashMap<_, _> = url.query_pairs().collect();
+        assert_eq!(
+            query.get("code_challenge_method").map(|v| v.as_ref()),
+            Some("S256")
+        );
+        assert_eq!(
+            query.get("access_type").map(|v| v.as_ref()),
+            Some("offline")
+        );
+        assert!(oauth_settings("copilot").is_err());
+    }
+    #[test]
+    fn google_credentials_are_required_and_provider_scoped() {
+        for service in ["gemini", "antigravity"] {
+            let error = google_oauth_client_with(service, |_| None).unwrap_err().to_string();
+            assert!(error.contains("CLIENT_ID"));
+            let error = google_oauth_client_with(service, |name| if name.ends_with("CLIENT_ID") { Some("test-client".into()) } else { Some("  ".into()) }).unwrap_err().to_string();
+            assert!(error.contains("CLIENT_SECRET"));
+            let prefix = if service == "gemini" { "GEMINI_" } else { "ANTIGRAVITY_" };
+            let pair = google_oauth_client_with(service, |name| {
+                assert!(name.starts_with(prefix));
+                Some(if name.ends_with("CLIENT_ID") { "test-client" } else { "test-secret" }.into())
+            }).unwrap();
+            assert_eq!(pair, ("test-client".into(), "test-secret".into()));
+        }
+    }
+
+    #[test]
+    fn claude_authorization_matches_native_pkce_request() {
+        let settings = oauth_settings("anthropic").unwrap();
+        let challenge = OAuthPkceManager::generate_pkce_challenge();
+        assert_eq!(challenge.state.len(), 43);
+        assert_eq!(challenge.code_verifier.len(), 43);
+        let result = OAuthPkceManager::new(settings.0, settings.1).build_authorization_url(
+            &settings.2, "https://platform.claude.com/oauth/code/callback", Some(&settings.3), &challenge
+        ).unwrap();
+        let url = Url::parse(&result.authorization_url).unwrap();
+        let query: std::collections::HashMap<_, _> = url.query_pairs().collect();
+        assert_eq!(url.host_str(), Some("claude.ai"));
+        assert_eq!(query.get("client_id").unwrap(), "9d1c250a-e61b-44d9-88ed-5944d1962f5e");
+        assert_eq!(query.get("code").unwrap(), "true");
+        assert_eq!(query.get("scope").unwrap(), "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers");
+        assert_eq!(query.get("redirect_uri").unwrap(), "https://platform.claude.com/oauth/code/callback");
+        assert_eq!(query.get("code_challenge_method").unwrap(), "S256");
+        assert_eq!(query.get("state").unwrap().as_ref(), challenge.state);
+    }
+
+    #[tokio::test]
+    async fn google_identity_uses_access_token_when_id_token_is_present() {
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        use wiremock::matchers::{method, path, header};
+        let server = MockServer::start().await;
+        Mock::given(method("GET")).and(path("/userinfo"))
+            .and(header("authorization", "Bearer access-token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"email":"person@example.com"})))
+            .expect(2).mount(&server).await;
+        for service in ["antigravity", "gemini"] {
+            let token = identity_token(service, "access-token", Some("id-token"));
+            assert_eq!(oauth_identity_at(service, token, &format!("{}/userinfo", server.uri())).await.unwrap().as_deref(), Some("person@example.com"));
+        }
+        assert_eq!(identity_token("openai", "access-token", Some("id-token")), "id-token");
+        assert_eq!(identity_token("anthropic", "access-token", Some("id-token")), "access-token");
+        server.reset().await;
+        Mock::given(path("/userinfo")).respond_with(ResponseTemplate::new(401)).mount(&server).await;
+        let error = oauth_identity_at("antigravity", "bad-token", &format!("{}/userinfo", server.uri())).await.unwrap_err().to_string();
+        assert!(error.contains("identity lookup returned HTTP 401"));
+        assert!(error.contains("token exchange succeeded"));
+    }
+
+    #[tokio::test]
+    async fn id_token_identity_is_used_for_openai() {
+        let payload = URL_SAFE_NO_PAD.encode(br#"{"email":"person@example.com"}"#);
+        assert_eq!(
+            oauth_identity("openai", &format!("header.{payload}.sig"))
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("person@example.com")
+        );
+    }
+}
+
+fn google_oauth_client(service: &str) -> Result<(String, String), DomainError> {
+    google_oauth_client_with(service, |name| std::env::var(name).ok())
+}
+
+fn google_oauth_client_with(service: &str, read: impl Fn(&str) -> Option<String>) -> Result<(String, String), DomainError> {
+    let (id_name, secret_name) = match service {
+        "gemini" => ("GEMINI_OAUTH_CLIENT_ID", "GEMINI_OAUTH_CLIENT_SECRET"),
+        "antigravity" => ("ANTIGRAVITY_OAUTH_CLIENT_ID", "ANTIGRAVITY_OAUTH_CLIENT_SECRET"),
+        _ => return Err(DomainError::Validation("Unsupported Google OAuth provider".into())),
+    };
+    let required = |name: &str| read(name).map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+        .ok_or_else(|| DomainError::Validation(format!("Google OAuth is not configured: set {name} in the daemon environment")));
+    Ok((required(id_name)?, required(secret_name)?))
+}
+
+fn google_oauth_secret(service: &str, client: &str) -> Result<String, DomainError> {
+    let (configured_client, secret) = google_oauth_client(service)?;
+    if configured_client != client {
+        return Err(DomainError::Validation("Google OAuth client does not match daemon configuration; use the client that issued this account's tokens".into()));
+    }
+    Ok(secret)
+}
+
+/// Start GitHub's real device grant. The first-party Copilot app supports this flow.
+pub async fn start_copilot_device() -> Result<serde_json::Value, DomainError> {
+    tracing::debug!(provider_id = "copilot", "Starting GitHub device authorization");
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+    let form = url::form_urlencoded::Serializer::new(String::new())
+        .extend_pairs([
+            ("client_id", "Iv1.b507a08c87ecfe98"),
+            ("scope", "read:user user:email"),
+        ])
+        .finish();
+    client
+        .post("https://github.com/login/device/code")
+        .header("Accept", "application/json")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(form)
+        .send()
+        .await
+        .map_err(|e| DomainError::Validation(e.to_string()))?
+        .error_for_status()
+        .map_err(|e| DomainError::Validation(e.to_string()))?
+        .json()
+        .await
+        .map_err(|e| DomainError::Validation(e.to_string()))
+}
+
+pub async fn complete_copilot_device(
+    device: &serde_json::Value,
+) -> Result<(OAuthTokenRecord, Option<String>), DomainError> {
+    let code = device
+        .get("device_code")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| {
+            DomainError::Validation("GitHub device response lacks device_code".into())
+        })?;
+    let expiry = device
+        .get("expires_in")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(900)
+        .min(1800);
+    let mut interval = device
+        .get("interval")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(5)
+        .max(5);
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(expiry);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+    while tokio::time::Instant::now() < deadline {
+        tokio::time::sleep(std::time::Duration::from_secs(interval)).await;
+        let form = url::form_urlencoded::Serializer::new(String::new())
+            .extend_pairs([
+                ("client_id", "Iv1.b507a08c87ecfe98"),
+                ("device_code", code),
+                ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
+            ])
+            .finish();
+        let value: serde_json::Value = client
+            .post("https://github.com/login/oauth/access_token")
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .body(form)
+            .send()
+            .await
+            .map_err(|e| DomainError::Validation(e.to_string()))?
+            .error_for_status()
+            .map_err(|e| DomainError::Validation(e.to_string()))?
+            .json()
+            .await
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        if let Some(token) = value.get("access_token").and_then(|v| v.as_str()) {
+            let user: serde_json::Value = client
+                .get("https://api.github.com/user")
+                .header("User-Agent", "Custos")
+                .bearer_auth(token)
+                .send()
+                .await
+                .map_err(|e| DomainError::Validation(e.to_string()))?
+                .error_for_status()
+                .map_err(|e| DomainError::Validation(e.to_string()))?
+                .json()
+                .await
+                .map_err(|e| DomainError::Validation(e.to_string()))?;
+            let mut identity = user
+                .get("email")
+                .and_then(|v| v.as_str())
+                .map(str::to_string);
+            if identity.is_none() {
+                let emails: serde_json::Value = client
+                    .get("https://api.github.com/user/emails")
+                    .header("User-Agent", "Custos")
+                    .bearer_auth(token)
+                    .send()
+                    .await
+                    .map_err(|e| DomainError::Validation(e.to_string()))?
+                    .error_for_status()
+                    .map_err(|e| DomainError::Validation(e.to_string()))?
+                    .json()
+                    .await
+                    .map_err(|e| DomainError::Validation(e.to_string()))?;
+                identity = emails
+                    .as_array()
+                    .and_then(|items| {
+                        items
+                            .iter()
+                            .find(|v| v["primary"] == true && v["verified"] == true)
+                    })
+                    .and_then(|v| v["email"].as_str())
+                    .map(str::to_string);
+            }
+            if identity.is_none() {
+                identity = user
+                    .get("login")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_string);
+            }
+            let now = chrono::Utc::now().timestamp_millis();
+            return Ok((
+                OAuthTokenRecord {
+                    provider_id: "copilot".into(),
+                    service_type: "copilot".into(),
+                    access_token: token.into(),
+                    refresh_token: None,
+                    expires_at: i64::MAX / 2,
+                    token_type: "Bearer".into(),
+                    scope: Some("read:user user:email".into()),
+                    created_at: now,
+                    updated_at: now,
+                },
+                identity,
+            ));
+        }
+        match value.get("error").and_then(|v| v.as_str()) {
+            Some("authorization_pending") => (),
+            Some("slow_down") => interval = interval.saturating_add(5),
+            _ => {
+                return Err(DomainError::Validation(format!(
+                    "GitHub device authorization failed: {}",
+                    value
+                        .get("error")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("invalid response")
+                )))
+            }
+        }
+    }
+    Err(DomainError::Validation(
+        "GitHub device authorization expired; start again".into(),
+    ))
+}
+
+pub async fn copilot_session_token(token: &str) -> Result<String, DomainError> {
+    tracing::debug!(provider_id = "copilot", "Acquiring Copilot subscription token");
+    copilot_session_token_at(token, "https://api.github.com/copilot_internal/v2/token").await
+}
+
+async fn copilot_session_token_at(token: &str, endpoint: &str) -> Result<String, DomainError> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+    let value: serde_json::Value = client
+        .get(endpoint)
+        .bearer_auth(token)
+        .header("User-Agent", "GitHubCopilotChat/0.35.0")
+        .header("Accept", "application/json")
+        .send()
+        .await
+        .map_err(|e| DomainError::Validation(e.to_string()))?
+        .error_for_status()
+        .map_err(|e| {
+            DomainError::Validation(format!("Copilot subscription token unavailable: {e}"))
+        })?
+        .json()
+        .await
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+    value
+        .get("token")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+        .ok_or_else(|| DomainError::Validation("Copilot session response lacks token".into()))
+}
+
+#[cfg(test)]
+mod copilot_token_tests {
+    use super::*;
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use wiremock::matchers::{method, path, header};
+    #[tokio::test]
+    async fn copilot_session_exchange_requires_subscription_and_bearer_auth() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET")).and(path("/token")).and(header("authorization", "Bearer github-token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"token":"session-token"}))).expect(1).mount(&server).await;
+        assert_eq!(copilot_session_token_at("github-token", &format!("{}/token", server.uri())).await.unwrap(), "session-token");
+        server.reset().await;
+        Mock::given(path("/token")).respond_with(ResponseTemplate::new(403)).mount(&server).await;
+        assert!(copilot_session_token_at("github-token", &format!("{}/token", server.uri())).await.unwrap_err().to_string().contains("subscription"));
     }
 }

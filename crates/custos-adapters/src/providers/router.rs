@@ -150,6 +150,9 @@ impl RouterModelProvider {
     /// Determines the provider service type from a given model identifier
     pub fn classify_provider(model: &str) -> &'static str {
         let m = model.trim().to_lowercase();
+        if m.starts_with("copilot/") { return "copilot"; }
+        if m.starts_with("gemini-oauth/") { return "gemini-oauth"; }
+        if m.starts_with("antigravity/") { return "antigravity"; }
         if m.starts_with("gpt-")
             || m.starts_with("o1")
             || m.starts_with("o3")
@@ -235,6 +238,9 @@ impl RouterModelProvider {
             req_builder = req_builder.bearer_auth(t);
         }
 
+        if provider_label == "GitHub Copilot" {
+            req_builder = req_builder.header("User-Agent", "GitHubCopilotChat/0.35.0").header("Editor-Version", "vscode/1.107.0").header("Editor-Plugin-Version", "copilot-chat/0.35.0").header("Copilot-Integration-Id", "vscode-chat");
+        }
         let resp = req_builder.send().await.map_err(|e| {
             DomainError::Validation(format!("{provider_label} transport error: {e}"))
         })?;
@@ -383,16 +389,10 @@ impl RouterModelProvider {
             "Dispatching live Anthropic Claude completion"
         );
 
-        let resp = self
-            .http_client
-            .post(&endpoint)
-            .header("x-api-key", token)
-            .header("anthropic-version", "2023-06-01")
-            .header("content-type", "application/json")
-            .json(&payload)
-            .send()
-            .await
-            .map_err(|e| DomainError::Validation(format!("Anthropic transport error: {e}")))?;
+        let oauth = self.resolver.uses_oauth("anthropic").await?;
+        let mut builder = self.http_client.post(&endpoint).header("anthropic-version", "2023-06-01").json(&payload);
+        builder = if oauth { builder.bearer_auth(token).header("anthropic-beta", "oauth-2025-04-20").header("User-Agent", "claude-cli/2.1.280 (external, cli)").header("X-App", "cli") } else { builder.header("x-api-key", token) };
+        let resp = builder.send().await.map_err(|e| DomainError::Validation(format!("Anthropic transport error: {e}")))?;
 
         let status = resp.status();
         if !status.is_success() {
@@ -436,6 +436,21 @@ impl ModelProvider for RouterModelProvider {
         let target_provider = Self::classify_provider(requested_model);
 
         match target_provider {
+            "copilot" => {
+                let github = self.resolver.get_token("copilot").await?.ok_or_else(|| DomainError::Validation("Connect GitHub Copilot first".into()))?;
+                let token = super::oauth_pkce::copilot_session_token(&github).await?;
+                let model = requested_model.strip_prefix("copilot/").ok_or_else(|| DomainError::Validation("Invalid Copilot model".into()))?;
+                self.execute_openai_compatible("https://api.githubcopilot.com", Some(&token), model, req, "GitHub Copilot").await
+            }
+            "gemini-oauth" => {
+                let token = self.resolver.get_token("gemini").await?.ok_or_else(|| DomainError::Validation("Connect Gemini OAuth first".into()))?;
+                super::antigravity::generate_codeassist_content("gemini", "https://cloudcode-pa.googleapis.com", &token, req).await
+            }
+            "antigravity" => {
+                let token = self.resolver.get_token("antigravity").await?.ok_or_else(|| DomainError::Validation("Connect Antigravity with OAuth first".into()))?;
+                let base = self.resolver.get_endpoint_url("antigravity").await?.unwrap_or_else(|| "https://cloudcode-pa.googleapis.com".into());
+                super::antigravity::generate_content(&base, &token, req).await
+            }
             "openai" => {
                 let oauth = self.resolver.uses_oauth("openai").await?;
                 let token = self.resolver.get_token("openai").await?.ok_or_else(|| {

@@ -154,6 +154,7 @@ function mapBackendKey(k: any): ClientApiKey {
 }
 
 const PROVIDER_LABELS: Record<ProviderServiceId, string> = {
+  antigravity: 'Google Antigravity',
   copilot: 'GitHub Copilot',
   gemini: 'Google Gemini',
   openai: 'OpenAI Platform',
@@ -167,6 +168,8 @@ const PROVIDER_LABELS: Record<ProviderServiceId, string> = {
 
 const normalizeProviderServiceId = (service?: string): ProviderServiceId => {
   const s = (service || '').toLowerCase();
+  if (s.includes('antigravity')) return 'antigravity';
+  if (s.includes('copilot')) return 'copilot';
   if (s.includes('anthropic') || s.includes('claude')) return 'anthropic';
   if (s.includes('openai') || s.includes('gpt') || s.includes('codex')) return 'openai';
   if (s.includes('gemini') || s.includes('google')) return 'gemini';
@@ -179,6 +182,10 @@ const normalizeProviderServiceId = (service?: string): ProviderServiceId => {
 
 const defaultProbeBaseUrl = (service: ProviderServiceId): string | undefined => {
   switch (service) {
+    case 'copilot':
+      return 'https://api.githubcopilot.com';
+    case 'antigravity':
+      return 'https://cloudcode-pa.googleapis.com';
     case 'openai':
       return 'https://api.openai.com/v1';
     case 'anthropic':
@@ -213,7 +220,7 @@ const safeIsoFromMillis = (value?: number): string => {
 };
 
 const tokenLooksOauth = (token?: OAuthTokenRecord | null): boolean =>
-  Boolean(token?.has_refresh_token || token?.refresh_token || token?.scope?.split(/\s+/).includes('openid'));
+  Boolean(token?.has_refresh_token || token?.refresh_token || token?.scope?.trim());
 
 const uniqueModels = (models: string[]): string[] => {
   const seen = new Set<string>();
@@ -616,11 +623,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           id: provider.id,
           providerId: serviceId,
           providerName: PROVIDER_LABELS[serviceId] || provider.name,
-          accountName: provider.name || PROVIDER_LABELS[serviceId] || provider.id,
+          accountName: authType === 'oauth' ? `${PROVIDER_LABELS[serviceId]} Account` : provider.name || PROVIDER_LABELS[serviceId] || provider.id,
           authType,
           apiKeyMasked: authType === 'api_key' ? provider.api_key_masked : undefined,
           endpointUrl,
-          oauthTier: authType === 'oauth' ? 'Connected via PKCE' : undefined,
+          oauthEmail: authType === 'oauth' && provider.name.includes('@') ? provider.name : undefined,
+          oauthTier: authType === 'oauth' ? (serviceId === 'copilot' ? 'Connected via Device Flow' : 'Connected via PKCE') : undefined,
           oauthExpiresAt: tokenMeta?.expires_at ? safeIsoFromMillis(tokenMeta.expires_at) : undefined,
           status: connected ? 'active' : 'offline',
           statusLabel: connected ? 'Connected' : 'Offline',

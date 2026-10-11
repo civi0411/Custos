@@ -132,6 +132,7 @@ pub const METHOD_OAUTH_EXCHANGE: &str = "v1.oauth.exchange";
 pub const METHOD_OAUTH_REFRESH: &str = "v1.oauth.refresh";
 pub const METHOD_OAUTH_GET: &str = "v1.oauth.get";
 pub const METHOD_OAUTH_DELETE: &str = "v1.oauth.delete";
+pub const METHOD_OAUTH_CANCEL: &str = "v1.oauth.cancel";
 pub const METHOD_OAUTH_STATUS: &str = "v1.oauth.status";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
