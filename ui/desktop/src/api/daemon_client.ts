@@ -480,6 +480,10 @@ export class DaemonClient {
     return this.request<{ deleted: boolean; provider_id: string }>('v1.oauth.delete', { provider_id });
   }
 
+  async cancelOAuth(): Promise<{ cancelled: boolean }> {
+    return this.request('v1.oauth.cancel', {});
+  }
+
   async getOAuthStatus(): Promise<OAuthStatusResult> {
     return this.request<OAuthStatusResult>('v1.oauth.status', {});
   }

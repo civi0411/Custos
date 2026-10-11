@@ -1042,10 +1042,15 @@ export interface ProviderConfigRecord {
 
 export interface OAuthAuthorizeResult {
   authorization_url: string;
-  code_verifier: string;
-  code_challenge: string;
-  state: string;
-  redirect_uri: string;
+  code_verifier?: string;
+  code_challenge?: string;
+  state?: string;
+  redirect_uri?: string;
+  flow_type?: 'authorization_code_pkce' | 'device_code';
+  user_code?: string;
+  verification_uri?: string;
+  expires_in?: number;
+  interval?: number;
 }
 
 export interface OAuthTokenRecord {

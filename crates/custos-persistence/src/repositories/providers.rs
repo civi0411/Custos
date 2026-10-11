@@ -81,14 +81,35 @@ impl ProviderRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         if let Some(first) = rows.next() {
-            Ok(Some(first.map_err(|e| DomainError::Validation(e.to_string()))?))
+            Ok(Some(
+                first.map_err(|e| DomainError::Validation(e.to_string()))?,
+            ))
         } else {
             Ok(None)
         }
     }
 
     pub fn save_provider(&self, config: &ProviderConfig) -> Result<(), DomainError> {
-        let conn = self.db.lock()?;
+        let mut conn = self.db.lock()?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        Self::write_provider(&tx, config)?;
+        Self::record_provider_event(
+            &tx,
+            "provider.config.updated",
+            &config.id,
+            &config.service_type,
+            config.updated_at,
+        )?;
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))
+    }
+
+    fn write_provider(
+        conn: &rusqlite::Connection,
+        config: &ProviderConfig,
+    ) -> Result<(), DomainError> {
         let fast_mode_int = config.fast_mode.map(|b| if b { 1i64 } else { 0i64 });
         let context_win_int = config.context_window.map(|w| w as i64);
 
@@ -126,7 +147,10 @@ impl ProviderRepository {
 
     pub fn delete_provider(&self, id: &str) -> Result<bool, DomainError> {
         let conn = self.db.lock()?;
-        let _ = conn.execute("DELETE FROM provider_model_catalog WHERE provider_id = ?1", params![id]);
+        let _ = conn.execute(
+            "DELETE FROM provider_model_catalog WHERE provider_id = ?1",
+            params![id],
+        );
         let changed = conn
             .execute("DELETE FROM providers_config WHERE id = ?1", params![id])
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -139,19 +163,37 @@ impl ProviderRepository {
         models: &[ModelCatalogOption],
     ) -> Result<(), DomainError> {
         let mut conn = self.db.lock()?;
-        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         let now = chrono::Utc::now().to_rfc3339();
-        let payload = serde_json::to_string(&serde_json::json!({"provider_id": provider_id, "models": models})).map_err(|e| DomainError::Validation(e.to_string()))?;
-        tx.execute("INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
-            params![custos_domain::new_id("catalog"), "provider.models.probed", payload, now])
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
-        tx.execute("DELETE FROM provider_model_catalog WHERE provider_id = ?1", params![provider_id])
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let payload = serde_json::to_string(
+            &serde_json::json!({"provider_id": provider_id, "models": models}),
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.execute(
+            "INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![
+                custos_domain::new_id("catalog"),
+                "provider.models.probed",
+                payload,
+                now
+            ],
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.execute(
+            "DELETE FROM provider_model_catalog WHERE provider_id = ?1",
+            params![provider_id],
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
         for m in models {
             let row_id = format!("{}:{}", provider_id, m.id);
             let ctx_int = m.context_window.map(|w| w as i64);
             let fast_mode_int = if m.supports_fast_mode { 1i64 } else { 0i64 };
-            let pricing_json = m.pricing.as_ref().and_then(|p| serde_json::to_string(p).ok());
+            let pricing_json = m
+                .pricing
+                .as_ref()
+                .and_then(|p| serde_json::to_string(p).ok());
             let fetched_at = chrono::Utc::now().timestamp_millis();
 
             tx.execute(
@@ -181,7 +223,8 @@ impl ProviderRepository {
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
         }
-        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
     }
 
@@ -299,7 +342,13 @@ impl ProviderRepository {
                 name = excluded.name,
                 token = excluded.token,
                 revoked = excluded.revoked",
-            params![key.id, key.name, key.token, key.created_at, if key.revoked { 1 } else { 0 }],
+            params![
+                key.id,
+                key.name,
+                key.token,
+                key.created_at,
+                if key.revoked { 1 } else { 0 }
+            ],
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
@@ -317,12 +366,75 @@ impl ProviderRepository {
 
     pub fn save_oauth_token(&self, token: &OAuthTokenRecord) -> Result<(), DomainError> {
         let mut conn = self.db.lock()?;
-        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
-        let payload = serde_json::json!({"provider_id": token.provider_id, "service_type": token.service_type, "updated_at": token.updated_at}).to_string();
-        tx.execute("INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
-            params![custos_domain::new_id("credential"), "provider.credentials.updated", payload, chrono::Utc::now().to_rfc3339()])
+        let tx = conn
+            .transaction()
             .map_err(|e| DomainError::Validation(e.to_string()))?;
-        tx.execute(
+        Self::write_oauth_token(&tx, token)?;
+        Self::record_provider_event(
+            &tx,
+            "provider.credentials.updated",
+            &token.provider_id,
+            &token.service_type,
+            token.updated_at,
+        )?;
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))
+    }
+
+    pub fn save_oauth_connection(
+        &self,
+        token: &OAuthTokenRecord,
+        config: &ProviderConfig,
+    ) -> Result<(), DomainError> {
+        if token.provider_id != config.id || token.service_type != config.service_type {
+            return Err(DomainError::Validation(
+                "OAuth credential and provider identity mismatch".into(),
+            ));
+        }
+        let mut conn = self.db.lock()?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        Self::write_oauth_token(&tx, token)?;
+        Self::write_provider(&tx, config)?;
+        Self::record_provider_event(
+            &tx,
+            "provider.oauth.connected",
+            &config.id,
+            &config.service_type,
+            config.updated_at,
+        )?;
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))
+    }
+
+    fn record_provider_event(
+        conn: &rusqlite::Connection,
+        topic: &str,
+        provider_id: &str,
+        service_type: &str,
+        updated_at: i64,
+    ) -> Result<(), DomainError> {
+        let payload =
+            serde_json::json!({"provider_id":provider_id,"service_type":service_type,"updated_at":updated_at}).to_string();
+        conn.execute(
+            "INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![
+                custos_domain::new_id("provider"),
+                topic,
+                payload,
+                chrono::Utc::now().to_rfc3339()
+            ],
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+        Ok(())
+    }
+
+    fn write_oauth_token(
+        conn: &rusqlite::Connection,
+        token: &OAuthTokenRecord,
+    ) -> Result<(), DomainError> {
+        conn.execute(
             "INSERT INTO provider_oauth_tokens (
                 provider_id, service_type, access_token, refresh_token,
                 expires_at, token_type, scope, created_at, updated_at
@@ -349,11 +461,13 @@ impl ProviderRepository {
             ],
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
-        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
     }
 
-    pub fn get_oauth_token(&self, provider_id: &str) -> Result<Option<OAuthTokenRecord>, DomainError> {
+    pub fn get_oauth_token(
+        &self,
+        provider_id: &str,
+    ) -> Result<Option<OAuthTokenRecord>, DomainError> {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
@@ -380,7 +494,9 @@ impl ProviderRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         if let Some(row) = rows.next() {
-            Ok(Some(row.map_err(|e| DomainError::Validation(e.to_string()))?))
+            Ok(Some(
+                row.map_err(|e| DomainError::Validation(e.to_string()))?,
+            ))
         } else {
             Ok(None)
         }
@@ -396,7 +512,10 @@ impl ProviderRepository {
         Ok(())
     }
 
-    pub fn list_expiring_oauth_tokens(&self, threshold_ms: i64) -> Result<Vec<OAuthTokenRecord>, DomainError> {
+    pub fn list_expiring_oauth_tokens(
+        &self,
+        threshold_ms: i64,
+    ) -> Result<Vec<OAuthTokenRecord>, DomainError> {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
@@ -434,22 +553,104 @@ impl ProviderRepository {
 mod catalog_snapshot_tests {
     use super::*;
     #[test]
+    fn oauth_connection_is_atomic_and_outbox_is_redacted() {
+        let store = crate::SqliteTaskStore::new_in_memory().unwrap();
+        let repo = store.providers();
+        let token = OAuthTokenRecord {
+            provider_id: "antigravity".into(),
+            service_type: "antigravity".into(),
+            access_token: "secret-access".into(),
+            refresh_token: Some("secret-refresh".into()),
+            expires_at: 10000,
+            token_type: "Bearer".into(),
+            scope: Some("cloud-platform".into()),
+            created_at: 1,
+            updated_at: 1,
+        };
+        let config = ProviderConfig {
+            id: "antigravity".into(),
+            service_type: "antigravity".into(),
+            name: "person@example.com".into(),
+            api_key_masked: "oauth".into(),
+            status: "active".into(),
+            endpoint_url: Some("https://cloudcode-pa.googleapis.com".into()),
+            default_model: None,
+            context_window: None,
+            fast_mode: None,
+            created_at: 1,
+            updated_at: 1,
+        };
+        repo.save_oauth_connection(&token, &config).unwrap();
+        assert_eq!(
+            repo.get_provider("antigravity").unwrap().unwrap().name,
+            "person@example.com"
+        );
+        {
+            let conn = repo.db.lock().unwrap();
+            let payload: String = conn
+                .query_row(
+                    "SELECT payload FROM outbox_messages WHERE topic='provider.oauth.connected'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap();
+            assert!(!payload.contains("secret-access"));
+            assert!(!payload.contains("secret-refresh"));
+            conn.execute_batch("CREATE TRIGGER reject_provider BEFORE INSERT ON providers_config BEGIN SELECT RAISE(ABORT, 'test rejection'); END;").unwrap();
+        }
+        let mut changed = token.clone();
+        changed.access_token = "replacement".into();
+        assert!(repo.save_oauth_connection(&changed, &config).is_err());
+        assert_eq!(
+            repo.get_oauth_token("antigravity")
+                .unwrap()
+                .unwrap()
+                .access_token,
+            "secret-access"
+        );
+    }
+
+    #[test]
     fn verified_snapshot_replaces_models_and_records_outbox_atomically() {
         let dir = tempfile::tempdir().unwrap();
-        let store = crate::SqliteTaskStore::new(dir.path().join("catalog.db").to_str().unwrap()).unwrap();
+        let store =
+            crate::SqliteTaskStore::new(dir.path().join("catalog.db").to_str().unwrap()).unwrap();
         let repo = store.providers();
-        let model = |id: &str| ModelCatalogOption { id: id.into(), label: id.into(), description: None,
-            provider_type: "openai".into(), is_default: false, default_effort: None, efforts: vec![],
-            supports_fast_mode: false, context_window: None, pricing: None };
-        repo.save_catalog_models("verified-probe:account", &[model("removed"), model("kept")]).unwrap();
+        let model = |id: &str| ModelCatalogOption {
+            id: id.into(),
+            label: id.into(),
+            description: None,
+            provider_type: "openai".into(),
+            is_default: false,
+            default_effort: None,
+            efforts: vec![],
+            supports_fast_mode: false,
+            context_window: None,
+            pricing: None,
+        };
+        repo.save_catalog_models("verified-probe:account", &[model("removed"), model("kept")])
+            .unwrap();
         let timestamp = repo.catalog_fetched_at("verified-probe:account").unwrap();
         assert!(timestamp > 0);
-        repo.save_catalog_models("verified-probe:account", &[model("kept")]).unwrap();
-        let cached = repo.list_catalog_models(Some("verified-probe:account")).unwrap();
-        assert_eq!(cached.len(), 1); assert_eq!(cached[0].id, "kept");
-        assert!(repo.list_catalog_models(Some("other-account")).unwrap().is_empty());
+        repo.save_catalog_models("verified-probe:account", &[model("kept")])
+            .unwrap();
+        let cached = repo
+            .list_catalog_models(Some("verified-probe:account"))
+            .unwrap();
+        assert_eq!(cached.len(), 1);
+        assert_eq!(cached[0].id, "kept");
+        assert!(repo
+            .list_catalog_models(Some("other-account"))
+            .unwrap()
+            .is_empty());
         let conn = repo.db.lock().unwrap();
-        let events: i64 = conn.query_row("SELECT COUNT(*) FROM outbox_messages WHERE topic = 'provider.models.probed'", [], |r| r.get(0)).unwrap();
+        let events: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM outbox_messages WHERE topic = 'provider.models.probed'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
         assert_eq!(events, 2);
     }
 }

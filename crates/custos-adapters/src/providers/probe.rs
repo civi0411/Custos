@@ -18,6 +18,9 @@ pub async fn probe_endpoint_models(
     api_key: Option<&str>,
     provider_type: &str,
 ) -> Result<Vec<ProbedModel>, DomainError> {
+    if provider_type == "antigravity" {
+        return super::antigravity::probe_models(base_url, api_key.ok_or_else(|| DomainError::Validation("Antigravity OAuth credentials missing".into()))?).await;
+    }
     let base = base_url.trim().trim_end_matches('/');
     if base.is_empty() {
         return Err(DomainError::Validation("Endpoint Base URL is empty".into()));
@@ -41,7 +44,8 @@ pub async fn probe_endpoint_models(
 
     // 2. Route by provider type or fallback to OpenAI compatible
     match provider_type {
-        "anthropic" => probe_anthropic_endpoint(&client, base, api_key).await,
+        "anthropic" => probe_anthropic_endpoint(&client, base, api_key, false).await,
+        "anthropic-oauth" => probe_anthropic_endpoint(&client, base, api_key, true).await,
         "gemini" | "google" => probe_gemini_endpoint(&client, base, api_key).await,
         _ => probe_openai_endpoint(&client, base, api_key).await,
     }
@@ -288,6 +292,7 @@ async fn probe_anthropic_endpoint(
     client: &reqwest::Client,
     base: &str,
     api_key: Option<&str>,
+    oauth: bool,
 ) -> Result<Vec<ProbedModel>, DomainError> {
     let url = if base.ends_with("/models") {
         base.to_string()
@@ -299,7 +304,10 @@ async fn probe_anthropic_endpoint(
     headers.insert("anthropic-version", HeaderValue::from_static("2023-06-01"));
     if let Some(key) = api_key.filter(|k| !k.trim().is_empty()) {
         if let Ok(val) = HeaderValue::from_str(key.trim()) {
-            headers.insert("x-api-key", val);
+            if oauth {
+                headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("Bearer {}", key.trim())).map_err(|e| DomainError::Validation(e.to_string()))?);
+                headers.insert("anthropic-beta", HeaderValue::from_static("oauth-2025-04-20"));
+            } else { headers.insert("x-api-key", val); }
         }
     }
 
@@ -493,4 +501,17 @@ mod tests {
         assert_eq!(models[1].name, Some("gpt-5.6-terra".into()));
         assert_eq!(models[1].context_window, None);
     }
+}
+
+pub async fn probe_copilot_models(github_token: &str) -> Result<Vec<ProbedModel>, DomainError> {
+    let token = super::oauth_pkce::copilot_session_token(github_token).await?;
+    let client = reqwest::Client::builder().timeout(Duration::from_secs(20)).user_agent("GitHubCopilotChat/0.35.0").default_headers({
+        let mut headers = HeaderMap::new();
+        headers.insert("Editor-Version", HeaderValue::from_static("vscode/1.107.0"));
+        headers.insert("Editor-Plugin-Version", HeaderValue::from_static("copilot-chat/0.35.0"));
+        headers.insert("Copilot-Integration-Id", HeaderValue::from_static("vscode-chat")); headers
+    }).build().map_err(|e| DomainError::Validation(e.to_string()))?;
+    let mut models = probe_openai_endpoint(&client, "https://api.githubcopilot.com", Some(&token)).await?;
+    for model in &mut models { model.id = format!("copilot/{}", model.id); model.owned_by = Some("copilot".into()); }
+    Ok(models)
 }

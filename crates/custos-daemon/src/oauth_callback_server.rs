@@ -33,11 +33,12 @@ pub struct PendingOAuthContext {
     pub code_verifier: String,
     pub state: String,
     pub redirect_uri: String,
+    pub expires_at: i64,
 }
 
 pub struct OAuthCallbackServer {
     store: Arc<SqliteTaskStore>,
-    pkce_manager: OAuthPkceManager,
+    pending: std::sync::Mutex<Option<PendingOAuthContext>>,
     status_tx: watch::Sender<CallbackServerStatus>,
     status_rx: watch::Receiver<CallbackServerStatus>,
     shutdown_tx: broadcast::Sender<()>,
@@ -47,7 +48,8 @@ fn oauth_provider_endpoint(service_type: &str) -> Option<String> {
     match service_type.to_ascii_lowercase().as_str() {
         "openai" | "codex" => Some("https://api.openai.com/v1".to_string()),
         "anthropic" | "claude" => Some("https://api.anthropic.com/v1".to_string()),
-        "gemini" | "google" => Some("https://generativelanguage.googleapis.com".to_string()),
+        "gemini" | "google" => Some("https://cloudcode-pa.googleapis.com".to_string()),
+        "antigravity" => Some("https://cloudcode-pa.googleapis.com".into()),
         "deepseek" => Some("https://api.deepseek.com/v1".to_string()),
         _ => None,
     }
@@ -77,11 +79,59 @@ impl OAuthCallbackServer {
         let (shutdown_tx, _) = broadcast::channel(4);
         Self {
             store,
-            pkce_manager: OAuthPkceManager::default(),
+            pending: std::sync::Mutex::new(None),
             status_tx,
             status_rx,
             shutdown_tx,
         }
+    }
+
+    pub fn start_copilot_device(&self, device: serde_json::Value) {
+        self.cancel();
+        let mut shutdown = self.shutdown_tx.subscribe();
+        let status = self.status_tx.clone();
+        let store = self.store.clone();
+        let _ = status.send(CallbackServerStatus::Listening { port: 0 });
+        tokio::spawn(async move {
+            let result = tokio::select! {
+                _ = shutdown.recv() => return,
+                result = custos_adapters::providers::oauth_pkce::complete_copilot_device(&device) => result,
+            };
+            match result {
+                Ok((token, identity)) => {
+                    let config = ProviderConfig {
+                        id: "copilot".into(),
+                        service_type: "copilot".into(),
+                        name: identity.unwrap_or_else(|| "GitHub Copilot".into()),
+                        api_key_masked: "oauth".into(),
+                        status: "active".into(),
+                        endpoint_url: Some("https://api.githubcopilot.com".into()),
+                        default_model: None,
+                        context_window: None,
+                        fast_mode: Some(false),
+                        created_at: token.created_at,
+                        updated_at: token.updated_at,
+                    };
+                    match store.providers().save_oauth_connection(&token, &config) {
+                        Ok(_) => {
+                            let _ = status.send(CallbackServerStatus::Completed {
+                                provider_id: "copilot".into(),
+                            });
+                        }
+                        Err(e) => {
+                            let _ = status.send(CallbackServerStatus::Failed {
+                                error: e.to_string(),
+                            });
+                        }
+                    }
+                }
+                Err(e) => {
+                    let _ = status.send(CallbackServerStatus::Failed {
+                        error: e.to_string(),
+                    });
+                }
+            }
+        });
     }
 
     pub fn status(&self) -> CallbackServerStatus {
@@ -92,7 +142,54 @@ impl OAuthCallbackServer {
         self.status_rx.clone()
     }
 
+    pub fn validate_manual_callback(
+        &self,
+        provider: &str,
+        verifier: &str,
+        redirect: &str,
+        callback: &str,
+    ) -> Result<(), DomainError> {
+        let mut pending = self
+            .pending
+            .lock()
+            .map_err(|_| DomainError::Validation("OAuth state lock unavailable".into()))?;
+        let context = pending.as_ref().ok_or_else(|| {
+            DomainError::Validation("Start OAuth authorization before exchanging a callback".into())
+        })?;
+        if chrono::Utc::now().timestamp_millis() > context.expires_at {
+            return Err(DomainError::Validation(
+                "OAuth authorization expired; start again".into(),
+            ));
+        }
+        if context.provider_id != provider
+            || context.code_verifier != verifier
+            || context.redirect_uri != redirect
+            || extract_query_param(callback, "state")
+                .or_else(|| callback.split_once('#').map(|v| v.1.to_string()))
+                .as_deref()
+                != Some(context.state.as_str())
+        {
+            return Err(DomainError::Validation(
+                "OAuth callback does not match the pending authorization".into(),
+            ));
+        }
+        if !matches!(
+            self.status(),
+            CallbackServerStatus::Listening { .. } | CallbackServerStatus::Idle
+        ) {
+            return Err(DomainError::Validation(
+                "OAuth authorization already consumed or expired".into(),
+            ));
+        }
+        *pending = None;
+        let _ = self.shutdown_tx.send(());
+        Ok(())
+    }
+
     pub fn cancel(&self) {
+        if let Ok(mut pending) = self.pending.lock() {
+            *pending = None;
+        }
         let _ = self.shutdown_tx.send(());
         let _ = self.status_tx.send(CallbackServerStatus::Idle);
     }
@@ -101,6 +198,18 @@ impl OAuthCallbackServer {
     /// Binds both IPv4 (127.0.0.1) and IPv6 ([::1]) to guarantee compatibility with
     /// operating systems (e.g. Windows) where `localhost` resolves to `::1` first.
     pub async fn start_listening(&self, context: PendingOAuthContext) -> Result<u16, DomainError> {
+        *self
+            .pending
+            .lock()
+            .map_err(|_| DomainError::Validation("OAuth state lock unavailable".into()))? =
+            Some(context.clone());
+        let callback_port = context
+            .redirect_uri
+            .split(':')
+            .nth(2)
+            .and_then(|v| v.split('/').next())
+            .and_then(|v| v.parse::<u16>().ok())
+            .unwrap_or(OAUTH_CALLBACK_PORT);
         // Cancel any existing running callback listener
         let _ = self.shutdown_tx.send(());
 
@@ -108,7 +217,7 @@ impl OAuthCallbackServer {
         let mut listener_v4 = None;
         let mut last_v4_err = None;
         for _ in 0..10 {
-            match TcpListener::bind(format!("127.0.0.1:{OAUTH_CALLBACK_PORT}")).await {
+            match TcpListener::bind(format!("127.0.0.1:{callback_port}")).await {
                 Ok(l) => {
                     listener_v4 = Some(l);
                     break;
@@ -128,11 +237,11 @@ impl OAuthCallbackServer {
                     .map(|e| e.to_string())
                     .unwrap_or_else(|| "unknown socket error".to_string());
                 tracing::warn!(
-                    port = OAUTH_CALLBACK_PORT,
+                    port = callback_port,
                     "Cannot bind IPv4 OAuth loopback listener: {err_msg}. Fallback to manual callback paste."
                 );
                 return Err(DomainError::Validation(format!(
-                    "Failed to bind IPv4 OAuth callback listener on port {OAUTH_CALLBACK_PORT}: {err_msg}"
+                    "Failed to bind IPv4 OAuth callback listener on port {callback_port}: {err_msg}"
                 )));
             }
         };
@@ -140,14 +249,14 @@ impl OAuthCallbackServer {
         // Attempt IPv6 loopback bind ([::1]) to serve localhost on Windows cleanly
         let mut listener_v6 = None;
         for _ in 0..5 {
-            match TcpListener::bind(format!("[::1]:{OAUTH_CALLBACK_PORT}")).await {
+            match TcpListener::bind(format!("[::1]:{callback_port}")).await {
                 Ok(l) => {
                     listener_v6 = Some(l);
                     break;
                 }
                 Err(e) => {
                     tracing::debug!(
-                        port = OAUTH_CALLBACK_PORT,
+                        port = callback_port,
                         "IPv6 loopback listener not yet bound: {e}"
                     );
                     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -158,7 +267,7 @@ impl OAuthCallbackServer {
         let port = listener_v4
             .local_addr()
             .map(|a| a.port())
-            .unwrap_or(OAUTH_CALLBACK_PORT);
+            .unwrap_or(callback_port);
 
         let _ = self
             .status_tx
@@ -167,7 +276,6 @@ impl OAuthCallbackServer {
         let status_tx = self.status_tx.clone();
         let mut shutdown_rx = self.shutdown_tx.subscribe();
         let store = self.store.clone();
-        let pkce_manager = self.pkce_manager.clone();
 
         tokio::spawn(async move {
             tracing::info!(
@@ -204,7 +312,9 @@ impl OAuthCallbackServer {
                         match listener_v4.accept().await {
                             Ok(pair) => pair,
                             Err(e) => {
-                                tracing::warn!("Error accepting IPv4 connection on port {port}: {e}");
+                                tracing::warn!(
+                                    "Error accepting IPv4 connection on port {port}: {e}"
+                                );
                                 break;
                             }
                         }
@@ -220,138 +330,134 @@ impl OAuthCallbackServer {
                     let first_line = request_str.lines().next().unwrap_or_default();
 
                     // Accept GET /auth/callback, GET /oauth_callback, or GET /callback
-                    let is_callback = first_line.starts_with("GET /auth/callback")
+                    let is_callback = first_line.starts_with("GET /oauth-callback")
+                        || first_line.starts_with("GET /auth/callback")
                         || first_line.starts_with("GET /oauth_callback")
                         || first_line.starts_with("GET /callback");
 
                     if is_callback {
-                        let query_str =
-                            first_line.split_whitespace().nth(1).unwrap_or_default();
+                        let query_str = first_line.split_whitespace().nth(1).unwrap_or_default();
 
-                                let code = extract_query_param(query_str, "code");
-                                let state = extract_query_param(query_str, "state");
+                        let code = extract_query_param(query_str, "code");
+                        let state = extract_query_param(query_str, "state");
 
-                                if let Some(auth_code) = code {
-                                    // Send clean HTML response to browser
-                                    let html_body = render_success_html();
-                                    let response = format!(
-                                        "HTTP/1.1 200 OK\r\n\
+                        if let Some(auth_code) = code {
+                            if state.as_deref() != Some(context.state.as_str()) {
+                                let _ = status_tx.send(CallbackServerStatus::Failed {
+                                    error: "OAuth state mismatch or missing state".into(),
+                                });
+                                break;
+                            }
+
+                            // Send clean HTML response to browser
+                            let html_body = render_success_html();
+                            let response = format!(
+                                "HTTP/1.1 200 OK\r\n\
                                          Content-Type: text/html; charset=utf-8\r\n\
                                          Content-Length: {}\r\n\
                                          Connection: close\r\n\r\n{}",
-                                        html_body.len(),
-                                        html_body
-                                    );
+                                html_body.len(),
+                                html_body
+                            );
 
-                                    let _ = socket.write_all(response.as_bytes()).await;
-                                    let _ = socket.flush().await;
+                            let _ = socket.write_all(response.as_bytes()).await;
+                            let _ = socket.flush().await;
 
-                                    let _ = status_tx.send(CallbackServerStatus::Exchanging {
-                                        code: auth_code.clone(),
-                                    });
+                            let _ = status_tx.send(CallbackServerStatus::Exchanging {
+                                code: auth_code.clone(),
+                            });
+
+                            tracing::info!(
+                                provider_id = %context.provider_id,
+                                "Received OAuth callback code from browser, exchanging tokens"
+                            );
+
+                            let settings =
+                                match custos_adapters::providers::oauth_pkce::oauth_settings(
+                                    &context.service_type,
+                                ) {
+                                    Ok(v) => v,
+                                    Err(e) => {
+                                        let _ = status_tx.send(CallbackServerStatus::Failed {
+                                            error: e.to_string(),
+                                        });
+                                        break;
+                                    }
+                                };
+                            let pkce_manager = OAuthPkceManager::new(&settings.0, &settings.1);
+
+                            // Exchange authorization code for tokens
+                            match pkce_manager
+                                .exchange_code_with_identity(
+                                    &context.provider_id,
+                                    &context.service_type,
+                                    &context.client_id,
+                                    &auth_code,
+                                    &context.redirect_uri,
+                                    &context.code_verifier,
+                                )
+                                .await
+                            {
+                                Ok((tokens, identity)) => {
+                                    let providers = store.providers();
+                                    let now = chrono::Utc::now().timestamp_millis();
+                                    let provider_config = ProviderConfig {
+                                        id: context.provider_id.clone(),
+                                        name: identity.unwrap_or_else(|| {
+                                            format!(
+                                                "{} (OAuth)",
+                                                oauth_provider_label(
+                                                    &context.provider_id,
+                                                    &context.service_type
+                                                )
+                                            )
+                                        }),
+                                        service_type: context.service_type.clone(),
+                                        api_key_masked: mask_oauth_token(&tokens.access_token),
+                                        status: "active".to_string(),
+                                        endpoint_url: oauth_provider_endpoint(
+                                            &context.service_type,
+                                        ),
+                                        default_model: None,
+                                        context_window: None,
+                                        fast_mode: Some(false),
+                                        created_at: now,
+                                        updated_at: now,
+                                    };
+                                    if let Err(err) =
+                                        providers.save_oauth_connection(&tokens, &provider_config)
+                                    {
+                                        tracing::error!(
+                                            "Failed to persist OAuth provider config: {err}"
+                                        );
+                                        let _ = status_tx.send(CallbackServerStatus::Failed {
+                                            error: format!("Failed to save provider config: {err}"),
+                                        });
+                                        break;
+                                    }
 
                                     tracing::info!(
                                         provider_id = %context.provider_id,
-                                        "Received OAuth callback code from browser, exchanging tokens"
+                                        "Successfully exchanged and persisted OAuth provider credentials"
                                     );
-
-                                    // Verify state if provided
-                                    if let Some(ref st) = state {
-                                        if !context.state.is_empty() && st != &context.state {
-                                            tracing::warn!("OAuth state parameter mismatch: expected {}, got {}", context.state, st);
-                                        }
-                                    }
-
-                                    // Exchange authorization code for tokens
-                                    match pkce_manager
-                                        .exchange_code(
-                                            &context.provider_id,
-                                            &context.service_type,
-                                            &context.client_id,
-                                            &auth_code,
-                                            &context.redirect_uri,
-                                            &context.code_verifier,
-                                        )
-                                        .await
-                                    {
-                                        Ok(tokens) => {
-                                            let providers = store.providers();
-                                            if let Err(err) = providers.save_oauth_token(&tokens) {
-                                                tracing::error!(
-                                                    "Failed to persist exchanged OAuth token: {err}"
-                                                );
-                                                let _ =
-                                                    status_tx.send(CallbackServerStatus::Failed {
-                                                        error: format!(
-                                                            "Failed to save token: {err}"
-                                                        ),
-                                                    });
-                                            } else {
-                                                let now = chrono::Utc::now().timestamp_millis();
-                                                let provider_config = ProviderConfig {
-                                                    id: context.provider_id.clone(),
-                                                    name: format!(
-                                                        "{} (OAuth)",
-                                                        oauth_provider_label(
-                                                            &context.provider_id,
-                                                            &context.service_type
-                                                        )
-                                                    ),
-                                                    service_type: context.service_type.clone(),
-                                                    api_key_masked: mask_oauth_token(
-                                                        &tokens.access_token,
-                                                    ),
-                                                    status: "active".to_string(),
-                                                    endpoint_url: oauth_provider_endpoint(
-                                                        &context.service_type,
-                                                    ),
-                                                    default_model: None,
-                                                    context_window: None,
-                                                    fast_mode: Some(false),
-                                                    created_at: now,
-                                                    updated_at: now,
-                                                };
-                                                if let Err(err) =
-                                                    providers.save_provider(&provider_config)
-                                                {
-                                                    tracing::error!(
-                                                        "Failed to persist OAuth provider config: {err}"
-                                                    );
-                                                    let _ = status_tx
-                                                        .send(CallbackServerStatus::Failed {
-                                                        error: format!(
-                                                            "Failed to save provider config: {err}"
-                                                        ),
-                                                    });
-                                                    break;
-                                                }
-
-                                                tracing::info!(
-                                                    provider_id = %context.provider_id,
-                                                    "Successfully exchanged and persisted OAuth provider credentials"
-                                                );
-                                                let _ = status_tx.send(
-                                                    CallbackServerStatus::Completed {
-                                                        provider_id: context.provider_id.clone(),
-                                                    },
-                                                );
-                                            }
-                                        }
-                                        Err(err) => {
-                                            tracing::error!("OAuth token exchange failed: {err}");
-                                            let _ = status_tx.send(CallbackServerStatus::Failed {
-                                                error: format!("Token exchange failed: {err}"),
-                                            });
-                                        }
-                                    }
-
-                                    break;
+                                    let _ = status_tx.send(CallbackServerStatus::Completed {
+                                        provider_id: context.provider_id.clone(),
+                                    });
                                 }
-                            } else if first_line.starts_with("GET /favicon.ico") {
-                                let not_found =
-                                    "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
-                                let _ = socket.write_all(not_found.as_bytes()).await;
+                                Err(err) => {
+                                    tracing::error!("OAuth account connection failed: {err}");
+                                    let _ = status_tx.send(CallbackServerStatus::Failed {
+                                        error: format!("OAuth account connection failed: {err}"),
+                                    });
+                                }
                             }
+
+                            break;
+                        }
+                    } else if first_line.starts_with("GET /favicon.ico") {
+                        let not_found = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+                        let _ = socket.write_all(not_found.as_bytes()).await;
+                    }
                 }
             };
 
@@ -415,7 +521,7 @@ fn render_success_html() -> &'static str {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Custos - Authorization Successful</title>
+  <title>Custos - Authorization Received</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -479,8 +585,8 @@ fn render_success_html() -> &'static str {
 <body>
   <div class="card">
     <div class="icon">&#10003;</div>
-    <h2>Authorization Successful</h2>
-    <p>Custos has securely connected to your OpenAI account. You may now close this browser tab and return to the application.</p>
+    <h2>Authorization Received</h2>
+    <p>Custos received the authorization callback. Return to the application to check token exchange and account status.</p>
     <div class="badge">Safe to close this window</div>
   </div>
 </body>
@@ -490,6 +596,85 @@ fn render_success_html() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn manual_callback_requires_matching_state_and_is_single_use() {
+        let server = OAuthCallbackServer::new(Arc::new(SqliteTaskStore::new_in_memory().unwrap()));
+        *server.pending.lock().unwrap() = Some(PendingOAuthContext {
+            provider_id: "antigravity".into(),
+            service_type: "antigravity".into(),
+            client_id: "google-client".into(),
+            code_verifier: "verifier".into(),
+            state: "expected-state".into(),
+            redirect_uri: "http://localhost:51121/oauth-callback".into(),
+            expires_at: i64::MAX,
+        });
+        assert!(server
+            .validate_manual_callback(
+                "antigravity",
+                "verifier",
+                "http://localhost:51121/oauth-callback",
+                "http://localhost:51121/oauth-callback?code=code&state=wrong"
+            )
+            .is_err());
+        assert!(server
+            .validate_manual_callback(
+                "antigravity",
+                "wrong",
+                "http://localhost:51121/oauth-callback",
+                "http://localhost:51121/oauth-callback?code=code&state=expected-state"
+            )
+            .is_err());
+        assert!(server
+            .validate_manual_callback(
+                "antigravity",
+                "verifier",
+                "http://localhost:51121/oauth-callback",
+                "http://localhost:51121/oauth-callback?code=code&state=expected-state"
+            )
+            .is_ok());
+        assert!(server
+            .validate_manual_callback(
+                "antigravity",
+                "verifier",
+                "http://localhost:51121/oauth-callback",
+                "http://localhost:51121/oauth-callback?code=code&state=expected-state"
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn manual_callback_rejects_expired_and_cancelled_authorizations() {
+        let server = OAuthCallbackServer::new(Arc::new(SqliteTaskStore::new_in_memory().unwrap()));
+        *server.pending.lock().unwrap() = Some(PendingOAuthContext {
+            provider_id: "anthropic".into(),
+            service_type: "anthropic".into(),
+            client_id: "client".into(),
+            code_verifier: "verifier".into(),
+            state: "state".into(),
+            redirect_uri: "https://platform.claude.com/oauth/code/callback".into(),
+            expires_at: 0,
+        });
+        assert!(server
+            .validate_manual_callback(
+                "anthropic",
+                "verifier",
+                "https://platform.claude.com/oauth/code/callback",
+                "code#state"
+            )
+            .is_err());
+        server.pending.lock().unwrap().as_mut().unwrap().expires_at = i64::MAX;
+        server.cancel();
+        assert!(server.pending.lock().unwrap().is_none());
+        assert!(server
+            .validate_manual_callback(
+                "anthropic",
+                "verifier",
+                "https://platform.claude.com/oauth/code/callback",
+                "code#state"
+            )
+            .is_err());
+    }
 
     #[test]
     fn test_extract_query_param_basic() {
@@ -521,7 +706,7 @@ mod tests {
     #[test]
     fn test_render_success_html() {
         let html = render_success_html();
-        assert!(html.contains("Authorization Successful"));
-        assert!(html.contains("Custos has securely connected"));
+        assert!(html.contains("Authorization Received"));
+        assert!(html.contains("Custos received the authorization callback"));
     }
 }
