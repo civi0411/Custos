@@ -2,6 +2,8 @@
 
 > **Lưu ý:** Đây là tài liệu thiết kế nền tảng (Base Architecture). Tài liệu này sẽ tiếp tục được mở rộng và cập nhật thông qua quá trình research sâu hơn về các công nghệ Indexing, VectorDB, và RAG.
 
+**Ranh giới hai code path hiện có:** `crates/custos-runtime/src/context/repo_intelligence/` là vị trí product runtime cho query planning/ContextPack theo snapshot; nó hiện có scanner, graph, coordinator và LLM view nhưng chưa được daemon compose thành một end-to-end service. `tools/repo_intelligent/` là **Custos Nexus**, utility Python dùng khi phát triển và có MCP surface cho client ngoài. Nó không là canonical memory, không sở hữu Task, grant, evidence hay model dispatch. Không dời cả Python tool vào `custos-packs` hoặc biến MCP thành đường nội bộ mặc định. Những thuật toán Nexus đã đo tốt có thể được port chọn lọc vào runtime/adapters/index projection sau khi kiểm snapshot, scope, latency và parser coverage.
+
 ## 1. Triết lý Thiết kế (Design Philosophy)
 
 Trong hệ thống Custos, **Repo Intelligence** không chỉ là một công cụ (Tool) hay một kỹ năng (Skill) đơn lẻ. Nó là một **Hệ thống con (Subsystem)** chuyên trách việc đọc, hiểu và truy vấn mã nguồn có nhận thức về **Snapshot (bản ghi trạng thái)** và **Provenance (nguồn gốc dữ liệu)**.

@@ -19,7 +19,7 @@ import { useAppContext } from '@/context/AppContext';
 export interface ModelOption {
   id: string;
   name: string;
-  provider: 'anthropic' | 'openai' | 'gemini' | 'deepseek' | 'local' | 'other';
+  provider: 'anthropic' | 'openai' | 'gemini' | 'deepseek' | 'local' | 'antigravity' | 'copilot' | 'other';
   providerName: string;
   badge?: string;
   badgeColor?: string;
@@ -33,6 +33,8 @@ export function getProviderInfo(modelId: string): {
   label: string;
 } {
   const m = (modelId || '').toLowerCase();
+  if (m.startsWith('copilot/')) return { provider: 'copilot', label: 'GitHub Copilot' };
+  if (m.startsWith('antigravity/')) return { provider: 'antigravity', label: 'Antigravity' };
   if (m.includes('claude') || m.includes('anthropic')) return { provider: 'anthropic', label: 'Anthropic' };
   if (m.includes('gpt') || m.includes('o1') || m.includes('o3') || m.includes('openai')) return { provider: 'openai', label: 'OpenAI' };
   if (m.includes('gemini') || m.includes('google')) return { provider: 'gemini', label: 'Google' };
@@ -61,6 +63,10 @@ export function ProviderIcon({
       return <GeminiIcon size={size} className={className} />;
     case 'deepseek':
       return <DeepSeekIcon size={size} className={className} />;
+    case 'copilot':
+      return <img src="/assets/provider-logo/github-copilot.jpg" alt="GitHub Copilot" width={size} height={size} className={className} />;
+    case 'antigravity':
+      return <GeminiIcon size={size} className={className} />;
     case 'local':
       return <Server size={size} className={className || 'text-teal-400'} />;
     default:

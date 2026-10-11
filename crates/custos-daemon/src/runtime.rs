@@ -37,6 +37,7 @@ pub struct CustosRuntime {
     pub workspace_coordinator: Arc<custos_runtime::workspace::WorkspaceCoordinator>,
     pub terminal_coordinator: Arc<custos_runtime::TerminalCoordinator>,
     pub python_coordinator: Arc<custos_runtime::PythonKernelCoordinator>,
+    pub pack_registry: Arc<custos_packs::DomainPackRegistry>,
 }
 
 impl CustosRuntime {
@@ -101,10 +102,11 @@ impl CustosRuntime {
                 // Check tokens expiring within the next 10 minutes (600 seconds)
                 let threshold_ms = now_ms + (600 * 1000);
                 if let Ok(expiring) = sweeper_store.providers().list_expiring_oauth_tokens(threshold_ms) {
-                    let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::default();
                     for tok in expiring {
+                        let settings = match custos_adapters::providers::oauth_pkce::oauth_settings(&tok.service_type) { Ok(v) => v, Err(_) => continue };
+                        let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(&settings.0, &settings.1);
                         tracing::info!(provider_id = %tok.provider_id, "Sweeper job refreshing expiring OAuth token");
-                        if let Ok(refreshed) = manager.refresh_token("custos-openai-desktop", &tok).await {
+                        if let Ok(refreshed) = manager.refresh_token(&settings.2, &tok).await {
                             let _ = sweeper_store.providers().save_oauth_token(&refreshed);
                             tracing::info!(provider_id = %tok.provider_id, "Sweeper job updated refreshed OAuth token in database");
                         }
@@ -130,6 +132,8 @@ impl CustosRuntime {
             "Custos kernel-mediated autonomous agent runtime with ExecutionPermits.",
             "internal",
         );
+        let default_harness_id = harness_reg.default_harness_id().map(str::to_string);
+        let harness_runtimes = harness_reg.runtimes();
         let harnesses = Arc::new(harness_reg);
         let harness = harnesses
             .get("claude-code")
@@ -139,11 +143,12 @@ impl CustosRuntime {
             TaskRuntime::new()
                 .with_kernel(kernel.clone())
                 .with_model(model.clone())
-                .with_harness(harness.clone())
+                .with_harnesses(harness_runtimes, default_harness_id.as_deref())
                 .with_sandbox(sandbox.clone())
                 .with_outbox(store.clone())
                 .with_effect_ledger(store.clone())
                 .with_run_store(store.clone())
+                .with_session_store(store.clone())
                 .with_lease_manager(lease_manager.clone()),
         );
 
@@ -176,6 +181,8 @@ impl CustosRuntime {
             .with_harnesses(harnesses.clone()),
         );
 
+        let pack_registry = Arc::new(custos_packs::create_default_pack_registry());
+
         Ok(Self {
             store,
             task_service,
@@ -192,6 +199,7 @@ impl CustosRuntime {
             workspace_coordinator,
             terminal_coordinator,
             python_coordinator,
+            pack_registry,
         })
     }
 }
@@ -204,7 +212,7 @@ struct DaemonCredentialResolver {
 impl CredentialResolver for DaemonCredentialResolver {
     async fn uses_oauth(&self, provider_id: &str) -> Result<bool, DomainError> {
         Ok(self.store.providers().get_oauth_token(provider_id)?
-            .is_some_and(|tok| tok.refresh_token.is_some() || tok.scope.as_deref().is_some_and(|s| s.split_whitespace().any(|v| v == "openid"))))
+            .is_some_and(|tok| tok.refresh_token.is_some() || tok.scope.as_deref().is_some_and(|s| !s.trim().is_empty())))
     }
     async fn get_token(&self, provider_id: &str) -> Result<Option<String>, DomainError> {
         let repo = self.store.providers();
@@ -213,9 +221,10 @@ impl CredentialResolver for DaemonCredentialResolver {
                 if tok.refresh_token.is_none() {
                     return Err(DomainError::Validation("Provider credentials expired; reconnect the account".into()));
                 }
-                let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::default();
+                let settings = custos_adapters::providers::oauth_pkce::oauth_settings(&tok.service_type)?;
+                let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(&settings.0, &settings.1);
                 let refreshed = manager.refresh_token(
-                    &custos_adapters::providers::oauth_pkce::resolve_openai_client_id(), &tok
+                    &settings.2, &tok
                 ).await?;
                 repo.save_oauth_token(&refreshed)?;
                 return Ok(Some(refreshed.access_token));

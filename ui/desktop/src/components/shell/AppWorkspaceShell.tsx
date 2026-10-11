@@ -39,6 +39,7 @@ interface AppWorkspaceShellProps {
   sessions: Session[];
   activeSessionId: string;
   onSelectSession: (id: string) => void;
+  onOpenFullChatIn?: (mode: AppWorkspaceMode) => void;
   onNewSession: () => void;
   onSendMessage: (text: string) => void;
   onClearHistory: () => void;
@@ -67,6 +68,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   sessions,
   activeSessionId,
   onSelectSession,
+  onOpenFullChatIn,
   onNewSession,
   onSendMessage,
   onClearHistory: _onClearHistory,
@@ -99,10 +101,18 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   const isDragging = useRef(false);
 
   // Active session lookup
-  const activeSession = sessions.find((s) => s.id === activeSessionId) || sessions[0] || {
-    id: 'default',
-    title: 'New Session',
-    messages: []
+  const activeSession = sessions.find((s) => s.id === activeSessionId) || {
+    id: '',
+    title: 'No conversation',
+    time: '',
+    preview: '',
+    model: '',
+    fileName: '',
+    diffHunk: '',
+    diffLinesCount: '',
+    summary: '',
+    messages: [],
+    diffCode: [],
   };
 
   const hasMessages = activeSession.messages && activeSession.messages.length > 0;
@@ -352,6 +362,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           sessions={sessions}
           activeSessionId={activeSessionId}
           onSelectSession={onSelectSession}
+          onOpenFullChatIn={onOpenFullChatIn}
           onDeleteSession={onDeleteConversation}
           newTaskLabel={lensMeta.taskLabel}
           newTaskIcon={Plus}
@@ -407,7 +418,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                     <span className="text-fg-editor underline decoration-[var(--color-border-emphasis)] underline-offset-4">{currentProject}</span>?
                   </h1>
                   <p className="text-[12px] text-fg-muted mt-2 max-w-sm">
-                    One conversation, three workbenches. Sources, changes and evidence stay attached to this session.
+                    Each workbench keeps its own conversations. Open a full saved chat in another workbench when you want to continue there.
                   </p>
                 </div>
               ) : (

@@ -155,12 +155,22 @@ export interface StartRunParams {
   task_id: string;
   instruction?: string;
   preferred_mode?: 'model' | 'native' | 'terminal';
+  workspace_id?: string;
   workspace_root?: string;
   harness_id?: string;
   session_id?: string;
   turn_id?: string;
   prompt?: string;
   model?: string;
+}
+
+export interface RunHandle {
+  run_id: string;
+  task_id: string;
+  status: RunStatus;
+  started_at: string;
+  completed_at?: string;
+  output?: string;
 }
 
 export interface AttachSessionParams {
@@ -1042,10 +1052,15 @@ export interface ProviderConfigRecord {
 
 export interface OAuthAuthorizeResult {
   authorization_url: string;
-  code_verifier: string;
-  code_challenge: string;
-  state: string;
-  redirect_uri: string;
+  code_verifier?: string;
+  code_challenge?: string;
+  state?: string;
+  redirect_uri?: string;
+  flow_type?: 'authorization_code_pkce' | 'device_code';
+  user_code?: string;
+  verification_uri?: string;
+  expires_in?: number;
+  interval?: number;
 }
 
 export interface OAuthTokenRecord {

@@ -1,6 +1,6 @@
 use crate::journal::SessionJournal;
 use custos_core::{SessionStateMachine, SessionStore};
-use custos_domain::{DomainError, Session, SessionId, SessionMode, SessionStatus, TaskId};
+use custos_domain::{DomainError, Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus, TaskId, WorkbenchLens};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -181,6 +181,44 @@ impl SessionManager {
             store.append_journal(&entry).await?;
         }
 
+        Ok(())
+    }
+
+    /// Persist that a canonical conversation is visible in an additional lens.
+    /// This does not revise its Task, dispatch a worker, or transfer authority.
+    pub async fn open_in_lens(
+        &self,
+        id: &SessionId,
+        lens: WorkbenchLens,
+    ) -> Result<(), DomainError> {
+        self.ensure_session_loaded(id).await?;
+        let lens_value = match lens {
+            WorkbenchLens::Assistant => "chat",
+            WorkbenchLens::Coding => "code",
+            WorkbenchLens::Research => "research",
+        };
+        let mut journals = self.journals.write().await;
+        let journal = journals.get_mut(id).ok_or_else(|| DomainError::NotFound {
+            kind: "Session".into(),
+            id: id.to_string(),
+        })?;
+        if journal.entries.iter().any(|entry| {
+            entry.entry_type == "workbench_opened" && entry.entry_data == lens_value
+        }) {
+            return Ok(());
+        }
+        let entry = SessionJournalEntry {
+            entry_id: None,
+            session_id: id.clone(),
+            entry_type: "workbench_opened".into(),
+            entry_data: lens_value.into(),
+            occurred_at: chrono::Utc::now().to_rfc3339(),
+        };
+        // Do not update the in-memory projection until the durable write succeeds.
+        if let Some(ref store) = self.store {
+            store.append_journal(&entry).await?;
+        }
+        journal.entries.push(entry);
         Ok(())
     }
 

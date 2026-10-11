@@ -413,7 +413,7 @@ function loadTasks() {
     if (fs.existsSync(TASKS_FILE)) {
       return JSON.parse(fs.readFileSync(TASKS_FILE, 'utf8'));
     }
-  } catch {}
+  } catch { }
   return [
     {
       id: 'task-c91f',
@@ -451,7 +451,7 @@ function saveTasks(tasks) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
     fs.writeFileSync(TASKS_FILE, JSON.stringify(tasks, null, 2), 'utf8');
-  } catch {}
+  } catch { }
 }
 
 let tasks = loadTasks();
@@ -487,10 +487,10 @@ export function printUnifiedDiff() {
   console.log(diffBox);
   console.log(
     chalk.bold('  Summary: ') +
-      chalk.green.bold('+5 additions') +
-      chalk.dim(', ') +
-      chalk.red.bold('-2 deletions') +
-      chalk.dim('  (Status: Pending Operator Permit)\n')
+    chalk.green.bold('+5 additions') +
+    chalk.dim(', ') +
+    chalk.red.bold('-2 deletions') +
+    chalk.dim('  (Status: Pending Operator Permit)\n')
   );
 }
 
@@ -518,10 +518,10 @@ export function printTaskList() {
 
     console.log(
       `  ${chalk.bold.white(t.id.padEnd(12))} ` +
-        `${modeColor(t.mode.padEnd(12))} ` +
-        `${statusBadge.padEnd(23)} ` +
-        `${chalk.dim((t.spans + ' spans').padEnd(8))} ` +
-        `${chalk.white(t.title)}`
+      `${modeColor(t.mode.padEnd(12))} ` +
+      `${statusBadge.padEnd(23)} ` +
+      `${chalk.dim((t.spans + ' spans').padEnd(8))} ` +
+      `${chalk.white(t.title)}`
     );
   });
   console.log();
@@ -569,8 +569,8 @@ export function advanceTask(taskId) {
 
   console.log(
     chalk.green(`\n  ✔ Task [${task.id}] đã chuyển trạng thái sang: `) +
-      chalk.hex('#38bdf8').bold(nextState) +
-      chalk.dim(` (+1 audit span)\n`)
+    chalk.hex('#38bdf8').bold(nextState) +
+    chalk.dim(` (+1 audit span)\n`)
   );
 }
 
@@ -642,8 +642,8 @@ export async function runVibeWizard(initialMode = null) {
     default: mode === 'Research'
       ? 'Audit repository architecture and concurrency lock boundaries'
       : mode === 'Assistant'
-      ? 'Coordinate multi-agent task lifecycle and verify audit spans'
-      : 'Refactor handler with verified sandbox & epoch lock guard',
+        ? 'Coordinate multi-agent task lifecycle and verify audit spans'
+        : 'Refactor handler with verified sandbox & epoch lock guard',
   });
 
   console.log();
@@ -1468,3 +1468,7 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
+
+
+

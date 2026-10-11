@@ -29,6 +29,10 @@ const getProviderLogo = (iconType: string): string | null => {
   switch (iconType) {
     case 'anthropic':
       return '/assets/provider-logo/anthropic.jpg';
+    case 'copilot':
+      return '/assets/provider-logo/github-copilot.jpg';
+    case 'antigravity':
+      return '/assets/provider-logo/gemini.jpg';
     case 'openai':
       return '/assets/provider-logo/openai.jpg';
     case 'gemini':

@@ -19,18 +19,28 @@ import { daemonClient } from '@/api/daemon_client';
 
 interface RemoteFleetWorkbenchPaneProps {
   onShowToast?: (message: string) => void;
+  supportedOperations: string[];
+  capabilityReason?: string;
 }
 
 export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> = ({
   onShowToast,
+  supportedOperations,
+  capabilityReason,
 }) => {
+  const can = useCallback(
+    (operation: string) => supportedOperations.includes(operation),
+    [supportedOperations]
+  );
   const [activeTab, setActiveTab] = useState<'nodes' | 'automation'>('nodes');
   const [hosts, setHosts] = useState<RemoteHostNode[]>([]);
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
   const [jobs, setJobs] = useState<HeadlessAutomationJob[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [commandInput, setCommandInput] = useState<string>('uname -a');
-  const [execReceipts] = useState<FleetExecReceipt[]>([]);
+  const [execReceipts, setExecReceipts] = useState<FleetExecReceipt[]>([]);
+  const [isExecuting, setIsExecuting] = useState<boolean>(false);
+  const [isPinging, setIsPinging] = useState<boolean>(false);
 
   // Modals
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState<boolean>(false);
@@ -51,6 +61,11 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
   const selectedHost = hosts.find((h) => h.id === selectedHostId) ?? hosts[0] ?? null;
 
   const loadHosts = useCallback(async () => {
+    if (!can('hosts.list')) {
+      setHosts([]);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const list = await daemonClient.listRemoteHosts();
@@ -63,16 +78,20 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
     } finally {
       setIsLoading(false);
     }
-  }, [selectedHostId, onShowToast]);
+  }, [can, selectedHostId, onShowToast]);
 
   const loadJobs = useCallback(async () => {
+    if (!can('jobs.list')) {
+      setJobs([]);
+      return;
+    }
     try {
       const jobList = await daemonClient.listHeadlessJobs();
       setJobs(jobList);
     } catch (err) {
       onShowToast?.(`Failed to load automation jobs: ${String(err)}`);
     }
-  }, [onShowToast]);
+  }, [can, onShowToast]);
 
   useEffect(() => {
     loadHosts();
@@ -107,6 +126,7 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
   };
 
   const handlePingHost = async (hostId: string) => {
+    setIsPinging(true);
     try {
       const res = await daemonClient.pingRemoteHost(hostId);
       setHosts((prev) =>
@@ -114,22 +134,38 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
           h.id === hostId
             ? {
                 ...h,
-                status: 'online',
-                last_ping_ms: res.ping_ms ?? 24,
-                lastPingMs: res.ping_ms ?? 24,
+                status: res.status as any,
+                last_ping_ms: res.ping_ms ?? h.last_ping_ms,
+                lastPingMs: res.ping_ms ?? h.lastPingMs,
               }
             : h
         )
       );
-      onShowToast?.(`Node online. Latency: ${res.ping_ms ?? 24}ms.`);
+      if (res.status === 'online') {
+        onShowToast?.(`Node online. Latency: ${res.ping_ms ?? 0}ms.`);
+      } else {
+        onShowToast?.(`Host ping failed: ${res.status}`);
+      }
     } catch (err) {
       onShowToast?.(`Ping probe failed: ${String(err)}`);
+    } finally {
+      setIsPinging(false);
     }
   };
 
   const handleExecCommand = async (e: React.FormEvent) => {
     e.preventDefault();
-    onShowToast?.('Remote execution unavailable: SSH transport adapter is not connected.');
+    if (!selectedHost || !commandInput.trim()) return;
+    setIsExecuting(true);
+    try {
+      const receipt = await daemonClient.execFleet(selectedHost.id, commandInput.trim());
+      setExecReceipts((prev) => [receipt, ...prev]);
+      onShowToast?.(`Executed on ${selectedHost.name}. Exit code: ${receipt.exit_code ?? 0} (${receipt.duration_ms}ms)`);
+    } catch (err) {
+      onShowToast?.(`Execution failed: ${String(err)}`);
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   const handleCreateJob = async (e: React.FormEvent) => {
@@ -211,13 +247,13 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
         </div>
       </div>
 
-      {/* Fail-closed Degraded Status Notification */}
-      <div className="bg-amber-500/10 border-b border-amber-500/20 px-3 py-1.5 flex items-center justify-between text-[11px] text-amber-400 shrink-0">
+      {/* Capability status from daemon, never inferred from persisted hosts. */}
+      <div className="bg-amber-500/10 border-b border-amber-500/20 px-3 py-1.5 flex items-center justify-between text-[11px] text-amber-300 shrink-0">
         <div className="flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-          <span>SSH Transport Gated: Remote execution, ping probes, and headless job execution are degraded (metadata-only mode).</span>
+          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+          <span>{capabilityReason || 'Remote Fleet capability is degraded.'}</span>
         </div>
-        <span className="font-mono text-[10px] text-amber-400/80">Fail-Closed</span>
+        <span className="font-mono text-[10px] text-amber-300/80">Fail-Closed</span>
       </div>
 
       {/* Main Tab Content */}
@@ -228,8 +264,9 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
             <div className="flex items-center justify-between p-3 border-b border-zinc-800">
               <span className="text-[11px] font-semibold text-zinc-400">Inventory Nodes</span>
               <button
+                disabled={!can('hosts.register')}
                 onClick={() => setIsRegisterModalOpen(true)}
-                className="flex items-center gap-1 px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-zinc-200 text-[11px] transition"
+                className="flex items-center gap-1 px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed border border-zinc-700 rounded text-zinc-200 text-[11px] transition"
               >
                 <Plus size={11} />
                 <span>Add Node</span>
@@ -244,8 +281,9 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
                   <Server size={24} className="text-zinc-700 mx-auto" />
                   <p className="text-zinc-500 text-[11px]">No remote SSH nodes.</p>
                   <button
+                    disabled={!can('hosts.register')}
                     onClick={() => setIsRegisterModalOpen(true)}
-                    className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-zinc-300 text-[11px]"
+                    className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed border border-zinc-700 rounded text-zinc-300 text-[11px]"
                   >
                     Register Node
                   </button>
@@ -294,7 +332,7 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
             {!selectedHost ? (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-zinc-500">
                 <Server size={32} className="text-zinc-700 mb-2" />
-                <p>Select or register an SSH host node to inspect and execute tasks.</p>
+                <p>Select or register an SSH host node to inspect its persisted configuration.</p>
               </div>
             ) : (
               <div className="flex-1 flex flex-col overflow-hidden">
@@ -319,13 +357,13 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
                   </div>
 
                   <button
-                    disabled={true}
-                    title="Ping probe unavailable: SSH transport adapter is not connected"
+                    disabled={!can('hosts.ping') || isPinging}
                     onClick={() => handlePingHost(selectedHost.id)}
-                    className="flex items-center gap-1 px-2.5 py-1 bg-zinc-800/50 border border-zinc-800 rounded text-zinc-500 text-[11px] cursor-not-allowed"
+                    title="SSH probe unavailable until the governed remote adapter is connected"
+                    className="flex items-center gap-1 px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed border border-zinc-700 rounded text-zinc-200 text-[11px] transition"
                   >
-                    <Activity size={12} className="text-zinc-500" />
-                    <span>Ping Probe</span>
+                    <Activity size={12} className={isPinging ? 'text-amber-400 animate-spin' : 'text-emerald-400'} />
+                    <span>{isPinging ? 'Pinging...' : 'Ping Probe'}</span>
                   </button>
                 </div>
 
@@ -339,18 +377,17 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
                     type="text"
                     value={commandInput}
                     onChange={(e) => setCommandInput(e.target.value)}
-                    disabled={true}
-                    placeholder="Remote command execution unavailable (SSH transport adapter not connected)..."
-                    className="flex-1 bg-zinc-950/60 border border-zinc-850 rounded px-3 py-1 font-mono text-xs text-zinc-500 focus:outline-none cursor-not-allowed"
+                    disabled={!can('exec') || isExecuting}
+                    placeholder="Remote execution unavailable until a governed adapter is connected"
+                    className="flex-1 bg-zinc-950/60 border border-zinc-800 rounded px-3 py-1 font-mono text-xs text-zinc-500 focus:outline-none disabled:cursor-not-allowed"
                   />
                   <button
                     type="submit"
-                    disabled={true}
-                    title="Remote execution unavailable: SSH transport adapter is not connected"
-                    className="flex items-center gap-1.5 px-3 py-1 bg-zinc-850 border border-zinc-800 rounded text-zinc-500 font-medium text-[11px] cursor-not-allowed"
+                    disabled={!can('exec') || isExecuting || !commandInput.trim()}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-cyan-700 hover:bg-cyan-600 disabled:bg-zinc-850 disabled:text-zinc-500 border border-cyan-600 disabled:border-zinc-800 rounded text-zinc-100 font-medium text-[11px] transition"
                   >
                     <Play size={11} />
-                    <span>Execute</span>
+                    <span>{isExecuting ? 'Running...' : 'Execute'}</span>
                   </button>
                 </form>
 
@@ -404,8 +441,9 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
               </p>
             </div>
             <button
+              disabled={!can('jobs.create')}
               onClick={() => setIsCreateJobModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-zinc-200 text-xs font-medium transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed border border-zinc-700 rounded text-zinc-200 text-xs font-medium transition"
             >
               <Plus size={12} />
               <span>Create Headless Job</span>
@@ -554,6 +592,7 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
                 </button>
                 <button
                   type="submit"
+                  disabled={!can('hosts.register')}
                   className="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-zinc-100 text-xs font-medium"
                 >
                   Register Node
@@ -625,6 +664,7 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
                 </button>
                 <button
                   type="submit"
+                  disabled={!can('jobs.create')}
                   className="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-zinc-100 text-xs font-medium"
                 >
                   Save Job

@@ -15,7 +15,8 @@ pub use crate::custos_local_api::{
     METHOD_ARTIFACTS_RECORD_LINEAGE, METHOD_AUTOMATION_JOBS_CREATE, METHOD_AUTOMATION_JOBS_LIST,
     METHOD_AUTOMATION_JOBS_RUN, METHOD_BROWSER_SESSIONS_CREATE, METHOD_BROWSER_SESSIONS_LIST,
     METHOD_BROWSER_TABS_CLOSE, METHOD_BROWSER_TABS_CREATE, METHOD_BROWSER_TABS_LIST,
-    METHOD_BROWSER_TABS_NAVIGATE, METHOD_BROWSER_TABS_SNAPSHOT, METHOD_CAPABILITIES_GET,
+    METHOD_BROWSER_TABS_NAVIGATE, METHOD_BROWSER_TABS_SNAPSHOT, METHOD_BROWSER_TABS_CLICK,
+    METHOD_BROWSER_TABS_FILL, METHOD_BROWSER_TABS_SCREENSHOT, METHOD_CAPABILITIES_GET,
     METHOD_CAPABILITIES_LIST, METHOD_FLEET_EXEC, METHOD_FLEET_HOSTS_LIST, METHOD_FLEET_HOSTS_PING,
     METHOD_FLEET_HOSTS_REGISTER, METHOD_HARNESS_CANCEL, METHOD_HARNESS_GET, METHOD_HARNESS_LIST,
     METHOD_HARNESS_RUN_NATIVE, METHOD_HARNESS_STEER, METHOD_MODELS_CATALOG, METHOD_MODELS_PRICING,
@@ -23,7 +24,7 @@ pub use crate::custos_local_api::{
     METHOD_NOTEBOOK_EXECUTE, METHOD_NOTEBOOK_INTERRUPT, METHOD_NOTEBOOK_RESET,
     METHOD_NOTEBOOK_STATUS, METHOD_NOTES_GET, METHOD_NOTES_HISTORY, METHOD_NOTES_LIST,
     METHOD_NOTES_SAVE, METHOD_OAUTH_AUTHORIZE, METHOD_OAUTH_DELETE, METHOD_OAUTH_EXCHANGE,
-    METHOD_OAUTH_GET, METHOD_OAUTH_REFRESH, METHOD_OAUTH_STATUS, METHOD_PROVIDERS_DELETE,
+    METHOD_OAUTH_GET, METHOD_OAUTH_REFRESH, METHOD_OAUTH_CANCEL, METHOD_OAUTH_STATUS, METHOD_PROVIDERS_DELETE,
     METHOD_PROVIDERS_GET, METHOD_PROVIDERS_LIST, METHOD_PROVIDERS_SAVE,
     METHOD_RESEARCH_ANCHORS_LIST, METHOD_RESEARCH_ANCHORS_SAVE, METHOD_RESEARCH_CLAIMS_LIST,
     METHOD_RESEARCH_CLAIMS_SAVE, METHOD_RESEARCH_HANDOFF_CODING, METHOD_RESEARCH_LINEAGE_LIST,
@@ -47,13 +48,15 @@ use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::contracts::workspace_files::WorkspaceFilesPort;
 use custos_core::{AdvanceTask, CancelTask, CreateTask, TaskService};
 use custos_domain::{
-    ArtifactLineageNode, BrowserSession, BrowserTab, CapabilityDescriptor, CapabilityGroup,
-    ClaimGroundingLevel, ClaimHandoffSummary, CreateHeadlessJobParams, ExecuteCellParams,
-    HandoffToCodingParams, HandoffToCodingResult, HeadlessAutomationJob, HeadlessJobStatus,
-    NoteRecord, NotebookCell, PassageAnchor, Recipe, RecipeHandoffSummary, RecordReviewParams,
-    RegisterHostParams, RemoteHostNode, ResearchClaim, ResearchExperimentRun,
-    ResearchSynthesisProposal, ReviewStatus, ReviewerRecord, SaveSynthesisProposalParams,
-    SessionId, SessionMode, SourceRecord, SshAuthMethod, TaskContract, TaskStatus,
+    new_id, validate_browser_url, ArtifactLineageNode, BrowserConsoleEntry, BrowserNetworkRequest,
+    BrowserPageSnapshot, BrowserSession, BrowserTab, BrowserTabStatus, CapabilityDescriptor,
+    CapabilityGroup, ClaimGroundingLevel, ClaimHandoffSummary, CreateHeadlessJobParams,
+    ExecuteCellParams, FleetExecReceipt, HandoffToCodingParams, HandoffToCodingResult,
+    HeadlessAutomationJob, HeadlessJobStatus, NoteRecord, NotebookCell, PassageAnchor, Recipe,
+    RecipeHandoffSummary, RecordReviewParams, RegisterHostParams, RemoteHostNode, RemoteHostStatus,
+    ResearchClaim, ResearchExperimentRun, ResearchSynthesisProposal, ReviewStatus, ReviewerRecord,
+    SaveSynthesisProposalParams, SessionId, SessionMode, SourceRecord, SshAuthMethod, TaskContract,
+    TaskStatus,
 };
 use custos_persistence::{FleetAutomationRepository, ProviderRepository, ResearchRepository};
 use custos_runtime::session::SessionManager;
@@ -67,10 +70,53 @@ fn default_model_probe_base_url(provider_type: &str) -> Option<&'static str> {
         "openai" | "codex" => Some("https://api.openai.com/v1"),
         "anthropic" | "claude" => Some("https://api.anthropic.com/v1"),
         "gemini" | "google" => Some("https://generativelanguage.googleapis.com"),
+        "copilot" => Some("https://api.githubcopilot.com"),
+        "antigravity" => Some("https://cloudcode-pa.googleapis.com"),
         "deepseek" => Some("https://api.deepseek.com/v1"),
         "local" | "ollama" => Some("http://localhost:11434"),
         _ => None,
     }
+}
+
+pub fn resolve_agent_browser_binary() -> Option<std::path::PathBuf> {
+    if let Ok(path) = std::env::var("AGENT_BROWSER_BINARY") {
+        let p = std::path::PathBuf::from(path);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    if let Some(home) = dirs::home_dir() {
+        let local_bin = home.join(".local/bin/agent-browser");
+        if local_bin.exists() {
+            return Some(local_bin);
+        }
+        let orca_bin = home.join("Project/AgentHub/orca/node_modules/agent-browser/bin/agent-browser-darwin-arm64");
+        if orca_bin.exists() {
+            return Some(orca_bin);
+        }
+    }
+    if let Ok(output) = std::process::Command::new("which").arg("agent-browser").output() {
+        if output.status.success() {
+            let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let p = std::path::PathBuf::from(path_str);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+// Effectful Browser and Remote Fleet operations stay fail-closed until their
+// transports are composed behind governed capability ports. Keeping this
+// decision in one place prevents persisted inventory/session metadata from
+// being mistaken for an executable capability.
+fn browser_execution_adapter_connected() -> bool {
+    false
+}
+
+fn remote_execution_adapter_connected() -> bool {
+    false
 }
 
 /// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, WorkflowPort, ResearchRepository, ProviderRepository, TerminalCoordinator, and WorkspaceFilesPort for IPC callers.
@@ -295,7 +341,7 @@ impl LocalApiDispatcher {
                     "Runs",
                     CapabilityGroup::Compute,
                     "Experiment attempts, environments, outputs, and execution receipts.",
-                    Some("synthesis"),
+                    Some("runs"),
                     vec!["list", "save"],
                 )
             } else {
@@ -304,7 +350,7 @@ impl LocalApiDispatcher {
                     "Runs",
                     CapabilityGroup::Compute,
                     "Experiment attempts, environments, outputs, and execution receipts.",
-                    Some("synthesis"),
+                    Some("runs"),
                     "ResearchRepository is not configured on this daemon instance.",
                 )
             },
@@ -840,6 +886,23 @@ impl LocalApiDispatcher {
                     None => ApiResponse::error(req.id, format!("Session {session_id} not found")),
                 }
             }
+            "v1.sessions.open_in_lens" => {
+                let session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
+                    Some(id) => SessionId(id.to_string()),
+                    None => return ApiResponse::error(req.id, "Missing session_id param"),
+                };
+                let lens: custos_domain::WorkbenchLens = match req.params.get("lens") {
+                    Some(value) => match serde_json::from_value(value.clone()) {
+                        Ok(lens) => lens,
+                        Err(e) => return ApiResponse::error(req.id, format!("Invalid lens: {e}")),
+                    },
+                    None => return ApiResponse::error(req.id, "Missing lens param"),
+                };
+                match self.session_manager.open_in_lens(&session_id, lens).await {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "status": "opened" })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
             "v1.sessions.message" => {
                 let session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
                     Some(id) => SessionId(id.to_string()),
@@ -948,6 +1011,30 @@ impl LocalApiDispatcher {
                     _ => "daemon_user".into(),
                 };
 
+                let resolved_workspace_root = if let Some(ref workspace_id) = params.workspace_id {
+                    let workspace = match self
+                        .resolve_workspace_for_dispatch(&req.id, workspace_id)
+                        .await
+                    {
+                        Ok(workspace) => workspace,
+                        Err(response) => return response,
+                    };
+                    if !workspace.is_ready() {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Workspace '{workspace_id}' is not ready for execution"),
+                        );
+                    }
+                    Some(workspace.path)
+                } else if params.preferred_mode.as_deref() == Some("native") {
+                    return ApiResponse::error(
+                        req.id,
+                        "Native Task runs require workspace_id; raw workspace paths are not accepted",
+                    );
+                } else {
+                    params.workspace_root.clone()
+                };
+
                 let mut cmd = custos_domain::StartRunCommand::new(params.task_id, actor);
                 if let Some(rev) = params.workflow_revision {
                     cmd = cmd.with_workflow_revision(rev);
@@ -958,7 +1045,7 @@ impl LocalApiDispatcher {
                 if let Some(harness) = params.harness_id {
                     cmd = cmd.with_harness_id(harness);
                 }
-                if let Some(root) = params.workspace_root {
+                if let Some(root) = resolved_workspace_root {
                     cmd = cmd.with_workspace_root(root);
                 }
                 if let Some(ref session_id) = params.session_id {
@@ -2598,17 +2685,18 @@ impl LocalApiDispatcher {
                             || tok
                                 .scope
                                 .as_deref()
-                                .is_some_and(|s| s.split_whitespace().any(|v| v == "openid"))
+                                .is_some_and(|s| !s.trim().is_empty())
                     });
                 let mut api_key_owned = explicit_key
                     .map(str::to_string)
                     .or_else(|| token_record.as_ref().map(|tok| tok.access_token.clone()));
                 if oauth {
                     if let Some(tok) = token_record.as_ref().filter(|tok| tok.is_expired(120)) {
-                        let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::default();
+                        let settings = match custos_adapters::providers::oauth_pkce::oauth_settings(&tok.service_type) { Ok(v) => v, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
+                        let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(&settings.0, &settings.1);
                         match manager
                             .refresh_token(
-                                &custos_adapters::providers::oauth_pkce::resolve_openai_client_id(),
+                                &settings.2,
                                 tok,
                             )
                             .await
@@ -2630,7 +2718,11 @@ impl LocalApiDispatcher {
                         }
                     }
                 }
-                let probe = if oauth && matches!(provider_type, "openai" | "codex") {
+                let probe = if oauth && provider_type == "copilot" {
+                    match api_key_owned.as_deref() { Some(token) => custos_adapters::providers::probe::probe_copilot_models(token).await, None => Err(custos_domain::DomainError::Validation("Copilot OAuth credentials missing".into())) }
+                } else if oauth && provider_type == "gemini" {
+                    match api_key_owned.as_deref() { Some(token) => custos_adapters::providers::antigravity::probe_codeassist_models("gemini", "https://cloudcode-pa.googleapis.com", token).await, None => Err(custos_domain::DomainError::Validation("Gemini OAuth credentials missing".into())) }
+                } else if oauth && matches!(provider_type, "openai" | "codex") {
                     match api_key_owned.as_deref() {
                         Some(token) => custos_adapters::providers::probe::probe_oauth_models(token).await,
                         None => Err(custos_domain::DomainError::Validation(
@@ -2641,7 +2733,7 @@ impl LocalApiDispatcher {
                     custos_adapters::providers::probe::probe_endpoint_models(
                         &base_url,
                         api_key_owned.as_deref(),
-                        provider_type,
+                        if oauth && provider_type == "anthropic" { "anthropic-oauth" } else { provider_type },
                     )
                     .await
                 };
@@ -2704,7 +2796,7 @@ impl LocalApiDispatcher {
                             || tok
                                 .scope
                                 .as_deref()
-                                .is_some_and(|s| s.split_whitespace().any(|v| v == "openid"))
+                                .is_some_and(|s| !s.trim().is_empty())
                     });
                     let cache_key = format!(
                         "verified-probe:{}:{}:{}:{}",
@@ -2883,23 +2975,40 @@ impl LocalApiDispatcher {
                     Ok(p) => p,
                     Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
                 };
+                if params.service_type.as_deref().or(params.provider_id.as_deref()) == Some("copilot") {
+                    let server = match self.oauth_callback_server.as_ref() { Some(v) => v, None => return ApiResponse::error(req.id, "OAuth callback server not configured") };
+                    return match custos_adapters::providers::oauth_pkce::start_copilot_device().await {
+                        Ok(mut device) => {
+                            if device.get("device_code").and_then(|v| v.as_str()).is_none() || device.get("user_code").and_then(|v| v.as_str()).is_none() { return ApiResponse::error(req.id, "Invalid GitHub device authorization response"); }
+                            server.start_copilot_device(device.clone());
+                            if let Some(object) = device.as_object_mut() { object.remove("device_code"); }
+                            device["flow_type"] = serde_json::json!("device_code");
+                            device["authorization_url"] = device.get("verification_uri").cloned().unwrap_or(serde_json::json!("https://github.com/login/device"));
+                            ApiResponse::success(req.id, device)
+                        }
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    };
+                }
+                let service = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
+                let settings = match custos_adapters::providers::oauth_pkce::oauth_settings(service) { Ok(v) => v, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
                 let auth_url = params
                     .auth_endpoint
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_AUTH_URL);
+                    .unwrap_or(&settings.0);
                 let token_url = params
                     .token_endpoint
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_TOKEN_URL);
+                    .unwrap_or(&settings.1);
                 let client_id = params
                     .client_id
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_CLIENT_ID);
+                    .unwrap_or(&settings.2);
+                let service_type_or_default = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
                 let redirect_uri = params
                     .redirect_uri
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_REDIRECT_URI);
-                let scope = params.scope.as_deref();
+                    .unwrap_or(if service_type_or_default == "anthropic" { "https://platform.claude.com/oauth/code/callback" } else if service_type_or_default == "antigravity" { "http://localhost:51121/oauth-callback" } else { custos_adapters::providers::oauth_pkce::DEFAULT_REDIRECT_URI });
+                let scope = params.scope.as_deref().or(Some(settings.3.as_str()));
 
                 let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(auth_url, token_url);
                 let challenge = custos_adapters::providers::oauth_pkce::OAuthPkceManager::generate_pkce_challenge();
@@ -2909,7 +3018,7 @@ impl LocalApiDispatcher {
                         // Start the loopback callback server on port 1455 if available
                         if let Some(ref cb_server) = self.oauth_callback_server {
                             let provider_id = params.provider_id.as_deref().unwrap_or("openai");
-                            let service_type = params.service_type.as_deref().unwrap_or("openai");
+                            let service_type = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
                             let pending = crate::oauth_callback_server::PendingOAuthContext {
                                 provider_id: provider_id.to_string(),
                                 service_type: service_type.to_string(),
@@ -2917,6 +3026,7 @@ impl LocalApiDispatcher {
                                 code_verifier: challenge.code_verifier.clone(),
                                 state: challenge.state.clone(),
                                 redirect_uri: redirect_uri.to_string(),
+                                expires_at: chrono::Utc::now().timestamp_millis() + 600_000,
                             };
                             if let Err(e) = cb_server.start_listening(pending).await {
                                 tracing::warn!(
@@ -2945,27 +3055,31 @@ impl LocalApiDispatcher {
                 };
 
                 let provider_id = params.provider_id.as_deref().unwrap_or("openai");
-                let service_type = params.service_type.as_deref().unwrap_or("openai");
+                let service_type = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
+                let settings = match custos_adapters::providers::oauth_pkce::oauth_settings(service_type) { Ok(v) => v, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
                 let client_id = params
                     .client_id
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_CLIENT_ID);
+                    .unwrap_or(&settings.2);
+                let service_type_or_default = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
                 let redirect_uri = params
                     .redirect_uri
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_REDIRECT_URI);
+                    .unwrap_or(if service_type_or_default == "anthropic" { "https://platform.claude.com/oauth/code/callback" } else if service_type_or_default == "antigravity" { "http://localhost:51121/oauth-callback" } else { custos_adapters::providers::oauth_pkce::DEFAULT_REDIRECT_URI });
                 let token_url = params
                     .token_endpoint
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_TOKEN_URL);
+                    .unwrap_or(&settings.1);
 
+                let callback_server = match self.oauth_callback_server.as_ref() { Some(v) => v, None => return ApiResponse::error(req.id, "OAuth callback server not configured") };
+                if let Err(e) = callback_server.validate_manual_callback(provider_id, &params.code_verifier, redirect_uri, &params.code_or_url) { return ApiResponse::error(req.id, e.to_string()); }
                 let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(
                     custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_AUTH_URL,
                     token_url,
                 );
 
                 match manager
-                    .exchange_code(
+                    .exchange_code_with_identity(
                         provider_id,
                         service_type,
                         client_id,
@@ -2975,35 +3089,30 @@ impl LocalApiDispatcher {
                     )
                     .await
                 {
-                    Ok(token_record) => {
-                        // Persist in provider_oauth_tokens
-                        if let Err(e) = providers_repo.save_oauth_token(&token_record) {
-                            return ApiResponse::error(req.id, format!("Failed to save OAuth token: {e}"));
-                        }
-
+                    Ok((token_record, identity)) => {
                         // Upsert matching provider config so it appears in UI as active
                         let now = chrono::Utc::now().timestamp_millis();
                         let masked = if token_record.access_token.len() > 8 {
-                            format!("{}••••••••", &token_record.access_token[..6])
+                            format!("{}••••••••", token_record.access_token.chars().take(6).collect::<String>())
                         } else {
                             "••••••••".to_string()
                         };
                         let prov_cfg = custos_domain::ProviderConfig {
                             id: provider_id.to_string(),
-                            name: format!("{} (OAuth)", if provider_id == "openai" { "OpenAI" } else { provider_id }),
+                            name: identity.unwrap_or_else(|| format!("{provider_id} (OAuth)")),
                             service_type: service_type.to_string(),
                             api_key_masked: masked,
                             status: "active".to_string(),
-                            endpoint_url: default_model_probe_base_url(service_type).map(str::to_string),
+                            endpoint_url: if service_type == "gemini" { Some("https://cloudcode-pa.googleapis.com".into()) } else { default_model_probe_base_url(service_type).map(str::to_string) },
                             default_model: None,
                             context_window: None,
                             fast_mode: Some(false),
                             created_at: now,
                             updated_at: now,
                         };
-                        let _ = providers_repo.save_provider(&prov_cfg);
+                        if let Err(e) = providers_repo.save_oauth_connection(&token_record, &prov_cfg) { return ApiResponse::error(req.id, e.to_string()); }
 
-                        match serde_json::to_value(&token_record) {
+                        match serde_json::to_value(serde_json::json!({"provider_id":token_record.provider_id,"service_type":token_record.service_type,"connected":true,"expires_at":token_record.expires_at,"scope":token_record.scope,"has_refresh_token":token_record.refresh_token.is_some()})) {
                             Ok(val) => ApiResponse::success(req.id, val),
                             Err(e) => ApiResponse::error(req.id, e.to_string()),
                         }
@@ -3027,11 +3136,12 @@ impl LocalApiDispatcher {
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
 
-                let client_id = params.client_id.as_deref().unwrap_or("custos-openai-desktop");
+                let settings = match custos_adapters::providers::oauth_pkce::oauth_settings(&existing.service_type) { Ok(v) => v, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
+                let client_id = params.client_id.as_deref().unwrap_or(&settings.2);
                 let token_url = params
                     .token_endpoint
                     .as_deref()
-                    .unwrap_or(custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_TOKEN_URL);
+                    .unwrap_or(&settings.1);
                 let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(
                     custos_adapters::providers::oauth_pkce::DEFAULT_OPENAI_AUTH_URL,
                     token_url,
@@ -3042,7 +3152,7 @@ impl LocalApiDispatcher {
                         if let Err(e) = providers_repo.save_oauth_token(&refreshed) {
                             return ApiResponse::error(req.id, format!("Failed to update token: {e}"));
                         }
-                        match serde_json::to_value(&refreshed) {
+                        match serde_json::to_value(serde_json::json!({"provider_id":refreshed.provider_id,"service_type":refreshed.service_type,"connected":true,"expires_at":refreshed.expires_at,"scope":refreshed.scope,"has_refresh_token":refreshed.refresh_token.is_some()})) {
                             Ok(val) => ApiResponse::success(req.id, val),
                             Err(e) => ApiResponse::error(req.id, e.to_string()),
                         }
@@ -3097,6 +3207,10 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
+            METHOD_OAUTH_CANCEL => {
+                if let Some(server) = self.oauth_callback_server.as_ref() { server.cancel(); }
+                ApiResponse::success(req.id, serde_json::json!({"cancelled":true}))
+            }
             METHOD_OAUTH_STATUS => {
                 if let Some(ref cb_server) = self.oauth_callback_server {
                     let status_val = match cb_server.status() {
@@ -3106,8 +3220,8 @@ impl LocalApiDispatcher {
                         crate::oauth_callback_server::CallbackServerStatus::Listening { port } => {
                             serde_json::json!({ "status": "listening", "port": port })
                         }
-                        crate::oauth_callback_server::CallbackServerStatus::Exchanging { code } => {
-                            serde_json::json!({ "status": "exchanging", "code": code })
+                        crate::oauth_callback_server::CallbackServerStatus::Exchanging { .. } => {
+                            serde_json::json!({ "status": "exchanging" })
                         }
                         crate::oauth_callback_server::CallbackServerStatus::Completed { provider_id } => {
                             serde_json::json!({ "status": "completed", "provider_id": provider_id })
@@ -3671,16 +3785,493 @@ impl LocalApiDispatcher {
                 }
             }
             METHOD_BROWSER_TABS_NAVIGATE => {
-                ApiResponse::error(
-                    req.id,
-                    "Browser navigation is unavailable until a scoped browser adapter is connected",
-                )
+                if !browser_execution_adapter_connected() {
+                    return ApiResponse::error(
+                        req.id,
+                        "Governed browser adapter is not connected; navigation is fail-closed",
+                    );
+                }
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                let tab_id = match req.params.get("tab_id").and_then(|v| v.as_str()) {
+                    Some(t) => t,
+                    None => return ApiResponse::error(req.id, "Missing tab_id parameter"),
+                };
+                let raw_url = match req.params.get("url").and_then(|v| v.as_str()) {
+                    Some(u) => u,
+                    None => return ApiResponse::error(req.id, "Missing url parameter"),
+                };
+                if let Err(e) = validate_browser_url(raw_url) {
+                    return ApiResponse::error(req.id, format!("Invalid URL: {e}"));
+                }
+                let mut tab = match fleet.get_browser_tab(tab_id) {
+                    Ok(Some(t)) => t,
+                    Ok(None) => return ApiResponse::error(req.id, format!("Tab '{tab_id}' not found")),
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                let now = chrono::Utc::now().timestamp_millis();
+                tab.url = raw_url.to_string();
+                tab.title = if raw_url.is_empty() || raw_url == "about:blank" {
+                    "New Tab".to_string()
+                } else {
+                    raw_url.to_string()
+                };
+
+                // Launch real browser navigation via agent-browser if available
+                if let Some(agent_bin) = resolve_agent_browser_binary() {
+                    if !raw_url.is_empty() && raw_url != "about:blank" {
+                        let _ = tokio::process::Command::new(&agent_bin)
+                            .arg("--session")
+                            .arg(tab_id)
+                            .arg("open")
+                            .arg(raw_url)
+                            .output()
+                            .await;
+                    }
+                }
+
+                tab.status = BrowserTabStatus::Ready;
+                tab.updated_at = now;
+                match fleet.save_browser_tab(&tab) {
+                    Ok(()) => match serde_json::to_value(&tab) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
             }
             METHOD_BROWSER_TABS_SNAPSHOT => {
-                ApiResponse::error(
-                    req.id,
-                    "Browser snapshots are unavailable until an authenticated browser adapter supplies them",
-                )
+                if !browser_execution_adapter_connected() {
+                    return ApiResponse::error(
+                        req.id,
+                        "Governed browser adapter is not connected; snapshot capture is fail-closed",
+                    );
+                }
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                let tab_id = if let Some(t) = req.params.get("tab_id").and_then(|v| v.as_str()) {
+                    t.to_string()
+                } else {
+                    return ApiResponse::error(req.id, "Missing tab_id parameter");
+                };
+
+                let mut tab = match fleet.get_browser_tab(&tab_id) {
+                    Ok(Some(t)) => t,
+                    Ok(None) => return ApiResponse::error(req.id, format!("Tab '{tab_id}' not found")),
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+
+                let now = chrono::Utc::now().timestamp_millis();
+
+                if let Ok(explicit_snapshot) = serde_json::from_value::<BrowserPageSnapshot>(req.params.clone()) {
+                    tab.last_snapshot = Some(explicit_snapshot);
+                    tab.updated_at = now;
+                    let _ = fleet.save_browser_tab(&tab);
+                    return ApiResponse::success(req.id, serde_json::json!({ "saved": true, "tab_id": tab_id }));
+                }
+
+                // If agent-browser is available, execute real AX tree snapshot and real screenshot
+                if let Some(agent_bin) = resolve_agent_browser_binary() {
+                    let snap_out = tokio::process::Command::new(&agent_bin)
+                        .arg("--session")
+                        .arg(&tab_id)
+                        .arg("--json")
+                        .arg("snapshot")
+                        .arg("-i")
+                        .arg("--urls")
+                        .output()
+                        .await;
+
+                    let screenshot_out = tokio::process::Command::new(&agent_bin)
+                        .arg("--session")
+                        .arg(&tab_id)
+                        .arg("--json")
+                        .arg("screenshot")
+                        .output()
+                        .await;
+
+                    let mut screenshot_path = None;
+                    if let Ok(ref s_out) = screenshot_out {
+                        if s_out.status.success() {
+                            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&s_out.stdout) {
+                                if let Some(p) = val.get("data").and_then(|d| d.get("path")).and_then(|p| p.as_str()) {
+                                    screenshot_path = Some(p.to_string());
+                                }
+                            }
+                        }
+                    }
+
+                    if let Ok(s_out) = snap_out {
+                        if s_out.status.success() {
+                            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&s_out.stdout) {
+                                if let Some(data) = val.get("data") {
+                                    let origin = data.get("origin").and_then(|v| v.as_str()).unwrap_or(&tab.url).to_string();
+                                    let snap_text = data.get("snapshot").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                    let refs_val = data.get("refs");
+
+                                    let mut links = Vec::new();
+                                    if let Some(refs_obj) = refs_val.and_then(|v| v.as_object()) {
+                                        for (key, val) in refs_obj {
+                                            let name = val.get("name").and_then(|v| v.as_str()).unwrap_or("");
+                                            let role = val.get("role").and_then(|v| v.as_str()).unwrap_or("");
+                                            links.push(format!("@{} [{}]: {}", key, role, name));
+                                        }
+                                    }
+
+                                    let summary = format!(
+                                        "URL: {}\n\nAccessibility Tree (Interactive Elements):\n{}\n\nInteractive Refs Count: {}",
+                                        origin,
+                                        if snap_text.is_empty() { "No interactive elements found" } else { &snap_text },
+                                        links.len()
+                                    );
+
+                                    let snapshot = BrowserPageSnapshot {
+                                        tab_id: tab_id.clone(),
+                                        url: origin.clone(),
+                                        title: if tab.title == "New Tab" { origin } else { tab.title.clone() },
+                                        dom_tree_summary: summary,
+                                        text_content: snap_text,
+                                        links,
+                                        viewport_width: 1280,
+                                        viewport_height: 800,
+                                        screenshot_uri: screenshot_path,
+                                        timestamp: now,
+                                    };
+
+                                    tab.last_snapshot = Some(snapshot);
+                                    tab.updated_at = now;
+                                    let _ = fleet.save_browser_tab(&tab);
+                                    return ApiResponse::success(req.id, serde_json::json!({
+                                        "saved": true,
+                                        "tab_id": tab_id,
+                                        "snapshot": tab.last_snapshot
+                                    }));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Fallback: HTTP GET fetch if agent-browser binary is not found
+                let snapshot = if tab.url.starts_with("http://") || tab.url.starts_with("https://") {
+                    let client = reqwest::Client::builder()
+                        .timeout(std::time::Duration::from_secs(5))
+                        .build()
+                        .unwrap_or_default();
+                    let start = std::time::Instant::now();
+                    match client.get(&tab.url).send().await {
+                        Ok(resp) => {
+                            let status_code = resp.status().as_u16();
+                            let content_type = resp.headers().get("content-type").and_then(|v| v.to_str().ok()).map(|s| s.to_string());
+                            let duration = start.elapsed().as_millis() as u64;
+                            let html_text = resp.text().await.unwrap_or_default();
+
+                            tab.network_requests.push(BrowserNetworkRequest {
+                                url: tab.url.clone(),
+                                method: "GET".to_string(),
+                                status: Some(status_code),
+                                content_type: content_type.clone(),
+                                duration_ms: duration,
+                                timestamp: now,
+                            });
+
+                            let extracted_title = if let Some(start_idx) = html_text.to_lowercase().find("<title>") {
+                                let rest = &html_text[start_idx + 7..];
+                                rest.find("</title>").map(|end_idx| rest[..end_idx].trim().to_string())
+                            } else {
+                                None
+                            };
+
+                            let mut links = Vec::new();
+                            let mut search_slice = html_text.as_str();
+                            while let Some(href_pos) = search_slice.find("href=\"") {
+                                let remainder = &search_slice[href_pos + 6..];
+                                if let Some(quote_end) = remainder.find('"') {
+                                    let href = &remainder[..quote_end];
+                                    if (href.starts_with("http://") || href.starts_with("https://") || href.starts_with('/')) && links.len() < 25 {
+                                        links.push(href.to_string());
+                                    }
+                                    search_slice = &remainder[quote_end..];
+                                } else {
+                                    break;
+                                }
+                            }
+
+                            let mut plain_text = String::new();
+                            let mut in_tag = false;
+                            for c in html_text.chars() {
+                                if c == '<' {
+                                    in_tag = true;
+                                } else if c == '>' {
+                                    in_tag = false;
+                                    plain_text.push(' ');
+                                } else if !in_tag {
+                                    plain_text.push(c);
+                                }
+                                if plain_text.len() > 4000 {
+                                    break;
+                                }
+                            }
+                            let compact_text = plain_text.split_whitespace().collect::<Vec<_>>().join(" ");
+                            let final_title = extracted_title.unwrap_or_else(|| tab.url.clone());
+                            tab.title = final_title.clone();
+
+                            BrowserPageSnapshot {
+                                tab_id: tab_id.clone(),
+                                url: tab.url.clone(),
+                                title: final_title.clone(),
+                                dom_tree_summary: format!(
+                                    "Page Title: {}\nHTTP Status: {}\nExtracted Links: {}\nText Preview:\n{}",
+                                    final_title,
+                                    status_code,
+                                    links.len(),
+                                    if compact_text.len() > 300 { &compact_text[..300] } else { &compact_text }
+                                ),
+                                text_content: compact_text,
+                                links,
+                                viewport_width: 1280,
+                                viewport_height: 800,
+                                screenshot_uri: None,
+                                timestamp: now,
+                            }
+                        }
+                        Err(err) => {
+                            tab.console_logs.push(BrowserConsoleEntry {
+                                level: "error".to_string(),
+                                message: format!("Failed to fetch {}: {}", tab.url, err),
+                                timestamp: now,
+                            });
+                            BrowserPageSnapshot {
+                                tab_id: tab_id.clone(),
+                                url: tab.url.clone(),
+                                title: tab.title.clone(),
+                                dom_tree_summary: format!("Connection error fetching {}: {}", tab.url, err),
+                                text_content: String::new(),
+                                links: Vec::new(),
+                                viewport_width: 1280,
+                                viewport_height: 800,
+                                screenshot_uri: None,
+                                timestamp: now,
+                            }
+                        }
+                    }
+                } else {
+                    BrowserPageSnapshot {
+                        tab_id: tab_id.clone(),
+                        url: tab.url.clone(),
+                        title: tab.title.clone(),
+                        dom_tree_summary: format!("Local tab: {}", tab.url),
+                        text_content: String::new(),
+                        links: Vec::new(),
+                        viewport_width: 1280,
+                        viewport_height: 800,
+                        screenshot_uri: None,
+                        timestamp: now,
+                    }
+                };
+
+                tab.last_snapshot = Some(snapshot);
+                tab.updated_at = now;
+                match fleet.save_browser_tab(&tab) {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({
+                        "saved": true,
+                        "tab_id": tab_id,
+                        "snapshot": tab.last_snapshot
+                    })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_BROWSER_TABS_CLICK => {
+                if !browser_execution_adapter_connected() {
+                    return ApiResponse::error(
+                        req.id,
+                        "Governed browser adapter is not connected; click is fail-closed",
+                    );
+                }
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                let tab_id = match req.params.get("tab_id").and_then(|v| v.as_str()) {
+                    Some(t) => t,
+                    None => return ApiResponse::error(req.id, "Missing tab_id parameter"),
+                };
+                let element_ref = match req.params.get("ref").and_then(|v| v.as_str()) {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "Missing ref parameter (e.g. @e1)"),
+                };
+
+                let agent_bin = match resolve_agent_browser_binary() {
+                    Some(b) => b,
+                    None => return ApiResponse::error(req.id, "agent-browser engine binary not found"),
+                };
+
+                let formatted_ref = if element_ref.starts_with('@') {
+                    element_ref.to_string()
+                } else {
+                    format!("@{}", element_ref)
+                };
+
+                let out = tokio::process::Command::new(&agent_bin)
+                    .arg("--session")
+                    .arg(tab_id)
+                    .arg("--json")
+                    .arg("click")
+                    .arg(&formatted_ref)
+                    .output()
+                    .await;
+
+                match out {
+                    Ok(o) => {
+                        if o.status.success() {
+                            // After click, update snapshot
+                            let mut tab = match fleet.get_browser_tab(tab_id) {
+                                Ok(Some(t)) => t,
+                                _ => return ApiResponse::success(req.id, serde_json::json!({ "clicked": formatted_ref })),
+                            };
+                            let snap_out = tokio::process::Command::new(&agent_bin)
+                                .arg("--session")
+                                .arg(tab_id)
+                                .arg("--json")
+                                .arg("snapshot")
+                                .arg("-i")
+                                .arg("--urls")
+                                .output()
+                                .await;
+
+                            if let Ok(so) = snap_out {
+                                if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&so.stdout) {
+                                    if let Some(data) = val.get("data") {
+                                        let origin = data.get("origin").and_then(|v| v.as_str()).unwrap_or(&tab.url).to_string();
+                                        let snap_text = data.get("snapshot").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                        tab.url = origin.clone();
+                                        if let Some(snap) = tab.last_snapshot.as_mut() {
+                                            snap.url = origin;
+                                            snap.text_content = snap_text.clone();
+                                            snap.dom_tree_summary = snap_text;
+                                        }
+                                        let _ = fleet.save_browser_tab(&tab);
+                                    }
+                                }
+                            }
+                            match serde_json::to_value(&tab) {
+                                Ok(val) => ApiResponse::success(req.id, val),
+                                Err(_) => ApiResponse::success(req.id, serde_json::json!({ "clicked": formatted_ref })),
+                            }
+                        } else {
+                            let err_msg = String::from_utf8_lossy(&o.stderr);
+                            ApiResponse::error(req.id, format!("Click failed: {}", err_msg.trim()))
+                        }
+                    }
+                    Err(e) => ApiResponse::error(req.id, format!("Failed to spawn agent-browser: {e}")),
+                }
+            }
+            METHOD_BROWSER_TABS_FILL => {
+                if !browser_execution_adapter_connected() {
+                    return ApiResponse::error(
+                        req.id,
+                        "Governed browser adapter is not connected; fill is fail-closed",
+                    );
+                }
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                let tab_id = match req.params.get("tab_id").and_then(|v| v.as_str()) {
+                    Some(t) => t,
+                    None => return ApiResponse::error(req.id, "Missing tab_id parameter"),
+                };
+                let element_ref = match req.params.get("ref").and_then(|v| v.as_str()) {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "Missing ref parameter (e.g. @e1)"),
+                };
+                let text = match req.params.get("text").and_then(|v| v.as_str()) {
+                    Some(t) => t,
+                    None => return ApiResponse::error(req.id, "Missing text parameter"),
+                };
+
+                let agent_bin = match resolve_agent_browser_binary() {
+                    Some(b) => b,
+                    None => return ApiResponse::error(req.id, "agent-browser engine binary not found"),
+                };
+
+                let formatted_ref = if element_ref.starts_with('@') {
+                    element_ref.to_string()
+                } else {
+                    format!("@{}", element_ref)
+                };
+
+                let out = tokio::process::Command::new(&agent_bin)
+                    .arg("--session")
+                    .arg(tab_id)
+                    .arg("--json")
+                    .arg("fill")
+                    .arg(&formatted_ref)
+                    .arg(text)
+                    .output()
+                    .await;
+
+                match out {
+                    Ok(o) => {
+                        if o.status.success() {
+                            let tab = fleet.get_browser_tab(tab_id).ok().flatten();
+                            ApiResponse::success(req.id, serde_json::json!({
+                                "filled": formatted_ref,
+                                "text": text,
+                                "tab": tab
+                            }))
+                        } else {
+                            let err_msg = String::from_utf8_lossy(&o.stderr);
+                            ApiResponse::error(req.id, format!("Fill failed: {}", err_msg.trim()))
+                        }
+                    }
+                    Err(e) => ApiResponse::error(req.id, format!("Failed to spawn agent-browser: {e}")),
+                }
+            }
+            METHOD_BROWSER_TABS_SCREENSHOT => {
+                if !browser_execution_adapter_connected() {
+                    return ApiResponse::error(
+                        req.id,
+                        "Governed browser adapter is not connected; screenshot is fail-closed",
+                    );
+                }
+                let tab_id = match req.params.get("tab_id").and_then(|v| v.as_str()) {
+                    Some(t) => t,
+                    None => return ApiResponse::error(req.id, "Missing tab_id parameter"),
+                };
+                let agent_bin = match resolve_agent_browser_binary() {
+                    Some(b) => b,
+                    None => return ApiResponse::error(req.id, "agent-browser engine binary not found"),
+                };
+
+                let out = tokio::process::Command::new(&agent_bin)
+                    .arg("--session")
+                    .arg(tab_id)
+                    .arg("--json")
+                    .arg("screenshot")
+                    .output()
+                    .await;
+
+                match out {
+                    Ok(o) => {
+                        if o.status.success() {
+                            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&o.stdout) {
+                                if let Some(p) = val.get("data").and_then(|d| d.get("path")).and_then(|p| p.as_str()) {
+                                    return ApiResponse::success(req.id, serde_json::json!({ "path": p, "tab_id": tab_id }));
+                                }
+                            }
+                            ApiResponse::success(req.id, serde_json::json!({ "tab_id": tab_id }))
+                        } else {
+                            let err_msg = String::from_utf8_lossy(&o.stderr);
+                            ApiResponse::error(req.id, format!("Screenshot failed: {}", err_msg.trim()))
+                        }
+                    }
+                    Err(e) => ApiResponse::error(req.id, format!("Failed to spawn agent-browser: {e}")),
+                }
             }
             METHOD_BROWSER_TABS_CLOSE => {
                 let fleet = match self.fleet_automation.as_ref() {
@@ -3740,16 +4331,145 @@ impl LocalApiDispatcher {
                 }
             }
             METHOD_FLEET_HOSTS_PING => {
-                ApiResponse::error(
-                    req.id,
-                    "Remote host probing is unavailable until a fleet transport adapter is connected",
-                )
+                if !remote_execution_adapter_connected() {
+                    return ApiResponse::error(
+                        req.id,
+                        "Governed remote execution adapter is not connected; SSH probe is fail-closed",
+                    );
+                }
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                let host_id = match req.params.get("host_id").and_then(|v| v.as_str()) {
+                    Some(id) => id,
+                    None => return ApiResponse::error(req.id, "Missing host_id parameter"),
+                };
+                let mut host = match fleet.get_remote_host(host_id) {
+                    Ok(Some(h)) => h,
+                    Ok(None) => return ApiResponse::error(req.id, format!("Host '{host_id}' not found")),
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+
+                let now = chrono::Utc::now().timestamp_millis();
+                let start = std::time::Instant::now();
+
+                let mut cmd = tokio::process::Command::new("ssh");
+                cmd.arg("-o").arg("BatchMode=yes")
+                   .arg("-o").arg("ConnectTimeout=3")
+                   .arg("-o").arg("StrictHostKeyChecking=yes")
+                   .arg("-p").arg(host.port.to_string());
+
+                if let SshAuthMethod::KeyPair { private_key_path, .. } = &host.auth_method {
+                    cmd.arg("-i").arg(private_key_path);
+                }
+
+                let target = format!("{}@{}", host.user, host.host);
+                cmd.arg(&target).arg("echo -n ping");
+
+                match cmd.output().await {
+                    Ok(out) => {
+                        let duration_ms = start.elapsed().as_millis() as u64;
+                        if out.status.success() {
+                            host.status = RemoteHostStatus::Online;
+                            host.last_ping_ms = Some(duration_ms);
+                            host.updated_at = now;
+                            let _ = fleet.save_remote_host(&host);
+                            ApiResponse::success(req.id, serde_json::json!({
+                                "host_id": host.id,
+                                "status": "online",
+                                "ping_ms": duration_ms
+                            }))
+                        } else {
+                            let stderr = String::from_utf8_lossy(&out.stderr);
+                            host.status = RemoteHostStatus::Offline;
+                            host.updated_at = now;
+                            let _ = fleet.save_remote_host(&host);
+                            ApiResponse::success(req.id, serde_json::json!({
+                                "host_id": host.id,
+                                "status": "offline",
+                                "error": stderr.trim()
+                            }))
+                        }
+                    }
+                    Err(e) => {
+                        host.status = RemoteHostStatus::Offline;
+                        host.updated_at = now;
+                        let _ = fleet.save_remote_host(&host);
+                        ApiResponse::success(req.id, serde_json::json!({
+                            "host_id": host.id,
+                            "status": "offline",
+                            "error": e.to_string()
+                        }))
+                    }
+                }
             }
             METHOD_FLEET_EXEC => {
-                ApiResponse::error(
-                    req.id,
-                    "Remote execution is unavailable until transport, authority and receipt verification are connected",
-                )
+                if !remote_execution_adapter_connected() {
+                    return ApiResponse::error(
+                        req.id,
+                        "Governed remote execution adapter is not connected; remote command is fail-closed",
+                    );
+                }
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                let host_id = match req.params.get("host_id").and_then(|v| v.as_str()) {
+                    Some(id) => id,
+                    None => return ApiResponse::error(req.id, "Missing host_id parameter"),
+                };
+                let command = match req.params.get("command").and_then(|v| v.as_str()) {
+                    Some(c) => c,
+                    None => return ApiResponse::error(req.id, "Missing command parameter"),
+                };
+                let host = match fleet.get_remote_host(host_id) {
+                    Ok(Some(h)) => h,
+                    Ok(None) => return ApiResponse::error(req.id, format!("Host '{host_id}' not found")),
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+
+                let now = chrono::Utc::now().timestamp_millis();
+                let start = std::time::Instant::now();
+
+                let mut cmd = tokio::process::Command::new("ssh");
+                cmd.arg("-o").arg("BatchMode=yes")
+                   .arg("-o").arg("ConnectTimeout=10")
+                   .arg("-o").arg("StrictHostKeyChecking=yes")
+                   .arg("-p").arg(host.port.to_string());
+
+                if let SshAuthMethod::KeyPair { private_key_path, .. } = &host.auth_method {
+                    cmd.arg("-i").arg(private_key_path);
+                }
+
+                let target = format!("{}@{}", host.user, host.host);
+                cmd.arg(&target).arg(command);
+
+                match cmd.output().await {
+                    Ok(out) => {
+                        let duration_ms = start.elapsed().as_millis() as u64;
+                        let receipt = FleetExecReceipt {
+                            execution_id: new_id("fexec"),
+                            host_id: host.id.clone(),
+                            command: command.to_string(),
+                            exit_code: out.status.code(),
+                            stdout: String::from_utf8_lossy(&out.stdout).to_string(),
+                            stderr: String::from_utf8_lossy(&out.stderr).to_string(),
+                            duration_ms,
+                            // Process exit is an operational observation, not
+                            // independent verification of the remote effect.
+                            verified: false,
+                            timestamp: now,
+                        };
+                        match serde_json::to_value(&receipt) {
+                            Ok(val) => ApiResponse::success(req.id, val),
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
+                    Err(e) => {
+                        ApiResponse::error(req.id, format!("Failed to spawn SSH process: {e}"))
+                    }
+                }
             }
             METHOD_AUTOMATION_JOBS_LIST => {
                 let fleet = match self.fleet_automation.as_ref() {
@@ -4647,6 +5367,21 @@ mod tests {
         let caps: Vec<custos_domain::CapabilityDescriptor> =
             serde_json::from_value(list_resp.result.unwrap()).unwrap();
         assert!(!caps.is_empty());
+
+        let mut projected_resources = std::collections::HashSet::new();
+        for capability in &caps {
+            if let Some(resource_id) = capability.resource_id.as_deref() {
+                assert!(
+                    projected_resources.insert(resource_id),
+                    "resource_id '{resource_id}' must map to exactly one capability"
+                );
+            }
+        }
+
+        let research_runs = caps.iter().find(|c| c.id == "research.runs").unwrap();
+        assert_eq!(research_runs.resource_id.as_deref(), Some("runs"));
+        let synthesis = caps.iter().find(|c| c.id == "synthesis.handoff").unwrap();
+        assert_eq!(synthesis.resource_id.as_deref(), Some("synthesis"));
 
         // Kernel task engine is available
         let tasks_cap = caps.iter().find(|c| c.id == "tasks.core").unwrap();
@@ -5554,7 +6289,7 @@ mod tests {
         let close_res = dispatcher.handle_request(close_req).await;
         assert!(close_res.is_success());
 
-        // 2. Fleet inventory is durable, while probe/exec require a real transport.
+        // 2. Fleet inventory is durable, while probe/exec use real OpenSSH transport.
         let reg_host_req = ApiRequest {
             id: "host_reg_1".into(),
             method: METHOD_FLEET_HOSTS_REGISTER.into(),
@@ -5578,7 +6313,7 @@ mod tests {
         };
         let ping_res = dispatcher.handle_request(ping_req).await;
         assert!(!ping_res.is_success());
-        assert!(ping_res.error.unwrap().contains("transport adapter"));
+        assert!(ping_res.error.unwrap().contains("remote execution adapter"));
 
         let exec_fleet_req = ApiRequest {
             id: "fleet_exec_1".into(),
@@ -5590,7 +6325,7 @@ mod tests {
         };
         let exec_fleet_res = dispatcher.handle_request(exec_fleet_req).await;
         assert!(!exec_fleet_res.is_success());
-        assert!(exec_fleet_res.error.unwrap().contains("Remote execution"));
+        assert!(exec_fleet_res.error.unwrap().contains("remote execution adapter"));
 
         // 3. Automation definitions are durable, while running needs an executor.
         let create_job_req = ApiRequest {

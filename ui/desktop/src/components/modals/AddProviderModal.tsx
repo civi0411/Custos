@@ -104,13 +104,14 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
 
   // OAuth Form State
   const [oauthProvider, setOauthProvider] = useState<ProviderServiceId>('openai');
-  const [oauthAccountName, setOauthAccountName] = useState('OpenAI Platform');
-  const [oauthEmail, setOauthEmail] = useState('user@openai.com');
-  const [oauthStep, setOauthStep] = useState<'idle' | 'authorizing' | 'success'>('idle');
-  const [deviceCode] = useState('CUST-8492');
+  const oauthProviderLabel = ({ openai: 'OpenAI', antigravity: 'Antigravity', copilot: 'GitHub Copilot', gemini: 'Gemini', anthropic: 'Claude' } as Partial<Record<ProviderServiceId, string>>)[oauthProvider] || oauthProvider;
+  const oauthAccountName = oauthProviderLabel;
+  const oauthEmail = undefined;
+
+
 
   // OAuth PKCE Flow State
-  const [authUrlResult, setAuthUrlResult] = useState<any>(null);
+  const [authUrlResult, setAuthUrlResult] = useState<import('@/types/domain').OAuthAuthorizeResult | null>(null);
   const [isGeneratingUrl, setIsGeneratingUrl] = useState(false);
   const [callbackInput, setCallbackInput] = useState('');
   const [isExchangingCode, setIsExchangingCode] = useState(false);
@@ -136,7 +137,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
         const statusRes = await daemonClient.getOAuthStatus();
         if (statusRes && statusRes.status) {
           setCallbackStatus(statusRes.status);
-          if (statusRes.status === 'completed') {
+          if (statusRes.status === 'completed' && statusRes.provider_id === targetProvider) {
             stopPolling();
             setExchangeSuccess(true);
             await handleConnectOAuth(targetProvider, accountName, email);
@@ -147,23 +148,12 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
           }
           if (statusRes.status === 'failed') {
             stopPolling();
+            setAuthUrlResult(null);
             setExchangeError(statusRes.error || 'Token exchange failed');
             return;
           }
         }
 
-        // Secondary check: directly inspect token table in daemon
-        const tokenRes = await daemonClient.getOAuthToken(targetProvider);
-        if (tokenRes && (tokenRes.connected || tokenRes.access_token)) {
-          stopPolling();
-          setCallbackStatus('completed');
-          setExchangeSuccess(true);
-          await handleConnectOAuth(targetProvider, accountName, email);
-          setTimeout(() => {
-            onClose();
-          }, 900);
-          return;
-        }
       } catch {
         // Silently continue polling
       }
@@ -174,32 +164,22 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   useEffect(() => {
     return () => {
       stopPolling();
+      void daemonClient.cancelOAuth().catch(() => {});
     };
   }, [stopPolling]);
 
   // Reset & update OAuth defaults on provider switch
-  const handleSelectOauthProvider = (prov: ProviderServiceId) => {
+  const handleSelectOauthProvider = async (prov: ProviderServiceId) => {
     stopPolling();
+    if (authUrlResult) {
+      try { await daemonClient.cancelOAuth(); } catch { /* A disconnected daemon has no active browser flow. */ }
+    }
     setCallbackStatus('idle');
     setOauthProvider(prov);
     setAuthUrlResult(null);
     setCallbackInput('');
     setExchangeError(null);
     setExchangeSuccess(false);
-    if (prov === 'copilot') {
-      setOauthAccountName('GitHub Copilot Account');
-      setOauthEmail('developer@custos.local');
-    } else if (prov === 'gemini') {
-      setOauthAccountName('Google AI Studio Account');
-      setOauthEmail('developer@gmail.com');
-    } else if (prov === 'openai') {
-      setOauthAccountName('OpenAI Team Org');
-      setOauthEmail('team@openai-org.local');
-    } else {
-      setOauthAccountName('Anthropic Console Account');
-      setOauthEmail('claude-user@anthropic.local');
-    }
-    setOauthStep('idle');
   };
 
   // Helper to open URL in default external browser (Tauri opener or window.open)
@@ -214,89 +194,12 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
     }
   };
 
-  // Client-side RFC 7636 PKCE Generator for instant zero-latency URL generation
-  const generateClientPkce = async (
-    clientId = 'app_EMoamEEZ73f0CkXaXp7hrann',
-    redirectUri = 'http://localhost:1455/auth/callback',
-    scope = 'openid profile email offline_access'
-  ) => {
-    // Generate 64-character unreserved string per RFC 7636 Section 4.1
-    const unreserved = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
-    const randBytes = new Uint8Array(64);
-    if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
-      window.crypto.getRandomValues(randBytes);
-    } else {
-      for (let i = 0; i < 64; i++) randBytes[i] = Math.floor(Math.random() * 256);
-    }
-    const codeVerifier = Array.from(randBytes, (b) => unreserved[b % unreserved.length]).join('');
-
-    // Generate SHA-256 code challenge
-    let codeChallenge = '';
-    try {
-      const encoder = new TextEncoder();
-      const data = encoder.encode(codeVerifier);
-      const digest = await window.crypto.subtle.digest('SHA-256', data);
-      const digestArray = new Uint8Array(digest);
-      let binary = '';
-      for (let i = 0; i < digestArray.byteLength; i++) {
-        binary += String.fromCharCode(digestArray[i]);
-      }
-      codeChallenge = btoa(binary)
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
-    } catch {
-      codeChallenge = btoa(codeVerifier)
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
-    }
-
-    const stateBytes = new Uint8Array(24);
-    if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
-      window.crypto.getRandomValues(stateBytes);
-    } else {
-      for (let i = 0; i < 24; i++) stateBytes[i] = Math.floor(Math.random() * 256);
-    }
-    const state = Array.from(stateBytes, (b) => unreserved[b % unreserved.length]).join('');
-
-    const params = new URLSearchParams({
-      response_type: 'code',
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      scope: scope,
-      code_challenge: codeChallenge,
-      code_challenge_method: 'S256',
-      state: state,
-    });
-
-    return {
-      authorization_url: `https://auth.openai.com/oauth/authorize?${params.toString()}`,
-      code_verifier: codeVerifier,
-      code_challenge: codeChallenge,
-      state: state,
-      redirect_uri: redirectUri,
-    };
-  };
-
   const handleGenerateAuthorizeUrl = async (autoOpen = true) => {
     setIsGeneratingUrl(true);
     setExchangeError(null);
     try {
-      let res: any = null;
-      try {
-        res = await daemonClient.getOAuthAuthorizeUrl({
-          provider_id: oauthProvider,
-          service_type: oauthProvider,
-        });
-      } catch (daemonErr) {
-        console.warn('[AddProviderModal] Daemon authorize endpoint warning, using client PKCE generator:', daemonErr);
-      }
-
-      if (!res || !res.authorization_url) {
-        res = await generateClientPkce();
-      }
-
+      const res = await daemonClient.getOAuthAuthorizeUrl({ provider_id: oauthProvider, service_type: oauthProvider });
+      if (!res?.authorization_url) throw new Error('Daemon did not return an authorization URL');
       setAuthUrlResult(res);
       startPolling(oauthProvider, oauthAccountName, oauthEmail);
       if (autoOpen && res.authorization_url) {
@@ -325,23 +228,12 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
 
   const handleExchangeCode = async () => {
     const rawInput = callbackInput.trim();
-    if (!rawInput || !authUrlResult) return;
+    if (!rawInput || !authUrlResult?.code_verifier) return;
     setIsExchangingCode(true);
     setExchangeError(null);
     try {
-      // Check if user directly pasted an API key or session token
-      if (rawInput.startsWith('sk-') || rawInput.startsWith('sess-')) {
-        stopPolling();
-        await onSaveProvider({
-          service: 'openai',
-          apiKey: rawInput,
-          fastMode: true,
-        });
-        setExchangeSuccess(true);
-        setTimeout(() => onClose(), 900);
-        return;
-      }
-
+      const returnedState = oauthProvider === 'anthropic' && !rawInput.startsWith('http') ? rawInput.split('#')[1] : new URL(rawInput).searchParams.get('state');
+      if (returnedState !== authUrlResult.state) throw new Error('OAuth callback state is missing or does not match');
       stopPolling();
       await daemonClient.exchangeOAuthCode({
         code_or_url: rawInput,
@@ -357,7 +249,8 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
       }, 900);
     } catch (err: any) {
       console.error('[AddProviderModal] Token exchange error:', err);
-      setExchangeError(err?.message || 'Token exchange failed. Please verify the code or URL.');
+      setAuthUrlResult(null);
+      setExchangeError(err?.message || 'Token exchange failed. Start authorization again.');
     } finally {
       setIsExchangingCode(false);
     }
@@ -467,11 +360,6 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
     onClose();
   };
 
-  const handleStartOAuthConnect = async () => {
-    setOauthStep('idle');
-    setExchangeError('PKCE is currently wired through the daemon callback flow. Use the OpenAI PKCE flow or connect this provider with an API key.');
-  };
-
   const selectedOption = providerOptions.find((opt) => opt.value === providerService);
 
   return (
@@ -521,8 +409,8 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
 
         {/* TAB 1: API KEY */}
         {authMode === 'api_key' ? (
-          <form onSubmit={handleSubmitApiKey} className="flex flex-col flex-1 overflow-y-auto">
-            <div className="p-5 space-y-4 text-xs">
+          <form onSubmit={handleSubmitApiKey} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="p-5 space-y-4 text-xs overflow-y-auto min-h-0 flex-1">
               {/* Provider Service Picker */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -674,7 +562,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="workbench-primary-action px-4 py-1.5 rounded-lg font-medium transition text-xs shadow-xs cursor-pointer"
+                className="provider-oauth-action px-4 py-1.5 rounded-lg font-medium transition text-xs shadow-xs cursor-pointer"
               >
                 Save & Activate Provider
               </button>
@@ -682,14 +570,14 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
           </form>
         ) : (
           /* TAB 2: OAUTH SSO */
-          <div className="flex flex-col flex-1 overflow-y-auto">
-            <div className="p-5 space-y-4 text-xs">
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="p-5 space-y-4 text-xs overflow-y-auto min-h-0 flex-1">
               <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-start gap-3">
                 <ShieldCheck className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
                   <div className="font-semibold text-fg-editor">OAuth 2.0 Sovereign Authorization</div>
                   <div className="text-[11px] text-fg-muted leading-relaxed">
-                    Connect seamlessly via Device Code flow or Browser OAuth. Tokens are encrypted locally and automatically refreshed without exposing raw credentials.
+                    Authorize in your browser using PKCE, or GitHub Device Flow for Copilot. Custos stores credentials in the daemon and retrieves your account identity.
                   </div>
                 </div>
               </div>
@@ -699,7 +587,8 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                 <label className="font-medium text-fg-editor">Select OAuth Identity Provider</label>
                 <div className="grid grid-cols-2 gap-2.5">
                   {[
-                    { id: 'copilot', name: 'GitHub Copilot', sub: 'Device Code / Enterprise SSO', icon: '/assets/provider-logo/openai.jpg' },
+                    { id: 'antigravity', name: 'Antigravity', sub: 'Google OAuth / PKCE', icon: '/assets/provider-logo/gemini.jpg' },
+                    { id: 'copilot', name: 'GitHub Copilot', sub: 'Device Authorization', icon: '/assets/provider-logo/github-copilot.jpg' },
                     { id: 'gemini', name: 'Google Cloud Gemini', sub: 'Google OAuth 2.0', icon: '/assets/provider-logo/gemini.jpg' },
                     { id: 'openai', name: 'OpenAI Platform', sub: 'OAuth Team / Enterprise', icon: '/assets/provider-logo/openai.jpg' },
                     { id: 'anthropic', name: 'Anthropic Claude', sub: 'Console OAuth Login', icon: '/assets/provider-logo/anthropic.jpg' },
@@ -726,85 +615,37 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                 </div>
               </div>
 
-              {/* Account Alias & Email */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-medium text-fg-editor">Account Alias / Label</label>
-                  <input
-                    type="text"
-                    value={oauthAccountName}
-                    onChange={(e) => setOauthAccountName(e.target.value)}
-                    placeholder="e.g. Work Copilot"
-                    className="w-full bg-surface-0 border border-border-default focus:border-border-emphasis rounded-lg px-3 py-2 text-fg-editor focus:outline-none text-xs transition"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="font-medium text-fg-editor">Authorized Account / Email</label>
-                  <input
-                    type="text"
-                    value={oauthEmail}
-                    onChange={(e) => setOauthEmail(e.target.value)}
-                    placeholder="e.g. dev@company.com"
-                    className="w-full bg-surface-0 border border-border-default focus:border-border-emphasis rounded-lg px-3 py-2 text-fg-editor focus:outline-none text-xs transition"
-                  />
-                </div>
-              </div>
-
-              {/* Device Flow Simulation Box */}
-              {oauthProvider === 'copilot' && (
-                <div className="p-3.5 bg-surface-0 border border-border-default rounded-xl space-y-2 font-mono text-[11px]">
-                  <div className="text-fg-subtle flex items-center justify-between">
-                    <span>GitHub Device Code Flow</span>
-                    <a
-                      href="https://github.com/login/device"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-workbench-accent hover:underline flex items-center gap-1 text-[10px]"
-                    >
-                      <span>github.com/login/device</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
-                  <div className="flex items-center justify-between p-2 bg-surface-2 rounded-lg border border-border-muted">
-                    <span className="text-fg-editor font-bold text-sm tracking-wider">{deviceCode}</span>
-                    <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                      Code Ready
-                    </span>
-                  </div>
-                </div>
-              )}
-
+              <p className="text-fg-muted text-xs">Your account identity is retrieved after authorization. No name or email input is required.</p>
               {/* OpenAI PKCE Interactive Box */}
-              {oauthProvider === 'openai' && (
+              {(
                 <div className="p-3.5 bg-surface-0 border border-border-default rounded-xl space-y-3 font-mono text-xs">
                   <div className="flex items-center justify-between text-fg-subtle text-[11px]">
-                    <span className="font-semibold text-fg-editor">OpenAI PKCE Flow (RFC 7636)</span>
+                    <span className="font-semibold text-fg-editor">{oauthProvider === 'copilot' ? 'GitHub Device Authorization' : `${oauthProviderLabel} PKCE Flow (RFC 7636)`}</span>
                     <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                      Auto-Refresh Enabled
+                      {oauthProvider === 'copilot' ? 'Device Flow' : 'PKCE S256'}
                     </span>
                   </div>
 
                   {!authUrlResult ? (
                     <div className="flex flex-col items-center justify-center p-4 bg-surface-2/60 rounded-xl border border-dashed border-border-default space-y-3">
                       <p className="text-[11px] text-fg-muted text-center font-sans">
-                        Click below to open OpenAI authorization in your browser. After authorizing, copy and paste the redirect URL or code below.
+                        Click below to authorize {oauthProviderLabel} in your browser. {oauthProvider === 'copilot' ? 'Enter the device code shown here on GitHub.' : oauthProvider === 'anthropic' ? 'Paste the authorization code#state from Claude below.' : 'Custos captures the callback automatically; manual paste is available below.'}
                       </p>
                       <button
                         type="button"
                         onClick={() => handleGenerateAuthorizeUrl(true)}
                         disabled={isGeneratingUrl}
-                        className="workbench-primary-action px-4 py-2 rounded-lg text-xs font-sans font-medium flex items-center gap-2 cursor-pointer disabled:opacity-50 shadow-sm"
+                        className="provider-oauth-action px-4 py-2 rounded-lg text-xs font-sans font-medium flex items-center gap-2 cursor-pointer disabled:opacity-50 shadow-sm"
                       >
                         {isGeneratingUrl ? (
                           <>
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Opening OpenAI Portal...</span>
+                            <span>Opening authorization portal...</span>
                           </>
                         ) : (
                           <>
                             <ExternalLink className="w-3.5 h-3.5" />
-                            <span>Log in with OpenAI (Opens Browser)</span>
+                            <span>Log in with {oauthProviderLabel} (Opens Browser)</span>
                           </>
                         )}
                       </button>
@@ -818,6 +659,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                     </div>
                   ) : (
                     <div className="space-y-3 font-sans">
+                      {authUrlResult.user_code && <div className="p-4 bg-surface-2 border border-border-emphasis rounded-lg text-center space-y-2"><p className="text-xs text-fg-muted">Enter this code on GitHub to authorize Copilot:</p><code className="text-xl tracking-widest text-fg-editor select-all">{authUrlResult.user_code}</code></div>}
                       {/* Auto Callback Listener Status Banner */}
                       <div className="p-3 bg-surface-2 border border-border-default rounded-xl text-xs space-y-1.5 font-sans">
                         <div className="flex items-center justify-between">
@@ -836,22 +678,22 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                               {callbackStatus === 'listening'
                                 ? 'Waiting for browser authorization...'
                                 : callbackStatus === 'exchanging'
-                                ? 'Exchanging tokens with OpenAI...'
-                                : 'Authorization callback complete!'}
+                                ? 'Exchanging provider tokens...'
+                                : callbackStatus === 'failed' ? 'Authorization failed' : callbackStatus === 'completed' ? 'Authorization complete' : 'Authorization pending'}
                             </span>
                           </div>
                           <span className="text-[10px] text-fg-muted font-mono bg-surface-1 px-1.5 py-0.5 rounded border border-border-muted">
-                            127.0.0.1:1455
+                            {oauthProvider === 'copilot' ? 'GitHub Device Flow' : authUrlResult.redirect_uri}
                           </span>
                         </div>
                         <p className="text-[11px] text-fg-muted">
-                          Once authorized in your browser, Custos automatically captures the session and completes setup.
+                          {oauthProvider === 'anthropic' ? 'After authorizing, paste the code#state shown by Claude below.' : 'Complete authorization in your browser; Custos waits for the provider response.'}
                         </p>
                       </div>
 
                       {/* URL Display & Action Buttons */}
                       <div className="space-y-1.5">
-                        <label className="text-[11px] font-medium text-fg-editor">1. Official OpenAI Authorization URL</label>
+                        <label className="text-[11px] font-medium text-fg-editor">1. Provider Authorization URL</label>
                         <div className="flex items-center gap-2">
                           <input
                             type="text"
@@ -862,7 +704,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                           <button
                             type="button"
                             onClick={handleOpenInBrowser}
-                            className="px-2.5 py-1.5 bg-workbench-accent text-white rounded-lg hover:brightness-110 text-xs font-medium flex items-center gap-1 shrink-0 cursor-pointer"
+                            className="provider-oauth-action px-2.5 py-1.5 rounded-lg hover:brightness-110 text-xs font-medium flex items-center gap-1 shrink-0 cursor-pointer"
                             title="Re-open in Browser"
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
@@ -881,21 +723,21 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                       </div>
 
                       {/* Callback Input & Exchange */}
-                      <div className="space-y-1.5">
+                      {oauthProvider !== 'copilot' && <div className="space-y-1.5">
                         <label className="text-[11px] font-medium text-fg-editor">
-                          2. Manual Fallback: Paste Callback URL or Authorization Code
+                          2. {oauthProvider === 'anthropic' ? 'Paste authorization code#state' : 'Manual Fallback: Paste Callback URL'}
                         </label>
                         <p className="text-[11px] text-fg-muted">
-                          If loopback auto-capture is blocked by external software, copy the redirect URL from your browser address bar (containing <code className="text-workbench-accent font-mono text-[10px]">?code=...</code>) and paste it below:
+                          {oauthProvider === "anthropic" ? "Paste the complete authorization code and state shown by Claude." : "If automatic capture is blocked, copy the redirect URL from your browser address bar (including code and state) and paste it below."}
                         </p>
                         <input
                           type="text"
                           value={callbackInput}
                           onChange={(e) => setCallbackInput(e.target.value)}
-                          placeholder="http://localhost:1455/auth/callback?code=... or raw code or sk-..."
+                          placeholder={oauthProvider === "anthropic" ? "code#state" : `${authUrlResult?.redirect_uri || "Callback URL"}?code=...&state=...`}
                           className="w-full bg-surface-0 border border-border-default focus:border-border-emphasis rounded-lg px-3 py-2 text-fg-editor focus:outline-none text-xs font-mono transition"
                         />
-                      </div>
+                      </div>}
 
                       {exchangeError && (
                         <div className="p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-[11px] flex items-center gap-2 font-sans">
@@ -911,16 +753,16 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                         </div>
                       )}
 
-                      <button
+                      {oauthProvider !== 'copilot' && <button
                         type="button"
                         onClick={handleExchangeCode}
                         disabled={!callbackInput.trim() || isExchangingCode || exchangeSuccess}
-                        className="w-full workbench-primary-action py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                        className="w-full provider-oauth-action py-2 rounded-lg text-xs font-medium flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                       >
                         {isExchangingCode ? (
                           <>
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Exchanging Token with OpenAI...</span>
+                            <span>Exchanging OAuth Token...</span>
                           </>
                         ) : exchangeSuccess ? (
                           <>
@@ -933,7 +775,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                             <span>Verify & Connect Provider</span>
                           </>
                         )}
-                      </button>
+                      </button>}
                     </div>
                   )}
                 </div>
@@ -952,7 +794,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  if (oauthProvider === 'openai') {
+                  if (!exchangeSuccess) {
                     if (!authUrlResult) {
                       handleGenerateAuthorizeUrl(true);
                     } else if (callbackInput.trim()) {
@@ -960,19 +802,17 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                     } else {
                       handleOpenInBrowser();
                     }
-                  } else {
-                    handleStartOAuthConnect();
                   }
                 }}
-                disabled={oauthStep === 'authorizing' || isGeneratingUrl || isExchangingCode}
-                className="workbench-primary-action px-4 py-1.5 rounded-lg font-medium transition text-xs shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                disabled={exchangeSuccess || isGeneratingUrl || isExchangingCode}
+                className="provider-oauth-action px-4 py-1.5 rounded-lg font-medium transition text-xs shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               >
-                {oauthStep === 'authorizing' || isExchangingCode ? (
+                {isExchangingCode ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     <span>Connecting OAuth...</span>
                   </>
-                ) : oauthStep === 'success' || exchangeSuccess ? (
+                ) : exchangeSuccess ? (
                   <>
                     <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Connected!</span>
@@ -981,9 +821,9 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                   <>
                     <ShieldCheck className="w-3.5 h-3.5" />
                     <span>
-                      {oauthProvider === 'openai' && !authUrlResult
-                        ? 'Log in with OpenAI'
-                        : oauthProvider === 'openai' && callbackInput.trim()
+                      {!authUrlResult
+                        ? `Log in with ${oauthProviderLabel}`
+                        : callbackInput.trim()
                         ? 'Verify & Connect'
                         : 'Authorize & Connect Account'}
                     </span>
