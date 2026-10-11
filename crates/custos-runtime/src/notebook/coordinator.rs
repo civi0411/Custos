@@ -8,9 +8,9 @@ use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::process::Command;
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, oneshot, RwLock};
 
 use custos_domain::{
     CellExecutionStatus, DomainError, ExecuteCellParams, ExecuteCellResult, KernelStatus,
@@ -18,12 +18,164 @@ use custos_domain::{
 };
 use custos_persistence::ResearchRepository;
 
+struct WorkerRequest {
+    code: String,
+    cwd: Option<String>,
+    resp_tx: oneshot::Sender<Result<WorkerResponse, DomainError>>,
+}
+
+#[derive(serde::Deserialize)]
+struct WorkerResponse {
+    status: String,
+    stdout: String,
+    stderr: String,
+}
+
+struct WorkerHandle {
+    sender: mpsc::Sender<WorkerRequest>,
+    pid: Option<u32>,
+}
+
+const PYTHON_RUNNER_SCRIPT: &str = r#"
+import sys, json, traceback, io, os
+
+__globals__ = {
+    '__name__': '__main__',
+    '__builtins__': __builtins__,
+}
+
+while True:
+    line = sys.stdin.readline()
+    if not line:
+        break
+    try:
+        req = json.loads(line)
+        code = req.get('code', '')
+        cwd = req.get('cwd')
+        if cwd and os.path.isdir(cwd):
+            try:
+                os.chdir(cwd)
+            except Exception:
+                pass
+        
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        s_out = io.StringIO()
+        s_err = io.StringIO()
+        sys.stdout = s_out
+        sys.stderr = s_err
+        
+        status = 'success'
+        try:
+            compiled = compile(code, '<notebook_cell>', 'exec')
+            exec(compiled, __globals__)
+        except Exception:
+            status = 'error'
+            traceback.print_exc(file=s_err)
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+            
+        resp = {
+            'status': status,
+            'stdout': s_out.getvalue(),
+            'stderr': s_err.getvalue()
+        }
+        sys.stdout.write(json.dumps(resp) + '\n')
+        sys.stdout.flush()
+    except Exception as e:
+        resp = {'status': 'error', 'stdout': '', 'stderr': str(e)}
+        sys.stdout.write(json.dumps(resp) + '\n')
+        sys.stdout.flush()
+"#;
+
+async fn spawn_worker_actor(
+    python_path: PathBuf,
+    work_dir: PathBuf,
+) -> Result<WorkerHandle, DomainError> {
+    let (tx, mut rx) = mpsc::channel::<WorkerRequest>(32);
+
+    let mut cmd = Command::new(&python_path);
+    cmd.arg("-u")
+        .arg("-c")
+        .arg(PYTHON_RUNNER_SCRIPT)
+        .current_dir(&work_dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| DomainError::Validation(format!("Failed to launch Python worker: {e}")))?;
+
+    let pid = child.id();
+    let mut stdin = child.stdin.take().ok_or_else(|| {
+        DomainError::Validation("Failed to acquire stdin for Python worker".into())
+    })?;
+    let stdout = child.stdout.take().ok_or_else(|| {
+        DomainError::Validation("Failed to acquire stdout for Python worker".into())
+    })?;
+    let mut reader = tokio::io::BufReader::new(stdout).lines();
+
+    tokio::spawn(async move {
+        while let Some(req) = rx.recv().await {
+            let payload = serde_json::json!({
+                "code": req.code,
+                "cwd": req.cwd
+            });
+            let mut line = serde_json::to_string(&payload).unwrap_or_default();
+            line.push('\n');
+
+            if let Err(e) = stdin.write_all(line.as_bytes()).await {
+                let _ = req.resp_tx.send(Err(DomainError::Validation(format!(
+                    "Failed to write to Python kernel stdin: {e}"
+                ))));
+                break;
+            }
+            if let Err(e) = stdin.flush().await {
+                let _ = req.resp_tx.send(Err(DomainError::Validation(format!(
+                    "Failed to flush Python kernel stdin: {e}"
+                ))));
+                break;
+            }
+
+            match reader.next_line().await {
+                Ok(Some(resp_line)) => match serde_json::from_str::<WorkerResponse>(&resp_line) {
+                    Ok(resp) => {
+                        let _ = req.resp_tx.send(Ok(resp));
+                    }
+                    Err(e) => {
+                        let _ = req.resp_tx.send(Err(DomainError::Validation(format!(
+                            "Failed to parse Python kernel response: {e}; raw: {resp_line}"
+                        ))));
+                    }
+                },
+                Ok(None) => {
+                    let _ = req.resp_tx.send(Err(DomainError::Validation(
+                        "Python kernel process terminated unexpectedly".into(),
+                    )));
+                    break;
+                }
+                Err(e) => {
+                    let _ = req.resp_tx.send(Err(DomainError::Validation(format!(
+                        "Error reading from Python kernel: {e}"
+                    ))));
+                    break;
+                }
+            }
+        }
+        let _ = child.kill().await;
+    });
+
+    Ok(WorkerHandle { sender: tx, pid })
+}
+
 struct ActiveKernel {
     epoch: u32,
     execution_counter: u32,
     status: KernelStatus,
     python_path: PathBuf,
-    active_child_pid: Option<u32>,
+    worker: Option<WorkerHandle>,
 }
 
 #[derive(Clone)]
@@ -117,7 +269,7 @@ impl PythonKernelCoordinator {
                     execution_counter: state.execution_counter,
                     status: state.status,
                     python_path: py,
-                    active_child_pid: None,
+                    worker: None,
                 },
             );
             Ok(state)
@@ -140,7 +292,7 @@ impl PythonKernelCoordinator {
                     execution_counter: 0,
                     status: KernelStatus::Idle,
                     python_path: py,
-                    active_child_pid: None,
+                    worker: None,
                 },
             );
             Ok(state)
@@ -153,7 +305,13 @@ impl PythonKernelCoordinator {
         repo: Option<&ResearchRepository>,
     ) -> Result<ExecuteCellResult, DomainError> {
         let python_path = Self::discover_python_path();
-        let (epoch, execution_count) = {
+        let work_dir = if let Some(ref cwd) = params.cwd {
+            PathBuf::from(cwd)
+        } else {
+            std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+        };
+
+        let (epoch, execution_count, worker_sender) = {
             let mut kernels = self.kernels.write().await;
             let kernel = kernels
                 .entry(params.session_id.clone())
@@ -162,82 +320,84 @@ impl PythonKernelCoordinator {
                     execution_counter: 0,
                     status: KernelStatus::Idle,
                     python_path: python_path.clone(),
-                    active_child_pid: None,
+                    worker: None,
                 });
 
             kernel.execution_counter += 1;
             kernel.status = KernelStatus::Busy;
-            (kernel.epoch, kernel.execution_counter)
-        };
 
-        let temp_dir = tempfile::tempdir()
-            .map_err(|e| DomainError::Validation(format!("Failed to create scratch dir: {e}")))?;
-        let script_path = temp_dir.path().join("cell_exec.py");
-        tokio::fs::write(&script_path, &params.code)
-            .await
-            .map_err(|e| DomainError::Validation(format!("Failed to write cell code: {e}")))?;
+            let sender = match &kernel.worker {
+                Some(w) if !w.sender.is_closed() => w.sender.clone(),
+                _ => {
+                    let handle = spawn_worker_actor(python_path.clone(), work_dir.clone()).await?;
+                    let tx = handle.sender.clone();
+                    kernel.worker = Some(handle);
+                    tx
+                }
+            };
 
-        let work_dir = if let Some(ref cwd) = params.cwd {
-            PathBuf::from(cwd)
-        } else {
-            temp_dir.path().to_path_buf()
+            (kernel.epoch, kernel.execution_counter, sender)
         };
 
         let start = Instant::now();
-        let mut cmd = Command::new(&python_path);
-        cmd.arg("-u")
-            .arg(&script_path)
-            .current_dir(&work_dir)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| DomainError::Validation(format!("Failed to launch Python: {e}")))?;
-
-        let pid = child.id();
-        {
-            let mut kernels = self.kernels.write().await;
-            if let Some(k) = kernels.get_mut(&params.session_id) {
-                k.active_child_pid = pid;
-            }
-        }
-
-        let stdout_handle = child.stdout.take();
-        let stderr_handle = child.stderr.take();
-
-        let wait_result = child.wait().await;
-        let wall_ms = start.elapsed().as_millis() as u64;
-
-        let mut stdout = String::new();
-        if let Some(mut r) = stdout_handle {
-            let _ = r.read_to_string(&mut stdout).await;
-        }
-
-        let mut stderr = String::new();
-        if let Some(mut r) = stderr_handle {
-            let _ = r.read_to_string(&mut stderr).await;
-        }
-
-        // Check for any plot image output generated in work_dir
-        let mut output_image: Option<String> = None;
-        let possible_plot = work_dir.join("_plot.png");
-        if possible_plot.exists() {
-            if let Ok(bytes) = tokio::fs::read(&possible_plot).await {
-                output_image = Some(format!("data:image/png;base64,{}", base64_encode(&bytes)));
-            }
-        }
-
-        let status = match wait_result {
-            Ok(exit) if exit.success() => CellExecutionStatus::Success,
-            _ => CellExecutionStatus::Error,
+        let (resp_tx, resp_rx) = oneshot::channel();
+        let worker_req = WorkerRequest {
+            code: params.code.clone(),
+            cwd: params.cwd.clone(),
+            resp_tx,
         };
+
+        let worker_res = if worker_sender.send(worker_req).await.is_err() {
+            // Worker channel closed, restart once and retry
+            let handle = spawn_worker_actor(python_path.clone(), work_dir.clone()).await?;
+            let sender = handle.sender.clone();
+            {
+                let mut kernels = self.kernels.write().await;
+                if let Some(k) = kernels.get_mut(&params.session_id) {
+                    k.worker = Some(handle);
+                }
+            }
+            let (retry_tx, retry_rx) = oneshot::channel();
+            let retry_req = WorkerRequest {
+                code: params.code.clone(),
+                cwd: params.cwd.clone(),
+                resp_tx: retry_tx,
+            };
+            sender.send(retry_req).await.map_err(|_| {
+                DomainError::Validation("Failed to communicate with restarted Python worker".into())
+            })?;
+            retry_rx.await.map_err(|_| {
+                DomainError::Validation("Python worker dropped execution response".into())
+            })?
+        } else {
+            resp_rx.await.map_err(|_| {
+                DomainError::Validation("Python worker dropped execution response".into())
+            })?
+        };
+
+        let wall_ms = start.elapsed().as_millis() as u64;
 
         {
             let mut kernels = self.kernels.write().await;
             if let Some(k) = kernels.get_mut(&params.session_id) {
                 k.status = KernelStatus::Idle;
-                k.active_child_pid = None;
+            }
+        }
+
+        let resp = worker_res?;
+
+        let status = if resp.status == "success" {
+            CellExecutionStatus::Success
+        } else {
+            CellExecutionStatus::Error
+        };
+
+        // Check for plot image in work_dir
+        let mut output_image: Option<String> = None;
+        let possible_plot = work_dir.join("_plot.png");
+        if possible_plot.exists() {
+            if let Ok(bytes) = tokio::fs::read(&possible_plot).await {
+                output_image = Some(format!("data:image/png;base64,{}", base64_encode(&bytes)));
             }
         }
 
@@ -250,8 +410,8 @@ impl PythonKernelCoordinator {
                 cell_index: 0,
                 execution_count: Some(execution_count),
                 status,
-                stdout: Some(stdout.clone()),
-                stderr: if stderr.is_empty() { None } else { Some(stderr.clone()) },
+                stdout: Some(resp.stdout.clone()),
+                stderr: if resp.stderr.is_empty() { None } else { Some(resp.stderr.clone()) },
                 output_image: output_image.clone(),
                 wall_ms: Some(wall_ms),
                 epoch,
@@ -264,8 +424,8 @@ impl PythonKernelCoordinator {
             cell_id: params.cell_id,
             execution_count,
             status,
-            stdout,
-            stderr,
+            stdout: resp.stdout,
+            stderr: resp.stderr,
             output_image,
             wall_ms,
             epoch,
@@ -275,10 +435,12 @@ impl PythonKernelCoordinator {
     pub async fn interrupt(&self, session_id: &str) -> Result<bool, DomainError> {
         let mut kernels = self.kernels.write().await;
         if let Some(k) = kernels.get_mut(session_id) {
-            if let Some(pid) = k.active_child_pid.take() {
-                #[cfg(unix)]
-                unsafe {
-                    libc::kill(pid as i32, libc::SIGINT);
+            if let Some(worker) = k.worker.take() {
+                if let Some(pid) = worker.pid {
+                    #[cfg(unix)]
+                    unsafe {
+                        libc::kill(pid as i32, libc::SIGKILL);
+                    }
                 }
                 k.status = KernelStatus::Interrupted;
                 return Ok(true);
@@ -300,14 +462,16 @@ impl PythonKernelCoordinator {
             execution_counter: 0,
             status: KernelStatus::Idle,
             python_path: py.clone(),
-            active_child_pid: None,
+            worker: None,
         });
 
-        // Kill active process if any
-        if let Some(pid) = entry.active_child_pid.take() {
-            #[cfg(unix)]
-            unsafe {
-                libc::kill(pid as i32, libc::SIGKILL);
+        // Terminate active worker actor process if any
+        if let Some(worker) = entry.worker.take() {
+            if let Some(pid) = worker.pid {
+                #[cfg(unix)]
+                unsafe {
+                    libc::kill(pid as i32, libc::SIGKILL);
+                }
             }
         }
 
@@ -415,5 +579,25 @@ mod tests {
         assert_eq!(res2.epoch, 2);
         assert_eq!(res2.execution_count, 1);
         assert!(res2.stdout.contains("x is 42"));
+
+        // 5. Test variable persistence in subsequent cell
+        let res3 = coordinator
+            .execute_cell(
+                ExecuteCellParams {
+                    session_id: "test_sess".into(),
+                    cell_id: "cell_3".into(),
+                    code: "print(f'persisted x: {x * 2}')".into(),
+                    workspace_id: None,
+                    cwd: None,
+                },
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(res3.status, CellExecutionStatus::Success);
+        assert_eq!(res3.epoch, 2);
+        assert_eq!(res3.execution_count, 2);
+        assert!(res3.stdout.contains("persisted x: 84"));
     }
 }

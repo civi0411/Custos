@@ -150,6 +150,14 @@ impl RouterModelProvider {
     /// Determines the provider service type from a given model identifier
     pub fn classify_provider(model: &str) -> &'static str {
         let m = model.trim().to_lowercase();
+        if m.starts_with("mock")
+            || m.starts_with("offline")
+            || m == "custos-mock"
+            || m == "custos-offline"
+            || m == "offline-sovereign"
+        {
+            return "mock";
+        }
         if m.starts_with("copilot/") { return "copilot"; }
         if m.starts_with("gemini-oauth/") { return "gemini-oauth"; }
         if m.starts_with("antigravity/") { return "antigravity"; }
@@ -453,11 +461,31 @@ impl ModelProvider for RouterModelProvider {
             }
             "openai" => {
                 let oauth = self.resolver.uses_oauth("openai").await?;
-                let token = self.resolver.get_token("openai").await?.ok_or_else(|| {
-                    DomainError::Validation(
-                        "OpenAI credentials not configured. Please log in with OpenAI via OAuth 2.0 PKCE or enter an API key in Settings > Providers.".into(),
-                    )
-                })?;
+                let token_res = self.resolver.get_token("openai").await;
+                let token = match token_res {
+                    Ok(Some(tok)) if !tok.trim().is_empty() => Some(tok),
+                    _ => self.resolve_token_with_fallback("openai").await,
+                };
+                let token = match token {
+                    Some(t) => t,
+                    None => {
+                        // Graceful offline fallback for unconfigured default prompt
+                        if requested_model.is_empty()
+                            || requested_model == "default"
+                            || requested_model == "openai"
+                        {
+                            let content = "Custos Sovereign (Offline Mode): Backend đã sẵn sàng! Bạn có thể kết nối OAuth 2.0 PKCE với OpenAI/Copilot/Gemini hoặc cấu hình API Key trong Settings > Providers để mở khoá toàn bộ năng lực mô hình đám mây.".to_string();
+                            return Ok(ModelResponse::text(
+                                content,
+                                "custos-sovereign-local".to_string(),
+                                35,
+                            ));
+                        }
+                        return Err(DomainError::Validation(
+                            "OpenAI credentials not configured. Please log in with OpenAI via OAuth 2.0 PKCE or enter an API key in Settings > Providers.".into(),
+                        ));
+                    }
+                };
                 let custom_url = self.resolver.get_endpoint_url("openai").await.ok().flatten();
                 if oauth {
                     return self.execute_chatgpt_codex(&token, requested_model, req).await;
@@ -522,6 +550,21 @@ impl ModelProvider for RouterModelProvider {
                     requested_model
                 };
                 self.execute_openai_compatible(&base_url, token.as_deref(), model, req, "Local Inference").await
+            }
+            "mock" => {
+                let content = format!(
+                    "Custos Sovereign (Offline Mode): Yêu cầu của bạn đã được tiếp nhận thành công ({} ký tự prompt). Hệ thống backend đang hoạt động ổn định ở chế độ Offline.",
+                    req.prompt.chars().count()
+                );
+                Ok(ModelResponse::text(
+                    content,
+                    if requested_model.is_empty() {
+                        "custos-offline".to_string()
+                    } else {
+                        requested_model.to_string()
+                    },
+                    42,
+                ))
             }
             _ => {
                 Err(DomainError::Validation(format!(
