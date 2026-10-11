@@ -57,6 +57,10 @@ import {
   OAuthAuthorizeResult,
   OAuthTokenRecord,
   OAuthStatusResult,
+  DomainPackManifest,
+  PacksJobCatalogItem,
+  WorkerRole,
+  RunPacksJobResult,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -971,6 +975,39 @@ export class DaemonClient {
   async runHeadlessJob(jobId: string): Promise<HeadlessAutomationJob> {
     return this.request<HeadlessAutomationJob>('v1.automation.jobs.run', {
       job_id: jobId,
+    });
+  }
+
+  // ==========================================
+  // Step 11: Domain Packs & Workbench Jobs API
+  // ==========================================
+  async listPacksManifests(): Promise<DomainPackManifest[]> {
+    return this.request<DomainPackManifest[]>('v1.packs.manifests.list', {});
+  }
+
+  async listPacksJobs(params?: { lens?: string; pack_id?: string }): Promise<PacksJobCatalogItem[]> {
+    return this.request<PacksJobCatalogItem[]>('v1.packs.jobs.list', params ?? {});
+  }
+
+  async getPacksJob(jobId: string): Promise<PacksJobCatalogItem> {
+    return this.request<PacksJobCatalogItem>('v1.packs.jobs.get', { job_id: jobId });
+  }
+
+  async listPacksRoles(packId?: string): Promise<WorkerRole[]> {
+    return this.request<WorkerRole[]>('v1.packs.roles.list', { pack_id: packId });
+  }
+
+  async runPacksJob(params: {
+    jobId: string;
+    sessionId?: string;
+    workspaceId?: string;
+    inputs?: Record<string, any>;
+  }): Promise<RunPacksJobResult> {
+    return this.request<RunPacksJobResult>('v1.packs.jobs.run', {
+      job_id: params.jobId,
+      session_id: params.sessionId,
+      workspace_id: params.workspaceId,
+      inputs: params.inputs ?? {},
     });
   }
 }

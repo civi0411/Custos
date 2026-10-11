@@ -16,13 +16,14 @@ import {
   Layers,
   Server,
   Smartphone,
+  Play,
 } from 'lucide-react';
 import { BrowserWorkbenchPane } from '@/components/views/BrowserWorkbenchPane';
 import { MobileSimulatorWorkbenchPane } from '@/components/views/MobileSimulatorWorkbenchPane';
 import { RemoteFleetWorkbenchPane } from '@/components/views/RemoteFleetWorkbenchPane';
 import { Session } from '@/types';
 import { daemonClient } from '@/api/daemon_client';
-import type { CapabilityDescriptor } from '@/types/domain';
+import type { CapabilityDescriptor, PacksJobCatalogItem } from '@/types/domain';
 import { ExecutionWorkspacesPane } from '@/components/workspaces/engineering/ExecutionWorkspacesPane';
 import { TerminalWorkbenchPane } from '@/components/workspaces/engineering/TerminalWorkbenchPane';
 import { FilesWorkbenchPane } from '@/components/workspaces/engineering/FilesWorkbenchPane';
@@ -179,6 +180,8 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   const [capabilities, setCapabilities] = React.useState<CapabilityDescriptor[]>([]);
   const [fetchFailed, setFetchFailed] = React.useState(false);
   const [capabilitiesLoaded, setCapabilitiesLoaded] = React.useState(false);
+  const [packsJobs, setPacksJobs] = React.useState<PacksJobCatalogItem[]>([]);
+  const [runningJobId, setRunningJobId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -197,10 +200,46 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
           setCapabilitiesLoaded(true);
         }
       });
+
+    daemonClient.listPacksJobs()
+      .then((jobs) => {
+        if (isMounted && Array.isArray(jobs)) {
+          setPacksJobs(jobs);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load workbench jobs from daemon:', err);
+      });
+
     return () => {
       isMounted = false;
     };
   }, []);
+
+  const handleRunJob = async (job: PacksJobCatalogItem) => {
+    if (job.status === 'planned') {
+      onShowToast?.(`Job "${job.name}" is planned for a future release.`);
+      return;
+    }
+    const id = job.jobId || job.job_id || '';
+    setRunningJobId(id);
+    try {
+      const res = await daemonClient.runPacksJob({
+        jobId: id,
+        sessionId: session?.id || session?.sessionId,
+      });
+      onShowToast?.(`Workbench Job "${job.name}" started (Task ${res.taskId || res.task_id})`);
+    } catch (err) {
+      onShowToast?.(`Failed to start job: ${String(err)}`);
+    } finally {
+      setRunningJobId(null);
+    }
+  };
+
+  const filteredJobs = React.useMemo(() => {
+    const targetLens = mode === 'code' ? 'coding' : mode === 'research' ? 'research' : 'assistant';
+    return packsJobs.filter((j) => j.lens === targetLens);
+  }, [packsJobs, mode]);
 
   const resources = React.useMemo(() => {
     if (!capabilitiesLoaded || fetchFailed) {
@@ -297,6 +336,107 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                 </button>
               );
             })}
+          </div>
+
+          <div className="mt-10 border-t border-[var(--color-border-muted)] pt-8">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Bot className="h-4 w-4 text-[var(--color-fg-muted)]" />
+                  <h2 className="text-sm font-semibold tracking-[-0.01em]">Workbench Jobs</h2>
+                  <span className="rounded-full bg-[var(--color-surface-2)] px-2 py-0.5 text-[10px] font-mono text-[var(--color-fg-muted)]">
+                    {filteredJobs.length}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] text-[var(--color-fg-muted)]">
+                  Pre-configured autonomous multi-role jobs tailored for the {mode} workbench.
+                </p>
+              </div>
+            </div>
+
+            {filteredJobs.length === 0 ? (
+              <div className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-6 text-center text-xs text-[var(--color-fg-muted)]">
+                No jobs configured for the {mode} workbench.
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {filteredJobs.map((job) => {
+                  const id = job.jobId || job.job_id || '';
+                  const role = job.primaryRole || job.primary_role || 'Agent';
+                  const topology = job.recommendedTopology || job.recommended_topology || 'Single';
+                  const isRunning = runningJobId === id;
+                  const isPlanned = job.status === 'planned';
+                  const isDegraded = job.status === 'degraded';
+                  const reason = job.degradationReason || job.degradation_reason;
+
+                  return (
+                    <div
+                      key={id}
+                      className="group flex flex-col justify-between rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-4 transition hover:border-[var(--color-border-default)] hover:bg-[var(--color-surface-2)]"
+                    >
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="font-semibold text-xs text-[var(--color-fg-default)]">
+                            {job.name}
+                          </div>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] ${
+                              job.status === 'available'
+                                ? 'bg-emerald-500/10 text-emerald-500'
+                                : isDegraded
+                                ? 'bg-amber-500/10 text-amber-500'
+                                : 'bg-zinc-500/10 text-[var(--color-fg-subtle)]'
+                            }`}
+                          >
+                            {job.status}
+                          </span>
+                        </div>
+
+                        <p className="mt-1.5 text-[11px] leading-5 text-[var(--color-fg-muted)]">
+                          {job.description}
+                        </p>
+
+                        {isDegraded && reason && (
+                          <div className="mt-2 rounded-md bg-amber-500/10 border border-amber-500/20 px-2 py-1 text-[10px] text-amber-600 dark:text-amber-400">
+                            {reason}
+                          </div>
+                        )}
+
+                        <div className="mt-3 flex flex-wrap items-center gap-2 text-[10px] text-[var(--color-fg-subtle)] font-mono">
+                          <span className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5">
+                            Role: {role}
+                          </span>
+                          <span className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5">
+                            Topology: {topology}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex items-center justify-between border-t border-[var(--color-border-subtle)] pt-3">
+                        <span className="text-[10px] text-[var(--color-fg-subtle)] font-mono truncate max-w-[150px]">
+                          {id}
+                        </span>
+                        <button
+                          type="button"
+                          disabled={isPlanned || isRunning}
+                          onClick={() => handleRunJob(job)}
+                          className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                            isPlanned
+                              ? 'cursor-not-allowed opacity-50 bg-[var(--color-surface-2)] text-[var(--color-fg-subtle)]'
+                              : isRunning
+                              ? 'opacity-70 bg-indigo-500/20 text-indigo-400'
+                              : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm'
+                          }`}
+                        >
+                          <Play className="h-3 w-3 fill-current" />
+                          {isRunning ? 'Starting...' : isPlanned ? 'Planned' : 'Run Job'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="mt-6 flex items-center gap-2 border-t border-[var(--color-border-muted)] pt-4 text-[10px] text-[var(--color-fg-subtle)]">

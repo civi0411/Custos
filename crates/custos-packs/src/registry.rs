@@ -42,7 +42,10 @@ impl DomainPackRegistry {
 
     /// Retrieves the domain pack associated with a specific Workbench Lens.
     pub fn get_pack_for_lens(&self, lens: WorkbenchLens) -> Option<Arc<dyn DomainPack>> {
-        self.packs.values().find(|p| p.manifest().lens == lens).cloned()
+        self.packs
+            .values()
+            .find(|p| p.manifest().lens == lens)
+            .cloned()
     }
 
     /// Looks up a specialized WorkerRole (Subagent) across all registered packs.
@@ -68,7 +71,11 @@ impl DomainPackRegistry {
     /// Looks up a verification oracle across all registered packs by its verifier_id.
     pub fn get_verifier(&self, verifier_id: &str) -> Option<Arc<dyn PackVerifier>> {
         for pack in self.packs.values() {
-            if let Some(verifier) = pack.verifiers().into_iter().find(|v| v.verifier_id() == verifier_id) {
+            if let Some(verifier) = pack
+                .verifiers()
+                .into_iter()
+                .find(|v| v.verifier_id() == verifier_id)
+            {
                 return Some(verifier);
             }
         }
