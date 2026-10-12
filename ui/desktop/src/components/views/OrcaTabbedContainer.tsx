@@ -22,7 +22,7 @@ import { MobileSimulatorWorkbenchPane } from '@/components/views/MobileSimulator
 import { RemoteFleetWorkbenchPane } from '@/components/views/RemoteFleetWorkbenchPane';
 import { Session } from '@/types';
 import { daemonClient } from '@/api/daemon_client';
-import type { CapabilityDescriptor, PacksJobCatalogItem } from '@/types/domain';
+import type { CapabilityDescriptor } from '@/types/domain';
 import { ExecutionWorkspacesPane } from '@/components/workspaces/engineering/ExecutionWorkspacesPane';
 import { TerminalWorkbenchPane } from '@/components/workspaces/engineering/TerminalWorkbenchPane';
 import { FilesWorkbenchPane } from '@/components/workspaces/engineering/FilesWorkbenchPane';
@@ -181,7 +181,6 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   const [capabilities, setCapabilities] = React.useState<CapabilityDescriptor[]>([]);
   const [fetchFailed, setFetchFailed] = React.useState(false);
   const [capabilitiesLoaded, setCapabilitiesLoaded] = React.useState(false);
-  const [packsJobs, setPacksJobs] = React.useState<PacksJobCatalogItem[]>([]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -201,25 +200,10 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
         }
       });
 
-    daemonClient.listPacksJobs()
-      .then((jobs) => {
-        if (isMounted && Array.isArray(jobs)) {
-          setPacksJobs(jobs);
-        }
-      })
-      .catch((err) => {
-        console.warn('Failed to load workbench jobs from daemon:', err);
-      });
-
     return () => {
       isMounted = false;
     };
   }, []);
-
-  const filteredJobs = React.useMemo(() => {
-    const targetLens = mode === 'code' ? 'coding' : mode === 'research' ? 'research' : 'assistant';
-    return packsJobs.filter((j) => j.lens === targetLens);
-  }, [packsJobs, mode]);
 
   const resources = React.useMemo(() => {
     if (!capabilitiesLoaded || fetchFailed) {
@@ -316,47 +300,6 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                 </button>
               );
             })}
-          </div>
-
-          <div className="mt-8 border-t border-[var(--color-border-muted)] pt-6">
-            <details className="group rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-4 transition">
-              <summary className="flex cursor-pointer items-center justify-between text-xs font-semibold text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] transition select-none">
-                <div className="flex items-center gap-2">
-                  <Bot className="h-4 w-4 text-[var(--color-fg-muted)]" />
-                  <span>Workflow Job Capabilities ({filteredJobs.length} autonomous jobs)</span>
-                </div>
-                <span className="text-[11px] text-[var(--color-fg-subtle)] font-normal group-open:hidden">
-                  Click to inspect registered jobs
-                </span>
-              </summary>
-              <p className="mt-2 text-[11px] leading-relaxed text-[var(--color-fg-subtle)]">
-                Autonomous multi-role jobs are contextually integrated directly into their respective workbench views (Changes, Files, Kanban, Literature, Runs, Notebooks) and available via chat slash commands.
-              </p>
-              <div className="mt-3.5 grid gap-2.5 md:grid-cols-2">
-                {filteredJobs.map((job) => {
-                  const id = job.jobId || job.job_id || '';
-                  const role = job.primaryRole || job.primary_role || 'Agent';
-                  return (
-                    <div
-                      key={id}
-                      className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)]/60 p-3 text-xs"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-[var(--color-fg-default)]">{job.name}</span>
-                        <span className="rounded bg-[var(--color-surface-1)] px-1.5 py-0.5 text-[9px] font-mono text-[var(--color-fg-subtle)] uppercase">
-                          {job.status}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-[11px] text-[var(--color-fg-muted)] line-clamp-2">{job.description}</p>
-                      <div className="mt-2 flex items-center justify-between text-[10px] font-mono text-[var(--color-fg-subtle)]">
-                        <span>Role: {role}</span>
-                        <span>{id}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </details>
           </div>
 
           <div className="mt-6 flex items-center gap-2 border-t border-[var(--color-border-muted)] pt-4 text-[10px] text-[var(--color-fg-subtle)]">
