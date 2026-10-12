@@ -143,7 +143,7 @@ export function useTerminalCommands({ currentMode, onModeChange }: UseTerminalCo
     setHistoryIndex(-1);
 
     const activeSlug = getModeSlug(currentMode as OperationalMode);
-    addLine('input', trimmed);
+    addLine('input', trimmed, { mode: currentMode as OperationalMode });
 
     if (trimmed === '/' || trimmed === '/mode' || trimmed === 'mode') {
       setShowModeSelector(true);

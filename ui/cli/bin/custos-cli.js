@@ -716,7 +716,14 @@ export function printUserMessageCard(promptText, mode = 'code') {
   console.log();
 }
 
-function renderHeroFrame({ currentInput = '', cursorPos = 0, currentMode = 'custos', chatTurns = [], scrollOffset = 0 }) {
+function renderHeroFrame({
+  currentInput = '',
+  cursorPos = 0,
+  currentMode = 'custos',
+  chatTurns = [],
+  scrollOffset = 0,
+  scrollState,
+}) {
   const termW = getTerminalWidth();
   const termH = process.stdout.rows || 30;
 
@@ -772,7 +779,7 @@ function renderHeroFrame({ currentInput = '', cursorPos = 0, currentMode = 'cust
   const line3 = boxIndentStr + blueBar + bg(statusContent + ' '.repeat(padStatusRight));
 
   const shortcutHint = (chatTurns && chatTurns.length > 0)
-    ? `${chalk.rgb(150, 150, 150)('pgup/pgdn')} ${chalk.rgb(105, 105, 105)('cuộn')}  ${chalk.rgb(150, 150, 150)('tab')} ${chalk.rgb(105, 105, 105)('switch agent')}  ${chalk.rgb(150, 150, 150)('ctrl+p')} ${chalk.rgb(105, 105, 105)('commands')}`
+    ? `${chalk.rgb(150, 150, 150)('wheel/pgup')} ${chalk.rgb(105, 105, 105)('cuộn')}  ${chalk.rgb(150, 150, 150)('tab')} ${chalk.rgb(105, 105, 105)('switch agent')}  ${chalk.rgb(150, 150, 150)('ctrl+p')} ${chalk.rgb(105, 105, 105)('commands')}`
     : `${chalk.rgb(150, 150, 150)('tab')} ${chalk.rgb(105, 105, 105)('switch agent')}  ${chalk.rgb(150, 150, 150)('ctrl+p')} ${chalk.rgb(105, 105, 105)('commands')}`;
 
   const shortcutsVisibleLen = stripAnsi(shortcutHint).length;
@@ -780,6 +787,11 @@ function renderHeroFrame({ currentInput = '', cursorPos = 0, currentMode = 'cust
   const lineShortcuts = ' '.repeat(boxLeft + padShortcuts) + shortcutHint;
 
   const output = [];
+
+  if (scrollState) {
+    scrollState.maxScroll = 0;
+    scrollState.effectiveScroll = 0;
+  }
 
   if (!chatTurns || chatTurns.length === 0) {
     const totalLines = BANNER_ART_RAW.length + 3 + 5 + 7;
@@ -860,6 +872,11 @@ function renderHeroFrame({ currentInput = '', cursorPos = 0, currentMode = 'cust
     const maxScroll = Math.max(0, totalLines - availableHistoryRows);
     const effectiveScroll = Math.max(0, Math.min(scrollOffset, maxScroll));
 
+    if (scrollState) {
+      scrollState.maxScroll = maxScroll;
+      scrollState.effectiveScroll = effectiveScroll;
+    }
+
     if (totalLines <= availableHistoryRows) {
       for (const hLine of allHistoryLines) {
         output.push(hLine + '\x1b[K');
@@ -870,7 +887,7 @@ function renderHeroFrame({ currentInput = '', cursorPos = 0, currentMode = 'cust
       const visibleLines = allHistoryLines.slice(startIndex, endIndex);
 
       if (startIndex > 0) {
-        output.push(boxIndentStr + chalk.rgb(120, 120, 120)('▲ ') + chalk.dim(`Còn ${startIndex} dòng phía trên [PageUp / Ctrl+↑ để cuộn]`) + '\x1b[K');
+        output.push(boxIndentStr + chalk.rgb(120, 120, 120)('▲ ') + chalk.dim(`Còn ${startIndex} dòng phía trên [con lăn / PageUp để cuộn]`) + '\x1b[K');
       } else {
         output.push('\x1b[K');
       }
@@ -916,11 +933,22 @@ function promptInteractiveChat({ currentMode, history, chatTurns = [] }) {
     let cursorPos = 0;
     let historyIdx = history.length;
     let scrollOffset = 0;
+    let mouseKeypressBlockedUntil = 0;
+    const scrollState = { maxScroll: 0, effectiveScroll: 0 };
 
     outputDevice.write('\x1b[2J\x1b[H');
 
     const render = () => {
-      outputDevice.write('\x1b[?25l\x1b[H' + renderHeroFrame({ currentInput: inputStr, cursorPos, currentMode, chatTurns, scrollOffset }));
+      const frame = renderHeroFrame({
+        currentInput: inputStr,
+        cursorPos,
+        currentMode,
+        chatTurns,
+        scrollOffset,
+        scrollState,
+      });
+      scrollOffset = scrollState.effectiveScroll;
+      outputDevice.write('\x1b[?25l\x1b[H' + frame);
     };
 
     const onResize = () => {
@@ -930,11 +958,35 @@ function promptInteractiveChat({ currentMode, history, chatTurns = [] }) {
 
     const cleanup = () => {
       inputDevice.removeListener('keypress', onKeypress);
+      inputDevice.removeListener('data', onMouseData);
       process.stdout.removeListener('resize', onResize);
-      outputDevice.write('\x1b[?25h');
+      outputDevice.write('\x1b[?1006l\x1b[?1000l\x1b[?25h');
+    };
+
+    const onMouseData = (data) => {
+      const sequence = data.toString();
+      if (sequence.includes('\x1b[<')) {
+        mouseKeypressBlockedUntil = Date.now() + 50;
+      }
+      const mouseEvents = sequence.matchAll(/\x1b\[<(\d+);\d+;\d+[Mm]/g);
+      let changed = false;
+
+      for (const event of mouseEvents) {
+        const button = Number(event[1]);
+        if ((button & 64) !== 64) continue;
+        const direction = (button & 1) === 0 ? 1 : -1;
+        scrollOffset = Math.max(0, Math.min(scrollState.maxScroll, scrollOffset + direction * 3));
+        changed = true;
+      }
+
+      if (changed) render();
     };
 
     const onKeypress = (str, key) => {
+      if (Date.now() <= mouseKeypressBlockedUntil || (str && /\x1b\[<\d+;\d+;\d+[Mm]/.test(str))) {
+        return;
+      }
+
       if (key?.ctrl && key?.name === 'c') {
         cleanup();
         leaveAlternateScreen();
@@ -1094,6 +1146,8 @@ function promptInteractiveChat({ currentMode, history, chatTurns = [] }) {
     if (inputDevice.isTTY) inputDevice.setRawMode(true);
     inputDevice.resume();
     inputDevice.on('keypress', onKeypress);
+    inputDevice.prependListener('data', onMouseData);
+    outputDevice.write('\x1b[?1000h\x1b[?1006h');
     render();
   });
 }
@@ -1468,7 +1522,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-
-
-
-

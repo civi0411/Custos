@@ -26,8 +26,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const [copied, setCopied] = useState(false);
   const [paletteLevel, setPaletteLevel] = useState<'root' | 'mode'>('root');
 
-  const terminalEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const terminalScreenRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const {
     lines,
@@ -59,7 +59,9 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   });
 
   const scrollToBottom = () => {
-    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const screen = terminalScreenRef.current;
+    if (!screen) return;
+    screen.scrollTo({ top: screen.scrollHeight, behavior: 'smooth' });
   };
 
   useEffect(() => {
@@ -122,7 +124,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     inputRef.current?.focus();
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setInputVal(val);
     if (val.startsWith('/')) {
@@ -134,7 +136,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Tab' && isWelcome) {
       e.preventDefault();
       setPaletteLevel('mode');
@@ -186,7 +188,8 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       }
     }
 
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
       if (inputVal.trim() === '/mode' || inputVal.trim() === 'mode') {
         setPaletteLevel('mode');
         setShowModeSelector(true);
@@ -230,7 +233,14 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   };
 
   return (
-    <div className="terminal-view-card is-welcome">
+    <div
+      className="terminal-view-card is-welcome"
+      onWheel={(event) => {
+        const screen = terminalScreenRef.current;
+        if (!screen || screen.contains(event.target as Node)) return;
+        screen.scrollBy({ top: event.deltaY });
+      }}
+    >
       <div className="opencode-top-actions">
         <button
           className="term-action-btn mode-pill-btn"
@@ -264,6 +274,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
       </div>
 
       <div
+        ref={terminalScreenRef}
         className="terminal-screen opencode-screen"
         onClick={(e) => {
           if (window.getSelection()?.toString()) return;
@@ -286,37 +297,39 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
             />
           ))}
 
-          <div className="terminal-prompt-wrapper">
-            {showModeSelector && (
-              <ModeSelectorPalette
-                items={paletteItems}
-                title={paletteLevel === 'mode' ? 'CHỌN MODE' : 'LỆNH & CHỨC NĂNG CUSTOS'}
-                filterQuery={filterQuery}
-                selectedIndex={selectedModeIndex}
-                onSelectIndex={setSelectedModeIndex}
-                onSelectItem={handleSelectSlashItem}
-              />
-            )}
+        </div>
+      </div>
 
-            <TerminalPrompt
-              currentMode={currentMode}
-              inputVal={inputVal}
-              isProcessing={isProcessing}
-              showModeSelector={showModeSelector}
-              vibeSession={vibeSession}
-              inputRef={inputRef}
-              onInputChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              onToggleModeSelector={() => {
-                setPaletteLevel('root');
-                setShowModeSelector((prev) => !prev);
-                setSelectedModeIndex(0);
-                inputRef.current?.focus();
-              }}
-              onSend={handleSend}
+      <div className="terminal-composer-dock">
+        <div className="terminal-prompt-wrapper">
+          {showModeSelector && (
+            <ModeSelectorPalette
+              items={paletteItems}
+              title={paletteLevel === 'mode' ? 'CHỌN MODE' : 'LỆNH & CHỨC NĂNG CUSTOS'}
+              filterQuery={filterQuery}
+              selectedIndex={selectedModeIndex}
+              onSelectIndex={setSelectedModeIndex}
+              onSelectItem={handleSelectSlashItem}
             />
-          </div>
-          <div ref={terminalEndRef} />
+          )}
+
+          <TerminalPrompt
+            currentMode={currentMode}
+            inputVal={inputVal}
+            isProcessing={isProcessing}
+            showModeSelector={showModeSelector}
+            vibeSession={vibeSession}
+            inputRef={inputRef}
+            onInputChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            onToggleModeSelector={() => {
+              setPaletteLevel('root');
+              setShowModeSelector((prev) => !prev);
+              setSelectedModeIndex(0);
+              inputRef.current?.focus();
+            }}
+            onSend={handleSend}
+          />
         </div>
       </div>
     </div>
