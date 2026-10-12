@@ -154,6 +154,8 @@ export interface CreateTaskParams {
 export interface StartRunParams {
   background?: boolean;
   task_id: string;
+  actor?: string;
+  workflow_revision?: string;
   instruction?: string;
   preferred_mode?: 'model' | 'native' | 'terminal';
   workspace_id?: string;

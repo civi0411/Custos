@@ -118,6 +118,38 @@ pub fn resolve_agent_browser_binary() -> Option<std::path::PathBuf> {
     None
 }
 
+pub fn resolve_ssh_binary() -> Option<std::path::PathBuf> {
+    if let Ok(path) = std::env::var("SSH_BINARY") {
+        let p = std::path::PathBuf::from(path);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    for candidate in [
+        "/usr/bin/ssh",
+        "/usr/local/bin/ssh",
+        "/opt/homebrew/bin/ssh",
+    ] {
+        let p = std::path::PathBuf::from(candidate);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    if let Ok(output) = std::process::Command::new("which")
+        .arg("ssh")
+        .output()
+    {
+        if output.status.success() {
+            let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let p = std::path::PathBuf::from(path_str);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
 // Effectful Browser and Remote Fleet operations stay fail-closed until their
 // transports are composed behind governed capability ports. Keeping this
 // decision in one place prevents persisted inventory/session metadata from
@@ -131,7 +163,7 @@ fn browser_execution_adapter_connected() -> bool {
 fn remote_execution_adapter_connected() -> bool {
     std::env::var("CUSTOS_REMOTE_FLEET_CONNECTED")
         .map(|v| v != "0" && v != "false")
-        .unwrap_or(false)
+        .unwrap_or_else(|_| resolve_ssh_binary().is_some())
 }
 
 /// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, WorkflowPort, ResearchRepository, ProviderRepository, TerminalCoordinator, and WorkspaceFilesPort for IPC callers.
@@ -535,15 +567,26 @@ impl LocalApiDispatcher {
                 )
             },
             if self.fleet_automation.is_some() {
-                CapabilityDescriptor::degraded(
-                    "remote.fleet",
-                    "Remote Fleet",
-                    CapabilityGroup::Compute,
-                    "Persisted SSH host inventory.",
-                    Some("fleet"),
-                    "SSH transport is not connected; probes and remote execution are refused.",
-                    vec!["hosts.list", "hosts.register"],
-                )
+                if remote_execution_adapter_connected() {
+                    CapabilityDescriptor::available(
+                        "remote.fleet",
+                        "Remote Fleet",
+                        CapabilityGroup::Compute,
+                        "SSH remote host inventory, ping latency probes, and distributed node execution.",
+                        Some("fleet"),
+                        vec!["hosts.list", "hosts.register", "hosts.ping", "fleet.exec"],
+                    )
+                } else {
+                    CapabilityDescriptor::degraded(
+                        "remote.fleet",
+                        "Remote Fleet",
+                        CapabilityGroup::Compute,
+                        "Persisted SSH host inventory.",
+                        Some("fleet"),
+                        "SSH transport is not connected; probes and remote execution are refused.",
+                        vec!["hosts.list", "hosts.register"],
+                    )
+                }
             } else {
                 CapabilityDescriptor::unavailable(
                     "remote.fleet",
@@ -4736,7 +4779,8 @@ impl LocalApiDispatcher {
                 let now = chrono::Utc::now().timestamp_millis();
                 let start = std::time::Instant::now();
 
-                let mut cmd = tokio::process::Command::new("ssh");
+                let ssh_bin = resolve_ssh_binary().unwrap_or_else(|| std::path::PathBuf::from("ssh"));
+                let mut cmd = tokio::process::Command::new(ssh_bin);
                 cmd.arg("-o").arg("BatchMode=yes")
                    .arg("-o").arg("ConnectTimeout=3")
                    .arg("-o").arg("StrictHostKeyChecking=yes")
@@ -4814,7 +4858,8 @@ impl LocalApiDispatcher {
                 let now = chrono::Utc::now().timestamp_millis();
                 let start = std::time::Instant::now();
 
-                let mut cmd = tokio::process::Command::new("ssh");
+                let ssh_bin = resolve_ssh_binary().unwrap_or_else(|| std::path::PathBuf::from("ssh"));
+                let mut cmd = tokio::process::Command::new(ssh_bin);
                 cmd.arg("-o").arg("BatchMode=yes")
                    .arg("-o").arg("ConnectTimeout=10")
                    .arg("-o").arg("StrictHostKeyChecking=yes")
@@ -4843,6 +4888,7 @@ impl LocalApiDispatcher {
                             verified: false,
                             timestamp: now,
                         };
+                        let _ = fleet.save_fleet_execution(&receipt);
                         match serde_json::to_value(&receipt) {
                             Ok(val) => ApiResponse::success(req.id, val),
                             Err(e) => ApiResponse::error(req.id, e.to_string()),
@@ -6932,8 +6978,14 @@ mod tests {
             params: serde_json::json!({ "host_id": host.id }),
         };
         let ping_res = dispatcher.handle_request(ping_req).await;
-        assert!(!ping_res.is_success());
-        assert!(ping_res.error.unwrap().contains("remote execution adapter"));
+        if remote_execution_adapter_connected() {
+            assert!(ping_res.is_success());
+            let result_val = ping_res.result.unwrap();
+            assert_eq!(result_val.get("status").and_then(|v| v.as_str()), Some("offline"));
+        } else {
+            assert!(!ping_res.is_success());
+            assert!(ping_res.error.unwrap().contains("remote execution adapter"));
+        }
 
         let exec_fleet_req = ApiRequest {
             id: "fleet_exec_1".into(),
@@ -6944,11 +6996,19 @@ mod tests {
             }),
         };
         let exec_fleet_res = dispatcher.handle_request(exec_fleet_req).await;
-        assert!(!exec_fleet_res.is_success());
-        assert!(exec_fleet_res
-            .error
-            .unwrap()
-            .contains("remote execution adapter"));
+        if remote_execution_adapter_connected() {
+            assert!(exec_fleet_res.is_success());
+            let exec_val = exec_fleet_res.result.unwrap();
+            let receipt: FleetExecReceipt = serde_json::from_value(exec_val).unwrap();
+            assert_eq!(receipt.host_id, host.id);
+            assert!(!receipt.verified);
+        } else {
+            assert!(!exec_fleet_res.is_success());
+            assert!(exec_fleet_res
+                .error
+                .unwrap()
+                .contains("remote execution adapter"));
+        }
 
         // 3. Automation definitions are durable, while running needs an executor.
         let create_job_req = ApiRequest {
