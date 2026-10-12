@@ -6,7 +6,6 @@ import {
   Power,
   RefreshCw,
   Copy,
-  Check,
   Terminal,
   ShieldCheck,
   Camera,
@@ -76,7 +75,7 @@ interface MobileSimulatorWorkbenchPaneProps {
 }
 
 export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPaneProps> = ({
-  onShowToast,
+  onShowToast: _onShowToast,
   defaultUrl = 'http://localhost:5173',
 }) => {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('iphone-15-pro');
@@ -86,7 +85,6 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
   const [activeUrl, setActiveUrl] = useState<string>(defaultUrl);
   const [isPowerOn, setIsPowerOn] = useState<boolean>(true);
   const [activeDrawer, setActiveDrawer] = useState<'axtree' | 'console' | 'evidence'>('axtree');
-  const [copiedAx, setCopiedAx] = useState<boolean>(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const device = useMemo(
@@ -102,19 +100,16 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
     const trimmed = urlInput.trim();
     if (!trimmed) return;
     setActiveUrl(trimmed.startsWith('http') ? trimmed : `http://${trimmed}`);
-    onShowToast?.(`Simulator loaded: ${trimmed}`);
   };
 
   const handleReload = () => {
     if (iframeRef.current) {
       iframeRef.current.src = activeUrl;
-      onShowToast?.('Simulator reloaded.');
     }
   };
 
   const toggleOrientation = () => {
     setOrientation((prev) => (prev === 'portrait' ? 'landscape' : 'portrait'));
-    onShowToast?.(`Orientation: ${orientation === 'portrait' ? 'Landscape' : 'Portrait'}`);
   };
 
   // Mock Accessibility Tree (AX Tree) representation for Coding Agent ingestion
@@ -129,28 +124,6 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
       { id: '7', role: 'navigation', name: 'Bottom Tab Bar', bounds: { x: 0, y: screenHeight - 64, w: screenWidth, h: 64 } },
     ];
   }, [screenWidth, screenHeight]);
-
-  const handleCopyAxTree = () => {
-    const formatted = JSON.stringify(
-      {
-        device: device.name,
-        orientation,
-        viewport: { width: screenWidth, height: screenHeight, dpr: device.dpr },
-        url: activeUrl,
-        accessibility_tree: mockAxTree,
-      },
-      null,
-      2
-    );
-    navigator.clipboard.writeText(formatted);
-    setCopiedAx(true);
-    setTimeout(() => setCopiedAx(false), 2000);
-    onShowToast?.('Accessibility tree copied for Agent context.');
-  };
-
-  const handleCaptureEvidence = () => {
-    onShowToast?.(`Visual evidence receipt recorded for ${device.name} (${screenWidth}x${screenHeight}).`);
-  };
 
   return (
     <div className="flex flex-col h-full bg-[#101012] text-zinc-200 text-xs overflow-hidden select-none font-sans">
@@ -414,17 +387,18 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
                     <span>Agent Screen Ingestion</span>
                   </div>
                   <button
-                    onClick={handleCopyAxTree}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] transition"
+                    disabled
+                    title="AX tree ingestion requires mobile simulator adapter (P3)"
+                    className="flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-800/50 text-zinc-500 text-[10px] cursor-not-allowed transition"
                   >
-                    {copiedAx ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
-                    <span>{copiedAx ? 'Copied' : 'Copy for Agent'}</span>
+                    <Copy size={11} />
+                    <span>Copy for Agent</span>
                   </button>
                 </div>
 
-                <p className="text-[10px] font-sans text-zinc-500 leading-normal">
-                  Hierarchical element snapshot for Coding LLMs to inspect UI responsiveness, button reachability, and touch target sizes.
-                </p>
+                <div className="p-2.5 rounded bg-amber-500/5 border border-amber-500/20 text-[10px] text-amber-400 font-sans">
+                  Synthetic preview tree. Live AX tree extraction from native device engine requires the mobile simulator adapter (P3).
+                </div>
 
                 <div className="space-y-1.5">
                   {mockAxTree.map((node) => (
@@ -471,17 +445,22 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
                     <ShieldCheck size={13} className="text-cyan-400" />
                     <span>Invariant Visual Evidence</span>
                   </span>
+                  <span className="text-[10px] text-amber-400 font-mono">Adapter Pending</span>
                 </div>
                 <p className="text-[10px] font-sans text-zinc-500 leading-normal">
-                  Record mobile viewport render proof into the session journal to satisfy verification gates.
+                  Record mobile viewport render proof into the session journal to satisfy verification gates. Visual receipt generation requires the mobile execution adapter (P3).
                 </p>
                 <button
-                  onClick={handleCaptureEvidence}
-                  className="w-full flex items-center justify-center gap-2 py-1.5 bg-cyan-900/60 hover:bg-cyan-800/80 border border-cyan-700/60 rounded text-cyan-200 text-xs font-sans font-medium transition"
+                  disabled
+                  title="Visual evidence receipts require simulator execution adapter (P3)"
+                  className="w-full flex items-center justify-center gap-2 py-1.5 bg-zinc-800/50 border border-zinc-700/60 rounded text-zinc-500 text-xs font-sans font-medium cursor-not-allowed transition"
                 >
                   <Camera size={13} />
-                  <span>Record Render Receipt</span>
+                  <span>Record Render Receipt (Adapter Pending)</span>
                 </button>
+                <div className="p-3 bg-zinc-950 rounded border border-zinc-850 text-zinc-500 text-[10px] leading-relaxed">
+                  No verified visual receipts attached. Physical renderer proofs will be persisted here once the simulator adapter is connected.
+                </div>
               </div>
             )}
           </div>

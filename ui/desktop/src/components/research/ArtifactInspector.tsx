@@ -391,7 +391,11 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
               }`}
             >
               <div className="flex items-center gap-3">
-                {isPassed ? (
+                {reviewStatus == null ? (
+                  <div className="p-1.5 rounded-full bg-amber-500/10 text-amber-500">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                ) : isPassed ? (
                   <div className="p-1.5 rounded-full bg-emerald-500/10 text-emerald-500">
                     <CheckCircle2 className="w-5 h-5" />
                   </div>
@@ -411,7 +415,11 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
               </div>
               <span
                 className={`font-mono text-[10px] px-2.5 py-1 rounded-md font-semibold uppercase tracking-wider ${
-                  isPassed ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30' : 'bg-rose-500/10 text-rose-500 border border-rose-500/30'
+                  reviewStatus == null
+                    ? 'bg-amber-500/10 text-amber-500 border border-amber-500/30'
+                    : isPassed
+                      ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/30'
+                      : 'bg-rose-500/10 text-rose-500 border border-rose-500/30'
                 }`}
               >
                 {reviewStatus == null ? 'Unknown' : isPassed ? 'Passed' : 'Failed'}

@@ -7,6 +7,7 @@ import {
   Bot,
   Trash2,
   Sparkles,
+  PlayCircle,
 } from 'lucide-react';
 import { useJobRegistry, JobEntry } from '@/hooks/useJobRegistry';
 
@@ -46,7 +47,7 @@ export const JobActivityDock: React.FC<JobActivityDockProps> = ({
     return () => clearInterval(interval);
   }, [activeCount]);
 
-  const hasCompletedJobs = jobs.some((j) => j.status === 'done' || j.status === 'failed');
+  const hasCompletedJobs = jobs.some((j) => j.status === 'done' || j.status === 'started' || j.status === 'failed');
 
   return (
     <div className="absolute z-50 bottom-5 right-5 w-[380px] pointer-events-auto animate-in slide-in-from-bottom-2 duration-150">
@@ -90,6 +91,7 @@ export const JobActivityDock: React.FC<JobActivityDockProps> = ({
             <div className="max-h-[220px] overflow-y-auto space-y-1.5 pr-0.5">
               {jobs.map((job: JobEntry) => {
                 const isRunning = job.status === 'running' || job.status === 'queued';
+                const isStarted = job.status === 'started';
                 const isDone = job.status === 'done';
                 const isFailed = job.status === 'failed';
 
@@ -101,6 +103,9 @@ export const JobActivityDock: React.FC<JobActivityDockProps> = ({
                     <div className="flex items-center gap-2 min-w-0 pr-2">
                       {isRunning && (
                         <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-400 shrink-0" />
+                      )}
+                      {isStarted && (
+                        <PlayCircle className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                       )}
                       {isDone && (
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />

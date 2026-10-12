@@ -101,7 +101,7 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
       code: artifactDetail.content || `# Content hash: ${v.content_hash || v.contentHash || ''}\n# Produced at: ${new Date(v.timestamp * 1000).toISOString()}`,
       executionLog: (v.produced_by_run_id || v.producedByRunId) ? `Produced by run: ${v.produced_by_run_id || v.producedByRunId}` : undefined,
       timestamp: v.timestamp * 1000,
-      reviewPassed: true,
+      reviewPassed: undefined,
     }));
 
     return {
@@ -112,13 +112,13 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
         {
           label: 'v1',
           code: artifactDetail.content || `# Content hash: ${artifactDetail.latest_content_hash}\n`,
-          reviewPassed: true,
+          reviewPassed: undefined,
         },
       ],
       inputs: [],
       code: artifactDetail.content || `# SHA-256: ${artifactDetail.latest_content_hash || artifactDetail.latestContentHash}\n`,
       language: path.endsWith('.py') ? 'python' : path.endsWith('.md') ? 'markdown' : path.endsWith('.json') ? 'json' : 'text',
-      reviewPassed: true,
+      reviewPassed: undefined,
       reviewFindings: (artifactDetail.annotations || []).map((ann) => ({
         level: ann.status === 'addressed' ? 'ok' : 'warn',
         title: `Annotation by ${ann.actor}`,
