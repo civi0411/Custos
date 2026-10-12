@@ -140,12 +140,14 @@ export const ChainsPage: React.FC = () => {
             </div>
             <input
               type="range"
+              aria-label="Circuit breaker latency threshold"
+              style={{ '--range-progress': `${(latencyThreshold - 50) / 450 * 100}%` } as React.CSSProperties}
               min="50"
               max="500"
               step="25"
               value={latencyThreshold}
               onChange={(e) => setLatencyThreshold(parseInt(e.target.value, 10))}
-              className="w-full h-1.5 bg-surface-2 rounded-lg appearance-none cursor-pointer accent-[var(--workbench-accent)]"
+              className="w-full"
             />
           </div>
         </div>

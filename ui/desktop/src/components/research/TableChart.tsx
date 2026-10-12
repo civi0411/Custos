@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useMemo, useState } from 'react';
 import { ParsedTableData, ChartType } from '@/types/research';
 
@@ -146,7 +147,7 @@ export const TableChart: React.FC<{ table: ParsedTableData }> = ({ table }) => {
         {/* X Axis Selector */}
         <div className="flex items-center gap-1.5 text-[var(--color-fg-muted)]">
           <span>X:</span>
-          <select
+          <NativeSelect
             value={xIndex}
             onChange={(e) => setXIndex(Number(e.target.value))}
             className="rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-0)] px-2 py-0.5 text-xs text-[var(--color-editor-fg)] outline-none"
@@ -157,7 +158,7 @@ export const TableChart: React.FC<{ table: ParsedTableData }> = ({ table }) => {
                 {c.name} {c.numeric ? '(num)' : ''}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
 
         {/* Y Axis Series Chips */}

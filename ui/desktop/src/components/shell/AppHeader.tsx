@@ -1,3 +1,4 @@
+import WorktreeIcon from '~icons/codicon/worktree';
 import React from 'react';
 import {
   MessageSquare,
@@ -18,7 +19,6 @@ import {
   FileDiff,
   Terminal as TerminalIcon,
   FolderTree,
-  GitBranch,
   ShieldCheck,
   Activity,
   FileCode,
@@ -116,7 +116,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       case 'changes': return <FileDiff className={cls} />;
       case 'terminal': return <TerminalIcon className={cls} />;
       case 'files': return <FolderTree className={cls} />;
-      case 'worktrees': return <GitBranch className={cls} />;
+      case 'worktrees': return <WorktreeIcon className={cls} />;
       case 'kanban': return <Bot className={cls} />;
       case 'evidence': return <ShieldCheck className={cls} />;
       case 'dag': return <Activity className={cls} />;
@@ -135,11 +135,11 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   };
 
   return (
-    <header className="h-12 bg-[var(--color-surface-1)] border-b border-[var(--color-border-muted)] flex items-center select-none z-30 shrink-0 font-sans text-xs overflow-hidden">
+    <header className="h-12 bg-[var(--color-surface-1)] border-[var(--color-border-muted)] flex items-center select-none z-30 shrink-0 font-sans text-xs overflow-hidden">
       {/* ── 1. LEFT: Nav Controls + Sidebar + Mode Switcher (Aligned to w-64 when expanded) ── */}
       <div
         className={`flex items-center justify-between shrink-0 h-full transition-all duration-300 ${
-          !isSidebarCollapsed ? 'w-64 px-3 border-r border-[var(--color-border-muted)]' : 'w-auto px-2.5 border-r border-[var(--color-border-muted)] gap-2.5'
+          !isSidebarCollapsed ? 'w-64 px-3 border-r border-[var(--color-border-muted)]' : 'w-auto px-2.5 border-[var(--color-border-muted)] gap-2.5'
         }`}
       >
         <div className="flex items-center gap-1">
@@ -292,7 +292,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     onClick={() => resourceTabs.setActiveTabId(tab.id)}
                     className={`group flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer transition max-w-[160px] shrink-0 text-[12px] h-7 ${
                       isActive
-                        ? 'bg-surface-2 text-fg-editor font-medium border border-border-default shadow-xs'
+                        ? 'bg-surface-2 text-fg-editor font-medium shadow-xs'
                         : 'bg-transparent text-fg-muted hover:text-fg-editor hover:bg-surface-2/60'
                     }`}
                   >

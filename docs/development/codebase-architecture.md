@@ -810,7 +810,7 @@ Custos/
 | [`src/providers/mod.rs`](../../crates/custos-adapters/src/providers/mod.rs) | 56 | Provider exports and regression test that unconfigured adapters do not fabricate model output. | `mod placeholder_tests` |
 | [`src/providers/oauth_pkce.rs`](../../crates/custos-adapters/src/providers/oauth_pkce.rs) | 979 | Provider-specific PKCE with Google environment overrides and masked public native-client defaults, access-token UserInfo and ID-token display claims, refresh; real Copilot device authorization and transient session token exchange. | `OAuthPkceManager`, `oauth_settings`, `oauth_identity`, `start_copilot_device`, `complete_copilot_device`, `copilot_session_token` |
 | [`src/providers/openai_chat.rs`](../../crates/custos-adapters/src/providers/openai_chat.rs) | 279 | Live ModelPort adapter kết nối trực tiếp endpoint OpenAI Chat Completions với Bearer OAuth/API Key và chẩn đoán quota API | `struct OpenAiChatProvider`, `trait TokenProvider`, `fn new`, `fn generate` |
-| [`src/providers/probe.rs`](../../crates/custos-adapters/src/providers/probe.rs) | 670 | Model discovery and bounded account quota reads/parsers with explicit unavailable states. | `probe_endpoint_models`, `probe_oauth_models`, `probe_copilot_models` |
+| [`src/providers/probe.rs`](../../crates/custos-adapters/src/providers/probe.rs) | 737 | Model discovery and bounded account quota reads/parsers with explicit unavailable states. | `probe_endpoint_models`, `probe_oauth_models`, `probe_copilot_models` |
 | [`src/providers/router.rs`](../../crates/custos-adapters/src/providers/router.rs) | 1185 | Account-pinned text routing, native Ollama transport and provider-reported token usage. | `RouterModelProvider`, `CredentialResolver`, `uses_oauth` |
 | [`src/providers/streaming.rs`](../../crates/custos-adapters/src/providers/streaming.rs) | 632 | Incremental SSE/NDJSON decoding (Trường + Vinh) | `stream_response` |
 | [`src/harness/live.rs`](../../crates/custos-adapters/src/harness/live.rs) | 476 | Incremental native subprocess observations and cancellation (Trường + Vinh) | `run_observed_process` |
@@ -1031,10 +1031,10 @@ Custos/
 | File | Lines | Current responsibility | Key export |
 |---|---:|---|---|
 | [`ui/desktop/src/app/studio/page.tsx`](../../ui/desktop/src/app/studio/page.tsx) | 233 | Per-lens session filtering, last selection and durable same-session full-chat opening; only last-selection remains device-local | `StudioPage` |
-| [`ui/desktop/src/components/shell/AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) | 633 | Shared conversation/resource shell; empty lens has no selected conversation | `AppWorkspaceShell` |
-| [`ui/desktop/src/components/shell/WorkspaceSidebar.tsx`](../../ui/desktop/src/components/shell/WorkspaceSidebar.tsx) | 360 | Per-lens history list and full-chat destination control | `WorkspaceSidebar` |
-| [`ui/desktop/src/components/modals/NewSessionModal.tsx`](../../ui/desktop/src/components/modals/NewSessionModal.tsx) | 100 | Defaults new Task pack to the visible workbench | `NewSessionModal` |
-| [`ui/desktop/src/context/AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx) | 1531 | Daemon session/journal projection; keeps all sessions, filters non-message events and reads durable lens membership | `AppProvider`, `useAppContext` |
+| [`ui/desktop/src/components/shell/AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) | 640 | Shared conversation/resource shell; empty lens has no selected conversation | `AppWorkspaceShell` |
+| [`ui/desktop/src/components/shell/WorkspaceSidebar.tsx`](../../ui/desktop/src/components/shell/WorkspaceSidebar.tsx) | 361 | Per-lens history list and full-chat destination control | `WorkspaceSidebar` |
+| [`ui/desktop/src/components/modals/NewSessionModal.tsx`](../../ui/desktop/src/components/modals/NewSessionModal.tsx) | 101 | Defaults new Task pack to the visible workbench | `NewSessionModal` |
+| [`ui/desktop/src/context/AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx) | 1547 | Daemon session/journal projection; keeps all sessions, filters non-message events and reads durable lens membership | `AppProvider`, `useAppContext` |
 
 Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../tools/repo_intelligent/README.md) (62 lines) describes its derived SQLite index and optional MCP export. The product-facing Repo Intelligence location is `custos-runtime/src/context/repo_intelligence/`; do not treat the Python utility as an agent, canonical memory or mandatory runtime dependency.
 
@@ -1070,20 +1070,29 @@ Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../
 
 | File | Lines | Responsibility | Exports |
 |---|---:|---|---|
-| [AppContext.tsx](../../ui/desktop/src/context/AppContext.tsx) | 1531 | Provider hydration, session/run restoration and background model/native chat projection | `AppProvider`, `useAppContext` |
-| [AgentsWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/AgentsWorkbenchPane.tsx) | 453 | Session-bound native launch and live run inspector (Vinh) | `AgentsWorkbenchPane` |
+| [AppContext.tsx](../../ui/desktop/src/context/AppContext.tsx) | 1547 | Provider hydration, session/run restoration and background model/native chat projection | `AppProvider`, `useAppContext` |
+| [AgentsWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/AgentsWorkbenchPane.tsx) | 454 | Session-bound native launch and live run inspector (Vinh) | `AgentsWorkbenchPane` |
 | [ModelSelector.tsx](../../ui/desktop/src/components/chat/ModelSelector.tsx) | 385 | Discovered model picker with cache/error status and retry | `ModelSelector`, `getConnectedModelOptions`, `ModelOption` |
-| [CombosManager.tsx](../../ui/desktop/src/components/providers/CombosManager.tsx) | 530 | Combo targets from the same discovered account catalogs | `CombosManager` |
+| [CombosManager.tsx](../../ui/desktop/src/components/providers/CombosManager.tsx) | 531 | Combo targets from the same discovered account catalogs | `CombosManager` |
 | [provider_types.ts](../../ui/desktop/src/types/provider_types.ts) | 91 | Account catalog source, original timestamp and failure metadata | `ConnectedAccount` |
 | [AddProviderModal.tsx](../../ui/desktop/src/components/modals/AddProviderModal.tsx) | 895 | OAuth/API connection UI with PKCE/device authorization, fetched identity and cancellation. | `AddProviderModal` |
 | [ProvidersView.tsx](../../ui/desktop/src/components/providers/ProvidersView.tsx) | 235 | Account listing and provider branding. | `ProvidersView` |
 | [daemon_client.ts](../../ui/desktop/src/api/daemon_client.ts) | 1064 | Typed IPC client, profile HTTP discovery and deduplicated SSE reconnect. | `DaemonClient` |
-| [SettingsModal.tsx](../../ui/desktop/src/components/modals/SettingsModal.tsx) | 419 | Settings account status and usage navigation | `SettingsModal` |
+| [SettingsModal.tsx](../../ui/desktop/src/components/modals/SettingsModal.tsx) | 420 | Settings account status and usage navigation | `SettingsModal` |
+| [markdownMath.ts](../../ui/desktop/src/components/chat/markdownMath.ts) | 39 | Math AST normalization for escaped subscripts and display delimiters (Owner: Vinh) | `remarkNormalizeChatMath` |
 | [HighlightedCodeBlock.tsx](../../ui/desktop/src/components/chat/HighlightedCodeBlock.tsx) | 38 | Memoized highlight.js fenced-code projection with theme tokens and escaped fallback (Owner: Vinh) | `HighlightedCodeBlock` |
+| [AppHeader.tsx](../../ui/desktop/src/components/shell/AppHeader.tsx) | 384 | Workspace header and matching worktree tab icon (Owner: Vinh) | `AppHeader` |
+| [CommandPalette.tsx](../../ui/desktop/src/components/shell/CommandPalette.tsx) | 333 | Command navigation with worktree glyph (Owner: Vinh) | `CommandPalette` |
+| [WorktreeManagerModal.tsx](../../ui/desktop/src/components/modals/WorktreeManagerModal.tsx) | 512 | Managed worktree projection with semantic worktree glyph (Owner: Vinh) | `WorktreeManagerModal` |
+| [StatusBar.tsx](../../ui/desktop/src/components/shell/StatusBar.tsx) | 164 | Discrete app zoom presets and ten-percent stepping (Owner: Vinh) | `StatusBar` |
+| [layout.tsx](../../ui/desktop/src/app/layout.tsx) | 75 | Full viewport application layout with browser zoom compensation (Owner: Vinh) | `RootLayout` |
+| [default.json](../../crates/custos-app/desktop/capabilities/default.json) | 11 | Main-window permissions including native WebView zoom (Owner: Vinh) | `Tauri capability` |
+| [NativeSelect.tsx](../../ui/desktop/src/components/common/NativeSelect.tsx) | 32 | Shared neutral dropdown adapter for native single-choice options and change events (Owner: Vinh) | `NativeSelect` |
+| [CustomSelect.tsx](../../ui/desktop/src/components/common/CustomSelect.tsx) | 220 | Shared themed dropdown with keyboard selection and focus states (Owner: Vinh) | `CustomSelect`, `CustomSelectOption` |
 | [AgentIcons.tsx](../../ui/desktop/src/components/common/AgentIcons.tsx) | 27 | Build-time Iconify provider SVG wrappers and brand mapping | `ProviderBrandIcon`, existing named icon wrappers |
-| [UsageMonitor.tsx](../../ui/desktop/src/components/providers/UsageMonitor.tsx) | 133 | Provider-branded account usage, remote remaining quotas, compact view and collapsible account panels | `UsageMonitor, summarizeUsage` |
+| [UsageMonitor.tsx](../../ui/desktop/src/components/providers/UsageMonitor.tsx) | 173 | Provider-branded account usage, remote remaining quotas, compact view and collapsible account panels | `UsageMonitor, summarizeUsage` |
 | [domain.ts](../../ui/desktop/src/types/domain.ts) | 1102 | Desktop wire DTOs including provider authorization flow metadata. | `OAuthAuthorizeResult` |
-| [index.css](../../ui/desktop/src/index.css) | 1546 | Desktop theme and visible OAuth action button styles. | CSS styles |
+| [index.css](../../ui/desktop/src/index.css) | 1691 | Desktop theme and visible OAuth action button styles. | CSS styles |
 
 
 ---
@@ -1136,3 +1145,23 @@ Live execution verification: streaming protocol/UTF-8/error/timeout fixtures, bo
 Native conversations retain harness/workspace identity from existing Task metadata. Follow-up prompts create new session-bound native runs in that workspace; no hidden native-agent session is resumed. The chat composer identifies the native harness instead of showing a cloud-model selector.
 
 SessionManager exposes an assistant-entry append variant returning the exact persisted journal entry; the existing void append contract remains compatible. Runtime uses that returned timestamp for run/journal correlation instead of reading the latest shared journal entry after an await.
+
+Conversation scroll edges use non-interactive, theme-aware backdrop blur overlays only where content extends beyond the viewport. AppWorkspaceShell tracks scroll bounds and observes content/viewport resizing; this is presentation-only and preserves chat follow-bottom behavior.
+
+Quota group projection: providers/probe.rs fetches Antigravity grouped quota summary before legacy fallbacks and annotates known bucket periods/groups. provider_types.ts carries optional window_kind/model_group metadata; UsageMonitor.tsx normalizes standard five-hour and weekly rows while retaining native exceptions and unknown data. Existing provider quota payload fields stay compatible; no persistence schema is added.
+
+#### Shared dropdown consumers
+
+| File | Lines | Responsibility | Exports |
+|---|---:|---|---|
+| [DelegateTaskModal.tsx](../../ui/desktop/src/components/modals/DelegateTaskModal.tsx) | 353 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [ArtifactInspector.tsx](../../ui/desktop/src/components/research/ArtifactInspector.tsx) | 468 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [ResearchSynthesisPane.tsx](../../ui/desktop/src/components/research/ResearchSynthesisPane.tsx) | 917 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [TableChart.tsx](../../ui/desktop/src/components/research/TableChart.tsx) | 334 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [BrowserWorkbenchPane.tsx](../../ui/desktop/src/components/views/BrowserWorkbenchPane.tsx) | 659 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [MobileSimulatorWorkbenchPane.tsx](../../ui/desktop/src/components/views/MobileSimulatorWorkbenchPane.tsx) | 492 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [RemoteFleetWorkbenchPane.tsx](../../ui/desktop/src/components/views/RemoteFleetWorkbenchPane.tsx) | 680 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [ChangesWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/ChangesWorkbenchPane.tsx) | 600 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [EvidenceWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/EvidenceWorkbenchPane.tsx) | 997 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [FilesWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/FilesWorkbenchPane.tsx) | 495 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [TerminalWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/TerminalWorkbenchPane.tsx) | 386 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |

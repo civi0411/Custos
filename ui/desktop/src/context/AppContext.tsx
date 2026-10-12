@@ -1,3 +1,5 @@
+import { isTauri } from '@tauri-apps/api/core';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import {
   MainTab,
@@ -358,7 +360,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // UI Scale state
   const [uiScale, setUiScale] = useState<number>(() => {
     const saved = localStorage.getItem('custos_ui_scale');
-    return saved ? parseInt(saved, 10) : 100;
+    const value = Number(saved || 100);
+    return Math.min(160, Math.max(70, Math.round((Number.isFinite(value) ? value : 100) / 10) * 10));
   });
 
   // Toast state
@@ -373,19 +376,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 2500);
   }, []);
 
-  // UI Scale applicator - zoom the entire document root so the full screen/window scales uniformly
+  const zoomQueue = useRef<Promise<void>>(Promise.resolve());
   const applyUiScale = useCallback((scaleVal: number) => {
-    const rounded = Math.round(scaleVal / 10) * 10;
-    const clamped = Math.min(150, Math.max(70, rounded));
+    const rounded = Math.round((Number.isFinite(scaleVal) ? scaleVal : 100) / 10) * 10;
+    const clamped = Math.min(160, Math.max(70, rounded));
     setUiScale(clamped);
     localStorage.setItem('custos_ui_scale', clamped.toString());
-    document.documentElement.style.zoom = `${clamped / 100}`;
-    document.body.style.zoom = '';
   }, []);
+
+  useEffect(() => {
+    const factor = uiScale / 100;
+    document.documentElement.style.zoom = '';
+    document.body.style.zoom = '';
+    document.documentElement.style.setProperty('--app-browser-zoom', '1');
+    if (isTauri()) {
+      // Serialize native zoom changes so rapid clicks settle at the latest level.
+      zoomQueue.current = zoomQueue.current.then(() => getCurrentWebview().setZoom(factor)).catch(error => {
+        showToast(`Unable to zoom app: ${String(error)}`);
+      });
+    } else {
+      document.documentElement.style.zoom = String(factor);
+      document.documentElement.style.setProperty('--app-browser-zoom', String(factor));
+    }
+  }, [uiScale, showToast]);
 
   const handleSetUiScale = (val: number) => {
     applyUiScale(val);
-    showToast(`UI Scale: ${val}%`);
   };
 
   const handleStepUiScale = (delta: number) => {

@@ -237,7 +237,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       {/* Floating Popover (Opens Upward Above Composer) */}
       {isOpen && (
         <div
-          className="absolute bottom-full mb-2 left-0 z-50 w-72 md:w-72 rounded-xl border border-border-default bg-surface-1/95 backdrop-blur-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150"
+          className="app-dropdown-menu absolute bottom-full mb-2 left-0 z-50 w-72 md:w-72 rounded-xl border border-border-default bg-surface-1/95 backdrop-blur-xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150"
           style={{ maxHeight: '420px' }}
         >
       {connectedAccounts.some((a) => a.catalogError && a.providerId !== 'local') && (
@@ -308,7 +308,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                       handleSelect(searchQuery.trim());
                       setIsOpen(false);
                     }}
-                    className="w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition bg-surface-2 hover:bg-surface-3 text-fg-editor border border-sky-500/30 hover:border-sky-500/50 shadow-xs group"
+                    className="w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition bg-surface-2 hover:bg-surface-3 text-fg-editor border border-border-muted hover:border-border-default group"
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <Cpu size={14} className="text-sky-400 shrink-0" />
