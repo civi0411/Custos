@@ -392,7 +392,11 @@ impl RunHandle {
         }
     }
 
-    pub fn with_completion(mut self, completed_at: Option<DateTime<Utc>>, output: Option<String>) -> Self {
+    pub fn with_completion(
+        mut self,
+        completed_at: Option<DateTime<Utc>>,
+        output: Option<String>,
+    ) -> Self {
         self.completed_at = completed_at;
         self.output = output;
         self

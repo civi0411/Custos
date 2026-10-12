@@ -342,7 +342,9 @@ impl OAuthPkceManager {
                 refresh_token: body.refresh_token,
                 expires_at,
                 token_type: body.token_type.unwrap_or_else(|| "Bearer".into()),
-                scope: body.scope.or_else(|| oauth_settings(service_type).ok().map(|v| v.3)),
+                scope: body
+                    .scope
+                    .or_else(|| oauth_settings(service_type).ok().map(|v| v.3)),
                 created_at: now_ms,
                 updated_at: now_ms,
             },
@@ -576,7 +578,11 @@ pub async fn oauth_identity(service: &str, token: &str) -> Result<Option<String>
     oauth_identity_at(service, token, endpoint).await
 }
 
-async fn oauth_identity_at(service: &str, token: &str, endpoint: &str) -> Result<Option<String>, DomainError> {
+async fn oauth_identity_at(
+    service: &str,
+    token: &str,
+    endpoint: &str,
+) -> Result<Option<String>, DomainError> {
     if matches!(service, "antigravity" | "gemini" | "anthropic") {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(15))
@@ -589,7 +595,9 @@ async fn oauth_identity_at(service: &str, token: &str, endpoint: &str) -> Result
             .bearer_auth(token)
             .send()
             .await
-            .map_err(|e| DomainError::Validation(format!("OAuth {service} identity lookup failed: {e}")))?;
+            .map_err(|e| {
+                DomainError::Validation(format!("OAuth {service} identity lookup failed: {e}"))
+            })?;
         let status = response.status();
         if !status.is_success() {
             return Err(DomainError::Validation(format!("OAuth {service} identity lookup returned HTTP {status}; token exchange succeeded, but account identity could not be fetched")));
@@ -622,7 +630,12 @@ mod provider_oauth_tests {
     use super::*;
     #[test]
     fn antigravity_authorization_has_google_issuer_and_pkce() {
-        let settings = ("https://accounts.google.com/o/oauth2/v2/auth", "https://oauth2.googleapis.com/token", "test-google-client", "https://www.googleapis.com/auth/cloud-platform");
+        let settings = (
+            "https://accounts.google.com/o/oauth2/v2/auth",
+            "https://oauth2.googleapis.com/token",
+            "test-google-client",
+            "https://www.googleapis.com/auth/cloud-platform",
+        );
         let result = OAuthPkceManager::new(settings.0, settings.1)
             .build_authorization_url(
                 &settings.2,
@@ -648,16 +661,50 @@ mod provider_oauth_tests {
     fn google_public_defaults_and_environment_overrides_are_provider_scoped() {
         for service in ["gemini", "antigravity"] {
             let defaults = public_google_oauth_defaults(service).unwrap();
-            assert_eq!(google_oauth_client_with(service, |_| None).unwrap(), defaults);
-            assert_eq!(google_oauth_client_with(service, |_| Some("  ".into())).unwrap(), defaults);
-            assert_eq!(google_oauth_client_with(service, |name| if name.ends_with("CLIENT_ID") { Some(defaults.0.clone()) } else { None }).unwrap(), defaults);
-            let error = google_oauth_client_with(service, |name| if name.ends_with("CLIENT_ID") { Some("test-client".into()) } else { Some("  ".into()) }).unwrap_err().to_string();
+            assert_eq!(
+                google_oauth_client_with(service, |_| None).unwrap(),
+                defaults
+            );
+            assert_eq!(
+                google_oauth_client_with(service, |_| Some("  ".into())).unwrap(),
+                defaults
+            );
+            assert_eq!(
+                google_oauth_client_with(service, |name| if name.ends_with("CLIENT_ID") {
+                    Some(defaults.0.clone())
+                } else {
+                    None
+                })
+                .unwrap(),
+                defaults
+            );
+            let error = google_oauth_client_with(service, |name| {
+                if name.ends_with("CLIENT_ID") {
+                    Some("test-client".into())
+                } else {
+                    Some("  ".into())
+                }
+            })
+            .unwrap_err()
+            .to_string();
             assert!(error.contains("CLIENT_SECRET"));
-            let prefix = if service == "gemini" { "GEMINI_" } else { "ANTIGRAVITY_" };
+            let prefix = if service == "gemini" {
+                "GEMINI_"
+            } else {
+                "ANTIGRAVITY_"
+            };
             let pair = google_oauth_client_with(service, |name| {
                 assert!(name.starts_with(prefix));
-                Some(if name.ends_with("CLIENT_ID") { "test-client" } else { "test-secret" }.into())
-            }).unwrap();
+                Some(
+                    if name.ends_with("CLIENT_ID") {
+                        "test-client"
+                    } else {
+                        "test-secret"
+                    }
+                    .into(),
+                )
+            })
+            .unwrap();
             assert_eq!(pair, ("test-client".into(), "test-secret".into()));
         }
     }
@@ -665,11 +712,23 @@ mod provider_oauth_tests {
     #[test]
     fn public_native_client_defaults_match_reference_fingerprints() {
         let pair = public_google_oauth_defaults("gemini").unwrap();
-        assert_eq!(format!("{:x}", Sha256::digest(pair.0.as_bytes())), "636d7183f3ca4ad92c7803811a3f635643f1da657a22eeedf280283161cb6e17");
-        assert_eq!(format!("{:x}", Sha256::digest(pair.1.as_bytes())), "6a5f78b8b99dd4025e41ba11bf54c304c6af29f924c5569cc7865b2428ce03a9");
+        assert_eq!(
+            format!("{:x}", Sha256::digest(pair.0.as_bytes())),
+            "636d7183f3ca4ad92c7803811a3f635643f1da657a22eeedf280283161cb6e17"
+        );
+        assert_eq!(
+            format!("{:x}", Sha256::digest(pair.1.as_bytes())),
+            "6a5f78b8b99dd4025e41ba11bf54c304c6af29f924c5569cc7865b2428ce03a9"
+        );
         let pair = public_google_oauth_defaults("antigravity").unwrap();
-        assert_eq!(format!("{:x}", Sha256::digest(pair.0.as_bytes())), "bf00c418024ba6bf606ccdc37120976e41bc429dd1d46ecf16a729aa532626ea");
-        assert_eq!(format!("{:x}", Sha256::digest(pair.1.as_bytes())), "1d2f041093fd95aa8995a038c711d50a7960da09a505381c09a745d6ad0ecc60");
+        assert_eq!(
+            format!("{:x}", Sha256::digest(pair.0.as_bytes())),
+            "bf00c418024ba6bf606ccdc37120976e41bc429dd1d46ecf16a729aa532626ea"
+        );
+        assert_eq!(
+            format!("{:x}", Sha256::digest(pair.1.as_bytes())),
+            "1d2f041093fd95aa8995a038c711d50a7960da09a505381c09a745d6ad0ecc60"
+        );
     }
 
     #[test]
@@ -678,38 +737,77 @@ mod provider_oauth_tests {
         let challenge = OAuthPkceManager::generate_pkce_challenge();
         assert_eq!(challenge.state.len(), 43);
         assert_eq!(challenge.code_verifier.len(), 43);
-        let result = OAuthPkceManager::new(settings.0, settings.1).build_authorization_url(
-            &settings.2, "https://platform.claude.com/oauth/code/callback", Some(&settings.3), &challenge
-        ).unwrap();
+        let result = OAuthPkceManager::new(settings.0, settings.1)
+            .build_authorization_url(
+                &settings.2,
+                "https://platform.claude.com/oauth/code/callback",
+                Some(&settings.3),
+                &challenge,
+            )
+            .unwrap();
         let url = Url::parse(&result.authorization_url).unwrap();
         let query: std::collections::HashMap<_, _> = url.query_pairs().collect();
         assert_eq!(url.host_str(), Some("claude.ai"));
-        assert_eq!(query.get("client_id").unwrap(), "9d1c250a-e61b-44d9-88ed-5944d1962f5e");
+        assert_eq!(
+            query.get("client_id").unwrap(),
+            "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+        );
         assert_eq!(query.get("code").unwrap(), "true");
         assert_eq!(query.get("scope").unwrap(), "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers");
-        assert_eq!(query.get("redirect_uri").unwrap(), "https://platform.claude.com/oauth/code/callback");
+        assert_eq!(
+            query.get("redirect_uri").unwrap(),
+            "https://platform.claude.com/oauth/code/callback"
+        );
         assert_eq!(query.get("code_challenge_method").unwrap(), "S256");
         assert_eq!(query.get("state").unwrap().as_ref(), challenge.state);
     }
 
     #[tokio::test]
     async fn google_identity_uses_access_token_when_id_token_is_present() {
+        use wiremock::matchers::{header, method, path};
         use wiremock::{Mock, MockServer, ResponseTemplate};
-        use wiremock::matchers::{method, path, header};
         let server = MockServer::start().await;
-        Mock::given(method("GET")).and(path("/userinfo"))
+        Mock::given(method("GET"))
+            .and(path("/userinfo"))
             .and(header("authorization", "Bearer access-token"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"email":"person@example.com"})))
-            .expect(2).mount(&server).await;
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"email":"person@example.com"})),
+            )
+            .expect(2)
+            .mount(&server)
+            .await;
         for service in ["antigravity", "gemini"] {
             let token = identity_token(service, "access-token", Some("id-token"));
-            assert_eq!(oauth_identity_at(service, token, &format!("{}/userinfo", server.uri())).await.unwrap().as_deref(), Some("person@example.com"));
+            assert_eq!(
+                oauth_identity_at(service, token, &format!("{}/userinfo", server.uri()))
+                    .await
+                    .unwrap()
+                    .as_deref(),
+                Some("person@example.com")
+            );
         }
-        assert_eq!(identity_token("openai", "access-token", Some("id-token")), "id-token");
-        assert_eq!(identity_token("anthropic", "access-token", Some("id-token")), "access-token");
+        assert_eq!(
+            identity_token("openai", "access-token", Some("id-token")),
+            "id-token"
+        );
+        assert_eq!(
+            identity_token("anthropic", "access-token", Some("id-token")),
+            "access-token"
+        );
         server.reset().await;
-        Mock::given(path("/userinfo")).respond_with(ResponseTemplate::new(401)).mount(&server).await;
-        let error = oauth_identity_at("antigravity", "bad-token", &format!("{}/userinfo", server.uri())).await.unwrap_err().to_string();
+        Mock::given(path("/userinfo"))
+            .respond_with(ResponseTemplate::new(401))
+            .mount(&server)
+            .await;
+        let error = oauth_identity_at(
+            "antigravity",
+            "bad-token",
+            &format!("{}/userinfo", server.uri()),
+        )
+        .await
+        .unwrap_err()
+        .to_string();
         assert!(error.contains("identity lookup returned HTTP 401"));
         assert!(error.contains("token exchange succeeded"));
     }
@@ -731,19 +829,37 @@ fn google_oauth_client(service: &str) -> Result<(String, String), DomainError> {
     google_oauth_client_with(service, |name| std::env::var(name).ok())
 }
 
-fn google_oauth_client_with(service: &str, read: impl Fn(&str) -> Option<String>) -> Result<(String, String), DomainError> {
+fn google_oauth_client_with(
+    service: &str,
+    read: impl Fn(&str) -> Option<String>,
+) -> Result<(String, String), DomainError> {
     let (id_name, secret_name) = match service {
         "gemini" => ("GEMINI_OAUTH_CLIENT_ID", "GEMINI_OAUTH_CLIENT_SECRET"),
-        "antigravity" => ("ANTIGRAVITY_OAUTH_CLIENT_ID", "ANTIGRAVITY_OAUTH_CLIENT_SECRET"),
-        _ => return Err(DomainError::Validation("Unsupported Google OAuth provider".into())),
+        "antigravity" => (
+            "ANTIGRAVITY_OAUTH_CLIENT_ID",
+            "ANTIGRAVITY_OAUTH_CLIENT_SECRET",
+        ),
+        _ => {
+            return Err(DomainError::Validation(
+                "Unsupported Google OAuth provider".into(),
+            ))
+        }
     };
     let (default_id, default_secret) = public_google_oauth_defaults(service)?;
-    let override_value = |name: &str| read(name).map(|v| v.trim().to_string()).filter(|v| !v.is_empty());
+    let override_value = |name: &str| {
+        read(name)
+            .map(|v| v.trim().to_string())
+            .filter(|v| !v.is_empty())
+    };
     let client_id = override_value(id_name).unwrap_or_else(|| default_id.clone());
     let secret = match override_value(secret_name) {
         Some(secret) => secret,
         None if client_id == default_id => default_secret,
-        None => return Err(DomainError::Validation(format!("Custom Google OAuth client requires {secret_name} in the daemon environment"))),
+        None => {
+            return Err(DomainError::Validation(format!(
+                "Custom Google OAuth client requires {secret_name} in the daemon environment"
+            )))
+        }
     };
     Ok((client_id, secret))
 }
@@ -752,17 +868,44 @@ fn google_oauth_client_with(service: &str, read: impl Fn(&str) -> Option<String>
 // Never use this mechanism to store private operator credentials or account tokens.
 fn public_google_oauth_defaults(service: &str) -> Result<(String, String), DomainError> {
     const MASK: &[u8] = b"omniroute-public-v1";
-    const GEMINI_ID: &[u8] = &[89, 85, 95, 91, 71, 90, 77, 68, 92, 30, 73, 64, 79, 3, 6, 91, 75, 2, 3, 0, 29, 28, 13, 0, 1, 5, 77, 0, 30, 17, 4, 4, 90, 8, 21, 30, 30, 92, 11, 4, 12, 88, 65, 90, 31, 90, 4, 93, 0, 6, 76, 11, 6, 12, 74, 26, 84, 26, 30, 11, 27, 17, 0, 27, 0, 0, 67, 4, 91, 1, 3, 4];
-    const GEMINI_ALT: &[u8] = &[40, 34, 45, 58, 34, 55, 88, 64, 16, 101, 23, 56, 50, 1, 68, 82, 66, 65, 98, 4, 64, 9, 12, 36, 89, 54, 1, 80, 78, 28, 45, 36, 31, 17, 15];
-    const ANTIGRAVITY_ID: &[u8] = &[94, 93, 89, 88, 66, 95, 67, 68, 83, 29, 69, 76, 83, 65, 29, 14, 69, 5, 66, 6, 3, 92, 1, 64, 94, 25, 23, 23, 72, 66, 70, 87, 26, 29, 12, 65, 25, 91, 7, 89, 9, 93, 66, 92, 16, 4, 75, 76, 0, 5, 17, 66, 14, 12, 66, 17, 93, 10, 24, 29, 12, 0, 12, 26, 26, 17, 72, 30, 1, 76, 15, 6, 14];
-    const ANTIGRAVITY_ALT: &[u8] = &[40, 34, 45, 58, 34, 55, 88, 63, 80, 21, 54, 34, 48, 88, 81, 85, 97, 18, 125, 37, 92, 3, 37, 48, 87, 6, 44, 38, 25, 10, 67, 19, 40, 40, 5];
+    const GEMINI_ID: &[u8] = &[
+        89, 85, 95, 91, 71, 90, 77, 68, 92, 30, 73, 64, 79, 3, 6, 91, 75, 2, 3, 0, 29, 28, 13, 0,
+        1, 5, 77, 0, 30, 17, 4, 4, 90, 8, 21, 30, 30, 92, 11, 4, 12, 88, 65, 90, 31, 90, 4, 93, 0,
+        6, 76, 11, 6, 12, 74, 26, 84, 26, 30, 11, 27, 17, 0, 27, 0, 0, 67, 4, 91, 1, 3, 4,
+    ];
+    const GEMINI_ALT: &[u8] = &[
+        40, 34, 45, 58, 34, 55, 88, 64, 16, 101, 23, 56, 50, 1, 68, 82, 66, 65, 98, 4, 64, 9, 12,
+        36, 89, 54, 1, 80, 78, 28, 45, 36, 31, 17, 15,
+    ];
+    const ANTIGRAVITY_ID: &[u8] = &[
+        94, 93, 89, 88, 66, 95, 67, 68, 83, 29, 69, 76, 83, 65, 29, 14, 69, 5, 66, 6, 3, 92, 1, 64,
+        94, 25, 23, 23, 72, 66, 70, 87, 26, 29, 12, 65, 25, 91, 7, 89, 9, 93, 66, 92, 16, 4, 75,
+        76, 0, 5, 17, 66, 14, 12, 66, 17, 93, 10, 24, 29, 12, 0, 12, 26, 26, 17, 72, 30, 1, 76, 15,
+        6, 14,
+    ];
+    const ANTIGRAVITY_ALT: &[u8] = &[
+        40, 34, 45, 58, 34, 55, 88, 63, 80, 21, 54, 34, 48, 88, 81, 85, 97, 18, 125, 37, 92, 3, 37,
+        48, 87, 6, 44, 38, 25, 10, 67, 19, 40, 40, 5,
+    ];
     let (id, secret) = match service {
         "gemini" => (GEMINI_ID, GEMINI_ALT),
         "antigravity" => (ANTIGRAVITY_ID, ANTIGRAVITY_ALT),
-        _ => return Err(DomainError::Validation("Unsupported public Google OAuth client".into())),
+        _ => {
+            return Err(DomainError::Validation(
+                "Unsupported public Google OAuth client".into(),
+            ))
+        }
     };
-    let decode = |bytes: &[u8]| String::from_utf8(bytes.iter().enumerate().map(|(index, byte)| byte ^ MASK[index % MASK.len()]).collect())
-        .map_err(|_| DomainError::Validation("Invalid public OAuth default representation".into()));
+    let decode = |bytes: &[u8]| {
+        String::from_utf8(
+            bytes
+                .iter()
+                .enumerate()
+                .map(|(index, byte)| byte ^ MASK[index % MASK.len()])
+                .collect(),
+        )
+        .map_err(|_| DomainError::Validation("Invalid public OAuth default representation".into()))
+    };
     Ok((decode(id)?, decode(secret)?))
 }
 
@@ -776,7 +919,10 @@ fn google_oauth_secret(service: &str, client: &str) -> Result<String, DomainErro
 
 /// Start GitHub's real device grant. The first-party Copilot app supports this flow.
 pub async fn start_copilot_device() -> Result<serde_json::Value, DomainError> {
-    tracing::debug!(provider_id = "copilot", "Starting GitHub device authorization");
+    tracing::debug!(
+        provider_id = "copilot",
+        "Starting GitHub device authorization"
+    );
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(20))
         .build()
@@ -930,7 +1076,10 @@ pub async fn complete_copilot_device(
 }
 
 pub async fn copilot_session_token(token: &str) -> Result<String, DomainError> {
-    tracing::debug!(provider_id = "copilot", "Acquiring Copilot subscription token");
+    tracing::debug!(
+        provider_id = "copilot",
+        "Acquiring Copilot subscription token"
+    );
     copilot_session_token_at(token, "https://api.github.com/copilot_internal/v2/token").await
 }
 
@@ -964,16 +1113,38 @@ async fn copilot_session_token_at(token: &str, endpoint: &str) -> Result<String,
 #[cfg(test)]
 mod copilot_token_tests {
     use super::*;
+    use wiremock::matchers::{header, method, path};
     use wiremock::{Mock, MockServer, ResponseTemplate};
-    use wiremock::matchers::{method, path, header};
     #[tokio::test]
     async fn copilot_session_exchange_requires_subscription_and_bearer_auth() {
         let server = MockServer::start().await;
-        Mock::given(method("GET")).and(path("/token")).and(header("authorization", "Bearer github-token"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"token":"session-token"}))).expect(1).mount(&server).await;
-        assert_eq!(copilot_session_token_at("github-token", &format!("{}/token", server.uri())).await.unwrap(), "session-token");
+        Mock::given(method("GET"))
+            .and(path("/token"))
+            .and(header("authorization", "Bearer github-token"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"token":"session-token"})),
+            )
+            .expect(1)
+            .mount(&server)
+            .await;
+        assert_eq!(
+            copilot_session_token_at("github-token", &format!("{}/token", server.uri()))
+                .await
+                .unwrap(),
+            "session-token"
+        );
         server.reset().await;
-        Mock::given(path("/token")).respond_with(ResponseTemplate::new(403)).mount(&server).await;
-        assert!(copilot_session_token_at("github-token", &format!("{}/token", server.uri())).await.unwrap_err().to_string().contains("subscription"));
+        Mock::given(path("/token"))
+            .respond_with(ResponseTemplate::new(403))
+            .mount(&server)
+            .await;
+        assert!(
+            copilot_session_token_at("github-token", &format!("{}/token", server.uri()))
+                .await
+                .unwrap_err()
+                .to_string()
+                .contains("subscription")
+        );
     }
 }

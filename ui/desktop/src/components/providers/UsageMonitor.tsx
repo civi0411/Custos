@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BarChart3, RefreshCw, Search } from 'lucide-react';
-import ChevronDown from '~icons/lucide/chevron-down';
-import ChevronUp from '~icons/lucide/chevron-up';
+import { BarChart3, RefreshCw, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { daemonClient } from '@/api/daemon_client';
 import { ProviderBrandIcon } from '@/components/common/AgentIcons';

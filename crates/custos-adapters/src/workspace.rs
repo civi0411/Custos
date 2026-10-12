@@ -23,12 +23,16 @@ impl LocalWorkspaceProvider {
 impl WorkspaceProvider for LocalWorkspaceProvider {
     async fn validate(&self, kind: &WorkspaceKind, path: &str) -> Result<(), DomainError> {
         if path.trim().is_empty() {
-            return Err(DomainError::Validation("Workspace path cannot be empty".into()));
+            return Err(DomainError::Validation(
+                "Workspace path cannot be empty".into(),
+            ));
         }
 
         match kind {
             WorkspaceKind::Folder { .. } => Ok(()),
-            WorkspaceKind::Git { repo_path, branch, .. } => {
+            WorkspaceKind::Git {
+                repo_path, branch, ..
+            } => {
                 let repo = Path::new(repo_path);
                 if !repo.exists() {
                     return Err(DomainError::Validation(format!(
@@ -41,12 +45,18 @@ impl WorkspaceProvider for LocalWorkspaceProvider {
                 }
                 Ok(())
             }
-            WorkspaceKind::RemoteSsh { host, remote_path, .. } => {
+            WorkspaceKind::RemoteSsh {
+                host, remote_path, ..
+            } => {
                 if host.trim().is_empty() {
-                    return Err(DomainError::Validation("Remote SSH host cannot be empty".into()));
+                    return Err(DomainError::Validation(
+                        "Remote SSH host cannot be empty".into(),
+                    ));
                 }
                 if remote_path.trim().is_empty() {
-                    return Err(DomainError::Validation("Remote SSH path cannot be empty".into()));
+                    return Err(DomainError::Validation(
+                        "Remote SSH path cannot be empty".into(),
+                    ));
                 }
                 Ok(())
             }
@@ -140,12 +150,10 @@ impl WorkspaceProvider for LocalWorkspaceProvider {
 
                 Ok(())
             }
-            WorkspaceKind::RemoteSsh { host, .. } => {
-                Err(DomainError::Validation(format!(
-                    "Remote SSH provisioning for host '{}' not yet supported",
-                    host
-                )))
-            }
+            WorkspaceKind::RemoteSsh { host, .. } => Err(DomainError::Validation(format!(
+                "Remote SSH provisioning for host '{}' not yet supported",
+                host
+            ))),
         }
     }
 
@@ -164,9 +172,10 @@ impl WorkspaceProvider for LocalWorkspaceProvider {
         let mut cmd = Command::new("sh");
         cmd.arg("-c").arg(script).current_dir(&workspace.path);
 
-        let output = cmd.output().await.map_err(|e| {
-            DomainError::Validation(format!("Failed to spawn setup script: {}", e))
-        })?;
+        let output = cmd
+            .output()
+            .await
+            .map_err(|e| DomainError::Validation(format!("Failed to spawn setup script: {}", e)))?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
@@ -534,7 +543,9 @@ mod tests {
 
         // Introduce untracked dirty file
         let dirty_file = worktree_dir.join("scratch.txt");
-        fs::write(&dirty_file, b"uncommitted changes").await.unwrap();
+        fs::write(&dirty_file, b"uncommitted changes")
+            .await
+            .unwrap();
 
         // Teardown must be refused safely
         let res = provider.teardown(&ws).await;
@@ -611,7 +622,9 @@ mod tests {
 
         // Modify README in worktree
         let wt_file = worktree_dir.join("README.md");
-        fs::write(&wt_file, b"line 1\nline 2 added\n").await.unwrap();
+        fs::write(&wt_file, b"line 1\nline 2 added\n")
+            .await
+            .unwrap();
 
         // Inspect dirty
         let dirty = provider.inspect_dirty(&ws).await.unwrap();
@@ -640,4 +653,3 @@ mod tests {
         assert!(res.unwrap_err().to_string().contains("shallow"));
     }
 }
-

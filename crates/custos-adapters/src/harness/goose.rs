@@ -64,7 +64,11 @@ impl GooseHarnessAdapter {
     }
 
     /// Normalizes Goose tool usages into structured ActionIntents.
-    pub fn normalize_output_to_intents(&self, task_id: &str, raw_output: &str) -> Vec<ActionIntent> {
+    pub fn normalize_output_to_intents(
+        &self,
+        task_id: &str,
+        raw_output: &str,
+    ) -> Vec<ActionIntent> {
         let mut intents = Vec::new();
 
         for line in raw_output.lines() {
@@ -75,17 +79,29 @@ impl GooseHarnessAdapter {
 
             if trimmed.starts_with('{') && trimmed.ends_with('}') {
                 if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
-                    let tool_name = val.get("tool").or_else(|| val.get("name")).and_then(|v| v.as_str()).unwrap_or("");
-                    let params = val.get("parameters").or_else(|| val.get("arguments")).cloned().unwrap_or(serde_json::Value::Null);
+                    let tool_name = val
+                        .get("tool")
+                        .or_else(|| val.get("name"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    let params = val
+                        .get("parameters")
+                        .or_else(|| val.get("arguments"))
+                        .cloned()
+                        .unwrap_or(serde_json::Value::Null);
 
                     if !tool_name.is_empty() {
                         let (action_name, target, risk) = match tool_name {
                             "developer__text_editor" | "text_editor" => {
-                                let path = params.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
+                                let path = params
+                                    .get("path")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("unknown");
                                 ("write_file", path.to_string(), RiskLevel::High)
                             }
                             "developer__shell" | "shell" => {
-                                let cmd = params.get("command").and_then(|v| v.as_str()).unwrap_or("");
+                                let cmd =
+                                    params.get("command").and_then(|v| v.as_str()).unwrap_or("");
                                 ("shell_exec", cmd.to_string(), RiskLevel::High)
                             }
                             _ => (tool_name, "workspace".to_string(), RiskLevel::Medium),

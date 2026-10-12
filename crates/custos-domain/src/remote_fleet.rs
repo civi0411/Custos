@@ -3,10 +3,10 @@
 //! Models for SSH host nodes, fleet clusters, remote command execution,
 //! and verification receipts.
 
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use crate::error::DomainError;
 use crate::ids::new_id;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -27,6 +27,9 @@ pub enum SshAuthMethod {
     },
     Agent,
     PasswordPrompt,
+    RoamingP2P {
+        connection_card: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -59,10 +62,14 @@ impl RemoteHostNode {
         let user_str = user.into();
 
         if host_str.trim().is_empty() {
-            return Err(DomainError::Validation("Host address cannot be empty.".to_string()));
+            return Err(DomainError::Validation(
+                "Host address cannot be empty.".to_string(),
+            ));
         }
         if user_str.trim().is_empty() {
-            return Err(DomainError::Validation("SSH user cannot be empty.".to_string()));
+            return Err(DomainError::Validation(
+                "SSH user cannot be empty.".to_string(),
+            ));
         }
 
         let now = chrono::Utc::now().timestamp_millis();
@@ -143,7 +150,8 @@ mod tests {
                 private_key_path: "~/.ssh/id_ed25519".to_string(),
                 passphrase: None,
             },
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(node.id.starts_with("node_"));
         assert_eq!(node.port, 22);

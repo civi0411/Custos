@@ -29,7 +29,9 @@ pub struct GeminiContent {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GeminiPart {
-    Text { text: String },
+    Text {
+        text: String,
+    },
     FunctionCall {
         #[serde(rename = "functionCall")]
         function_call: GeminiFunctionCall,
@@ -327,13 +329,7 @@ mod tests {
     #[test]
     fn test_parse_gemini_sse_chunk() {
         let raw = r#"data: {"candidates":[{"content":{"parts":[{"text":"Hi there!"}],"role":"model"},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":5,"candidatesTokenCount":3}}"#;
-        let events = parse_gemini_sse_chunk(
-            Uuid::new_v4(),
-            1,
-            "google",
-            "gemini-2.0-flash",
-            raw,
-        );
+        let events = parse_gemini_sse_chunk(Uuid::new_v4(), 1, "google", "gemini-2.0-flash", raw);
 
         assert_eq!(events.len(), 3);
         assert!(matches!(events[0].delta, TurnDelta::Text { .. }));

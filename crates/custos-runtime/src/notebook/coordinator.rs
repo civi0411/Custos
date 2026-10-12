@@ -411,7 +411,11 @@ impl PythonKernelCoordinator {
                 execution_count: Some(execution_count),
                 status,
                 stdout: Some(resp.stdout.clone()),
-                stderr: if resp.stderr.is_empty() { None } else { Some(resp.stderr.clone()) },
+                stderr: if resp.stderr.is_empty() {
+                    None
+                } else {
+                    Some(resp.stderr.clone())
+                },
                 output_image: output_image.clone(),
                 wall_ms: Some(wall_ms),
                 epoch,
@@ -463,13 +467,15 @@ impl PythonKernelCoordinator {
         let py = Self::discover_python_path();
         let ver = Self::get_python_version(&py);
         let mut kernels = self.kernels.write().await;
-        let entry = kernels.entry(session_id.to_string()).or_insert_with(|| ActiveKernel {
-            epoch: 1,
-            execution_counter: 0,
-            status: KernelStatus::Idle,
-            python_path: py.clone(),
-            worker: None,
-        });
+        let entry = kernels
+            .entry(session_id.to_string())
+            .or_insert_with(|| ActiveKernel {
+                epoch: 1,
+                execution_counter: 0,
+                status: KernelStatus::Idle,
+                python_path: py.clone(),
+                worker: None,
+            });
 
         // Terminate active worker actor process if any
         if let Some(worker) = entry.worker.take() {

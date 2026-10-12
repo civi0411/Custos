@@ -223,11 +223,9 @@ impl ModelProvider for OpenAiChatProvider {
             DomainError::Validation(format!("Failed to parse OpenAI JSON response: {e}"))
         })?;
 
-        let choice = res_body
-            .choices
-            .into_iter()
-            .next()
-            .ok_or_else(|| DomainError::Validation("OpenAI returned no completion choices".into()))?;
+        let choice = res_body.choices.into_iter().next().ok_or_else(|| {
+            DomainError::Validation("OpenAI returned no completion choices".into())
+        })?;
 
         let content = choice.message.content.unwrap_or_default();
         let tokens_used = res_body.usage.and_then(|u| u.total_tokens).unwrap_or(0);

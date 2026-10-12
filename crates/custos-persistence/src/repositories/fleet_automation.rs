@@ -52,7 +52,10 @@ impl FleetAutomationRepository {
         Ok(())
     }
 
-    pub fn get_browser_session(&self, session_id: &str) -> Result<Option<BrowserSession>, DomainError> {
+    pub fn get_browser_session(
+        &self,
+        session_id: &str,
+    ) -> Result<Option<BrowserSession>, DomainError> {
         let maybe_row = {
             let conn = self.db.lock()?;
             conn.query_row(
@@ -222,7 +225,10 @@ impl FleetAutomationRepository {
         }
     }
 
-    pub fn list_browser_tabs(&self, session_id: Option<&str>) -> Result<Vec<BrowserTab>, DomainError> {
+    pub fn list_browser_tabs(
+        &self,
+        session_id: Option<&str>,
+    ) -> Result<Vec<BrowserTab>, DomainError> {
         let conn = self.db.lock()?;
         let mut tabs = Vec::new();
 
@@ -340,8 +346,10 @@ impl FleetAutomationRepository {
         };
 
         let console_logs = match console_logs_json {
-            Some(json) if !json.is_empty() => serde_json::from_str::<Vec<BrowserConsoleEntry>>(&json)
-                .map_err(|e| DomainError::Validation(e.to_string()))?,
+            Some(json) if !json.is_empty() => {
+                serde_json::from_str::<Vec<BrowserConsoleEntry>>(&json)
+                    .map_err(|e| DomainError::Validation(e.to_string()))?
+            }
             _ => Vec::new(),
         };
 
@@ -536,8 +544,9 @@ impl FleetAutomationRepository {
         let auth_method = serde_json::from_str::<SshAuthMethod>(&auth_json)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        let labels = serde_json::from_str::<std::collections::HashMap<String, String>>(&labels_json)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let labels =
+            serde_json::from_str::<std::collections::HashMap<String, String>>(&labels_json)
+                .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let status = match status_str.as_str() {
             "online" => RemoteHostStatus::Online,
@@ -605,8 +614,17 @@ impl FleetAutomationRepository {
                 .map_err(|e| DomainError::Validation(format!("Query failed: {}", e)))?;
 
             for r in rows {
-                let (execution_id, host_id, command, exit_code, stdout, stderr, duration_ms, verified_num, timestamp) =
-                    r.map_err(|e| DomainError::Validation(format!("Row error: {}", e)))?;
+                let (
+                    execution_id,
+                    host_id,
+                    command,
+                    exit_code,
+                    stdout,
+                    stderr,
+                    duration_ms,
+                    verified_num,
+                    timestamp,
+                ) = r.map_err(|e| DomainError::Validation(format!("Row error: {}", e)))?;
                 receipts.push(FleetExecReceipt {
                     execution_id,
                     host_id,
@@ -629,8 +647,17 @@ impl FleetAutomationRepository {
                 .map_err(|e| DomainError::Validation(format!("Query failed: {}", e)))?;
 
             for r in rows {
-                let (execution_id, host_id, command, exit_code, stdout, stderr, duration_ms, verified_num, timestamp) =
-                    r.map_err(|e| DomainError::Validation(format!("Row error: {}", e)))?;
+                let (
+                    execution_id,
+                    host_id,
+                    command,
+                    exit_code,
+                    stdout,
+                    stderr,
+                    duration_ms,
+                    verified_num,
+                    timestamp,
+                ) = r.map_err(|e| DomainError::Validation(format!("Row error: {}", e)))?;
                 receipts.push(FleetExecReceipt {
                     execution_id,
                     host_id,
@@ -680,8 +707,8 @@ impl FleetAutomationRepository {
 
     pub fn save_headless_job(&self, job: &HeadlessAutomationJob) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
-        let spec_json = serde_json::to_string(&job.spec)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let spec_json =
+            serde_json::to_string(&job.spec).map_err(|e| DomainError::Validation(e.to_string()))?;
         let trigger_json = serde_json::to_string(&job.trigger)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
@@ -728,7 +755,10 @@ impl FleetAutomationRepository {
         Ok(())
     }
 
-    pub fn get_headless_job(&self, job_id: &str) -> Result<Option<HeadlessAutomationJob>, DomainError> {
+    pub fn get_headless_job(
+        &self,
+        job_id: &str,
+    ) -> Result<Option<HeadlessAutomationJob>, DomainError> {
         let conn = self.db.lock()?;
         let maybe_row = conn
             .query_row(
@@ -907,7 +937,8 @@ mod tests {
                 private_key_path: "~/.ssh/id_rsa".to_string(),
                 passphrase: None,
             },
-        ).unwrap();
+        )
+        .unwrap();
         repo.save_remote_host(&host).unwrap();
 
         let fetched_host = repo.get_remote_host(&host.id).unwrap().unwrap();
@@ -946,11 +977,9 @@ mod tests {
             required_evidence: vec!["TestResult".to_string()],
         };
 
-        let mut job = HeadlessAutomationJob::new(
-            "continuous-integration",
-            spec,
-            HeadlessTrigger::Manual,
-        ).unwrap();
+        let mut job =
+            HeadlessAutomationJob::new("continuous-integration", spec, HeadlessTrigger::Manual)
+                .unwrap();
         job.status = HeadlessJobStatus::Completed;
         job.exit_code = Some(0);
         job.output_log = "All tests passed successfully.".to_string();

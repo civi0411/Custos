@@ -19,7 +19,13 @@ pub async fn probe_endpoint_models(
     provider_type: &str,
 ) -> Result<Vec<ProbedModel>, DomainError> {
     if provider_type == "antigravity" {
-        return super::antigravity::probe_models(base_url, api_key.ok_or_else(|| DomainError::Validation("Antigravity OAuth credentials missing".into()))?).await;
+        return super::antigravity::probe_models(
+            base_url,
+            api_key.ok_or_else(|| {
+                DomainError::Validation("Antigravity OAuth credentials missing".into())
+            })?,
+        )
+        .await;
     }
     let base = base_url.trim().trim_end_matches('/');
     if base.is_empty() {
@@ -202,12 +208,26 @@ pub fn parse_openai_models(body: &str) -> Result<Vec<ProbedModel>, DomainError> 
         .iter()
         .filter_map(|m| {
             let id = m.get("id")?.as_str()?.to_string();
-            let name = m.get("name").and_then(|n| n.as_str()).map(|s| s.to_string());
-            let owned_by = m.get("owned_by").and_then(|o| o.as_str()).map(|s| s.to_string());
-            let description = m.get("description").and_then(|d| d.as_str()).map(|s| s.to_string());
-            let context = ["context_length", "max_model_len", "max_context_length", "context_window"]
-                .iter()
-                .find_map(|k| m.get(*k).and_then(|c| c.as_u64()));
+            let name = m
+                .get("name")
+                .and_then(|n| n.as_str())
+                .map(|s| s.to_string());
+            let owned_by = m
+                .get("owned_by")
+                .and_then(|o| o.as_str())
+                .map(|s| s.to_string());
+            let description = m
+                .get("description")
+                .and_then(|d| d.as_str())
+                .map(|s| s.to_string());
+            let context = [
+                "context_length",
+                "max_model_len",
+                "max_context_length",
+                "context_window",
+            ]
+            .iter()
+            .find_map(|k| m.get(*k).and_then(|c| c.as_u64()));
 
             Some(ProbedModel {
                 id,
@@ -220,15 +240,19 @@ pub fn parse_openai_models(body: &str) -> Result<Vec<ProbedModel>, DomainError> 
         .collect();
 
     if models.is_empty() {
-        return Err(DomainError::Validation("The endpoint listed zero models".into()));
+        return Err(DomainError::Validation(
+            "The endpoint listed zero models".into(),
+        ));
     }
 
     Ok(models)
 }
 
 pub async fn probe_oauth_models(token: &str) -> Result<Vec<ProbedModel>, DomainError> {
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(PROBE_TIMEOUT_SECS))
-        .build().map_err(|e| DomainError::Validation(format!("Failed to build OAuth probe client: {e}")))?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(PROBE_TIMEOUT_SECS))
+        .build()
+        .map_err(|e| DomainError::Validation(format!("Failed to build OAuth probe client: {e}")))?;
     probe_chatgpt_codex_endpoint(&client, token).await
 }
 
@@ -249,10 +273,9 @@ pub async fn probe_chatgpt_codex_endpoint(
         req = req.header("ChatGPT-Account-ID", account_id);
     }
 
-    let resp = req
-        .send()
-        .await
-        .map_err(|e| DomainError::Validation(format!("Failed to reach Codex models at {url}: {e}")))?;
+    let resp = req.send().await.map_err(|e| {
+        DomainError::Validation(format!("Failed to reach Codex models at {url}: {e}"))
+    })?;
 
     if !resp.status().is_success() {
         return Err(DomainError::Validation(format!(
@@ -261,17 +284,17 @@ pub async fn probe_chatgpt_codex_endpoint(
         )));
     }
 
-    let body = resp
-        .text()
-        .await
-        .map_err(|e| DomainError::Validation(format!("Failed reading Codex models response: {e}")))?;
+    let body = resp.text().await.map_err(|e| {
+        DomainError::Validation(format!("Failed reading Codex models response: {e}"))
+    })?;
 
     parse_chatgpt_codex_models(&body)
 }
 
 pub fn parse_chatgpt_codex_models(body: &str) -> Result<Vec<ProbedModel>, DomainError> {
-    let v: Value = serde_json::from_str(body)
-        .map_err(|e| DomainError::Validation(format!("Codex models response was not valid JSON: {e}")))?;
+    let v: Value = serde_json::from_str(body).map_err(|e| {
+        DomainError::Validation(format!("Codex models response was not valid JSON: {e}"))
+    })?;
 
     let list = v
         .get("models")
@@ -287,8 +310,14 @@ pub fn parse_chatgpt_codex_models(body: &str) -> Result<Vec<ProbedModel>, Domain
                 .or_else(|| m.get("name"))
                 .and_then(|n| n.as_str())
                 .map(|s| s.to_string());
-            let description = m.get("description").and_then(|d| d.as_str()).map(|s| s.to_string());
-            let context_window = m.get("context_window").or_else(|| m.get("max_tokens")).and_then(|t| t.as_u64());
+            let description = m
+                .get("description")
+                .and_then(|d| d.as_str())
+                .map(|s| s.to_string());
+            let context_window = m
+                .get("context_window")
+                .or_else(|| m.get("max_tokens"))
+                .and_then(|t| t.as_u64());
             Some(ProbedModel {
                 id: id.clone(),
                 name: name.or(Some(id)),
@@ -300,7 +329,9 @@ pub fn parse_chatgpt_codex_models(body: &str) -> Result<Vec<ProbedModel>, Domain
         .collect();
 
     if models.is_empty() {
-        return Err(DomainError::Validation("The Codex endpoint listed zero models".into()));
+        return Err(DomainError::Validation(
+            "The Codex endpoint listed zero models".into(),
+        ));
     }
 
     Ok(models)
@@ -324,9 +355,18 @@ async fn probe_anthropic_endpoint(
     if let Some(key) = api_key.filter(|k| !k.trim().is_empty()) {
         if let Ok(val) = HeaderValue::from_str(key.trim()) {
             if oauth {
-                headers.insert(AUTHORIZATION, HeaderValue::from_str(&format!("Bearer {}", key.trim())).map_err(|e| DomainError::Validation(e.to_string()))?);
-                headers.insert("anthropic-beta", HeaderValue::from_static("oauth-2025-04-20"));
-            } else { headers.insert("x-api-key", val); }
+                headers.insert(
+                    AUTHORIZATION,
+                    HeaderValue::from_str(&format!("Bearer {}", key.trim()))
+                        .map_err(|e| DomainError::Validation(e.to_string()))?,
+                );
+                headers.insert(
+                    "anthropic-beta",
+                    HeaderValue::from_static("oauth-2025-04-20"),
+                );
+            } else {
+                headers.insert("x-api-key", val);
+            }
         }
     }
 
@@ -335,7 +375,9 @@ async fn probe_anthropic_endpoint(
         .headers(headers)
         .send()
         .await
-        .map_err(|e| DomainError::Validation(format!("Failed to reach Anthropic models at {url}: {e}")))?;
+        .map_err(|e| {
+            DomainError::Validation(format!("Failed to reach Anthropic models at {url}: {e}"))
+        })?;
 
     if !resp.status().is_success() {
         return Err(DomainError::Validation(format!(
@@ -368,11 +410,9 @@ async fn probe_gemini_endpoint(
         url = format!("{url}?key={}", key.trim());
     }
 
-    let resp = client
-        .get(&url)
-        .send()
-        .await
-        .map_err(|e| DomainError::Validation(format!("Failed to reach Gemini models at {url}: {e}")))?;
+    let resp = client.get(&url).send().await.map_err(|e| {
+        DomainError::Validation(format!("Failed to reach Gemini models at {url}: {e}"))
+    })?;
 
     if !resp.status().is_success() {
         return Err(DomainError::Validation(format!(
@@ -403,9 +443,18 @@ pub fn parse_gemini_models(body: &str) -> Result<Vec<ProbedModel>, DomainError> 
         .filter_map(|m| {
             let full_name = m.get("name")?.as_str()?;
             // Format is "models/gemini-2.5-pro", strip prefix
-            let id = full_name.strip_prefix("models/").unwrap_or(full_name).to_string();
-            let display_name = m.get("displayName").and_then(|d| d.as_str()).map(|s| s.to_string());
-            let description = m.get("description").and_then(|d| d.as_str()).map(|s| s.to_string());
+            let id = full_name
+                .strip_prefix("models/")
+                .unwrap_or(full_name)
+                .to_string();
+            let display_name = m
+                .get("displayName")
+                .and_then(|d| d.as_str())
+                .map(|s| s.to_string());
+            let description = m
+                .get("description")
+                .and_then(|d| d.as_str())
+                .map(|s| s.to_string());
             let context = m.get("inputTokenLimit").and_then(|c| c.as_u64());
 
             Some(ProbedModel {
@@ -419,7 +468,9 @@ pub fn parse_gemini_models(body: &str) -> Result<Vec<ProbedModel>, DomainError> 
         .collect();
 
     if probed.is_empty() {
-        return Err(DomainError::Validation("No Gemini models discovered".into()));
+        return Err(DomainError::Validation(
+            "No Gemini models discovered".into(),
+        ));
     }
 
     Ok(probed)
@@ -524,14 +575,30 @@ mod tests {
 
 pub async fn probe_copilot_models(github_token: &str) -> Result<Vec<ProbedModel>, DomainError> {
     let token = super::oauth_pkce::copilot_session_token(github_token).await?;
-    let client = reqwest::Client::builder().timeout(Duration::from_secs(20)).user_agent("GitHubCopilotChat/0.35.0").default_headers({
-        let mut headers = HeaderMap::new();
-        headers.insert("Editor-Version", HeaderValue::from_static("vscode/1.107.0"));
-        headers.insert("Editor-Plugin-Version", HeaderValue::from_static("copilot-chat/0.35.0"));
-        headers.insert("Copilot-Integration-Id", HeaderValue::from_static("vscode-chat")); headers
-    }).build().map_err(|e| DomainError::Validation(e.to_string()))?;
-    let mut models = probe_openai_endpoint(&client, "https://api.githubcopilot.com", Some(&token)).await?;
-    for model in &mut models { model.id = format!("copilot/{}", model.id); model.owned_by = Some("copilot".into()); }
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .user_agent("GitHubCopilotChat/0.35.0")
+        .default_headers({
+            let mut headers = HeaderMap::new();
+            headers.insert("Editor-Version", HeaderValue::from_static("vscode/1.107.0"));
+            headers.insert(
+                "Editor-Plugin-Version",
+                HeaderValue::from_static("copilot-chat/0.35.0"),
+            );
+            headers.insert(
+                "Copilot-Integration-Id",
+                HeaderValue::from_static("vscode-chat"),
+            );
+            headers
+        })
+        .build()
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+    let mut models =
+        probe_openai_endpoint(&client, "https://api.githubcopilot.com", Some(&token)).await?;
+    for model in &mut models {
+        model.id = format!("copilot/{}", model.id);
+        model.owned_by = Some("copilot".into());
+    }
     Ok(models)
 }
 

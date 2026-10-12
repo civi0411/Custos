@@ -161,10 +161,36 @@ impl RouterModelProvider {
         {
             return "mock";
         }
-        if m.starts_with("ollama/") { return "local"; }
-        if m.starts_with("copilot/") { return "copilot"; }
-        if m.starts_with("gemini-oauth/") { return "gemini-oauth"; }
-        if m.starts_with("antigravity/") { return "antigravity"; }
+        if m.starts_with("ollama/") {
+            return "local";
+        }
+        if m.starts_with("copilot/") {
+            return "copilot";
+        }
+        if m.starts_with("gemini-oauth/") {
+            return "gemini-oauth";
+        }
+        if m.starts_with("antigravity/") {
+            return "antigravity";
+        }
+        if m.starts_with("groq/") || m == "groq" {
+            return "groq";
+        }
+        if m.starts_with("openrouter/") || m == "openrouter" {
+            return "openrouter";
+        }
+        if m.starts_with("together/") || m == "together" {
+            return "together";
+        }
+        if m.starts_with("cerebras/") || m == "cerebras" {
+            return "cerebras";
+        }
+        if m.starts_with("perplexity/") || m == "perplexity" {
+            return "perplexity";
+        }
+        if m.starts_with("mistral/") {
+            return "mistral";
+        }
         if m.starts_with("gpt-")
             || m.starts_with("o1")
             || m.starts_with("o3")
@@ -202,10 +228,13 @@ impl RouterModelProvider {
         }
     }
 
-    async fn resolve_token_with_fallback(&self, provider_id: &str) -> Option<String> {
-        if let Ok(Some(tok)) = self.resolver.get_token(provider_id).await {
+    async fn resolve_token_with_fallback(
+        &self,
+        provider_id: &str,
+    ) -> Result<Option<String>, DomainError> {
+        if let Some(tok) = self.resolver.get_token(provider_id).await? {
             if !tok.trim().is_empty() {
-                return Some(tok.trim().to_string());
+                return Ok(Some(tok.trim().to_string()));
             }
         }
         let env_var = match provider_id {
@@ -213,9 +242,15 @@ impl RouterModelProvider {
             "anthropic" => "ANTHROPIC_API_KEY",
             "gemini" => "GEMINI_API_KEY",
             "deepseek" => "DEEPSEEK_API_KEY",
-            _ => return None,
+            "groq" => "GROQ_API_KEY",
+            "openrouter" => "OPENROUTER_API_KEY",
+            "together" => "TOGETHER_API_KEY",
+            "mistral" => "MISTRAL_API_KEY",
+            "cerebras" => "CEREBRAS_API_KEY",
+            "perplexity" => "PERPLEXITY_API_KEY",
+            _ => return Ok(None),
         };
-        std::env::var(env_var).ok().filter(|s| !s.trim().is_empty())
+        Ok(std::env::var(env_var).ok().filter(|s| !s.trim().is_empty()))
     }
 
     async fn execute_openai_compatible(
@@ -251,7 +286,11 @@ impl RouterModelProvider {
         }
 
         if provider_label == "GitHub Copilot" {
-            req_builder = req_builder.header("User-Agent", "GitHubCopilotChat/0.35.0").header("Editor-Version", "vscode/1.107.0").header("Editor-Plugin-Version", "copilot-chat/0.35.0").header("Copilot-Integration-Id", "vscode-chat");
+            req_builder = req_builder
+                .header("User-Agent", "GitHubCopilotChat/0.35.0")
+                .header("Editor-Version", "vscode/1.107.0")
+                .header("Editor-Plugin-Version", "copilot-chat/0.35.0")
+                .header("Copilot-Integration-Id", "vscode-chat");
         }
         let resp = req_builder.send().await.map_err(|e| {
             DomainError::Validation(format!("{provider_label} transport error: {e}"))
@@ -259,20 +298,27 @@ impl RouterModelProvider {
 
         let status = resp.status();
         if !status.is_success() {
-            let body = resp.text().await.unwrap_or_else(|_| "<unreadable body>".into());
+            let body = resp
+                .text()
+                .await
+                .unwrap_or_else(|_| "<unreadable body>".into());
             error!(status = %status, body = %body, "{provider_label} API returned error response");
-            return Err(DomainError::Validation(format_provider_error(status, &body, provider_label)));
+            return Err(DomainError::Validation(format_provider_error(
+                status,
+                &body,
+                provider_label,
+            )));
         }
 
         let res_body: OpenAiChatResponse = resp.json().await.map_err(|e| {
-            DomainError::Validation(format!("Failed to parse {provider_label} JSON response: {e}"))
+            DomainError::Validation(format!(
+                "Failed to parse {provider_label} JSON response: {e}"
+            ))
         })?;
 
-        let choice = res_body
-            .choices
-            .into_iter()
-            .next()
-            .ok_or_else(|| DomainError::Validation(format!("{provider_label} returned no completion choices")))?;
+        let choice = res_body.choices.into_iter().next().ok_or_else(|| {
+            DomainError::Validation(format!("{provider_label} returned no completion choices"))
+        })?;
 
         let content = choice.message.content.unwrap_or_default();
         let usage = res_body.usage;
@@ -408,15 +454,23 @@ impl RouterModelProvider {
             req_builder = req_builder.header("ChatGPT-Account-ID", account_id);
         }
 
-        let resp = req_builder.send().await.map_err(|e| {
-            DomainError::Validation(format!("ChatGPT Codex transport error: {e}"))
-        })?;
+        let resp = req_builder
+            .send()
+            .await
+            .map_err(|e| DomainError::Validation(format!("ChatGPT Codex transport error: {e}")))?;
 
         let status = resp.status();
         if !status.is_success() {
-            let body = resp.text().await.unwrap_or_else(|_| "<unreadable body>".into());
+            let body = resp
+                .text()
+                .await
+                .unwrap_or_else(|_| "<unreadable body>".into());
             error!(status = %status, "ChatGPT Codex returned error response");
-            return Err(DomainError::Validation(format_provider_error(status, &body, "ChatGPT Codex")));
+            return Err(DomainError::Validation(format_provider_error(
+                status,
+                &body,
+                "ChatGPT Codex",
+            )));
         }
 
         let text_body = resp.text().await.map_err(|e| {
@@ -435,7 +489,16 @@ impl RouterModelProvider {
             "Received live response from ChatGPT Codex"
         );
 
-        Ok(ModelResponse::text(content, target_model.to_string(), tokens_used).with_usage(count("input_tokens"), count("output_tokens"), count("total_tokens")))
+        Ok(ModelResponse::text(
+            content,
+            target_model.to_string(),
+            tokens_used,
+        )
+        .with_usage(
+            count("input_tokens"),
+            count("output_tokens"),
+            count("total_tokens"),
+        ))
     }
 
     async fn execute_anthropic(
@@ -469,14 +532,35 @@ impl RouterModelProvider {
             "Dispatching live Anthropic Claude completion"
         );
 
-        let oauth = self.resolver.uses_oauth(req.provider_account_id.as_deref().unwrap_or("anthropic")).await?;
-        let mut builder = self.http_client.post(&endpoint).header("anthropic-version", "2023-06-01").json(&payload);
-        builder = if oauth { builder.bearer_auth(token).header("anthropic-beta", "oauth-2025-04-20").header("User-Agent", "claude-cli/2.1.280 (external, cli)").header("X-App", "cli") } else { builder.header("x-api-key", token) };
-        let resp = builder.send().await.map_err(|e| DomainError::Validation(format!("Anthropic transport error: {e}")))?;
+        let oauth = self
+            .resolver
+            .uses_oauth(req.provider_account_id.as_deref().unwrap_or("anthropic"))
+            .await?;
+        let mut builder = self
+            .http_client
+            .post(&endpoint)
+            .header("anthropic-version", "2023-06-01")
+            .json(&payload);
+        builder = if oauth {
+            builder
+                .bearer_auth(token)
+                .header("anthropic-beta", "oauth-2025-04-20")
+                .header("User-Agent", "claude-cli/2.1.280 (external, cli)")
+                .header("X-App", "cli")
+        } else {
+            builder.header("x-api-key", token)
+        };
+        let resp = builder
+            .send()
+            .await
+            .map_err(|e| DomainError::Validation(format!("Anthropic transport error: {e}")))?;
 
         let status = resp.status();
         if !status.is_success() {
-            let body = resp.text().await.unwrap_or_else(|_| "<unreadable body>".into());
+            let body = resp
+                .text()
+                .await
+                .unwrap_or_else(|_| "<unreadable body>".into());
             error!(status = %status, body = %body, "Anthropic API returned error response");
             return Err(DomainError::Validation(format!(
                 "Anthropic API error {status}: {body}"
@@ -535,90 +619,144 @@ impl ModelProvider for RouterModelProvider {
                 super::antigravity::generate_content(&base, &token, req).await
             }
             "openai" => {
-                let oauth = self.resolver.uses_oauth(req.provider_account_id.as_deref().unwrap_or("openai")).await?;
+                let oauth = self
+                    .resolver
+                    .uses_oauth(req.provider_account_id.as_deref().unwrap_or("openai"))
+                    .await?;
                 let account = req.provider_account_id.as_deref().unwrap_or("openai");
                 let token_res = self.resolver.get_token(account).await;
                 let token = if oauth || req.provider_account_id.is_some() {
                     token_res?.filter(|tok| !tok.trim().is_empty())
                 } else {
-                    match token_res { Ok(Some(tok)) if !tok.trim().is_empty() => Some(tok), _ => self.resolve_token_with_fallback(account).await }
+                    match token_res {
+                        Ok(Some(tok)) if !tok.trim().is_empty() => Some(tok),
+                        _ => self.resolve_token_with_fallback(account).await?,
+                    }
                 };
                 let token = match token {
                     Some(t) => t,
                     None => {
-                        // Graceful offline fallback for unconfigured default prompt
-                        if requested_model.is_empty()
-                            || requested_model == "default"
-                            || requested_model == "openai"
-                        {
-                            let content = "Custos Sovereign (Offline Mode): Backend đã sẵn sàng! Bạn có thể kết nối OAuth 2.0 PKCE với OpenAI/Copilot/Gemini hoặc cấu hình API Key trong Settings > Providers để mở khoá toàn bộ năng lực mô hình đám mây.".to_string();
-                            return Ok(ModelResponse::text(
-                                content,
-                                "custos-sovereign-local".to_string(),
-                                35,
-                            ));
-                        }
                         return Err(DomainError::Validation(
                             "OpenAI credentials not configured. Please log in with OpenAI via OAuth 2.0 PKCE or enter an API key in Settings > Providers.".into(),
                         ));
                     }
                 };
-                let custom_url = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("openai")).await.ok().flatten();
+                let custom_url = self
+                    .resolver
+                    .get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("openai"))
+                    .await
+                    .ok()
+                    .flatten();
                 if oauth {
                     return self.execute_chatgpt_codex(&token, requested_model, req).await;
                 }
-                let base_url = custom_url.unwrap_or_else(|| "https://api.openai.com/v1".to_string());
-                let model = if requested_model.is_empty() || requested_model == "default" || requested_model == "openai" {
+                let base_url =
+                    custom_url.unwrap_or_else(|| "https://api.openai.com/v1".to_string());
+                let model = if requested_model.is_empty()
+                    || requested_model == "default"
+                    || requested_model == "openai"
+                {
                     "gpt-4o"
                 } else {
                     requested_model
                 };
-                self.execute_openai_compatible(&base_url, Some(&token), model, req, "OpenAI").await
+                self.execute_openai_compatible(&base_url, Some(&token), model, req, "OpenAI")
+                    .await
             }
             "anthropic" => {
-                let token = (if let Some(account) = req.provider_account_id.as_deref() { self.resolver.get_token(account).await? } else { self.resolve_token_with_fallback("anthropic").await }).ok_or_else(|| {
+                let token = (if let Some(account) = req.provider_account_id.as_deref() {
+                    self.resolver.get_token(account).await?
+                } else {
+                    self.resolve_token_with_fallback("anthropic").await?
+                })
+                .ok_or_else(|| {
                     DomainError::Validation(
                         "Anthropic Claude API key not configured. Please enter your API key in Settings > Providers to chat with Claude models.".into(),
                     )
                 })?;
-                let custom_url = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("anthropic")).await.ok().flatten();
-                let base_url = custom_url.unwrap_or_else(|| "https://api.anthropic.com/v1".to_string());
-                self.execute_anthropic(&base_url, &token, requested_model, req).await
+                let custom_url = self
+                    .resolver
+                    .get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("anthropic"))
+                    .await
+                    .ok()
+                    .flatten();
+                let base_url =
+                    custom_url.unwrap_or_else(|| "https://api.anthropic.com/v1".to_string());
+                self.execute_anthropic(&base_url, &token, requested_model, req)
+                    .await
             }
             "gemini" => {
-                let token = (if let Some(account) = req.provider_account_id.as_deref() { self.resolver.get_token(account).await? } else { self.resolve_token_with_fallback("gemini").await }).ok_or_else(|| {
+                let token = (if let Some(account) = req.provider_account_id.as_deref() {
+                    self.resolver.get_token(account).await?
+                } else {
+                    self.resolve_token_with_fallback("gemini").await?
+                })
+                .ok_or_else(|| {
                     DomainError::Validation(
                         "Google Gemini API key not configured. Please enter your API key in Settings > Providers to chat with Gemini models.".into(),
                     )
                 })?;
-                let custom_url = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("gemini")).await.ok().flatten();
+                let custom_url = self
+                    .resolver
+                    .get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("gemini"))
+                    .await
+                    .ok()
+                    .flatten();
                 let base_url = custom_url.unwrap_or_else(|| {
                     "https://generativelanguage.googleapis.com/v1beta/openai".to_string()
                 });
-                let model = if requested_model.is_empty() || requested_model == "default" || requested_model == "gemini" {
+                let model = if requested_model.is_empty()
+                    || requested_model == "default"
+                    || requested_model == "gemini"
+                {
                     "gemini-2.5-flash"
                 } else {
                     requested_model
                 };
-                self.execute_openai_compatible(&base_url, Some(&token), model, req, "Google Gemini").await
+                self.execute_openai_compatible(
+                    &base_url,
+                    Some(&token),
+                    model,
+                    req,
+                    "Google Gemini",
+                )
+                .await
             }
             "deepseek" => {
-                let token = (if let Some(account) = req.provider_account_id.as_deref() { self.resolver.get_token(account).await? } else { self.resolve_token_with_fallback("deepseek").await }).ok_or_else(|| {
+                let token = (if let Some(account) = req.provider_account_id.as_deref() {
+                    self.resolver.get_token(account).await?
+                } else {
+                    self.resolve_token_with_fallback("deepseek").await?
+                })
+                .ok_or_else(|| {
                     DomainError::Validation(
                         "DeepSeek API key not configured. Please enter your API key in Settings > Providers to chat with DeepSeek models.".into(),
                     )
                 })?;
-                let custom_url = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("deepseek")).await.ok().flatten();
-                let base_url = custom_url.unwrap_or_else(|| "https://api.deepseek.com/v1".to_string());
-                let model = if requested_model.is_empty() || requested_model == "default" || requested_model == "deepseek" {
+                let custom_url = self
+                    .resolver
+                    .get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("deepseek"))
+                    .await
+                    .ok()
+                    .flatten();
+                let base_url =
+                    custom_url.unwrap_or_else(|| "https://api.deepseek.com/v1".to_string());
+                let model = if requested_model.is_empty()
+                    || requested_model == "default"
+                    || requested_model == "deepseek"
+                {
                     "deepseek-chat"
                 } else {
                     requested_model
                 };
-                self.execute_openai_compatible(&base_url, Some(&token), model, req, "DeepSeek").await
+                self.execute_openai_compatible(&base_url, Some(&token), model, req, "DeepSeek")
+                    .await
             }
             "local" => {
-                let custom_url = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("local")).await?;
+                let custom_url = self
+                    .resolver
+                    .get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("local"))
+                    .await?;
                 let base_url = custom_url.unwrap_or_else(|| "http://localhost:11434".to_string());
                 if let Some(model) = requested_model.strip_prefix("ollama/") {
                     return self.execute_ollama(&base_url, model, req).await;
@@ -626,8 +764,51 @@ impl ModelProvider for RouterModelProvider {
                 if base_url.contains(":11434") {
                     return self.execute_ollama(&base_url, requested_model, req).await;
                 }
-                let token = if let Some(account) = req.provider_account_id.as_deref() { self.resolver.get_token(account).await? } else { self.resolve_token_with_fallback("local").await };
-                self.execute_openai_compatible(&base_url, token.as_deref(), requested_model, req, "Local Inference").await
+                let token = if let Some(account) = req.provider_account_id.as_deref() {
+                    self.resolver.get_token(account).await?
+                } else {
+                    self.resolve_token_with_fallback("local").await?
+                };
+                self.execute_openai_compatible(
+                    &base_url,
+                    token.as_deref(),
+                    requested_model,
+                    req,
+                    "Local Inference",
+                )
+                .await
+            }
+            "groq" | "openrouter" | "together" | "mistral" | "cerebras" | "perplexity" => {
+                let default_base = match target_provider {
+                    "groq" => "https://api.groq.com/openai/v1",
+                    "openrouter" => "https://openrouter.ai/api/v1",
+                    "together" => "https://api.together.xyz/v1",
+                    "mistral" => "https://api.mistral.ai/v1",
+                    "cerebras" => "https://api.cerebras.ai/v1",
+                    "perplexity" => "https://api.perplexity.ai",
+                    _ => unreachable!(),
+                };
+                let token = (if let Some(account) = req.provider_account_id.as_deref() {
+                    self.resolver.get_token(account).await?
+                } else {
+                    self.resolve_token_with_fallback(target_provider).await?
+                })
+                .ok_or_else(|| {
+                    DomainError::Validation(format!(
+                        "{target_provider} API key not configured. Please enter your API key in Settings > Providers."
+                    ))
+                })?;
+                let custom_url = self
+                    .resolver
+                    .get_endpoint_url(req.provider_account_id.as_deref().unwrap_or(target_provider))
+                    .await
+                    .ok()
+                    .flatten();
+                let base_url = custom_url.unwrap_or_else(|| default_base.to_string());
+                let prefix = format!("{target_provider}/");
+                let model = requested_model.strip_prefix(&prefix).unwrap_or(requested_model);
+                self.execute_openai_compatible(&base_url, Some(&token), model, req, target_provider)
+                    .await
             }
             "mock" => {
                 let content = format!(
@@ -656,8 +837,14 @@ impl ModelProvider for RouterModelProvider {
 
 /// Formats non-success provider API errors, decorating known credit/quota balance issues
 /// with actionable instructions.
-pub fn format_provider_error(status: reqwest::StatusCode, body: &str, provider_label: &str) -> String {
-    if provider_label == "OpenAI" && (body.contains("credit_balance_exhausted") || body.contains("insufficient_quota")) {
+pub fn format_provider_error(
+    status: reqwest::StatusCode,
+    body: &str,
+    provider_label: &str,
+) -> String {
+    if provider_label == "OpenAI"
+        && (body.contains("credit_balance_exhausted") || body.contains("insufficient_quota"))
+    {
         "OpenAI API error 429 (credit_balance_exhausted): You have no prepaid API credits remaining on your OpenAI Platform organization.\n\n\
         Note: ChatGPT Plus subscription ($20/mo) only covers web/app ChatGPT and does NOT cover OpenAI Platform Developer API usage. \
         Please add credits ($5+) at https://platform.openai.com/settings/organization/billing/ or switch to Google Gemini (free tier) / Ollama.".to_string()
@@ -680,9 +867,19 @@ pub fn parse_codex_sse_stream(raw: &str) -> Result<(String, usize), DomainError>
                 break;
             }
             if let Ok(val) = serde_json::from_str::<serde_json::Value>(json_str) {
-                if matches!(val.get("type").and_then(|t| t.as_str()), Some("error" | "response.failed" | "response.incomplete")) {
-                    let message = val.pointer("/error/message").or_else(|| val.pointer("/response/error/message")).or_else(|| val.get("message")).and_then(|m| m.as_str()).unwrap_or("Response failed or incomplete");
-                    return Err(DomainError::Validation(format!("ChatGPT Codex stream error: {message}")));
+                if matches!(
+                    val.get("type").and_then(|t| t.as_str()),
+                    Some("error" | "response.failed" | "response.incomplete")
+                ) {
+                    let message = val
+                        .pointer("/error/message")
+                        .or_else(|| val.pointer("/response/error/message"))
+                        .or_else(|| val.get("message"))
+                        .and_then(|m| m.as_str())
+                        .unwrap_or("Response failed or incomplete");
+                    return Err(DomainError::Validation(format!(
+                        "ChatGPT Codex stream error: {message}"
+                    )));
                 }
                 completed |= val.get("type").and_then(|t| t.as_str()) == Some("response.completed");
                 if let Some(delta) = val.get("delta").and_then(|d| d.as_str()) {
@@ -692,7 +889,11 @@ pub fn parse_codex_sse_stream(raw: &str) -> Result<(String, usize), DomainError>
                     if let Some(total) = usage.get("total_tokens").and_then(|t| t.as_u64()) {
                         tokens_used = Some(total as usize);
                     }
-                } else if let Some(total) = val.get("usage").and_then(|u| u.get("total_tokens")).and_then(|t| t.as_u64()) {
+                } else if let Some(total) = val
+                    .get("usage")
+                    .and_then(|u| u.get("total_tokens"))
+                    .and_then(|t| t.as_u64())
+                {
                     tokens_used = Some(total as usize);
                 }
             }
@@ -700,7 +901,9 @@ pub fn parse_codex_sse_stream(raw: &str) -> Result<(String, usize), DomainError>
     }
 
     if !completed {
-        return Err(DomainError::Validation("ChatGPT Codex stream ended before completion".into()));
+        return Err(DomainError::Validation(
+            "ChatGPT Codex stream ended before completion".into(),
+        ));
     }
     if content.is_empty() {
         return Err(DomainError::Validation(
@@ -1015,9 +1218,12 @@ mod tests {
     #[test]
     fn test_format_provider_error_credit_balance_exhausted() {
         let err_body = r#"{ "error": { "message": "You have no credits remaining.", "type": "insufficient_quota", "code": "credit_balance_exhausted" } }"#;
-        let formatted = format_provider_error(reqwest::StatusCode::TOO_MANY_REQUESTS, err_body, "OpenAI");
+        let formatted =
+            format_provider_error(reqwest::StatusCode::TOO_MANY_REQUESTS, err_body, "OpenAI");
         assert!(formatted.contains("credit_balance_exhausted"));
-        assert!(formatted.contains("ChatGPT Plus subscription ($20/mo) only covers web/app ChatGPT"));
+        assert!(
+            formatted.contains("ChatGPT Plus subscription ($20/mo) only covers web/app ChatGPT")
+        );
         assert!(formatted.contains("https://platform.openai.com/settings/organization/billing/"));
     }
 
@@ -1025,25 +1231,73 @@ mod tests {
     fn test_format_provider_error_standard() {
         let err_body = r#"{"error": "invalid model"}"#;
         let formatted = format_provider_error(reqwest::StatusCode::BAD_REQUEST, err_body, "OpenAI");
-        assert_eq!(formatted, "OpenAI API error 400 Bad Request: {\"error\": \"invalid model\"}");
+        assert_eq!(
+            formatted,
+            "OpenAI API error 400 Bad Request: {\"error\": \"invalid model\"}"
+        );
     }
 
     #[test]
     fn test_classify_provider() {
         assert_eq!(RouterModelProvider::classify_provider("gpt-4o"), "openai");
-        assert_eq!(RouterModelProvider::classify_provider("gpt-4o-mini"), "openai");
-        assert_eq!(RouterModelProvider::classify_provider("gpt-5.6-sol"), "openai");
-        assert_eq!(RouterModelProvider::classify_provider("gpt-5.6-terra"), "openai");
+        assert_eq!(
+            RouterModelProvider::classify_provider("gpt-4o-mini"),
+            "openai"
+        );
+        assert_eq!(
+            RouterModelProvider::classify_provider("gpt-5.6-sol"),
+            "openai"
+        );
+        assert_eq!(
+            RouterModelProvider::classify_provider("gpt-5.6-terra"),
+            "openai"
+        );
         assert_eq!(RouterModelProvider::classify_provider("o3-mini"), "openai");
         assert_eq!(RouterModelProvider::classify_provider("o1"), "openai");
-        assert_eq!(RouterModelProvider::classify_provider("claude-3-7-sonnet"), "anthropic");
-        assert_eq!(RouterModelProvider::classify_provider("claude-3-5-haiku"), "anthropic");
-        assert_eq!(RouterModelProvider::classify_provider("gemini-2.5-flash"), "gemini");
-        assert_eq!(RouterModelProvider::classify_provider("gemini-2.5-pro"), "gemini");
-        assert_eq!(RouterModelProvider::classify_provider("deepseek-chat"), "deepseek");
-        assert_eq!(RouterModelProvider::classify_provider("deepseek-reasoner"), "deepseek");
-        assert_eq!(RouterModelProvider::classify_provider("llama3.3:70b"), "local");
-        assert_eq!(RouterModelProvider::classify_provider("qwen2.5-coder:32b"), "local");
+        assert_eq!(
+            RouterModelProvider::classify_provider("claude-3-7-sonnet"),
+            "anthropic"
+        );
+        assert_eq!(
+            RouterModelProvider::classify_provider("claude-3-5-haiku"),
+            "anthropic"
+        );
+        assert_eq!(
+            RouterModelProvider::classify_provider("gemini-2.5-flash"),
+            "gemini"
+        );
+        assert_eq!(
+            RouterModelProvider::classify_provider("gemini-2.5-pro"),
+            "gemini"
+        );
+        assert_eq!(
+            RouterModelProvider::classify_provider("deepseek-chat"),
+            "deepseek"
+        );
+        assert_eq!(
+            RouterModelProvider::classify_provider("deepseek-reasoner"),
+            "deepseek"
+        );
+        assert_eq!(
+            RouterModelProvider::classify_provider("llama3.3:70b"),
+            "local"
+        );
+        assert_eq!(
+            RouterModelProvider::classify_provider("qwen2.5-coder:32b"),
+            "local"
+        );
+        assert_eq!(
+            RouterModelProvider::classify_provider("groq/llama-3.3-70b"),
+            "groq"
+        );
+        assert_eq!(
+            RouterModelProvider::classify_provider("openrouter/auto"),
+            "openrouter"
+        );
+        assert_eq!(
+            RouterModelProvider::classify_provider("together/deepseek-r1"),
+            "together"
+        );
     }
 
     #[test]
@@ -1073,7 +1327,10 @@ mod tests {
         async fn get_token(&self, _provider_id: &str) -> Result<Option<String>, DomainError> {
             Ok(None)
         }
-        async fn get_endpoint_url(&self, _provider_id: &str) -> Result<Option<String>, DomainError> {
+        async fn get_endpoint_url(
+            &self,
+            _provider_id: &str,
+        ) -> Result<Option<String>, DomainError> {
             Ok(None)
         }
     }

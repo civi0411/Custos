@@ -58,6 +58,9 @@ impl ModelProvider for MockModel {
             .unwrap_or_else(|| "mock-default".into());
         Ok(ModelResponse {
             tokens_used: content.len() / 4 + 1,
+            input_tokens: None,
+            output_tokens: None,
+            total_tokens: None,
             content,
             model_id: "mock".into(),
             tool_calls: vec![],

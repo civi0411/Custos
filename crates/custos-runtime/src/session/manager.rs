@@ -1,6 +1,9 @@
 use crate::journal::SessionJournal;
 use custos_core::{SessionStateMachine, SessionStore};
-use custos_domain::{DomainError, Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus, TaskId, WorkbenchLens};
+use custos_domain::{
+    DomainError, Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus, TaskId,
+    WorkbenchLens,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -202,9 +205,11 @@ impl SessionManager {
             kind: "Session".into(),
             id: id.to_string(),
         })?;
-        if journal.entries.iter().any(|entry| {
-            entry.entry_type == "workbench_opened" && entry.entry_data == lens_value
-        }) {
+        if journal
+            .entries
+            .iter()
+            .any(|entry| entry.entry_type == "workbench_opened" && entry.entry_data == lens_value)
+        {
             return Ok(());
         }
         let entry = SessionJournalEntry {

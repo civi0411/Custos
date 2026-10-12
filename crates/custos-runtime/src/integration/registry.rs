@@ -33,9 +33,16 @@ impl IntegrationRegistry {
     }
 
     /// Update the lifecycle state of a binding
-    pub async fn update_state(&self, id: &Uuid, state: LifecycleState, error: Option<String>) -> Result<()> {
+    pub async fn update_state(
+        &self,
+        id: &Uuid,
+        state: LifecycleState,
+        error: Option<String>,
+    ) -> Result<()> {
         let mut guard = self.bindings.write().await;
-        let entry = guard.get_mut(id).ok_or_else(|| anyhow!("Binding '{}' not found", id))?;
+        let entry = guard
+            .get_mut(id)
+            .ok_or_else(|| anyhow!("Binding '{}' not found", id))?;
         entry.state = state;
         entry.error_message = error;
         entry.last_health_check = Some(chrono::Utc::now());
@@ -45,11 +52,7 @@ impl IntegrationRegistry {
     /// List all bindings of a specific category
     pub async fn list_by_kind(&self, kind: IntegrationKind) -> Vec<IntegrationBinding> {
         let guard = self.bindings.read().await;
-        guard
-            .values()
-            .filter(|b| b.kind == kind)
-            .cloned()
-            .collect()
+        guard.values().filter(|b| b.kind == kind).cloned().collect()
     }
 
     /// List all active and enabled bindings for a category
@@ -93,19 +96,31 @@ mod tests {
         assert_eq!(initial.state, LifecycleState::Configured);
 
         // Transition: Configured -> Validated
-        registry.update_state(&id, LifecycleState::Validated, None).await.unwrap();
+        registry
+            .update_state(&id, LifecycleState::Validated, None)
+            .await
+            .unwrap();
         let validated = registry.get(&id).await.unwrap();
         assert_eq!(validated.state, LifecycleState::Validated);
 
         // Transition: Validated -> Enabled
-        registry.update_state(&id, LifecycleState::Enabled, None).await.unwrap();
-        let enabled = registry.list_enabled(IntegrationKind::ModelConnection).await;
+        registry
+            .update_state(&id, LifecycleState::Enabled, None)
+            .await
+            .unwrap();
+        let enabled = registry
+            .list_enabled(IntegrationKind::ModelConnection)
+            .await;
         assert_eq!(enabled.len(), 1);
         assert_eq!(enabled[0].name, "OpenAI Direct");
 
         // Transition: Enabled -> Degraded on error
         registry
-            .update_state(&id, LifecycleState::Degraded, Some("HTTP 429 Rate Limited".into()))
+            .update_state(
+                &id,
+                LifecycleState::Degraded,
+                Some("HTTP 429 Rate Limited".into()),
+            )
             .await
             .unwrap();
         let degraded = registry.get(&id).await.unwrap();

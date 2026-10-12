@@ -4,10 +4,10 @@
 //! and verifier records into an auditable proposal before materializing invariant-governed
 //! coding tasks and execution worktrees.
 
-use serde::{Deserialize, Serialize};
+use crate::claim::ClaimGroundingLevel;
 use crate::error::DomainError;
 use crate::ids::new_id;
-use crate::claim::ClaimGroundingLevel;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -67,10 +67,14 @@ impl ResearchSynthesisProposal {
         let summary = summary.into();
 
         if title.trim().is_empty() {
-            return Err(DomainError::Validation("Proposal title cannot be empty".into()));
+            return Err(DomainError::Validation(
+                "Proposal title cannot be empty".into(),
+            ));
         }
         if summary.trim().is_empty() {
-            return Err(DomainError::Validation("Proposal summary cannot be empty".into()));
+            return Err(DomainError::Validation(
+                "Proposal summary cannot be empty".into(),
+            ));
         }
 
         let caveats = Self::generate_caveats(&claims, &recipes);
@@ -187,15 +191,13 @@ mod tests {
             },
         ];
 
-        let recipes = vec![
-            RecipeHandoffSummary {
-                recipe_id: "recipe_1".into(),
-                name: "Run test suite".into(),
-                command: "cargo test".into(),
-                inputs_count: 0,
-                outputs: vec!["target/debug".into()],
-            },
-        ];
+        let recipes = vec![RecipeHandoffSummary {
+            recipe_id: "recipe_1".into(),
+            name: "Run test suite".into(),
+            command: "cargo test".into(),
+            inputs_count: 0,
+            outputs: vec!["target/debug".into()],
+        }];
 
         let proposal = ResearchSynthesisProposal::new(
             "Sandbox Synthesis",
@@ -205,7 +207,8 @@ mod tests {
             vec!["artifacts/sandbox.md".into()],
             Some("ws_default".into()),
             Some("feature/sandbox".into()),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(proposal.status, SynthesisProposalStatus::Draft);
         assert_eq!(proposal.caveats.len(), 1);

@@ -9,9 +9,9 @@ pub mod oauth_pkce;
 pub mod openai_chat;
 pub mod pricing;
 pub mod probe;
-pub mod router;
 #[allow(clippy::module_inception)]
 pub mod providers;
+pub mod router;
 pub mod translator;
 
 pub use antigravity::*;
@@ -25,8 +25,8 @@ pub use oauth_pkce::*;
 pub use openai_chat::*;
 pub use pricing::*;
 pub use probe::*;
-pub use router::*;
 pub use providers::*;
+pub use router::*;
 
 #[cfg(test)]
 mod placeholder_tests {

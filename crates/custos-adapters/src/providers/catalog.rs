@@ -234,7 +234,9 @@ pub fn default_canonical_models() -> Vec<ModelCatalogOption> {
         ModelCatalogOption {
             id: "gpt-5.6-luna".into(),
             label: "GPT-5.6 Luna".into(),
-            description: Some("Ultra-fast low-latency coding model for real-time iterations".into()),
+            description: Some(
+                "Ultra-fast low-latency coding model for real-time iterations".into(),
+            ),
             provider_type: "openai".into(),
             is_default: false,
             default_effort: None,

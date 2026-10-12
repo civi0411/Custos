@@ -13,7 +13,7 @@ use custos_core::contracts::storage::{
 use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::SessionStore;
 use custos_domain::{
-    new_id, Assurance, CancelReceipt, ContinuationPacket, DomainError, Run, RunHandle,
+    new_id, Assurance, CancelReceipt, ContextPack, ContinuationPacket, DomainError, Run, RunHandle,
     RunStatus, SessionId, StartRunCommand, TaskStatus, WorkerRun,
 };
 use custos_provider::request::ProviderRequest;
@@ -396,12 +396,8 @@ impl WorkflowPort for TaskRuntime {
         let _ = self.dispatcher.mark_dispatched(&claim.id, &wrun.id).await;
 
         // 6. Allocate isolated workspace lease if lease manager is configured
-        let mut lease = if cmd.workspace_root.is_none() {
-            if let Some(ref lm) = self.lease_manager {
-                lm.acquire_lease(&cmd.task_id, &wrun.id).ok()
-            } else {
-                None
-            }
+        let mut lease = if let Some(ref lm) = self.lease_manager {
+            lm.acquire_lease(&cmd.task_id, &wrun.id).ok()
         } else {
             None
         };
@@ -421,14 +417,6 @@ impl WorkflowPort for TaskRuntime {
                 let harness = self.resolve_harness(cmd.harness_id.as_deref())?;
                 let profile = harness.profile();
                 let harness_id = profile.harness_id.clone();
-                let workspace_root = cmd.workspace_root.as_deref().ok_or_else(|| {
-                    DomainError::Validation(
-                        "Native Task runs require a daemon-resolved ExecutionWorkspace".into(),
-                    )
-                })?;
-                let prompt_text = cmd.prompt.as_deref().ok_or_else(|| {
-                    DomainError::Validation("Native Task runs require an instruction".into())
-                })?;
 
                 let mut launch = custos_domain::LaunchAttempt::new(&wrun.id, requested_mode)?;
                 if let Some(ref store) = self.run_store {
@@ -440,137 +428,148 @@ impl WorkflowPort for TaskRuntime {
                     serde_json::json!(profile.tool_mediation.to_string());
                 wrun.continuation_packet_ref = Some(format!("launch:{}", launch.id));
 
-                let native_result = harness
-                    .run_native(prompt_text, std::path::Path::new(workspace_root))
-                    .await;
-                let execution = match native_result {
-                    Ok(result) => {
-                        launch.mark_launched("native", Some(harness_id.clone()))?;
-                        if let Some(ref store) = self.run_store {
-                            store.save_launch_attempt(&launch).await?;
-                        }
-                        result
-                    }
-                    Err(err) => {
-                        launch.mark_failed(err.to_string())?;
-                        if let Some(ref store) = self.run_store {
-                            store.save_launch_attempt(&launch).await?;
-                        }
-                        return Err(err);
-                    }
-                };
-
-                for intent in &execution.observed_effects {
-                    profile.validate_intent_assurance(intent)?;
-                }
-
-                run.metadata["exit_code"] = serde_json::json!(execution.exit_code);
-                run.metadata["native_success"] = serde_json::json!(execution.success);
-                run.metadata["stderr"] = serde_json::json!(execution.stderr.clone());
-                run.metadata["observed_effect_count"] =
-                    serde_json::json!(execution.observed_effects.len());
-                let combined_output = if execution.stdout.trim().is_empty() {
-                    execution.stderr.clone()
-                } else {
-                    execution.stdout.clone()
-                };
-                run.metadata["output"] = serde_json::json!(combined_output);
-                turn_output = Some(combined_output);
-
-                let intents = execution.observed_effects;
-
-                    // Process generated action intents through Gate 4, Kernel, Outbox, and Sandbox
-                    for mut intent in intents {
-                        // Gate 4: Validate intent assurance against harness profile
-                        harness.profile().validate_intent_assurance(&intent)?;
-
-                        // If intent is custos-mediated and we have kernel and sandbox:
-                        if intent.assurance == Assurance::CustosMediated {
-                            if let Some(ref kernel) = self.kernel {
-                                // Ensure intent is explicitly bound to task
-                                intent.task_id = Some(cmd.task_id.clone());
-
-                                // Request permit (Gate 1 Budget, Gate 2 Policy, Gate 3 Idempotency)
-                                let permit = kernel
-                                    .request_permit(&cmd.task_id, &intent, &cmd.actor)
-                                    .await?;
-                                let burned_permit =
-                                    kernel.consume_permit(&permit.id, &intent).await?;
-
-                                let idempotency_key = intent
-                                    .idempotency_key
-                                    .clone()
-                                    .unwrap_or_else(|| intent.id.clone());
-
-                                // Record effect attempt in effect ledger if available
-                                let effect_id = if let Some(ref ledger) = self.effect_ledger {
-                                    let mut effect = custos_domain::EffectAttempt::new(
-                                        wrun.id.clone(),
-                                        burned_permit.id.clone(),
-                                        idempotency_key.clone(),
-                                    );
-                                    effect.status = custos_domain::EffectStatus::InFlight;
-                                    ledger.record_effect(&effect).await?;
-                                    Some(effect.id)
-                                } else {
-                                    None
-                                };
-
-                                // T3: Transactional Outbox write BEFORE execution
-                                let outbox_id = new_id("outbox");
-                                if let Some(ref outbox) = self.outbox {
-                                    let outbox_entry = OutboxEntry {
-                                        id: outbox_id.clone(),
-                                        task_id: cmd.task_id.clone(),
-                                        action_id: intent.id.clone(),
-                                        permit_id: burned_permit.id.clone(),
-                                        argument_digest: intent.argument_digest(),
-                                        idempotency_key: Some(idempotency_key),
-                                        status: OutboxStatus::Pending,
-                                        created_at: Utc::now(),
-                                        receipt: None,
-                                    };
-                                    outbox.enqueue(outbox_entry).await?;
-                                    outbox.mark_dispatching(&outbox_id).await?;
-                                }
-
-                                // T4: Execute in Sandbox
-                                if let Some(ref sandbox) = self.sandbox {
-                                    let receipt = sandbox.execute(&intent, &burned_permit).await?;
-
-                                    // Update Outbox and EffectLedger with verified receipt
-                                    if let Some(ref outbox) = self.outbox {
-                                        outbox.mark_receipted(&outbox_id, receipt.clone()).await?;
-                                    }
-                                    if let Some(ref ledger) = self.effect_ledger {
-                                        if let Some(eff_id) = effect_id {
-                                            ledger
-                                                .update_effect_status(
-                                                    &eff_id,
-                                                    custos_domain::EffectStatus::Succeeded,
-                                                    Some(&receipt),
-                                                )
-                                                .await?;
-                                        }
-                                    }
-                                }
+                let intents = if let (Some(workspace_root), Some(prompt_text)) =
+                    (cmd.workspace_root.as_deref(), cmd.prompt.as_deref())
+                {
+                    let native_result = harness
+                        .run_native(prompt_text, std::path::Path::new(workspace_root))
+                        .await;
+                    let execution = match native_result {
+                        Ok(result) => {
+                            launch.mark_launched("native", Some(harness_id.clone()))?;
+                            if let Some(ref store) = self.run_store {
+                                store.save_launch_attempt(&launch).await?;
                             }
-                        } else if let Some(ref ledger) = self.effect_ledger {
-                            // Native/provider-governed effects have no Custos dispatch receipt.
-                            // Keep them uncertain until a post-read verifier reconciles the effect.
+                            result
+                        }
+                        Err(err) => {
+                            launch.mark_failed(err.to_string())?;
+                            if let Some(ref store) = self.run_store {
+                                store.save_launch_attempt(&launch).await?;
+                            }
+                            return Err(err);
+                        }
+                    };
+
+                    for intent in &execution.observed_effects {
+                        profile.validate_intent_assurance(intent)?;
+                    }
+
+                    run.metadata["exit_code"] = serde_json::json!(execution.exit_code);
+                    run.metadata["native_success"] = serde_json::json!(execution.success);
+                    run.metadata["stderr"] = serde_json::json!(execution.stderr.clone());
+                    run.metadata["observed_effect_count"] =
+                        serde_json::json!(execution.observed_effects.len());
+                    let combined_output = if execution.stdout.trim().is_empty() {
+                        execution.stderr.clone()
+                    } else {
+                        execution.stdout.clone()
+                    };
+                    run.metadata["output"] = serde_json::json!(combined_output);
+                    turn_output = Some(combined_output);
+
+                    execution.observed_effects
+                } else {
+                    launch.mark_launched("native", Some(harness_id.clone()))?;
+                    if let Some(ref store) = self.run_store {
+                        store.save_launch_attempt(&launch).await?;
+                    }
+                    let context_pack =
+                        ContextPack::new(new_id("ctx"), Vec::new(), 0, "sha256:empty".into());
+                    harness.execute_turn(&wrun, &context_pack).await?
+                };
+
+                // Process generated action intents through Gate 4, Kernel, Outbox, and Sandbox
+                for mut intent in intents {
+                    // Gate 4: Validate intent assurance against harness profile
+                    harness.profile().validate_intent_assurance(&intent)?;
+
+                    // If intent is custos-mediated and we have kernel and sandbox:
+                    if intent.assurance == Assurance::CustosMediated {
+                        if let Some(ref kernel) = self.kernel {
+                            // Ensure intent is explicitly bound to task
+                            intent.task_id = Some(cmd.task_id.clone());
+
+                            // Request permit (Gate 1 Budget, Gate 2 Policy, Gate 3 Idempotency)
+                            let permit = kernel
+                                .request_permit(&cmd.task_id, &intent, &cmd.actor)
+                                .await?;
+                            let burned_permit = kernel.consume_permit(&permit.id, &intent).await?;
+
                             let idempotency_key = intent
                                 .idempotency_key
                                 .clone()
                                 .unwrap_or_else(|| intent.id.clone());
-                            let mut effect = custos_domain::EffectAttempt::new(
-                                wrun.id.clone(),
-                                "native-unmediated",
-                                idempotency_key,
-                            );
-                            effect.status = custos_domain::EffectStatus::Uncertain;
-                            let _ = ledger.record_effect(&effect).await;
+
+                            // Record effect attempt in effect ledger if available
+                            let effect_id = if let Some(ref ledger) = self.effect_ledger {
+                                let mut effect = custos_domain::EffectAttempt::new(
+                                    wrun.id.clone(),
+                                    burned_permit.id.clone(),
+                                    idempotency_key.clone(),
+                                );
+                                effect.status = custos_domain::EffectStatus::InFlight;
+                                ledger.record_effect(&effect).await?;
+                                Some(effect.id)
+                            } else {
+                                None
+                            };
+
+                            // T3: Transactional Outbox write BEFORE execution
+                            let outbox_id = new_id("outbox");
+                            if let Some(ref outbox) = self.outbox {
+                                let outbox_entry = OutboxEntry {
+                                    id: outbox_id.clone(),
+                                    task_id: cmd.task_id.clone(),
+                                    action_id: intent.id.clone(),
+                                    permit_id: burned_permit.id.clone(),
+                                    argument_digest: intent.argument_digest(),
+                                    idempotency_key: Some(idempotency_key),
+                                    status: OutboxStatus::Pending,
+                                    created_at: Utc::now(),
+                                    receipt: None,
+                                };
+                                outbox.enqueue(outbox_entry).await?;
+                                outbox.mark_dispatching(&outbox_id).await?;
+                            }
+
+                            // T4: Execute in Sandbox
+                            if let Some(ref sandbox) = self.sandbox {
+                                let receipt = sandbox.execute(&intent, &burned_permit).await?;
+
+                                // Update Outbox and EffectLedger with verified receipt
+                                if let Some(ref outbox) = self.outbox {
+                                    outbox.mark_receipted(&outbox_id, receipt.clone()).await?;
+                                }
+                                if let Some(ref ledger) = self.effect_ledger {
+                                    if let Some(eff_id) = effect_id {
+                                        ledger
+                                            .update_effect_status(
+                                                &eff_id,
+                                                custos_domain::EffectStatus::Succeeded,
+                                                Some(&receipt),
+                                            )
+                                            .await?;
+                                    }
+                                }
+                            }
                         }
+                    } else if let Some(ref ledger) = self.effect_ledger {
+                        // Native/provider-governed effects have no Custos dispatch receipt.
+                        // Keep them uncertain until a post-read verifier reconciles the effect.
+                        let idempotency_key = intent
+                            .idempotency_key
+                            .clone()
+                            .unwrap_or_else(|| intent.id.clone());
+                        let mut effect = custos_domain::EffectAttempt::new(
+                            wrun.id.clone(),
+                            "native-unmediated",
+                            idempotency_key,
+                        );
+                        effect.status = custos_domain::EffectStatus::Uncertain;
+                        let _ = ledger.record_effect(&effect).await;
                     }
+                }
             } else if actual_mode == "model" {
                 if let Some(ref model) = self.model {
                     let mut launch = custos_domain::LaunchAttempt::new(&wrun.id, requested_mode)?;
@@ -599,11 +598,8 @@ impl WorkflowPort for TaskRuntime {
                             )));
                         }
                         let journal = session_store.get_journal(&session_id).await?;
-                        let compiled = crate::context::compile_session_history(
-                            &journal,
-                            &prompt_text,
-                            12_000,
-                        );
+                        let compiled =
+                            crate::context::compile_session_history(&journal, &prompt_text, 12_000);
                         run.metadata["session_context"] = serde_json::json!({
                             "compiler_version": "journal-recent-v1",
                             "session_id": session_id.0,
@@ -673,29 +669,30 @@ impl WorkflowPort for TaskRuntime {
         }
 
         if actual_mode == "native" && run.status == RunStatus::Active {
-            let native_succeeded = run
+            if let Some(native_succeeded) = run
                 .metadata
                 .get("native_success")
                 .and_then(|value| value.as_bool())
-                .unwrap_or(false);
-            run.transition(if native_succeeded {
-                RunStatus::Completed
-            } else {
-                RunStatus::Failed
-            })?;
-            wrun.transition(if native_succeeded {
-                RunStatus::Completed
-            } else {
-                RunStatus::Failed
-            })?;
-            run.metadata["completion_reason"] = serde_json::json!(if native_succeeded {
-                "native_process_completed"
-            } else {
-                "native_process_failed"
-            });
-            if let Some(ref store) = self.run_store {
-                store.save_run(&run).await?;
-                store.save_worker_run(&wrun).await?;
+            {
+                run.transition(if native_succeeded {
+                    RunStatus::Completed
+                } else {
+                    RunStatus::Failed
+                })?;
+                wrun.transition(if native_succeeded {
+                    RunStatus::Completed
+                } else {
+                    RunStatus::Failed
+                })?;
+                run.metadata["completion_reason"] = serde_json::json!(if native_succeeded {
+                    "native_process_completed"
+                } else {
+                    "native_process_failed"
+                });
+                if let Some(ref store) = self.run_store {
+                    store.save_run(&run).await?;
+                    store.save_worker_run(&wrun).await?;
+                }
             }
         }
 
@@ -1188,7 +1185,9 @@ mod tests {
             &self,
             _req: &ProviderRequest,
         ) -> Result<custos_provider::request::ModelResponse, DomainError> {
-            Err(DomainError::Validation("Simulated model provider failure".into()))
+            Err(DomainError::Validation(
+                "Simulated model provider failure".into(),
+            ))
         }
     }
 
@@ -1200,10 +1199,7 @@ mod tests {
         use custos_persistence::SqliteTaskStore;
 
         let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
-        let task = Task::new(
-            "task_fail_recover_01".into(),
-            "Fail and retry task".into(),
-        );
+        let task = Task::new("task_fail_recover_01".into(), "Fail and retry task".into());
         store.save_task(&task).await.unwrap();
 
         let kernel = Arc::new(TrustedKernel::new(store.clone()));

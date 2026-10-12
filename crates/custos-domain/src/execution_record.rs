@@ -52,7 +52,12 @@ impl ExecutionRecord {
 
     pub fn transition(&mut self, next: ExecutionRecordStatus) {
         self.status = next;
-        if matches!(next, ExecutionRecordStatus::Completed | ExecutionRecordStatus::Failed | ExecutionRecordStatus::Cancelled) {
+        if matches!(
+            next,
+            ExecutionRecordStatus::Completed
+                | ExecutionRecordStatus::Failed
+                | ExecutionRecordStatus::Cancelled
+        ) {
             self.ended_at = Some(Utc::now());
         }
     }

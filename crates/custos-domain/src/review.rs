@@ -3,9 +3,9 @@
 //! Models reviewer records with method, evidence, status, criteria checks,
 //! and audit trails across tasks, artifacts, runs, diffs, and notes.
 
-use serde::{Deserialize, Serialize};
 use crate::error::DomainError;
 use crate::ids::new_id;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -102,10 +102,14 @@ impl ReviewerRecord {
             return Err(DomainError::Validation("Target ID cannot be empty".into()));
         }
         if reviewer.trim().is_empty() {
-            return Err(DomainError::Validation("Reviewer identifier cannot be empty".into()));
+            return Err(DomainError::Validation(
+                "Reviewer identifier cannot be empty".into(),
+            ));
         }
         if evidence_summary.trim().is_empty() {
-            return Err(DomainError::Validation("Evidence summary cannot be empty".into()));
+            return Err(DomainError::Validation(
+                "Evidence summary cannot be empty".into(),
+            ));
         }
 
         let now = chrono::Utc::now().timestamp();
@@ -152,7 +156,8 @@ mod tests {
                 file_path: Some("crates/custos-domain/src/lib.rs".into()),
                 line_number: Some(1),
             }],
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(rev.target_type, ReviewTargetType::Diff);
         assert_eq!(rev.status, ReviewStatus::Approved);

@@ -40,7 +40,9 @@ impl HarnessRegistry {
         let root = workspace_root.into();
         let mut registry = Self::new();
 
-        let claude = Arc::new(super::claude_code::ClaudeCodeHarnessAdapter::new(root.clone()));
+        let claude = Arc::new(super::claude_code::ClaudeCodeHarnessAdapter::new(
+            root.clone(),
+        ));
         registry.register(
             claude,
             "Claude Code CLI",
@@ -157,21 +159,27 @@ impl HarnessRegistry {
         cwd: &Path,
     ) -> Result<HarnessExecutionResult, DomainError> {
         let harness = self.get(id).ok_or_else(|| {
-            DomainError::Validation(format!("Harness '{id}' is not registered in HarnessRegistry"))
+            DomainError::Validation(format!(
+                "Harness '{id}' is not registered in HarnessRegistry"
+            ))
         })?;
         harness.run_native(instruction, cwd).await
     }
 
     pub async fn cancel(&self, id: &str, run_id: &str) -> Result<(), DomainError> {
         let harness = self.get(id).ok_or_else(|| {
-            DomainError::Validation(format!("Harness '{id}' is not registered in HarnessRegistry"))
+            DomainError::Validation(format!(
+                "Harness '{id}' is not registered in HarnessRegistry"
+            ))
         })?;
         harness.cancel_run(run_id).await
     }
 
     pub async fn steer(&self, id: &str, run_id: &str, guidance: &str) -> Result<(), DomainError> {
         let harness = self.get(id).ok_or_else(|| {
-            DomainError::Validation(format!("Harness '{id}' is not registered in HarnessRegistry"))
+            DomainError::Validation(format!(
+                "Harness '{id}' is not registered in HarnessRegistry"
+            ))
         })?;
         harness.steer_run(run_id, guidance).await
     }
@@ -203,7 +211,9 @@ mod tests {
         assert_eq!(runtimes.len(), 4);
         assert!(runtimes.contains_key("codex"));
 
-        let desc = registry.get_descriptor("opencode").expect("OpenCode descriptor");
+        let desc = registry
+            .get_descriptor("opencode")
+            .expect("OpenCode descriptor");
         assert_eq!(desc.id, "opencode");
         assert_eq!(desc.name, "OpenCode Agent");
     }

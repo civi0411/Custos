@@ -61,7 +61,8 @@ impl HeadroomPolicy {
 
     /// Maximum tokens available for the prompt before violating the headroom reservation
     pub fn max_prompt_tokens(&self) -> usize {
-        self.context_window.saturating_sub(self.safety_headroom_tokens)
+        self.context_window
+            .saturating_sub(self.safety_headroom_tokens)
     }
 
     /// Verifies if the prompt fits within the safe window
@@ -155,9 +156,12 @@ impl RtkPruner {
                             if let ContentBlock::Text(ref mut text_block) = item {
                                 let orig_tokens = Self::estimate_tokens(&text_block.text);
                                 if orig_tokens > 100 {
-                                    let hash = blake3::hash(text_block.text.as_bytes()).to_hex().to_string();
+                                    let hash = blake3::hash(text_block.text.as_bytes())
+                                        .to_hex()
+                                        .to_string();
                                     let max_keep_chars = 200;
-                                    let truncated: String = text_block.text.chars().take(max_keep_chars).collect();
+                                    let truncated: String =
+                                        text_block.text.chars().take(max_keep_chars).collect();
                                     let replacement = format!(
                                         "{}\n\n[... RTK Pruned: {} tokens omitted for headroom ...]",
                                         truncated,
@@ -173,7 +177,8 @@ impl RtkPruner {
                                         message_index: idx,
                                         original_tokens: orig_tokens,
                                         pruned_tokens,
-                                        reason: "Tool output trimmed to fit context headroom".to_string(),
+                                        reason: "Tool output trimmed to fit context headroom"
+                                            .to_string(),
                                         omission_hash: hash,
                                     });
 
@@ -252,7 +257,9 @@ mod tests {
         msg1.content = vec![MessageContentBlock::ToolResponse(
             custos_provider::types::conversation::message::ToolResponse {
                 id: "call_123".to_string(),
-                tool_result: Ok(CallToolResult::success(vec![ContentBlock::text(long_output)])),
+                tool_result: Ok(CallToolResult::success(vec![ContentBlock::text(
+                    long_output,
+                )])),
                 metadata: None,
             },
         )];
@@ -260,7 +267,10 @@ mod tests {
         let msg2 = Message::user().with_text("Latest user prompt to solve bug");
 
         let mut messages = vec![msg0, msg1, msg2];
-        let initial_tokens: usize = messages.iter().map(RtkPruner::estimate_message_tokens).sum();
+        let initial_tokens: usize = messages
+            .iter()
+            .map(RtkPruner::estimate_message_tokens)
+            .sum();
         assert!(initial_tokens > 400);
 
         // Budget for 200 tokens
@@ -270,7 +280,10 @@ mod tests {
         assert_eq!(omissions[0].message_index, 1);
         assert!(!omissions[0].omission_hash.is_empty());
 
-        let final_tokens: usize = messages.iter().map(RtkPruner::estimate_message_tokens).sum();
+        let final_tokens: usize = messages
+            .iter()
+            .map(RtkPruner::estimate_message_tokens)
+            .sum();
         assert!(final_tokens < initial_tokens);
     }
 }

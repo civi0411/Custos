@@ -48,10 +48,7 @@ pub fn is_localhost_origin(origin: &str) -> bool {
         return false;
     }
 
-    parsed
-        .host_str()
-        .map(is_localhost_host)
-        .unwrap_or(false)
+    parsed.host_str().map(is_localhost_host).unwrap_or(false)
 }
 
 /// Validate whether an incoming MCP HTTP request satisfies DNS rebinding protection invariants
@@ -123,7 +120,11 @@ mod tests {
             "http://localhost/path",
             "http://[::1].evil.example",
         ] {
-            assert!(!is_localhost_origin(origin), "should reject origin: {}", origin);
+            assert!(
+                !is_localhost_origin(origin),
+                "should reject origin: {}",
+                origin
+            );
         }
     }
 

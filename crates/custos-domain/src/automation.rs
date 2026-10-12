@@ -3,10 +3,10 @@
 //! Models for automated tasks, cron / event triggers, scheduled batch jobs,
 //! and contract evidence verification.
 
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use crate::error::DomainError;
 use crate::ids::new_id;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -69,10 +69,14 @@ impl HeadlessAutomationJob {
     ) -> Result<Self, DomainError> {
         let name_str = name.into();
         if name_str.trim().is_empty() {
-            return Err(DomainError::Validation("Job name cannot be empty.".to_string()));
+            return Err(DomainError::Validation(
+                "Job name cannot be empty.".to_string(),
+            ));
         }
         if spec.command_or_script.trim().is_empty() {
-            return Err(DomainError::Validation("Job command or script cannot be empty.".to_string()));
+            return Err(DomainError::Validation(
+                "Job command or script cannot be empty.".to_string(),
+            ));
         }
 
         let now = chrono::Utc::now().timestamp_millis();
@@ -128,7 +132,8 @@ mod tests {
             HeadlessTrigger::Cron {
                 schedule: "0 0 * * *".to_string(),
             },
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(job.id.starts_with("job_"));
         assert_eq!(job.status, HeadlessJobStatus::Pending);

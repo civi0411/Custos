@@ -338,7 +338,10 @@ impl RunRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let claim = stmt
-            .query_row(params![task_id, node_id.unwrap_or("")], Self::map_dispatch_claim)
+            .query_row(
+                params![task_id, node_id.unwrap_or("")],
+                Self::map_dispatch_claim,
+            )
             .optional()
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
@@ -373,7 +376,10 @@ impl RunRepository {
         Ok(())
     }
 
-    pub fn get_launch_attempt(&self, attempt_id: &str) -> Result<Option<LaunchAttempt>, DomainError> {
+    pub fn get_launch_attempt(
+        &self,
+        attempt_id: &str,
+    ) -> Result<Option<LaunchAttempt>, DomainError> {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
@@ -536,7 +542,9 @@ mod tests {
 
         // 2. Second claim on same task while first is active fails with Conflict
         let claim2 = DispatchClaim::new(&task.id, "worker_2", 1);
-        let err = repo.claim_ready(&claim2).expect_err("Second claim must conflict");
+        let err = repo
+            .claim_ready(&claim2)
+            .expect_err("Second claim must conflict");
         assert!(matches!(err, DomainError::Conflict(_)));
 
         // 3. Releasing first claim allows second claim to succeed
@@ -544,7 +552,8 @@ mod tests {
         released_claim1.release().unwrap();
         repo.update_claim(&released_claim1).unwrap();
 
-        repo.claim_ready(&claim2).expect("Claim must succeed after release");
+        repo.claim_ready(&claim2)
+            .expect("Claim must succeed after release");
         let active2 = repo.get_active_claim(&task.id, None).unwrap().unwrap();
         assert_eq!(active2.assignee, "worker_2");
     }
@@ -571,7 +580,9 @@ mod tests {
 
         let repo = RunRepository::new(db);
         let mut attempt = LaunchAttempt::new("wrun_1", "model").unwrap();
-        attempt.mark_launched("model", Some("claude-sonnet".into())).unwrap();
+        attempt
+            .mark_launched("model", Some("claude-sonnet".into()))
+            .unwrap();
 
         repo.save_launch_attempt(&attempt).unwrap();
 
@@ -607,7 +618,9 @@ mod tests {
         }
 
         let repo = RunRepository::new(db);
-        let reconciled_count = repo.reconcile_runs_on_startup().expect("Reconcile should succeed");
+        let reconciled_count = repo
+            .reconcile_runs_on_startup()
+            .expect("Reconcile should succeed");
         assert_eq!(reconciled_count, 2);
 
         let wrun = repo.get_worker_run("wrun_stale").unwrap().unwrap();
