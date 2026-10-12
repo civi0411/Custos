@@ -1,28 +1,34 @@
+mod browser;
 use custos_daemon::local_api::LocalApiClient;
 use custos_daemon::{ensure_daemon_client, ProfileResolver};
 use std::sync::Arc;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
+fn greet(caller: tauri::Webview, name: &str) -> Result<String, String> {
+    browser::authorize(&caller).map_err(|e| e.to_string())?;
+    Ok(format!("Hello, {}! You've been greeted from Rust!", name))
 }
 
 #[tauri::command]
 async fn custos_dispatch(
+    caller: tauri::Webview,
     client: tauri::State<'_, Arc<LocalApiClient>>,
     raw_json: String,
 ) -> Result<String, String> {
+    browser::authorize(&caller).map_err(|e| e.to_string())?;
     let resp = client.dispatch_raw(&raw_json).await;
     Ok(resp)
 }
 
 #[tauri::command]
 async fn custos_request(
+    caller: tauri::Webview,
     client: tauri::State<'_, Arc<LocalApiClient>>,
     method: String,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    browser::authorize(&caller).map_err(|e| e.to_string())?;
     let req = custos_daemon::ApiRequest {
         id: custos_domain::new_id("ipc"),
         method,
@@ -37,9 +43,12 @@ async fn custos_request(
 }
 
 #[tauri::command]
-fn custos_http_endpoint() -> Result<String, String> {
+fn custos_http_endpoint(caller: tauri::Webview) -> Result<String, String> {
+    browser::authorize(&caller).map_err(|e| e.to_string())?;
     let profile = ProfileResolver::from_env();
-    let port = profile.read_http_port().ok_or_else(|| "Daemon HTTP endpoint is unavailable".to_string())?;
+    let port = profile
+        .read_http_port()
+        .ok_or_else(|| "Daemon HTTP endpoint is unavailable".to_string())?;
     Ok(format!("http://127.0.0.1:{port}"))
 }
 
@@ -51,8 +60,25 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .on_page_load(|view, payload| {
+            if view.label() == "main" && payload.event() == tauri::webview::PageLoadEvent::Started {
+                use tauri::Manager;
+                if let Some(registry) = view.try_state::<browser::BrowserRegistry>() {
+                    if let Ok(mut tabs) = registry.0.try_lock() { tabs.clear(); }
+                }
+                for (label, child) in view.app_handle().webviews() {
+                    if label.starts_with("browser-") {
+                        if let Err(error) = child.close() {
+                            tracing::debug!(%label, %error, "Browser cleanup during frontend reload failed");
+                        }
+                    }
+                }
+            }
+        })
         .manage(client)
+        .manage(browser::BrowserRegistry::default())
         .invoke_handler(tauri::generate_handler![
+            browser::browser_command,
             greet,
             custos_http_endpoint,
             custos_dispatch,

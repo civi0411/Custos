@@ -20,7 +20,7 @@ import {
   Compass,
   ArrowRight,
 } from 'lucide-react';
-import { BrowserWorkbenchPane } from '@/components/views/BrowserWorkbenchPane';
+const BrowserWorkbenchPane = React.lazy(() => import('@/components/views/BrowserWorkbenchPane').then((module) => ({ default: module.BrowserWorkbenchPane })));
 import { MobileSimulatorWorkbenchPane } from '@/components/views/MobileSimulatorWorkbenchPane';
 import { RemoteFleetWorkbenchPane } from '@/components/views/RemoteFleetWorkbenchPane';
 import { WorkflowDagWorkbenchPane } from '@/components/views/WorkflowDagWorkbenchPane';
@@ -128,7 +128,7 @@ export const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'runs', title: 'Runs', description: 'Inspect experiment logs, environment specs, and execution outputs.', icon: FlaskConical, group: 'Research', status: 'available' },
   { id: 'synthesis', title: 'Synthesis & Handoff', description: 'Synthesize research claims and recipes into coding tasks.', icon: Layers, group: 'Research', status: 'available', supportedOperations: ['synthesis.proposals.list', 'synthesis.proposals.get', 'synthesis.proposals.save', 'synthesis.handoff.execute'] },
   { id: 'artifacts', title: 'Artifacts', description: 'View generated documents, reports, diagrams, and exported files.', icon: FileCode, group: 'Research', status: 'available', supportedOperations: ['list', 'get', 'record_lineage', 'lineage.list', 'lineage.graph', 'annotations.list', 'annotations.save'] },
-  { id: 'browser', title: 'Browser', description: 'Interactive browser session for web research, local dev preview, and agent testing.', icon: Globe, group: 'Shared', status: 'available', supportedOperations: ['sessions.list', 'sessions.create', 'tabs.list', 'tabs.create', 'tabs.close', 'tabs.navigate', 'tabs.snapshot'] },
+  { id: 'browser', title: 'Browser', description: 'Manual native browser for web research and local development previews.', icon: Globe, group: 'Shared', status: 'available', supportedOperations: [] },
   { id: 'emulator', title: 'Phone Simulator', description: 'Interactive mobile device simulator (iOS, Android, Responsive) for live frontend preview and testing.', icon: Smartphone, group: 'Engineering', status: 'available', supportedOperations: ['preview', 'rotate', 'inspect', 'snapshot', 'devices.list', 'devices.launch', 'devices.navigate', 'devices.tap'] },
   { id: 'fleet', title: 'Remote Fleet', description: 'Remote host inventory for distributed compute.', icon: Server, group: 'Shared', status: 'available', supportedOperations: ['hosts.list', 'hosts.register', 'hosts.ping', 'jobs.list', 'jobs.create', 'fleet.exec', 'jobs.run'] },
   { id: 'notes', title: 'Notes & Scratchpad', description: 'Capture quick notes, thoughts, and draft context for conversations.', icon: FileCode, group: 'Shared', status: 'available', supportedOperations: ['list', 'get', 'save', 'history'] },
@@ -180,7 +180,7 @@ const UnavailableResource: React.FC<{ resource: ResourceDefinition }> = ({ resou
   );
 };
 
-export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
+const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
   resourceTabs,
   session,
   onShowToast,
@@ -217,8 +217,9 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   }, []);
 
   const resources = React.useMemo(() => {
+    const nativeBrowser = (def: ResourceDefinition): ResourceDefinition => ({ ...def, status: ('__TAURI_INTERNALS__' in window ? 'available' : 'unavailable') as ResourceDefinition['status'], reason: '__TAURI_INTERNALS__' in window ? undefined : 'Open Custos desktop to use the native Browser.', supportedOperations: [] });
     if (!capabilitiesLoaded || fetchFailed) {
-      return DEFAULT_RESOURCES.map((def) => ({
+      return DEFAULT_RESOURCES.map((def) => def.id === 'browser' ? nativeBrowser(def) : ({
         ...def,
         status: 'unavailable' as const,
         reason: capabilitiesLoaded
@@ -228,8 +229,9 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
       }));
     }
     return DEFAULT_RESOURCES.map((def) => {
+      if (def.id === 'browser') return nativeBrowser(def);
       // Client-native interactive preview resources run directly in ADE frontend
-      if (def.id === 'browser' || def.id === 'emulator') {
+      if (def.id === 'emulator') {
         const matched = capabilities.find(
           (c) => (c.resourceId ?? c.resource_id) === def.id
         );
@@ -510,17 +512,6 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     </div>
   );
 
-  if (activeType === 'browser') {
-    return frameResource(
-      <BrowserWorkbenchPane
-        onShowToast={onShowToast}
-        onAskAgent={onAskAgent}
-        supportedOperations={activeResource.supportedOperations ?? []}
-        capabilityReason={activeResource.reason}
-      />
-    );
-  }
-
   if (activeType === 'emulator') {
     return frameResource(
       <MobileSimulatorWorkbenchPane
@@ -622,3 +613,33 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     ? <UnavailableResource resource={activeResource} />
     : <UnavailableResource resource={{ id: 'tools', title: 'Unknown resource', description: 'The selected resource is not supported by this client.', icon: Wrench, group: 'Shared', status: 'unavailable', reason: 'The selected resource is not supported by this client.' }} />;
 };
+
+
+// Retain only browser tabs that have actually been visited. Hidden native
+// webviews preserve page state; removing a tab or panel runs their cleanup.
+export const OrcaTabbedContainer = React.memo(function OrcaTabbedContainer(props: OrcaTabbedContainerProps) {
+  const { resourceTabs } = props;
+  const activeTab = resourceTabs.tabs.find((tab) => tab.id === resourceTabs.activeTabId);
+  const browserActive = !!activeTab && getTabType(activeTab) === 'browser';
+  const [visited, setVisited] = React.useState<Set<string>>(() => new Set());
+  React.useEffect(() => {
+    setVisited((previous) => {
+      const next = new Set([...previous].filter((id) => resourceTabs.tabs.some((tab) => tab.id === id)));
+      if (browserActive && activeTab) next.add(activeTab.id);
+      if (next.size === previous.size && [...next].every((id) => previous.has(id))) return previous;
+      return next;
+    });
+  }, [resourceTabs.tabs, browserActive, activeTab]);
+  return <div className="relative h-full min-h-0">
+    <div className="h-full" style={{ display: browserActive ? 'none' : 'block' }}><ResourceContent {...props} /></div>
+    {resourceTabs.tabs.filter((tab) => getTabType(tab) === 'browser' && (visited.has(tab.id) || tab.id === resourceTabs.activeTabId)).map((tab) => (
+      <div key={tab.id} className="h-full" style={{ display: tab.id === resourceTabs.activeTabId ? 'block' : 'none' }}>
+        <React.Suspense fallback={<div role="status" aria-label="Loading browser" className="h-full p-8 bg-canvas space-y-5 motion-safe:animate-pulse"><div className="h-7 w-2/3 bg-surface-2 rounded" /><div className="h-32 bg-surface-1 rounded" /></div>}>
+          <BrowserWorkbenchPane tabId={tab.id} active={tab.id === resourceTabs.activeTabId} url={tab.url.startsWith('custos:') ? 'about:blank' : tab.url}
+            onUrlChange={(url) => resourceTabs.setTabs((previous) => previous.map((item) => item.id === tab.id && item.url !== url ? { ...item, url } : item))}
+            onAskAgent={props.onAskAgent} />
+        </React.Suspense>
+      </div>
+    ))}
+  </div>;
+});

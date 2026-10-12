@@ -1,6 +1,6 @@
 import StopIcon from '~icons/lucide/square';
 import WorktreeIcon from '~icons/codicon/worktree';
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   Send,
   FolderGit2,
@@ -39,6 +39,31 @@ import { daemonClient } from '@/api/daemon_client';
 
 
 
+
+// Width changes are handled by CSS; only new message text needs parsing.
+const ConversationMarkdown = React.memo(function ConversationMarkdown({ text }: { text: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkMath, remarkNormalizeChatMath]}
+      rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, strict: false, maxExpand: 1000, maxSize: 20 }]]}
+      components={{
+        pre({ children }) {
+          const child = React.Children.toArray(children)[0];
+          if (!React.isValidElement<{ className?: string; children?: React.ReactNode }>(child)) {
+            return <pre>{children}</pre>;
+          }
+          const language = /(?:^|\s)language-([^\s]+)/.exec(child.props.className || '')?.[1];
+          return <HighlightedCodeBlock code={String(child.props.children ?? '').replace(/\n$/, '')} language={language} />;
+        },
+        code({ children, className }) {
+          return <code className={className || 'px-1.5 py-0.5 rounded bg-surface-1 text-fg-editor border border-border-muted font-mono text-[12px]'}>{children}</code>;
+        }
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  );
+});
 
 interface AppWorkspaceShellProps {
   mode: AppWorkspaceMode;
@@ -184,10 +209,9 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     const el = dialogueRef.current;
     if (!el) return;
     const canScroll = el.scrollHeight > el.clientHeight;
-    setScrollEdges({
-      top: canScroll && el.scrollTop > 12,
-      bottom: canScroll && el.scrollTop < el.scrollHeight - el.clientHeight - 12
-    });
+    const top = canScroll && el.scrollTop > 12;
+    const bottom = canScroll && el.scrollTop < el.scrollHeight - el.clientHeight - 12;
+    setScrollEdges(previous => previous.top === top && previous.bottom === bottom ? previous : { top, bottom });
   };
 
   useEffect(() => {
@@ -270,7 +294,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     }
   };
 
-  const openTab = (id: OrcaTabId, title: string, url: string) => {
+  const openTab = useCallback((id: OrcaTabId, title: string, url: string) => {
     if (!isWebTabOpen) {
       onToggleWebTab();
     }
@@ -291,7 +315,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       resourceTabs.setTabs((prev) => [...prev, newTab]);
     }
     resourceTabs.setActiveTabId(newTabId);
-  };
+  }, [isWebTabOpen, onToggleWebTab, resourceTabs]);
   const runningJobsByTab = useMemo(() => {
     const counts: Record<string, number> = {};
     jobs.forEach((j) => {
@@ -302,9 +326,12 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     return counts;
   }, [jobs]);
 
-  const handleOpenTab = (id: OrcaTabId) => {
+  const handleOpenTab = useCallback((id: OrcaTabId) => {
     openTab(id, id.charAt(0).toUpperCase() + id.slice(1), `custos://resource/${id}`);
-  };
+  }, [openTab]);
+  const handleResourceAskAgent = useCallback((draft: string) => {
+    setInputText(previous => previous ? `${previous}\n\n${draft}` : draft);
+  }, []);
 
   const handleCloseTab = (e: React.MouseEvent, tabId: string) => {
     e.stopPropagation();
@@ -577,25 +604,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                       >
                         {/* Message Content */}
                         <div className="conversation-markdown text-[13px] leading-relaxed text-fg-editor space-y-3 min-w-0 break-words [overflow-wrap:anywhere]">
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm, remarkMath, remarkNormalizeChatMath]}
-                            rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, strict: false, maxExpand: 1000, maxSize: 20 }]]}
-                            components={{
-                              pre({ children }) {
-                                const child = React.Children.toArray(children)[0];
-                                if (!React.isValidElement<{ className?: string; children?: React.ReactNode }>(child)) {
-                                  return <pre>{children}</pre>;
-                                }
-                                const language = /(?:^|\s)language-([^\s]+)/.exec(child.props.className || '')?.[1];
-                                return <HighlightedCodeBlock code={String(child.props.children ?? '').replace(/\n$/, '')} language={language} />;
-                              },
-                              code({ children, className }) {
-                                return <code className={className || 'px-1.5 py-0.5 rounded bg-surface-1 text-fg-editor border border-border-muted font-mono text-[12px]'}>{children}</code>;
-                              }
-                            }}
-                          >
-                            {msg.text}
-                          </ReactMarkdown>
+                          <ConversationMarkdown text={msg.text} />
                           {!msg.text && msg.runId && !['completed','failed','cancelled','interrupted'].includes(msg.runStatus || '') && <p role="status" className="text-xs text-fg-muted">{msg.runStatus === 'thinking' ? 'Thinking...' : 'Running...'}</p>}
                           {msg.liveError && <p role="alert" className="mt-2 text-xs text-amber-400">{msg.liveError}</p>}
                           {msg.activities?.map((activity, index) => <details key={`${msg.runId}-activity-${index}`} className="mt-2 rounded-lg border border-border-muted bg-surface-1 p-2 text-xs"><summary className="cursor-pointer text-fg-muted">{activity.kind === 'reasoning_summary' ? 'Reasoning summary' : activity.kind === 'tool_input' ? 'Tool input' : 'Tool output'}</summary><pre className="mt-2 whitespace-pre-wrap break-words max-h-60 overflow-auto text-[11px]">{JSON.stringify(activity.payload, null, 2)}</pre></details>)}
@@ -712,9 +721,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                 mode={mode}
                 splitPercent={splitPercent}
                 onOpenTab={handleOpenTab}
-                onAskAgent={(draft) => {
-                  setInputText((prev) => (prev ? `${prev}\n\n${draft}` : draft));
-                }}
+                onAskAgent={handleResourceAskAgent}
               />
             </div>
           )}

@@ -18,11 +18,11 @@
 
 > **Research transport and compute audit:** `daemon_client.ts` maps Research wire keys between Rust `snake_case` and TypeScript `camelCase`; recipe execution records have read-only `v1.research.executions.list/get` endpoints. `ResearchRepository` returns an observable error for corrupt environment JSON instead of fabricating a Python/hardware snapshot. Notebook dispatch is now daemon-composed through `PythonKernelCoordinator`, but each cell launches a fresh Python subprocess from a temporary script. The coordinator persists counters/cell output while its active process table is in memory; it is not yet a stateful notebook kernel, compute sandbox, or complete provenance/authority path. UI and capability copy must preserve this distinction.
 
-> **Desktop resource-tab ownership:** [`AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) and [`OrcaTabbedContainer.tsx`](../../ui/desktop/src/components/views/OrcaTabbedContainer.tsx) render one shared shell/resource catalog for all three lenses. Research, workspace, notebook, terminal, files, changes, agents, evidence, browser and fleet panes now exist at different realization levels. A rendered pane is not proof that its physical operations work: browser/fleet/automation deliberately advertise degraded metadata-only operation while their effects fail closed. The container must gate every pane action from daemon `supported_operations`, not from its static resource table.
+> **Desktop resource-tab ownership:** [`AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) and [`OrcaTabbedContainer.tsx`](../../ui/desktop/src/components/views/OrcaTabbedContainer.tsx) render one shared shell/resource catalog for all three lenses. Research, workspace, notebook, terminal, files, changes, agents, evidence, browser and fleet panes now exist at different realization levels. A rendered pane is not proof that its physical operations work: browser capability metadata still advertises limited operations; Fleet can advertise availability when upstream transport discovery succeeds. Missing transports fail closed, and engine discovery is not proof of permit mediation. Daemon-owned actions are gated by `supported_operations`. Manual browser navigation is provided separately by the native desktop host, with lazy child webviews and no automation authority.
 
 > **Desktop picker and cross-lens navigation:** `AppWorkspaceShell.tsx` owns the transient `+` resource picker, while `OrcaTabbedContainer.tsx` owns the resource definitions and capability-gated panes. `WorkspaceSidebar.tsx` exposes project-wide session search; `StudioPage` persists `OpenLens` membership through the existing daemon command and selects the same canonical session in the target lens. These UI actions do not create tasks, runs, grants or duplicate journals.
 
-> **Capability projection invariant:** [`LocalApiDispatcher::list_capabilities`](../../crates/custos-daemon/src/api.rs) owns the canonical capability-to-resource mapping. The desktop catalog supplies labels/icons/grouping only; absence, loading failure or an unmatched `resource_id` produces `unavailable`, never optimistic availability. Degraded panes receive the exact operation set and gate controls locally. Research `runs` and `synthesis` are distinct resource projections even though both consume the Research repository.
+> **Capability projection invariant:** [`LocalApiDispatcher::list_capabilities`](../../crates/custos-daemon/src/api.rs) owns the canonical capability-to-resource mapping. The desktop catalog supplies labels/icons/grouping only; absence, loading failure or an unmatched `resource_id` produces `unavailable` for daemon operations, never optimistic availability. Manual Browser availability is instead derived from native host presence. Degraded panes receive the exact operation set and gate controls locally. Research `runs` and `synthesis` are distinct resource projections even though both consume the Research repository.
 
 > **OpenCode adapter realization:** [`harness/opencode.rs`](../../crates/custos-adapters/src/harness/opencode.rs) can execute the local CLI as a provider-governed native process and normalize captured/mock event fixtures. Its HTTP/SSE production turn, remote cancellation, steering and exact usage are not composed. The profile must therefore keep those capabilities disabled, production `execute_turn` must fail explicitly, and native subprocess execution must enforce its configured timeout until a pinned server adapter is implemented.
 
@@ -969,10 +969,10 @@ Custos/
 | Tập tin | Số dòng | Vai trò & Trách nhiệm kiến trúc | Các Struct / Trait / Hàm cốt lõi |
 |---|:---:|---|---|
 | [`Cargo.toml`](../../crates/custos-daemon/Cargo.toml) | 40 | Manifest của composition root và các concrete dependency được phép ráp tại daemon. | None |
-| [`src/api.rs`](../../crates/custos-daemon/src/api.rs) | 6812 | Local API dispatcher with account-scoped discovery and durable usage/remote quota projections through existing ports. | `struct LocalApiDispatcher`, `fn list_capabilities`, `fn handle_request` |
+| [`src/api.rs`](../../crates/custos-daemon/src/api.rs) | 7596 | Local API dispatcher with account-scoped discovery and durable usage/remote quota projections through existing ports. | `struct LocalApiDispatcher`, `fn list_capabilities`, `fn handle_request` |
 | [`src/http_server.rs`](../../crates/custos-daemon/src/http_server.rs) | 403 | Loopback RPC/health and scoped SSE transport, exact origin admission, heartbeat/replay/snapshot and bounded socket writes. | `fn start_http_server`, `fn handle_http_client` |
 | [`src/lib.rs`](../../crates/custos-daemon/src/lib.rs) | 18 | Export API, HTTP adapter, profile, runtime và Local API client/transport. | None |
-| [`src/local_api/lib.rs`](../../crates/custos-daemon/src/local_api/lib.rs) | 1700 | Versioned request/response DTO, process/TCP transports và typed client methods, including session deletion request/client helper. Cần được tách module cơ học theo domain trong cùng crate khi refactor. | `struct ApiRequest`, `struct ApiResponse`, `struct ProcessTransport`, `struct TcpTransport`, `struct LocalApiClient` |
+| [`src/local_api/lib.rs`](../../crates/custos-daemon/src/local_api/lib.rs) | 1769 | Versioned request/response DTO, process/TCP transports và typed client methods, including session deletion request/client helper. Cần được tách module cơ học theo domain trong cùng crate khi refactor. | `struct ApiRequest`, `struct ApiResponse`, `struct ProcessTransport`, `struct TcpTransport`, `struct LocalApiClient` |
 | [`src/main.rs`](../../crates/custos-daemon/src/main.rs) | 121 | Composition/process entry point: singleton lock và loopback TCP + HTTP + stdio JSONL listeners. | `fn main` |
 | [`src/oauth_callback_server.rs`](../../crates/custos-daemon/src/oauth_callback_server.rs) | 712 | Provider-specific loopback callback capture, single-use state validation, cancellation and real device authorization lifecycle. | `OAuthCallbackServer`, `PendingOAuthContext`, `CallbackServerStatus`, `validate_manual_callback`, `cancel` |
 | [`src/profile.rs`](../../crates/custos-daemon/src/profile.rs) | 381 | Profile directory resolver, TCP/HTTP port discovery, singleton file lock và auto-connect helper. | `struct ProfileResolver`, `struct DaemonLock`, `fn ensure_daemon_client` |
@@ -1038,7 +1038,7 @@ Custos/
 | File | Lines | Current responsibility | Key export |
 |---|---:|---|---|
 | [`ui/desktop/src/app/studio/page.tsx`](../../ui/desktop/src/app/studio/page.tsx) | 236 | Per-lens session filtering, last selection and durable same-session full-chat opening from project search; only last-selection remains device-local | `StudioPage` |
-| [`ui/desktop/src/components/shell/AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) | 760 | Shared conversation/resource shell; speed dial new tab integration; empty lens has no selected conversation | `AppWorkspaceShell` |
+| [`ui/desktop/src/components/shell/AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) | 756 | Shared conversation/resource shell; memoized Markdown, change-only scroll edges and stable resource callbacks; empty lens has no selected conversation | `AppWorkspaceShell` |
 | [`ui/desktop/src/components/shell/WorkspaceSidebar.tsx`](../../ui/desktop/src/components/shell/WorkspaceSidebar.tsx) | 420 | Per-lens history, 3-dots session workbench mover, and project-wide session search | `WorkspaceSidebar` |
 | [`ui/desktop/src/components/modals/NewSessionModal.tsx`](../../ui/desktop/src/components/modals/NewSessionModal.tsx) | 101 | Defaults new Task pack to the visible workbench | `NewSessionModal` |
 | [`ui/desktop/src/context/AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx) | 1547 | Daemon session/journal projection; keeps all sessions, filters non-message events and reads durable lens membership | `AppProvider`, `useAppContext` |
@@ -1050,7 +1050,7 @@ Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../
 - **Đường dẫn thư mục:** `crates/custos-app/cli` & `crates/custos-app/desktop`
 - **Chủ sở hữu chính (Owner):** **Vinh (Client Lead)**
 - **Quy tắc ranh giới:** Giao tiếp với Daemon thuần túy qua IPC socket; cấm truy cập SQLite trực tiếp. Không dính GUI Tauri dependency vào CLI binary.
-- **Tổng số file:** 13 files | **Tổng số dòng mã:** ~2,670 lines
+- **Tổng số file:** 15 files | **Tổng số dòng mã:** 3,012 catalogued lines
 - **Mô tả chức năng:** Các ứng dụng giao diện trình diễn mỏng (Thin Presentation Clients): Render tiến độ tác vụ bằng ratatui (CLI) và Tauri Webview (Desktop), bảng hiển thị mã màu diff thay đổi, bảng điều khiển trạng thái và xác nhận cấp quyền.
 - **Hợp đồng tương tác CLI:** phiên mặc định mang nhãn `custos`; `/` mở palette không cần Enter; `/mode` mở tầng mode gồm `/code`, `/research`, `/assistant`; prompt phản ánh mode bằng nhãn `custos-<mode>`.
 
@@ -1068,15 +1068,20 @@ Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../
 | [`cli/src/ui/mod.rs`](../../crates/custos-app/cli/src/ui/mod.rs) | 110 | Module mod UI terminal | `fn get_terminal_width`, `fn get_terminal_height`, `enum ResponsiveTier`, `fn current` |
 | [`cli/src/ui/prompt.rs`](../../crates/custos-app/cli/src/ui/prompt.rs) | 122 | Nhận phản hồi duyệt quyền hạn từ người dùng | `enum RiskLevel`, `fn badge`, `fn confirm_execution`, `fn wait_for_mode_prompt` |
 | [`cli/src/ui/spinner.rs`](../../crates/custos-app/cli/src/ui/spinner.rs) | 46 | Hiển thị hoạt ảnh tiến độ công việc | `struct CliSpinner`, `fn new`, `fn set_message`, `fn finish_success` |
-| [`desktop/Cargo.toml`](../../crates/custos-app/desktop/Cargo.toml) | 24 | Module Cargo Desktop: phục vụ biên dịch executable `custos-desktop` (Tauri/Webview) | None |
+| [`desktop/Cargo.toml`](../../crates/custos-app/desktop/Cargo.toml) | 29 | Module Cargo Desktop: phục vụ biên dịch executable `custos-desktop` (Tauri/Webview) | None |
 | [`desktop/build.rs`](../../crates/custos-app/desktop/build.rs) | 4 | Build script Tauri cho desktop backend | `fn main` |
-| [`desktop/src/lib.rs`](../../crates/custos-app/desktop/src/lib.rs) | 63 | Tauri thin host: lấy `Arc<LocalApiClient>` theo profile, forward `custos_request`/`custos_dispatch` qua Local API; không bootstrap backend riêng | `fn greet`, `fn custos_request`, `fn custos_dispatch`, `fn run` |
+| [`desktop/src/lib.rs`](../../crates/custos-app/desktop/src/lib.rs) | 89 | Tauri thin host with main-webview command authorization and manual Browser lifecycle: lấy `Arc<LocalApiClient>` theo profile, forward `custos_request`/`custos_dispatch` qua Local API; không bootstrap backend riêng | `fn greet`, `fn custos_request`, `fn custos_dispatch`, `fn run` |
 | [`desktop/src/main.rs`](../../crates/custos-app/desktop/src/main.rs) | 7 | Điểm khởi đầu thực thi duy nhất của `custos-desktop` | None |
+| [`desktop/src/browser.rs`](../../crates/custos-app/desktop/src/browser.rs) | 246 | Manual child-webview registry, main-only commands, URL validation and instance-scoped page events (Owner: Vinh) | `BrowserRegistry`, `BrowserRequest`, `BrowserState`, `BrowserError`, `authorize`, `browser_command` |
 
 #### Desktop provider projection files (Owner: Vinh)
 
 | File | Lines | Responsibility | Exports |
 |---|---:|---|---|
+| [WorkflowDagWorkbenchPane.tsx](../../ui/desktop/src/components/views/WorkflowDagWorkbenchPane.tsx) | 687 | Session run/DAG projection with start/cancel/inspect controls; default stages are fixtures, not verification evidence (Owner: Vinh) | `WorkflowDagWorkbenchPane`, `WorkflowDagWorkbenchPaneProps`, `DagNode`, `DagNodeStatus` |
+| [native_browser.ts](../../ui/desktop/src/api/native_browser.ts) | 20 | Serialized per-tab IPC queue, including create/close races (Owner: Vinh) | `browserCommand`, `BrowserState` |
+| [BrowserWorkbenchPane.tsx](../../ui/desktop/src/components/views/BrowserWorkbenchPane.tsx) | 201 | Lazy native Browser toolbar, skeleton, loading/errors, viewport and overlay-aware bounds (Owner: Vinh) | `BrowserWorkbenchPane`, `normalizeBrowserUrl` |
+| [OrcaTabbedContainer.tsx](../../ui/desktop/src/components/views/OrcaTabbedContainer.tsx) | 645 | Memoized shared resource catalog and lazy retained browser tabs (Owner: Vinh) | `OrcaTabbedContainer`, `ResourceContent` |
 | [AppContext.tsx](../../ui/desktop/src/context/AppContext.tsx) | 1547 | Provider hydration, session/run restoration and background model/native chat projection | `AppProvider`, `useAppContext` |
 | [AgentsWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/AgentsWorkbenchPane.tsx) | 454 | Session-bound native launch and live run inspector (Vinh) | `AgentsWorkbenchPane` |
 | [ModelSelector.tsx](../../ui/desktop/src/components/chat/ModelSelector.tsx) | 385 | Discovered model picker with cache/error status and retry | `ModelSelector`, `getConnectedModelOptions`, `ModelOption` |
@@ -1084,7 +1089,7 @@ Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../
 | [provider_types.ts](../../ui/desktop/src/types/provider_types.ts) | 91 | Account catalog source, original timestamp and failure metadata | `ConnectedAccount` |
 | [AddProviderModal.tsx](../../ui/desktop/src/components/modals/AddProviderModal.tsx) | 895 | OAuth/API connection UI with PKCE/device authorization, fetched identity and cancellation. | `AddProviderModal` |
 | [ProvidersView.tsx](../../ui/desktop/src/components/providers/ProvidersView.tsx) | 235 | Account listing and provider branding. | `ProvidersView` |
-| [daemon_client.ts](../../ui/desktop/src/api/daemon_client.ts) | 1064 | Typed IPC client, profile HTTP discovery and deduplicated SSE reconnect. | `DaemonClient` |
+| [daemon_client.ts](../../ui/desktop/src/api/daemon_client.ts) | 1142 | Typed IPC client, profile HTTP discovery, deduplicated SSE reconnect and upstream emulator/screenshot methods. | `DaemonClient` |
 | [SettingsModal.tsx](../../ui/desktop/src/components/modals/SettingsModal.tsx) | 420 | Settings account status and usage navigation | `SettingsModal` |
 | [markdownMath.ts](../../ui/desktop/src/components/chat/markdownMath.ts) | 39 | Math AST normalization for escaped subscripts and display delimiters (Owner: Vinh) | `remarkNormalizeChatMath` |
 | [HighlightedCodeBlock.tsx](../../ui/desktop/src/components/chat/HighlightedCodeBlock.tsx) | 38 | Memoized highlight.js fenced-code projection with theme tokens and escaped fallback (Owner: Vinh) | `HighlightedCodeBlock` |
@@ -1093,12 +1098,12 @@ Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../
 | [WorktreeManagerModal.tsx](../../ui/desktop/src/components/modals/WorktreeManagerModal.tsx) | 512 | Managed worktree projection with semantic worktree glyph (Owner: Vinh) | `WorktreeManagerModal` |
 | [StatusBar.tsx](../../ui/desktop/src/components/shell/StatusBar.tsx) | 164 | Discrete app zoom presets and ten-percent stepping (Owner: Vinh) | `StatusBar` |
 | [layout.tsx](../../ui/desktop/src/app/layout.tsx) | 75 | Full viewport application layout with browser zoom compensation (Owner: Vinh) | `RootLayout` |
-| [default.json](../../crates/custos-app/desktop/capabilities/default.json) | 11 | Main-window permissions including native WebView zoom (Owner: Vinh) | `Tauri capability` |
+| [default.json](../../crates/custos-app/desktop/capabilities/default.json) | 11 | Main-webview-only permissions including native WebView zoom; browser content receives no capability (Owner: Vinh) | `Tauri capability` |
 | [NativeSelect.tsx](../../ui/desktop/src/components/common/NativeSelect.tsx) | 32 | Shared neutral dropdown adapter for native single-choice options and change events (Owner: Vinh) | `NativeSelect` |
 | [CustomSelect.tsx](../../ui/desktop/src/components/common/CustomSelect.tsx) | 220 | Shared themed dropdown with keyboard selection and focus states (Owner: Vinh) | `CustomSelect`, `CustomSelectOption` |
 | [AgentIcons.tsx](../../ui/desktop/src/components/common/AgentIcons.tsx) | 27 | Build-time Iconify provider SVG wrappers and brand mapping | `ProviderBrandIcon`, existing named icon wrappers |
 | [UsageMonitor.tsx](../../ui/desktop/src/components/providers/UsageMonitor.tsx) | 173 | Provider-branded account usage, remote remaining quotas, compact view and collapsible account panels | `UsageMonitor, summarizeUsage` |
-| [domain.ts](../../ui/desktop/src/types/domain.ts) | 1102 | Desktop wire DTOs including provider authorization flow metadata. | `OAuthAuthorizeResult` |
+| [domain.ts](../../ui/desktop/src/types/domain.ts) | 1206 | Desktop wire DTOs including provider authorization flow, emulator device/session/snapshot/screenshot types and optional workflow actor/revision. | `OAuthAuthorizeResult`, `EmulatorDevice`, `EmulatorSession`, `EmulatorSnapshotResult`, `EmulatorScreenshotResult` |
 | [index.css](../../ui/desktop/src/index.css) | 1691 | Desktop theme and visible OAuth action button styles. | CSS styles |
 
 
@@ -1121,6 +1126,18 @@ Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../
 - **Bản chất:** Động cơ nội soi và thấu hiểu mã nguồn cục bộ dựa trên Tree-sitter AST, xây dựng đồ thị gọi hàm (Call Graph), tìm kiếm ngữ nghĩa FTS5 và giao thức MCP Server.
 - **Cơ sở dữ liệu:** SQLite WAL (`nexus_index.db`) lưu trữ toàn bộ symbols, call edges và semantic chunks của repository.
 - **Các công cụ MCP cung cấp:** `nexus_map`, `nexus_overview`, `nexus_symbol`, `nexus_callers`, `nexus_callees`, `nexus_flow`, `nexus_file`, `nexus_crate`, `nexus_search`, `nexus_read`.
+
+---
+
+### 4.3. Native Browser Verification (Owner: Vinh)
+
+| File | Lines | Responsibility | Exports |
+|---|---:|---|---|
+| [browser-native-smoke.mjs](../../tools/browser-native-smoke.mjs) | 105 | Dependency-free Node CDP fixture runner for manual native browser lifecycle and IPC isolation | Node executable |
+
+Frontend production build, desktop cargo check/build and Windows WebView2 native smoke checks pass. Native UI checks in production and development StrictMode cover skeleton, creation failure/Retry, closing while creation is pending, retained form state, mobile CSS width under app zoom, maximize, modal-hide requests, panel close/reopen and tab destruction. The Rust unit-test executable fails during Windows loader startup with STATUS_ENTRYPOINT_NOT_FOUND before running assertions; the native executable does run. Cross-platform certification and physical multi-monitor DPI checks are not claimed.
+
+The manual-browser slice adds two production files and one test tool. It adds no product crate, domain schema or daemon automation API. Manual browsing is a desktop presentation capability; governed browser automation remains fail-closed under daemon supported operations. Closing the panel destroys its child webviews and preserves last URLs, without terminating development servers or clearing the browser profile.
 
 ---
 
@@ -1165,9 +1182,8 @@ Quota group projection: providers/probe.rs fetches Antigravity grouped quota sum
 | [ArtifactInspector.tsx](../../ui/desktop/src/components/research/ArtifactInspector.tsx) | 468 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
 | [ResearchSynthesisPane.tsx](../../ui/desktop/src/components/research/ResearchSynthesisPane.tsx) | 917 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
 | [TableChart.tsx](../../ui/desktop/src/components/research/TableChart.tsx) | 334 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
-| [BrowserWorkbenchPane.tsx](../../ui/desktop/src/components/views/BrowserWorkbenchPane.tsx) | 659 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
-| [MobileSimulatorWorkbenchPane.tsx](../../ui/desktop/src/components/views/MobileSimulatorWorkbenchPane.tsx) | 492 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
-| [RemoteFleetWorkbenchPane.tsx](../../ui/desktop/src/components/views/RemoteFleetWorkbenchPane.tsx) | 680 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [MobileSimulatorWorkbenchPane.tsx](../../ui/desktop/src/components/views/MobileSimulatorWorkbenchPane.tsx) | 778 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [RemoteFleetWorkbenchPane.tsx](../../ui/desktop/src/components/views/RemoteFleetWorkbenchPane.tsx) | 747 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
 | [ChangesWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/ChangesWorkbenchPane.tsx) | 600 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
 | [EvidenceWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/EvidenceWorkbenchPane.tsx) | 997 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
 | [FilesWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/FilesWorkbenchPane.tsx) | 495 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
@@ -1176,3 +1192,11 @@ Quota group projection: providers/probe.rs fetches Antigravity grouped quota sum
 Conversation presentation omits message author/avatar headers and all message badges. The composer uses a transparent Send button with an accent-filled icon when the draft contains non-whitespace text; an accessible filled Stop icon occupies the same button while a response is active. Errors and activity details remain visible.
 
 Desktop toast feedback is reserved for actionable failures, unavailable operations and meaningful asynchronous results. Workbench navigation, model selection, prompt dispatch and immediate appearance changes remain quiet because their state is already visible. Unimplemented history/filter controls are disabled instead of emitting placeholder notifications.
+
+Conversation performance (Owner: Vinh): AppWorkspaceShell owns internal `ConversationMarkdown` text memoization and change-only scroll-edge updates. OrcaTabbedContainer is memoized against its props; stable shell resource callbacks keep composer edits out of resource renders. No file or public protocol is added.
+
+Conversation performance validation: a synthetic 24-message fixture in development Edge/React Profiler measured nine composer keystrokes at 1,244 ms of total React render work before the fix and 35 ms after. The same scroll exercise dropped from 23 commits / 2,845 ms to two commits / 3.4 ms. These are fixture render-work measurements, not user-device FPS claims. Unchanged math DOM identity, live text/error updates, reading scroll position and resource close/open passed. Frontend type checking and production build pass.
+
+Development-branch integration: native Browser and conversation performance changes remain intact. Existing daemon api.rs/local_api contracts, daemon_client.ts and domain.ts gain emulator commands/DTOs and optional screenshot image data; existing Fleet and Mobile Simulator panes consume those upstream endpoints. Engine discovery/connectivity flags are not proof of permit mediation or completed Tasks. The integration adds the upstream WorkflowDagWorkbenchPane file; no parallel Browser presentation or product crate is introduced.
+
+Merge validation: frontend production build and cargo check for custos-app-desktop pass. The native Browser source is byte-identical to the pre-merge branch; the resource container keeps React memoization and lazy browser retention while adding the upstream Workflow pane and emulator/fleet metadata. No conflict markers or unmerged index entries remain.
