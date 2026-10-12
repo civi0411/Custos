@@ -4,10 +4,8 @@ import {
   GitBranch,
   Search,
   RefreshCw,
-  Hash,
   Clock,
   ArrowRight,
-  ShieldCheck,
   FileText,
   Terminal,
   AlertCircle,
@@ -25,11 +23,13 @@ import { ArtifactInspector } from './ArtifactInspector';
 interface ArtifactsWorkbenchPaneProps {
   onShowToast?: (msg: string) => void;
   selectedArtifactPath?: string;
+  onAskAgent?: (draft: string) => void;
 }
 
 export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
   onShowToast,
   selectedArtifactPath: initialPath,
+  onAskAgent,
 }) => {
   const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
   const [selectedPath, setSelectedPath] = useState<string | null>(initialPath || null);
@@ -98,8 +98,15 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
     const path = artifactDetail.artifact_path || artifactDetail.artifactPath || 'artifact';
     const versions: ArtifactVersion[] = (artifactDetail.versions || []).map((v) => ({
       label: `v${v.version}`,
-      code: artifactDetail.content || `# Content hash: ${v.content_hash || v.contentHash || ''}\n# Produced at: ${new Date(v.timestamp * 1000).toISOString()}`,
-      executionLog: (v.produced_by_run_id || v.producedByRunId) ? `Produced by run: ${v.produced_by_run_id || v.producedByRunId}` : undefined,
+      code:
+        artifactDetail.content ||
+        `# Artifact: ${path}\n# Version: v${v.version}\n# Produced at: ${new Date(
+          v.timestamp * 1000
+        ).toISOString()}`,
+      executionLog:
+        v.produced_by_run_id || v.producedByRunId
+          ? `Produced by run: ${v.produced_by_run_id || v.producedByRunId}`
+          : undefined,
       timestamp: v.timestamp * 1000,
       reviewPassed: undefined,
     }));
@@ -108,16 +115,27 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
       title: path.split('/').pop() || path,
       filename: path,
       activeVersion: `v${artifactDetail.latest_version || artifactDetail.latestVersion || 1}`,
-      versions: versions.length > 0 ? versions : [
-        {
-          label: 'v1',
-          code: artifactDetail.content || `# Content hash: ${artifactDetail.latest_content_hash}\n`,
-          reviewPassed: undefined,
-        },
-      ],
+      versions:
+        versions.length > 0
+          ? versions
+          : [
+              {
+                label: 'v1',
+                code: artifactDetail.content || `# Artifact: ${path}\n`,
+                reviewPassed: undefined,
+              },
+            ],
       inputs: [],
-      code: artifactDetail.content || `# SHA-256: ${artifactDetail.latest_content_hash || artifactDetail.latestContentHash}\n`,
-      language: path.endsWith('.py') ? 'python' : path.endsWith('.md') ? 'markdown' : path.endsWith('.json') ? 'json' : 'text',
+      code: artifactDetail.content || `# Artifact: ${path}\n`,
+      language: path.endsWith('.py')
+        ? 'python'
+        : path.endsWith('.md')
+        ? 'markdown'
+        : path.endsWith('.json')
+        ? 'json'
+        : path.endsWith('.ts') || path.endsWith('.tsx')
+        ? 'typescript'
+        : 'text',
       reviewPassed: undefined,
       reviewFindings: (artifactDetail.annotations || []).map((ann) => ({
         level: ann.status === 'addressed' ? 'ok' : 'warn',
@@ -130,44 +148,47 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
 
   return (
     <div className="flex h-full w-full flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
-      {/* Top Bar */}
-      <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-[var(--color-border-default)] px-4 bg-[var(--color-surface-1)]">
+      {/* Clean 44px (h-11) Top Bar */}
+      <div className="flex h-11 flex-shrink-0 items-center justify-between border-b border-[var(--color-border-default)] px-3.5 bg-[var(--color-surface-1)]">
         <div className="flex items-center gap-3">
-          <FileCode className="h-4 w-4 text-emerald-500" />
-          <div className="flex flex-col">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-editor-fg)]">
-              Artifact Identity & Lineage DAG
-            </span>
-            <span className="text-[10px] text-[var(--color-fg-subtle)]">
-              Content-addressed SHA-256 digests, version history & provenance graph
+          <div className="flex items-center gap-2">
+            <FileCode className="h-4 w-4 text-emerald-400" />
+            <span className="text-xs font-semibold text-[var(--color-editor-fg)]">
+              Session Artifacts
             </span>
           </div>
+
+          <div className="h-3.5 w-px bg-[var(--color-border-muted)]" />
+
+          <span className="text-[11px] text-[var(--color-fg-subtle)]">
+            {artifacts.length} {artifacts.length === 1 ? 'file' : 'files'} tracked
+          </span>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* View toggle */}
+          {/* Segmented View Mode Toggle */}
           <div className="flex rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-2)] p-0.5">
             <button
               onClick={() => setActiveView('inspector')}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition ${
+              className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition ${
                 activeView === 'inspector'
                   ? 'bg-[var(--color-surface-1)] text-[var(--color-editor-fg)] shadow-sm'
                   : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
               }`}
             >
               <FileText className="h-3.5 w-3.5" />
-              Inspector
+              <span>Inspector</span>
             </button>
             <button
               onClick={() => setActiveView('lineage')}
-              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition ${
+              className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition ${
                 activeView === 'lineage'
                   ? 'bg-[var(--color-surface-1)] text-[var(--color-editor-fg)] shadow-sm'
                   : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
               }`}
             >
               <GitBranch className="h-3.5 w-3.5" />
-              Lineage DAG
+              <span>Lineage</span>
             </button>
           </div>
 
@@ -186,13 +207,13 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
       {/* Main Workspace Layout */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Sidebar: Artifacts Ledger */}
-        <div className="flex w-72 flex-shrink-0 flex-col border-r border-[var(--color-border-default)] bg-[var(--color-surface-1)]">
+        <div className="flex w-64 flex-shrink-0 flex-col border-r border-[var(--color-border-default)] bg-[var(--color-surface-1)]">
           <div className="border-b border-[var(--color-border-muted)] p-2.5">
             <div className="relative">
               <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-[var(--color-fg-muted)]" />
               <input
                 type="text"
-                placeholder="Filter artifacts or hash..."
+                placeholder="Search artifacts..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-canvas)] py-1 pl-8 pr-2.5 text-xs text-[var(--color-editor-fg)] placeholder:text-[var(--color-fg-subtle)] focus:border-emerald-500 focus:outline-none"
@@ -213,7 +234,7 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
                 <FileCode className="mx-auto mb-2 h-6 w-6 opacity-40" />
                 <p>No tracked artifacts yet.</p>
                 <p className="mt-1 text-[10px] text-[var(--color-fg-subtle)]">
-                  Artifacts are created by experiment runs, notes, or execution receipts.
+                  Artifacts generated by agents or tools will appear here.
                 </p>
               </div>
             )}
@@ -223,7 +244,6 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
               const isSelected = selectedPath === path;
               const version = art.latest_version || art.latestVersion || 1;
               const count = art.versions_count || art.versionsCount || 1;
-              const hash = (art.latest_content_hash || art.latestContentHash || '').slice(0, 8);
               const isNote = path.startsWith('notes/');
 
               return (
@@ -247,35 +267,29 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
                         {path.split('/').pop() || path}
                       </span>
                     </div>
-                    <span className="rounded bg-[var(--color-surface-3)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--color-editor-fg)]">
+                    <span className="rounded bg-[var(--color-surface-3)] px-1.5 py-0.5 text-[9px] font-semibold text-[var(--color-fg-muted)]">
                       v{version}
                     </span>
                   </div>
 
-                  <div className="mt-1 text-[10px] text-[var(--color-fg-subtle)] truncate">
+                  <div className="mt-1 text-[10px] text-[var(--color-fg-subtle)] truncate font-mono">
                     {path}
                   </div>
 
                   <div className="mt-2 flex items-center justify-between text-[9px] text-[var(--color-fg-muted)]">
-                    <span className="flex items-center gap-1 font-mono">
-                      <Hash className="h-2.5 w-2.5" />
-                      {hash || 'unknown'}
-                    </span>
                     <span>
                       {count} {count === 1 ? 'version' : 'versions'}
                     </span>
+                    <span>Ready</span>
                   </div>
                 </button>
               );
             })}
           </div>
 
-          <div className="border-t border-[var(--color-border-muted)] p-2.5 text-[10px] text-[var(--color-fg-subtle)] flex items-center justify-between">
-            <span>Tracked: {artifacts.length}</span>
-            <span className="flex items-center gap-1 text-emerald-500">
-              <ShieldCheck className="h-3 w-3" />
-              CAS Verified
-            </span>
+          <div className="border-t border-[var(--color-border-muted)] px-3 py-2 text-[10px] text-[var(--color-fg-subtle)] flex items-center justify-between">
+            <span>Artifacts: {artifacts.length}</span>
+            <span>Versioned</span>
           </div>
         </div>
 
@@ -283,7 +297,7 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
         <div className="flex-1 overflow-hidden bg-[var(--color-canvas)]">
           {activeView === 'inspector' ? (
             inspectorData ? (
-              <ArtifactInspector data={inspectorData} />
+              <ArtifactInspector data={inspectorData} onAskAgent={onAskAgent} />
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center p-8 text-center">
                 <FileCode className="h-8 w-8 text-[var(--color-fg-muted)] opacity-50 mb-2" />
@@ -291,8 +305,7 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
                   Select an Artifact
                 </h3>
                 <p className="mt-1 max-w-sm text-xs text-[var(--color-fg-muted)]">
-                  Pick an artifact from the list on the left to inspect its source code, version diffs,
-                  execution logs, and proof-closure records.
+                  Choose an artifact from the list to preview code, inspect execution logs, and insert into chat.
                 </p>
               </div>
             )
@@ -302,10 +315,10 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
               <div className="mb-4">
                 <h2 className="text-sm font-semibold text-[var(--color-editor-fg)] flex items-center gap-2">
                   <GitBranch className="h-4 w-4 text-emerald-500" />
-                  Provenance DAG & Lineage Graph
+                  Provenance & Lineage Graph
                 </h2>
                 <p className="text-xs text-[var(--color-fg-muted)] mt-0.5">
-                  Direct acyclic graph depicting cryptographic hashes, parent versions, and execution runs.
+                  Visual graph of dependencies, parent versions, and execution runs.
                 </p>
               </div>
 
@@ -338,13 +351,7 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
                             </span>
                           </div>
 
-                          {node.content_hash && (
-                            <div className="mt-2 font-mono text-[10px] text-[var(--color-fg-subtle)] truncate">
-                              hash: {node.content_hash}
-                            </div>
-                          )}
-
-                          <div className="mt-1 text-[10px] text-[var(--color-fg-muted)] flex items-center gap-1">
+                          <div className="mt-2 text-[10px] text-[var(--color-fg-muted)] flex items-center gap-1">
                             <Clock className="h-3 w-3" />
                             {new Date(node.timestamp * 1000).toLocaleString()}
                           </div>
