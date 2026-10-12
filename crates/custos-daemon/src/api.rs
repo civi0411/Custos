@@ -4805,6 +4805,9 @@ impl LocalApiDispatcher {
                 let session_id = req.params.get("session_id").and_then(|v| v.as_str()).map(|s| s.to_string());
                 let workspace_id = req.params.get("workspace_id").and_then(|v| v.as_str()).map(|s| s.to_string());
                 let inputs = req.params.get("inputs").cloned().unwrap_or(serde_json::Value::Null);
+                if !inputs.is_null() {
+                    tracing::debug!(job_id = %job_id, inputs = ?inputs, "Running job with pre-populated inputs");
+                }
 
                 let title = format!("[{}] {}", job.name, job.description);
                 let mut metadata = serde_json::json!({

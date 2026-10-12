@@ -22,8 +22,20 @@ import {
   RunHandle,
   ToolMediationLevel,
 } from '@/types/domain';
+import { JobActionButton } from '@/components/common';
+import type { OrcaTabId } from '@/components/views/OrcaTabbedContainer';
 
-export const AgentsWorkbenchPane: React.FC = () => {
+export interface AgentsWorkbenchPaneProps {
+  sessionId?: string;
+  onShowToast?: (msg: string) => void;
+  onOpenTab?: (id: OrcaTabId) => void;
+}
+
+export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
+  sessionId,
+  onShowToast,
+  onOpenTab,
+}) => {
   const { startNativeConversation } = useAppContext();
   const subscription = useRef<AbortController | null>(null);
   const [activities, setActivities] = useState<import('@/types/domain').LiveRunSnapshot['activities']>([]);
@@ -325,14 +337,84 @@ export const AgentsWorkbenchPane: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-[var(--color-fg-muted)]">
-                    Instruction / Agent Goal Prompt
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-[var(--color-fg-muted)]">
+                      Instruction / Agent Goal Prompt
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-[var(--color-fg-subtle)] uppercase tracking-wider font-semibold">
+                        Autonomous Jobs:
+                      </span>
+                      <JobActionButton
+                        jobId="engineering__bugfix"
+                        label="Bugfix Job"
+                        icon={AlertTriangle}
+                        getInputs={() => {
+                          if (!selectedWorkspaceId || !instruction.trim()) return null;
+                          return {
+                            issue_description: instruction.trim(),
+                            allowed_paths: [selectedWorkspaceId],
+                          };
+                        }}
+                        sessionId={sessionId}
+                        workspaceId={selectedWorkspaceId}
+                        sourceTabId="kanban"
+                        onNavigate={onOpenTab}
+                        notReadyTooltip="Enter an instruction and select a workspace to run Bugfix job"
+                        readyTooltip="Run autonomous bugfix job with regression test verification"
+                        onShowToast={onShowToast}
+                        variant="toolbar"
+                        size="sm"
+                      />
+                      <JobActionButton
+                        jobId="engineering__feature"
+                        label="Feature Job"
+                        icon={Zap}
+                        getInputs={() => {
+                          if (!selectedWorkspaceId || !instruction.trim()) return null;
+                          return {
+                            specification: instruction.trim(),
+                            contracts: 'Comply with domain schemas and unit test suites',
+                          };
+                        }}
+                        sessionId={sessionId}
+                        workspaceId={selectedWorkspaceId}
+                        sourceTabId="kanban"
+                        onNavigate={onOpenTab}
+                        notReadyTooltip="Enter an instruction and select a workspace to run Feature job"
+                        readyTooltip="Run autonomous feature implementation job"
+                        onShowToast={onShowToast}
+                        variant="toolbar"
+                        size="sm"
+                      />
+                      <JobActionButton
+                        jobId="engineering__diagnose"
+                        label="Diagnose"
+                        icon={ShieldAlert}
+                        getInputs={() => {
+                          if (!selectedWorkspaceId || !instruction.trim()) return null;
+                          return {
+                            symptoms: instruction.trim(),
+                            environment: `Workspace: ${selectedWorkspaceId}, Harness: ${selectedHarnessId}`,
+                          };
+                        }}
+                        sessionId={sessionId}
+                        workspaceId={selectedWorkspaceId}
+                        sourceTabId="kanban"
+                        onNavigate={onOpenTab}
+                        notReadyTooltip="Enter an instruction and select a workspace to diagnose"
+                        readyTooltip="Investigate runtime errors, trace symptoms, and formulate hypotheses"
+                        onShowToast={onShowToast}
+                        variant="toolbar"
+                        size="sm"
+                      />
+                    </div>
+                  </div>
                   <textarea
                     rows={3}
                     value={instruction}
                     onChange={(e) => setInstruction(e.target.value)}
-                    placeholder="e.g. Inspect the current workspace and propose test suite improvements under Gate 4 assurance..."
+                    placeholder="e.g. Fix memory leak when handling large WebSocket payload..."
                     className="w-full rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-2)] p-3 font-mono text-xs text-[var(--color-fg-default)] placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-border-focus)] focus:outline-none"
                   />
                 </div>

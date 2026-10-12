@@ -61,6 +61,9 @@ interface AppHeaderProps {
   attentionCount?: number;
   onOpenAttention?: () => void;
   onOpenKanban?: () => void;
+
+  // Running jobs per tab indicator
+  runningJobsByTab?: Record<OrcaTabId, number>;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
@@ -83,7 +86,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onOpenCommandPalette,
   attentionCount = 0,
   onOpenAttention,
-  onOpenKanban
+  onOpenKanban,
+  runningJobsByTab,
 }) => {
   const modes: { id: AppWorkspaceMode; label: string; icon: React.ElementType; shortcut: string; description: string }[] = [
     {
@@ -286,11 +290,12 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               {/* Resource Tabs */}
               {resourceTabs.tabs.map((tab) => {
                 const isActive = tab.id === resourceTabs.activeTabId;
+                const runningCount = runningJobsByTab?.[tab.id] ?? 0;
                 return (
                   <div
                     key={tab.id}
                     onClick={() => resourceTabs.setActiveTabId(tab.id)}
-                    className={`group flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer transition max-w-[160px] shrink-0 text-[12px] h-7 ${
+                    className={`group flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer transition max-w-[170px] shrink-0 text-[12px] h-7 ${
                       isActive
                         ? 'bg-surface-2 text-fg-editor font-medium border border-border-default shadow-xs'
                         : 'bg-transparent text-fg-muted hover:text-fg-editor hover:bg-surface-2/60'
@@ -298,6 +303,15 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                   >
                     {getTabIcon(tab.id, isActive)}
                     <span className="truncate">{tab.title}</span>
+                    {runningCount > 0 && (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-[10px] text-emerald-400 font-mono font-bold shrink-0 ml-0.5"
+                        title={`${runningCount} job${runningCount > 1 ? 's' : ''} running`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        {runningCount > 1 && <span>{runningCount}</span>}
+                      </span>
+                    )}
                     <button
                       onClick={(e) => onCloseTab(e, tab.id)}
                       className="opacity-0 group-hover:opacity-100 hover:text-fg-editor p-0.5 rounded transition text-fg-muted shrink-0 ml-0.5"

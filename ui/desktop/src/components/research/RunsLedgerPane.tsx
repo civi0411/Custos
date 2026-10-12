@@ -12,18 +12,24 @@ import {
   FileOutput,
   Copy,
   Terminal,
+  Database,
+  BarChart3,
 } from 'lucide-react';
 import { ResearchExperimentRun } from '@/types/research';
 import { daemonClient } from '@/api/daemon_client';
+import { JobActionButton } from '@/components/common';
+import type { OrcaTabId } from '@/components/views/OrcaTabbedContainer';
 
 interface RunsLedgerPaneProps {
-  onReproduce?: (run: ResearchExperimentRun) => void;
+  sessionId?: string;
   onShowToast?: (msg: string) => void;
+  onOpenTab?: (tabId: OrcaTabId) => void;
 }
 
 export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
-  onReproduce,
+  sessionId,
   onShowToast,
+  onOpenTab,
 }) => {
   const [runs, setRuns] = useState<ResearchExperimentRun[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -57,10 +63,6 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
     setTimeout(() => setCopiedId(null), 1500);
   };
 
-  const handleReproduce = (run: ResearchExperimentRun) => {
-    onReproduce?.(run);
-    onShowToast?.(`Drafted reproducible prompt for ${run.runId} into Research Chat!`);
-  };
 
   if (loadError && runs.length === 0) {
     return (
@@ -82,6 +84,26 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
           <span className="text-[10px] text-[var(--color-fg-muted)] font-mono font-medium bg-[var(--color-surface-2)] px-2 py-0.5 rounded border border-[var(--color-border-muted)] ml-1">
             {runs.length} recorded run(s)
           </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <JobActionButton
+            jobId="research__dataset_audit"
+            label="Audit Dataset"
+            icon={Database}
+            getInputs={() => {
+              if (runs.length === 0) return null;
+              return {
+                dataset_path: runs[0].outputFiles?.[0]?.path || 'artifacts/dataset',
+                benchmark_split: 'eval',
+              };
+            }}
+            sessionId={sessionId}
+            notReadyTooltip="No experiment runs or dataset artifacts available to audit"
+            readyTooltip="Audit training/eval dataset distributions and lineage invariants"
+            onShowToast={onShowToast}
+            variant="toolbar"
+            size="sm"
+          />
         </div>
       </header>
 
@@ -182,23 +204,50 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                   {/* Action Bar */}
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleReproduce(run)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-2)] text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-3)] font-medium transition"
-                        title="Generate verification prompt with exact environment & lockfile"
-                      >
-                        <RotateCcw size={13} />
-                        <span>Reproduce Run</span>
-                      </button>
+                      <JobActionButton
+                        jobId="research__reproduce"
+                        label="Reproduce"
+                        icon={RotateCcw}
+                        getInputs={() => ({
+                          code_repo: run.codeFiles?.[0]?.path || run.command,
+                          config_yaml: run.envSnapshot?.hardware || 'default',
+                          seeds: ['42'],
+                          expected_metrics: { wall_ms: run.wallMs, status: run.status },
+                        })}
+                        sessionId={sessionId}
+                        sourceTabId="runs"
+                        onNavigate={onOpenTab}
+                        readyTooltip={`Execute autonomous reproduction for run ${run.runId}`}
+                        onShowToast={onShowToast}
+                        variant="toolbar"
+                        size="sm"
+                      />
+                      <JobActionButton
+                        jobId="research__result_analysis"
+                        label="Analyze Results"
+                        icon={BarChart3}
+                        getInputs={() => ({
+                          run_logs: `Run ID: ${run.runId}\nCommand: ${run.command}\nStatus: ${run.status}\nWallMs: ${run.wallMs}\nMerkle: ${run.outputMerkleRoot}`,
+                          baseline_run_id: run.runId,
+                        })}
+                        sessionId={sessionId}
+                        sourceTabId="runs"
+                        navigateOnSuccess="artifacts"
+                        onNavigate={onOpenTab}
+                        readyTooltip={`Perform deep analysis of telemetry and outputs for ${run.runId}`}
+                        onShowToast={onShowToast}
+                        variant="toolbar"
+                        size="sm"
+                      />
 
                       <button
                         onClick={() => handleCopyCommand(run)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-2)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] transition font-medium"
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] transition text-xs font-medium"
                       >
                         {copiedId === run.runId ? (
-                          <Check size={13} className="text-emerald-500" />
+                          <Check size={12} className="text-emerald-500" />
                         ) : (
-                          <Copy size={13} />
+                          <Copy size={12} />
                         )}
                         <span>Copy Command</span>
                       </button>

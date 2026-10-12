@@ -11,8 +11,10 @@ import {
   AlertCircle,
   FileCode,
   Check,
+  ShieldCheck,
 } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
+import { JobActionButton } from '@/components/common';
 import {
   ExecutionWorkspace,
   WorkspaceDiffEntry,
@@ -20,7 +22,19 @@ import {
   WorkspaceFileDiff,
 } from '@/types/domain';
 
-export const ChangesWorkbenchPane: React.FC = () => {
+import type { OrcaTabId } from '@/components/views/OrcaTabbedContainer';
+
+export interface ChangesWorkbenchPaneProps {
+  sessionId?: string;
+  onShowToast?: (msg: string) => void;
+  onOpenTab?: (id: OrcaTabId) => void;
+}
+
+export const ChangesWorkbenchPane: React.FC<ChangesWorkbenchPaneProps> = ({
+  sessionId,
+  onShowToast,
+  onOpenTab,
+}) => {
   const [workspaces, setWorkspaces] = useState<ExecutionWorkspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('');
   const [loadingWorkspaces, setLoadingWorkspaces] = useState<boolean>(true);
@@ -198,6 +212,20 @@ export const ChangesWorkbenchPane: React.FC = () => {
     [diffSummary]
   );
 
+  const getReviewInputs = useCallback((): Record<string, unknown> | null => {
+    if (!diffSummary || diffSummary.is_clean || !diffSummary.files || diffSummary.files.length === 0) {
+      return null;
+    }
+    return {
+      diff: diffSummary.raw_diff || `${diffSummary.files.length} changed files: ${diffSummary.files.map((f) => f.path).join(', ')}`,
+      base_commit: diffSummary.head_hash || selectedWorkspaceId,
+      branch: diffSummary.branch || 'HEAD',
+      changed_files: diffSummary.files.map((f) => f.path),
+      additions: diffSummary.total_additions,
+      deletions: diffSummary.total_deletions,
+    };
+  }, [diffSummary, selectedWorkspaceId]);
+
   const activeWorkspace = workspaces.find((w) => w.id === selectedWorkspaceId);
 
   return (
@@ -286,6 +314,20 @@ export const ChangesWorkbenchPane: React.FC = () => {
             <RefreshCw className={`h-3 w-3 ${loadingDiff ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
           </button>
+          <JobActionButton
+            jobId="engineering__review"
+            label="Review Diff"
+            icon={ShieldCheck}
+            getInputs={getReviewInputs}
+            sessionId={sessionId}
+            workspaceId={selectedWorkspaceId}
+            sourceTabId="changes"
+            onNavigate={onOpenTab}
+            notReadyTooltip="No uncommitted changes to review"
+            readyTooltip="Run AI Code Review on current workspace changes"
+            onShowToast={onShowToast}
+            variant="toolbar"
+          />
         </div>
       </div>
 

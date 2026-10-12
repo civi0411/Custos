@@ -1,6 +1,7 @@
 import React from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
+import { JobRegistryProvider } from './context/JobRegistryContext';
 import { RootLayout } from './app/layout';
 
 // App Router pages
@@ -16,27 +17,30 @@ import { SettingsPage } from './app/settings/page';
 
 export const App: React.FC = () => {
   return (
-    <AppProvider>
-      <HashRouter>
-        <Routes>
-          <Route path="/" element={<RootLayout />}>
-            <Route index element={<RootPage />} />
-            <Route path="studio" element={<StudioPage />} />
-            <Route path="studio/:sessionId" element={<StudioPage />} />
-            <Route path="providers" element={<ProvidersPage />} />
-            <Route path="chains" element={<ChainsPage />} />
-            <Route path="telemetry" element={<TelemetryPage />} />
-            <Route path="cache" element={<CachePage />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="docs" element={<DocsPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-            {/* Catch-all fallback */}
-            <Route path="*" element={<Navigate to="/studio" replace />} />
-          </Route>
-        </Routes>
-      </HashRouter>
-    </AppProvider>
+    <JobRegistryProvider>
+      <AppProvider>
+        <HashRouter>
+          <Routes>
+            <Route path="/" element={<RootLayout />}>
+              <Route index element={<RootPage />} />
+              <Route path="studio" element={<StudioPage />} />
+              <Route path="studio/:sessionId" element={<StudioPage />} />
+              <Route path="providers" element={<ProvidersPage />} />
+              <Route path="chains" element={<ChainsPage />} />
+              <Route path="telemetry" element={<TelemetryPage />} />
+              <Route path="cache" element={<CachePage />} />
+              <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="docs" element={<DocsPage />} />
+              <Route path="settings" element={<SettingsPage />} />
+              {/* Catch-all fallback */}
+              <Route path="*" element={<Navigate to="/studio" replace />} />
+            </Route>
+          </Routes>
+        </HashRouter>
+      </AppProvider>
+    </JobRegistryProvider>
   );
 };
 
 export default App;
+
