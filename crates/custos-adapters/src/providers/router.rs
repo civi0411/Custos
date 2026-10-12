@@ -12,6 +12,7 @@ use tracing::{debug, error, info};
 
 #[async_trait]
 pub trait CredentialResolver: Send + Sync {
+    async fn select_account(&self, _service: &str, _model: &str) -> Result<Option<String>, DomainError> { Ok(None) }
     /// Return access token or API key for a given provider
     async fn get_token(&self, provider_id: &str) -> Result<Option<String>, DomainError>;
     async fn uses_oauth(&self, _provider_id: &str) -> Result<bool, DomainError> {
@@ -595,6 +596,12 @@ impl ModelProvider for RouterModelProvider {
 
     async fn stream(&self, req: &ProviderRequest) -> Result<tokio::sync::mpsc::Receiver<custos_provider::ProviderEvent>, DomainError> {
         use super::streaming::{Wire, stream_response};
+        let mut routed = req.clone();
+        if routed.provider_account_id.is_none() {
+            let service = Self::classify_provider(&routed.model);
+            routed.provider_account_id = self.resolver.select_account(if service == "gemini-oauth" { "gemini" } else { service }, &routed.model).await?;
+        }
+        let req = &routed;
         let model = req.model.trim();
         let service = Self::classify_provider(model);
         let account = req.provider_account_id.as_deref().unwrap_or(if service == "gemini-oauth" { "gemini" } else { service });
@@ -670,6 +677,12 @@ impl ModelProvider for RouterModelProvider {
     }
 
     async fn generate(&self, req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
+        let mut routed = req.clone();
+        if routed.provider_account_id.is_none() {
+            let service = Self::classify_provider(&routed.model);
+            routed.provider_account_id = self.resolver.select_account(if service == "gemini-oauth" { "gemini" } else { service }, &routed.model).await?;
+        }
+        let req = &routed;
         let requested_model = req.model.trim();
         debug!(task_id = %req.task_id, request_id = %req.request_id, model = %requested_model, "Routing model request");
         let target_provider = Self::classify_provider(requested_model);
@@ -1257,6 +1270,38 @@ mod tests {
     impl CredentialResolver for AccountResolver {
         async fn get_token(&self, id: &str) -> Result<Option<String>,DomainError> { Ok(Some(format!("{id}-key"))) }
         async fn get_endpoint_url(&self, id: &str) -> Result<Option<String>,DomainError> { assert!(id.starts_with("account-")); Ok(Some(self.endpoint.clone())) }
+    }
+
+    struct RotatingAccountResolver { endpoint: String, cursor: std::sync::atomic::AtomicUsize }
+    #[async_trait]
+    impl CredentialResolver for RotatingAccountResolver {
+        async fn select_account(&self, service: &str, model: &str) -> Result<Option<String>,DomainError> {
+            assert_eq!(service,"openai");assert_eq!(model,"gpt-test");
+            let index=self.cursor.fetch_add(1,std::sync::atomic::Ordering::SeqCst)%2;
+            Ok(Some(format!("account-{}",if index==0 {"A"} else {"B"})))
+        }
+        async fn get_token(&self,id:&str)->Result<Option<String>,DomainError>{Ok(Some(format!("{id}-key")))}
+        async fn get_endpoint_url(&self,id:&str)->Result<Option<String>,DomainError>{assert!(id.starts_with("account-"));Ok(Some(self.endpoint.clone()))}
+    }
+    #[tokio::test]
+    async fn automatic_accounts_rotate_for_generate_and_stream_but_explicit_accounts_stay_pinned() {
+        use wiremock::{Mock,MockServer,ResponseTemplate};
+        use wiremock::matchers::{method,path,header,body_partial_json};
+        let server=MockServer::start().await;
+        for account in ["account-A","account-B"] {
+            Mock::given(method("POST")).and(path("/chat/completions")).and(header("authorization",format!("Bearer {account}-key"))).and(body_partial_json(serde_json::json!({"stream":true}))).respond_with(ResponseTemplate::new(200).set_body_string("data: {\"choices\":[{\"delta\":{\"content\":\"answer\"}}]}\n\ndata: [DONE]\n\n").insert_header("content-type","text/event-stream")).with_priority(1).expect(1).mount(&server).await;
+            Mock::given(method("POST")).and(path("/chat/completions")).and(header("authorization",format!("Bearer {account}-key"))).and(body_partial_json(serde_json::json!({"model":"gpt-test"}))).respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"model":"gpt-test","choices":[{"message":{"content":"answer"}}],"usage":{"total_tokens":1}}))).with_priority(2).mount(&server).await;
+        }
+        let resolver=Arc::new(RotatingAccountResolver{endpoint:server.uri(),cursor:std::sync::atomic::AtomicUsize::new(0)});
+        let provider=RouterModelProvider::new(resolver.clone());
+        let mut request=ProviderRequest::simple("hello");request.model="gpt-test".into();
+        for _ in 0..2 {assert_eq!(provider.generate(&request).await.unwrap().content,"answer");}
+        for _ in 0..2 {let mut events=provider.stream(&request).await.unwrap();while events.recv().await.is_some(){}}
+        request.provider_account_id=Some("account-B".into());provider.generate(&request).await.unwrap();
+        assert_eq!(resolver.cursor.load(std::sync::atomic::Ordering::SeqCst),4);
+        let requests=server.received_requests().await.unwrap();
+        let accounts:Vec<_>=requests.iter().map(|r|r.headers.get("authorization").unwrap().to_str().unwrap().to_string()).collect();
+        assert_eq!(accounts,vec!["Bearer account-A-key","Bearer account-B-key","Bearer account-A-key","Bearer account-B-key","Bearer account-B-key"]);
     }
     #[tokio::test]
     async fn explicitly_selected_accounts_use_their_own_credentials_and_usage() {

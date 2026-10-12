@@ -26,6 +26,7 @@ interface AddProviderModalProps {
   onClose: () => void;
   onSaveProvider: (providerPayload: {
     service: string;
+    accountName?: string;
     apiKey: string;
     endpointUrl?: string;
     model?: string;
@@ -67,12 +68,6 @@ const providerOptions: CustomSelectOption[] = [
   },
 ];
 
-const priorityOptions: CustomSelectOption[] = [
-  { value: 'primary', label: 'Primary Provider (Route 1)', sublabel: 'Default target for agent queries' },
-  { value: 'fallback', label: 'Fallback on HTTP 429 (Route 2)', sublabel: 'Automatic failover on rate limits' },
-  { value: 'cache', label: 'Offline Local Cache (Route 3)', sublabel: 'Local model fallback on network cut' },
-];
-
 const effortOptions: CustomSelectOption[] = [
   { value: 'low', label: 'Low Effort', sublabel: 'Faster response, lower cost' },
   { value: 'medium', label: 'Medium Effort', sublabel: 'Balanced reasoning (default)' },
@@ -91,10 +86,10 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
 
   // API Key Form State
   const [providerService, setProviderService] = useState('anthropic');
-  const [routingPriority, setRoutingPriority] = useState('primary');
+  const [accountName, setAccountName] = useState('');
   const [apiKey, setApiKey] = useState('');
   const closeAndClearSecret = () => { setApiKey(''); setCallbackInput(''); setAuthUrlResult(null); onClose(); };
-  useEffect(() => { if (!isOpen) setApiKey(''); }, [isOpen]);
+  useEffect(() => { if (!isOpen) { setApiKey(''); setAccountName(''); } }, [isOpen]);
   const [endpointUrl, setEndpointUrl] = useState('');
   const [selectedModel, setSelectedModel] = useState('');
   const [availableModels, setAvailableModels] = useState<CustomSelectOption[]>([]);
@@ -146,6 +141,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   }, [isOpen]);
 
   // OAuth Form State
+  const oauthAccountId = useRef('');
   const [oauthProvider, setOauthProvider] = useState<ProviderServiceId>('openai');
   const oauthProviderLabel = ({ openai: 'OpenAI', antigravity: 'Antigravity', copilot: 'GitHub Copilot', gemini: 'Gemini', anthropic: 'Claude' } as Partial<Record<ProviderServiceId, string>>)[oauthProvider] || oauthProvider;
   const oauthAccountName = oauthProviderLabel;
@@ -173,18 +169,20 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
     }
   }, []);
 
-  const startPolling = useCallback((targetProvider: ProviderServiceId, accountName: string, email?: string) => {
+  const startPolling = useCallback((targetProvider: string, accountName: string, email?: string) => {
     stopPolling();
     setCallbackStatus('listening');
     pollTimerRef.current = setInterval(async () => {
+      let completing = false;
       try {
         const statusRes = await daemonClient.getOAuthStatus();
         if (statusRes && statusRes.status) {
           setCallbackStatus(statusRes.status);
           if (statusRes.status === 'completed' && statusRes.provider_id === targetProvider) {
+            completing = true;
             stopPolling();
-            setExchangeSuccess(true);
             await handleConnectOAuth(targetProvider, accountName, email);
+            setExchangeSuccess(true);
             setTimeout(() => {
               onClose();
             }, 900);
@@ -198,8 +196,11 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
           }
         }
 
-      } catch {
-        // Silently continue polling
+      } catch (error: any) {
+        if (completing) {
+          setCallbackStatus('failed');
+          setExchangeError(error?.message || 'Could not load the connected account. Retry.');
+        }
       }
     }, 1000);
   }, [stopPolling, handleConnectOAuth, onClose]);
@@ -242,10 +243,11 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
     setIsGeneratingUrl(true);
     setExchangeError(null);
     try {
-      const res = await daemonClient.getOAuthAuthorizeUrl({ provider_id: oauthProvider, service_type: oauthProvider });
+      oauthAccountId.current = `${oauthProvider}-${crypto.randomUUID()}`;
+      const res = await daemonClient.getOAuthAuthorizeUrl({ provider_id: oauthAccountId.current, service_type: oauthProvider });
       if (!res?.authorization_url) throw new Error('Daemon did not return an authorization URL');
       setAuthUrlResult(res);
-      startPolling(oauthProvider, oauthAccountName, oauthEmail);
+      startPolling(oauthAccountId.current, oauthAccountName, oauthEmail);
       if (autoOpen && res.authorization_url) {
         await openExternalBrowser(res.authorization_url);
       }
@@ -282,12 +284,12 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
       await daemonClient.exchangeOAuthCode({
         code_or_url: rawInput,
         code_verifier: authUrlResult.code_verifier,
-        provider_id: oauthProvider,
+        provider_id: oauthAccountId.current,
         service_type: oauthProvider,
         redirect_uri: authUrlResult.redirect_uri,
       });
+      await handleConnectOAuth(oauthAccountId.current, oauthAccountName, oauthEmail);
       setExchangeSuccess(true);
-      await handleConnectOAuth(oauthProvider, oauthAccountName, oauthEmail);
       setTimeout(() => {
         onClose();
       }, 900);
@@ -393,6 +395,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
 
     try {
     await onSaveProvider({
+      accountName: accountName.trim() || undefined,
       service: providerService,
       apiKey: apiKey.trim(),
       endpointUrl: endpointUrl.trim() || undefined,
@@ -599,15 +602,10 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                 </div>
               </div>
 
-              {/* Routing Priority */}
               <div className="space-y-1.5">
-                <label className="font-medium text-fg-editor">OmniRoute Priority Tier</label>
-                <CustomSelect
-                  value={routingPriority}
-                  onChange={setRoutingPriority}
-                  options={priorityOptions}
-                  headerTitle="Priority Tier"
-                />
+                <label htmlFor="provider-account-name" className="font-medium text-fg-editor">Account name (optional)</label>
+                <input id="provider-account-name" value={accountName} onChange={e => setAccountName(e.target.value)} placeholder="Personal, Work…" className="w-full rounded-lg border border-border-muted bg-surface-0 px-3 py-2 text-xs" />
+                <p className="text-[10px] text-fg-muted">Set account priority and round-robin in Settings after connecting.</p>
               </div>
             </div>
 

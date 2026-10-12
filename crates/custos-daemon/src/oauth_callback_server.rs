@@ -91,7 +91,7 @@ impl OAuthCallbackServer {
         }
     }
 
-    pub fn start_copilot_device(&self, device: serde_json::Value) {
+    pub fn start_copilot_device(&self, device: serde_json::Value, account_id: String) {
         self.cancel();
         let mut shutdown = self.shutdown_tx.subscribe();
         let status = self.status_tx.clone();
@@ -103,9 +103,10 @@ impl OAuthCallbackServer {
                 result = custos_adapters::providers::oauth_pkce::complete_copilot_device(&device) => result,
             };
             match result {
-                Ok((token, identity)) => {
+                Ok((mut token, identity)) => {
+                    token.provider_id = account_id.clone();
                     let config = ProviderConfig {
-                        id: "copilot".into(),
+                        id: account_id.clone(),
                         service_type: "copilot".into(),
                         name: identity.unwrap_or_else(|| "GitHub Copilot".into()),
                         api_key_masked: "oauth".into(),
@@ -120,7 +121,7 @@ impl OAuthCallbackServer {
                     match credentials.save_oauth_connection(&token, Some(&config)).await {
                         Ok(_) => {
                             let _ = status.send(CallbackServerStatus::Completed {
-                                provider_id: "copilot".into(),
+                                provider_id: account_id.clone(),
                             });
                         }
                         Err(e) => {

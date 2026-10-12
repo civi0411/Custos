@@ -528,6 +528,18 @@ export class DaemonClient {
   // Providers, Keys & LLM Status API
   // ---------------------------------------------------------
 
+  async getProviderRouting(service: string): Promise<{ service_type: string; round_robin: boolean; account_order: string[] }> {
+    return this.request('v1.providers.routing.get', { service_type: service });
+  }
+
+  async saveProviderRouting(service: string, roundRobin: boolean, accountOrder: string[]): Promise<{ service_type: string; round_robin: boolean; account_order: string[] }> {
+    return this.request('v1.providers.routing.save', { service_type: service, round_robin: roundRobin, account_order: accountOrder });
+  }
+
+  async reserveProviderAccount(service: string, model: string): Promise<{ account_id: string | null }> {
+    return this.request('v1.providers.route', { service_type: service, model });
+  }
+
   async listProviders(): Promise<any[]> {
     return this.request<any[]>('v1.providers.list', {});
   }

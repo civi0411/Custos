@@ -57,7 +57,7 @@ interface AppContextType {
   connectedAccounts: ConnectedAccount[];
   refreshModels: () => Promise<void>;
   setConnectedAccounts: React.Dispatch<React.SetStateAction<ConnectedAccount[]>>;
-  handleConnectOAuth: (providerId: ProviderServiceId, accountName: string, email?: string) => Promise<void>;
+  handleConnectOAuth: (providerId: string, accountName: string, email?: string) => Promise<void>;
   handleDeleteAccount: (accountId: string) => Promise<void>;
 
   // Modals
@@ -101,7 +101,7 @@ interface AppContextType {
   handleCreateNewSession: (title: string, pack: 'engineering' | 'research' | 'assistant') => Promise<void>;
   handleNewProjectPrompt: () => void;
   handleSaveProvider: (
-    serviceOrParams: string | { service: string; apiKey?: string; endpointUrl?: string; model?: string; contextWindow?: number; fastMode?: boolean },
+    serviceOrParams: string | { service: string; accountName?: string; apiKey?: string; endpointUrl?: string; model?: string; contextWindow?: number; fastMode?: boolean },
     apiKey?: string
   ) => Promise<void>;
   handleDeleteProvider: (id: string) => Promise<void> | void;
@@ -591,7 +591,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           id: provider.id,
           providerId: serviceId,
           providerName: PROVIDER_LABELS[serviceId] || provider.name,
-          accountName: authType === 'oauth' ? `${PROVIDER_LABELS[serviceId]} Account` : provider.name || PROVIDER_LABELS[serviceId] || provider.id,
+          accountName: provider.name || `${PROVIDER_LABELS[serviceId]} Account`,
           authType,
           apiKeyMasked: authType === 'api_key' ? provider.api_key_masked : undefined,
           endpointUrl,
@@ -1006,8 +1006,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
+      let routedAccountId: string;
+      try {
+        const modelAccount = connectedAccounts.find(a => a.status === 'active' && a.supportedModels.includes(chosenModel));
+        if (!modelAccount) throw new Error('No connected account supports this model');
+        const route = await daemonClient.reserveProviderAccount(modelAccount.providerId, chosenModel);
+        if (!route.account_id) throw new Error('No eligible account is available');
+        routedAccountId = route.account_id;
+      } catch (error: any) {
+        appendAssistantMessage({ role: 'assistant', author: 'Custos Engine', badge: 'Account Unavailable', text: error?.message || String(error) });
+        return;
+      }
+
       if (chosenModel.startsWith('ollama/')) {
-        const account = connectedAccounts.find(a => a.providerId === 'local' && a.status === 'active' && a.supportedModels.includes(chosenModel));
+        const account = connectedAccounts.find(a => a.id === routedAccountId && a.status === 'active');
         if (!account) {
           appendAssistantMessage({ role: 'assistant', author: 'Custos Engine', badge: 'Ollama Unavailable', stepName: 'Model Gateway', text: 'Ollama is offline or the selected model is no longer installed. Start Ollama and use Retry models. Your prompt will not be sent to another provider.' });
           showToast('Ollama unavailable — start Ollama and retry');
@@ -1098,7 +1110,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             conversation_session_id: targetSessionId || activeSession.id,
             source_task_id: activeSession.taskId || activeSession.id,
             model: chosenModel,
-            provider_account_id: connectedAccounts.find(a => a.status === 'active' && a.supportedModels.includes(chosenModel))?.id,
+            provider_account_id: routedAccountId,
           },
         });
         runTaskId = createdTask.id;
@@ -1320,7 +1332,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const handleSaveProvider = async (
-    serviceOrParams: string | { service: string; apiKey?: string; endpointUrl?: string; model?: string; contextWindow?: number; fastMode?: boolean },
+    serviceOrParams: string | { service: string; accountName?: string; apiKey?: string; endpointUrl?: string; model?: string; contextWindow?: number; fastMode?: boolean },
     maybeApiKey?: string
   ) => {
     try {
@@ -1332,8 +1344,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const contextWindow = isObj ? serviceOrParams.contextWindow : undefined;
       const fastMode = isObj ? serviceOrParams.fastMode : undefined;
 
-      const existing = providers.find((p) => p.name.toLowerCase().includes(service.toLowerCase()) || p.id === service);
-      const providerId = existing?.id || service.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const providerId = `${normalizeProviderServiceId(service)}-${crypto.randomUUID()}`;
       const providerType =
         service.toLowerCase().includes('claude') || service.toLowerCase().includes('anthropic') ? 'anthropic' :
         service.toLowerCase().includes('openai') || service.toLowerCase().includes('gpt') ? 'openai' :
@@ -1345,10 +1356,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       await daemonClient.saveProvider({
         id: providerId,
-        name: existing?.name || service,
+        name: (isObj && serviceOrParams.accountName?.trim()) || `${service} Account ${providerId.slice(-6)}`,
         service_type: providerType,
         provider_type: providerType,
-        model: defaultModel || existing?.model || '',
+        model: defaultModel || '',
         default_model: defaultModel,
         api_key: apiKey,
         endpoint_url: resolvedEndpoint,
@@ -1458,20 +1469,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [selectedModel, showToast]);
 
   const ensureOAuthProviderRecord = useCallback(async (
-    providerId: ProviderServiceId,
+    providerId: string,
     accountName?: string
   ) => {
-    const token = await daemonClient.getOAuthToken(providerId).catch(() => null);
-    if (!token?.connected) {
-      return;
-    }
+    const token = await daemonClient.getOAuthToken(providerId);
+    if (!token?.connected) throw new Error('OAuth account credentials were not saved. Retry the connection.');
 
-    const providerRecords = (await daemonClient.listProviders().catch(() => [])) as ProviderConfigRecord[];
-    const serviceId = normalizeProviderServiceId(providerId);
-    const existing = providerRecords.find((provider) =>
-      provider.id === providerId ||
-      normalizeProviderServiceId(provider.service_type || provider.id) === serviceId
-    );
+    const providerRecords = (await daemonClient.listProviders()) as ProviderConfigRecord[];
+    const existing = providerRecords.find((provider) => provider.id === providerId);
+    const serviceId = normalizeProviderServiceId(existing?.service_type || providerId);
 
     if (existing && isProviderConnected(existing)) {
       return;
@@ -1491,11 +1497,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
-  const handleConnectOAuth = useCallback(async (providerId: ProviderServiceId, accountName: string, _email?: string) => {
+  const handleConnectOAuth = useCallback(async (providerId: string, accountName: string, _email?: string) => {
     await ensureOAuthProviderRecord(providerId, accountName);
     const refreshed = await refreshProviderState();
-    const account = refreshed.accounts.find((item) => item.providerId === providerId);
-    showToast(`Connected ${account?.accountName || accountName || PROVIDER_LABELS[providerId]} via OAuth`);
+    const account = refreshed.accounts.find((item) => item.id === providerId);
+    showToast(`Connected ${account?.accountName || accountName || PROVIDER_LABELS[normalizeProviderServiceId(providerId)]} via OAuth`);
   }, [ensureOAuthProviderRecord, refreshProviderState, showToast]);
 
   const handleDeleteAccount = useCallback(async (accountId: string) => {
@@ -1504,7 +1510,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       await daemonClient.deleteOAuthToken(account.id);
       await daemonClient.deleteProvider(account.id);
-      if (account.id !== account.providerId) await daemonClient.deleteOAuthToken(account.providerId);
       await refreshProviderState();
       showToast('Account disconnected');
     } catch (err) {
