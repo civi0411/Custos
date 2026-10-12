@@ -1168,3 +1168,37 @@ export interface LiveRunSnapshot {
   error?: string | null;
   reconnecting?: boolean;
 }
+
+export interface EmulatorDevice {
+  id: string;
+  name: string;
+  platform: 'iOS' | 'Android' | 'iPadOS';
+  width: number;
+  height: number;
+  scale: number;
+  user_agent: string;
+  status: 'ready' | 'running' | 'offline';
+}
+
+export interface EmulatorSession {
+  session_id: string;
+  device_id: string;
+  width: number;
+  height: number;
+  scale: number;
+  url: string;
+  status: string;
+}
+
+export interface EmulatorSnapshotResult {
+  session_id: string;
+  snapshot: string;
+  refs: Record<string, { name?: string; role?: string }>;
+  origin: string;
+}
+
+export interface EmulatorScreenshotResult {
+  session_id: string;
+  path?: string;
+  image_base64?: string;
+}
