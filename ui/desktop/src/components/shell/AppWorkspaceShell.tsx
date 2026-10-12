@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Send,
-  Terminal,
   FolderGit2,
   GitBranch,
   Orbit,
@@ -28,6 +27,7 @@ import { ModelSelector } from '@/components/chat/ModelSelector';
 import { useAppContext } from '@/context/AppContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { HighlightedCodeBlock } from '@/components/chat/HighlightedCodeBlock';
 import { formatKeyCombo } from '@/lib/utils';
 
 interface AppWorkspaceShellProps {
@@ -87,7 +87,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   onToggleExpandWebTab,
   openResources
 }) => {
-  const { openSettings, selectedModel, handleSelectModel } = useAppContext();
+  const { openSettings, selectedModel, handleSelectModel, handleStopRun } = useAppContext();
   const [inputText, setInputText] = useState('');
   const [splitPercent, setSplitPercent] = useState<number>(() => {
     return mode === 'chat' ? 50 : 42;
@@ -103,6 +103,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   // Active session lookup
   const activeSession = sessions.find((s) => s.id === activeSessionId) || {
     id: '',
+    nativeHarnessId: undefined as string | undefined,
     title: 'No conversation',
     time: '',
     preview: '',
@@ -161,8 +162,16 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onShowToast]);
 
+  const liveMessage = activeSession.messages.find(message => message.runId && !['completed','failed','cancelled','interrupted'].includes(message.runStatus || ''));
+  const dialogueRef = useRef<HTMLDivElement>(null);
+  const followBottom = useRef(true);
+  useEffect(() => { followBottom.current = true; }, [activeSessionId]);
+  useEffect(() => {
+    if (followBottom.current && dialogueRef.current) dialogueRef.current.scrollTop = dialogueRef.current.scrollHeight;
+  }, [activeSession.messages]);
+
   const handleSend = () => {
-    if (!inputText.trim()) return;
+    if (!inputText.trim() || liveMessage) return;
     onSendMessage(inputText);
     setInputText('');
   };
@@ -396,7 +405,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
             }}
           >
             {/* Dialogue Messages Canvas */}
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+            <div ref={dialogueRef} onScroll={event => { const element = event.currentTarget; followBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; }} className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
               {!hasMessages ? (
                 <div className="h-full flex flex-col items-center justify-center text-center my-auto pb-12">
                   <div className="w-14 h-14 rounded-xl bg-surface-1 border border-border-default flex items-center justify-center text-fg-muted mb-5">
@@ -438,6 +447,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                             </div>
                           )}
                           <span className="font-semibold text-fg-editor">{isUser ? 'You' : msg.author || 'Custos'}</span>
+                          {msg.runId && !['completed','failed','cancelled','interrupted'].includes(msg.runStatus || '') && <button type="button" onClick={() => void handleStopRun(msg.runId!)} className="rounded border border-border-default px-2 py-0.5 text-[10px] text-fg-editor hover:bg-surface-2">Stop</button>}
                           {msg.badge && (
                             <span className="px-1.5 py-0.2 rounded text-[10px] bg-surface-1 text-fg-muted border border-border-default">
                               {msg.badge}
@@ -449,31 +459,24 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
                             components={{
-                              code({ className, children, ...props }) {
-                                const match = /language-(\w+)/.exec(className || '');
-                                if (match) {
-                                  return (
-                                    <div className="my-3 rounded-xl overflow-hidden bg-surface-0 border border-border-default font-mono text-[12px]">
-                                      <div className="px-3 py-1.5 bg-surface-1 text-[10px] text-fg-muted flex items-center gap-2">
-                                        <Terminal className="w-3 h-3" />
-                                        {match[1]}
-                                      </div>
-                                      <pre className="p-3.5 overflow-x-auto text-fg-editor">
-                                        <code>{String(children).replace(/\n$/, '')}</code>
-                                      </pre>
-                                    </div>
-                                  );
+                              pre({ children }) {
+                                const child = React.Children.toArray(children)[0];
+                                if (!React.isValidElement<{ className?: string; children?: React.ReactNode }>(child)) {
+                                  return <pre>{children}</pre>;
                                 }
-                                return (
-                                  <code className="px-1.5 py-0.5 rounded bg-surface-1 text-fg-editor border border-border-muted font-mono text-[12px]" {...props}>
-                                    {children}
-                                  </code>
-                                );
+                                const language = /(?:^|\s)language-([^\s]+)/.exec(child.props.className || '')?.[1];
+                                return <HighlightedCodeBlock code={String(child.props.children ?? '').replace(/\n$/, '')} language={language} />;
+                              },
+                              code({ children, className }) {
+                                return <code className={className || 'px-1.5 py-0.5 rounded bg-surface-1 text-fg-editor border border-border-muted font-mono text-[12px]'}>{children}</code>;
                               }
                             }}
                           >
                             {msg.text}
                           </ReactMarkdown>
+                          {!msg.text && msg.runId && !['completed','failed','cancelled','interrupted'].includes(msg.runStatus || '') && <p role="status" className="text-xs text-fg-muted">{msg.runStatus === 'thinking' ? 'Thinking...' : 'Running...'}</p>}
+                          {msg.liveError && <p role="alert" className="mt-2 text-xs text-amber-400">{msg.liveError}</p>}
+                          {msg.activities?.map((activity, index) => <details key={`${msg.runId}-activity-${index}`} className="mt-2 rounded-lg border border-border-muted bg-surface-1 p-2 text-xs"><summary className="cursor-pointer text-fg-muted">{activity.kind === 'reasoning_summary' ? 'Reasoning summary' : activity.kind === 'tool_input' ? 'Tool input' : 'Tool output'}</summary><pre className="mt-2 whitespace-pre-wrap break-words max-h-60 overflow-auto text-[11px]">{JSON.stringify(activity.payload, null, 2)}</pre></details>)}
                         </div>
                       </div>
                     );
@@ -506,15 +509,13 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                     <span className={`text-[11px] font-mono border border-border-default bg-surface-1 px-2 py-0.5 rounded ${lensMeta.iconColor}`}>
                       {lensMeta.badge}
                     </span>
-                    <ModelSelector
-                      currentModel={activeSession?.model || selectedModel}
-                      onSelectModel={handleSelectModel}
-                    />
+                    {activeSession.nativeHarnessId ? <span className="rounded border border-border-default px-2 py-1 text-xs text-fg-editor">Native · {activeSession.nativeHarnessId}</span> : <ModelSelector currentModel={activeSession?.model || selectedModel}
+                      onSelectModel={handleSelectModel} />}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={handleSend}
-                      disabled={!inputText.trim()}
+                      disabled={!inputText.trim() || Boolean(liveMessage)}
                       className={`p-1.5 rounded-lg transition ${
                         inputText.trim()
                           ? 'workbench-primary-action'
@@ -593,11 +594,9 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                 />
 
                 <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-border-muted">
-                  <ModelSelector
-                    currentModel={activeSession?.model || selectedModel}
+                  {activeSession.nativeHarnessId ? <span className="rounded border border-border-default px-2 py-1 text-xs text-fg-editor">Native · {activeSession.nativeHarnessId}</span> : <ModelSelector currentModel={activeSession?.model || selectedModel}
                     onSelectModel={handleSelectModel}
-                    compact
-                  />
+                    compact />}
                   <button
                     onClick={handleSend}
                     disabled={!inputText.trim()}

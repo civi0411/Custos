@@ -531,3 +531,42 @@ Settings projects durable model-run usage through v1.providers.usage, composed b
 Provider brand icons are compiled locally from @iconify/json through unplugin-icons React components in the existing AgentIcons module. Only imported SVGs enter the desktop bundle; no runtime icon CDN is used. Usage quota windows display remaining percentage (100 minus validated provider used percentage); durable request/token usage remains measured consumption.
 
 Usage & Quotas supports Expanded and Compact presentation modes, stored as a local desktop preference. Compact account panels retain measured token totals and remaining-quota chips while hiding the model table and token breakdown. Each account can be collapsed independently without stopping refresh; remaining quota stays visible, and expanded panels retain reset times and snapshot freshness.
+
+Provider settings present connected identity/OAuth accounts as the sole account list, without a duplicate persisted-daemon provider section. Saved provider configuration remains owned by the daemon and account disconnect still uses the existing IPC path.
+
+### Live conversation execution
+
+Desktop chat opts into background workflow execution; legacy start-run calls remain blocking. Runtime registers the persisted run, ownership and cancellation before returning its handle. ModelProvider streaming and observable native harness events feed a bounded ephemeral run projection; canonical outcomes, journal messages and measured usage retain existing persistence/Outbox ownership. Public reasoning summaries are separate from answer text; unknown progress is never fabricated.
+
+The daemon exposes session/run-scoped SSE with monotonic event IDs, Last-Event-ID replay, 15-second heartbeat, a 1,000-event/2 MiB per-run replay bound, five-minute terminal retention and snapshot recovery for cursor gaps. Slow subscribers cannot block execution. Disconnect does not cancel a run. Snapshot and SSE admission verify the run/session association; origin checks remain enforced. Tauri resolves the profile HTTP endpoint through its thin host.
+
+Events carry session/turn/task/run correlation plus status, text deltas, public reasoning summaries, tool input/output, usage and canonical terminal result. Native observer callbacks are transport-neutral core contracts; adapters alone own incremental network/process reads. Cancellation reaches HTTP streaming receivers and native child processes. Activity payloads are bounded and redact credentials; display events never authorize tools.
+
+Desktop maintains one message per run, batches deltas at 50 ms, reconnects without resubmitting prompts, retains partial text on errors and only follows scrolling when already at the bottom. Terminal snapshots replace provisional output without duplicating journal entries. Restart restores durable results without automatically replaying execution.
+
+Completion events retain optional actual model and legacy token estimates separately from measured input/output usage.
+
+`v1.workflow.session_runs` discovers durable run identities and journal timestamps by session metadata through existing task/run ports. Desktop reconnects these runs after hydration; restart projections report interrupted and never execute again.
+
+Native Agents workbench starts a session-bound background run through AppContext, projects that run into chat, and consumes the same SSE contract in its inspector.
+
+Terminal run metadata retains the canonical journal timestamp so hydration can restore run status onto the existing assistant entry without adding another message or changing the database schema.
+
+Native conversations retain harness/workspace identity from existing Task metadata. Follow-up prompts create new session-bound native runs in that workspace; no hidden native-agent session is resumed. The chat composer identifies the native harness instead of showing a cloud-model selector.
+
+The live API uses the existing RPC envelope:
+
+| Operation | Contract |
+|---|---|
+| `v1.workflow.start_run` | `background: true` returns a registered run handle; omitted/false preserves blocking behavior. |
+| `v1.workflow.live_run` | Requires `session_id`, `run_id`, and a cursor; returns replay events and a canonical snapshot, with `gap` for an unavailable cursor. |
+| `v1.workflow.session_runs` | Returns session-scoped durable run identities, status, model/harness and optional canonical journal timestamp for hydration. |
+| `GET /api/events` | Requires `session_id` and `run_id`; accepts `cursor` or `Last-Event-ID`. Invalid session/run association returns HTTP 403. |
+
+SSE `run` payloads contain `id`, `session_id`, `turn_id`, `task_id`, `run_id`, `kind` and `payload`. SSE `snapshot` payloads contain the full current projection and cursor. `status` carries queued/running/thinking/tool-running or a terminal state; `text_delta` carries text; `reasoning_summary` carries public summary text; `tool_input`/`tool_output` carry redacted bounded activity; `usage` carries known measurements; `result` carries canonical status/text/error. Unavailable usage remains null. Activity is capped at 100 entries and 16 KiB per entry with explicit truncation markers. Upstream idle reads time out after 45 seconds; socket writes time out after five seconds. Native transport preserves the harness's configured execution timeout.
+
+SessionManager exposes an assistant-entry append variant returning the exact persisted journal entry; the existing void append contract remains compatible. Runtime uses that returned timestamp for run/journal correlation instead of reading the latest shared journal entry after an await.
+
+Opaque partial tool-argument fragments are omitted from the public activity projection; JSON-encoded tool payloads are decoded for recursive credential redaction before rendering. Display events remain non-authoritative.
+
+Chat fenced code is rendered locally with highlight.js in the desktop projection. Explicit language fences use registered grammars; unlabelled fences use bounded automatic detection. Unknown languages remain escaped plain text. Inline code retains its compact style; highlighting is derived from each streamed message without changing persistence or execution contracts.

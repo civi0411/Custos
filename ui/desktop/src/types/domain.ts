@@ -152,6 +152,7 @@ export interface CreateTaskParams {
 }
 
 export interface StartRunParams {
+  background?: boolean;
   task_id: string;
   instruction?: string;
   preferred_mode?: 'model' | 'native' | 'terminal';
@@ -1085,3 +1086,17 @@ export interface OAuthStatusResult {
   error?: string;
 }
 
+
+export interface LiveRunSnapshot {
+  cursor: number;
+  run_id: string;
+  task_id: string;
+  session_id: string;
+  turn_id: string;
+  status: string;
+  text: string;
+  activities: Array<{ kind: string; payload: Record<string, unknown> }>;
+  usage?: Record<string, number | null>;
+  error?: string | null;
+  reconnecting?: boolean;
+}

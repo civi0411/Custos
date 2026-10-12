@@ -88,7 +88,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
             </button>
             <button 
               type="submit" 
-              className="workbench-primary-action px-3.5 py-1.5 rounded-lg font-medium transition text-xs"
+              className="btn-primary px-3.5 py-1.5 rounded-lg font-medium transition text-xs"
             >
               Create Task
             </button>

@@ -176,6 +176,15 @@ pub trait AgentRuntimePort: Send + Sync {
         context_pack: &ContextPack,
     ) -> Result<Vec<ActionIntent>, DomainError>;
 
+    async fn run_native_observed(
+        &self,
+        instruction: &str,
+        cwd: &Path,
+        _observer: std::sync::Arc<dyn RunObserver>,
+    ) -> Result<HarnessExecutionResult, DomainError> {
+        self.run_native(instruction, cwd).await
+    }
+
     /// Signals cancellation to an ongoing agent run.
     async fn cancel_run(&self, _run_id: &str) -> Result<(), DomainError> {
         if !self.profile().supports_cancel {
@@ -208,4 +217,10 @@ pub trait AgentRuntimePort: Send + Sync {
             "Native subprocess execution not supported by this harness".into(),
         ))
     }
+}
+
+/// Transport-neutral, non-authoritative presentation observer.
+pub trait RunObserver: Send + Sync {
+    fn emit(&self, kind: &str, payload: serde_json::Value);
+    fn is_cancelled(&self) -> bool;
 }

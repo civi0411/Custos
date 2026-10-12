@@ -3,6 +3,7 @@
 //! Protocol types and dispatcher for IPC communication between CLI / UI / VS Code and custosd.
 
 use std::sync::Arc;
+use custos_domain::DomainError;
 
 pub use crate::custos_local_api::{
     AdvanceTaskRequest, ApiRequest, ApiResponse, ArchiveWorkspaceApiRequest,
@@ -610,6 +611,13 @@ impl LocalApiDispatcher {
         serde_json::to_string(&response).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
     }
 
+    pub async fn live_run(&self, session_id: &str, run_id: &str, cursor: u64) -> Result<custos_domain::LiveRunReplay, DomainError> {
+        if self.session_manager.get_session(&SessionId(session_id.into())).await.is_none() {
+            return Err(DomainError::Validation("Unknown session".into()));
+        }
+        self.workflow.as_ref().ok_or_else(|| DomainError::Validation("Workflow unavailable".into()))?.live_run(session_id, run_id, cursor).await
+    }
+
     pub async fn handle_request(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             "v1.ping" | "v1.health" => {
@@ -991,6 +999,31 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
+            "v1.workflow.session_runs" => {
+                let Some(session)=req.params.get("session_id").and_then(|v|v.as_str()) else {return ApiResponse::error(req.id,"Missing session_id");};
+                if self.session_manager.get_session(&SessionId(session.to_string())).await.is_none() {return ApiResponse::error(req.id,"Unknown session");}
+                let Some(store)=&self.usage_runs else {return ApiResponse::error(req.id,"Run store unavailable");};
+                let tasks=match self.task_service.list_tasks().await {Ok(tasks)=>tasks,Err(e)=>return ApiResponse::error(req.id,e.to_string())};
+                let mut runs=Vec::new();
+                for task in tasks {
+                    let task_runs=match store.list_runs_for_task(&task.id).await {Ok(runs)=>runs,Err(e)=>return ApiResponse::error(req.id,e.to_string())};
+                    for run in task_runs {
+                        if run.metadata.get("session_id").and_then(|v|v.as_str())==Some(session) && (run.metadata.get("background").and_then(|v|v.as_bool())==Some(true) || run.metadata.get("journal_occurred_at").is_some() || !run.status.is_terminal()) {
+                            runs.push(serde_json::json!({"run_id":run.id,"model":run.metadata.get("requested_model").filter(|value|!value.is_null()).or_else(||run.metadata.get("harness_id")),"status":run.status.to_string(),"journal_occurred_at":run.metadata.get("journal_occurred_at")}));
+                        }
+                    }
+                }
+                ApiResponse::success(req.id,serde_json::json!(runs))
+            }
+            "v1.workflow.live_run" => {
+                let session = req.params.get("session_id").and_then(|v|v.as_str()).unwrap_or("");
+                let run = req.params.get("run_id").and_then(|v|v.as_str()).unwrap_or("");
+                let cursor = req.params.get("cursor").and_then(|v|v.as_u64()).unwrap_or(0);
+                match self.live_run(session,run,cursor).await {
+                    Ok(replay) => match serde_json::to_value(replay) { Ok(value) => ApiResponse::success(req.id,value), Err(error) => ApiResponse::error(req.id,error.to_string()) },
+                    Err(error) => ApiResponse::error(req.id,error.to_string()),
+                }
+            }
             METHOD_WORKFLOW_START_RUN => {
                 let workflow = match self.workflow.as_ref() {
                     Some(w) => w,
@@ -1083,9 +1116,11 @@ impl LocalApiDispatcher {
                     cmd = cmd.with_prompt(p);
                 }
 
-                match workflow.start_run(cmd).await {
+                let background = params.background;
+                let result = if background { workflow.start_run_background(cmd).await } else { workflow.start_run(cmd).await };
+                match result {
                     Ok(handle) => {
-                        if let (Some(ref sid), Some(ref out)) = (params.session_id.as_ref(), handle.output.as_ref()) {
+                        if let (Some(ref sid), Some(ref out)) = (params.session_id.as_ref().filter(|_| !background), handle.output.as_ref()) {
                             let _ = self
                                 .session_manager
                                 .append_assistant_message(&SessionId(sid.to_string()), out)

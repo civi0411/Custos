@@ -121,13 +121,90 @@ export class DaemonClient {
         Boolean((window as any).__TAURI__));
   }
 
+  private async resolveHttpEndpoint(): Promise<string> {
+    if (this.isTauri) {
+      const endpoint = await invoke<string>('custos_http_endpoint');
+      const parsed = new URL(endpoint);
+      if (parsed.protocol !== 'http:' || parsed.hostname !== '127.0.0.1') throw new Error('Invalid daemon HTTP endpoint');
+      this.baseUrl = endpoint;
+    }
+    return this.baseUrl;
+  }
+
+  async watchRun(session: string, run: string, update: (snapshot: import('../types/domain').LiveRunSnapshot) => void, signal: AbortSignal): Promise<void> {
+    type Snapshot = import('../types/domain').LiveRunSnapshot;
+    const terminal = (status: string) => ['completed', 'failed', 'cancelled', 'interrupted'].includes(status);
+    let snapshot: Snapshot | null = null;
+    let backoff = 1000;
+    while (!signal.aborted) {
+      try {
+        const base = await this.resolveHttpEndpoint();
+        const replay: { snapshot: Snapshot } = await this.request<{ snapshot: Snapshot }>('v1.workflow.live_run', { session_id: session, run_id: run, cursor: snapshot?.cursor || 0 });
+        snapshot = { ...replay.snapshot, reconnecting: false };
+        update(snapshot);
+        if (terminal(snapshot.status)) return;
+        const response = await fetch(`${base}/api/events?session_id=${encodeURIComponent(session)}&run_id=${encodeURIComponent(run)}&cursor=${snapshot.cursor}`, { signal, headers: { Accept: 'text/event-stream' } });
+        if (!response.ok || !response.body) throw new Error(`Live connection HTTP ${response.status}`);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let pending = '';
+        const consume = (frame: string) => {
+          let event = ''; const data: string[] = [];
+          for (const line of frame.split('\n')) {
+            if (line.startsWith('event:')) event = line.slice(6).trim();
+            if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
+          }
+          if (!data.length || !snapshot) return;
+          const value = JSON.parse(data.join('\n'));
+          if (event === 'snapshot') {
+            if (value.run_id !== run || value.session_id !== session) throw new Error('Mismatched live snapshot');
+            snapshot = { ...value, reconnecting: false };
+          } else if (event === 'run') {
+            if (value.run_id !== run || value.session_id !== session || value.id <= snapshot.cursor) return;
+            if (value.id !== snapshot.cursor + 1) throw new Error('Live cursor gap');
+            const payload = value.payload || {};
+            snapshot = { ...snapshot, cursor: value.id, reconnecting: false };
+            if (value.kind === 'text_delta') snapshot.text += payload.text || '';
+            if (value.kind === 'status') snapshot.status = payload.status;
+            if (['tool_input', 'tool_output', 'reasoning_summary'].includes(value.kind)) snapshot.activities = [...snapshot.activities, { kind: value.kind, payload }].slice(-100);
+            if (value.kind === 'usage') snapshot.usage = payload;
+            if (value.kind === 'result') { snapshot.status = payload.status; snapshot.text = payload.text || snapshot.text; snapshot.error = payload.error; }
+          }
+          if (snapshot) update(snapshot);
+        };
+        try {
+          while (!signal.aborted) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            pending += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+            if (pending.length > 3 * 1024 * 1024) throw new Error('Live frame exceeded limit');
+            let end: number;
+            while ((end = pending.indexOf('\n\n')) >= 0) { consume(pending.slice(0, end)); pending = pending.slice(end + 2); }
+            if (snapshot && terminal(snapshot.status)) return;
+            backoff = 1000;
+          }
+        } finally { await reader.cancel().catch(() => undefined); reader.releaseLock(); }
+        if (!signal.aborted) throw new Error('Live stream disconnected');
+      } catch (error) {
+        if (signal.aborted) return;
+        if (snapshot) update({ ...snapshot, reconnecting: true });
+        await new Promise<void>(resolve => {
+          const timer = window.setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, backoff);
+          const abort = () => { window.clearTimeout(timer); resolve(); };
+          signal.addEventListener('abort', abort, { once: true });
+        });
+        backoff = Math.min(5000, backoff * 2);
+      }
+    }
+  }
+
   async getProviderUsage(includeQuota = false): Promise<import('../types/provider_types').ProviderUsageReport> {
     return this.request('v1.providers.usage', { include_quota: includeQuota });
   }
 
   async checkHealth(): Promise<boolean> {
     try {
-      const res = await fetch(`${this.baseUrl}/api/health`, { method: 'GET' });
+      const res = await fetch(`${await this.resolveHttpEndpoint()}/api/health`, { method: 'GET' });
       this.daemonOnline = res.ok;
       return this.daemonOnline;
     } catch {
@@ -157,7 +234,8 @@ export class DaemonClient {
   }
 
   private async requestHttp<T>(method: string, params: Record<string, any> = {}): Promise<T> {
-    const res = await fetch(`${this.baseUrl}/api/request`, {
+    const baseUrl = await this.resolveHttpEndpoint();
+    const res = await fetch(`${baseUrl}/api/request`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -215,6 +293,10 @@ export class DaemonClient {
   // ---------------------------------------------------------
   // Workflow & Execution API
   // ---------------------------------------------------------
+
+  async listSessionRuns(sessionId: string): Promise<Array<{ run_id: string; model?: string; status: string; journal_occurred_at?: string }>> {
+    return this.request('v1.workflow.session_runs', { session_id: sessionId });
+  }
 
   async startRun(params: StartRunParams): Promise<RunHandle> {
     return this.request<RunHandle>('v1.workflow.start_run', params);

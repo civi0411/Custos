@@ -119,10 +119,13 @@ async fn handle_http_client(
     // Extract Origin header
     let mut req_origin: Option<String> = None;
     let mut content_length = 0;
+    let mut last_event_id = None;
     for line in lines {
         let lower = line.to_lowercase();
         if let Some(val) = lower.strip_prefix("origin:") {
             req_origin = Some(val.trim().to_string());
+        } else if let Some(val) = lower.strip_prefix("last-event-id:") {
+            last_event_id = val.trim().parse::<u64>().ok();
         } else if let Some(val) = lower.strip_prefix("content-length:") {
             content_length = val.trim().parse::<usize>().unwrap_or(0);
         }
@@ -154,7 +157,7 @@ Connection: close\r\n\r\n{}",
         let resp = format!(
             "HTTP/1.1 204 No Content\r\n\
 {}Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\
-Access-Control-Allow-Headers: Content-Type, Authorization\r\n\
+Access-Control-Allow-Headers: Content-Type, Authorization, Last-Event-ID\r\n\
 Access-Control-Max-Age: 86400\r\n\
 Content-Length: 0\r\n\
 Connection: close\r\n\r\n",
@@ -162,6 +165,43 @@ Connection: close\r\n\r\n",
         );
         stream.write_all(resp.as_bytes()).await?;
         stream.flush().await?;
+        return Ok(());
+    }
+
+    if method == "GET" && path.starts_with("/api/events?") {
+        let query = path.split_once('?').map(|(_,q)|q).unwrap_or("");
+        let param = |key: &str| query.split('&').filter_map(|p|p.split_once('=')).find(|(k,_)|*k==key).map(|(_,v)|v.to_string()).unwrap_or_default();
+        let session = param("session_id"); let run = param("run_id");
+        let valid = |id: &str| !id.is_empty() && id.len() <= 256 && id.bytes().all(|b|b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+        let mut cursor = last_event_id.or_else(||param("cursor").parse().ok()).unwrap_or(0);
+        let initial = if valid(&session) && valid(&run) { api.live_run(&session,&run,cursor).await } else { Err(custos_domain::DomainError::Validation("Invalid event scope".into())) };
+        if initial.is_err() {
+            let body = "{\"error\":\"Invalid or inaccessible run/session\"}";
+            let response = format!("HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{}Connection: close\r\n\r\n{}",body.len(),cors_origin_header,body);
+            write_live(&mut stream,response.as_bytes()).await?; return Ok(());
+        }
+        let headers = format!("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream; charset=utf-8\r\nCache-Control: no-cache\r\nX-Accel-Buffering: no\r\n{}Connection: close\r\n\r\nretry: 1000\n\n",cors_origin_header);
+        write_live(&mut stream,headers.as_bytes()).await?;
+        tracing::debug!(run_id = %run, session_id = %session, "SSE subscriber connected");
+        let mut initial = initial.ok();
+        let mut heartbeat = tokio::time::Instant::now();
+        loop {
+            let replay = match initial.take() { Some(replay) => replay, None => match api.live_run(&session,&run,cursor).await { Ok(replay)=>replay, Err(_)=>break } };
+            if replay.gap || (replay.events.is_empty() && matches!(replay.snapshot.status.as_str(),"completed"|"failed"|"cancelled"|"interrupted")) {
+                cursor = replay.snapshot.cursor;
+                let data = serde_json::to_string(&replay.snapshot).map_err(std::io::Error::other)?;
+                write_live(&mut stream,format!("id: {cursor}\nevent: snapshot\ndata: {data}\n\n").as_bytes()).await?;
+            } else {
+                for event in replay.events {
+                    cursor = event.id;
+                    let data=serde_json::to_string(&event).map_err(std::io::Error::other)?;
+                    write_live(&mut stream,format!("id: {cursor}\nevent: run\ndata: {data}\n\n").as_bytes()).await?;
+                }
+            }
+            if matches!(replay.snapshot.status.as_str(),"completed"|"failed"|"cancelled"|"interrupted") { break; }
+            if heartbeat.elapsed() >= Duration::from_secs(15) { write_live(&mut stream,b": heartbeat\n\n").await?; heartbeat=tokio::time::Instant::now(); }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
         return Ok(());
     }
 
@@ -294,6 +334,41 @@ fn find_header_end(buf: &[u8]) -> Option<usize> {
 mod tests {
     use super::is_allowed_origin;
 
+    #[tokio::test]
+    async fn slow_subscriber_writer_times_out() {
+        use super::*;
+        let (mut server,client)=tokio::io::duplex(64);
+        let data=vec![b'x';1024];
+        let error=tokio::time::timeout(Duration::from_secs(7),write_live(&mut server,&data)).await.unwrap().unwrap_err();
+        assert_eq!(error.kind(),std::io::ErrorKind::TimedOut);drop(client);
+    }
+
+    #[tokio::test]
+    async fn sse_replays_after_start_and_checks_session_scope() {
+        use std::sync::Arc;
+        use custos_core::{contracts::workflow::WorkflowPort,TaskService};
+        use custos_runtime::{SessionManager,workflow::TaskRuntime};
+        use custos_domain::{SessionMode,StartRunCommand};
+        use super::*;
+        let store=Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let tasks=Arc::new(TaskService::new(store.clone()));let sessions=Arc::new(SessionManager::with_store(store.clone()));
+        let task=tasks.create_task("SSE fixture".into()).await.unwrap();
+        let session=sessions.create_session(SessionMode::Assisted).await;
+        let other=sessions.create_session(SessionMode::Assisted).await;
+        let bridge=Arc::new(custos_bridge::BridgeService::new(sessions.clone(),tasks.clone()));
+        let runtime=Arc::new(TaskRuntime::new().with_run_store(store.clone()).with_model(Arc::new(custos_adapters::providers::fake::FakeProvider::with_default_text("test","answer"))));
+        let run=runtime.start_run_background(StartRunCommand::new(&task.id,"chat").with_prompt("prompt").with_session_id(session.id.to_string()).with_preferred_mode("model")).await.unwrap();
+        let api=Arc::new(LocalApiDispatcher::new(tasks,sessions,bridge).with_workflow(runtime));
+        let (port,server)=start_http_server("127.0.0.1:0",api).await.unwrap();
+        let url=format!("http://127.0.0.1:{port}/api/events?session_id={}&run_id={}",session.id,run.run_id);
+        let response=reqwest::get(&url).await.unwrap();assert_eq!(response.status(),200);assert!(response.headers()["content-type"].to_str().unwrap().starts_with("text/event-stream"));
+        let events=response.text().await.unwrap();assert!(events.contains("event: run"));assert!(events.contains("queued"));assert!(events.contains("completed"));assert!(events.contains("answer"));
+        let cursor=events.lines().filter_map(|line|line.strip_prefix("id: ")).last().unwrap();
+        let response=reqwest::Client::new().get(&url).header("Last-Event-ID",cursor).send().await.unwrap();let replay=response.text().await.unwrap();assert!(replay.contains("event: snapshot"));assert!(!replay.contains("text_delta"));
+        let wrong=format!("http://127.0.0.1:{port}/api/events?session_id={}&run_id={}",other.id,run.run_id);assert_eq!(reqwest::get(wrong).await.unwrap().status(),403);
+        server.abort();
+    }
+
     #[test]
     fn origin_policy_accepts_only_exact_loopback_authorities() {
         for allowed in [
@@ -321,4 +396,8 @@ mod tests {
             );
         }
     }
+}
+
+async fn write_live<W: tokio::io::AsyncWrite + Unpin>(stream: &mut W, bytes: &[u8]) -> std::io::Result<()> {
+    tokio::time::timeout(Duration::from_secs(5), async { stream.write_all(bytes).await?; stream.flush().await }).await.map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut,"Slow SSE subscriber"))?
 }

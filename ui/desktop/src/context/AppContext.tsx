@@ -82,6 +82,8 @@ interface AppContextType {
   handleSelectModel: (model: string) => void;
 
   // Actions
+  startNativeConversation: (instruction: string, harness: string, workspace: string) => Promise<{ run: import('../types/domain').RunHandle; sessionId: string }>;
+  handleStopRun: (runId: string) => Promise<void>;
   handleSendMessage: (text: string, lens?: 'assistant' | 'coding' | 'research') => Promise<void>;
   handleClearHistory: () => void;
   handleDeleteConversation: (sessionId: string) => Promise<void>;
@@ -696,6 +698,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             return {
               id: sessionId,
+              nativeHarnessId: t?.metadata?.kind === 'native_coding_agent' ? t.metadata.harness_id : undefined,
+              workspaceId: t?.metadata?.workspace_id,
               openedLenses: Array.from(new Set(journalList
                 .filter((entry) => entry.entry_type === 'workbench_opened')
                 .map((entry) => entry.entry_data)
@@ -705,11 +709,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               source: 'daemon',
               taskStatus: t ? String(t.status) : undefined,
               sessionId,
-              pack: t?.contract?.pack_id || t?.contract?.pack || 'assistant',
+              pack: t?.metadata?.kind === 'native_coding_agent' ? 'engineering' : t?.contract?.pack_id || t?.contract?.pack || 'assistant',
               title: t?.title || domainSession.title || domainSession.current_goal || `Conversation ${sessionId.slice(0, 8)}`,
               time: 'Live',
               preview: t ? `Status: ${t.status} | Contract: ${t.contract?.pack_id || 'general'}` : 'Unbound conversation',
-              model: (t?.contract as any)?.model || selectedModel || '',
+              model: t?.metadata?.kind === 'native_coding_agent' ? t.metadata.harness_id : (t?.contract as any)?.model || selectedModel || '',
               fileName: '',
               diffHunk: '',
               diffLinesCount: '',
@@ -725,6 +729,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   j.entry_type === 'user_message';
                 return {
                   id: j.id || String(j.entry_id || `${sessionId}-${j.occurred_at}`),
+                  recordedAt: j.occurred_at,
                   role: isUser ? 'user' : 'assistant',
                   author: isUser ? 'You' : (j.author || 'Custos Kernel'),
                   badge: j.badge,
@@ -741,6 +746,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...prev,
             'Custos Workspace': projectedSessions,
           }));
+
+          for (const chat of projectedSessions) {
+            const runs = await daemonClient.listSessionRuns(chat.sessionId || chat.id).catch(() => []);
+            for (const run of runs) {
+              if (run.journal_occurred_at) {
+                setProjectData(previous => ({...previous, 'Custos Workspace': (previous['Custos Workspace'] || []).map(item => item.id !== chat.id ? item : {...item, messages: item.messages.map(message => message.recordedAt === run.journal_occurred_at ? {...message, runId: run.run_id, runStatus: run.status, badge: run.status, author: run.model || message.author} : message)})}));
+              }
+              followLiveRun('Custos Workspace', chat.id, chat.sessionId || chat.id, run.run_id, run.model || 'Custos');
+            }
+          }
 
           setCurrentProject('Custos Workspace');
           setActiveSessionId((previous) => projectedSessions.some((session) => session.id === previous)
@@ -795,8 +810,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [uiScale]);
 
   // Actions
+  const pendingTurns = useRef(new Set<string>());
+  const liveConnections = useRef(new Map<string, AbortController>());
+  useEffect(() => () => { liveConnections.current.forEach(controller => controller.abort()); liveConnections.current.clear(); }, []);
+  const handleStopRun = async (runId: string) => {
+    try { await daemonClient.cancelRun({ run_id: runId, reason: 'Stopped from chat' }); }
+    catch (error) { showToast(error instanceof Error ? error.message : String(error)); }
+  };
+  const followLiveRun = (project: string, conversation: string, session: string, run: string, author: string) => {
+    if (liveConnections.current.has(run)) return;
+    const controller = new AbortController(); liveConnections.current.set(run, controller);
+    let timer: number | undefined;
+    let latest: import('../types/domain').LiveRunSnapshot | null = null;
+    const flush = () => {
+      timer = undefined;
+      const snapshot = latest; if (!snapshot) return;
+      setProjectData(previous => ({ ...previous, [project]: (previous[project] || []).map(chat => chat.id !== conversation ? chat : {
+        ...chat, messages: chat.messages.some(message => message.runId === run)
+          ? chat.messages.map(message => message.runId !== run ? message : { ...message, text: snapshot.text, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined })
+          : [...chat.messages, { id: `live-${run}`, role: 'assistant' as const, author, text: snapshot.text, runId: run, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined }],
+      }) }));
+    };
+    void daemonClient.watchRun(session, run, snapshot => {
+      latest = snapshot;
+      if (['completed', 'failed', 'cancelled', 'interrupted'].includes(snapshot.status)) { if (timer !== undefined) window.clearTimeout(timer); flush(); }
+      else if (timer === undefined) timer = window.setTimeout(flush, 50);
+    }, controller.signal).finally(() => { if (timer !== undefined) window.clearTimeout(timer); if (!controller.signal.aborted) flush(); liveConnections.current.delete(run); });
+  };
+
+  const startNativeConversation = async (instruction: string, harness: string, workspace: string) => {
+    const session = await daemonClient.createSession('assisted');
+    const task = await daemonClient.createTask({ title: instruction.slice(0, 120), metadata: { kind: 'native_coding_agent', pack_id: 'engineering', harness_id: harness, workspace_id: workspace, conversation_session_id: session.id } });
+    await daemonClient.attachSession({ session_id: session.id, task_id: task.id });
+    await daemonClient.appendSessionMessage(session.id, 'user', instruction);
+    const project = 'Custos Workspace';
+    const chat: Session = { nativeHarnessId: harness, workspaceId: workspace, id: session.id, sessionId: session.id, taskId: task.id, source: 'daemon', title: instruction.slice(0, 80), time: 'Live', preview: harness, model: harness, pack: 'engineering', fileName: '', diffHunk: '', diffLinesCount: '', summary: '', diffCode: [], messages: [{ role: 'user', author: 'You', text: instruction }] };
+    setProjectData(previous => ({ ...previous, [project]: [...(previous[project] || []), chat] }));
+    const run = await daemonClient.startRun({ background: true, task_id: task.id, session_id: session.id, turn_id: `turn_${crypto.randomUUID()}`, preferred_mode: 'native', harness_id: harness, workspace_id: workspace, prompt: instruction });
+    setCurrentProject(project); setActiveSessionId(session.id);
+    followLiveRun(project, session.id, session.id, run.run_id, harness);
+    return { run, sessionId: session.id };
+  };
+
   const handleSendMessage = async (text: string, lens?: 'assistant' | 'coding' | 'research') => {
     if (!activeSession) return;
+    if (activeSession.messages.some(message => message.runId && !['completed','failed','cancelled','interrupted'].includes(message.runStatus || ''))) { showToast('Stop or wait for the current run before sending another prompt.'); return; }
+    if (pendingTurns.current.has(activeSession.id)) return;
+    pendingTurns.current.add(activeSession.id);
     const userMsg = {
       role: 'user' as const,
       author: 'You',
@@ -847,6 +907,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     try {
+      if (activeSession.nativeHarnessId && activeSession.workspaceId && activeSession.sessionId) {
+        const harness = activeSession.nativeHarnessId;
+        const task = await daemonClient.createTask({ title: text.slice(0, 120), metadata: { kind: 'native_coding_agent', pack_id: 'engineering', harness_id: harness, workspace_id: activeSession.workspaceId, conversation_session_id: activeSession.sessionId } });
+        await daemonClient.appendSessionMessage(activeSession.sessionId, 'user', text);
+        const run = await daemonClient.startRun({ background: true, task_id: task.id, session_id: activeSession.sessionId, turn_id: `turn_${crypto.randomUUID()}`, preferred_mode: 'native', harness_id: harness, workspace_id: activeSession.workspaceId, prompt: text });
+        setProjectData(previous => ({ ...previous, [currentProject]: (previous[currentProject] || []).map(chat => chat.id !== activeSession.id ? chat : { ...chat, messages: [...chat.messages, { id: `live-${run.run_id}`, role: 'assistant' as const, author: harness, runId: run.run_id, runStatus: 'queued', badge: 'queued', text: '' }] }) }));
+        followLiveRun(currentProject, activeSession.id, activeSession.sessionId, run.run_id, harness);
+        return;
+      }
       const chosenModel = (selectedModel || activeSession.model || '').trim();
       const selectedCombo = combos.find((combo) => combo.id.toLowerCase() === chosenModel.toLowerCase());
 
@@ -995,8 +1064,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await daemonClient.appendSessionMessage(targetSessionId, 'user', text);
       }
 
-      // 3. Start workflow run with target model
+      // Register a cancellable background run before consuming its live projection.
       const run = await daemonClient.startRun({
+        background: true,
+        turn_id: `turn_${crypto.randomUUID()}`,
         task_id: runTaskId,
         preferred_mode: 'model',
         session_id: targetSessionId,
@@ -1005,42 +1076,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       const runId = run.run_id;
-      if (chosenModel.startsWith('ollama/') && run.output?.includes('Ollama connection failed')) {
-        setConnectedAccounts(previous => previous.map(a => a.providerId === 'local' && a.supportedModels.includes(chosenModel) ? { ...a, status: 'offline', statusLabel: 'Ollama offline', badgeColor: '#6b7280', catalogSource: 'cached', catalogError: 'Ollama stopped during the request. Start Ollama and resend your prompt.' } : a));
-      }
-      const outputText = run.output;
-      const isCompleted = run.status === 'completed';
-
-      const assistantMsg = {
-        role: 'assistant' as const,
-        author: chosenModel,
-        badge: isCompleted ? 'Live Inference' : `Run ${run.status}`,
-        stepName: `Run #${runId.slice(0, 8)}`,
-        text: outputText
-          ? outputText
-          : `Run ${runId} was accepted with status ${run.status}. Awaiting background completion.`,
-      };
-
-      setProjectData((prev) => {
-        const list = prev[currentProject] || [];
-        const updatedList = list.map((s) => {
-          if (s.id === activeSession.id) {
-            return {
-              ...s,
-              taskId: s.taskId,
-              sessionId: targetSessionId || s.sessionId,
-              messages: [...s.messages, assistantMsg],
-            };
-          }
-          return s;
-        });
-        return {
-          ...prev,
-          [currentProject]: updatedList,
-        };
-      });
-
-      showToast(`Run ${runId.slice(0, 8)}: ${run.status}`);
+      appendAssistantMessage({ role: 'assistant', author: chosenModel, badge: 'queued', stepName: `Run #${runId.slice(0, 8)}`, text: '' });
+      setProjectData(previous => ({ ...previous, [currentProject]: (previous[currentProject] || []).map(chat => chat.id !== activeSession.id ? chat : { ...chat, messages: chat.messages.map((message,index) => index === chat.messages.length - 1 ? { ...message, id: `live-${runId}`, runId, runStatus: 'queued' } : message) }) }));
+      if (targetSessionId) followLiveRun(currentProject, activeSession.id, targetSessionId, runId, chosenModel);
     } catch (err: any) {
       if ((selectedModel || activeSession.model || '').startsWith('ollama/') && String(err?.message || err).includes('Ollama connection failed')) {
         setConnectedAccounts(previous => previous.map(a => a.providerId === 'local' ? { ...a, status: 'offline', statusLabel: 'Ollama offline', badgeColor: '#6b7280', catalogSource: 'cached', catalogError: 'Ollama stopped during the request. Start Ollama and resend your prompt.' } : a));
@@ -1068,7 +1106,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           [currentProject]: updatedList,
         };
       });
-    }
+    } finally { pendingTurns.current.delete(activeSession.id); }
   };
 
   const handleClearHistory = () => {
@@ -1463,6 +1501,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedModel,
         handleSelectModel,
         handleSendMessage,
+        handleStopRun,
+        startNativeConversation,
         handleClearHistory,
         handleDeleteConversation,
         handleAcceptAndRun,

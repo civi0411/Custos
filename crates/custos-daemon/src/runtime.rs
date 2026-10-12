@@ -149,6 +149,7 @@ impl CustosRuntime {
                 .with_effect_ledger(store.clone())
                 .with_run_store(store.clone())
                 .with_session_store(store.clone())
+            .with_journal_manager(session_manager.clone())
                 .with_lease_manager(lease_manager.clone()),
         );
 
