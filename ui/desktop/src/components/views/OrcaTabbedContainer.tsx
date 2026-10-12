@@ -18,6 +18,7 @@ import {
   Smartphone,
   Search,
   Compass,
+  ArrowRight,
 } from 'lucide-react';
 import { BrowserWorkbenchPane } from '@/components/views/BrowserWorkbenchPane';
 import { MobileSimulatorWorkbenchPane } from '@/components/views/MobileSimulatorWorkbenchPane';
@@ -112,24 +113,24 @@ export type ResourceDefinition = {
 };
 
 export const DEFAULT_RESOURCES: ResourceDefinition[] = [
-  { id: 'files', title: 'Files', description: 'Repository tree, editors and source anchors.', icon: FolderTree, group: 'Engineering', status: 'available', supportedOperations: ['tree', 'read', 'write'] },
-  { id: 'changes', title: 'Changes', description: 'Diff review, annotations and patch decisions.', icon: FileDiff, group: 'Engineering', status: 'available', supportedOperations: ['diff', 'file_diff', 'stage', 'unstage', 'discard'] },
-  { id: 'terminal', title: 'Terminal', description: 'Bounded PTY streams scoped to an execution workspace.', icon: Terminal, group: 'Engineering', status: 'available', supportedOperations: ['spawn', 'write', 'resize', 'read', 'terminate', 'list', 'get'] },
-  { id: 'worktrees', title: 'Workspaces', description: 'Inspect daemon-owned folder and Git execution workspaces.', icon: WorktreeIcon, group: 'Engineering', status: 'available' },
-  { id: 'kanban', title: 'Agents', description: 'Worker runs, native coding harnesses (Claude Code, Codex, Goose), and agent loop dispatch.', icon: Bot, group: 'Engineering', status: 'available', supportedOperations: ['list_harnesses', 'get_harness', 'run_native', 'dispatch', 'cancel', 'steer'] },
-  { id: 'evidence', title: 'Evidence', description: 'Criteria, receipts, verifier records and stale status.', icon: ShieldCheck, group: 'Engineering', status: 'available', supportedOperations: ['reviews.list', 'reviews.record', 'reviews.get', 'reviews.mark_stale'] },
+  { id: 'files', title: 'Files', description: 'Explore project files, navigate directory trees, and edit code.', icon: FolderTree, group: 'Engineering', status: 'available', supportedOperations: ['tree', 'read', 'write'] },
+  { id: 'changes', title: 'Changes', description: 'Inspect git diffs, review code modifications, and stage patches.', icon: FileDiff, group: 'Engineering', status: 'available', supportedOperations: ['diff', 'file_diff', 'stage', 'unstage', 'discard'] },
+  { id: 'terminal', title: 'Terminal', description: 'Run commands, build tools, and scripts in an isolated workspace shell.', icon: Terminal, group: 'Engineering', status: 'available', supportedOperations: ['spawn', 'write', 'resize', 'read', 'terminate', 'list', 'get'] },
+  { id: 'worktrees', title: 'Workspaces', description: 'Switch between isolated git worktrees and project folders.', icon: WorktreeIcon, group: 'Engineering', status: 'available' },
+  { id: 'kanban', title: 'Agents', description: 'Monitor worker runs and steer native coding harnesses.', icon: Bot, group: 'Engineering', status: 'available', supportedOperations: ['list_harnesses', 'get_harness', 'run_native', 'dispatch', 'cancel', 'steer'] },
+  { id: 'evidence', title: 'Evidence', description: 'Review verification criteria, checks, and audit receipts.', icon: ShieldCheck, group: 'Engineering', status: 'available', supportedOperations: ['reviews.list', 'reviews.record', 'reviews.get', 'reviews.mark_stale'] },
   { id: 'dag', title: 'Workflow', description: 'Execution graph, dependencies, budgets and run state.', icon: Activity, group: 'Engineering', status: 'available' },
-  { id: 'literature', title: 'Sources', description: 'Versioned literature, passages and corpus coverage.', icon: BookOpen, group: 'Research', status: 'available' },
-  { id: 'claims', title: 'Claims', description: 'Atomic claims and support, contradiction or unknown evidence.', icon: ShieldCheck, group: 'Research', status: 'available' },
-  { id: 'knowledge', title: 'Methods', description: 'Reproduction recipes separated from observed execution records.', icon: FlaskConical, group: 'Research', status: 'available' },
-  { id: 'experiments', title: 'Notebook', description: 'Authorized kernels, code cells and reproducible compute epochs.', icon: NotebookTabs, group: 'Research', status: 'available', supportedOperations: ['cells.list', 'cells.save', 'execute', 'interrupt', 'reset', 'status'] },
-  { id: 'runs', title: 'Runs', description: 'Experiment attempts, environments, artifacts and receipts.', icon: FlaskConical, group: 'Research', status: 'available' },
-  { id: 'synthesis', title: 'Synthesis & Handoff', description: 'Synthesize research claims and recipes into Invariant Coding tasks.', icon: Layers, group: 'Research', status: 'available', supportedOperations: ['synthesis.proposals.list', 'synthesis.proposals.get', 'synthesis.proposals.save', 'synthesis.handoff.execute'] },
-  { id: 'artifacts', title: 'Artifacts', description: 'Inspect versions, lineage, annotations, provenance DAG and review findings.', icon: FileCode, group: 'Research', status: 'available', supportedOperations: ['list', 'get', 'record_lineage', 'lineage.list', 'lineage.graph', 'annotations.list', 'annotations.save'] },
-  { id: 'browser', title: 'Browser', description: 'Persisted browser sessions and tab intents. Physical navigation and snapshots are degraded.', icon: Globe, group: 'Shared', status: 'degraded', reason: 'Browser execution adapter is not connected; navigation and snapshots fail closed.', supportedOperations: ['sessions.list', 'sessions.create', 'tabs.list', 'tabs.create', 'tabs.close'] },
-  { id: 'emulator', title: 'Phone Simulator', description: 'Interactive mobile device simulator (iOS, Android, Responsive) for live frontend preview, touch gestures, and DOM inspection.', icon: Smartphone, group: 'Engineering', status: 'unavailable', reason: 'Mobile simulator execution adapter is not connected (P3).', supportedOperations: [] },
-  { id: 'fleet', title: 'Remote Fleet', description: 'Remote host inventory for coding and research compute. SSH probes and execution are degraded.', icon: Server, group: 'Shared', status: 'degraded', reason: 'SSH transport is not connected; probes and remote execution fail closed.', supportedOperations: ['hosts.list', 'hosts.register', 'jobs.list', 'jobs.create'] },
-  { id: 'notes', title: 'Notes', description: 'Task notes, scratchpads, and Markdown knowledge capture with version history.', icon: FileCode, group: 'Shared', status: 'available', supportedOperations: ['list', 'get', 'save', 'history'] },
+  { id: 'literature', title: 'Sources', description: 'Read papers, explore research literature, and pin citation excerpts.', icon: BookOpen, group: 'Research', status: 'available' },
+  { id: 'claims', title: 'Claims', description: 'Track scientific claims, verified facts, and evidence.', icon: ShieldCheck, group: 'Research', status: 'available' },
+  { id: 'knowledge', title: 'Methods', description: 'Browse and execute reusable reproduction recipes.', icon: FlaskConical, group: 'Research', status: 'available' },
+  { id: 'experiments', title: 'Notebook', description: 'Run interactive code cells and analyze computational results.', icon: NotebookTabs, group: 'Research', status: 'available', supportedOperations: ['cells.list', 'cells.save', 'execute', 'interrupt', 'reset', 'status'] },
+  { id: 'runs', title: 'Runs', description: 'Inspect experiment logs, environment specs, and execution outputs.', icon: FlaskConical, group: 'Research', status: 'available' },
+  { id: 'synthesis', title: 'Synthesis & Handoff', description: 'Synthesize research claims and recipes into coding tasks.', icon: Layers, group: 'Research', status: 'available', supportedOperations: ['synthesis.proposals.list', 'synthesis.proposals.get', 'synthesis.proposals.save', 'synthesis.handoff.execute'] },
+  { id: 'artifacts', title: 'Artifacts', description: 'View generated documents, reports, diagrams, and exported files.', icon: FileCode, group: 'Research', status: 'available', supportedOperations: ['list', 'get', 'record_lineage', 'lineage.list', 'lineage.graph', 'annotations.list', 'annotations.save'] },
+  { id: 'browser', title: 'Browser', description: 'Interactive browser session for web research and testing.', icon: Globe, group: 'Shared', status: 'degraded', reason: 'Browser execution adapter is not connected; navigation and snapshots fail closed.', supportedOperations: ['sessions.list', 'sessions.create', 'tabs.list', 'tabs.create', 'tabs.close'] },
+  { id: 'emulator', title: 'Phone Simulator', description: 'Interactive mobile device simulator (iOS, Android, Responsive) for live frontend preview.', icon: Smartphone, group: 'Engineering', status: 'unavailable', reason: 'Mobile simulator execution adapter is not connected (P3).', supportedOperations: [] },
+  { id: 'fleet', title: 'Remote Fleet', description: 'Remote host inventory for distributed compute.', icon: Server, group: 'Shared', status: 'degraded', reason: 'SSH transport is not connected; probes and remote execution fail closed.', supportedOperations: ['hosts.list', 'hosts.register', 'jobs.list', 'jobs.create'] },
+  { id: 'notes', title: 'Notes & Scratchpad', description: 'Capture quick notes, thoughts, and draft context for conversations.', icon: FileCode, group: 'Shared', status: 'available', supportedOperations: ['list', 'get', 'save', 'history'] },
 ];
 
 const urlFor = (id: OrcaTabId) => id === 'tools' ? 'custos://resources' : `custos://resource/${id}`;
@@ -288,28 +289,32 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     if (mode === 'code') {
       return resources.filter(
         (r) =>
-          r.group === 'Engineering' ||
-          r.id === 'fleet' ||
-          r.id === 'browser' ||
+          r.id === 'files' ||
+          r.id === 'changes' ||
+          r.id === 'terminal' ||
+          r.id === 'worktrees' ||
+          r.id === 'kanban' ||
+          r.id === 'evidence' ||
           r.id === 'notes'
       );
     }
     if (mode === 'research') {
       return resources.filter(
         (r) =>
-          r.group === 'Research' ||
-          r.id === 'fleet' ||
-          r.id === 'browser' ||
-          r.id === 'notes'
+          r.id === 'literature' ||
+          r.id === 'experiments' ||
+          r.id === 'claims' ||
+          r.id === 'synthesis' ||
+          r.id === 'artifacts' ||
+          r.id === 'notes' ||
+          r.id === 'runs' ||
+          r.id === 'knowledge'
       );
     }
-    // Copilot: Assistant tools and shared utilities
+    // Copilot: Assistant tools and scratchpads
     return resources.filter(
       (r) =>
         r.id === 'notes' ||
-        r.id === 'browser' ||
-        r.id === 'fleet' ||
-        r.id === 'evidence' ||
         r.id === 'artifacts'
     );
   }, [resources, mode]);
@@ -317,7 +322,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   const categoryPills = React.useMemo(() => {
     if (mode === 'code') return ['All', 'Engineering', 'Shared'] as const;
     if (mode === 'research') return ['All', 'Research', 'Shared'] as const;
-    return ['All', 'Shared'] as const;
+    return [] as const;
   }, [mode]);
 
   const headerMeta = React.useMemo(() => {
@@ -338,12 +343,12 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     return {
       kicker: 'Copilot Workbench',
       title: 'Copilot Tools & Resources',
-      description: 'Assistant tools, scratchpads, and inspection surfaces for this session.',
+      description: 'Assistant tools, scratchpads, and session inspection for this conversation.',
     };
   }, [mode]);
 
   const filteredResources = visibleResources.filter((resource) => {
-    const isShared = resource.group === 'Shared' || resource.id === 'fleet' || resource.id === 'browser' || resource.id === 'notes' || resource.id === 'evidence' || resource.id === 'artifacts';
+    const isShared = resource.id === 'notes' || resource.id === 'artifacts';
     const matchesGroup =
       selectedGroup === 'All' ||
       (selectedGroup === 'Engineering' && resource.group === 'Engineering') ||
@@ -353,8 +358,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     const matchesQuery =
       !q ||
       resource.title.toLowerCase().includes(q) ||
-      resource.description.toLowerCase().includes(q) ||
-      (resource.supportedOperations && resource.supportedOperations.some((op) => op.toLowerCase().includes(q)));
+      resource.description.toLowerCase().includes(q);
     return matchesGroup && matchesQuery;
   });
 
@@ -386,29 +390,31 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filter resources by name, description, or capability..."
+                  placeholder="Filter resources by name or description..."
                   className="w-full bg-[var(--color-surface-1)] border border-[var(--color-border-default)] rounded-xl pl-10 pr-4 py-2 text-xs text-fg-editor placeholder:text-fg-subtle focus:outline-none focus:border-border-default focus:ring-1 focus:ring-border-default/20 transition"
                   autoFocus
                 />
               </div>
 
-              {/* Category Pills */}
-              <div className="flex items-center gap-1 bg-[var(--color-surface-1)] p-1 rounded-xl border border-[var(--color-border-muted)] shrink-0 text-xs">
-                {categoryPills.map((group) => (
-                  <button
-                    key={group}
-                    type="button"
-                    onClick={() => setSelectedGroup(group)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition ${
-                      selectedGroup === group
-                        ? 'bg-surface-2 text-fg-editor shadow-xs'
-                        : 'text-fg-muted hover:text-fg-editor hover:bg-surface-2/50'
-                    }`}
-                  >
-                    {group}
-                  </button>
-                ))}
-              </div>
+              {/* Category Pills (Only when more than 3 options) */}
+              {categoryPills.length > 0 && (
+                <div className="flex items-center gap-1 bg-[var(--color-surface-1)] p-1 rounded-xl border border-[var(--color-border-muted)] shrink-0 text-xs">
+                  {categoryPills.map((group) => (
+                    <button
+                      key={group}
+                      type="button"
+                      onClick={() => setSelectedGroup(group)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition ${
+                        selectedGroup === group
+                          ? 'bg-surface-2 text-fg-editor shadow-xs'
+                          : 'text-fg-muted hover:text-fg-editor hover:bg-surface-2/50'
+                      }`}
+                    >
+                      {group}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -421,45 +427,31 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                   key={resource.id}
                   type="button"
                   onClick={() => openResource(resource)}
-                  className="group rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-4 text-left transition hover:border-[var(--color-border-default)] hover:bg-[var(--color-surface-2)] hover:shadow-sm"
+                  className="group rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-4 text-left transition hover:border-[var(--color-border-default)] hover:bg-[var(--color-surface-2)] hover:shadow-sm flex flex-col justify-between"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="p-2 rounded-lg bg-[var(--color-canvas)] border border-[var(--color-border-muted)] group-hover:border-[var(--color-border-default)] transition">
-                      <Icon className="h-4 w-4 text-[var(--color-fg-muted)] group-hover:workbench-accent transition-colors" />
-                    </div>
-                    <span
-                      className={`text-[9px] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded ${
-                        resource.status === 'available'
-                          ? 'text-emerald-500 bg-emerald-500/10'
-                          : resource.status === 'degraded'
-                          ? 'text-amber-500 bg-amber-500/10'
-                          : 'text-[var(--color-fg-subtle)] bg-surface-2'
-                      }`}
-                    >
-                      {resource.status === 'available' ? 'API' : resource.status === 'degraded' ? 'Degraded' : 'Planned'}
-                    </span>
-                  </div>
-                  <div className="mt-4 text-xs font-semibold text-fg-editor group-hover:workbench-accent transition-colors">
-                    {resource.title}
-                  </div>
-                  <p className="mt-1 text-[11px] leading-5 text-[var(--color-fg-muted)] line-clamp-2">
-                    {resource.description}
-                  </p>
-
-                  {resource.supportedOperations && resource.supportedOperations.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1 pt-2 border-t border-[var(--color-border-muted)]/60">
-                      {resource.supportedOperations.slice(0, 3).map((op) => (
-                        <span key={op} className="text-[9.5px] font-mono px-1 py-0.2 rounded bg-[var(--color-canvas)] text-fg-subtle border border-[var(--color-border-muted)]">
-                          {op}
-                        </span>
-                      ))}
-                      {resource.supportedOperations.length > 3 && (
-                        <span className="text-[9.5px] font-mono px-1 text-fg-subtle">
-                          +{resource.supportedOperations.length - 3}
+                  <div>
+                    <div className="flex items-start justify-between">
+                      <div className="p-2 rounded-lg bg-[var(--color-canvas)] border border-[var(--color-border-muted)] group-hover:border-[var(--color-border-default)] transition">
+                        <Icon className="h-4 w-4 text-[var(--color-fg-muted)] group-hover:workbench-accent transition-colors" />
+                      </div>
+                      {resource.status === 'degraded' && (
+                        <span className="text-[9px] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded text-amber-500 bg-amber-500/10">
+                          Degraded
                         </span>
                       )}
                     </div>
-                  )}
+                    <div className="mt-3 text-xs font-semibold text-fg-editor group-hover:workbench-accent transition-colors">
+                      {resource.title}
+                    </div>
+                    <p className="mt-1 text-[11px] leading-5 text-[var(--color-fg-muted)] line-clamp-2">
+                      {resource.description}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between pt-2.5 border-t border-[var(--color-border-muted)]/50 text-[11px] text-[var(--color-fg-subtle)] group-hover:text-fg-editor transition-colors">
+                    <span className="font-medium">Open in tab</span>
+                    <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
+                  </div>
                 </button>
               );
             })}
@@ -491,23 +483,8 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
 
   const frameResource = (content: React.ReactNode) => (
     <div className="flex h-full min-h-0 flex-col bg-[var(--color-canvas)]">
-      <div className="flex shrink-0 items-center gap-3 border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-3 py-1.5 text-[10px] text-[var(--color-fg-muted)]">
-        <span className="font-semibold text-[var(--color-fg-default)]">{activeResource.title}</span>
-        <span className={`rounded-full px-1.5 py-0.5 font-semibold uppercase tracking-[0.06em] ${activeResource.status === 'available'
-            ? 'bg-emerald-500/10 text-emerald-500'
-            : 'bg-amber-500/10 text-amber-500'
-          }`}>
-          {activeResource.status}
-        </span>
-        <span className="truncate">Session: {session?.id || 'unbound'}</span>
-        <span className="ml-auto truncate font-mono">
-          {(activeResource.supportedOperations ?? []).length > 0
-            ? (activeResource.supportedOperations ?? []).join(' · ')
-            : 'No operations advertised'}
-        </span>
-      </div>
       {activeResource.reason && activeResource.status === 'degraded' && (
-        <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/5 px-3 py-1 text-[10px] text-amber-600 dark:text-amber-300">
+        <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/5 px-3 py-1.5 text-[10px] text-amber-600 dark:text-amber-300">
           {activeResource.reason}
         </div>
       )}
