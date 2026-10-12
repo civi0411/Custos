@@ -93,6 +93,8 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   const [providerService, setProviderService] = useState('anthropic');
   const [routingPriority, setRoutingPriority] = useState('primary');
   const [apiKey, setApiKey] = useState('');
+  const closeAndClearSecret = () => { setApiKey(''); setCallbackInput(''); setAuthUrlResult(null); onClose(); };
+  useEffect(() => { if (!isOpen) setApiKey(''); }, [isOpen]);
   const [endpointUrl, setEndpointUrl] = useState('');
   const [selectedModel, setSelectedModel] = useState('');
   const [availableModels, setAvailableModels] = useState<CustomSelectOption[]>([]);
@@ -155,6 +157,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   const [authUrlResult, setAuthUrlResult] = useState<import('@/types/domain').OAuthAuthorizeResult | null>(null);
   const [isGeneratingUrl, setIsGeneratingUrl] = useState(false);
   const [callbackInput, setCallbackInput] = useState('');
+  useEffect(() => { if (!isOpen) { setCallbackInput(''); setAuthUrlResult(null); } }, [isOpen]);
   const [isExchangingCode, setIsExchangingCode] = useState(false);
   const [exchangeError, setExchangeError] = useState<string | null>(null);
   const [exchangeSuccess, setExchangeSuccess] = useState(false);
@@ -414,7 +417,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
             <span className="text-sm font-semibold text-fg-editor">Connect Provider or Account</span>
           </div>
           <button
-            onClick={onClose}
+            onClick={closeAndClearSecret}
             className="p-1 hover:bg-surface-2 rounded-md text-fg-muted hover:text-fg-editor transition cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -465,7 +468,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
               <CustomSelect value={localModel} onChange={setLocalModel} options={localModels.map(m => ({ value: m.id, label: m.name || m.id, sublabel: m.context_window ? `${m.context_window} tokens` : 'Context unknown' }))} headerTitle="Installed Ollama models" />
             </div>
             <div className="border-t border-border-muted p-4 flex justify-end gap-2">
-              <button type="button" onClick={onClose} disabled={localBusy} className="text-fg-editor px-3 py-2">Cancel</button>
+              <button type="button" onClick={closeAndClearSecret} disabled={localBusy} className="text-fg-editor px-3 py-2">Cancel</button>
               <button type="submit" disabled={localBusy || !localConnected || !localModels.some(m => m.id === localModel)} className="provider-oauth-action rounded-lg px-3 py-2 disabled:opacity-50">{localBusy ? 'Please wait...' : 'Save & Activate Provider'}</button>
             </div>
           </form>
@@ -611,7 +614,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
             <div className="h-14 border-t border-border-muted px-5 flex items-center justify-end gap-2 bg-surface-1 shrink-0">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={closeAndClearSecret}
                 className="px-3.5 py-1.5 rounded-lg hover:bg-surface-2 text-fg-muted hover:text-fg-editor transition text-xs cursor-pointer"
               >
                 Cancel
@@ -842,7 +845,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
             <div className="h-14 border-t border-border-muted px-5 flex items-center justify-end gap-2 bg-surface-1 shrink-0">
               <button
                 type="button"
-                onClick={onClose}
+                onClick={closeAndClearSecret}
                 className="px-3.5 py-1.5 rounded-lg hover:bg-surface-2 text-fg-muted hover:text-fg-editor transition text-xs cursor-pointer"
               >
                 Cancel

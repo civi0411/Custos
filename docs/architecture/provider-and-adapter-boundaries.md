@@ -99,3 +99,14 @@ cancellation behavior and error mapping. A native harness is not
 `custos-mediated` unless Custos intercepts every relevant effect before dispatch.
 An MCP or A2A module is not `complete` merely because its DTOs serialize.
 
+
+### Provider credential secure storage
+
+Provider API keys and OAuth access/refresh tokens are daemon-owned secrets. The core defines an internal credential-vault contract; adapters implement the existing OS keyring, persistence owns metadata and recoverable operations, and daemon composes the service. Desktop remains a Local API client. No secret may be written to new SQLite records, outbox, public responses or frontend storage. Client Local API keys are excluded.
+
+A database-stable UUID namespaces immutable per-account credential generations. Long bundles use 1024-character ASCII keyring segments and a final manifest with binding, length and SHA-256; the JSON limit is 256 KiB. Keyring calls run through spawn_blocking outside database locks. Credential metadata transactions temporarily use SQLite synchronous FULL before opening the transaction and restore the prior writer setting afterwards. Save verifies the new bundle before an atomic metadata/config/outbox commit; cleanup of the previous generation follows commit. Durable pending operations support crash recovery and generation checks. Delete deactivates credentials before keyring cleanup. Locked/unavailable/corrupt stores fail closed without plaintext or cross-account fallback.
+
+Legacy provider tokens migrate automatically and idempotently only after keyring read-back verification. Secure deletion and WAL truncation are tracked; existing backups and physical disk erasure are outside that guarantee. Keyring failure retains legacy data for retry but prevents provider use. Explicit environment credentials remain supported when no stored account exists. OAuth callbacks, refresh, probes and inference share the same service. UI closes only after successful commit, clears entered secrets on close/success and receives metadata only.
+### Desktop model connection attribution
+
+The existing ModelSelector preserves the Copilot route namespace before model-family inference. Claude, GPT and Gemini names served through Copilot belong to the GitHub Copilot group. Copilot is included in both display ordering and provider filters; model IDs sent to the daemon retain their original route namespace.

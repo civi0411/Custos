@@ -17,6 +17,7 @@
 //! at the crate root and a top-level `ports` module would shadow `crate::ports::TaskStore`.
 
 pub mod harness;
+pub mod credentials;
 pub mod judgment;
 pub mod kernel;
 pub mod memory;
