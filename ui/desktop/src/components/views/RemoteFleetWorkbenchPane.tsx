@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Server,
@@ -632,7 +633,7 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
 
               <div>
                 <label className="text-zinc-400 text-[11px] block mb-1">Target Execution Type</label>
-                <select
+                <NativeSelect
                   value={newJobTargetType}
                   onChange={(e) => setNewJobTargetType(e.target.value)}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-200 focus:outline-none"
@@ -640,7 +641,7 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
                   <option value="local_process">local_process (Host Process)</option>
                   <option value="remote_ssh">remote_ssh (Fleet Node)</option>
                   <option value="browser_session">browser_session (Headless Browser)</option>
-                </select>
+                </NativeSelect>
               </div>
 
               <div>

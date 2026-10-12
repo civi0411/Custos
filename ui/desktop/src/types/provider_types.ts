@@ -79,7 +79,7 @@ export interface ProviderQuotaSnapshot {
   account_id: string;
   status: 'available' | 'unavailable' | 'unsupported' | 'not_applicable';
   source?: 'provider' | 'provider_catalog';
-  windows: { name: string; used_percent: number; resets_at: string | number | null }[];
+  windows: { name: string; used_percent: number; resets_at: string | number | null; window_kind?: 'five_hour' | 'weekly' | 'other'; model_group?: 'gemini' | 'claude_gpt' }[];
   fetched_at: string;
   error?: string;
 }

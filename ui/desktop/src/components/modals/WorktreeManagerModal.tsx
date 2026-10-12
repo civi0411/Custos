@@ -1,7 +1,7 @@
+import WorktreeIcon from '~icons/codicon/worktree';
 import React, { useState, useEffect } from 'react';
 import { 
   X, 
-  GitBranch, 
   FolderPlus, 
   Check, 
   Trash2, 
@@ -210,7 +210,7 @@ export const WorktreeManagerModal: React.FC<WorktreeManagerModalProps> = ({
         <div className="px-6 py-4 flex items-center justify-between border-b border-border-muted bg-surface-1">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-surface-2 border border-border-default text-emerald-500">
-              <GitBranch className="w-4 h-4" />
+              <WorktreeIcon className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -370,7 +370,7 @@ export const WorktreeManagerModal: React.FC<WorktreeManagerModalProps> = ({
           ) : (
             <div className="flex items-center justify-between">
               <span className="font-semibold text-fg-editor text-xs flex items-center gap-1.5">
-                <GitBranch className="w-4 h-4 workbench-accent" />
+                <WorktreeIcon className="w-4 h-4 workbench-accent" />
                 Active Managed Worktrees ({worktrees.length})
               </span>
               <button
@@ -405,7 +405,7 @@ export const WorktreeManagerModal: React.FC<WorktreeManagerModalProps> = ({
                   {/* Top row */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 font-mono">
-                      <GitBranch className={`w-4 h-4 ${isActive ? 'workbench-accent' : 'text-fg-muted'}`} />
+                      <WorktreeIcon className={`w-4 h-4 ${isActive ? 'workbench-accent' : 'text-fg-muted'}`} />
                       <span className="font-semibold text-fg-editor text-xs">{wt.branch}</span>
                       {wt.isMain && (
                         <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-blue-500/10 text-blue-500 border border-blue-500/20">

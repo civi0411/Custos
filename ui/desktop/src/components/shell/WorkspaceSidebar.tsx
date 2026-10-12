@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import {
@@ -154,7 +155,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         {activeSessionId && onOpenFullChatIn && (
           <label className="block px-2 pb-2 text-[11px] text-fg-subtle">
             Open full chat in
-            <select
+            <NativeSelect
               aria-label="Open complete conversation in another workbench"
               value=""
               onChange={(event) => {
@@ -169,7 +170,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               <option value="chat">Copilot</option>
               <option value="code">Coding</option>
               <option value="research">Research</option>
-            </select>
+            </NativeSelect>
             <span className="mt-1 block text-[10px] leading-snug">Full saved chat is visible here. A model receives only recent bounded history; older turns and native-agent hidden state are not transferred. Check the selected provider before sending.</span>
           </label>
         )}

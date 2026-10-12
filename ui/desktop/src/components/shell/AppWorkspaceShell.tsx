@@ -1,10 +1,10 @@
+import StopIcon from '~icons/lucide/square';
+import WorktreeIcon from '~icons/codicon/worktree';
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Send,
   FolderGit2,
-  GitBranch,
   Orbit,
-  Settings2,
   Plus,
   BookOpen,
   FlaskConical,
@@ -22,11 +22,14 @@ import { WorkspaceSidebar } from '@/components/shell/WorkspaceSidebar';
 import { AppHeader, type AppWorkspaceMode } from '@/components/shell/AppHeader';
 import { CommandPalette } from '@/components/shell/CommandPalette';
 import { AttentionBanner, type AttentionItem } from '@/components/shell/AttentionBanner';
-import { OpenAIIcon, ClaudeIcon } from '@/components/common/AgentIcons';
 import { ModelSelector } from '@/components/chat/ModelSelector';
 import { useAppContext } from '@/context/AppContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+import { remarkNormalizeChatMath } from '@/components/chat/markdownMath';
 import { HighlightedCodeBlock } from '@/components/chat/HighlightedCodeBlock';
 import { formatKeyCombo } from '@/lib/utils';
 
@@ -165,9 +168,27 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   const liveMessage = activeSession.messages.find(message => message.runId && !['completed','failed','cancelled','interrupted'].includes(message.runStatus || ''));
   const dialogueRef = useRef<HTMLDivElement>(null);
   const followBottom = useRef(true);
+  const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false });
+  const updateScrollEdges = () => {
+    const element = dialogueRef.current;
+    if (!element) return;
+    const top = element.scrollTop > 2;
+    const bottom = element.scrollHeight - element.scrollTop - element.clientHeight > 2;
+    setScrollEdges(previous => previous.top === top && previous.bottom === bottom ? previous : { top, bottom });
+  };
+  useEffect(() => {
+    const element = dialogueRef.current;
+    if (!element) return;
+    const observer = new ResizeObserver(updateScrollEdges);
+    observer.observe(element);
+    if (element.firstElementChild) observer.observe(element.firstElementChild);
+    updateScrollEdges();
+    return () => observer.disconnect();
+  }, [activeSessionId, hasMessages]);
   useEffect(() => { followBottom.current = true; }, [activeSessionId]);
   useEffect(() => {
     if (followBottom.current && dialogueRef.current) dialogueRef.current.scrollTop = dialogueRef.current.scrollHeight;
+    updateScrollEdges();
   }, [activeSession.messages]);
 
   const handleSend = () => {
@@ -258,7 +279,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
             onClick: () => openTab('files', 'Files', 'custos://files')
           },
           {
-            icon: GitBranch,
+            icon: WorktreeIcon,
             label: 'Worktrees',
             onClick: () => openTab('worktrees', 'Worktrees', 'custos://worktrees')
           },
@@ -318,11 +339,6 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       onClick: () => openTab('kanban', 'Fleet Kanban', 'orca://kanban'),
       rightElement: <span className="text-[10px] text-fg-muted font-mono">{formatKeyCombo({ ctrlOrCmd: true, alt: true, key: 'K' })}</span>
     },
-    {
-      icon: Settings2,
-      label: 'Preferences & Settings',
-      onClick: () => openSettings('general')
-    }
   ];
 
   return (
@@ -405,7 +421,8 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
             }}
           >
             {/* Dialogue Messages Canvas */}
-            <div ref={dialogueRef} onScroll={event => { const element = event.currentTarget; followBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; }} className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+            <div className="relative flex-1 min-h-0">
+            <div ref={dialogueRef} onScroll={event => { const element = event.currentTarget; followBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; updateScrollEdges(); }} className="h-full overflow-y-auto px-6 py-6 space-y-6">
               {!hasMessages ? (
                 <div className="h-full flex flex-col items-center justify-center text-center my-auto pb-12">
                   <div className="w-14 h-14 rounded-xl bg-surface-1 border border-border-default flex items-center justify-center text-fg-muted mb-5">
@@ -435,29 +452,11 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   {activeSession.messages.map((msg, i) => {
                     const isUser = msg.role === 'user';
                     return (
-                      <div key={msg.id || i} className="space-y-2">
-                        <div className="flex items-center gap-2 text-xs">
-                          {isUser ? (
-                            <div className={`w-5 h-5 rounded-md ${lensMeta.avatarBg} text-fg-on-emphasis font-bold text-[9px] flex items-center justify-center shrink-0`}>
-                              {lensMeta.avatarText}
-                            </div>
-                          ) : (
-                            <div className="w-5 h-5 rounded-md bg-surface-2 text-fg-editor flex items-center justify-center shrink-0 p-0.5 border border-border-default">
-                              {mode === 'code' ? <OpenAIIcon size={13} /> : <ClaudeIcon size={13} />}
-                            </div>
-                          )}
-                          <span className="font-semibold text-fg-editor">{isUser ? 'You' : msg.author || 'Custos'}</span>
-                          {msg.runId && !['completed','failed','cancelled','interrupted'].includes(msg.runStatus || '') && <button type="button" onClick={() => void handleStopRun(msg.runId!)} className="rounded border border-border-default px-2 py-0.5 text-[10px] text-fg-editor hover:bg-surface-2">Stop</button>}
-                          {msg.badge && (
-                            <span className="px-1.5 py-0.2 rounded text-[10px] bg-surface-1 text-fg-muted border border-border-default">
-                              {msg.badge}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="text-[13px] leading-relaxed text-fg-editor space-y-3">
+                      <div key={msg.id || i} aria-label={isUser ? "User message" : "Agent message"} className={isUser ? "conversation-user-message space-y-2" : "space-y-2 min-w-0"}>
+                        <div className="conversation-markdown text-[13px] leading-relaxed text-fg-editor space-y-3 min-w-0 break-words [overflow-wrap:anywhere]">
                           <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
+                            remarkPlugins={[remarkGfm, remarkMath, remarkNormalizeChatMath]}
+                            rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, strict: false, maxExpand: 1000, maxSize: 20 }]]}
                             components={{
                               pre({ children }) {
                                 const child = React.Children.toArray(children)[0];
@@ -485,6 +484,10 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
               )}
             </div>
 
+              <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-top ${scrollEdges.top ? 'is-visible' : ''}`} />
+              <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-bottom ${scrollEdges.bottom ? 'is-visible' : ''}`} />
+            </div>
+
             {/* DOCKED CHAT COMPOSER (Natural Flex Child) */}
             <div className="shrink-0 p-4 bg-canvas">
               <div className="workbench-composer max-w-2xl mx-auto p-3 transition group">
@@ -497,7 +500,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-fg-editor placeholder-fg-subtle text-[13px] resize-none leading-relaxed"
                 />
 
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-border-muted">
+                <div className="flex items-center justify-between mt-2 pt-2">
                   <div className="flex items-center gap-2 text-fg-muted">
                     <button
                       onClick={() => openResources(false)}
@@ -514,15 +517,19 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={handleSend}
-                      disabled={!inputText.trim() || Boolean(liveMessage)}
-                      className={`p-1.5 rounded-lg transition ${
-                        inputText.trim()
-                          ? 'workbench-primary-action'
-                          : 'text-fg-muted bg-surface-2'
+                      onClick={() => liveMessage?.runId ? void handleStopRun(liveMessage.runId) : handleSend()}
+                      disabled={!liveMessage && !inputText.trim()}
+                      aria-label={liveMessage ? 'Stop response' : 'Send message'}
+                      title={liveMessage ? 'Stop response' : 'Send message'}
+                      className={`p-1.5 rounded-lg bg-transparent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed ${
+                        liveMessage || inputText.trim()
+                          ? 'workbench-accent'
+                          : 'text-fg-muted'
                       }`}
                     >
-                      <Send className="w-4 h-4" />
+                      {liveMessage
+                        ? <StopIcon className="w-4 h-4" fill="currentColor" aria-hidden="true" />
+                        : <Send className="w-4 h-4" fill={inputText.trim() ? 'currentColor' : 'none'} aria-hidden="true" />}
                     </button>
                   </div>
                 </div>

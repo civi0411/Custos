@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   CornerDownLeft,
@@ -185,7 +186,7 @@ export const TerminalWorkbenchPane: React.FC = () => {
             <span className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
               Workspace:
             </span>
-            <select
+            <NativeSelect
               value={activeWorkspaceId}
               onChange={(e) => setActiveWorkspaceId(e.target.value)}
               className="rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-2 py-1 text-xs font-medium text-[var(--color-fg-default)] outline-none hover:bg-[var(--color-surface-3)]"
@@ -195,7 +196,7 @@ export const TerminalWorkbenchPane: React.FC = () => {
                   {ws.name} ({ws.kind.type === 'git' ? 'git' : 'folder'})
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           {activeWs && (

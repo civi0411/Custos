@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import { ProviderBrandIcon } from '@/components/common/AgentIcons';
 import React, { useEffect, useState } from 'react';
 import {
@@ -181,15 +182,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 <SettingRow title="Interface scale" description="Saved locally for this device.">
                   <div className="flex items-center gap-2">
-                    <input type="range" min="75" max="150" step="5" value={uiScale} onChange={(event) => handleSetUiScale(Number(event.target.value))} />
+                    <input aria-label="Interface scale" style={{ '--range-progress': `${(uiScale - 70) / 90 * 100}%` } as React.CSSProperties} type="range" min="70" max="160" step="10" value={uiScale} onChange={(event) => handleSetUiScale(Number(event.target.value))} />
                     <span className="w-10 text-right font-mono text-[11px]">{uiScale}%</span>
                   </div>
                 </SettingRow>
                 <SettingRow title="Density" description="Changes spacing while preserving the same information architecture.">
-                  <select value={appearance.density} onChange={(event) => updateAppearance({ ...appearance, density: event.target.value as AppearancePreferences['density'] })}>
+                  <NativeSelect value={appearance.density} onChange={(event) => updateAppearance({ ...appearance, density: event.target.value as AppearancePreferences['density'] })}>
                     <option value="comfortable">Comfortable</option>
                     <option value="compact">Compact</option>
-                  </select>
+                  </NativeSelect>
                 </SettingRow>
                 <SettingRow title="Reduce motion" description="Disables nonessential transitions and attention animations.">
                   <input type="checkbox" checked={appearance.reduceMotion} onChange={(event) => updateAppearance({ ...appearance, reduceMotion: event.target.checked })} />

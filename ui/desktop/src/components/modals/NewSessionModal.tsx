@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useEffect, useState } from 'react';
 import { PlusCircle, X } from 'lucide-react';
 
@@ -64,7 +65,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
 
             <div className="space-y-1.5">
               <label className="font-medium text-fg-editor" htmlFor="task-pack">Workbench</label>
-              <select
+              <NativeSelect
                 id="task-pack"
                 value={pack}
                 onChange={(event) => setPack(event.target.value as typeof pack)}
@@ -73,7 +74,7 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
                 <option value="engineering">Coding</option>
                 <option value="research">Research</option>
                 <option value="assistant">Assistant</option>
-              </select>
+              </NativeSelect>
               <p className="text-[11px] text-fg-subtle">Write the first instruction in the conversation after creating the task.</p>
             </div>
           </div>

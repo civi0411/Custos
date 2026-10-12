@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useState } from 'react';
 import {
   Code,
@@ -152,7 +153,7 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
               {diffMode && (
                 <div className="flex items-center gap-1 text-[11px] font-mono text-[var(--color-fg-muted)] bg-[var(--color-surface-2)] px-2 py-0.5 rounded-lg border border-[var(--color-border-muted)]">
                   <span>vs</span>
-                  <select
+                  <NativeSelect
                     value={compareIdx}
                     onChange={(e) => setCompareIdx(Number(e.target.value))}
                     className="bg-transparent text-[var(--color-editor-fg)] font-semibold focus:outline-none cursor-pointer"
@@ -162,7 +163,7 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
                         {v.label}
                       </option>
                     ))}
-                  </select>
+                  </NativeSelect>
                 </div>
               )}
             </div>

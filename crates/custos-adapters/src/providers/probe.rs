@@ -577,6 +577,18 @@ mod ollama_connection_tests {
 /// Fetch account quota independently of observed inference usage.
 pub async fn probe_account_quota(service: &str, token: &str) -> Result<Value, DomainError> {
     let client = reqwest::Client::builder().timeout(Duration::from_secs(8)).build().map_err(|e| DomainError::Validation(e.to_string()))?;
+    if service == "antigravity" {
+        if let Ok(response) = client.post("https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuotaSummary")
+            .bearer_auth(token).header("User-Agent", "antigravity").json(&serde_json::json!({})).send().await {
+            if response.status().is_success() {
+                if let Ok(body) = response.json::<Value>().await {
+                    let parsed = parse_account_quota("antigravity-summary", &body);
+                    if parsed["status"] == "available" { return Ok(parsed); }
+                }
+            }
+        }
+        tracing::debug!("Antigravity grouped quota unavailable; trying existing quota fallback");
+    }
     // Quota reads must not onboard or create a project.
     if matches!(service, "antigravity" | "gemini") {
         let metadata = if service == "antigravity" { serde_json::json!({"ideType":"ANTIGRAVITY"}) } else { serde_json::json!({"ideType":"GEMINI_CLI","platform":"WINDOWS_AMD64","pluginType":"GEMINI"}) };
@@ -622,6 +634,17 @@ pub fn parse_account_quota(service: &str, body: &Value) -> Value {
         }
     };
     match service {
+        "antigravity-summary" => if let Some(groups) = body.get("groups").and_then(Value::as_array) {
+            for group in groups {
+                if let Some(buckets) = group.get("buckets").and_then(Value::as_array) {
+                    for bucket in buckets {
+                        let name = bucket.get("bucketId").and_then(Value::as_str).map(str::to_owned)
+                            .unwrap_or_else(|| format!("{} {}", group.get("displayName").and_then(Value::as_str).unwrap_or("Unknown group"), bucket.get("displayName").and_then(Value::as_str).unwrap_or("Unknown limit")));
+                        push(&name, bucket.get("remainingFraction").and_then(Value::as_f64).map(|v| (1.0-v)*100.0), bucket.get("resetTime").cloned().unwrap_or(Value::Null));
+                    }
+                }
+            }
+        },
         "openai" => for (name, key) in [("Session", "primary_window"), ("Weekly", "secondary_window")] {
             if let Some(window) = body.pointer(&format!("/rate_limit/{key}")) { push(name, window.get("used_percent").and_then(Value::as_f64), window.get("reset_at").cloned().unwrap_or(Value::Null)); }
         },
@@ -641,12 +664,56 @@ pub fn parse_account_quota(service: &str, body: &Value) -> Value {
         },
         _ => {}
     }
+    for window in &mut windows {
+        let name = window["name"].as_str().unwrap_or_default().to_lowercase();
+        let period = if name.contains("weekly") || name.starts_with("seven_day") || name.contains("7-day") { "weekly" }
+            else if name.contains("5h") || name.contains("five_hour") || name.contains("five hour") || name == "session" { "five_hour" } else { "other" };
+        window["window_kind"] = serde_json::json!(period);
+        if name.contains("gemini") { window["model_group"] = serde_json::json!("gemini"); }
+        else if name.contains("3p") || name.contains("claude") || name.contains("gpt") { window["model_group"] = serde_json::json!("claude_gpt"); }
+        if service == "openai" {
+            let key = if name == "session" { "primary_window" } else { "secondary_window" };
+            if let Some(seconds) = body.pointer(&format!("/rate_limit/{key}/limit_window_seconds")).and_then(Value::as_u64) {
+                window["window_kind"] = serde_json::json!(match seconds { 18000 => "five_hour", 604800 => "weekly", _ => "other" });
+            }
+        }
+    }
     serde_json::json!({"status": if windows.is_empty() {"unavailable"} else {"available"}, "source": if matches!(service, "antigravity" | "gemini") {"provider_catalog"} else {"provider"}, "windows": windows})
 }
 
 #[cfg(test)]
 mod quota_monitor_tests {
     use super::*;
+    #[test]
+    fn antigravity_summary_keeps_four_independent_limits() {
+        let parsed = parse_account_quota("antigravity-summary", &serde_json::json!({"groups":[
+            {"displayName":"Gemini Models","buckets":[
+                {"bucketId":"gemini-5h","remainingFraction":0.9,"resetTime":"five-hour-reset"},
+                {"bucketId":"gemini-weekly","remainingFraction":0.4,"resetTime":"weekly-reset"}]},
+            {"displayName":"Claude and GPT Models","buckets":[
+                {"bucketId":"3p-5h","remainingFraction":0.7},
+                {"bucketId":"3p-weekly","remainingFraction":0.2}]}]}));
+        assert_eq!(parsed["source"], "provider");
+        assert_eq!(parsed["windows"].as_array().map(Vec::len), Some(4));
+        assert_eq!(parsed["windows"][0]["model_group"], "gemini");
+        assert_eq!(parsed["windows"][1]["window_kind"], "weekly");
+        assert_eq!(parsed["windows"][2]["model_group"], "claude_gpt");
+        assert_eq!(parsed["windows"][2]["window_kind"], "five_hour");
+        assert_eq!(parsed["windows"][3]["used_percent"], 80.0);
+        assert!(parsed["windows"][3]["resets_at"].is_null());
+        let partial = parse_account_quota("antigravity-summary", &serde_json::json!({"groups":[{"buckets":[
+            {"bucketId":"gemini-5h","remainingFraction":0},
+            {"bucketId":"gemini-weekly"}]}]}));
+        assert_eq!(partial["windows"].as_array().map(Vec::len), Some(1));
+        assert_eq!(partial["windows"][0]["used_percent"], 100.0);
+    }
+
+    #[test]
+    fn non_standard_openai_window_is_not_relabeled_as_five_hours() {
+        let parsed = parse_account_quota("openai", &serde_json::json!({"rate_limit":{"primary_window":{
+            "used_percent":10,"limit_window_seconds":86400}}}));
+        assert_eq!(parsed["windows"][0]["window_kind"], "other");
+    }
     #[test]
     fn missing_quota_is_unknown_and_windows_remain_distinct() {
         let empty = parse_account_quota("openai", &serde_json::json!({"rate_limit":{}}));

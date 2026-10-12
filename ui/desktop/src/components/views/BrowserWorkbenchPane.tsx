@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Globe,
@@ -217,7 +218,7 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
         {/* Sessions Selector & New Session */}
         <div className="flex items-center gap-2">
           {sessions.length > 0 ? (
-            <select
+            <NativeSelect
               value={activeSessionId || ''}
               onChange={(e) => setActiveSessionId(e.target.value)}
               className="bg-zinc-900 border border-zinc-700 text-zinc-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-zinc-500"
@@ -227,7 +228,7 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
                   {s.name} ({s.tabs?.length ?? 0} tabs)
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           ) : (
             <span className="text-zinc-500 text-[11px]">No active sessions</span>
           )}

@@ -1,10 +1,10 @@
+import WorktreeIcon from '~icons/codicon/worktree';
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Search,
   Terminal,
   FileDiff,
   FolderTree,
-  GitBranch,
   Bot,
   ShieldCheck,
   BookOpen,
@@ -183,7 +183,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       category: 'worktrees',
       title: 'Manage Git Worktrees (OrCa Lifecycle)',
       subtitle: 'Switch branches, inspect modified files, merge or ship',
-      icon: GitBranch,
+      icon: WorktreeIcon,
       iconColor: 'text-[#58a6ff]',
       action: () => { onOpenWorktrees(); onClose(); }
     },
