@@ -35,6 +35,9 @@ Workspace có nhiều Task; Task liên kết nhiều session; một session có 
 
 **Session theo từng lens:** Copilot, Coding và Research có danh sách chat và lựa chọn gần nhất riêng. Bấm icon lens khôi phục chat cuối của lens đích; nếu chưa có thì là trạng thái `No conversation`, không tự đem chat từ lens vừa rời đi. `Open full chat in…` gắn cùng session vào danh sách đích và hiển thị mọi turn còn được giữ trong canonical journal. `Continue as linked chat` tạo session mới có lineage và bản hiển thị timeline nguồn; model-visible context vẫn phải qua compiler, privacy và budget với receipt. Không gọi lịch sử hiển thị đầy đủ là inference context đầy đủ. Khi tiếp tục từ Research sang Coding, notebook code/dataset/figure là nguồn và artifact để kiểm, không phải patch repo được áp dụng tự động.
 
+Sidebar của mỗi lens còn có tìm kiếm trên tất cả session thuộc project. Chọn session ngoài lens gọi `OpenLens` rồi chọn cùng session ID trong lens hiện tại; không nhân bản journal và không mặc định chạy agent. Nút `+` mở resource picker nổi trên workspace, giữ tab đang xem cho tới khi người dùng chọn một resource. Danh mục Browser/Remote Fleet hiện phần metadata có thật và trạng thái transport chưa sẵn sàng theo capability registry; không dùng static catalog để tự quảng bá execution.
+Remote Fleet nằm trong resource chung để Coding và Research cùng xem inventory host; daemon phải quảng bá `hosts.ping` hoặc `exec` trước khi UI cho phép probe/chạy lệnh. Browser khởi đầu bằng tab trống, không giả trang mẫu hoặc nhãn sandbox khi chưa có transport và isolation receipt.
+
 ## 3. Luồng và nơi ra quyết định
 
 ```mermaid

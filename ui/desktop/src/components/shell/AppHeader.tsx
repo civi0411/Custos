@@ -25,7 +25,8 @@ import {
   BookOpen,
   NotebookTabs,
   Layers,
-  Server
+  Server,
+  LayoutGrid
 } from 'lucide-react';
 import type { OrcaTabId, ResourceTabsState } from '@/components/views/OrcaTabbedContainer';
 import { formatKeyCombo } from '@/lib/utils';
@@ -116,7 +117,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const getTabIcon = (id: OrcaTabId, isActive: boolean) => {
     const cls = `w-3.5 h-3.5 ${isActive ? 'workbench-accent' : 'text-fg-muted group-hover:text-fg-editor transition-colors'}`;
     switch (id) {
-      case 'tools': return <Globe className={cls} />;
+      case 'tools': return <LayoutGrid className={cls} />;
       case 'changes': return <FileDiff className={cls} />;
       case 'terminal': return <TerminalIcon className={cls} />;
       case 'files': return <FolderTree className={cls} />;

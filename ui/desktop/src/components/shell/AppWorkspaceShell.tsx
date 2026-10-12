@@ -47,9 +47,11 @@ interface AppWorkspaceShellProps {
   projectNames: string[];
   onSelectProject: (name: string) => void;
   sessions: Session[];
+  allSessions: Session[];
   activeSessionId: string;
   onSelectSession: (id: string) => void;
   onOpenFullChatIn?: (mode: AppWorkspaceMode) => void;
+  onOpenSessionHere?: (id: string) => void;
   onNewSession: () => void;
   onSendMessage: (text: string) => void;
   onClearHistory: () => void;
@@ -76,9 +78,11 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   projectNames,
   onSelectProject,
   sessions,
+  allSessions,
   activeSessionId,
   onSelectSession,
   onOpenFullChatIn,
+  onOpenSessionHere,
   onNewSession,
   onSendMessage,
   onClearHistory: _onClearHistory,
@@ -273,7 +277,16 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   };
 
   const openTab = (id: OrcaTabId, title: string, url: string) => {
-    resourceTabs.setTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, title, url }]));
+    resourceTabs.setTabs((prev) => {
+      const hasTarget = prev.some((t) => t.id === id);
+      if (hasTarget) {
+        return prev.filter((t) => t.id !== 'tools' || t.id === id);
+      }
+      if (resourceTabs.activeTabId === 'tools') {
+        return prev.map((t) => (t.id === 'tools' ? { id, title, url } : t));
+      }
+      return [...prev, { id, title, url }];
+    });
     resourceTabs.setActiveTabId(id);
     openResources(false);
   };
@@ -288,20 +301,13 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   }, [jobs]);
 
   const handleOpenTab = (id: OrcaTabId) => {
-    const existing = resourceTabs.tabs.find((t) => t.id === id);
-    if (existing) {
-      resourceTabs.setActiveTabId(id);
-    } else {
-      openTab(id, id.charAt(0).toUpperCase() + id.slice(1), `custos://resource/${id}`);
-    }
-    openResources(false);
+    openTab(id, id.charAt(0).toUpperCase() + id.slice(1), `custos://resource/${id}`);
   };
 
   const handleCloseTab = (e: React.MouseEvent, tabId: OrcaTabId) => {
     e.stopPropagation();
     if (resourceTabs.tabs.length <= 1) {
-      resourceTabs.setTabs([{ id: 'tools', title: 'Resources', url: 'custos://resources' }]);
-      resourceTabs.setActiveTabId('tools');
+      onToggleWebTab();
       return;
     }
     const nextTabs = resourceTabs.tabs.filter((t) => t.id !== tabId);
@@ -312,7 +318,8 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   };
 
   const handleAddNewTab = () => {
-    resourceTabs.setTabs((prev) => (prev.some((t) => t.id === 'tools') ? prev : [...prev, { id: 'tools', title: 'Resources', url: 'custos://resources' }]));
+    openResources(false);
+    resourceTabs.setTabs((prev) => (prev.some((t) => t.id === 'tools') ? prev : [...prev, { id: 'tools', title: 'New Tab', url: 'custos://resources' }]));
     resourceTabs.setActiveTabId('tools');
   };
 
@@ -473,9 +480,11 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           projectNames={projectNames}
           onSelectProject={onSelectProject}
           sessions={sessions}
+          allSessions={allSessions}
           activeSessionId={activeSessionId}
           onSelectSession={onSelectSession}
           onOpenFullChatIn={onOpenFullChatIn}
+          onOpenSessionHere={onOpenSessionHere}
           onDeleteSession={onDeleteConversation}
           newTaskLabel={lensMeta.taskLabel}
           newTaskIcon={Plus}
@@ -611,9 +620,9 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                 <div className="flex items-center justify-between mt-2 pt-2">
                   <div className="flex items-center gap-2 text-fg-muted">
                     <button
-                      onClick={() => openResources(false)}
+                      onClick={handleAddNewTab}
                       className="p-1 hover:text-fg-editor transition rounded"
-                      title="Open Resources"
+                      title="Choose a resource"
                     >
                       <Plus className="w-4 h-4" />
                     </button>

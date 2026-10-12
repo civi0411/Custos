@@ -59,7 +59,7 @@ export function StudioPage() {
   const [tabStates, setTabStates] = useState<Record<string, { tabs: OrcaTab[]; activeTabId: OrcaTabId }>>({});
   const tabScope = `${currentProject}:${activeSessionId || 'no-session'}`;
   const currentTabState = tabStates[tabScope] ?? {
-    tabs: [{ id: 'tools' as const, title: 'Resources', url: 'custos://resources' }],
+    tabs: [{ id: 'tools' as const, title: 'New Tab', url: 'custos://resources' }],
     activeTabId: 'tools' as const,
   };
   const setTabs = (update: SetStateAction<OrcaTab[]>) => setTabStates((previous) => {
@@ -74,7 +74,7 @@ export function StudioPage() {
   });
   const resourceTabs: ResourceTabsState = { ...currentTabState, setTabs, setActiveTabId };
   const openResources = (expanded: boolean) => {
-    setTabs((previous) => previous.some((tab) => tab.id === 'tools') ? previous : [...previous, { id: 'tools', title: 'Resources', url: 'custos://resources' }]);
+    setTabs((previous) => previous.some((tab) => tab.id === 'tools') ? previous : [...previous, { id: 'tools', title: 'New Tab', url: 'custos://resources' }]);
     setActiveTabId('tools');
     setIsWebTabExpanded(expanded);
     setIsWebTabOpen(true);
@@ -108,8 +108,8 @@ export function StudioPage() {
       : candidates[0]?.id || '');
   };
 
-  const openFullChatIn = async (targetMode: AppWorkspaceMode) => {
-    const source = currentSessions.find((session) => session.id === activeSessionId);
+  const openFullChatIn = async (targetMode: AppWorkspaceMode, sourceId = activeSessionId) => {
+    const source = currentSessions.find((session) => session.id === sourceId);
     if (!source) return;
     try {
       await daemonClient.openSessionInLens(source.sessionId || source.id,
@@ -123,6 +123,7 @@ export function StudioPage() {
       [source.id]: Array.from(new Set([...(previous[source.id] || []), targetMode])),
     }));
     setLastSessionByLens((previous) => ({ ...previous, [`${currentProject}:${targetMode}`]: source.id }));
+    setActiveSessionId(source.id);
     setMode(targetMode);
   };
 
@@ -194,9 +195,11 @@ export function StudioPage() {
           setActiveSessionId(available.find((session) => session.id === remembered)?.id || available[0]?.id || '');
         }}
         sessions={sessionsForMode(mode)}
+        allSessions={currentSessions}
         activeSessionId={activeSessionId}
         onSelectSession={selectSession}
         onOpenFullChatIn={openFullChatIn}
+        onOpenSessionHere={(id) => void openFullChatIn(mode, id)}
         onNewSession={() => setIsNewSessionOpen(true)}
         onSendMessage={(message) => {
           if (!activeSessionId || !sessionsForMode(mode).some((session) => session.id === activeSessionId)) {
