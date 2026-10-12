@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, type SetStateAction } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { type AppWorkspaceMode, AppWorkspaceShell } from '@/components/shell';
-import { type OrcaTab, type OrcaTabId, type ResourceTabsState } from '@/components/views/OrcaTabbedContainer';
+import { type OrcaTab, type ResourceTabsState } from '@/components/views/OrcaTabbedContainer';
 import type { Session } from '@/types';
 import { daemonClient } from '@/api/daemon_client';
 
@@ -56,26 +56,44 @@ export function StudioPage() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isWebTabOpen, setIsWebTabOpen] = useState(false);
   const [isWebTabExpanded, setIsWebTabExpanded] = useState(false);
-  const [tabStates, setTabStates] = useState<Record<string, { tabs: OrcaTab[]; activeTabId: OrcaTabId }>>({});
-  const tabScope = `${currentProject}:${activeSessionId || 'no-session'}`;
-  const currentTabState = tabStates[tabScope] ?? {
-    tabs: [{ id: 'tools' as const, title: 'New Tab', url: 'custos://resources' }],
-    activeTabId: 'tools' as const,
+  const [tabStates, setTabStates] = useState<Record<string, { tabs: OrcaTab[]; activeTabId: string }>>({});
+  const tabScope = `${currentProject}:${activeSessionId || 'no-session'}:${mode}`;
+
+  const getDefaultTabForMode = (m: AppWorkspaceMode): { tabs: OrcaTab[]; activeTabId: string } => {
+    if (m === 'code') {
+      return {
+        tabs: [{ id: 'files', type: 'files', title: 'Files', url: 'custos://resource/files' }],
+        activeTabId: 'files',
+      };
+    }
+    if (m === 'research') {
+      return {
+        tabs: [{ id: 'literature', type: 'literature', title: 'Sources', url: 'custos://resource/literature' }],
+        activeTabId: 'literature',
+      };
+    }
+    return {
+      tabs: [{ id: 'notes', type: 'notes', title: 'Notes', url: 'custos://resource/notes' }],
+      activeTabId: 'notes',
+    };
   };
+
+  const currentTabState = tabStates[tabScope] ?? getDefaultTabForMode(mode);
   const setTabs = (update: SetStateAction<OrcaTab[]>) => setTabStates((previous) => {
     const current = previous[tabScope] ?? currentTabState;
     const tabs = typeof update === 'function' ? update(current.tabs) : update;
     return { ...previous, [tabScope]: { ...current, tabs } };
   });
-  const setActiveTabId = (update: SetStateAction<OrcaTabId>) => setTabStates((previous) => {
+  const setActiveTabId = (update: SetStateAction<string>) => setTabStates((previous) => {
     const current = previous[tabScope] ?? currentTabState;
     const activeTabId = typeof update === 'function' ? update(current.activeTabId) : update;
     return { ...previous, [tabScope]: { ...current, activeTabId } };
   });
   const resourceTabs: ResourceTabsState = { ...currentTabState, setTabs, setActiveTabId };
   const openResources = (expanded: boolean) => {
-    setTabs((previous) => previous.some((tab) => tab.id === 'tools') ? previous : [...previous, { id: 'tools', title: 'New Tab', url: 'custos://resources' }]);
-    setActiveTabId('tools');
+    const newTabId = `tools-${Date.now()}`;
+    setTabs((previous) => [...previous, { id: newTabId, type: 'tools', title: 'New Tab', url: 'custos://resources' }]);
+    setActiveTabId(newTabId);
     setIsWebTabExpanded(expanded);
     setIsWebTabOpen(true);
   };

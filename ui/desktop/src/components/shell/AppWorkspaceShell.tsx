@@ -16,7 +16,7 @@ import {
   Activity
 } from 'lucide-react';
 import { Session } from '@/types';
-import { OrcaTabbedContainer, type ResourceTabsState, type OrcaTabId } from '@/components/views/OrcaTabbedContainer';
+import { OrcaTabbedContainer, type ResourceTabsState, type OrcaTabId, type OrcaTab, getTabType } from '@/components/views/OrcaTabbedContainer';
 import { WorkspaceSidebar } from '@/components/shell/WorkspaceSidebar';
 import { AppHeader, type AppWorkspaceMode } from '@/components/shell/AppHeader';
 import { CommandPalette } from '@/components/shell/CommandPalette';
@@ -99,7 +99,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   isWebTabExpanded,
   onToggleWebTab,
   onToggleExpandWebTab,
-  openResources
+  openResources: _openResources
 }) => {
   const { openSettings, selectedModel, handleSelectModel, handleStopRun } = useAppContext();
   const [inputText, setInputText] = useState('');
@@ -277,34 +277,42 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   };
 
   const openTab = (id: OrcaTabId, title: string, url: string) => {
-    resourceTabs.setTabs((prev) => {
-      const hasTarget = prev.some((t) => t.id === id);
-      if (hasTarget) {
-        return prev.filter((t) => t.id !== 'tools' || t.id === id);
+    if (!isWebTabOpen) {
+      onToggleWebTab();
+    }
+    const activeTab = resourceTabs.tabs.find((t) => t.id === resourceTabs.activeTabId);
+    const newTabId = `${id}-${Date.now()}`;
+    const newTab: OrcaTab = { id: newTabId, type: id, title, url };
+
+    if (activeTab && getTabType(activeTab) === 'tools') {
+      resourceTabs.setTabs((prev) =>
+        prev.map((t) => (t.id === activeTab.id ? newTab : t))
+      );
+    } else {
+      const existing = resourceTabs.tabs.find((t) => getTabType(t) === id);
+      if (existing) {
+        resourceTabs.setActiveTabId(existing.id);
+        return;
       }
-      if (resourceTabs.activeTabId === 'tools') {
-        return prev.map((t) => (t.id === 'tools' ? { id, title, url } : t));
-      }
-      return [...prev, { id, title, url }];
-    });
-    resourceTabs.setActiveTabId(id);
-    openResources(false);
+      resourceTabs.setTabs((prev) => [...prev, newTab]);
+    }
+    resourceTabs.setActiveTabId(newTabId);
   };
   const runningJobsByTab = useMemo(() => {
-    const counts: Partial<Record<OrcaTabId, number>> = {};
+    const counts: Record<string, number> = {};
     jobs.forEach((j) => {
       if ((j.status === 'running' || j.status === 'queued') && j.sourceTabId) {
         counts[j.sourceTabId] = (counts[j.sourceTabId] || 0) + 1;
       }
     });
-    return counts as Record<OrcaTabId, number>;
+    return counts;
   }, [jobs]);
 
   const handleOpenTab = (id: OrcaTabId) => {
     openTab(id, id.charAt(0).toUpperCase() + id.slice(1), `custos://resource/${id}`);
   };
 
-  const handleCloseTab = (e: React.MouseEvent, tabId: OrcaTabId) => {
+  const handleCloseTab = (e: React.MouseEvent, tabId: string) => {
     e.stopPropagation();
     if (resourceTabs.tabs.length <= 1) {
       onToggleWebTab();
@@ -313,14 +321,25 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     const nextTabs = resourceTabs.tabs.filter((t) => t.id !== tabId);
     resourceTabs.setTabs(nextTabs);
     if (resourceTabs.activeTabId === tabId) {
-      resourceTabs.setActiveTabId(nextTabs[nextTabs.length - 1].id);
+      const closedIndex = resourceTabs.tabs.findIndex((t) => t.id === tabId);
+      const nextActive = nextTabs[Math.max(0, closedIndex - 1)] || nextTabs[0];
+      resourceTabs.setActiveTabId(nextActive.id);
     }
   };
 
   const handleAddNewTab = () => {
-    openResources(false);
-    resourceTabs.setTabs((prev) => (prev.some((t) => t.id === 'tools') ? prev : [...prev, { id: 'tools', title: 'New Tab', url: 'custos://resources' }]));
-    resourceTabs.setActiveTabId('tools');
+    if (!isWebTabOpen) {
+      onToggleWebTab();
+    }
+    const newTabInstanceId = `tools-${Date.now()}`;
+    const newTab: OrcaTab = {
+      id: newTabInstanceId,
+      type: 'tools',
+      title: 'New Tab',
+      url: 'custos://resources'
+    };
+    resourceTabs.setTabs((prev) => [...prev, newTab]);
+    resourceTabs.setActiveTabId(newTabInstanceId);
   };
 
   // Lens metadata & personality

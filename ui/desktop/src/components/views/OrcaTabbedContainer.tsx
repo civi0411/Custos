@@ -64,16 +64,23 @@ export type OrcaTabId =
   | 'synthesis';
 
 export interface OrcaTab {
-  id: OrcaTabId;
+  id: string;
+  type?: OrcaTabId;
   title: string;
   url: string;
 }
 
+export function getTabType(tab: OrcaTab | { id: string; type?: OrcaTabId }): OrcaTabId {
+  if (tab.type) return tab.type;
+  const base = tab.id.split('-')[0] as OrcaTabId;
+  return base;
+}
+
 export interface ResourceTabsState {
   tabs: OrcaTab[];
-  activeTabId: OrcaTabId;
+  activeTabId: string;
   setTabs: React.Dispatch<React.SetStateAction<OrcaTab[]>>;
-  setActiveTabId: React.Dispatch<React.SetStateAction<OrcaTabId>>;
+  setActiveTabId: React.Dispatch<React.SetStateAction<string>>;
 }
 
 interface OrcaTabbedContainerProps {
@@ -245,35 +252,103 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     });
   }, [capabilities, capabilitiesLoaded, fetchFailed]);
 
-  const activeId = resourceTabs.activeTabId;
-  const activeResource = resources.find((resource) => resource.id === activeId);
+  const activeTab = resourceTabs.tabs.find((t) => t.id === resourceTabs.activeTabId);
+  const activeType: OrcaTabId = activeTab ? getTabType(activeTab) : (resourceTabs.activeTabId.split('-')[0] as OrcaTabId);
+  const activeResource = resources.find((resource) => resource.id === activeType);
 
   const [searchQuery, setSearchQuery] = React.useState('');
-  const [selectedGroup, setSelectedGroup] = React.useState<'all' | 'Engineering' | 'Research' | 'Shared'>('all');
+  const [selectedGroup, setSelectedGroup] = React.useState<string>('All');
+
+  React.useEffect(() => {
+    setSelectedGroup('All');
+  }, [mode]);
 
   const openResource = (resource: ResourceDefinition) => {
+    const newTabId = `${resource.id}-${Date.now()}`;
+    const newTab: OrcaTab = {
+      id: newTabId,
+      type: resource.id,
+      title: resource.title,
+      url: urlFor(resource.id),
+    };
     resourceTabs.setTabs((previous) => {
-      const alreadyHasTarget = previous.some((tab) => tab.id === resource.id);
-      if (alreadyHasTarget) {
-        return previous.filter((tab) => tab.id !== 'tools' || tab.id === resource.id);
+      const activeIndex = previous.findIndex((t) => t.id === resourceTabs.activeTabId);
+      if (activeIndex !== -1 && getTabType(previous[activeIndex]) === 'tools') {
+        const next = [...previous];
+        next[activeIndex] = newTab;
+        return next;
       }
-      return previous.map((tab) =>
-        tab.id === 'tools'
-          ? { id: resource.id, title: resource.title, url: urlFor(resource.id) }
-          : tab
-      );
+      return [...previous, newTab];
     });
-    resourceTabs.setActiveTabId(resource.id);
+    resourceTabs.setActiveTabId(newTabId);
   };
 
-  const visibleResources = resources.filter((resource) => {
-    if (mode === 'research') return resource.group !== 'Engineering';
-    if (mode === 'code') return resource.group !== 'Research';
-    return resource.group === 'Shared' || resource.id === 'evidence' || resource.id === 'literature';
-  });
+  // Scope visible resources strictly to current workbench mode
+  const visibleResources = React.useMemo(() => {
+    if (mode === 'code') {
+      return resources.filter(
+        (r) =>
+          r.group === 'Engineering' ||
+          r.id === 'fleet' ||
+          r.id === 'browser' ||
+          r.id === 'notes'
+      );
+    }
+    if (mode === 'research') {
+      return resources.filter(
+        (r) =>
+          r.group === 'Research' ||
+          r.id === 'fleet' ||
+          r.id === 'browser' ||
+          r.id === 'notes'
+      );
+    }
+    // Copilot: Assistant tools and shared utilities
+    return resources.filter(
+      (r) =>
+        r.id === 'notes' ||
+        r.id === 'browser' ||
+        r.id === 'fleet' ||
+        r.id === 'evidence' ||
+        r.id === 'artifacts'
+    );
+  }, [resources, mode]);
+
+  const categoryPills = React.useMemo(() => {
+    if (mode === 'code') return ['All', 'Engineering', 'Shared'] as const;
+    if (mode === 'research') return ['All', 'Research', 'Shared'] as const;
+    return ['All', 'Shared'] as const;
+  }, [mode]);
+
+  const headerMeta = React.useMemo(() => {
+    if (mode === 'code') {
+      return {
+        kicker: 'Coding Workbench',
+        title: 'Engineering Tools & Resources',
+        description: 'Repository inspection, execution surfaces, and developer tools for this session.',
+      };
+    }
+    if (mode === 'research') {
+      return {
+        kicker: 'Research Workbench',
+        title: 'Research Tools & Resources',
+        description: 'Literature, hypotheses, notebook kernels, and synthesis tools for this session.',
+      };
+    }
+    return {
+      kicker: 'Copilot Workbench',
+      title: 'Copilot Tools & Resources',
+      description: 'Assistant tools, scratchpads, and inspection surfaces for this session.',
+    };
+  }, [mode]);
 
   const filteredResources = visibleResources.filter((resource) => {
-    const matchesGroup = selectedGroup === 'all' || resource.group === selectedGroup;
+    const isShared = resource.group === 'Shared' || resource.id === 'fleet' || resource.id === 'browser' || resource.id === 'notes' || resource.id === 'evidence' || resource.id === 'artifacts';
+    const matchesGroup =
+      selectedGroup === 'All' ||
+      (selectedGroup === 'Engineering' && resource.group === 'Engineering') ||
+      (selectedGroup === 'Research' && resource.group === 'Research') ||
+      (selectedGroup === 'Shared' && isShared);
     const q = searchQuery.trim().toLowerCase();
     const matchesQuery =
       !q ||
@@ -283,24 +358,24 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     return matchesGroup && matchesQuery;
   });
 
-  if (activeId === 'tools') {
+  if (activeType === 'tools') {
     return (
       <div className="h-full overflow-y-auto bg-[var(--color-canvas)] px-6 py-8 text-[var(--color-editor-fg)]">
         <div className="mx-auto max-w-4xl">
           {/* Hero Header */}
           <div className="mb-6">
             <div className="flex items-center gap-2 mb-2">
-              <span className="workbench-kicker">{mode} workbench</span>
+              <span className="workbench-kicker">{headerMeta.kicker}</span>
               <span className="text-[10px] text-fg-subtle">•</span>
               <span className="text-[11px] text-fg-subtle flex items-center gap-1">
                 <Compass className="w-3.5 h-3.5 text-accent" /> New Tab
               </span>
             </div>
             <h1 className="text-xl font-semibold tracking-[-0.02em] text-fg-editor">
-              Resource Catalog & Speed Dial
+              {headerMeta.title}
             </h1>
             <p className="mt-1 text-xs leading-5 text-[var(--color-fg-muted)]">
-              Choose an execution surface or inspection resource to open in this tab. Tabs preserve the active conversation session.
+              {headerMeta.description}
             </p>
 
             {/* Quick Search & Filters */}
@@ -311,7 +386,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filter resources by name, description, or capability (e.g. terminal, files, git, claims)..."
+                  placeholder="Filter resources by name, description, or capability..."
                   className="w-full bg-[var(--color-surface-1)] border border-[var(--color-border-default)] rounded-xl pl-10 pr-4 py-2 text-xs text-fg-editor placeholder:text-fg-subtle focus:outline-none focus:border-border-default focus:ring-1 focus:ring-border-default/20 transition"
                   autoFocus
                 />
@@ -319,7 +394,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
 
               {/* Category Pills */}
               <div className="flex items-center gap-1 bg-[var(--color-surface-1)] p-1 rounded-xl border border-[var(--color-border-muted)] shrink-0 text-xs">
-                {(['all', 'Engineering', 'Research', 'Shared'] as const).map((group) => (
+                {categoryPills.map((group) => (
                   <button
                     key={group}
                     type="button"
@@ -330,7 +405,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
                         : 'text-fg-muted hover:text-fg-editor hover:bg-surface-2/50'
                     }`}
                   >
-                    {group === 'all' ? 'All' : group}
+                    {group}
                   </button>
                 ))}
               </div>
@@ -440,7 +515,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     </div>
   );
 
-  if (activeId === 'browser') {
+  if (activeType === 'browser') {
     return frameResource(
       <BrowserWorkbenchPane
         onShowToast={onShowToast}
@@ -450,11 +525,11 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     );
   }
 
-  if (activeId === 'emulator') {
+  if (activeType === 'emulator') {
     return frameResource(<MobileSimulatorWorkbenchPane onShowToast={onShowToast} />);
   }
 
-  if (activeId === 'fleet') {
+  if (activeType === 'fleet') {
     return frameResource(
       <RemoteFleetWorkbenchPane
         onShowToast={onShowToast}
@@ -464,11 +539,11 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     );
   }
 
-  if (activeId === 'literature') {
+  if (activeType === 'literature') {
     return frameResource(<LiteraturePane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />);
   }
 
-  if (activeId === 'claims') {
+  if (activeType === 'claims') {
     return frameResource(
       <ClaimsMatrixPane
         onHandoffToCoding={(claims) => onHandoffToCoding?.(claims)}
@@ -477,39 +552,39 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     );
   }
 
-  if (activeId === 'knowledge') {
+  if (activeType === 'knowledge') {
     return frameResource(<ResearchMethodsPane />);
   }
 
-  if (activeId === 'experiments') {
+  if (activeType === 'experiments') {
     return frameResource(<NotebookWorkspacePane sessionId={session?.id} onAskAgent={onAskAgent} onShowToast={onShowToast} onOpenTab={onOpenTab} />);
   }
 
-  if (activeId === 'worktrees') {
+  if (activeType === 'worktrees') {
     return frameResource(<ExecutionWorkspacesPane />);
   }
 
-  if (activeId === 'terminal') {
+  if (activeType === 'terminal') {
     return frameResource(<TerminalWorkbenchPane />);
   }
 
-  if (activeId === 'files') {
+  if (activeType === 'files') {
     return frameResource(<FilesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />);
   }
 
-  if (activeId === 'changes') {
+  if (activeType === 'changes') {
     return frameResource(<ChangesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />);
   }
 
-  if (activeId === 'kanban') {
+  if (activeType === 'kanban') {
     return frameResource(<AgentsWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />);
   }
 
-  if (activeId === 'evidence') {
+  if (activeType === 'evidence') {
     return frameResource(<EvidenceWorkbenchPane onShowToast={onShowToast} />);
   }
 
-  if (activeId === 'runs') {
+  if (activeType === 'runs') {
     return frameResource(
       <RunsLedgerPane
         sessionId={session?.id}
@@ -519,15 +594,15 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     );
   }
 
-  if (activeId === 'synthesis') {
+  if (activeType === 'synthesis') {
     return frameResource(<ResearchSynthesisPane onShowToast={onShowToast} />);
   }
 
-  if (activeId === 'artifacts') {
+  if (activeType === 'artifacts') {
     return frameResource(<ArtifactsWorkbenchPane onShowToast={onShowToast} />);
   }
 
-  if (activeId === 'notes') {
+  if (activeType === 'notes') {
     return frameResource(<NotesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} />);
   }
 
