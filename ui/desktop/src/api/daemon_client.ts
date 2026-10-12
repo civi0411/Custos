@@ -1073,8 +1073,8 @@ export class DaemonClient {
     return this.request<RemoteHostNode>('v1.fleet.hosts.register', params);
   }
 
-  async pingRemoteHost(hostId: string): Promise<{ host_id: string; status: string; ping_ms?: number }> {
-    return this.request<{ host_id: string; status: string; ping_ms?: number }>('v1.fleet.hosts.ping', {
+  async pingRemoteHost(hostId: string): Promise<{ host_id: string; status: string; ping_ms?: number; error?: string }> {
+    return this.request<{ host_id: string; status: string; ping_ms?: number; error?: string }>('v1.fleet.hosts.ping', {
       host_id: hostId,
     });
   }

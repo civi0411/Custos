@@ -23,6 +23,7 @@ import {
 import { BrowserWorkbenchPane } from '@/components/views/BrowserWorkbenchPane';
 import { MobileSimulatorWorkbenchPane } from '@/components/views/MobileSimulatorWorkbenchPane';
 import { RemoteFleetWorkbenchPane } from '@/components/views/RemoteFleetWorkbenchPane';
+import { WorkflowDagWorkbenchPane } from '@/components/views/WorkflowDagWorkbenchPane';
 import { Session } from '@/types';
 import { daemonClient } from '@/api/daemon_client';
 import type { CapabilityDescriptor } from '@/types/domain';
@@ -119,7 +120,7 @@ export const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'worktrees', title: 'Workspaces', description: 'Switch between isolated git worktrees and project folders.', icon: WorktreeIcon, group: 'Engineering', status: 'available' },
   { id: 'kanban', title: 'Agents', description: 'Monitor worker runs and steer native coding harnesses.', icon: Bot, group: 'Engineering', status: 'available', supportedOperations: ['list_harnesses', 'get_harness', 'run_native', 'dispatch', 'cancel', 'steer'] },
   { id: 'evidence', title: 'Evidence', description: 'Review verification criteria, checks, and audit receipts.', icon: ShieldCheck, group: 'Engineering', status: 'available', supportedOperations: ['reviews.list', 'reviews.record', 'reviews.get', 'reviews.mark_stale'] },
-  { id: 'dag', title: 'Workflow', description: 'Execution graph, dependencies, budgets and run state.', icon: Activity, group: 'Engineering', status: 'available' },
+  { id: 'dag', title: 'Workflow', description: 'Execution graph, dependencies, budgets and run state.', icon: Activity, group: 'Engineering', status: 'available', supportedOperations: ['session_runs', 'start_run', 'cancel_run', 'live_run'] },
   { id: 'literature', title: 'Sources', description: 'Read papers, explore research literature, and pin citation excerpts.', icon: BookOpen, group: 'Research', status: 'available' },
   { id: 'claims', title: 'Claims', description: 'Track scientific claims, verified facts, and evidence.', icon: ShieldCheck, group: 'Research', status: 'available' },
   { id: 'knowledge', title: 'Methods', description: 'Browse and execute reusable reproduction recipes.', icon: FlaskConical, group: 'Research', status: 'available' },
@@ -128,8 +129,8 @@ export const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'synthesis', title: 'Synthesis & Handoff', description: 'Synthesize research claims and recipes into coding tasks.', icon: Layers, group: 'Research', status: 'available', supportedOperations: ['synthesis.proposals.list', 'synthesis.proposals.get', 'synthesis.proposals.save', 'synthesis.handoff.execute'] },
   { id: 'artifacts', title: 'Artifacts', description: 'View generated documents, reports, diagrams, and exported files.', icon: FileCode, group: 'Research', status: 'available', supportedOperations: ['list', 'get', 'record_lineage', 'lineage.list', 'lineage.graph', 'annotations.list', 'annotations.save'] },
   { id: 'browser', title: 'Browser', description: 'Interactive browser session for web research, local dev preview, and agent testing.', icon: Globe, group: 'Shared', status: 'available', supportedOperations: ['sessions.list', 'sessions.create', 'tabs.list', 'tabs.create', 'tabs.close', 'tabs.navigate', 'tabs.snapshot'] },
-  { id: 'emulator', title: 'Phone Simulator', description: 'Interactive mobile device simulator (iOS, Android, Responsive) for live frontend preview and testing.', icon: Smartphone, group: 'Engineering', status: 'available', supportedOperations: ['preview', 'rotate', 'inspect', 'snapshot'] },
-  { id: 'fleet', title: 'Remote Fleet', description: 'Remote host inventory for distributed compute.', icon: Server, group: 'Shared', status: 'degraded', reason: 'SSH transport is not connected; probes and remote execution fail closed.', supportedOperations: ['hosts.list', 'hosts.register', 'jobs.list', 'jobs.create'] },
+  { id: 'emulator', title: 'Phone Simulator', description: 'Interactive mobile device simulator (iOS, Android, Responsive) for live frontend preview and testing.', icon: Smartphone, group: 'Engineering', status: 'available', supportedOperations: ['preview', 'rotate', 'inspect', 'snapshot', 'devices.list', 'devices.launch', 'devices.navigate', 'devices.tap'] },
+  { id: 'fleet', title: 'Remote Fleet', description: 'Remote host inventory for distributed compute.', icon: Server, group: 'Shared', status: 'available', supportedOperations: ['hosts.list', 'hosts.register', 'hosts.ping', 'jobs.list', 'jobs.create', 'fleet.exec', 'jobs.run'] },
   { id: 'notes', title: 'Notes & Scratchpad', description: 'Capture quick notes, thoughts, and draft context for conversations.', icon: FileCode, group: 'Shared', status: 'available', supportedOperations: ['list', 'get', 'save', 'history'] },
 ];
 
@@ -582,6 +583,17 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
 
   if (activeType === 'evidence') {
     return frameResource(<EvidenceWorkbenchPane onShowToast={onShowToast} />);
+  }
+
+  if (activeType === 'dag') {
+    return frameResource(
+      <WorkflowDagWorkbenchPane
+        sessionId={session?.id}
+        onShowToast={onShowToast}
+        onAskAgent={onAskAgent}
+        onOpenTab={onOpenTab}
+      />
+    );
   }
 
   if (activeType === 'runs') {
