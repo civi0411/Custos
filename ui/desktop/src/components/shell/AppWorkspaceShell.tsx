@@ -192,13 +192,6 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
 
   const { jobs, dispatchJob, updateJob } = useJobRegistry();
 
-  const currentLens: 'coding' | 'research' | 'assistant' =
-    mode === 'code' ? 'coding' : mode === 'research' ? 'research' : 'assistant';
-
-  const primaryQuickCommands = useMemo(() => {
-    return SLASH_COMMANDS.filter((cmd) => cmd.lens === currentLens).slice(0, 4);
-  }, [currentLens]);
-
   const executeSlashCommand = (cmd: SlashCommandDef, args: string) => {
     setInputText('');
 
@@ -609,41 +602,6 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   onSelectCommand={handleSelectSlashCommand}
                   onClose={() => {}}
                 />
-
-                {/* Workspace Action Quick Chips */}
-                {!inputText && (
-                  <div className="mb-2 pb-2 border-b border-border-muted/40 flex items-center gap-1.5 overflow-x-auto text-[11px] no-scrollbar">
-                    <span className="text-[10px] font-mono uppercase tracking-wider text-fg-subtle shrink-0 mr-1 flex items-center gap-1">
-                      <span className={`w-1.5 h-1.5 rounded-full ${
-                        mode === 'code' ? 'bg-sky-400' : mode === 'research' ? 'bg-purple-400' : 'bg-amber-400'
-                      }`} />
-                      {lensMeta.badge} Tác vụ:
-                    </span>
-                    {primaryQuickCommands.map((cmd) => {
-                      const Icon = cmd.icon;
-                      return (
-                        <button
-                          key={cmd.command}
-                          type="button"
-                          onClick={() => handleSelectSlashCommand(cmd)}
-                          title={cmd.description}
-                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md font-mono text-[11px] border transition shrink-0 ${
-                            mode === 'code'
-                              ? 'border-sky-500/25 bg-sky-500/5 text-sky-400 hover:bg-sky-500/15 hover:border-sky-500/40 active:scale-[0.98]'
-                              : mode === 'research'
-                              ? 'border-purple-500/25 bg-purple-500/5 text-purple-400 hover:bg-purple-500/15 hover:border-purple-500/40 active:scale-[0.98]'
-                              : 'border-amber-500/25 bg-amber-500/5 text-amber-400 hover:bg-amber-500/15 hover:border-amber-500/40 active:scale-[0.98]'
-                          }`}
-                        >
-                          <Icon className="w-3 h-3 shrink-0" />
-                          <span className="font-semibold">{cmd.command}</span>
-                          <span className="text-[10px] text-fg-subtle font-sans opacity-85">{cmd.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
                 <textarea
                   rows={2}
                   value={inputText}
