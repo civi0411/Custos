@@ -6,8 +6,8 @@ export interface JobEntry {
   jobId: string;         // e.g. "engineering__review"
   jobName: string;
   taskId?: string;       // returned by daemon after start
-  status: 'queued' | 'running' | 'done' | 'failed';
-  sourceTabId?: OrcaTabId;  // which tab triggered it
+  status: 'queued' | 'running' | 'started' | 'done' | 'failed';
+  sourceTabId?: string;  // which tab triggered it (supports tab instance IDs e.g. "files-123...")
   startedAt: number;
   endedAt?: number;
   error?: string;
@@ -20,8 +20,8 @@ export interface JobRegistryValue {
   updateJob: (id: string, patch: Partial<JobEntry>) => void;
   clearCompleted: () => void;
   removeJob: (id: string) => void;
-  isJobRunning: (jobId: string, sourceTabId?: OrcaTabId) => boolean;
-  getRunningCountForTab: (tabId: OrcaTabId) => number;
+  isJobRunning: (jobId: string, sourceTabId?: string) => boolean;
+  getRunningCountForTab: (tabId: string) => number;
 }
 
 export const JOB_RESULT_TAB: Partial<Record<string, OrcaTabId>> = {
@@ -58,7 +58,7 @@ export const JobRegistryProvider: React.FC<{ children: React.ReactNode }> = ({ c
       prev.map((job) => {
         if (job.id === id) {
           const updated = { ...job, ...patch };
-          if ((patch.status === 'done' || patch.status === 'failed') && !updated.endedAt) {
+          if ((patch.status === 'done' || patch.status === 'started' || patch.status === 'failed') && !updated.endedAt) {
             updated.endedAt = Date.now();
           }
           return updated;
@@ -77,11 +77,15 @@ export const JobRegistryProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, []);
 
   const isJobRunning = useCallback(
-    (jobId: string, sourceTabId?: OrcaTabId): boolean => {
+    (jobId: string, sourceTabId?: string): boolean => {
       return jobs.some((j) => {
         if (j.status !== 'running' && j.status !== 'queued') return false;
         if (j.jobId !== jobId) return false;
-        if (sourceTabId !== undefined && j.sourceTabId !== sourceTabId) return false;
+        if (sourceTabId !== undefined) {
+          const jBase = j.sourceTabId?.split('-')[0];
+          const queryBase = sourceTabId.split('-')[0];
+          if (j.sourceTabId !== sourceTabId && jBase !== queryBase) return false;
+        }
         return true;
       });
     },
@@ -89,10 +93,13 @@ export const JobRegistryProvider: React.FC<{ children: React.ReactNode }> = ({ c
   );
 
   const getRunningCountForTab = useCallback(
-    (tabId: OrcaTabId): number => {
-      return jobs.filter(
-        (j) => j.sourceTabId === tabId && (j.status === 'running' || j.status === 'queued')
-      ).length;
+    (tabId: string): number => {
+      const targetBase = tabId.split('-')[0];
+      return jobs.filter((j) => {
+        if (j.status !== 'running' && j.status !== 'queued') return false;
+        if (!j.sourceTabId) return false;
+        return j.sourceTabId === tabId || j.sourceTabId.split('-')[0] === targetBase;
+      }).length;
     },
     [jobs]
   );

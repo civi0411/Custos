@@ -32,7 +32,7 @@ export interface UseWorkbenchJobOptions {
   jobId: string;
   sessionId?: string;
   workspaceId?: string;
-  sourceTabId?: OrcaTabId;
+  sourceTabId?: string;
   allowParallel?: boolean;
   navigateOnSuccess?: OrcaTabId;
   getInputs: () => Record<string, unknown> | null;
@@ -137,7 +137,7 @@ export function useWorkbenchJob({
       const taskId = result.taskId || result.task_id || 'unknown';
       registry.updateJob(entryId, {
         taskId,
-        status: 'done',
+        status: 'started',
         endedAt: Date.now(),
       });
 
