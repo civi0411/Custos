@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   FileDiff,
@@ -245,7 +246,7 @@ export const ChangesWorkbenchPane: React.FC<ChangesWorkbenchPaneProps> = ({
           {/* Workspace dropdown */}
           <div className="flex items-center gap-2">
             <label className="text-[11px] text-[var(--color-fg-subtle)]">Workspace:</label>
-            <select
+            <NativeSelect
               value={selectedWorkspaceId}
               onChange={(e) => setSelectedWorkspaceId(e.target.value)}
               disabled={loadingWorkspaces}
@@ -256,7 +257,7 @@ export const ChangesWorkbenchPane: React.FC<ChangesWorkbenchPaneProps> = ({
                   {ws.name} ({ws.kind.type === 'git' ? 'Git' : 'Folder'})
                 </option>
               ))}
-            </select>
+            </NativeSelect>
             {activeWorkspace && (
               <span className="hidden xl:inline text-[11px] text-[var(--color-fg-subtle)] font-mono truncate max-w-[200px]">
                 {activeWorkspace.path}

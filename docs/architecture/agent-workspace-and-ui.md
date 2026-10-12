@@ -570,3 +570,19 @@ SessionManager exposes an assistant-entry append variant returning the exact per
 Opaque partial tool-argument fragments are omitted from the public activity projection; JSON-encoded tool payloads are decoded for recursive credential redaction before rendering. Display events remain non-authoritative.
 
 Chat fenced code is rendered locally with highlight.js in the desktop projection. Explicit language fences use registered grammars; unlabelled fences use bounded automatic detection. Unknown languages remain escaped plain text. Inline code retains its compact style; highlighting is derived from each streamed message without changing persistence or execution contracts.
+
+Conversation scroll edges use non-interactive, theme-aware backdrop blur overlays only where content extends beyond the viewport. AppWorkspaceShell tracks scroll bounds and observes content/viewport resizing; this is presentation-only and preserves chat follow-bottom behavior.
+
+Conversation user messages align right inside a softly contrasted theme-aware container; assistant responses retain their existing content layout. Neither role displays an avatar or author label. Live status, Stop and activity controls remain available. Worktree navigation uses the build-time Iconify codicon/worktree glyph consistently, without new dependencies or execution contracts.
+
+Desktop interface scale uses the current Tauri WebView zoom, with persisted discrete 70–160 percent levels in steps of ten. Browser preview uses document zoom with compensated root viewport dimensions. The main-window capability admits only the existing WebView zoom operation. Conversation composer replaces Send with an accessible Stop icon while a live run exists; message status badges are omitted while errors and activity remain visible.
+
+Conversation Markdown supports inline and display LaTeX through remark-math and rehype-katex, with bundled local KaTeX fonts/styles and trust disabled. A presentation-only math-node normalization handles double-dollar display delimiters and escaped subscript markers emitted by models; text macros and ordinary code/text remain unchanged. Invalid or partial streamed formulas fall back to visible source.
+
+Provider quota windows retain optional model group and explicit five-hour/weekly/other period metadata. Antigravity probes retrieveUserQuotaSummary first and keeps its independent Gemini and Claude/GPT buckets; existing quota/model-catalog probes remain fallbacks. Desktop presents two standard remaining-limit rows per group, marks absent windows as not reported and preserves unclassified provider windows separately. Local inference and GitHub Copilot keep their native quota formats. No weekly consumption is inferred from reset timestamps, model snapshots or Custos usage.
+
+Unattributed usage is presented as Historical usage with its per-model table; it has no account-level token summary or quota panel. The model table remains available in compact view.
+
+Desktop form controls share theme-aware dropdown surfaces, selected/focus states and accent-filled slider tracks. Existing CustomSelect retains its options contract and supports keyboard navigation; native range inputs retain browser keyboard behavior and explicit accessible labels. Control styling does not change provider or execution contracts.
+
+Application single-choice selects use the shared neutral dropdown projection instead of OS-specific popup surfaces. A NativeSelect presentation adapter retains native options, value and change-event behavior via a hidden select; disabled options remain unavailable. Dropdown selection uses neutral contrast without accent glow, while keyboard focus remains visible. No provider/runtime contract changes.

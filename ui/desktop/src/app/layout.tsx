@@ -31,7 +31,7 @@ export const RootLayout: React.FC = () => {
   } = useAppContext();
 
   return (
-    <div className="bg-canvas text-editor-fg font-sans antialiased h-screen w-screen overflow-hidden flex flex-col select-none">
+    <div className="bg-canvas text-editor-fg font-sans antialiased app-viewport overflow-hidden flex flex-col select-none">
       {/* Dynamic Route Content (Studio Sovereign Workspace or Clean Standalone Views) */}
       <div className="flex-1 flex overflow-hidden min-w-0 relative bg-canvas">
         <Outlet />

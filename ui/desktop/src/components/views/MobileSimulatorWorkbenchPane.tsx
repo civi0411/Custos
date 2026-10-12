@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useState, useMemo, useRef } from 'react';
 import {
   Smartphone,
@@ -167,7 +168,7 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
 
         {/* Device Switcher & Orientation Controls */}
         <div className="flex items-center gap-2">
-          <select
+          <NativeSelect
             value={selectedDeviceId}
             onChange={(e) => setSelectedDeviceId(e.target.value)}
             className="bg-zinc-900 border border-zinc-700 text-zinc-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-zinc-500"
@@ -177,7 +178,7 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
                 {d.name} ({d.width}×{d.height})
               </option>
             ))}
-          </select>
+          </NativeSelect>
 
           <button
             onClick={toggleOrientation}

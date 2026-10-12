@@ -1,3 +1,4 @@
+import WorktreeIcon from '~icons/codicon/worktree';
 import React from 'react';
 import {
   Activity,
@@ -7,7 +8,6 @@ import {
   FileDiff,
   FlaskConical,
   FolderTree,
-  GitBranch,
   Globe,
   NotebookTabs,
   ShieldCheck,
@@ -106,7 +106,7 @@ const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'files', title: 'Files', description: 'Repository tree, editors and source anchors.', icon: FolderTree, group: 'Engineering', status: 'available', supportedOperations: ['tree', 'read', 'write'] },
   { id: 'changes', title: 'Changes', description: 'Diff review, annotations and patch decisions.', icon: FileDiff, group: 'Engineering', status: 'available', supportedOperations: ['diff', 'file_diff', 'stage', 'unstage', 'discard'] },
   { id: 'terminal', title: 'Terminal', description: 'Bounded PTY streams scoped to an execution workspace.', icon: Terminal, group: 'Engineering', status: 'available', supportedOperations: ['spawn', 'write', 'resize', 'read', 'terminate', 'list', 'get'] },
-  { id: 'worktrees', title: 'Workspaces', description: 'Inspect daemon-owned folder and Git execution workspaces.', icon: GitBranch, group: 'Engineering', status: 'available' },
+  { id: 'worktrees', title: 'Workspaces', description: 'Inspect daemon-owned folder and Git execution workspaces.', icon: WorktreeIcon, group: 'Engineering', status: 'available' },
   { id: 'kanban', title: 'Agents', description: 'Worker runs, native coding harnesses (Claude Code, Codex, Goose), and agent loop dispatch.', icon: Bot, group: 'Engineering', status: 'available', supportedOperations: ['list_harnesses', 'get_harness', 'run_native', 'dispatch', 'cancel', 'steer'] },
   { id: 'evidence', title: 'Evidence', description: 'Criteria, receipts, verifier records and stale status.', icon: ShieldCheck, group: 'Engineering', status: 'available', supportedOperations: ['reviews.list', 'reviews.record', 'reviews.get', 'reviews.mark_stale'] },
   { id: 'dag', title: 'Workflow', description: 'Execution graph, dependencies, budgets and run state.', icon: Activity, group: 'Engineering', status: 'available' },

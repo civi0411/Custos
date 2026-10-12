@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Bot,
@@ -304,7 +305,7 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
                       Target Execution Workspace
                     </label>
                     <div className="relative">
-                      <select
+                      <NativeSelect
                         value={selectedWorkspaceId}
                         onChange={(e) => setSelectedWorkspaceId(e.target.value)}
                         className="w-full appearance-none rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-3 py-2 pr-8 text-xs text-[var(--color-fg-default)] focus:border-[var(--color-border-focus)] focus:outline-none"
@@ -315,7 +316,7 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
                             {ws.name} ({ws.path})
                           </option>
                         ))}
-                      </select>
+                      </NativeSelect>
                       <FolderGit2 className="pointer-events-none absolute right-2.5 top-2.5 h-3.5 w-3.5 text-[var(--color-fg-muted)]" />
                     </div>
                   </div>
