@@ -1066,11 +1066,9 @@ export interface OAuthAuthorizeResult {
   interval?: number;
 }
 
-export interface OAuthTokenRecord {
+export interface OAuthConnectionMetadata {
   provider_id: string;
   service_type: string;
-  access_token?: string;
-  refresh_token?: string;
   expires_at?: number;
   token_type?: string;
   scope?: string;
@@ -1204,3 +1202,6 @@ export interface EmulatorScreenshotResult {
   path?: string;
   image_base64?: string;
 }
+
+/** Compatibility name for metadata-only OAuth responses. */
+export type OAuthTokenRecord = OAuthConnectionMetadata;

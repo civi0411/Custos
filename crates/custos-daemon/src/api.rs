@@ -176,6 +176,7 @@ pub struct LocalApiDispatcher {
     workspace: Option<Arc<WorkspaceCoordinator>>,
     research: Option<Arc<ResearchRepository>>,
     providers: Option<Arc<ProviderRepository>>,
+    credentials: Option<Arc<crate::credentials::ProviderCredentials>>,
     terminal: Arc<TerminalCoordinator>,
     files: Arc<dyn WorkspaceFilesPort>,
     harnesses: Arc<HarnessRegistry>,
@@ -201,6 +202,7 @@ impl LocalApiDispatcher {
             workspace: None,
             research: None,
             providers: None,
+            credentials: None,
             terminal: Arc::new(TerminalCoordinator::new()),
             files: Arc::new(WorkspaceFilesCoordinator::new()),
             harnesses: Arc::new(HarnessRegistry::new()),
@@ -253,8 +255,33 @@ impl LocalApiDispatcher {
     }
 
     pub fn with_providers(mut self, providers: Arc<ProviderRepository>) -> Self {
+        #[cfg(test)] { self.credentials=Some(crate::credential_tests::fake_credentials(providers.clone())); }
         self.providers = Some(providers);
         self
+    }
+
+    pub fn with_credentials(mut self, credentials: Arc<crate::credentials::ProviderCredentials>) -> Self {
+        self.credentials = Some(credentials);
+        self
+    }
+    fn credential_service(&self) -> Result<&Arc<crate::credentials::ProviderCredentials>, DomainError> {
+        self.credentials.as_ref().ok_or_else(|| DomainError::Validation(
+            "secure_storage_unavailable: Credential service is not configured".into()))
+    }
+    async fn read_provider_token(&self, account: &str) -> Result<Option<custos_domain::OAuthTokenRecord>, DomainError> {
+        self.credential_service()?.get_oauth_token(account).await
+    }
+    async fn refresh_provider_token(&self, previous: &custos_domain::OAuthTokenRecord, refreshed: &custos_domain::OAuthTokenRecord) -> Result<(), DomainError> {
+        self.credential_service()?.save_refreshed(previous, refreshed).await
+    }
+    async fn write_provider_connection(&self, token: &custos_domain::OAuthTokenRecord, config: &custos_domain::ProviderConfig) -> Result<(), DomainError> {
+        self.credential_service()?.save_oauth_connection(token, Some(config)).await
+    }
+    async fn remove_provider_credential(&self, account: &str, remove_provider: bool) -> Result<(), DomainError> {
+        self.credential_service()?.delete(account, remove_provider).await
+    }
+    async fn provider_tokens(&self) -> Result<Vec<custos_domain::OAuthTokenRecord>, DomainError> {
+        self.credential_service()?.list_oauth_tokens().await
     }
 
     pub fn with_fleet_automation(
@@ -2580,10 +2607,7 @@ impl LocalApiDispatcher {
                 }
             }
             "v1.providers.delete" => {
-                let providers_repo = match self.providers.as_ref() {
-                    Some(p) => p,
-                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
-                };
+                if self.providers.is_none() { return ApiResponse::error(req.id,"ProviderRepository not configured"); }
                 let id = req
                     .params
                     .get("id")
@@ -2593,10 +2617,10 @@ impl LocalApiDispatcher {
                 if id.is_empty() {
                     return ApiResponse::error(req.id, "Missing provider id parameter");
                 }
-                match providers_repo.delete_provider(id) {
-                    Ok(deleted) => ApiResponse::success(
+                match self.remove_provider_credential(id, true).await {
+                    Ok(()) => ApiResponse::success(
                         req.id,
-                        serde_json::json!({ "deleted": deleted, "id": id }),
+                        serde_json::json!({ "deleted": true, "id": id }),
                     ),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
@@ -2612,35 +2636,22 @@ impl LocalApiDispatcher {
                     .and_then(|v| v.as_str())
                     .unwrap_or("p_custom")
                     .to_string();
+                let existing_provider = match providers_repo.get_provider(&id) { Ok(value)=>value,Err(e)=>return ApiResponse::error(req.id,e.to_string()) };
                 let name = req
                     .params
                     .get("name")
                     .and_then(|v| v.as_str())
-                    .unwrap_or(&id)
+                    .unwrap_or_else(||existing_provider.as_ref().map(|p|p.name.as_str()).unwrap_or(&id))
                     .to_string();
                 let service_type = req
                     .params
                     .get("service_type")
                     .or_else(|| req.params.get("provider_type"))
                     .and_then(|v| v.as_str())
-                    .unwrap_or("anthropic")
+                    .unwrap_or_else(||existing_provider.as_ref().map(|p|p.service_type.as_str()).unwrap_or("anthropic"))
                     .to_string();
                 let raw_api_key = req.params.get("api_key").and_then(|v| v.as_str());
-                let masked = if let Some(key) = raw_api_key {
-                    if key.len() > 8 {
-                        format!("{}••••••••", &key[..6])
-                    } else if !key.is_empty() {
-                        "••••••••".to_string()
-                    } else {
-                        "none".to_string()
-                    }
-                } else {
-                    req.params
-                        .get("api_key_masked")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("none")
-                        .to_string()
-                };
+                let masked = if raw_api_key.is_some_and(|key|!key.trim().is_empty()) { "••••••••".to_string() } else { providers_repo.get_provider(&id).ok().flatten().map(|p|p.api_key_masked).unwrap_or_else(||"none".into()) };
                 let status = req
                     .params
                     .get("status")
@@ -2674,28 +2685,6 @@ impl LocalApiDispatcher {
 
                 let now = chrono::Utc::now().timestamp_millis();
 
-                if let Some(key) = raw_api_key {
-                    if !key.trim().is_empty() {
-                        let tok = custos_domain::OAuthTokenRecord {
-                            provider_id: id.clone(),
-                            service_type: service_type.clone(),
-                            access_token: key.trim().to_string(),
-                            refresh_token: None,
-                            expires_at: i64::MAX / 2,
-                            token_type: "bearer".to_string(),
-                            scope: None,
-                            created_at: now,
-                            updated_at: now,
-                        };
-                        let _ = providers_repo.save_oauth_token(&tok);
-                        if service_type != id {
-                            let mut tok_alias = tok.clone();
-                            tok_alias.provider_id = service_type.clone();
-                            let _ = providers_repo.save_oauth_token(&tok_alias);
-                        }
-                    }
-                }
-
                 let cfg = custos_domain::ProviderConfig {
                     id,
                     name,
@@ -2709,11 +2698,14 @@ impl LocalApiDispatcher {
                     created_at: now,
                     updated_at: now,
                 };
-                match providers_repo.save_provider(&cfg) {
+                match self.credential_service() {
+                    Ok(service) => match service.save_provider(&cfg, raw_api_key).await {
                     Ok(()) => ApiResponse::success(
                         req.id,
                         serde_json::json!({ "saved": true, "id": cfg.id }),
                     ),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
@@ -2765,22 +2757,9 @@ impl LocalApiDispatcher {
                     return ApiResponse::error(req.id, "Missing base_url parameter for models probe");
                 }
 
-                let token_record = if let Some(repo) = self.providers.as_ref() {
-                    let result = provider_id
-                        .as_deref()
-                        .map(|pid| repo.get_oauth_token(pid))
-                        .unwrap_or(Ok(None))
-                        .and_then(|token| match token {
-                            Some(token) => Ok(Some(token)),
-                            None => repo.get_oauth_token(provider_type),
-                        });
-                    match result {
-                        Ok(token) => token,
-                        Err(e) => return ApiResponse::error(req.id, e.to_string()),
-                    }
-                } else {
-                    None
-                };
+                let token_record = if req.params.get("api_key").and_then(|v|v.as_str()).is_some_and(|key|!key.trim().is_empty()) { None } else if self.credentials.is_some() {
+                    match self.read_provider_token(provider_id.as_deref().unwrap_or(provider_type)).await { Ok(token)=>token,Err(e)=>return ApiResponse::error(req.id,e.to_string()) }
+                } else { None };
                 let explicit_key = req
                     .params
                     .get("api_key")
@@ -2809,8 +2788,8 @@ impl LocalApiDispatcher {
                             .await
                         {
                             Ok(refreshed) => {
-                                if let Some(repo) = self.providers.as_ref() {
-                                    if let Err(e) = repo.save_oauth_token(&refreshed) {
+                                if self.credentials.is_some() {
+                                    if let Err(e) = self.refresh_provider_token(tok, &refreshed).await {
                                         return ApiResponse::error(req.id, e.to_string());
                                     }
                                 }
@@ -2891,10 +2870,7 @@ impl LocalApiDispatcher {
                         .filter(|s| !s.trim().is_empty())
                         .or_else(|| default_model_probe_base_url(service))
                         .unwrap_or("");
-                    let token = match repo.get_oauth_token(pid).and_then(|token| match token {
-                        Some(token) => Ok(Some(token)),
-                        None => repo.get_oauth_token(service),
-                    }) {
+                    let token = match self.read_provider_token(pid).await {
                         Ok(token) => token,
                         Err(e) => return ApiResponse::error(req.id, e.to_string()),
                     };
@@ -2951,14 +2927,14 @@ impl LocalApiDispatcher {
                         for provider in providers {
                             let mut snapshot = serde_json::json!({"account_id":provider.id,"status":if provider.service_type == "local" {"not_applicable"} else {"unsupported"},"windows":[],"fetched_at":chrono::Utc::now()});
                             if provider.service_type != "local" {
-                                match repo.get_oauth_token(&provider.id) {
+                                match self.read_provider_token(&provider.id).await {
                                     Ok(Some(mut token)) if token.refresh_token.is_some() || provider.service_type == "copilot" => {
                                         if token.is_expired(120) && token.refresh_token.is_some() {
                                             let refreshed = match custos_adapters::providers::oauth_pkce::oauth_settings(&token.service_type) {
                                                 Ok(settings) => custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(&settings.0,&settings.1).refresh_token(&settings.2,&token).await,
                                                 Err(e) => Err(e),
                                             };
-                                            match refreshed { Ok(value) => { if let Err(e)=repo.save_oauth_token(&value) { return ApiResponse::error(req.id,e.to_string()); } token=value; }, Err(_) => { snapshot["status"]=serde_json::json!("unavailable"); snapshot["error"]=serde_json::json!("Reconnect account to refresh quota"); quotas.push(snapshot); continue; } }
+                                            match refreshed { Ok(value) => { if let Err(e)=self.refresh_provider_token(&token, &value).await { return ApiResponse::error(req.id,e.to_string()); } token=value; }, Err(_) => { snapshot["status"]=serde_json::json!("unavailable"); snapshot["error"]=serde_json::json!("Reconnect account to refresh quota"); quotas.push(snapshot); continue; } }
                                         }
                                         match custos_adapters::providers::probe::probe_account_quota(&provider.service_type,&token.access_token).await {
                                             Ok(value) => { snapshot["status"]=value["status"].clone(); snapshot["windows"]=value["windows"].clone(); snapshot["source"]=value["source"].clone(); },
@@ -3071,8 +3047,8 @@ impl LocalApiDispatcher {
                     || std::env::var("GEMINI_API_KEY").is_ok()
                     || std::env::var("CUSTOS_PROVIDER").is_ok();
 
-                let oauth_tokens = if let Some(ref repo) = self.providers {
-                    repo.list_oauth_tokens().unwrap_or_default()
+                let oauth_tokens = if self.credentials.is_some() {
+                    match self.provider_tokens().await { Ok(tokens) => tokens, Err(e) => return ApiResponse::error(req.id, e.to_string()) }
                 } else {
                     Vec::new()
                 };
@@ -3210,10 +3186,7 @@ impl LocalApiDispatcher {
                 }
             }
             METHOD_OAUTH_EXCHANGE => {
-                let providers_repo = match self.providers.as_ref() {
-                    Some(p) => p,
-                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
-                };
+                if self.providers.is_none() { return ApiResponse::error(req.id,"ProviderRepository not configured"); }
                 let params: OAuthExchangeParams = match serde_json::from_value(req.params) {
                     Ok(p) => p,
                     Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
@@ -3257,11 +3230,7 @@ impl LocalApiDispatcher {
                     Ok((token_record, identity)) => {
                         // Upsert matching provider config so it appears in UI as active
                         let now = chrono::Utc::now().timestamp_millis();
-                        let masked = if token_record.access_token.len() > 8 {
-                            format!("{}••••••••", token_record.access_token.chars().take(6).collect::<String>())
-                        } else {
-                            "••••••••".to_string()
-                        };
+                        let masked = "oauth".to_string();
                         let prov_cfg = custos_domain::ProviderConfig {
                             id: provider_id.to_string(),
                             name: identity.unwrap_or_else(|| format!("{provider_id} (OAuth)")),
@@ -3275,7 +3244,7 @@ impl LocalApiDispatcher {
                             created_at: now,
                             updated_at: now,
                         };
-                        if let Err(e) = providers_repo.save_oauth_connection(&token_record, &prov_cfg) { return ApiResponse::error(req.id, e.to_string()); }
+                        if let Err(e) = self.write_provider_connection(&token_record, &prov_cfg).await { return ApiResponse::error(req.id, e.to_string()); }
 
                         match serde_json::to_value(serde_json::json!({"provider_id":token_record.provider_id,"service_type":token_record.service_type,"connected":true,"expires_at":token_record.expires_at,"scope":token_record.scope,"has_refresh_token":token_record.refresh_token.is_some()})) {
                             Ok(val) => ApiResponse::success(req.id, val),
@@ -3286,16 +3255,13 @@ impl LocalApiDispatcher {
                 }
             }
             METHOD_OAUTH_REFRESH => {
-                let providers_repo = match self.providers.as_ref() {
-                    Some(p) => p,
-                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
-                };
+                if self.providers.is_none() { return ApiResponse::error(req.id,"ProviderRepository not configured"); }
                 let params: OAuthRefreshParams = match serde_json::from_value(req.params) {
                     Ok(p) => p,
                     Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
                 };
 
-                let existing = match providers_repo.get_oauth_token(&params.provider_id) {
+                let existing = match self.read_provider_token(&params.provider_id).await {
                     Ok(Some(tok)) => tok,
                     Ok(None) => return ApiResponse::error(req.id, format!("No OAuth token found for {}", params.provider_id)),
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
@@ -3314,7 +3280,7 @@ impl LocalApiDispatcher {
 
                 match manager.refresh_token(client_id, &existing).await {
                     Ok(refreshed) => {
-                        if let Err(e) = providers_repo.save_oauth_token(&refreshed) {
+                        if let Err(e) = self.refresh_provider_token(&existing, &refreshed).await {
                             return ApiResponse::error(req.id, format!("Failed to update token: {e}"));
                         }
                         match serde_json::to_value(serde_json::json!({"provider_id":refreshed.provider_id,"service_type":refreshed.service_type,"connected":true,"expires_at":refreshed.expires_at,"scope":refreshed.scope,"has_refresh_token":refreshed.refresh_token.is_some()})) {
@@ -3326,17 +3292,14 @@ impl LocalApiDispatcher {
                 }
             }
             METHOD_OAUTH_GET => {
-                let providers_repo = match self.providers.as_ref() {
-                    Some(p) => p,
-                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
-                };
+                if self.providers.is_none() { return ApiResponse::error(req.id,"ProviderRepository not configured"); }
                 let provider_id = req
                     .params
                     .get("provider_id")
                     .or_else(|| req.params.get("id"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("openai");
-                match providers_repo.get_oauth_token(provider_id) {
+                match self.read_provider_token(provider_id).await {
                     Ok(Some(tok)) => {
                         let sanitized = serde_json::json!({
                             "provider_id": tok.provider_id,
@@ -3354,17 +3317,14 @@ impl LocalApiDispatcher {
                 }
             }
             METHOD_OAUTH_DELETE => {
-                let providers_repo = match self.providers.as_ref() {
-                    Some(p) => p,
-                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
-                };
+                if self.providers.is_none() { return ApiResponse::error(req.id,"ProviderRepository not configured"); }
                 let provider_id = req
                     .params
                     .get("provider_id")
                     .or_else(|| req.params.get("id"))
                     .and_then(|v| v.as_str())
                     .unwrap_or("openai");
-                match providers_repo.delete_oauth_token(provider_id) {
+                match self.remove_provider_credential(provider_id, false).await {
                     Ok(()) => ApiResponse::success(
                         req.id,
                         serde_json::json!({ "deleted": true, "provider_id": provider_id }),
@@ -7334,7 +7294,7 @@ mod tests {
             created_at: now,
             updated_at: now,
         };
-        store.providers().save_oauth_token(&token_record).unwrap();
+        dispatcher.credential_service().unwrap().save_oauth_token(&token_record).await.unwrap();
 
         // 4. Query token via v1.oauth.get
         let get_req_2 = ApiRequest {

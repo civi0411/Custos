@@ -55,7 +55,7 @@ import {
   ModelCatalogResult,
   ProviderConfigRecord,
   OAuthAuthorizeResult,
-  OAuthTokenRecord,
+  OAuthConnectionMetadata,
   OAuthStatusResult,
   DomainPackManifest,
   PacksJobCatalogItem,
@@ -233,6 +233,9 @@ export class DaemonClient {
       try {
         return await invoke<T>('custos_request', { method, params });
       } catch (err: any) {
+        // A rejected credential operation is an application error, not a request
+        // to repeat a save/exchange through a second transport.
+        if (method.startsWith('v1.providers.') || method.startsWith('v1.oauth.') || (method === 'v1.models.probe' && params.api_key)) throw err;
         console.warn(`[DaemonClient] Tauri invoke failed on ${method}, falling back to HTTP:`, err);
         return this.requestHttp<T>(method, params);
       }
@@ -565,16 +568,16 @@ export class DaemonClient {
     client_id?: string;
     redirect_uri?: string;
     token_endpoint?: string;
-  }): Promise<OAuthTokenRecord> {
-    return this.request<OAuthTokenRecord>('v1.oauth.exchange', params);
+  }): Promise<OAuthConnectionMetadata> {
+    return this.request<OAuthConnectionMetadata>('v1.oauth.exchange', params);
   }
 
-  async refreshOAuthToken(provider_id: string = 'openai'): Promise<OAuthTokenRecord> {
-    return this.request<OAuthTokenRecord>('v1.oauth.refresh', { provider_id });
+  async refreshOAuthToken(provider_id: string = 'openai'): Promise<OAuthConnectionMetadata> {
+    return this.request<OAuthConnectionMetadata>('v1.oauth.refresh', { provider_id });
   }
 
-  async getOAuthToken(provider_id: string = 'openai'): Promise<OAuthTokenRecord | null> {
-    return this.request<OAuthTokenRecord | null>('v1.oauth.get', { provider_id });
+  async getOAuthToken(provider_id: string = 'openai'): Promise<OAuthConnectionMetadata | null> {
+    return this.request<OAuthConnectionMetadata | null>('v1.oauth.get', { provider_id });
   }
 
   async deleteOAuthToken(provider_id: string = 'openai'): Promise<{ deleted: boolean; provider_id: string }> {

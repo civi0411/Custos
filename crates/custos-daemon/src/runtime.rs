@@ -18,6 +18,7 @@ use std::sync::Arc;
 #[allow(dead_code)]
 pub struct CustosRuntime {
     pub store: Arc<SqliteTaskStore>,
+    pub credentials: Arc<crate::credentials::ProviderCredentials>,
     pub task_service: Arc<TaskService>,
     pub session_manager: Arc<SessionManager>,
     pub bridge_service: Arc<BridgeService>,
@@ -49,8 +50,9 @@ impl CustosRuntime {
         let store = Arc::new(SqliteTaskStore::new(database_path)?);
 
         // Multi-provider router: dynamically dispatches to OpenAI, Anthropic, Gemini, DeepSeek, or Ollama/local
+        let credentials = Self::credential_service(&store);
         let credential_resolver = Arc::new(DaemonCredentialResolver {
-            store: store.clone(),
+            store: store.clone(), credentials: credentials.clone(),
         });
         let router_provider = Arc::new(RouterModelProvider::new(credential_resolver));
 
@@ -65,7 +67,7 @@ impl CustosRuntime {
             _ => router_provider.clone(),
         };
 
-        Self::bootstrap_with_store_and_model(store, model)
+        Self::bootstrap_with_store_and_model(store, model, credentials)
     }
 
     pub fn bootstrap_with_model(
@@ -73,13 +75,25 @@ impl CustosRuntime {
         model: Arc<dyn ModelPort>,
     ) -> Result<Self, DomainError> {
         let store = Arc::new(SqliteTaskStore::new(database_path)?);
-        Self::bootstrap_with_store_and_model(store, model)
+        let credentials = Self::credential_service(&store);
+        Self::bootstrap_with_store_and_model(store, model, credentials)
+    }
+
+    fn credential_service(store: &Arc<SqliteTaskStore>) -> Arc<crate::credentials::ProviderCredentials> {
+        let repo = Arc::new(store.providers().clone());
+        #[cfg(test)]
+        { crate::credential_tests::fake_credentials(repo) }
+        #[cfg(not(test))]
+        { Arc::new(crate::credentials::ProviderCredentials::new(repo, Arc::new(custos_adapters::providers::credential_vault::KeyringCredentialVault))) }
     }
 
     fn bootstrap_with_store_and_model(
         store: Arc<SqliteTaskStore>,
         model: Arc<dyn ModelPort>,
+        credentials: Arc<crate::credentials::ProviderCredentials>,
     ) -> Result<Self, DomainError> {
+        let startup_credentials = credentials.clone();
+        tokio::spawn(async move { if startup_credentials.initialize().await.is_err() { tracing::warn!("Provider secure storage needs attention; affected accounts remain blocked"); } });
         // Crash Recovery Reconcile (Gate 3): transition any InFlight effects to Uncertain on startup
         store.outbox().reconcile_on_startup()?;
         store.reconcile_runs_on_startup()?;
@@ -97,7 +111,7 @@ impl CustosRuntime {
         let sandbox = Arc::new(SovereignDeveloperAdapter::new(workspace_root.clone()));
 
         // Background OAuth Token Sweeper Job: runs every 5 minutes and refreshes expiring tokens
-        let sweeper_store = store.clone();
+        let sweeper_credentials = credentials.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(300));
             loop {
@@ -105,9 +119,8 @@ impl CustosRuntime {
                 let now_ms = chrono::Utc::now().timestamp_millis();
                 // Check tokens expiring within the next 10 minutes (600 seconds)
                 let threshold_ms = now_ms + (600 * 1000);
-                if let Ok(expiring) = sweeper_store
-                    .providers()
-                    .list_expiring_oauth_tokens(threshold_ms)
+                if let Ok(expiring) = sweeper_credentials
+                    .list_expiring_oauth_tokens(threshold_ms).await
                 {
                     for tok in expiring {
                         let settings = match custos_adapters::providers::oauth_pkce::oauth_settings(
@@ -122,8 +135,10 @@ impl CustosRuntime {
                         );
                         tracing::info!(provider_id = %tok.provider_id, "Sweeper job refreshing expiring OAuth token");
                         if let Ok(refreshed) = manager.refresh_token(&settings.2, &tok).await {
-                            let _ = sweeper_store.providers().save_oauth_token(&refreshed);
-                            tracing::info!(provider_id = %tok.provider_id, "Sweeper job updated refreshed OAuth token in database");
+                            match sweeper_credentials.save_refreshed(&tok, &refreshed).await {
+                                Ok(()) => tracing::info!(provider_id = %tok.provider_id, "Sweeper saved refreshed credential"),
+                                Err(_) => tracing::warn!(provider_id = %tok.provider_id, "Sweeper could not save refreshed credential"),
+                            }
                         }
                     }
                 }
@@ -180,7 +195,7 @@ impl CustosRuntime {
         let python_coordinator = Arc::new(custos_runtime::PythonKernelCoordinator::new());
 
         let oauth_callback_server = Arc::new(
-            crate::oauth_callback_server::OAuthCallbackServer::new(store.clone()),
+            crate::oauth_callback_server::OAuthCallbackServer::with_credentials(credentials.clone()),
         );
 
         let pack_registry = Arc::new(custos_packs::create_default_pack_registry());
@@ -198,6 +213,7 @@ impl CustosRuntime {
             .with_python_kernel(python_coordinator.clone())
             .with_research(Arc::new(store.research().clone()))
             .with_providers(Arc::new(store.providers().clone()))
+            .with_credentials(credentials.clone())
             .with_fleet_automation(Arc::new(store.fleet_automation().clone()))
             .with_oauth_callback_server(oauth_callback_server)
             .with_harnesses(harnesses.clone())
@@ -206,6 +222,7 @@ impl CustosRuntime {
 
         Ok(Self {
             store,
+            credentials,
             task_service,
             session_manager,
             bridge_service,
@@ -227,6 +244,7 @@ impl CustosRuntime {
 
 struct DaemonCredentialResolver {
     store: Arc<SqliteTaskStore>,
+    credentials: Arc<crate::credentials::ProviderCredentials>,
 }
 
 #[async_trait::async_trait]
@@ -236,21 +254,22 @@ impl CredentialResolver for DaemonCredentialResolver {
         if record.service_type != service {
             return Err(DomainError::Validation("Selected account does not belong to the requested model provider".into()));
         }
+        if !matches!(service,"local"|"ollama") && self.credentials.get_oauth_token(account_id).await?.is_none() {
+            return Err(DomainError::Validation("secure_storage_missing: Reconnect this provider account".into()));
+        }
         Ok(())
     }
     async fn uses_oauth(&self, provider_id: &str) -> Result<bool, DomainError> {
         Ok(self
-            .store
-            .providers()
-            .get_oauth_token(provider_id)?
+            .credentials
+            .get_oauth_token(provider_id).await?
             .is_some_and(|tok| {
                 tok.refresh_token.is_some()
                     || tok.scope.as_deref().is_some_and(|s| !s.trim().is_empty())
             }))
     }
     async fn get_token(&self, provider_id: &str) -> Result<Option<String>, DomainError> {
-        let repo = self.store.providers();
-        if let Some(tok) = repo.get_oauth_token(provider_id)? {
+        if let Some(tok) = self.credentials.get_oauth_token(provider_id).await? {
             if tok.is_expired(120) {
                 if tok.refresh_token.is_none() {
                     return Err(DomainError::Validation(
@@ -264,7 +283,7 @@ impl CredentialResolver for DaemonCredentialResolver {
                     &settings.1,
                 );
                 let refreshed = manager.refresh_token(&settings.2, &tok).await?;
-                repo.save_oauth_token(&refreshed)?;
+                self.credentials.save_refreshed(&tok, &refreshed).await?;
                 return Ok(Some(refreshed.access_token));
             }
             return Ok(Some(tok.access_token));
@@ -290,7 +309,7 @@ impl CredentialResolver for DaemonCredentialResolver {
 
     async fn get_endpoint_url(&self, provider_id: &str) -> Result<Option<String>, DomainError> {
         let repo = self.store.providers();
-        if let Ok(Some(prov)) = repo.get_provider(provider_id) {
+        if let Some(prov) = repo.get_provider(provider_id)? {
             if let Some(endpoint) = prov.endpoint_url {
                 if !endpoint.trim().is_empty() {
                     return Ok(Some(endpoint.trim().to_string()));
@@ -321,15 +340,15 @@ mod credential_tests {
     async fn credential_metadata_controls_authentication_not_token_prefix() {
         let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
         let resolver = DaemonCredentialResolver {
-            store: store.clone(),
+            store: store.clone(), credentials: CustosRuntime::credential_service(&store),
         };
-        store.providers().save_oauth_token(&token(true)).unwrap();
+        resolver.credentials.save_oauth_token(&token(true)).await.unwrap();
         assert!(resolver.uses_oauth("openai").await.unwrap());
         assert_eq!(
             resolver.get_token("openai").await.unwrap().unwrap(),
             "opaque-oauth"
         );
-        store.providers().save_oauth_token(&token(false)).unwrap();
+        resolver.credentials.save_oauth_token(&token(false)).await.unwrap();
         assert!(!resolver.uses_oauth("openai").await.unwrap());
         assert_eq!(
             resolver.get_token("openai").await.unwrap().unwrap(),
@@ -340,12 +359,12 @@ mod credential_tests {
     async fn expired_oauth_without_refresh_fails_closed() {
         let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
         let resolver = DaemonCredentialResolver {
-            store: store.clone(),
+            store: store.clone(), credentials: CustosRuntime::credential_service(&store),
         };
         let mut expired = token(false);
         expired.scope = Some("openid".into());
         expired.expires_at = 0;
-        store.providers().save_oauth_token(&expired).unwrap();
+        resolver.credentials.save_oauth_token(&expired).await.unwrap();
         assert!(resolver.uses_oauth("openai").await.unwrap());
         assert!(resolver
             .get_token("openai")

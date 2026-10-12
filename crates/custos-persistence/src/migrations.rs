@@ -95,5 +95,6 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         "../migrations/0027_dispatch_claims_and_fencing.sql"
     ))?;
 
+    conn.execute_batch(include_str!("../migrations/0028_secure_provider_credentials.sql"))?;
     Ok(())
 }

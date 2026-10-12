@@ -7,7 +7,7 @@ use rusqlite::params;
 
 #[derive(Clone)]
 pub struct ProviderRepository {
-    db: DbConnection,
+    pub(super) db: DbConnection,
 }
 
 impl ProviderRepository {
@@ -106,7 +106,7 @@ impl ProviderRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))
     }
 
-    fn write_provider(
+    pub(super) fn write_provider(
         conn: &rusqlite::Connection,
         config: &ProviderConfig,
     ) -> Result<(), DomainError> {
@@ -146,14 +146,17 @@ impl ProviderRepository {
     }
 
     pub fn delete_provider(&self, id: &str) -> Result<bool, DomainError> {
-        let conn = self.db.lock()?;
-        let _ = conn.execute(
+        let mut conn = self.db.lock()?;
+        let tx=conn.transaction().map_err(|_|DomainError::Validation("Provider deletion failed".into()))?;
+        tx.execute(
             "DELETE FROM provider_model_catalog WHERE provider_id = ?1",
             params![id],
-        );
-        let changed = conn
+        ).map_err(|_|DomainError::Validation("Provider deletion failed".into()))?;
+        let changed = tx
             .execute("DELETE FROM providers_config WHERE id = ?1", params![id])
             .map_err(|e| DomainError::Validation(e.to_string()))?;
+        Self::record_provider_event(&tx,"provider.config.deleted",id,"metadata",chrono::Utc::now().timestamp_millis())?;
+        tx.commit().map_err(|_|DomainError::Validation("Provider deletion failed".into()))?;
         Ok(changed > 0)
     }
 
@@ -364,6 +367,7 @@ impl ProviderRepository {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn save_oauth_token(&self, token: &OAuthTokenRecord) -> Result<(), DomainError> {
         let mut conn = self.db.lock()?;
         let tx = conn
@@ -381,6 +385,7 @@ impl ProviderRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))
     }
 
+    #[cfg(test)]
     pub fn save_oauth_connection(
         &self,
         token: &OAuthTokenRecord,
@@ -408,7 +413,7 @@ impl ProviderRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))
     }
 
-    fn record_provider_event(
+    pub(super) fn record_provider_event(
         conn: &rusqlite::Connection,
         topic: &str,
         provider_id: &str,
@@ -430,6 +435,7 @@ impl ProviderRepository {
         Ok(())
     }
 
+    #[cfg(test)]
     fn write_oauth_token(
         conn: &rusqlite::Connection,
         token: &OAuthTokenRecord,
@@ -502,6 +508,7 @@ impl ProviderRepository {
         }
     }
 
+    #[cfg(test)]
     pub fn delete_oauth_token(&self, provider_id: &str) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
         conn.execute(
@@ -512,6 +519,7 @@ impl ProviderRepository {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn list_expiring_oauth_tokens(
         &self,
         threshold_ms: i64,
@@ -548,6 +556,7 @@ impl ProviderRepository {
         Ok(list)
     }
 
+    #[cfg(test)]
     pub fn list_oauth_tokens(&self) -> Result<Vec<OAuthTokenRecord>, DomainError> {
         let conn = self.db.lock()?;
         let mut stmt = conn

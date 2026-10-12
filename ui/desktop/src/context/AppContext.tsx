@@ -227,7 +227,7 @@ const safeIsoFromMillis = (value?: number): string => {
 };
 
 const tokenLooksOauth = (token?: OAuthTokenRecord | null): boolean =>
-  Boolean(token?.has_refresh_token || token?.refresh_token || token?.scope?.trim());
+  Boolean(token?.has_refresh_token || token?.scope?.trim());
 
 const uniqueModels = (models: string[]): string[] => {
   const seen = new Set<string>();
@@ -487,7 +487,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       const token = await daemonClient.getOAuthToken(providerId).catch(() => null);
-      if (!tokenLooksOauth(token) || (!token?.connected && !token?.access_token)) {
+      if (!tokenLooksOauth(token) || !token?.connected) {
         continue;
       }
 
@@ -516,18 +516,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const accounts = await Promise.all(
       providerRecords.map(async (provider): Promise<ConnectedAccount | null> => {
         const serviceId = normalizeProviderServiceId(provider.service_type || provider.id);
-        const connected = isProviderConnected(provider);
+        let connected = isProviderConnected(provider);
         const endpointUrl = provider.endpoint_url || defaultProbeBaseUrl(serviceId);
 
         let tokenMeta: OAuthTokenRecord | null = null;
-        tokenMeta = await daemonClient.getOAuthToken(provider.id).catch(() => null);
-        if (!tokenMeta && provider.id !== serviceId) {
-          tokenMeta = await daemonClient.getOAuthToken(serviceId).catch(() => null);
-        }
+        let credentialError: string | undefined;
+        tokenMeta = await daemonClient.getOAuthToken(provider.id).catch((error) => { credentialError = error instanceof Error ? error.message : String(error); return null; });
+        if (serviceId !== 'local') connected = connected && tokenMeta?.connected === true;
 
         let catalogModels: ModelCatalogOption[] = [];
         let catalogSource: 'live' | 'cached' | 'unavailable' = 'unavailable';
-        let catalogError: string | undefined;
+        let catalogError: string | undefined = credentialError;
         let catalogFetchedAt: number | undefined;
         if (connected && endpointUrl) {
           try {
@@ -571,7 +570,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         const supportedModels = uniqueModels(catalogModels.map((model) => model.id));
 
-        if (!connected || (provider.api_key_masked === 'oauth' && !tokenMeta?.connected)) {
+        if (!credentialError && (!connected || (provider.api_key_masked === 'oauth' && !tokenMeta?.connected))) {
           return null;
         }
 
@@ -584,7 +583,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           provider.context_window ||
           catalogModels[0]?.context_window;
         const available = connected && !(serviceId === 'local' && catalogSource !== 'live');
-        const authType = tokenLooksOauth(tokenMeta)
+        const authType = tokenLooksOauth(tokenMeta) || provider.api_key_masked === 'oauth'
           ? 'oauth'
           : 'api_key';
 
@@ -600,7 +599,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           oauthTier: authType === 'oauth' ? (serviceId === 'copilot' ? 'Connected via Device Flow' : 'Connected via PKCE') : undefined,
           oauthExpiresAt: tokenMeta?.expires_at ? safeIsoFromMillis(tokenMeta.expires_at) : undefined,
           status: available ? 'active' : 'offline',
-          statusLabel: available ? 'Connected' : 'Ollama offline — start Ollama and retry',
+          statusLabel: available ? 'Connected' : credentialError || (serviceId === 'local' ? 'Ollama offline — start Ollama and retry' : 'Reconnect provider'),
           badgeColor: available ? '#10b981' : '#6b7280',
           defaultModel,
           supportedModels,
@@ -1363,7 +1362,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       await refreshProviderState();
       setIsAddProviderOpen(false);
-      showToast(`Provider ${service} đã được cập nhật thành công vào Backend SQLite!`);
+      showToast(`Provider ${service} đã được lưu với credential bảo mật!`);
     } catch (err: any) {
       console.error('[SaveProvider] Error:', err);
       showToast(`Lỗi lưu provider: ${err?.message || err}`);
@@ -1463,7 +1462,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     accountName?: string
   ) => {
     const token = await daemonClient.getOAuthToken(providerId).catch(() => null);
-    if (!token?.connected && !token?.access_token) {
+    if (!token?.connected) {
       return;
     }
 
