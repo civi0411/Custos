@@ -1531,3 +1531,16 @@ input[type="checkbox"]:disabled {
 .provider-oauth-action { background: #c98970; color: #171717; border: 1px solid #e3ad98; }
 .provider-oauth-action:hover { filter: brightness(1.12); }
 .provider-oauth-action:focus-visible { outline: 2px solid #f3d7cb; outline-offset: 2px; }
+
+/* Chat code tokens follow the active light/dark syntax palette. */
+.chat-highlight .hljs-keyword, .chat-highlight .hljs-selector-tag, .chat-highlight .hljs-literal { color: var(--syn-keyword); }
+.chat-highlight .hljs-string, .chat-highlight .hljs-regexp { color: var(--syn-string); }
+.chat-highlight .hljs-number { color: var(--syn-number); }
+.chat-highlight .hljs-comment, .chat-highlight .hljs-quote { color: var(--syn-comment); font-style: italic; }
+.chat-highlight .hljs-type, .chat-highlight .hljs-built_in, .chat-highlight .hljs-title.class_ { color: var(--syn-type); }
+.chat-highlight .hljs-title, .chat-highlight .hljs-section { color: var(--syn-function); }
+.chat-highlight .hljs-variable, .chat-highlight .hljs-params { color: var(--syn-variable); }
+.chat-highlight .hljs-attr, .chat-highlight .hljs-attribute, .chat-highlight .hljs-name { color: var(--syn-attr); }
+.chat-highlight .hljs-symbol, .chat-highlight .hljs-meta { color: var(--syn-constant); }
+.chat-highlight .hljs-addition { color: var(--syn-inserted); }
+.chat-highlight .hljs-deletion { color: var(--syn-deleted); }

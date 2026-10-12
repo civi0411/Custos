@@ -321,6 +321,28 @@ pub async fn probe_codeassist_models(
         .collect())
 }
 
+pub async fn stream_codeassist(service: &str, base: &str, token: &str, req: &ModelRequest) -> Result<reqwest::Response, DomainError> {
+    tracing::debug!(task_id=%req.task_id,request_id=%req.request_id,"Starting Google stream");
+    if req.tools.as_ref().is_some_and(|tools|!tools.is_empty()) {return Err(DomainError::Validation("Google flat streaming does not support tool schemas".into()));}
+    let project=discover_project(service,base,token).await?;
+    let model=req.model.strip_prefix(if service=="gemini" {"gemini-oauth/"} else {"antigravity/"}).ok_or_else(||DomainError::Validation("Select a discovered Google model".into()))?;
+    let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(120)).build().map_err(|e|DomainError::Validation(e.to_string()))?;
+    let fallback=if service=="antigravity" && base.trim_end_matches('/')=="https://cloudcode-pa.googleapis.com" {Some("https://daily-cloudcode-pa.googleapis.com")} else {None};
+    let body=serde_json::json!({"project":project,"model":model,"userAgent":"antigravity","requestType":"agent","requestId":req.request_id,"request":{"contents":[{"role":"user","parts":[{"text":req.prompt}]}],"generationConfig":{"temperature":req.temperature,"maxOutputTokens":req.max_tokens}}});
+    for (attempt,endpoint) in std::iter::once(base).chain(fallback).enumerate() {
+        let response=client.post(format!("{}/v1internal:streamGenerateContent?alt=sse",endpoint.trim_end_matches('/'))).bearer_auth(token).header("User-Agent",if service=="antigravity" {"antigravity/1.18.3 windows/amd64"} else {"google-api-nodejs-client/9.15.1"}).header("X-Goog-Api-Client","google-cloud-sdk vscode_cloudshelleditor/0.1").json(&body).send().await.map_err(|_|DomainError::Validation("Google stream connection failed".into()))?;
+        let status=response.status();
+        if status.is_success() {return Ok(response);}
+        let retry_after=response.headers().get("retry-after").is_some();
+        let error=response.json::<serde_json::Value>().await.ok();
+        let details=error.as_ref().and_then(|v|v.pointer("/error/details")).and_then(|v|v.as_array());
+        let quota_limited=details.is_some_and(|values|values.iter().any(|v|v["@type"].as_str().is_some_and(|s|s.ends_with("QuotaFailure")||s.ends_with("RetryInfo")) || v["reason"].as_str().is_some_and(|s|s.contains("QUOTA")||s.contains("RATE_LIMIT"))));
+        if attempt==0 && fallback.is_some() && status==reqwest::StatusCode::TOO_MANY_REQUESTS && error.as_ref().and_then(|v|v.pointer("/error/status")).and_then(|v|v.as_str())==Some("RESOURCE_EXHAUSTED") && !quota_limited && !retry_after {continue;}
+        return Err(DomainError::Validation(format!("Google streaming returned {status}")));
+    }
+    Err(DomainError::Validation("Google streaming runtime unavailable".into()))
+}
+
 pub async fn generate_content(
     base: &str,
     token: &str,

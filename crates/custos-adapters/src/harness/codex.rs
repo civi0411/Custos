@@ -185,6 +185,13 @@ impl AgentRuntimePort for CodexHarnessAdapter {
         Ok(())
     }
 
+    async fn run_native_observed(&self, instruction: &str, cwd: &Path, observer: std::sync::Arc<dyn custos_core::contracts::harness::RunObserver>) -> Result<HarnessExecutionResult, DomainError> {
+        if self.mock_mode { return self.run_native(instruction,cwd).await; }
+        let mut command=tokio::process::Command::new(&self.binary_path);
+        command.current_dir(cwd).arg("exec").arg("--json").arg(instruction);
+        super::live::run_observed_process(command,observer,"codex",self.default_timeout).await
+    }
+
     async fn run_native(
         &self,
         instruction: &str,

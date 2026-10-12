@@ -70,14 +70,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const {
     uiScale,
     handleSetUiScale,
-    providers,
     clientKeys,
     connectedAccounts,
     handleDeleteAccount,
     setIsAddProviderOpen,
     handleGenerateClientKey,
     handleRevokeClientKey,
-    handleDeleteProvider,
     refreshModels,
   } = useAppContext();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
@@ -271,7 +269,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         : 'border-transparent text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
                     }`}
                   >
-                    <BarChart3 className="h-3.5 w-3.5 text-emerald-400" />
+                    <BarChart3 className="h-3.5 w-3.5" />
                     <span>Usage & Quotas</span>
                   </button>
                 </div>
@@ -290,58 +288,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </button>
                     </div>
 
-                    {/* Section 1: Backend Providers */}
-                    <div className="space-y-2">
-                      <div className="text-[11px] font-semibold uppercase font-mono tracking-wider text-[var(--color-fg-subtle)]">
-                        Persisted Daemon Providers
-                      </div>
-                      {providers.length === 0 && <p className="rounded-lg border border-[var(--color-border-muted)] p-4 text-xs text-[var(--color-fg-muted)]">No provider records returned by the daemon.</p>}
-                      {providers.map((provider) => (
-                        <div key={provider.id} className="flex items-center justify-between rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3">
-                          <div>
-                            <div className="text-xs font-semibold flex items-center gap-2">
-                              <ProviderBrandIcon provider={provider.iconType} size={16} />
-                              <span>{provider.name}</span>
-                              {provider.fastMode && (
-                                <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1 py-0.2 rounded font-mono">
-                                  Fast
-                                </span>
-                              )}
-                            </div>
-                            <div className="mt-1 font-mono text-[10px] text-[var(--color-fg-muted)] flex items-center gap-1.5">
-                              <span>{provider.model}</span>
-                              {provider.contextWindow && (
-                                <span className="text-[9px] px-1 rounded bg-[var(--color-surface-2)] text-[var(--color-fg-subtle)]">
-                                  {Math.round(provider.contextWindow / 1000)}k ctx
-                                </span>
-                              )}
-                              <span>· {connectedAccounts.find(a => a.id === provider.id && a.providerId === 'local')?.status === 'active' ? 'Online' : connectedAccounts.some(a => a.id === provider.id && a.providerId === 'local') ? 'Offline' : provider.statusLabel}</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="font-mono text-[10px] text-[var(--color-fg-subtle)]">{provider.apiKey}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (window.confirm(`Xóa provider "${provider.name}"?`)) {
-                                  void handleDeleteProvider(provider.id);
-                                }
-                              }}
-                              className="text-[10px] text-rose-400 hover:text-rose-300 transition cursor-pointer"
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
                     {/* Section 2: Connected Accounts (OAuth & Multi-key) */}
                     <div className="space-y-2 pt-2">
                       <div className="text-[11px] font-semibold uppercase font-mono tracking-wider text-[var(--color-fg-subtle)] flex items-center justify-between">
                         <span>Connected Identity & OAuth Accounts</span>
                         <span className="text-[10px] lowercase text-[var(--color-fg-subtle)]">{connectedAccounts.length} accounts</span>
                       </div>
+                      {connectedAccounts.length === 0 && <p className="rounded-lg border border-[var(--color-border-muted)] p-4 text-xs text-[var(--color-fg-muted)]">No connected accounts. Use Connect Provider to add one.</p>}
                       {connectedAccounts.map((account) => (
                         <div key={account.id} className="flex items-center justify-between rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3">
                           <div>

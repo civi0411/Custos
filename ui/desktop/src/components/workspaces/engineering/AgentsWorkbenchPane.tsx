@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Bot,
   Play,
@@ -14,6 +14,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
+import { useAppContext } from '@/context/AppContext';
 import { daemonClient } from '@/api/daemon_client';
 import {
   HarnessDescriptor,
@@ -23,6 +24,10 @@ import {
 } from '@/types/domain';
 
 export const AgentsWorkbenchPane: React.FC = () => {
+  const { startNativeConversation } = useAppContext();
+  const subscription = useRef<AbortController | null>(null);
+  const [activities, setActivities] = useState<import('@/types/domain').LiveRunSnapshot['activities']>([]);
+  useEffect(() => () => subscription.current?.abort(), []);
   const [harnesses, setHarnesses] = useState<HarnessDescriptor[]>([]);
   const [loadingHarnesses, setLoadingHarnesses] = useState<boolean>(true);
   const [selectedHarnessId, setSelectedHarnessId] = useState<string>('claude-code');
@@ -87,27 +92,26 @@ export const AgentsWorkbenchPane: React.FC = () => {
     setRunResult(null);
 
     try {
-      const task = await daemonClient.createTask({
-        title: instruction.trim().slice(0, 120),
-        metadata: {
-          kind: 'native_coding_agent',
-          harness_id: selectedHarnessId,
-          workspace_id: selectedWorkspaceId,
-        },
-      });
-      const result = await daemonClient.startRun({
-        task_id: task.id,
-        preferred_mode: 'native',
-        harness_id: selectedHarnessId,
-        workspace_id: selectedWorkspaceId,
-        prompt: instruction.trim(),
-      });
+      setActivities([]);
+      const { run: result, sessionId } = await startNativeConversation(instruction.trim(), selectedHarnessId, selectedWorkspaceId);
       setRunResult(result);
-      setStatusMessage(
-        result.status === 'completed'
-          ? `Task-backed run ${result.run_id.slice(0, 8)} completed; verification is still separate.`
-          : `Run ${result.run_id.slice(0, 8)} finished with status ${result.status}.`
-      );
+      subscription.current?.abort();
+      const controller = new AbortController(); subscription.current = controller;
+      let latest: import('@/types/domain').LiveRunSnapshot | null = null;
+      let timer: number | undefined;
+      const flush = () => {
+        timer = undefined; if (!latest) return;
+        setRunResult({ ...result, output: latest.text, status: (['completed','failed','cancelled'].includes(latest.status) ? latest.status : 'active') as RunHandle['status'] });
+        setStatusMessage(latest.reconnecting ? 'Reconnecting' : latest.status);
+        setActivities(latest.activities); setErrorMessage(latest.error || null);
+      };
+      try {
+        await daemonClient.watchRun(sessionId, result.run_id, snapshot => {
+          latest = snapshot;
+          if (['completed','failed','cancelled','interrupted'].includes(snapshot.status)) { if (timer !== undefined) window.clearTimeout(timer); flush(); }
+          else if (timer === undefined) timer = window.setTimeout(flush, 50);
+        }, controller.signal);
+      } finally { if (timer !== undefined) window.clearTimeout(timer); if (!controller.signal.aborted) flush(); }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Execution error encountered');
       setStatusMessage(null);
@@ -376,6 +380,9 @@ export const AgentsWorkbenchPane: React.FC = () => {
               <span>{statusMessage}</span>
             </div>
           )}
+
+          {running && runResult && <button type="button" onClick={() => void daemonClient.cancelRun({run_id: runResult.run_id, reason: 'Stopped from native inspector'}).catch(error => setErrorMessage(String(error)))} className="mb-3 rounded border border-[var(--color-border-default)] px-3 py-1 text-xs text-[var(--color-fg-default)]">Stop</button>}
+          {activities.map((activity, index) => <details key={index} className="mb-2 rounded border border-[var(--color-border-default)] p-2 text-xs"><summary>{activity.kind === 'reasoning_summary' ? 'Reasoning summary' : activity.kind === 'tool_input' ? 'Tool input' : 'Tool output'}</summary><pre className="max-h-48 overflow-auto whitespace-pre-wrap">{JSON.stringify(activity.payload, null, 2)}</pre></details>)}
 
           {/* Task-backed run output */}
           {runResult && (

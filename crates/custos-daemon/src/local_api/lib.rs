@@ -377,6 +377,8 @@ pub struct ExplainPlanRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartRunRequest {
+    #[serde(default)]
+    pub background: bool,
     pub task_id: String,
     #[serde(default)]
     pub actor: Option<String>,

@@ -8,6 +8,10 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum ProviderEventType {
     Chunk,
+    Thinking,
+    ReasoningSummary,
+    ToolOutput,
+    Usage,
     ToolCall,
     Completed,
     Failed,
@@ -31,6 +35,10 @@ pub struct TokenUsage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderEvent {
     pub request_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tokens_used: Option<usize>,
     pub event_type: ProviderEventType,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
@@ -46,6 +54,8 @@ impl ProviderEvent {
     pub fn chunk(request_id: impl Into<String>, text: impl Into<String>) -> Self {
         Self {
             request_id: request_id.into(),
+            model_id: None,
+            tokens_used: None,
             event_type: ProviderEventType::Chunk,
             text: Some(text.into()),
             tool_calls: None,
@@ -57,6 +67,8 @@ impl ProviderEvent {
     pub fn tool_call(request_id: impl Into<String>, tool_calls: Vec<ToolCall>) -> Self {
         Self {
             request_id: request_id.into(),
+            model_id: None,
+            tokens_used: None,
             event_type: ProviderEventType::ToolCall,
             text: None,
             tool_calls: Some(tool_calls),
@@ -72,6 +84,8 @@ impl ProviderEvent {
     ) -> Self {
         Self {
             request_id: request_id.into(),
+            model_id: None,
+            tokens_used: None,
             event_type: ProviderEventType::Completed,
             text,
             tool_calls: None,
@@ -83,6 +97,8 @@ impl ProviderEvent {
     pub fn failed(request_id: impl Into<String>, error: impl Into<String>) -> Self {
         Self {
             request_id: request_id.into(),
+            model_id: None,
+            tokens_used: None,
             event_type: ProviderEventType::Failed,
             text: None,
             tool_calls: None,

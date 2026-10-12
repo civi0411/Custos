@@ -153,3 +153,4 @@ pub use workspace_files::{
     WorkspaceDiffEntry, WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff,
     WorkspaceFileEntry, WorkspaceFileTree, WriteWorkspaceFileParams,
 };
+pub use run::{LiveRunEvent, LiveRunReplay, LiveRunSnapshot};
