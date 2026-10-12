@@ -24,6 +24,7 @@ import {
   Tablet,
   Smartphone,
   Monitor,
+  Cpu,
 } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
 import type { BrowserSession, BrowserTab } from '@/types/domain';
@@ -91,7 +92,7 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
   onAskAgent,
 }) => {
   const [, setSessions] = useState<BrowserSession[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [, setActiveSessionId] = useState<string | null>(null);
   const [, setTabs] = useState<BrowserTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
 
@@ -102,6 +103,15 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
   const [historyIndex, setHistoryIndex] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Dual-mode Engine state (Local Iframe vs Governed Chrome CDP)
+  const [engineMode, setEngineMode] = useState<'auto' | 'governed' | 'iframe'>('auto');
+  const [governedScreenshot, setGovernedScreenshot] = useState<string | null>(null);
+  const [governedSnapshot, setGovernedSnapshot] = useState<{
+    links?: string[];
+    summary?: string;
+  } | null>(null);
+  const [isGovernedNavigating, setIsGovernedNavigating] = useState<boolean>(false);
 
   // Address bar autocomplete & focus state
   const [addressDropdownOpen, setAddressDropdownOpen] = useState<boolean>(false);
@@ -159,35 +169,33 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
     try {
       const sessList = await daemonClient.listBrowserSessions(workspaceId);
       setSessions(sessList);
-      if (sessList.length > 0 && !activeSessionId) {
-        setActiveSessionId(sessList[0].id);
+      if (sessList.length > 0) {
+        const sId = sessList[0].id;
+        setActiveSessionId(sId);
+        const tabList = await daemonClient.listBrowserTabs(sId);
+        setTabs(tabList);
+        if (tabList.length > 0) {
+          setActiveTabId(tabList[0].id);
+        } else {
+          const tab = await daemonClient.createBrowserTab(sId, 'about:blank');
+          setTabs([tab]);
+          setActiveTabId(tab.id);
+        }
+      } else {
+        const created = await daemonClient.createBrowserSession('Default Session', workspaceId);
+        setActiveSessionId(created.id);
+        const tab = await daemonClient.createBrowserTab(created.id, 'about:blank');
+        setTabs([tab]);
+        setActiveTabId(tab.id);
       }
     } catch (_err) {
       // Quiet failover
     }
-  }, [workspaceId, activeSessionId]);
-
-  const loadTabs = React.useCallback(async (sessionId: string) => {
-    try {
-      const tabList = await daemonClient.listBrowserTabs(sessionId);
-      setTabs(tabList);
-      if (tabList.length > 0 && (!activeTabId || !tabList.some((t) => t.id === activeTabId))) {
-        setActiveTabId(tabList[0].id);
-      }
-    } catch (_err) {
-      // Quiet failover
-    }
-  }, [activeTabId]);
+  }, [workspaceId]);
 
   useEffect(() => {
     loadSessions();
   }, [loadSessions]);
-
-  useEffect(() => {
-    if (activeSessionId) {
-      loadTabs(activeSessionId);
-    }
-  }, [activeSessionId, loadTabs]);
 
   // Orca smart navigation normalizer (shared/browser-url.ts parity)
   const normalizeNavigationTarget = (raw: string): string => {
@@ -215,7 +223,71 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
     return `https://duckduckgo.com/?q=${encodeURIComponent(trimmed)}`;
   };
 
-  const navigateTo = (targetUrl: string) => {
+  const isTargetLocal = (url: string) => {
+    return /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i.test(url);
+  };
+
+  const executeGovernedNavigation = async (tabId: string, url: string) => {
+    setIsGovernedNavigating(true);
+    setLoadError(null);
+    try {
+      await daemonClient.navigateBrowserTab(tabId, url);
+      const shot = await daemonClient.screenshotBrowserTab(tabId);
+      if (shot?.image_base64) {
+        setGovernedScreenshot(shot.image_base64);
+      }
+      const snap = await daemonClient.snapshotBrowserTab({ tab_id: tabId });
+      if (snap?.snapshot) {
+        setGovernedSnapshot({
+          links: snap.snapshot.links,
+          summary: snap.snapshot.dom_tree_summary,
+        });
+      }
+    } catch (err: any) {
+      console.warn('Governed navigation warning:', err);
+    } finally {
+      setIsGovernedNavigating(false);
+      setLoading(false);
+    }
+  };
+
+  const handleRefClick = async (refKey: string) => {
+    if (!activeTabId) return;
+    onShowToast?.(`Clicking ${refKey} via Governed Chrome...`);
+    try {
+      await daemonClient.clickBrowserTab(activeTabId, refKey);
+      const shot = await daemonClient.screenshotBrowserTab(activeTabId);
+      if (shot?.image_base64) {
+        setGovernedScreenshot(shot.image_base64);
+      }
+      const snap = await daemonClient.snapshotBrowserTab({ tab_id: activeTabId });
+      if (snap?.snapshot) {
+        setGovernedSnapshot({
+          links: snap.snapshot.links,
+          summary: snap.snapshot.dom_tree_summary,
+        });
+      }
+      onShowToast?.(`Clicked ${refKey} successfully`);
+    } catch (err: any) {
+      onShowToast?.(`Click failed: ${err.message || err}`);
+    }
+  };
+
+  const handleRefFill = async (refKey: string, text: string) => {
+    if (!activeTabId) return;
+    try {
+      await daemonClient.fillBrowserTab(activeTabId, refKey, text);
+      const shot = await daemonClient.screenshotBrowserTab(activeTabId);
+      if (shot?.image_base64) {
+        setGovernedScreenshot(shot.image_base64);
+      }
+      onShowToast?.(`Filled text into ${refKey}`);
+    } catch (err: any) {
+      onShowToast?.(`Fill failed: ${err.message || err}`);
+    }
+  };
+
+  const navigateTo = (targetUrl: string, forcedEngine?: 'governed' | 'iframe') => {
     const resolved = normalizeNavigationTarget(targetUrl);
     setLoading(true);
     setLoadError(null);
@@ -230,16 +302,42 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
     });
     setHistoryIndex((prev) => prev + 1);
 
-    if (iframeRef.current && resolved !== 'about:blank') {
-      iframeRef.current.src = resolved;
+    if (resolved === 'about:blank') {
+      setGovernedScreenshot(null);
+      setGovernedSnapshot(null);
+      setLoading(false);
+      return;
     }
 
-    if (activeTabId && resolved !== 'about:blank') {
-      daemonClient.navigateBrowserTab(activeTabId, resolved).catch(() => {});
-    }
+    const mode = forcedEngine || engineMode;
+    const isLocal = isTargetLocal(resolved);
+    const shouldUseGoverned = mode === 'governed' || (mode === 'auto' && !isLocal);
 
-    // Stop loading indicator after slight delay for visual feedback
-    setTimeout(() => setLoading(false), 500);
+    if (shouldUseGoverned) {
+      if (activeTabId) {
+        executeGovernedNavigation(activeTabId, resolved);
+      } else {
+        daemonClient.createBrowserSession('Default Session', workspaceId).then((sess) => {
+          setActiveSessionId(sess.id);
+          return daemonClient.createBrowserTab(sess.id, resolved);
+        }).then((tab) => {
+          setActiveTabId(tab.id);
+          return executeGovernedNavigation(tab.id, resolved);
+        }).catch((err) => {
+          console.warn('Failed to auto-init browser tab:', err);
+          setLoading(false);
+        });
+      }
+    } else {
+      setGovernedScreenshot(null);
+      if (iframeRef.current) {
+        iframeRef.current.src = resolved;
+      }
+      if (activeTabId) {
+        daemonClient.navigateBrowserTab(activeTabId, resolved).catch(() => {});
+      }
+      setTimeout(() => setLoading(false), 500);
+    }
   };
 
   const handleBack = () => {
@@ -505,6 +603,26 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
 
         {/* Right Tool Cluster (Orca BrowserChromeElementToolButtons & Toolbar) */}
         <div className="flex items-center gap-1 shrink-0 ml-auto">
+          {/* Dual Engine Mode Toggle */}
+          <button
+            onClick={() => {
+              const nextMode = (engineMode === 'governed' || governedScreenshot) ? 'iframe' : 'governed';
+              setEngineMode(nextMode);
+              if (currentUrl !== 'about:blank') {
+                navigateTo(currentUrl, nextMode);
+              }
+              onShowToast?.(`Switched engine to ${nextMode === 'governed' ? 'Governed Chrome CDP' : 'Direct Local Frame'}`);
+            }}
+            className={`flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] font-mono transition ${
+              governedScreenshot
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                : 'border-[var(--color-border-default)] bg-[var(--color-surface-2)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+            }`}
+            title="Toggle between Governed Chrome CDP and Direct Local Frame"
+          >
+            <Cpu className="h-3 w-3 text-emerald-400" />
+            <span>{governedScreenshot ? 'Chrome CDP' : isTargetLocal(currentUrl) ? 'Local Frame' : 'Auto'}</span>
+          </button>
           {/* Grab Element Tool */}
           <button
             onClick={handleTriggerGrab}
@@ -826,6 +944,17 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
                     </p>
                     <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
                       <button
+                        onClick={() => {
+                          setEngineMode('governed');
+                          navigateTo(currentUrl, 'governed');
+                          onShowToast?.('Switching to Governed Chrome CDP Engine...');
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-500/50 bg-emerald-500/20 hover:bg-emerald-500/30 text-xs text-emerald-300 font-medium transition"
+                      >
+                        <Cpu className="h-3.5 w-3.5 text-emerald-400" />
+                        <span>Switch to Governed Chrome Engine</span>
+                      </button>
+                      <button
                         onClick={handleReload}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-xs text-[var(--color-editor-fg)] font-medium transition"
                       >
@@ -849,14 +978,57 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
                         <ExternalLink className="h-3.5 w-3.5" />
                         <span>Open Externally</span>
                       </button>
-                      <button
-                        onClick={() => handleInsertToChat(`Analyze the page structure and extract design tokens from ${currentUrl}`)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-xs text-amber-300 font-medium transition"
-                      >
-                        <Sparkles className="h-3.5 w-3.5" />
-                        <span>Ask Agent to Scrape</span>
-                      </button>
                     </div>
+                  </div>
+                </div>
+              ) : governedScreenshot ? (
+                /* Governed Chrome CDP Screencast Canvas */
+                <div className="relative w-full h-full flex flex-col items-center justify-start overflow-auto bg-slate-950">
+                  {isGovernedNavigating && (
+                    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-xs">
+                      <div className="flex items-center gap-2 rounded-lg bg-[var(--color-surface-1)] px-4 py-2 text-xs border border-[var(--color-border-default)] shadow-xl text-emerald-400">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Rendering via Governed Chrome Engine...</span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="relative max-w-full">
+                    <img
+                      src={governedScreenshot}
+                      alt="Governed Chrome Viewport"
+                      className="max-w-full h-auto block select-none pointer-events-auto"
+                    />
+                    {/* Interactive AX Tree Element Overlay in Grab Mode */}
+                    {grabMode && governedSnapshot?.links && (
+                      <div className="absolute inset-0 pointer-events-none p-3 flex flex-wrap gap-1.5 content-start bg-slate-950/20 backdrop-blur-[0.5px]">
+                        {governedSnapshot.links.slice(0, 40).map((link, idx) => {
+                          const match = link.match(/^@([a-zA-Z0-9]+)\s*\[(.*?)\]:\s*(.*)$/);
+                          const refKey = match ? match[1] : `e${idx + 1}`;
+                          const role = match ? match[2] : 'element';
+                          const name = match ? match[3] : link;
+                          return (
+                            <button
+                              key={refKey}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedElement({
+                                  tagName: role.toUpperCase(),
+                                  selector: `@${refKey}`,
+                                  classes: role,
+                                  text: name || refKey,
+                                });
+                                onShowToast?.(`Selected @${refKey} [${role}]: ${name}`);
+                              }}
+                              className="pointer-events-auto flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/90 hover:bg-emerald-400 text-black text-[10px] font-mono font-bold shadow-md transition"
+                              title={`${role}: ${name}`}
+                            >
+                              <span>@{refKey}</span>
+                              <span className="font-normal opacity-85 truncate max-w-[100px]">{name || role}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -991,29 +1163,96 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
               {activeDevtoolTab === 'subagent' && (
                 <div className="space-y-2 font-sans">
                   <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="font-semibold text-cyan-400 font-mono">Accessibility (AX Tree) Nodes</span>
-                    <button
-                      onClick={() => {
-                        handleInsertToChat(
-                          `Browser Subagent Task for ${currentUrl}:\nAnalyze page accessibility tree, evaluate interactive roles, and report missing aria-labels or contrast warnings.`
-                        );
-                      }}
-                      className="flex items-center gap-1 text-[11px] text-cyan-300 hover:underline"
-                    >
-                      <Send className="h-3 w-3" />
-                      <span>Send AX Tree to Subagent</span>
-                    </button>
+                    <span className="font-semibold text-cyan-400 font-mono">
+                      Accessibility (AX Tree) Interactive Nodes ({governedSnapshot?.links?.length || 0})
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={async () => {
+                          if (activeTabId) {
+                            onShowToast?.('Refetching AX Tree snapshot...');
+                            const snap = await daemonClient.snapshotBrowserTab({ tab_id: activeTabId });
+                            if (snap?.snapshot) {
+                              setGovernedSnapshot({
+                                links: snap.snapshot.links,
+                                summary: snap.snapshot.dom_tree_summary,
+                              });
+                            }
+                          }
+                        }}
+                        className="text-[11px] text-[var(--color-fg-muted)] hover:text-emerald-400"
+                      >
+                        Refresh Snapshot
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleInsertToChat(
+                            `Browser Subagent Task for ${currentUrl}:\nAccessibility tree nodes:\n${governedSnapshot?.links?.join('\n') || 'None'}`
+                          );
+                        }}
+                        className="flex items-center gap-1 text-[11px] text-cyan-300 hover:underline"
+                      >
+                        <Send className="h-3 w-3" />
+                        <span>Send to Agent</span>
+                      </button>
+                    </div>
                   </div>
-                  <div className="space-y-1.5 font-mono text-[11px]">
-                    <div className="p-1.5 rounded bg-[var(--color-surface-2)] border border-[var(--color-border-muted)]">
-                      <span className="text-cyan-400">[banner]</span> &quot;Page Header&quot; (bounds: 100% × 56px)
-                    </div>
-                    <div className="p-1.5 rounded bg-[var(--color-surface-2)] border border-[var(--color-border-muted)]">
-                      <span className="text-cyan-400">[main]</span> &quot;Primary Content Viewport&quot; (bounds: 100% × 820px)
-                    </div>
-                    <div className="p-1.5 rounded bg-[var(--color-surface-2)] border border-[var(--color-border-muted)]">
-                      <span className="text-cyan-400">[button]</span> &quot;Interactive Action Target&quot; (focusable: true)
-                    </div>
+                  <div className="space-y-1.5 font-mono text-[11px] max-h-48 overflow-auto">
+                    {governedSnapshot?.links && governedSnapshot.links.length > 0 ? (
+                      governedSnapshot.links.map((link) => {
+                        const match = link.match(/^@([a-zA-Z0-9]+)\s*\[(.*?)\]:\s*(.*)$/);
+                        const refKey = match ? match[1] : link;
+                        const role = match ? match[2] : 'element';
+                        const name = match ? match[3] : '';
+                        return (
+                          <div
+                            key={link}
+                            className="flex items-center justify-between p-1.5 rounded bg-[var(--color-surface-2)] border border-[var(--color-border-muted)] hover:border-emerald-500/40 transition"
+                          >
+                            <div className="flex items-center gap-1.5 truncate mr-2">
+                              <span className="text-emerald-400 font-bold">@{refKey}</span>
+                              <span className="text-cyan-400">[{role}]</span>
+                              <span className="text-[var(--color-editor-fg)] truncate">{name}</span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => handleRefClick(refKey)}
+                                className="px-1.5 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10px]"
+                                title="Click this element via Governed Chrome"
+                              >
+                                Click
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const text = prompt(`Enter text to fill into @${refKey}:`);
+                                  if (text !== null) {
+                                    handleRefFill(refKey, text);
+                                  }
+                                }}
+                                className="px-1.5 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px]"
+                                title="Fill text into this element"
+                              >
+                                Fill
+                              </button>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(`@${refKey}`);
+                                  onShowToast?.(`Copied @${refKey}`);
+                                }}
+                                className="p-1 rounded text-[var(--color-fg-muted)] hover:text-white"
+                                title="Copy ref"
+                              >
+                                <Copy className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-3 text-center text-[var(--color-fg-subtle)] font-sans">
+                        No AX Tree nodes captured yet. Navigate to a page using Governed Chrome Engine to view interactive element refs.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

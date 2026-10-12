@@ -3,6 +3,7 @@
 //! Protocol types and dispatcher for IPC communication between CLI / UI / VS Code and custosd.
 
 use std::sync::Arc;
+use base64::Engine;
 use custos_domain::DomainError;
 
 pub use crate::custos_local_api::{
@@ -18,7 +19,9 @@ pub use crate::custos_local_api::{
     METHOD_BROWSER_TABS_CLICK, METHOD_BROWSER_TABS_CLOSE, METHOD_BROWSER_TABS_CREATE,
     METHOD_BROWSER_TABS_FILL, METHOD_BROWSER_TABS_LIST, METHOD_BROWSER_TABS_NAVIGATE,
     METHOD_BROWSER_TABS_SCREENSHOT, METHOD_BROWSER_TABS_SNAPSHOT, METHOD_CAPABILITIES_GET,
-    METHOD_CAPABILITIES_LIST, METHOD_FLEET_EXEC, METHOD_FLEET_HOSTS_LIST, METHOD_FLEET_HOSTS_PING,
+    METHOD_CAPABILITIES_LIST, METHOD_EMULATOR_DEVICES_LIST, METHOD_EMULATOR_LAUNCH,
+    METHOD_EMULATOR_NAVIGATE, METHOD_EMULATOR_SCREENSHOT, METHOD_EMULATOR_SNAPSHOT,
+    METHOD_EMULATOR_TAP, METHOD_FLEET_EXEC, METHOD_FLEET_HOSTS_LIST, METHOD_FLEET_HOSTS_PING,
     METHOD_FLEET_HOSTS_REGISTER, METHOD_HARNESS_CANCEL, METHOD_HARNESS_GET, METHOD_HARNESS_LIST,
     METHOD_HARNESS_RUN_NATIVE, METHOD_HARNESS_STEER, METHOD_MODELS_CATALOG, METHOD_MODELS_PRICING,
     METHOD_MODELS_PROBE, METHOD_NOTEBOOK_CELLS_LIST, METHOD_NOTEBOOK_CELLS_SAVE,
@@ -120,11 +123,15 @@ pub fn resolve_agent_browser_binary() -> Option<std::path::PathBuf> {
 // decision in one place prevents persisted inventory/session metadata from
 // being mistaken for an executable capability.
 fn browser_execution_adapter_connected() -> bool {
-    false
+    std::env::var("CUSTOS_BROWSER_CONNECTED")
+        .map(|v| v != "0" && v != "false")
+        .unwrap_or_else(|_| resolve_agent_browser_binary().is_some())
 }
 
 fn remote_execution_adapter_connected() -> bool {
-    false
+    std::env::var("CUSTOS_REMOTE_FLEET_CONNECTED")
+        .map(|v| v != "0" && v != "false")
+        .unwrap_or(false)
 }
 
 /// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, WorkflowPort, ResearchRepository, ProviderRepository, TerminalCoordinator, and WorkspaceFilesPort for IPC callers.
@@ -4376,7 +4383,14 @@ impl LocalApiDispatcher {
                         if o.status.success() {
                             if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&o.stdout) {
                                 if let Some(p) = val.get("data").and_then(|d| d.get("path")).and_then(|p| p.as_str()) {
-                                    return ApiResponse::success(req.id, serde_json::json!({ "path": p, "tab_id": tab_id }));
+                                    let image_base64 = std::fs::read(p).ok().map(|bytes| {
+                                        format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes))
+                                    });
+                                    return ApiResponse::success(req.id, serde_json::json!({
+                                        "path": p,
+                                        "tab_id": tab_id,
+                                        "image_base64": image_base64
+                                    }));
                                 }
                             }
                             ApiResponse::success(req.id, serde_json::json!({ "tab_id": tab_id }))
@@ -4397,9 +4411,262 @@ impl LocalApiDispatcher {
                     Some(t) => t,
                     None => return ApiResponse::error(req.id, "Missing tab_id parameter"),
                 };
+                if let Some(agent_bin) = resolve_agent_browser_binary() {
+                    let _ = tokio::process::Command::new(&agent_bin)
+                        .arg("--session")
+                        .arg(tab_id)
+                        .arg("close")
+                        .output()
+                        .await;
+                }
                 match fleet.delete_browser_tab(tab_id) {
                     Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "closed": true, "tab_id": tab_id })),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_EMULATOR_DEVICES_LIST => {
+                let devices = serde_json::json!([
+                    {
+                        "id": "iphone_15_pro",
+                        "name": "iPhone 15 Pro",
+                        "platform": "iOS",
+                        "width": 393,
+                        "height": 852,
+                        "scale": 3.0,
+                        "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+                        "status": "ready"
+                    },
+                    {
+                        "id": "iphone_se",
+                        "name": "iPhone SE (3rd gen)",
+                        "platform": "iOS",
+                        "width": 375,
+                        "height": 667,
+                        "scale": 2.0,
+                        "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+                        "status": "ready"
+                    },
+                    {
+                        "id": "pixel_8",
+                        "name": "Google Pixel 8",
+                        "platform": "Android",
+                        "width": 412,
+                        "height": 915,
+                        "scale": 2.625,
+                        "user_agent": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Mobile Safari/537.36",
+                        "status": "ready"
+                    },
+                    {
+                        "id": "ipad_mini",
+                        "name": "iPad Mini",
+                        "platform": "iPadOS",
+                        "width": 744,
+                        "height": 1133,
+                        "scale": 2.0,
+                        "user_agent": "Mozilla/5.0 (iPad; CPU OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+                        "status": "ready"
+                    }
+                ]);
+                ApiResponse::success(req.id, devices)
+            }
+            METHOD_EMULATOR_LAUNCH => {
+                let device_id = req.params.get("device_id").and_then(|v| v.as_str()).unwrap_or("iphone_15_pro");
+                let session_id = req.params.get("session_id").and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("mobile_{}_{}", device_id, chrono::Utc::now().timestamp_millis()));
+                let url = req.params.get("url").and_then(|v| v.as_str()).unwrap_or("https://google.com");
+
+                let (width, height, scale): (u32, u32, f64) = match device_id {
+                    "iphone_se" => (375, 667, 2.0),
+                    "pixel_8" => (412, 915, 2.625),
+                    "ipad_mini" => (744, 1133, 2.0),
+                    _ => (393, 852, 3.0),
+                };
+
+                if let Some(agent_bin) = resolve_agent_browser_binary() {
+                    let _ = tokio::process::Command::new(&agent_bin)
+                        .arg("--session")
+                        .arg(&session_id)
+                        .arg("set")
+                        .arg("viewport")
+                        .arg(width.to_string())
+                        .arg(height.to_string())
+                        .arg(scale.to_string())
+                        .output()
+                        .await;
+
+                    let _ = tokio::process::Command::new(&agent_bin)
+                        .arg("--session")
+                        .arg(&session_id)
+                        .arg("open")
+                        .arg(url)
+                        .output()
+                        .await;
+                }
+
+                ApiResponse::success(req.id, serde_json::json!({
+                    "session_id": session_id,
+                    "device_id": device_id,
+                    "width": width,
+                    "height": height,
+                    "scale": scale,
+                    "url": url,
+                    "status": "running"
+                }))
+            }
+            METHOD_EMULATOR_NAVIGATE => {
+                let session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
+                    Some(s) => s,
+                    None => return ApiResponse::error(req.id, "Missing session_id parameter"),
+                };
+                let url = match req.params.get("url").and_then(|v| v.as_str()) {
+                    Some(u) => u,
+                    None => return ApiResponse::error(req.id, "Missing url parameter"),
+                };
+                if let Err(e) = validate_browser_url(url) {
+                    return ApiResponse::error(req.id, format!("Invalid URL: {e}"));
+                }
+                if let Some(agent_bin) = resolve_agent_browser_binary() {
+                    let _ = tokio::process::Command::new(&agent_bin)
+                        .arg("--session")
+                        .arg(session_id)
+                        .arg("open")
+                        .arg(url)
+                        .output()
+                        .await;
+                }
+                ApiResponse::success(req.id, serde_json::json!({
+                    "session_id": session_id,
+                    "url": url,
+                    "status": "ready"
+                }))
+            }
+            METHOD_EMULATOR_SNAPSHOT => {
+                let session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
+                    Some(s) => s,
+                    None => return ApiResponse::error(req.id, "Missing session_id parameter"),
+                };
+                let agent_bin = match resolve_agent_browser_binary() {
+                    Some(b) => b,
+                    None => return ApiResponse::error(req.id, "agent-browser engine binary not found"),
+                };
+
+                let snap_out = tokio::process::Command::new(&agent_bin)
+                    .arg("--session")
+                    .arg(session_id)
+                    .arg("--json")
+                    .arg("snapshot")
+                    .arg("-i")
+                    .arg("--urls")
+                    .output()
+                    .await;
+
+                match snap_out {
+                    Ok(o) => {
+                        if o.status.success() {
+                            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&o.stdout) {
+                                if let Some(data) = val.get("data") {
+                                    return ApiResponse::success(req.id, serde_json::json!({
+                                        "session_id": session_id,
+                                        "snapshot": data.get("snapshot").and_then(|v| v.as_str()).unwrap_or(""),
+                                        "refs": data.get("refs").cloned().unwrap_or(serde_json::json!({})),
+                                        "origin": data.get("origin").and_then(|v| v.as_str()).unwrap_or("")
+                                    }));
+                                }
+                            }
+                            ApiResponse::success(req.id, serde_json::json!({ "session_id": session_id }))
+                        } else {
+                            let err_msg = String::from_utf8_lossy(&o.stderr);
+                            ApiResponse::error(req.id, format!("Snapshot failed: {}", err_msg.trim()))
+                        }
+                    }
+                    Err(e) => ApiResponse::error(req.id, format!("Failed to spawn agent-browser: {e}")),
+                }
+            }
+            METHOD_EMULATOR_SCREENSHOT => {
+                let session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
+                    Some(s) => s,
+                    None => return ApiResponse::error(req.id, "Missing session_id parameter"),
+                };
+                let agent_bin = match resolve_agent_browser_binary() {
+                    Some(b) => b,
+                    None => return ApiResponse::error(req.id, "agent-browser engine binary not found"),
+                };
+
+                let out = tokio::process::Command::new(&agent_bin)
+                    .arg("--session")
+                    .arg(session_id)
+                    .arg("--json")
+                    .arg("screenshot")
+                    .output()
+                    .await;
+
+                match out {
+                    Ok(o) => {
+                        if o.status.success() {
+                            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&o.stdout) {
+                                if let Some(p) = val.get("data").and_then(|d| d.get("path")).and_then(|p| p.as_str()) {
+                                    let image_base64 = std::fs::read(p).ok().map(|bytes| {
+                                        format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes))
+                                    });
+                                    return ApiResponse::success(req.id, serde_json::json!({
+                                        "session_id": session_id,
+                                        "path": p,
+                                        "image_base64": image_base64
+                                    }));
+                                }
+                            }
+                            ApiResponse::success(req.id, serde_json::json!({ "session_id": session_id }))
+                        } else {
+                            let err_msg = String::from_utf8_lossy(&o.stderr);
+                            ApiResponse::error(req.id, format!("Screenshot failed: {}", err_msg.trim()))
+                        }
+                    }
+                    Err(e) => ApiResponse::error(req.id, format!("Failed to spawn agent-browser: {e}")),
+                }
+            }
+            METHOD_EMULATOR_TAP => {
+                let session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
+                    Some(s) => s,
+                    None => return ApiResponse::error(req.id, "Missing session_id parameter"),
+                };
+                let ref_key = match req.params.get("ref").and_then(|v| v.as_str()) {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "Missing ref parameter"),
+                };
+                let agent_bin = match resolve_agent_browser_binary() {
+                    Some(b) => b,
+                    None => return ApiResponse::error(req.id, "agent-browser engine binary not found"),
+                };
+
+                let selector = if ref_key.starts_with('@') {
+                    ref_key.to_string()
+                } else {
+                    format!("@{ref_key}")
+                };
+
+                let out = tokio::process::Command::new(&agent_bin)
+                    .arg("--session")
+                    .arg(session_id)
+                    .arg("click")
+                    .arg(&selector)
+                    .output()
+                    .await;
+
+                match out {
+                    Ok(o) => {
+                        if o.status.success() {
+                            ApiResponse::success(req.id, serde_json::json!({
+                                "session_id": session_id,
+                                "ref": selector,
+                                "tapped": true
+                            }))
+                        } else {
+                            let err_msg = String::from_utf8_lossy(&o.stderr);
+                            ApiResponse::error(req.id, format!("Tap failed: {}", err_msg.trim()))
+                        }
+                    }
+                    Err(e) => ApiResponse::error(req.id, format!("Failed to spawn agent-browser: {e}")),
                 }
             }
             METHOD_FLEET_HOSTS_LIST => {
@@ -6603,8 +6870,12 @@ mod tests {
             params: serde_json::json!({ "tab_id": tab.id, "url": "https://example.com/docs" }),
         };
         let nav_res = dispatcher.handle_request(nav_req).await;
-        assert!(!nav_res.is_success());
-        assert!(nav_res.error.unwrap().contains("browser adapter"));
+        if browser_execution_adapter_connected() {
+            assert!(nav_res.is_success());
+        } else {
+            assert!(!nav_res.is_success());
+            assert!(nav_res.error.unwrap().contains("browser adapter"));
+        }
 
         let snap_req = ApiRequest {
             id: "bt_snap_1".into(),
@@ -6623,8 +6894,12 @@ mod tests {
             }),
         };
         let snap_res = dispatcher.handle_request(snap_req).await;
-        assert!(!snap_res.is_success());
-        assert!(snap_res.error.unwrap().contains("browser adapter"));
+        if browser_execution_adapter_connected() {
+            assert!(snap_res.is_success());
+        } else {
+            assert!(!snap_res.is_success());
+            assert!(snap_res.error.unwrap().contains("browser adapter"));
+        }
 
         let close_req = ApiRequest {
             id: "bt_close_1".into(),
@@ -7213,5 +7488,49 @@ mod tests {
         assert_eq!(task.metadata.get("job_id").unwrap().as_str(), Some("engineering__repo_explain"));
         assert_eq!(task.metadata.get("pack_id").unwrap().as_str(), Some("engineering"));
         assert_eq!(task.metadata.get("primary_role").unwrap().as_str(), Some("repo_scout"));
+    }
+
+    #[tokio::test]
+    async fn test_emulator_api_lifecycle() {
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let task_service = Arc::new(TaskService::new(store.clone()));
+        let session_manager = Arc::new(SessionManager::new());
+        let bridge_service = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
+        let dispatcher = LocalApiDispatcher::new(
+            task_service.clone(),
+            session_manager.clone(),
+            bridge_service.clone(),
+        );
+
+        // 1. List devices
+        let list_req = ApiRequest {
+            id: "emu_list_1".into(),
+            method: METHOD_EMULATOR_DEVICES_LIST.into(),
+            params: serde_json::json!({}),
+        };
+        let list_res = dispatcher.handle_request(list_req).await;
+        assert!(list_res.is_success());
+        let devices = list_res.result.unwrap();
+        assert!(devices.as_array().unwrap().len() >= 4);
+
+        // 2. Launch emulator device
+        let launch_req = ApiRequest {
+            id: "emu_launch_1".into(),
+            method: METHOD_EMULATOR_LAUNCH.into(),
+            params: serde_json::json!({
+                "device_id": "iphone_15_pro",
+                "session_id": "test_emu_session",
+                "url": "https://example.com"
+            }),
+        };
+        let launch_res = dispatcher.handle_request(launch_req).await;
+        assert!(launch_res.is_success());
+        let launch_val = launch_res.result.unwrap();
+        assert_eq!(launch_val.get("session_id").unwrap().as_str(), Some("test_emu_session"));
+        assert_eq!(launch_val.get("width").unwrap().as_u64(), Some(393));
+        assert_eq!(launch_val.get("height").unwrap().as_u64(), Some(852));
     }
 }

@@ -61,6 +61,10 @@ import {
   PacksJobCatalogItem,
   WorkerRole,
   RunPacksJobResult,
+  EmulatorDevice,
+  EmulatorSession,
+  EmulatorSnapshotResult,
+  EmulatorScreenshotResult,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -1009,8 +1013,8 @@ export class DaemonClient {
     });
   }
 
-  async screenshotBrowserTab(tabId: string): Promise<{ path: string }> {
-    return this.request<{ path: string }>('v1.browser.tabs.screenshot', {
+  async screenshotBrowserTab(tabId: string): Promise<{ path: string; tab_id?: string; image_base64?: string }> {
+    return this.request<{ path: string; tab_id?: string; image_base64?: string }>('v1.browser.tabs.screenshot', {
       tab_id: tabId,
     });
   }
@@ -1018,6 +1022,43 @@ export class DaemonClient {
   async closeBrowserTab(tabId: string): Promise<{ closed: boolean; tab_id: string }> {
     return this.request<{ closed: boolean; tab_id: string }>('v1.browser.tabs.close', {
       tab_id: tabId,
+    });
+  }
+
+  // ==========================================
+  // Mobile Simulator / Emulator API
+  // ==========================================
+  async listEmulatorDevices(): Promise<EmulatorDevice[]> {
+    return this.request<EmulatorDevice[]>('v1.emulator.devices.list', {});
+  }
+
+  async launchEmulatorDevice(params: { device_id?: string; session_id?: string; url?: string }): Promise<EmulatorSession> {
+    return this.request<EmulatorSession>('v1.emulator.devices.launch', params);
+  }
+
+  async navigateEmulator(sessionId: string, url: string): Promise<{ session_id: string; url: string; status: string }> {
+    return this.request<{ session_id: string; url: string; status: string }>('v1.emulator.devices.navigate', {
+      session_id: sessionId,
+      url,
+    });
+  }
+
+  async snapshotEmulator(sessionId: string): Promise<EmulatorSnapshotResult> {
+    return this.request<EmulatorSnapshotResult>('v1.emulator.devices.snapshot', {
+      session_id: sessionId,
+    });
+  }
+
+  async captureEmulatorScreenshot(sessionId: string): Promise<EmulatorScreenshotResult> {
+    return this.request<EmulatorScreenshotResult>('v1.emulator.devices.screenshot', {
+      session_id: sessionId,
+    });
+  }
+
+  async tapEmulator(sessionId: string, ref: string): Promise<{ session_id: string; ref: string; tapped: boolean }> {
+    return this.request<{ session_id: string; ref: string; tapped: boolean }>('v1.emulator.devices.tap', {
+      session_id: sessionId,
+      ref,
     });
   }
 
