@@ -1,3 +1,4 @@
+import { APPEARANCE_KEY, readAppearance, applyAppearance, type AppearancePreferences } from '@/lib/appearance';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
@@ -69,6 +70,11 @@ interface AppContextType {
   setIsNewSessionOpen: (open: boolean) => void;
   isAddProviderOpen: boolean;
   setIsAddProviderOpen: (open: boolean) => void;
+
+  // Device-local appearance
+  appearance: AppearancePreferences;
+  resolvedTheme: 'light' | 'dark';
+  updateAppearance: (next: Partial<AppearancePreferences>) => void;
 
   // UI Scale
   uiScale: number;
@@ -355,6 +361,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const openSettings = useCallback((tab?: string) => {
     if (tab) setSettingsTab(tab);
     setIsSettingsOpen(true);
+  }, []);
+
+  const [appearance, setAppearance] = useState<AppearancePreferences>(readAppearance);
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const resolvedTheme = appearance.theme === 'system' ? (systemDark ? 'dark' : 'light') : appearance.theme;
+  useEffect(() => {
+    if (appearance.theme !== 'system') return;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const update = () => setSystemDark(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, [appearance.theme]);
+  useEffect(() => {
+    const sync = (event: StorageEvent) => {
+      if (event.key !== APPEARANCE_KEY && event.key !== null) return;
+      const saved = readAppearance();
+      if (saved.theme === 'system') setSystemDark(window.matchMedia('(prefers-color-scheme: dark)').matches);
+      setAppearance(saved);
+    };
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
+  }, []);
+  useEffect(() => { applyAppearance(appearance, resolvedTheme); }, [appearance, resolvedTheme]);
+  const themeQueue = useRef<Promise<void>>(Promise.resolve());
+  useEffect(() => {
+    if (!isTauri()) return;
+    const theme = appearance.theme === 'system' ? null : resolvedTheme;
+    themeQueue.current = themeQueue.current
+      .then(async () => {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        await getCurrentWindow().setTheme(theme);
+      })
+      .catch(error => console.warn('Native window theme could not be applied', error));
+  }, [appearance.theme, resolvedTheme]);
+  const updateAppearance = useCallback((next: Partial<AppearancePreferences>) => {
+    if (next.theme === 'system') setSystemDark(window.matchMedia('(prefers-color-scheme: dark)').matches);
+    setAppearance(previous => {
+      const updated = { ...previous, ...next };
+      try { localStorage.setItem(APPEARANCE_KEY, JSON.stringify(updated)); }
+      catch (error) { console.warn('Device appearance could not be saved', error); }
+      return updated;
+    });
   }, []);
 
   // UI Scale state
@@ -1506,6 +1555,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsNewSessionOpen,
         isAddProviderOpen,
         setIsAddProviderOpen,
+        appearance,
+        resolvedTheme,
+        updateAppearance,
         uiScale,
         handleSetUiScale,
         handleStepUiScale,

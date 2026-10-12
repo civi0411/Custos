@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* ============================================================
    CUSTOS SADE — DESIGN SYSTEM
@@ -114,6 +115,7 @@
 }
 
 :root {
+  color-scheme: light;
   /* LIGHT MODE (Graphite on paper) */
   --bg-canvas: #ffffff;
   --bg-canvas-subtle: #f9f9f9;
@@ -156,50 +158,50 @@
   --statusbar-fg: #6e6e80;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* DARK MODE (Graphite on paper) */
-    --bg-canvas: #212121;
-    --bg-canvas-subtle: #2a2a2a;
-    --bg-canvas-inset: #1a1a1a;
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  /* DARK MODE (Graphite on paper) */
+  --bg-canvas: #212121;
+  --bg-canvas-subtle: #2a2a2a;
+  --bg-canvas-inset: #1a1a1a;
 
-    --surface-0: #212121;
-    --surface-1: #2a2a2a;
-    --surface-2: #333333;
-    --surface-3: #3a3a3a;
-    --surface-overlay: #3a3a3a;
+  --surface-0: #212121;
+  --surface-1: #2a2a2a;
+  --surface-2: #333333;
+  --surface-3: #3a3a3a;
+  --surface-overlay: #3a3a3a;
 
-    --border-default: #424242;
-    --border-muted: #333333;
-    --border-subtle: #2a2a2a;
-    --border-emphasis: #555555;
+  --border-default: #424242;
+  --border-muted: #333333;
+  --border-subtle: #2a2a2a;
+  --border-emphasis: #555555;
 
-    --fg-editor: #ececec;
-    --fg-muted: #9e9e9e;
-    --fg-subtle: #757575;
-    --fg-on-emphasis: #ffffff;
+  --fg-editor: #ececec;
+  --fg-muted: #9e9e9e;
+  --fg-subtle: #757575;
+  --fg-on-emphasis: #ffffff;
 
-    --syn-keyword: #ff7b72;
-    --syn-string: #a5d6ff;
-    --syn-number: #79c0ff;
-    --syn-comment: #8b949e;
-    --syn-type: #ffa657;
-    --syn-function: #d2a8ff;
-    --syn-variable: #ececec;
-    --syn-operator: #ff7b72;
-    --syn-punctuation: #ececec;
-    --syn-attr: #79c0ff;
-    --syn-constant: #79c0ff;
-    --syn-deleted: #ffa198;
-    --syn-inserted: #56d364;
+  --syn-keyword: #ff7b72;
+  --syn-string: #a5d6ff;
+  --syn-number: #79c0ff;
+  --syn-comment: #8b949e;
+  --syn-type: #ffa657;
+  --syn-function: #d2a8ff;
+  --syn-variable: #ececec;
+  --syn-operator: #ff7b72;
+  --syn-punctuation: #ececec;
+  --syn-attr: #79c0ff;
+  --syn-constant: #79c0ff;
+  --syn-deleted: #ffa198;
+  --syn-inserted: #56d364;
 
-    --accent: #10a37f;
-    --accent-subtle: rgba(16, 163, 127, 0.15);
+  --accent: #10a37f;
+  --accent-subtle: rgba(16, 163, 127, 0.15);
 
-    --statusbar-bg: #1a1a1a;
-    --statusbar-fg: #9e9e9e;
-  }
+  --statusbar-bg: #1a1a1a;
+  --statusbar-fg: #9e9e9e;
 }
+
 
 
 /* ============================================================

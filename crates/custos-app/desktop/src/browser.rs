@@ -21,6 +21,8 @@ pub struct BrowserRequest {
     id: String,
     action: String,
     instance: Option<String>,
+    user_agent: Option<String>,
+    contain_fullscreen: Option<bool>,
     url: Option<String>,
     x: Option<f64>,
     y: Option<f64>,
@@ -112,7 +114,21 @@ async fn execute(
         let load_app = app.clone();
         let load_id = req.id.clone();
         let load_instance = req.instance.clone();
-        let builder = WebviewBuilder::new(&label, WebviewUrl::External(url))
+        let builder = WebviewBuilder::new(&label, WebviewUrl::External(url));
+        let builder = if req.contain_fullscreen == Some(true) {
+            builder.initialization_script_for_all_frames(include_str!("browser_fullscreen.js"))
+        } else {
+            builder
+        };
+        let builder = if let Some(user_agent) = req.user_agent.as_deref() {
+            if user_agent.len() > 512 || user_agent.chars().any(char::is_control) {
+                return Err(BrowserError::Invalid("Invalid browser user agent".into()));
+            }
+            builder.user_agent(user_agent)
+        } else {
+            builder
+        };
+        let builder = builder
             .on_navigation(move |url| {
                 let allowed = allowed_url(url);
                 if !allowed {
@@ -199,7 +215,7 @@ async fn execute(
         }
         "zoom" => {
             let zoom = req.zoom.unwrap_or(1.0);
-            if !zoom.is_finite() || !(0.25..=4.0).contains(&zoom) {
+            if !zoom.is_finite() || !(0.1..=4.0).contains(&zoom) {
                 return Err(BrowserError::Invalid("Invalid zoom".into()));
             }
             view.set_zoom(zoom)?;

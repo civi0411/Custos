@@ -1041,7 +1041,7 @@ Custos/
 | [`ui/desktop/src/components/shell/AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) | 756 | Shared conversation/resource shell; memoized Markdown, change-only scroll edges and stable resource callbacks; empty lens has no selected conversation | `AppWorkspaceShell` |
 | [`ui/desktop/src/components/shell/WorkspaceSidebar.tsx`](../../ui/desktop/src/components/shell/WorkspaceSidebar.tsx) | 420 | Per-lens history, 3-dots session workbench mover, and project-wide session search | `WorkspaceSidebar` |
 | [`ui/desktop/src/components/modals/NewSessionModal.tsx`](../../ui/desktop/src/components/modals/NewSessionModal.tsx) | 101 | Defaults new Task pack to the visible workbench | `NewSessionModal` |
-| [`ui/desktop/src/context/AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx) | 1547 | Daemon session/journal projection; keeps all sessions, filters non-message events and reads durable lens membership | `AppProvider`, `useAppContext` |
+| [`ui/desktop/src/context/AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx) | 1596 | Daemon session/journal projection; keeps all sessions, filters non-message events and reads durable lens membership | `AppProvider`, `useAppContext` |
 
 Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../tools/repo_intelligent/README.md) (62 lines) describes its derived SQLite index and optional MCP export. The product-facing Repo Intelligence location is `custos-runtime/src/context/repo_intelligence/`; do not treat the Python utility as an agent, canonical memory or mandatory runtime dependency.
 
@@ -1050,7 +1050,7 @@ Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../
 - **Đường dẫn thư mục:** `crates/custos-app/cli` & `crates/custos-app/desktop`
 - **Chủ sở hữu chính (Owner):** **Vinh (Client Lead)**
 - **Quy tắc ranh giới:** Giao tiếp với Daemon thuần túy qua IPC socket; cấm truy cập SQLite trực tiếp. Không dính GUI Tauri dependency vào CLI binary.
-- **Tổng số file:** 15 files | **Tổng số dòng mã:** 3,012 catalogued lines
+- **Tổng số file:** 15 files | **Tổng số dòng mã:** 3,022 catalogued lines
 - **Mô tả chức năng:** Các ứng dụng giao diện trình diễn mỏng (Thin Presentation Clients): Render tiến độ tác vụ bằng ratatui (CLI) và Tauri Webview (Desktop), bảng hiển thị mã màu diff thay đổi, bảng điều khiển trạng thái và xác nhận cấp quyền.
 - **Hợp đồng tương tác CLI:** phiên mặc định mang nhãn `custos`; `/` mở palette không cần Enter; `/mode` mở tầng mode gồm `/code`, `/research`, `/assistant`; prompt phản ánh mode bằng nhãn `custos-<mode>`.
 
@@ -1072,17 +1072,21 @@ Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../
 | [`desktop/build.rs`](../../crates/custos-app/desktop/build.rs) | 4 | Build script Tauri cho desktop backend | `fn main` |
 | [`desktop/src/lib.rs`](../../crates/custos-app/desktop/src/lib.rs) | 89 | Tauri thin host with main-webview command authorization and manual Browser lifecycle: lấy `Arc<LocalApiClient>` theo profile, forward `custos_request`/`custos_dispatch` qua Local API; không bootstrap backend riêng | `fn greet`, `fn custos_request`, `fn custos_dispatch`, `fn run` |
 | [`desktop/src/main.rs`](../../crates/custos-app/desktop/src/main.rs) | 7 | Điểm khởi đầu thực thi duy nhất của `custos-desktop` | None |
-| [`desktop/src/browser.rs`](../../crates/custos-app/desktop/src/browser.rs) | 246 | Manual child-webview registry, main-only commands, URL validation and instance-scoped page events (Owner: Vinh) | `BrowserRegistry`, `BrowserRequest`, `BrowserState`, `BrowserError`, `authorize`, `browser_command` |
+| [`desktop/src/browser.rs`](../../crates/custos-app/desktop/src/browser.rs) | 262 | Manual child-webview registry, main-only commands, URL/user-agent validation and instance-scoped page events (Owner: Vinh) | `BrowserRegistry`, `BrowserRequest`, `BrowserState`, `BrowserError`, `authorize`, `browser_command` |
 
 #### Desktop provider projection files (Owner: Vinh)
 
 | File | Lines | Responsibility | Exports |
 |---|---:|---|---|
 | [WorkflowDagWorkbenchPane.tsx](../../ui/desktop/src/components/views/WorkflowDagWorkbenchPane.tsx) | 687 | Session run/DAG projection with start/cancel/inspect controls; default stages are fixtures, not verification evidence (Owner: Vinh) | `WorkflowDagWorkbenchPane`, `WorkflowDagWorkbenchPaneProps`, `DagNode`, `DagNodeStatus` |
-| [native_browser.ts](../../ui/desktop/src/api/native_browser.ts) | 20 | Serialized per-tab IPC queue, including create/close races (Owner: Vinh) | `browserCommand`, `BrowserState` |
-| [BrowserWorkbenchPane.tsx](../../ui/desktop/src/components/views/BrowserWorkbenchPane.tsx) | 201 | Lazy native Browser toolbar, skeleton, loading/errors, viewport and overlay-aware bounds (Owner: Vinh) | `BrowserWorkbenchPane`, `normalizeBrowserUrl` |
-| [OrcaTabbedContainer.tsx](../../ui/desktop/src/components/views/OrcaTabbedContainer.tsx) | 645 | Memoized shared resource catalog and lazy retained browser tabs (Owner: Vinh) | `OrcaTabbedContainer`, `ResourceContent` |
-| [AppContext.tsx](../../ui/desktop/src/context/AppContext.tsx) | 1547 | Provider hydration, session/run restoration and background model/native chat projection | `AppProvider`, `useAppContext` |
+| [`desktop/src/browser_fullscreen.js`](../../crates/custos-app/desktop/src/browser_fullscreen.js) | 70 | Phone-only document-start fullscreen containment, state/events and restoration (Owner: Vinh) | `Scoped fullscreen presentation` |
+| [useNativeBrowser.ts](../../ui/desktop/src/hooks/useNativeBrowser.ts) | 149 | Shared native Browser/Phone lifecycle, loading, visibility, bounds and zoom (Owner: Vinh) | `useNativeBrowser`, `NativeBrowserOptions` |
+| [appearance.ts](../../ui/desktop/src/lib/appearance.ts) | 30 | Validated device appearance persistence and DOM theme application (Owner: Vinh) | `AppearancePreferences`, `ThemePreference`, `readAppearance`, `applyAppearance`, `APPEARANCE_KEY` |
+| [native_browser.ts](../../ui/desktop/src/api/native_browser.ts) | 30 | Serialized per-tab IPC queue and shared URL normalizer, including create/close races (Owner: Vinh) | `browserCommand`, `BrowserState`, `normalizeBrowserUrl` |
+| [MobileSimulatorWorkbenchPane.tsx](../../ui/desktop/src/components/views/MobileSimulatorWorkbenchPane.tsx) | 126 | Lazy native phone web preview, fitted device viewport, orientation and power/Home lifecycle (Owner: Vinh) | `MobileSimulatorWorkbenchPane` |
+| [BrowserWorkbenchPane.tsx](../../ui/desktop/src/components/views/BrowserWorkbenchPane.tsx) | 75 | Lazy native Browser toolbar, skeleton, loading/errors, viewport and overlay-aware bounds (Owner: Vinh) | `BrowserWorkbenchPane`, `normalizeBrowserUrl` |
+| [OrcaTabbedContainer.tsx](../../ui/desktop/src/components/views/OrcaTabbedContainer.tsx) | 627 | Memoized shared resource catalog and lazy retained browser tabs (Owner: Vinh) | `OrcaTabbedContainer`, `ResourceContent` |
+| [AppContext.tsx](../../ui/desktop/src/context/AppContext.tsx) | 1596 | Provider hydration, session/run restoration, native chat and device appearance/theme state | `AppProvider`, `useAppContext` |
 | [AgentsWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/AgentsWorkbenchPane.tsx) | 454 | Session-bound native launch and live run inspector (Vinh) | `AgentsWorkbenchPane` |
 | [ModelSelector.tsx](../../ui/desktop/src/components/chat/ModelSelector.tsx) | 385 | Discovered model picker with cache/error status and retry | `ModelSelector`, `getConnectedModelOptions`, `ModelOption` |
 | [CombosManager.tsx](../../ui/desktop/src/components/providers/CombosManager.tsx) | 531 | Combo targets from the same discovered account catalogs | `CombosManager` |
@@ -1090,7 +1094,7 @@ Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../
 | [AddProviderModal.tsx](../../ui/desktop/src/components/modals/AddProviderModal.tsx) | 895 | OAuth/API connection UI with PKCE/device authorization, fetched identity and cancellation. | `AddProviderModal` |
 | [ProvidersView.tsx](../../ui/desktop/src/components/providers/ProvidersView.tsx) | 235 | Account listing and provider branding. | `ProvidersView` |
 | [daemon_client.ts](../../ui/desktop/src/api/daemon_client.ts) | 1142 | Typed IPC client, profile HTTP discovery, deduplicated SSE reconnect and upstream emulator/screenshot methods. | `DaemonClient` |
-| [SettingsModal.tsx](../../ui/desktop/src/components/modals/SettingsModal.tsx) | 420 | Settings account status and usage navigation | `SettingsModal` |
+| [SettingsModal.tsx](../../ui/desktop/src/components/modals/SettingsModal.tsx) | 410 | Settings account/usage navigation and device Light/Dark/System appearance controls | `SettingsModal` |
 | [markdownMath.ts](../../ui/desktop/src/components/chat/markdownMath.ts) | 39 | Math AST normalization for escaped subscripts and display delimiters (Owner: Vinh) | `remarkNormalizeChatMath` |
 | [HighlightedCodeBlock.tsx](../../ui/desktop/src/components/chat/HighlightedCodeBlock.tsx) | 38 | Memoized highlight.js fenced-code projection with theme tokens and escaped fallback (Owner: Vinh) | `HighlightedCodeBlock` |
 | [AppHeader.tsx](../../ui/desktop/src/components/shell/AppHeader.tsx) | 384 | Workspace header and matching worktree tab icon (Owner: Vinh) | `AppHeader` |
@@ -1098,13 +1102,14 @@ Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../
 | [WorktreeManagerModal.tsx](../../ui/desktop/src/components/modals/WorktreeManagerModal.tsx) | 512 | Managed worktree projection with semantic worktree glyph (Owner: Vinh) | `WorktreeManagerModal` |
 | [StatusBar.tsx](../../ui/desktop/src/components/shell/StatusBar.tsx) | 164 | Discrete app zoom presets and ten-percent stepping (Owner: Vinh) | `StatusBar` |
 | [layout.tsx](../../ui/desktop/src/app/layout.tsx) | 75 | Full viewport application layout with browser zoom compensation (Owner: Vinh) | `RootLayout` |
-| [default.json](../../crates/custos-app/desktop/capabilities/default.json) | 11 | Main-webview-only permissions including native WebView zoom; browser content receives no capability (Owner: Vinh) | `Tauri capability` |
+| [default.json](../../crates/custos-app/desktop/capabilities/default.json) | 14 | Main-webview-only permissions including native WebView zoom and window theme; browser content receives no capability (Owner: Vinh) | `Tauri capability` |
 | [NativeSelect.tsx](../../ui/desktop/src/components/common/NativeSelect.tsx) | 32 | Shared neutral dropdown adapter for native single-choice options and change events (Owner: Vinh) | `NativeSelect` |
 | [CustomSelect.tsx](../../ui/desktop/src/components/common/CustomSelect.tsx) | 220 | Shared themed dropdown with keyboard selection and focus states (Owner: Vinh) | `CustomSelect`, `CustomSelectOption` |
 | [AgentIcons.tsx](../../ui/desktop/src/components/common/AgentIcons.tsx) | 27 | Build-time Iconify provider SVG wrappers and brand mapping | `ProviderBrandIcon`, existing named icon wrappers |
 | [UsageMonitor.tsx](../../ui/desktop/src/components/providers/UsageMonitor.tsx) | 173 | Provider-branded account usage, remote remaining quotas, compact view and collapsible account panels | `UsageMonitor, summarizeUsage` |
 | [domain.ts](../../ui/desktop/src/types/domain.ts) | 1206 | Desktop wire DTOs including provider authorization flow, emulator device/session/snapshot/screenshot types and optional workflow actor/revision. | `OAuthAuthorizeResult`, `EmulatorDevice`, `EmulatorSession`, `EmulatorSnapshotResult`, `EmulatorScreenshotResult` |
-| [index.css](../../ui/desktop/src/index.css) | 1691 | Desktop theme and visible OAuth action button styles. | CSS styles |
+| [index.html](../../ui/desktop/index.html) | 38 | Pre-paint device appearance bootstrap and desktop entry point (Owner: Vinh) | HTML bootstrap |
+| [index.css](../../ui/desktop/src/index.css) | 1696 | Resolved Light/Dark semantic theme tokens, dark variants and existing OAuth styles. | CSS styles |
 
 
 ---
@@ -1133,7 +1138,7 @@ Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../
 
 | File | Lines | Responsibility | Exports |
 |---|---:|---|---|
-| [browser-native-smoke.mjs](../../tools/browser-native-smoke.mjs) | 105 | Dependency-free Node CDP fixture runner for manual native browser lifecycle and IPC isolation | Node executable |
+| [browser-native-smoke.mjs](../../tools/browser-native-smoke.mjs) | 128 | Dependency-free Node CDP fixture runner for manual native browser lifecycle and IPC isolation | Node executable |
 
 Frontend production build, desktop cargo check/build and Windows WebView2 native smoke checks pass. Native UI checks in production and development StrictMode cover skeleton, creation failure/Retry, closing while creation is pending, retained form state, mobile CSS width under app zoom, maximize, modal-hide requests, panel close/reopen and tab destruction. The Rust unit-test executable fails during Windows loader startup with STATUS_ENTRYPOINT_NOT_FOUND before running assertions; the native executable does run. Cross-platform certification and physical multi-monitor DPI checks are not claimed.
 
@@ -1182,7 +1187,6 @@ Quota group projection: providers/probe.rs fetches Antigravity grouped quota sum
 | [ArtifactInspector.tsx](../../ui/desktop/src/components/research/ArtifactInspector.tsx) | 468 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
 | [ResearchSynthesisPane.tsx](../../ui/desktop/src/components/research/ResearchSynthesisPane.tsx) | 917 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
 | [TableChart.tsx](../../ui/desktop/src/components/research/TableChart.tsx) | 334 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
-| [MobileSimulatorWorkbenchPane.tsx](../../ui/desktop/src/components/views/MobileSimulatorWorkbenchPane.tsx) | 778 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
 | [RemoteFleetWorkbenchPane.tsx](../../ui/desktop/src/components/views/RemoteFleetWorkbenchPane.tsx) | 747 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
 | [ChangesWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/ChangesWorkbenchPane.tsx) | 600 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
 | [EvidenceWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/EvidenceWorkbenchPane.tsx) | 997 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
@@ -1200,3 +1204,15 @@ Conversation performance validation: a synthetic 24-message fixture in developme
 Development-branch integration: native Browser and conversation performance changes remain intact. Existing daemon api.rs/local_api contracts, daemon_client.ts and domain.ts gain emulator commands/DTOs and optional screenshot image data; existing Fleet and Mobile Simulator panes consume those upstream endpoints. Engine discovery/connectivity flags are not proof of permit mediation or completed Tasks. The integration adds the upstream WorkflowDagWorkbenchPane file; no parallel Browser presentation or product crate is introduced.
 
 Merge validation: frontend production build and cargo check for custos-app-desktop pass. The native Browser source is byte-identical to the pre-merge branch; the resource container keeps React memoization and lazy browser retention while adding the upstream Workflow pane and emulator/fleet metadata. No conflict markers or unmerged index entries remain.
+
+Phone/theme slice (Owner: Vinh): existing MobileSimulatorWorkbenchPane consumes useNativeBrowser; OrcaTabbedContainer retains lazy native Phone tabs as well as Browser tabs. browser.rs accepts an optional create-time user_agent; Phone derives a mobile Chromium identity from the actual host engine/version for responsive site selection and media compatibility (other engines retain native identity). Device selection only resizes the existing view. AppContext owns appearance preferences/resolvedTheme; SettingsModal edits that state. index.html applies saved appearance before paint; index.css selects semantic dark tokens and dark variants by resolved theme. Main-only default capability gains native window theme permission. The slice adds two UI modules; existing Browser/Phone presentation, host and appearance files are reused.
+
+Native fixture coverage also includes rejecting invalid user agents before allocation and verifying create-time user agents on a real child view.
+
+Phone/theme validation: frontend production build and desktop cargo check pass, including a separate target directory while the running app locked its DLL. Windows native checks pass for Browser regression, Phone lazy allocation/skeleton, CSS viewport dimensions, user agents, rotation, retained form state, modal hiding, power/Home/tab/panel cleanup, panel URL restoration and closing while creation is pending in StrictMode. Native window theme reports dark after selection. Browser UI checks pass for Light/Dark/System selection (mouse/keyboard), OS changes, explicit overrides, reload persistence, legacy/invalid preferences and storage-event synchronization. Dark Settings visual layout was inspected. No macOS/Linux, touch/DPR emulation or full OS simulator certification is claimed.
+
+Phone media compatibility validation: on Windows WebView2, the same public YouTube video reproduces 'Your browser can''t play this video' with the previous Safari/iPhone override (video readyState 0), while the native default identity plays successfully (readyState 4 and advancing playback time). Phone presets now preserve native identity; the frontend build and Phone lifecycle/viewport regression pass.
+
+Phone fullscreen containment adds one host-owned presentation script (no crate, dependency or daemon protocol). BrowserRequest and NativeBrowserOptions gain an optional contain_fullscreen/containFullscreen flag; only Phone enables it. The host installs the script in all document frames before page code runs.
+
+Phone media/layout validation: the mobile identity preserves the installed Chromium version and YouTube redirects to m.youtube.com. At a 393px viewport the page has no horizontal overflow and video playback advances. The YouTube fullscreen control fills only the 393px by 600px child viewport; Custos fullscreen state stays unchanged, and Escape/player-button exit work. Fullscreen metrics are scoped while active to avoid mobile player background detection based on the physical desktop screen. Native fixture checks cover API exit, restored styles, viewport bounds and promise/event order.

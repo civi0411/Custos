@@ -41,7 +41,7 @@ async function connect(target) {
 const fixture = http.createServer((req, res) => {
   if (req.url === '/redirect') { res.writeHead(302, { Location: '/second' }); res.end(); return; }
   res.setHeader('Content-Type', 'text/html');
-  res.end(`<title>Browser fixture</title><input id="draft"><a href="/second">Next</a><button onclick="window.open('/popup')">Popup</button><p>${req.url}</p>`);
+  res.end(`<title>Browser fixture</title><input id="draft"><a href="/second">Next</a><button onclick="window.open('/popup')">Popup</button><div id="player" style="width:120px;height:80px;background:black"><video></video></div><p>${req.url}</p>`);
 });
 await new Promise((resolve) => fixture.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${fixture.address().port}`;
@@ -53,7 +53,7 @@ const command = (id, action, fields = {}) => main.eval(`window.__TAURI_INTERNALS
 const fixtureTargets = async () => (await targets()).filter((target) => target.url.startsWith(origin));
 try {
   assert.equal((await fixtureTargets()).length, 0, 'No eager browser allocation');
-  await command(ids[0], 'create', { url: `${origin}/first` });
+  await command(ids[0], 'create', { url: `${origin}/first`, contain_fullscreen: true });
   await waitFor(fixtureTargets, (list) => list.length === 1, 'First webview was not created');
   await command(ids[0], 'create', { url: `${origin}/first` });
   assert.equal((await fixtureTargets()).length, 1, 'Create must be idempotent');
@@ -65,6 +65,19 @@ try {
     await command(ids[0], 'layout', { visible: false });
     await command(ids[0], 'layout', { visible: true, x: 100, y: 120, width: 375, height: 400 });
     assert.equal(await page.eval("document.querySelector('#draft').value"), 'retained draft', 'Hide/show preserves page state');
+    const windowFullscreen = () => main.eval("window.__TAURI_INTERNALS__.invoke('plugin:window|is_fullscreen', { label: 'main' })");
+    const originalFullscreen = await windowFullscreen();
+    const originalStyle = await page.eval("document.querySelector('#player').style.cssText");
+    await page.eval("window.__fullscreenChanges=[];window.__fullscreenResolved=false;document.addEventListener('fullscreenchange',()=>window.__fullscreenChanges.push(window.__fullscreenResolved));document.querySelector('#player').requestFullscreen().then(()=>{window.__fullscreenResolved=true;})");
+    await waitFor(() => page.eval('window.__fullscreenChanges[0]'), value => value === true, 'Fullscreen change must follow promise resolution');
+    assert.equal(await page.eval("document.fullscreenElement?.id"), 'player', 'Player enters scoped fullscreen');
+    assert.deepEqual(await page.eval("({width:document.fullscreenElement.getBoundingClientRect().width,height:document.fullscreenElement.getBoundingClientRect().height})"), { width: 375, height: 400 }, 'Player fills only the native child viewport');
+    assert.equal(await windowFullscreen(), originalFullscreen, 'Player must not fullscreen the host window');
+    await page.eval("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");
+    assert.equal(await page.eval('document.fullscreenElement'), null, 'Escape exits scoped fullscreen');
+    assert.equal(await page.eval("document.querySelector('#player').style.cssText"), originalStyle, 'Exit restores page layout');
+    await page.eval("document.querySelector('#player').requestFullscreen().then(()=>document.exitFullscreen())");
+    assert.equal(await page.eval('document.fullscreenElement'), null, 'Fullscreen API exit restores state');
     for (const action of ['browser_command', 'custos_http_endpoint', 'custos_request', 'custos_dispatch', 'greet']) {
       const result = await page.eval(`window.__TAURI_INTERNALS__.invoke(${JSON.stringify(action)}, ${JSON.stringify({ request: { id: ids[0], action: 'state' }, method: 'v1.sessions.list', params: {}, rawJson: '{}', name: 'test' })}).then(() => 'ALLOWED', error => String(error))`);
       assert.match(result, /main application webview|not allowed|denied/i, `${action} must be denied to browser content`);
@@ -90,13 +103,23 @@ try {
     await command(ids[0], 'create', { url: `${origin}/first` });
     await waitFor(fixtureTargets, (list) => list.length === 2, 'Close/create leaked or lost a webview');
   }
+  await assert.rejects(() => command('smoke-invalid-ua', 'create', { url: `${origin}/first`, user_agent: 'bad\nagent' }), /Invalid browser user agent/);
+  await command(ids[0], 'close');
+  const mobileAgent = 'Custos Mobile Preview fixture';
+  await command(ids[0], 'create', { url: `${origin}/first`, user_agent: mobileAgent });
+  const mobileTargets = await waitFor(fixtureTargets, list => list.length === 2, 'User-agent webview was not created');
+  const mobile = await connect(mobileTargets.find(target => target.url.endsWith('/first')));
+  try {
+    await waitFor(() => mobile.eval('document.readyState'), state => state === 'complete', 'Mobile fixture did not load');
+    assert.equal(await mobile.eval('navigator.userAgent'), mobileAgent, 'Create must apply the requested user agent');
+  } finally { mobile.close(); }
   // Concurrent create/close tests the host lock independently of frontend queues.
   await command(ids[0], 'close');
   await Promise.all([command(ids[0], 'create', { url: `${origin}/first` }), command(ids[0], 'close')]);
   await command(ids[0], 'close');
   await command(ids[1], 'close');
   await waitFor(fixtureTargets, (list) => list.length === 0, 'Closed webviews remain alive');
-  console.log('PASS: native lifecycle, retained state, history, redirects, popup, URL schemes and IPC isolation');
+  console.log('PASS: native lifecycle, scoped fullscreen/exit, retained state, history, redirects, popup, URL schemes, user agents and IPC isolation');
 } finally {
   for (const id of ids) await command(id, 'close').catch(() => {});
   main.close();

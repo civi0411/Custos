@@ -8,6 +8,8 @@ import {
   Keyboard,
   KeyRound,
   Monitor,
+  Sun,
+  Moon,
   Plus,
   Server,
   Shield,
@@ -32,22 +34,6 @@ export interface SettingsModalProps {
 
 type SettingsTab = 'general' | 'appearance' | 'shortcuts' | 'providers' | 'runtime' | 'security' | 'storage' | 'about';
 
-type AppearancePreferences = {
-  density: 'comfortable' | 'compact';
-  reduceMotion: boolean;
-};
-const APPEARANCE_KEY = 'custos.appearance.preferences';
-
-const readAppearance = (): AppearancePreferences => {
-  try {
-    const value = localStorage.getItem(APPEARANCE_KEY);
-    if (value) return JSON.parse(value) as AppearancePreferences;
-  } catch {
-    // Invalid local preferences fall back to safe defaults.
-  }
-  return { density: 'comfortable', reduceMotion: false };
-};
-
 const SettingRow: React.FC<{
   title: string;
   description: string;
@@ -69,6 +55,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onShowToast: _onShowToast,
 }) => {
   const {
+    appearance,
+    resolvedTheme,
+    updateAppearance,
     uiScale,
     handleSetUiScale,
     clientKeys,
@@ -81,7 +70,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   } = useAppContext();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [providersSubTab, setProvidersSubTab] = useState<'providers' | 'combos' | 'usage'>('providers');
-  const [appearance, setAppearance] = useState<AppearancePreferences>(readAppearance);
   const [daemonOnline, setDaemonOnline] = useState<boolean | null>(null);
   const [checkingDaemon, setCheckingDaemon] = useState(false);
 
@@ -99,13 +87,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const online = await daemonClient.checkHealth();
     setDaemonOnline(online);
     setCheckingDaemon(false);
-  };
-
-  const updateAppearance = (next: AppearancePreferences) => {
-    setAppearance(next);
-    localStorage.setItem(APPEARANCE_KEY, JSON.stringify(next));
-    document.documentElement.dataset.density = next.density;
-    document.documentElement.dataset.reduceMotion = String(next.reduceMotion);
   };
 
   const nav = [
@@ -177,8 +158,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="space-y-3">
                 <div className="mb-5">
                   <h2 className="text-sm font-semibold">Appearance</h2>
-                  <p className="mt-1 text-[11px] text-[var(--color-fg-muted)]">Graphite-on-paper is the shared visual system for all workbenches.</p>
+                  <p className="mt-1 text-[11px] text-[var(--color-fg-muted)]">Choose your theme, spacing and motion preferences for this device.</p>
                 </div>
+                <SettingRow title="Theme" description={`System follows your operating system. Currently using ${resolvedTheme} appearance.`}>
+                  <fieldset className="flex gap-2" aria-label="Theme">
+                    {([{ value: 'light', label: 'Light', icon: Sun }, { value: 'dark', label: 'Dark', icon: Moon }, { value: 'system', label: 'System', icon: Monitor }] as const).map(({ value, label, icon: Icon }) => (
+                      <label key={value} className={`flex w-20 cursor-pointer flex-col items-center gap-2 rounded-lg border px-3 py-3 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-[var(--color-accent)] ${appearance.theme === value ? 'border-[var(--color-accent)] bg-[var(--color-accent-subtle)]' : 'border-[var(--color-border-default)] hover:bg-[var(--color-surface-2)]'}`}>
+                        <input className="sr-only" type="radio" name="appearance-theme" aria-label={`${label} theme`} value={value} checked={appearance.theme === value} onChange={() => updateAppearance({ theme: value })} />
+                        <Icon className="h-4 w-4" /><span className="text-xs">{label}</span>
+                      </label>
+                    ))}
+                  </fieldset>
+                </SettingRow>
                 <SettingRow title="Interface scale" description="Saved locally for this device.">
                   <div className="flex items-center gap-2">
                     <input aria-label="Interface scale" style={{ '--range-progress': `${(uiScale - 70) / 90 * 100}%` } as React.CSSProperties} type="range" min="70" max="160" step="10" value={uiScale} onChange={(event) => handleSetUiScale(Number(event.target.value))} />
@@ -186,7 +177,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </SettingRow>
                 <SettingRow title="Density" description="Changes spacing while preserving the same information architecture.">
-                  <NativeSelect value={appearance.density} onChange={(event) => updateAppearance({ ...appearance, density: event.target.value as AppearancePreferences['density'] })}>
+                  <NativeSelect value={appearance.density} onChange={(event) => updateAppearance({ ...appearance, density: event.target.value as 'comfortable' | 'compact' })}>
                     <option value="comfortable">Comfortable</option>
                     <option value="compact">Compact</option>
                   </NativeSelect>
