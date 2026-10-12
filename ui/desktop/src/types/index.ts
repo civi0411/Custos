@@ -3,6 +3,11 @@ export type WorkbenchLens = 'copilot' | 'coding' | 'research';
 export type MainTab = 'studio' | 'providers' | 'chains' | 'telemetry' | 'cache' | 'dashboard' | 'docs' | 'settings';
 
 export interface ChatMessage {
+  recordedAt?: string;
+  runId?: string;
+  liveError?: string;
+  runStatus?: string;
+  activities?: import('./domain').LiveRunSnapshot['activities'];
   id?: string;
   role: 'user' | 'assistant';
   author: string;
@@ -18,6 +23,8 @@ export interface DiffLine {
 }
 
 export interface Session {
+  nativeHarnessId?: string;
+  workspaceId?: string;
   id: string;
   openedLenses?: Array<'chat' | 'code' | 'research'>;
   taskId?: string;

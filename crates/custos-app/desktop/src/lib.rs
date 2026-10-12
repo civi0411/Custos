@@ -36,6 +36,13 @@ async fn custos_request(
     }
 }
 
+#[tauri::command]
+fn custos_http_endpoint() -> Result<String, String> {
+    let profile = ProfileResolver::from_env();
+    let port = profile.read_http_port().ok_or_else(|| "Daemon HTTP endpoint is unavailable".to_string())?;
+    Ok(format!("http://127.0.0.1:{port}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let profile = ProfileResolver::from_env();
@@ -47,6 +54,7 @@ pub fn run() {
         .manage(client)
         .invoke_handler(tauri::generate_handler![
             greet,
+            custos_http_endpoint,
             custos_dispatch,
             custos_request
         ])

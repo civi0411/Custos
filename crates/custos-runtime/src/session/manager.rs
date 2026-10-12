@@ -159,6 +159,11 @@ impl SessionManager {
         id: &SessionId,
         message: &str,
     ) -> Result<(), DomainError> {
+        self.append_assistant_entry(id,message).await.map(|_|())
+    }
+
+    /// Append an assistant response and return its exact persisted identity.
+    pub async fn append_assistant_entry(&self,id:&SessionId,message:&str)->Result<SessionJournalEntry,DomainError> {
         self.ensure_session_loaded(id).await?;
 
         let entry = {
@@ -181,7 +186,7 @@ impl SessionManager {
             store.append_journal(&entry).await?;
         }
 
-        Ok(())
+        Ok(entry)
     }
 
     /// Persist that a canonical conversation is visible in an additional lens.

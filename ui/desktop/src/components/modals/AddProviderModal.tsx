@@ -403,7 +403,6 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
     } catch (err: any) { setProbeStatus({ type: 'error', message: `Save failed: ${err?.message || err}` }); }
   };
 
-  const selectedOption = providerOptions.find((opt) => opt.value === providerService);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 select-none">
@@ -445,7 +444,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                 : 'border-transparent text-fg-muted hover:text-fg-editor'
             }`}
           >
-            <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+            <ShieldCheck className="w-3.5 h-3.5" />
             <span>OAuth 2.0 / SSO Connect</span>
           </button>
           <button type="button" onClick={() => setAuthMode('local')} className={`pb-2.5 px-3 font-medium border-b-2 flex items-center gap-1.5 ${authMode === 'local' ? 'border-workbench-accent text-fg-editor' : 'border-transparent text-fg-muted'}`}><Server className="w-3.5 h-3.5" />Local</button>
@@ -477,11 +476,6 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="font-medium text-fg-editor">Provider Service</label>
-                  {selectedOption?.icon && (
-                    <div className="w-5 h-5 rounded-md overflow-hidden shrink-0 shadow-xs flex items-center justify-center">
-                      {selectedOption.icon}
-                    </div>
-                  )}
                 </div>
                 <CustomSelect
                   value={providerService}

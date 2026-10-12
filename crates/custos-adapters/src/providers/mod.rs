@@ -52,3 +52,5 @@ mod placeholder_tests {
         }
     }
 }
+
+mod streaming;
