@@ -44,8 +44,9 @@ pub mod workspace_files;
 
 // Explicit re-exports of public domain surface (No glob *)
 pub use action::{
-    Action, ActionIntent, ActionIntentV1, ActionLifecycleState, Assurance, EffectAttempt,
-    EffectStatus, RiskLevel,
+    Action, ActionAvailability, ActionInputSpec, ActionIntent, ActionIntentV1,
+    ActionLifecycleState, Assurance, ContextualActionDescriptor, EffectAttempt, EffectClass,
+    EffectStatus, ResourceRef, ResourceType, RiskLevel,
 };
 pub use annotation::{AnnotationRecord, AnnotationStatus, AnnotationTarget};
 pub use approval::{ApprovalDecision, ApprovalRequest, ApprovalStatus};

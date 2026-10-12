@@ -26,7 +26,8 @@ import {
   NotebookTabs,
   Layers,
   Server,
-  LayoutGrid
+  LayoutGrid,
+  Smartphone
 } from 'lucide-react';
 import { type OrcaTabId, type ResourceTabsState, getTabType } from '@/components/views/OrcaTabbedContainer';
 import { formatKeyCombo } from '@/lib/utils';
@@ -126,6 +127,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
       case 'evidence': return <ShieldCheck className={cls} />;
       case 'dag': return <Activity className={cls} />;
       case 'browser': return <Globe className={cls} />;
+      case 'emulator': return <Smartphone className={cls} />;
       case 'notes': return <FileCode className={cls} />;
       case 'literature': return <BookOpen className={cls} />;
       case 'claims': return <ShieldCheck className={cls} />;

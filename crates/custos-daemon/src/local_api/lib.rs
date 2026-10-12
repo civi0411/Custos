@@ -63,6 +63,7 @@ pub const METHOD_RESEARCH_LINEAGE_LIST: &str = "v1.research.lineage.list";
 pub const METHOD_RESEARCH_HANDOFF_CODING: &str = "v1.research.handoff_coding";
 pub const METHOD_CAPABILITIES_LIST: &str = "v1.capabilities.list";
 pub const METHOD_CAPABILITIES_GET: &str = "v1.capabilities.get";
+pub const METHOD_RESOURCES_GET_ACTIONS: &str = "v1.resources.get_actions";
 pub const METHOD_TERMINAL_SPAWN: &str = "v1.terminal.spawn";
 pub const METHOD_TERMINAL_WRITE: &str = "v1.terminal.write";
 pub const METHOD_TERMINAL_RESIZE: &str = "v1.terminal.resize";
@@ -457,6 +458,17 @@ pub struct RecoverWorkspaceApiRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct GetCapabilityApiRequest {
     pub capability_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetResourceActionsParams {
+    #[serde(default)]
+    pub task_id: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    pub resource_ref: custos_domain::ResourceRef,
+    #[serde(default)]
+    pub workbench_lens: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

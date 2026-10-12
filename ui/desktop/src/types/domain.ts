@@ -1205,3 +1205,30 @@ export interface EmulatorScreenshotResult {
 
 /** Compatibility name for metadata-only OAuth responses. */
 export type OAuthTokenRecord = OAuthConnectionMetadata;
+
+export type EffectClass = 'read' | 'write' | 'execute' | 'destructive';
+
+export type ActionAvailability =
+  | { type: 'available' }
+  | { type: 'degraded'; reason: string }
+  | { type: 'unavailable'; reason: string };
+
+export interface ActionInputSpec {
+  schema_type: string;
+  schemaType?: string;
+  fields: Record<string, string>;
+  required: string[];
+}
+
+export interface ContextualActionDescriptor {
+  id: string;
+  title: string;
+  description: string;
+  effect: EffectClass;
+  availability: ActionAvailability;
+  preflight_required: boolean;
+  preflightRequired?: boolean;
+  input_schema?: ActionInputSpec | null;
+  inputSchema?: ActionInputSpec | null;
+}
+

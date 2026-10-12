@@ -10,7 +10,7 @@ pub use crate::custos_local_api::{
     AdvanceTaskRequest, ApiRequest, ApiResponse, ArchiveWorkspaceApiRequest,
     ArtifactDetailResponse, CancelHarnessRunRequest, CancelRunRequest, CancelTaskRequest,
     CompleteTaskRequest, CreateTaskRequest, CreateWorkspaceApiRequest, GetCapabilityApiRequest,
-    GetHarnessRequest, GetWorkspaceApiRequest, InspectWorkspaceDirtyApiRequest,
+    GetHarnessRequest, GetResourceActionsParams, GetWorkspaceApiRequest, InspectWorkspaceDirtyApiRequest,
     OAuthAuthorizeParams, OAuthExchangeParams, OAuthRefreshParams, RecoverWorkspaceApiRequest,
     RunNativeHarnessRequest, SaveNoteParams, StartRunRequest, SteerHarnessRunRequest,
     METHOD_ARTIFACTS_GET, METHOD_ARTIFACTS_LINEAGE_GRAPH, METHOD_ARTIFACTS_LIST,
@@ -19,7 +19,7 @@ pub use crate::custos_local_api::{
     METHOD_BROWSER_TABS_CLICK, METHOD_BROWSER_TABS_CLOSE, METHOD_BROWSER_TABS_CREATE,
     METHOD_BROWSER_TABS_FILL, METHOD_BROWSER_TABS_LIST, METHOD_BROWSER_TABS_NAVIGATE,
     METHOD_BROWSER_TABS_SCREENSHOT, METHOD_BROWSER_TABS_SNAPSHOT, METHOD_CAPABILITIES_GET,
-    METHOD_CAPABILITIES_LIST, METHOD_EMULATOR_DEVICES_LIST, METHOD_EMULATOR_LAUNCH,
+    METHOD_CAPABILITIES_LIST, METHOD_RESOURCES_GET_ACTIONS, METHOD_EMULATOR_DEVICES_LIST, METHOD_EMULATOR_LAUNCH,
     METHOD_EMULATOR_NAVIGATE, METHOD_EMULATOR_SCREENSHOT, METHOD_EMULATOR_SNAPSHOT,
     METHOD_EMULATOR_TAP, METHOD_FLEET_EXEC, METHOD_FLEET_HOSTS_LIST, METHOD_FLEET_HOSTS_PING,
     METHOD_FLEET_HOSTS_REGISTER, METHOD_HARNESS_CANCEL, METHOD_HARNESS_GET, METHOD_HARNESS_LIST,
@@ -664,6 +664,258 @@ impl LocalApiDispatcher {
                 )
             },
         ]
+    }
+
+    /// Query contextual actions available for a specific resource under the current task/environment
+    pub fn get_resource_actions(
+        &self,
+        params: &GetResourceActionsParams,
+    ) -> Vec<custos_domain::ContextualActionDescriptor> {
+        use custos_domain::{
+            ActionAvailability, ActionInputSpec, ContextualActionDescriptor, EffectClass,
+            ResourceType, RiskClass,
+        };
+
+        let target = params.resource_ref.clone();
+        match target.resource_type {
+            ResourceType::File => vec![
+                ContextualActionDescriptor {
+                    action_id: "git.stage".to_string(),
+                    title: "Stage File".to_string(),
+                    description: "Stage modifications to git index".to_string(),
+                    target_resource: target.clone(),
+                    availability: ActionAvailability::Ready,
+                    effect_class: EffectClass::WorkspaceMutation,
+                    destructive: false,
+                    required_inputs: vec![],
+                },
+                ContextualActionDescriptor {
+                    action_id: "git.unstage".to_string(),
+                    title: "Unstage File".to_string(),
+                    description: "Remove modifications from git index".to_string(),
+                    target_resource: target.clone(),
+                    availability: ActionAvailability::Ready,
+                    effect_class: EffectClass::WorkspaceMutation,
+                    destructive: false,
+                    required_inputs: vec![],
+                },
+                ContextualActionDescriptor {
+                    action_id: "git.discard".to_string(),
+                    title: "Discard Changes".to_string(),
+                    description: "Revert working tree modifications to HEAD".to_string(),
+                    target_resource: target.clone(),
+                    availability: ActionAvailability::NeedsApproval {
+                        risk_class: RiskClass::High,
+                        prompt: "Discarding changes will overwrite uncommitted edits on disk.".to_string(),
+                    },
+                    effect_class: EffectClass::WorkspaceMutation,
+                    destructive: true,
+                    required_inputs: vec![],
+                },
+            ],
+            ResourceType::Worktree => vec![
+                ContextualActionDescriptor {
+                    action_id: "worktree.switch".to_string(),
+                    title: "Switch Worktree".to_string(),
+                    description: "Switch active execution worktree".to_string(),
+                    target_resource: target.clone(),
+                    availability: ActionAvailability::Ready,
+                    effect_class: EffectClass::ReadOnly,
+                    destructive: false,
+                    required_inputs: vec![],
+                },
+                ContextualActionDescriptor {
+                    action_id: "worktree.create".to_string(),
+                    title: "Create Worktree".to_string(),
+                    description: "Create new isolated git worktree branch".to_string(),
+                    target_resource: target.clone(),
+                    availability: ActionAvailability::Ready,
+                    effect_class: EffectClass::WorkspaceMutation,
+                    destructive: false,
+                    required_inputs: vec![ActionInputSpec {
+                        name: "branch".to_string(),
+                        input_type: "string".to_string(),
+                        required: true,
+                    }],
+                },
+            ],
+            ResourceType::Terminal => vec![
+                ContextualActionDescriptor {
+                    action_id: "terminal.spawn".to_string(),
+                    title: "New Terminal Shell".to_string(),
+                    description: "Spawn an isolated PTY shell bound to current workspace".to_string(),
+                    target_resource: target.clone(),
+                    availability: ActionAvailability::Ready,
+                    effect_class: EffectClass::ProcessExecution,
+                    destructive: false,
+                    required_inputs: vec![],
+                },
+                ContextualActionDescriptor {
+                    action_id: "terminal.terminate".to_string(),
+                    title: "Terminate Shell".to_string(),
+                    description: "Kill current active terminal process".to_string(),
+                    target_resource: target.clone(),
+                    availability: ActionAvailability::Ready,
+                    effect_class: EffectClass::ProcessExecution,
+                    destructive: true,
+                    required_inputs: vec![],
+                },
+            ],
+            ResourceType::Claim => vec![
+                ContextualActionDescriptor {
+                    action_id: "claim.verify".to_string(),
+                    title: "Verify Claim".to_string(),
+                    description: "Attach verification receipt from experiment run".to_string(),
+                    target_resource: target.clone(),
+                    availability: ActionAvailability::Ready,
+                    effect_class: EffectClass::WorkspaceMutation,
+                    destructive: false,
+                    required_inputs: vec![],
+                },
+                ContextualActionDescriptor {
+                    action_id: "claim.dispute".to_string(),
+                    title: "Dispute Claim".to_string(),
+                    description: "Mark claim as disputed or unverified".to_string(),
+                    target_resource: target.clone(),
+                    availability: ActionAvailability::Ready,
+                    effect_class: EffectClass::WorkspaceMutation,
+                    destructive: false,
+                    required_inputs: vec![],
+                },
+            ],
+            ResourceType::Source => vec![
+                ContextualActionDescriptor {
+                    action_id: "source.extract_claim".to_string(),
+                    title: "Extract Claim".to_string(),
+                    description: "Extract a scientific or technical claim from excerpt".to_string(),
+                    target_resource: target.clone(),
+                    availability: ActionAvailability::Ready,
+                    effect_class: EffectClass::WorkspaceMutation,
+                    destructive: false,
+                    required_inputs: vec![ActionInputSpec {
+                        name: "passage".to_string(),
+                        input_type: "string".to_string(),
+                        required: true,
+                    }],
+                },
+            ],
+            ResourceType::Notebook => vec![
+                ContextualActionDescriptor {
+                    action_id: "notebook.execute_cell".to_string(),
+                    title: "Execute Cell".to_string(),
+                    description: "Execute interactive notebook cell and capture output".to_string(),
+                    target_resource: target.clone(),
+                    availability: ActionAvailability::Ready,
+                    effect_class: EffectClass::ProcessExecution,
+                    destructive: false,
+                    required_inputs: vec![],
+                },
+                ContextualActionDescriptor {
+                    action_id: "notebook.reset".to_string(),
+                    title: "Reset Kernel".to_string(),
+                    description: "Restart computational notebook kernel".to_string(),
+                    target_resource: target.clone(),
+                    availability: ActionAvailability::NeedsApproval {
+                        risk_class: RiskClass::Medium,
+                        prompt: "Resetting kernel will clear all active variables and memory.".to_string(),
+                    },
+                    effect_class: EffectClass::ProcessExecution,
+                    destructive: true,
+                    required_inputs: vec![],
+                },
+            ],
+            ResourceType::Draft => vec![
+                ContextualActionDescriptor {
+                    action_id: "draft.stage_to_outbox".to_string(),
+                    title: "Stage to Outbox".to_string(),
+                    description: "Queue communication payload for human approval".to_string(),
+                    target_resource: target.clone(),
+                    availability: ActionAvailability::Ready,
+                    effect_class: EffectClass::WorkspaceMutation,
+                    destructive: false,
+                    required_inputs: vec![],
+                },
+            ],
+            ResourceType::OutboxItem => vec![
+                ContextualActionDescriptor {
+                    action_id: "outbox.approve_and_send".to_string(),
+                    title: "Approve & Transmit".to_string(),
+                    description: "Grant single-use permit and transmit external side-effect".to_string(),
+                    target_resource: target.clone(),
+                    availability: ActionAvailability::NeedsApproval {
+                        risk_class: RiskClass::High,
+                        prompt: "This action will transmit communication to external recipients.".to_string(),
+                    },
+                    effect_class: EffectClass::NetworkTransmission,
+                    destructive: false,
+                    required_inputs: vec![],
+                },
+            ],
+            ResourceType::BrowserPreview => vec![
+                ContextualActionDescriptor {
+                    action_id: "preview.navigate".to_string(),
+                    title: "Navigate".to_string(),
+                    description: "Load local development URL in manual preview".to_string(),
+                    target_resource: target.clone(),
+                    availability: ActionAvailability::Ready,
+                    effect_class: EffectClass::ReadOnly,
+                    destructive: false,
+                    required_inputs: vec![ActionInputSpec {
+                        name: "url".to_string(),
+                        input_type: "string".to_string(),
+                        required: true,
+                    }],
+                },
+            ],
+            ResourceType::RemoteHost => {
+                if self.fleet_automation.is_some() {
+                    vec![
+                        ContextualActionDescriptor {
+                            action_id: "fleet.ping".to_string(),
+                            title: "Ping Host".to_string(),
+                            description: "Test reachability of remote fleet host".to_string(),
+                            target_resource: target.clone(),
+                            availability: ActionAvailability::Ready,
+                            effect_class: EffectClass::ReadOnly,
+                            destructive: false,
+                            required_inputs: vec![],
+                        },
+                        ContextualActionDescriptor {
+                            action_id: "fleet.exec".to_string(),
+                            title: "Run Command".to_string(),
+                            description: "Execute sandboxed command on remote host".to_string(),
+                            target_resource: target.clone(),
+                            availability: ActionAvailability::NeedsApproval {
+                                risk_class: RiskClass::High,
+                                prompt: "Command execution on remote host requires operator permit.".to_string(),
+                            },
+                            effect_class: EffectClass::ProcessExecution,
+                            destructive: false,
+                            required_inputs: vec![ActionInputSpec {
+                                name: "command".to_string(),
+                                input_type: "string".to_string(),
+                                required: true,
+                            }],
+                        },
+                    ]
+                } else {
+                    vec![ContextualActionDescriptor {
+                        action_id: "fleet.connect".to_string(),
+                        title: "Connect Remote Fleet".to_string(),
+                        description: "Configure SSH / Fleet transport in settings".to_string(),
+                        target_resource: target.clone(),
+                        availability: ActionAvailability::NeedsSetup {
+                            setup_action: "settings.fleet".to_string(),
+                            description: "Remote Fleet transport coordinator is not configured.".to_string(),
+                        },
+                        effect_class: EffectClass::ReadOnly,
+                        destructive: false,
+                        required_inputs: vec![],
+                    }]
+                }
+            }
+            _ => vec![],
+        }
     }
 
     async fn resolve_workspace_for_dispatch(
@@ -3409,6 +3661,17 @@ impl LocalApiDispatcher {
                         }
                     }
                     None => ApiResponse::error(req.id, "Missing capability_id parameter"),
+                }
+            }
+            METHOD_RESOURCES_GET_ACTIONS => {
+                let params: GetResourceActionsParams = match serde_json::from_value(req.params.clone()) {
+                    Ok(p) => p,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid get_actions params: {e}")),
+                };
+                let actions = self.get_resource_actions(&params);
+                match serde_json::to_value(&actions) {
+                    Ok(val) => ApiResponse::success(req.id, serde_json::json!({ "actions": val })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
             METHOD_TERMINAL_SPAWN => {

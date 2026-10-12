@@ -313,6 +313,94 @@ impl EffectAttempt {
     }
 }
 
+/// Structured reference to any persistent or active Resource in Custos
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ResourceRef {
+    pub resource_type: ResourceType,
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+}
+
+impl ResourceRef {
+    pub fn new(resource_type: ResourceType, id: impl Into<String>) -> Self {
+        Self {
+            resource_type,
+            id: id.into(),
+            path: None,
+            version: None,
+        }
+    }
+
+    pub fn with_path(mut self, path: impl Into<String>) -> Self {
+        self.path = Some(path.into());
+        self
+    }
+}
+
+/// Enumeration of canonical resource archetypes across Coding, Research, and Copilot lenses
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResourceType {
+    File,
+    Worktree,
+    Terminal,
+    Claim,
+    Source,
+    Notebook,
+    Run,
+    Artifact,
+    Draft,
+    OutboxItem,
+    RemoteHost,
+    BrowserPreview,
+}
+
+/// Contextual readiness status of an action for a given Task, Resource, and Permission state
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum ActionAvailability {
+    Ready,
+    NeedsSelection { hint: String },
+    NeedsSetup { setup_action: String, description: String },
+    NeedsApproval { risk_class: crate::authority::RiskClass, prompt: String },
+    Running { run_id: String, progress: Option<u32> },
+    Unavailable { reason: String },
+}
+
+/// Full descriptor of a contextual action advertised for a specific resource
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextualActionDescriptor {
+    pub action_id: String,
+    pub title: String,
+    pub description: String,
+    pub target_resource: ResourceRef,
+    pub availability: ActionAvailability,
+    pub effect_class: EffectClass,
+    pub destructive: bool,
+    pub required_inputs: Vec<ActionInputSpec>,
+}
+
+/// Classification of the side effect produced by an action
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EffectClass {
+    ReadOnly,
+    WorkspaceMutation,
+    ProcessExecution,
+    NetworkTransmission,
+}
+
+/// Specification of inputs required to dispatch an action
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActionInputSpec {
+    pub name: String,
+    pub input_type: String,
+    pub required: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

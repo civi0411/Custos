@@ -63,6 +63,7 @@ import {
   RunPacksJobResult,
   EmulatorDevice,
   EmulatorSession,
+  ContextualActionDescriptor,
   EmulatorSnapshotResult,
   EmulatorScreenshotResult,
 } from '../types/domain';
@@ -1151,6 +1152,24 @@ export class DaemonClient {
       workspace_id: params.workspaceId,
       inputs: params.inputs ?? {},
     });
+  }
+
+  // ==========================================
+  // Step 12: Contextual Resource Actions API
+  // ==========================================
+  async getResourceActions(
+    resourceId: string,
+    sessionId?: string
+  ): Promise<ContextualActionDescriptor[]> {
+    try {
+      return await this.request<ContextualActionDescriptor[]>('v1.resources.get_actions', {
+        resource_id: resourceId,
+        session_id: sessionId,
+      });
+    } catch (err) {
+      console.warn(`Failed to fetch actions for resource ${resourceId}:`, err);
+      return [];
+    }
   }
 }
 

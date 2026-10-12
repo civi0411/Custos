@@ -16,9 +16,6 @@ import {
   Layers,
   Server,
   Smartphone,
-  Search,
-  Compass,
-  ArrowRight,
 } from 'lucide-react';
 const BrowserWorkbenchPane = React.lazy(() => import('@/components/views/BrowserWorkbenchPane').then((module) => ({ default: module.BrowserWorkbenchPane })));
 const MobileSimulatorWorkbenchPane = React.lazy(() => import('@/components/views/MobileSimulatorWorkbenchPane').then(module => ({ default: module.MobileSimulatorWorkbenchPane })));
@@ -43,6 +40,7 @@ import {
   ArtifactsWorkbenchPane,
   ResearchSynthesisPane,
 } from '@/components/research';
+import { QuickResourcePalette } from '@/components/navigation/QuickResourcePalette';
 
 export type OrcaTabId =
   | 'tools'
@@ -128,8 +126,8 @@ export const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'runs', title: 'Runs', description: 'Inspect experiment logs, environment specs, and execution outputs.', icon: FlaskConical, group: 'Research', status: 'available' },
   { id: 'synthesis', title: 'Synthesis & Handoff', description: 'Synthesize research claims and recipes into coding tasks.', icon: Layers, group: 'Research', status: 'available', supportedOperations: ['synthesis.proposals.list', 'synthesis.proposals.get', 'synthesis.proposals.save', 'synthesis.handoff.execute'] },
   { id: 'artifacts', title: 'Artifacts', description: 'View generated documents, reports, diagrams, and exported files.', icon: FileCode, group: 'Research', status: 'available', supportedOperations: ['list', 'get', 'record_lineage', 'lineage.list', 'lineage.graph', 'annotations.list', 'annotations.save'] },
-  { id: 'browser', title: 'Browser', description: 'Manual native browser for web research and local development previews.', icon: Globe, group: 'Shared', status: 'available', supportedOperations: [] },
-  { id: 'emulator', title: 'Phone Simulator', description: 'Responsive mobile web preview with native lifecycle and device presets.', icon: Smartphone, group: 'Engineering', status: 'available', supportedOperations: [] },
+  { id: 'browser', title: 'Browser Preview (Manual)', description: 'Manual native browser for web research and local development previews.', icon: Globe, group: 'Shared', status: 'available', supportedOperations: [] },
+  { id: 'emulator', title: 'Mobile Preview', description: 'Responsive mobile web preview with native lifecycle and device presets.', icon: Smartphone, group: 'Engineering', status: 'available', supportedOperations: [] },
   { id: 'fleet', title: 'Remote Fleet', description: 'Remote host inventory for distributed compute.', icon: Server, group: 'Shared', status: 'available', supportedOperations: ['hosts.list', 'hosts.register', 'hosts.ping', 'jobs.list', 'jobs.create', 'fleet.exec', 'jobs.run'] },
   { id: 'notes', title: 'Notes & Scratchpad', description: 'Capture quick notes, thoughts, and draft context for conversations.', icon: FileCode, group: 'Shared', status: 'available', supportedOperations: ['list', 'get', 'save', 'history'] },
 ];
@@ -261,13 +259,6 @@ const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
   const activeType: OrcaTabId = activeTab ? getTabType(activeTab) : (resourceTabs.activeTabId.split('-')[0] as OrcaTabId);
   const activeResource = resources.find((resource) => resource.id === activeType);
 
-  const [searchQuery, setSearchQuery] = React.useState('');
-  const [selectedGroup, setSelectedGroup] = React.useState<string>('All');
-
-  React.useEffect(() => {
-    setSelectedGroup('All');
-  }, [mode]);
-
   const openResource = (resource: ResourceDefinition) => {
     const newTabId = `${resource.id}-${Date.now()}`;
     const newTab: OrcaTab = {
@@ -288,199 +279,14 @@ const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
     resourceTabs.setActiveTabId(newTabId);
   };
 
-  // Scope visible resources strictly to current workbench mode
-  const visibleResources = React.useMemo(() => {
-    if (mode === 'code') {
-      return resources.filter(
-        (r) =>
-          r.id === 'files' ||
-          r.id === 'changes' ||
-          r.id === 'terminal' ||
-          r.id === 'browser' ||
-          r.id === 'emulator' ||
-          r.id === 'worktrees' ||
-          r.id === 'kanban' ||
-          r.id === 'evidence' ||
-          r.id === 'notes'
-      );
-    }
-    if (mode === 'research') {
-      return resources.filter(
-        (r) =>
-          r.id === 'literature' ||
-          r.id === 'experiments' ||
-          r.id === 'browser' ||
-          r.id === 'claims' ||
-          r.id === 'synthesis' ||
-          r.id === 'artifacts' ||
-          r.id === 'notes' ||
-          r.id === 'runs' ||
-          r.id === 'knowledge'
-      );
-    }
-    // Copilot: Assistant tools and scratchpads
-    return resources.filter(
-      (r) =>
-        r.id === 'notes' ||
-        r.id === 'artifacts' ||
-        r.id === 'browser' ||
-        r.id === 'emulator'
-    );
-  }, [resources, mode]);
-
-  const categoryPills = React.useMemo(() => {
-    if (mode === 'code') return ['All', 'Engineering', 'Shared'] as const;
-    if (mode === 'research') return ['All', 'Research', 'Shared'] as const;
-    return [] as const;
-  }, [mode]);
-
-  const headerMeta = React.useMemo(() => {
-    if (mode === 'code') {
-      return {
-        kicker: 'Coding Workbench',
-        title: 'Engineering Tools & Resources',
-        description: 'Repository inspection, execution surfaces, and developer tools for this session.',
-      };
-    }
-    if (mode === 'research') {
-      return {
-        kicker: 'Research Workbench',
-        title: 'Research Tools & Resources',
-        description: 'Literature, hypotheses, notebook kernels, and synthesis tools for this session.',
-      };
-    }
-    return {
-      kicker: 'Copilot Workbench',
-      title: 'Copilot Tools & Resources',
-      description: 'Assistant tools, scratchpads, and session inspection for this conversation.',
-    };
-  }, [mode]);
-
-  const filteredResources = visibleResources.filter((resource) => {
-    const isShared = resource.id === 'notes' || resource.id === 'artifacts' || resource.id === 'browser';
-    const matchesGroup =
-      selectedGroup === 'All' ||
-      (selectedGroup === 'Engineering' && resource.group === 'Engineering') ||
-      (selectedGroup === 'Research' && resource.group === 'Research') ||
-      (selectedGroup === 'Shared' && isShared);
-    const q = searchQuery.trim().toLowerCase();
-    const matchesQuery =
-      !q ||
-      resource.title.toLowerCase().includes(q) ||
-      resource.description.toLowerCase().includes(q);
-    return matchesGroup && matchesQuery;
-  });
-
   if (activeType === 'tools') {
     return (
-      <div className="h-full overflow-y-auto bg-[var(--color-canvas)] px-6 py-8 text-[var(--color-editor-fg)]">
-        <div className="mx-auto max-w-4xl">
-          {/* Hero Header */}
-          <div className="mb-6">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="workbench-kicker">{headerMeta.kicker}</span>
-              <span className="text-[10px] text-fg-subtle">•</span>
-              <span className="text-[11px] text-fg-subtle flex items-center gap-1">
-                <Compass className="w-3.5 h-3.5 text-accent" /> New Tab
-              </span>
-            </div>
-            <h1 className="text-xl font-semibold tracking-[-0.02em] text-fg-editor">
-              {headerMeta.title}
-            </h1>
-            <p className="mt-1 text-xs leading-5 text-[var(--color-fg-muted)]">
-              {headerMeta.description}
-            </p>
-
-            {/* Quick Search & Filters */}
-            <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              <div className="relative flex-1">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Filter resources by name or description..."
-                  className="w-full bg-[var(--color-surface-1)] border border-[var(--color-border-default)] rounded-xl pl-10 pr-4 py-2 text-xs text-fg-editor placeholder:text-fg-subtle focus:outline-none focus:border-border-default focus:ring-1 focus:ring-border-default/20 transition"
-                  autoFocus
-                />
-              </div>
-
-              {/* Category Pills (Only when more than 3 options) */}
-              {categoryPills.length > 0 && (
-                <div className="flex items-center gap-1 bg-[var(--color-surface-1)] p-1 rounded-xl border border-[var(--color-border-muted)] shrink-0 text-xs">
-                  {categoryPills.map((group) => (
-                    <button
-                      key={group}
-                      type="button"
-                      onClick={() => setSelectedGroup(group)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition ${
-                        selectedGroup === group
-                          ? 'bg-surface-2 text-fg-editor shadow-xs'
-                          : 'text-fg-muted hover:text-fg-editor hover:bg-surface-2/50'
-                      }`}
-                    >
-                      {group}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Cards Grid */}
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {filteredResources.map((resource) => {
-              const Icon = resource.icon;
-              return (
-                <button
-                  key={resource.id}
-                  type="button"
-                  onClick={() => openResource(resource)}
-                  className="group rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-4 text-left transition hover:border-[var(--color-border-default)] hover:bg-[var(--color-surface-2)] hover:shadow-sm flex flex-col justify-between"
-                >
-                  <div>
-                    <div className="flex items-start justify-between">
-                      <div className="p-2 rounded-lg bg-[var(--color-canvas)] border border-[var(--color-border-muted)] group-hover:border-[var(--color-border-default)] transition">
-                        <Icon className="h-4 w-4 text-[var(--color-fg-muted)] group-hover:workbench-accent transition-colors" />
-                      </div>
-                      {resource.status === 'degraded' && (
-                        <span className="text-[9px] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded text-amber-500 bg-amber-500/10">
-                          Degraded
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-3 text-xs font-semibold text-fg-editor group-hover:workbench-accent transition-colors">
-                      {resource.title}
-                    </div>
-                    <p className="mt-1 text-[11px] leading-5 text-[var(--color-fg-muted)] line-clamp-2">
-                      {resource.description}
-                    </p>
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between pt-2.5 border-t border-[var(--color-border-muted)]/50 text-[11px] text-[var(--color-fg-subtle)] group-hover:text-fg-editor transition-colors">
-                    <span className="font-medium">Open in tab</span>
-                    <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          {filteredResources.length === 0 && (
-            <div className="p-8 text-center text-xs text-fg-subtle border border-dashed border-[var(--color-border-muted)] rounded-xl mt-4">
-              No matching resources found for "{searchQuery}".
-            </div>
-          )}
-
-          <div className="mt-8 flex items-center justify-between border-t border-[var(--color-border-muted)] pt-4 text-[10px] text-[var(--color-fg-subtle)]">
-            <div className="flex items-center gap-2">
-              <Wrench className="h-3.5 w-3.5" />
-              <span>Active session: {session?.title || 'No session selected'}</span>
-            </div>
-            <span>Click any card to open in this tab</span>
-          </div>
-        </div>
-      </div>
+      <QuickResourcePalette
+        resources={resources}
+        mode={mode}
+        sessionId={session?.id}
+        onOpenResource={openResource}
+      />
     );
   }
 
