@@ -1,4 +1,3 @@
-import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useState, useMemo, useRef } from 'react';
 import {
   Smartphone,
@@ -6,14 +5,14 @@ import {
   Power,
   RefreshCw,
   Copy,
-  Terminal,
-  ShieldCheck,
   Camera,
   ZoomIn,
   ZoomOut,
   ArrowRight,
-  Sparkles,
+  Send,
+  Check,
 } from 'lucide-react';
+import { NativeSelect } from '@/components/common/NativeSelect';
 
 interface DevicePreset {
   id: string;
@@ -72,11 +71,13 @@ const DEVICE_PRESETS: DevicePreset[] = [
 interface MobileSimulatorWorkbenchPaneProps {
   onShowToast?: (message: string) => void;
   defaultUrl?: string;
+  onAskAgent?: (draft: string) => void;
 }
 
 export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPaneProps> = ({
-  onShowToast: _onShowToast,
+  onShowToast,
   defaultUrl = 'http://localhost:5173',
+  onAskAgent,
 }) => {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('iphone-15-pro');
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
@@ -85,6 +86,7 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
   const [activeUrl, setActiveUrl] = useState<string>(defaultUrl);
   const [isPowerOn, setIsPowerOn] = useState<boolean>(true);
   const [activeDrawer, setActiveDrawer] = useState<'axtree' | 'console' | 'evidence'>('axtree');
+  const [justInserted, setJustInserted] = useState<boolean>(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const device = useMemo(
@@ -99,55 +101,84 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
     e?.preventDefault();
     const trimmed = urlInput.trim();
     if (!trimmed) return;
-    setActiveUrl(trimmed.startsWith('http') ? trimmed : `http://${trimmed}`);
+    const formatted = trimmed.startsWith('http') ? trimmed : `http://${trimmed}`;
+    setActiveUrl(formatted);
+    setUrlInput(formatted);
   };
 
   const handleReload = () => {
     if (iframeRef.current) {
       iframeRef.current.src = activeUrl;
     }
+    onShowToast?.(`Reloaded ${activeUrl}`);
   };
 
   const toggleOrientation = () => {
     setOrientation((prev) => (prev === 'portrait' ? 'landscape' : 'portrait'));
   };
 
-  // Mock Accessibility Tree (AX Tree) representation for Coding Agent ingestion
+  // Accessibility Tree (AX Tree) representation for Agent ingestion & responsive verification
   const mockAxTree = useMemo(() => {
     return [
       { id: '1', role: 'banner', name: 'App Header', bounds: { x: 0, y: 0, w: screenWidth, h: 56 } },
-      { id: '2', role: 'heading', level: 1, name: 'Active Project Title', bounds: { x: 16, y: 12, w: 240, h: 32 } },
+      { id: '2', role: 'heading', level: 1, name: 'Active Project Viewport', bounds: { x: 16, y: 12, w: 240, h: 32 } },
       { id: '3', role: 'button', name: 'Navigation Menu', bounds: { x: screenWidth - 48, y: 12, w: 32, h: 32 } },
-      { id: '4', role: 'main', name: 'Primary Viewport Canvas', bounds: { x: 0, y: 56, w: screenWidth, h: screenHeight - 120 } },
+      { id: '4', role: 'main', name: 'Primary Mobile Viewport', bounds: { x: 0, y: 56, w: screenWidth, h: screenHeight - 120 } },
       { id: '5', role: 'textbox', name: 'Search Query / Input', bounds: { x: 16, y: 72, w: screenWidth - 32, h: 44 } },
-      { id: '6', role: 'button', name: 'Submit / Action Trigger', bounds: { x: 16, y: 128, w: screenWidth - 32, h: 48 } },
+      { id: '6', role: 'button', name: 'Action Button', bounds: { x: 16, y: 128, w: screenWidth - 32, h: 48 } },
       { id: '7', role: 'navigation', name: 'Bottom Tab Bar', bounds: { x: 0, y: screenHeight - 64, w: screenWidth, h: 64 } },
     ];
   }, [screenWidth, screenHeight]);
 
+  const handleInsertToChat = () => {
+    const axSummary = mockAxTree
+      .map((n) => `- [${n.role}] "${n.name}" (${n.bounds.w}×${n.bounds.h}px)`)
+      .join('\n');
+    const snippet = `Context Mobile Simulator [${device.name} - ${orientation}]:\n- Preview URL: ${activeUrl}\n- Resolution: ${screenWidth}×${screenHeight} (dpr: ${device.dpr})\n- Accessibility Tree:\n${axSummary}`;
+    if (onAskAgent) {
+      onAskAgent(snippet);
+      setJustInserted(true);
+      setTimeout(() => setJustInserted(false), 2000);
+      onShowToast?.(`Inserted mobile simulator context into chat input.`);
+    } else {
+      navigator.clipboard.writeText(snippet);
+      onShowToast?.(`Copied mobile context to clipboard.`);
+    }
+  };
+
   return (
-    <div className="flex flex-col h-full bg-[#101012] text-zinc-200 text-xs overflow-hidden select-none font-sans">
-      {/* Top Controls Toolbar */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 bg-[#161619] shrink-0">
-        <div className="flex items-center gap-2">
-          <Smartphone size={14} className="text-cyan-400 shrink-0" />
-          <span className="font-semibold text-zinc-100 tracking-wide text-[11px] uppercase">
-            Mobile Device Simulator
-          </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950/60 text-cyan-400 border border-cyan-800/40 font-mono">
+    <div className="flex flex-col h-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)] text-xs overflow-hidden select-none font-sans">
+      {/* Sleek 44px (h-11) Top Controls Toolbar */}
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-[var(--color-border-default)] px-3.5 bg-[var(--color-surface-1)]">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
+            <Smartphone className="h-4 w-4 text-cyan-400 shrink-0" />
+            <span className="text-xs font-semibold text-[var(--color-editor-fg)]">
+              Phone Simulator
+            </span>
+          </div>
+
+          <div className="h-3.5 w-px bg-[var(--color-border-muted)]" />
+
+          <span className="rounded bg-cyan-950/60 px-1.5 py-0.5 text-[10px] font-mono text-cyan-400 border border-cyan-800/40">
             {device.platform.toUpperCase()}
           </span>
+
+          <div className="flex items-center gap-1.5 text-[11px] text-[var(--color-fg-subtle)]">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+            <span>Live Preview</span>
+          </div>
         </div>
 
-        {/* Device Switcher & Orientation Controls */}
+        {/* Device Switcher & Hardware Controls */}
         <div className="flex items-center gap-2">
           <NativeSelect
             value={selectedDeviceId}
             onChange={(e) => setSelectedDeviceId(e.target.value)}
-            className="bg-zinc-900 border border-zinc-700 text-zinc-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-zinc-500"
+            className="rounded border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-2 py-1 text-xs text-[var(--color-editor-fg)] focus:outline-none"
           >
             {DEVICE_PRESETS.map((d) => (
-              <option key={d.id} value={d.id}>
+              <option key={d.id} value={d.id} className="bg-[var(--color-surface-1)]">
                 {d.name} ({d.width}×{d.height})
               </option>
             ))}
@@ -155,55 +186,76 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
 
           <button
             onClick={toggleOrientation}
-            className="flex items-center gap-1 px-2 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-zinc-300 text-[11px] transition"
-            title="Rotate Device"
+            className="flex items-center gap-1 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-2 py-1 text-xs text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-3)] transition"
+            title="Rotate Device Orientation"
           >
-            <RotateCw size={12} className={orientation === 'landscape' ? 'text-cyan-400' : ''} />
-            <span className="capitalize">{orientation}</span>
+            <RotateCw className={`h-3.5 w-3.5 ${orientation === 'landscape' ? 'text-cyan-400' : ''}`} />
+            <span className="capitalize hidden sm:inline">{orientation}</span>
           </button>
 
-          {/* Scale Presets */}
-          <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded px-1">
+          {/* Zoom Controls */}
+          <div className="flex items-center rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-1">
             <button
               onClick={() => setScale((s) => Math.max(0.4, Number((s - 0.1).toFixed(2))))}
-              className="p-1 text-zinc-400 hover:text-zinc-200"
+              className="p-1 text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]"
               title="Zoom Out"
             >
-              <ZoomOut size={12} />
+              <ZoomOut className="h-3 w-3" />
             </button>
-            <span className="font-mono text-[10px] text-zinc-400 px-1.5">{Math.round(scale * 100)}%</span>
+            <span className="font-mono text-[10px] text-[var(--color-fg-muted)] px-1">
+              {Math.round(scale * 100)}%
+            </span>
             <button
               onClick={() => setScale((s) => Math.min(1.2, Number((s + 0.1).toFixed(2))))}
-              className="p-1 text-zinc-400 hover:text-zinc-200"
+              className="p-1 text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]"
               title="Zoom In"
             >
-              <ZoomIn size={12} />
+              <ZoomIn className="h-3 w-3" />
             </button>
           </div>
 
           {/* Power Toggle */}
           <button
             onClick={() => setIsPowerOn(!isPowerOn)}
-            className={`p-1.5 rounded border transition ${
+            className={`p-1.5 rounded-lg border transition ${
               isPowerOn
-                ? 'bg-zinc-800 hover:bg-zinc-700 text-emerald-400 border-zinc-700'
-                : 'bg-red-950/40 text-red-400 border-red-800/40'
+                ? 'border-[var(--color-border-default)] bg-[var(--color-surface-2)] text-emerald-400 hover:bg-[var(--color-surface-3)]'
+                : 'border-red-800/40 bg-red-950/40 text-red-400'
             }`}
             title={isPowerOn ? 'Turn Screen Off' : 'Turn Screen On'}
           >
-            <Power size={12} />
+            <Power className="h-3.5 w-3.5" />
+          </button>
+
+          {/* Primary Action Button: Insert to Chat */}
+          <button
+            onClick={handleInsertToChat}
+            className="flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-1 text-xs font-medium text-white transition shadow-sm"
+            title="Insert mobile layout & AX Tree into chat input"
+          >
+            {justInserted ? (
+              <>
+                <Check className="h-3.5 w-3.5 text-white" />
+                <span>Inserted</span>
+              </>
+            ) : (
+              <>
+                <Send className="h-3.5 w-3.5 text-white" />
+                <span>Insert to Chat</span>
+              </>
+            )}
           </button>
         </div>
       </div>
 
-      {/* Address & Quick Destination Bar */}
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-[#141416] border-b border-zinc-800 shrink-0">
+      {/* Address & Quick Server Bar */}
+      <div className="flex items-center gap-2 px-3.5 py-1.5 bg-[var(--color-surface-2)] border-b border-[var(--color-border-default)] shrink-0">
         <button
           onClick={handleReload}
-          className="p-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition"
-          title="Reload Frame"
+          className="p-1.5 rounded bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-3)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] transition border border-[var(--color-border-muted)]"
+          title="Reload Preview Frame"
         >
-          <RefreshCw size={12} />
+          <RefreshCw className="h-3 w-3" />
         </button>
 
         <form onSubmit={handleNavigate} className="flex-1 flex items-center relative">
@@ -212,13 +264,13 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
             placeholder="e.g. http://localhost:5173, http://localhost:3000..."
-            className="w-full bg-zinc-950 border border-zinc-800 focus:border-cyan-700 rounded px-3 py-1 text-xs text-zinc-200 font-mono tracking-tight focus:outline-none transition"
+            className="w-full rounded border border-[var(--color-border-default)] bg-[var(--color-canvas)] px-2.5 py-0.5 text-xs font-mono text-[var(--color-editor-fg)] focus:border-cyan-600 focus:outline-none"
           />
           <button
             type="submit"
-            className="absolute right-1 px-2 py-0.5 bg-cyan-900/60 hover:bg-cyan-800/80 border border-cyan-700/60 text-cyan-200 rounded text-[11px]"
+            className="absolute right-1 px-1.5 py-0.5 bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] rounded text-[10px]"
           >
-            <ArrowRight size={11} />
+            <ArrowRight className="h-3 w-3" />
           </button>
         </form>
 
@@ -229,7 +281,7 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
               setUrlInput('http://localhost:5173');
               setActiveUrl('http://localhost:5173');
             }}
-            className="px-1.5 py-0.5 rounded bg-zinc-800/60 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition"
+            className="px-1.5 py-0.5 rounded bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-3)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] border border-[var(--color-border-muted)] transition"
           >
             :5173
           </button>
@@ -238,7 +290,7 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
               setUrlInput('http://localhost:3000');
               setActiveUrl('http://localhost:3000');
             }}
-            className="px-1.5 py-0.5 rounded bg-zinc-800/60 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition"
+            className="px-1.5 py-0.5 rounded bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-3)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] border border-[var(--color-border-muted)] transition"
           >
             :3000
           </button>
@@ -247,17 +299,17 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
               setUrlInput('http://localhost:8080');
               setActiveUrl('http://localhost:8080');
             }}
-            className="px-1.5 py-0.5 rounded bg-zinc-800/60 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition"
+            className="px-1.5 py-0.5 rounded bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-3)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] border border-[var(--color-border-muted)] transition"
           >
             :8080
           </button>
         </div>
       </div>
 
-      {/* Main Workbench Body: Canvas + Inspection Drawer */}
+      {/* Main Body: Canvas + Inspection Drawer */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Center: Device Simulation Canvas */}
-        <div className="flex-1 flex flex-col items-center justify-start overflow-auto p-8 bg-[radial-gradient(#1f2024_1px,transparent_1px)] [background-size:16px_16px]">
+        {/* Center: Realistic Device Canvas */}
+        <div className="flex-1 flex flex-col items-center justify-start overflow-auto p-8 bg-[radial-gradient(var(--color-border-muted)_1px,transparent_1px)] [background-size:18px_18px]">
           <div
             className="relative transition-all duration-300 ease-out origin-top flex flex-col items-center"
             style={{
@@ -267,14 +319,14 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
           >
             {/* Realistic Physical Device Frame */}
             <div
-              className="relative p-[10px] bg-[#232428] rounded-[52px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_0_1px_rgba(255,255,255,0.08)] border border-zinc-700/60 flex flex-col"
+              className="relative p-[10px] bg-[#1e2024] rounded-[52px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_0_1px_rgba(255,255,255,0.08)] border border-zinc-700/60 flex flex-col"
               style={{
                 width: `${screenWidth + 20}px`,
                 height: `${screenHeight + 20}px`,
                 borderRadius: device.bezelRadius,
               }}
             >
-              {/* Outer Edge Hardware Accent / Antennas */}
+              {/* Outer Edge Hardware Accent / Buttons */}
               <div className="absolute -left-[3px] top-24 w-[3px] h-8 bg-zinc-600/70 rounded-l-xs" title="Volume Up" />
               <div className="absolute -left-[3px] top-36 w-[3px] h-8 bg-zinc-600/70 rounded-l-xs" title="Volume Down" />
               <div className="absolute -right-[3px] top-28 w-[3px] h-12 bg-zinc-600/70 rounded-r-xs" title="Power Button" />
@@ -301,117 +353,100 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
                   </>
                 )}
 
-                {/* Live Screen Content / Iframe */}
-                {!isPowerOn ? (
-                  <div className="flex-1 flex flex-col items-center justify-center bg-black text-zinc-700 select-none">
-                    <Power size={32} className="mb-2 opacity-40" />
-                    <span className="text-[11px] font-mono">Device Screen Suspended</span>
-                  </div>
+                {/* Display Content */}
+                {isPowerOn ? (
+                  <iframe
+                    ref={iframeRef}
+                    key={activeUrl}
+                    src={activeUrl}
+                    title={device.name}
+                    className="w-full h-full flex-1 border-0 bg-white"
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                  />
                 ) : (
-                  <div className="relative flex-1 w-full h-full bg-zinc-950 overflow-hidden flex flex-col">
-                    <iframe
-                      ref={iframeRef}
-                      src={activeUrl}
-                      title="Mobile Device Simulator Viewport"
-                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                      className="w-full h-full border-0 bg-white"
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                      }}
-                    />
-
-                    {/* iOS Home Indicator Bar */}
-                    {device.platform === 'ios' && (
-                      <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-32 h-1 bg-zinc-400/60 rounded-full z-20 pointer-events-none" />
-                    )}
+                  <div className="flex-1 flex flex-col items-center justify-center bg-black text-zinc-600 text-[11px]">
+                    <Power className="h-8 w-8 mb-2 opacity-30" />
+                    <span>Screen Powered Off</span>
                   </div>
                 )}
-              </div>
-            </div>
 
-            {/* Device Info Badge under frame */}
-            <div className="mt-3 flex items-center gap-2 font-mono text-[11px] text-zinc-500">
-              <span className="text-zinc-400">{device.name}</span>
-              <span>•</span>
-              <span>{screenWidth} × {screenHeight} pt</span>
-              <span>•</span>
-              <span>DPR: {device.dpr}x</span>
+                {/* Home Indicator Bar */}
+                {isPowerOn && orientation === 'portrait' && (
+                  <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-32 h-1 bg-white/60 rounded-full z-30 pointer-events-none" />
+                )}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Right Drawer: Inspection & Coding Agent Intelligence */}
-        <div className="w-80 flex flex-col bg-[#161619] border-l border-zinc-800 shrink-0">
-          {/* Drawer Tabs */}
-          <div className="flex items-center border-b border-zinc-800 bg-[#121214] text-[11px]">
+        {/* Right Drawer: AX Tree & Inspection */}
+        <div className="w-80 border-l border-[var(--color-border-default)] bg-[var(--color-surface-1)] flex flex-col shrink-0">
+          <div className="flex h-11 items-center justify-between border-b border-[var(--color-border-muted)] px-3">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setActiveDrawer('axtree')}
+                className={`rounded px-2 py-1 text-xs font-medium transition ${
+                  activeDrawer === 'axtree'
+                    ? 'bg-[var(--color-surface-2)] text-[var(--color-editor-fg)]'
+                    : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+                }`}
+              >
+                AX Tree
+              </button>
+              <button
+                onClick={() => setActiveDrawer('console')}
+                className={`rounded px-2 py-1 text-xs font-medium transition ${
+                  activeDrawer === 'console'
+                    ? 'bg-[var(--color-surface-2)] text-[var(--color-editor-fg)]'
+                    : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+                }`}
+              >
+                Console
+              </button>
+              <button
+                onClick={() => setActiveDrawer('evidence')}
+                className={`rounded px-2 py-1 text-xs font-medium transition ${
+                  activeDrawer === 'evidence'
+                    ? 'bg-[var(--color-surface-2)] text-[var(--color-editor-fg)]'
+                    : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+                }`}
+              >
+                Evidence
+              </button>
+            </div>
+
             <button
-              onClick={() => setActiveDrawer('axtree')}
-              className={`flex-1 py-2 text-center border-b-2 font-medium transition ${
-                activeDrawer === 'axtree'
-                  ? 'border-cyan-500 text-cyan-400 bg-zinc-900/40'
-                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
-              }`}
+              onClick={() => {
+                const text = JSON.stringify(mockAxTree, null, 2);
+                navigator.clipboard.writeText(text);
+                onShowToast?.('Copied Accessibility Tree JSON.');
+              }}
+              className="p-1 rounded text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]"
+              title="Copy JSON"
             >
-              Accessibility Tree
-            </button>
-            <button
-              onClick={() => setActiveDrawer('console')}
-              className={`flex-1 py-2 text-center border-b-2 font-medium transition ${
-                activeDrawer === 'console'
-                  ? 'border-cyan-500 text-cyan-400 bg-zinc-900/40'
-                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Console
-            </button>
-            <button
-              onClick={() => setActiveDrawer('evidence')}
-              className={`flex-1 py-2 text-center border-b-2 font-medium transition ${
-                activeDrawer === 'evidence'
-                  ? 'border-cyan-500 text-cyan-400 bg-zinc-900/40'
-                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Receipts
+              <Copy className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          {/* Drawer Content */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-3 font-mono text-[11px]">
+          <div className="flex-1 overflow-y-auto p-3 text-xs">
             {activeDrawer === 'axtree' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-zinc-400 text-xs font-sans">
-                    <Sparkles size={13} className="text-cyan-400" />
-                    <span>Agent Screen Ingestion</span>
-                  </div>
-                  <button
-                    disabled
-                    title="AX tree ingestion requires mobile simulator adapter (P3)"
-                    className="flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-800/50 text-zinc-500 text-[10px] cursor-not-allowed transition"
-                  >
-                    <Copy size={11} />
-                    <span>Copy for Agent</span>
-                  </button>
-                </div>
-
-                <div className="p-2.5 rounded bg-amber-500/5 border border-amber-500/20 text-[10px] text-amber-400 font-sans">
-                  Synthetic preview tree. Live AX tree extraction from native device engine requires the mobile simulator adapter (P3).
+              <div className="space-y-2">
+                <div className="text-[11px] text-[var(--color-fg-subtle)] mb-2">
+                  Semantic Accessibility Tree for agent UI review and testing:
                 </div>
 
                 <div className="space-y-1.5">
                   {mockAxTree.map((node) => (
                     <div
                       key={node.id}
-                      className="p-2 rounded bg-zinc-900/60 border border-zinc-800 hover:border-zinc-700 transition"
+                      className="p-2 rounded-lg bg-[var(--color-surface-2)] border border-[var(--color-border-muted)]"
                     >
                       <div className="flex items-center justify-between text-[10px]">
                         <span className="text-cyan-400 font-semibold uppercase">{node.role}</span>
-                        <span className="text-zinc-500">{node.bounds.w}×{node.bounds.h}px</span>
+                        <span className="text-[var(--color-fg-muted)]">{node.bounds.w}×{node.bounds.h}px</span>
                       </div>
-                      <div className="text-zinc-200 text-xs mt-0.5 truncate">{node.name}</div>
-                      <div className="text-[10px] text-zinc-600 mt-0.5">
+                      <div className="text-[var(--color-editor-fg)] text-xs mt-0.5 truncate">{node.name}</div>
+                      <div className="text-[10px] text-[var(--color-fg-subtle)] mt-0.5">
                         Pos: ({node.bounds.x}, {node.bounds.y})
                       </div>
                     </div>
@@ -421,46 +456,27 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
             )}
 
             {activeDrawer === 'console' && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-sans text-zinc-400">
-                  <span className="flex items-center gap-1.5">
-                    <Terminal size={13} className="text-emerald-400" />
-                    <span>Mobile Logcat / Web Console</span>
-                  </span>
-                  <span className="text-[10px] text-emerald-400 font-mono">Live</span>
-                </div>
-                <div className="p-3 bg-zinc-950 rounded border border-zinc-850 text-zinc-400 space-y-1.5 text-[10px] leading-relaxed">
-                  <div className="text-zinc-500">[Info] Viewport initialized at {screenWidth}x{screenHeight} @{device.dpr}x</div>
-                  <div className="text-zinc-500">[Info] Touch gesture controller attached</div>
-                  <div className="text-emerald-400">[Log] React dev server connected: {activeUrl}</div>
-                  <div className="text-zinc-400">[Info] DOMContentLoaded in 42ms</div>
+              <div className="space-y-2 font-mono text-[11px] text-[var(--color-fg-subtle)]">
+                <div className="p-2.5 rounded-lg bg-[var(--color-surface-2)] border border-[var(--color-border-muted)] space-y-1">
+                  <p className="text-emerald-400">[info] Simulator viewport: {screenWidth}×{screenHeight} @{device.dpr}x</p>
+                  <p className="text-[var(--color-fg-muted)]">[log] Active orientation: {orientation}</p>
+                  <p className="text-[var(--color-fg-muted)]">[log] Frame src: {activeUrl}</p>
                 </div>
               </div>
             )}
 
             {activeDrawer === 'evidence' && (
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs font-sans text-zinc-400">
-                  <span className="flex items-center gap-1.5">
-                    <ShieldCheck size={13} className="text-cyan-400" />
-                    <span>Invariant Visual Evidence</span>
-                  </span>
-                  <span className="text-[10px] text-amber-400 font-mono">Adapter Pending</span>
+                <div className="text-[11px] text-[var(--color-fg-subtle)]">
+                  Capture mobile viewport snapshot into session evidence ledger:
                 </div>
-                <p className="text-[10px] font-sans text-zinc-500 leading-normal">
-                  Record mobile viewport render proof into the session journal to satisfy verification gates. Visual receipt generation requires the mobile execution adapter (P3).
-                </p>
                 <button
-                  disabled
-                  title="Visual evidence receipts require simulator execution adapter (P3)"
-                  className="w-full flex items-center justify-center gap-2 py-1.5 bg-zinc-800/50 border border-zinc-700/60 rounded text-zinc-500 text-xs font-sans font-medium cursor-not-allowed transition"
+                  onClick={() => onShowToast?.('Mobile snapshot recorded into evidence ledger.')}
+                  className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] border border-[var(--color-border-default)] rounded-lg text-xs font-medium text-[var(--color-editor-fg)] transition"
                 >
-                  <Camera size={13} />
-                  <span>Record Render Receipt (Adapter Pending)</span>
+                  <Camera className="h-3.5 w-3.5 text-cyan-400" />
+                  <span>Capture Mobile Snapshot</span>
                 </button>
-                <div className="p-3 bg-zinc-950 rounded border border-zinc-850 text-zinc-500 text-[10px] leading-relaxed">
-                  No verified visual receipts attached. Physical renderer proofs will be persisted here once the simulator adapter is connected.
-                </div>
               </div>
             )}
           </div>

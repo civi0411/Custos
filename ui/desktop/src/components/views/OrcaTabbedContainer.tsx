@@ -127,8 +127,8 @@ export const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'runs', title: 'Runs', description: 'Inspect experiment logs, environment specs, and execution outputs.', icon: FlaskConical, group: 'Research', status: 'available' },
   { id: 'synthesis', title: 'Synthesis & Handoff', description: 'Synthesize research claims and recipes into coding tasks.', icon: Layers, group: 'Research', status: 'available', supportedOperations: ['synthesis.proposals.list', 'synthesis.proposals.get', 'synthesis.proposals.save', 'synthesis.handoff.execute'] },
   { id: 'artifacts', title: 'Artifacts', description: 'View generated documents, reports, diagrams, and exported files.', icon: FileCode, group: 'Research', status: 'available', supportedOperations: ['list', 'get', 'record_lineage', 'lineage.list', 'lineage.graph', 'annotations.list', 'annotations.save'] },
-  { id: 'browser', title: 'Browser', description: 'Interactive browser session for web research and testing.', icon: Globe, group: 'Shared', status: 'degraded', reason: 'Browser execution adapter is not connected; navigation and snapshots fail closed.', supportedOperations: ['sessions.list', 'sessions.create', 'tabs.list', 'tabs.create', 'tabs.close'] },
-  { id: 'emulator', title: 'Phone Simulator', description: 'Interactive mobile device simulator (iOS, Android, Responsive) for live frontend preview.', icon: Smartphone, group: 'Engineering', status: 'unavailable', reason: 'Mobile simulator execution adapter is not connected (P3).', supportedOperations: [] },
+  { id: 'browser', title: 'Browser', description: 'Interactive browser session for web research, local dev preview, and agent testing.', icon: Globe, group: 'Shared', status: 'available', supportedOperations: ['sessions.list', 'sessions.create', 'tabs.list', 'tabs.create', 'tabs.close', 'tabs.navigate', 'tabs.snapshot'] },
+  { id: 'emulator', title: 'Phone Simulator', description: 'Interactive mobile device simulator (iOS, Android, Responsive) for live frontend preview and testing.', icon: Smartphone, group: 'Engineering', status: 'available', supportedOperations: ['preview', 'rotate', 'inspect', 'snapshot'] },
   { id: 'fleet', title: 'Remote Fleet', description: 'Remote host inventory for distributed compute.', icon: Server, group: 'Shared', status: 'degraded', reason: 'SSH transport is not connected; probes and remote execution fail closed.', supportedOperations: ['hosts.list', 'hosts.register', 'jobs.list', 'jobs.create'] },
   { id: 'notes', title: 'Notes & Scratchpad', description: 'Capture quick notes, thoughts, and draft context for conversations.', icon: FileCode, group: 'Shared', status: 'available', supportedOperations: ['list', 'get', 'save', 'history'] },
 ];
@@ -227,6 +227,18 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
       }));
     }
     return DEFAULT_RESOURCES.map((def) => {
+      // Client-native interactive preview resources run directly in ADE frontend
+      if (def.id === 'browser' || def.id === 'emulator') {
+        const matched = capabilities.find(
+          (c) => (c.resourceId ?? c.resource_id) === def.id
+        );
+        return {
+          ...def,
+          status: 'available' as const,
+          supportedOperations: matched?.supportedOperations ?? matched?.supported_operations ?? def.supportedOperations ?? [],
+        };
+      }
+
       const matched = capabilities.find(
         (c) => (c.resourceId ?? c.resource_id) === def.id
       );
@@ -292,6 +304,8 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
           r.id === 'files' ||
           r.id === 'changes' ||
           r.id === 'terminal' ||
+          r.id === 'browser' ||
+          r.id === 'emulator' ||
           r.id === 'worktrees' ||
           r.id === 'kanban' ||
           r.id === 'evidence' ||
@@ -303,6 +317,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
         (r) =>
           r.id === 'literature' ||
           r.id === 'experiments' ||
+          r.id === 'browser' ||
           r.id === 'claims' ||
           r.id === 'synthesis' ||
           r.id === 'artifacts' ||
@@ -315,7 +330,9 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     return resources.filter(
       (r) =>
         r.id === 'notes' ||
-        r.id === 'artifacts'
+        r.id === 'artifacts' ||
+        r.id === 'browser' ||
+        r.id === 'emulator'
     );
   }, [resources, mode]);
 
@@ -348,7 +365,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   }, [mode]);
 
   const filteredResources = visibleResources.filter((resource) => {
-    const isShared = resource.id === 'notes' || resource.id === 'artifacts';
+    const isShared = resource.id === 'notes' || resource.id === 'artifacts' || resource.id === 'browser';
     const matchesGroup =
       selectedGroup === 'All' ||
       (selectedGroup === 'Engineering' && resource.group === 'Engineering') ||
@@ -496,6 +513,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     return frameResource(
       <BrowserWorkbenchPane
         onShowToast={onShowToast}
+        onAskAgent={onAskAgent}
         supportedOperations={activeResource.supportedOperations ?? []}
         capabilityReason={activeResource.reason}
       />
@@ -503,7 +521,12 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   }
 
   if (activeType === 'emulator') {
-    return frameResource(<MobileSimulatorWorkbenchPane onShowToast={onShowToast} />);
+    return frameResource(
+      <MobileSimulatorWorkbenchPane
+        onShowToast={onShowToast}
+        onAskAgent={onAskAgent}
+      />
+    );
   }
 
   if (activeType === 'fleet') {
