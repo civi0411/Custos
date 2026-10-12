@@ -1,11 +1,8 @@
 import React, { useState } from 'react';
 import {
   Plus,
-  Cpu,
   Laptop,
   Terminal,
-  Trash2,
-  RefreshCw,
   Layers,
   BarChart3,
   Server,
@@ -14,6 +11,7 @@ import { ProviderItem, ClientApiKey } from '@/types';
 import { useAppContext } from '@/context/AppContext';
 import { CombosManager } from '@/components/providers/CombosManager';
 import { UsageMonitor } from '@/components/providers/UsageMonitor';
+
 
 interface ProvidersViewProps {
   providers: ProviderItem[];
@@ -25,35 +23,14 @@ interface ProvidersViewProps {
   onDeleteProvider?: (id: string) => void;
 }
 
-const getProviderLogo = (iconType: string): string | null => {
-  switch (iconType) {
-    case 'anthropic':
-      return '/assets/provider-logo/anthropic.jpg';
-    case 'copilot':
-      return '/assets/provider-logo/github-copilot.jpg';
-    case 'antigravity':
-      return '/assets/provider-logo/gemini.jpg';
-    case 'openai':
-      return '/assets/provider-logo/openai.jpg';
-    case 'gemini':
-      return '/assets/provider-logo/gemini.jpg';
-    case 'deepseek':
-      return '/assets/provider-logo/deepseek.jpg';
-    default:
-      return null;
-  }
-};
 
 export const ProvidersView: React.FC<ProvidersViewProps> = ({
-  providers,
   clientKeys,
   onOpenAddProviderModal,
   onGenerateClientKey,
   onRevokeClientKey,
-  onTestConnection,
-  onDeleteProvider,
 }) => {
-  const { connectedAccounts, handleDeleteAccount } = useAppContext();
+  const { connectedAccounts, handleDeleteAccount, refreshModels } = useAppContext();
   const [activeSubTab, setActiveSubTab] = useState<'providers' | 'combos' | 'usage'>('providers');
 
   return (
@@ -98,7 +75,7 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
           <Server className="w-3.5 h-3.5" />
           <span>Providers & Accounts</span>
           <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-surface-2 text-fg-subtle">
-            {providers.length + connectedAccounts.length}
+            {connectedAccounts.length}
           </span>
         </button>
 
@@ -135,112 +112,6 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
         {activeSubTab === 'usage' && <UsageMonitor />}
         {activeSubTab === 'providers' && (
           <div className="space-y-8 min-w-0">
-            {/* SECTION 1: Configured AI Providers */}
-            <div className="space-y-4 min-w-0">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
-                  Configured AI Model Providers (Daemon Persisted)
-                </h3>
-                <span className="text-[11px] text-fg-subtle font-mono">
-                  Live Probe Enabled · SQLite Persisted
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {providers.map((p) => {
-                  const logoUrl = getProviderLogo(p.iconType);
-                  const ctxK = p.contextWindow ? `${Math.round(p.contextWindow / 1000)}k ctx` : null;
-
-                  return (
-                    <div
-                      key={p.id}
-                      className="p-4 sm:p-5 rounded-2xl bg-surface-1 border border-border-muted hover:border-border-default transition flex flex-col justify-between space-y-4 shadow-xs"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3 min-w-0">
-                          {logoUrl ? (
-                            <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-xs border border-border-default bg-surface-2">
-                              <img
-                                src={logoUrl}
-                                alt={p.name}
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
-                          ) : (
-                            <div className="w-10 h-10 rounded-xl bg-surface-2 flex items-center justify-center workbench-accent font-bold text-sm shrink-0 border border-border-default">
-                              <Cpu className="w-5 h-5" />
-                            </div>
-                          )}
-
-                          <div className="min-w-0">
-                            <h4 className="text-sm font-semibold text-fg-editor truncate">{p.name}</h4>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-[11px] text-fg-muted font-mono truncate">{p.model}</span>
-                              {ctxK && (
-                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface-2 text-fg-subtle font-mono shrink-0">
-                                  {ctxK}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span
-                            className="w-2 h-2 rounded-full"
-                            style={{ backgroundColor: p.badgeColor }}
-                          />
-                          <span className="text-xs font-mono text-fg-subtle">{p.statusLabel}</span>
-                        </div>
-                      </div>
-
-                      {/* Provider Details */}
-                      <div className="space-y-2 text-xs font-mono">
-                        <div className="flex justify-between text-fg-muted">
-                          <span>API Key Secret:</span>
-                          <span className="text-fg-subtle">{p.apiKey}</span>
-                        </div>
-                        {p.endpoint && (
-                          <div className="flex justify-between text-fg-muted truncate">
-                            <span>Endpoint URL:</span>
-                            <span className="text-fg-subtle truncate max-w-[240px]">{p.endpoint}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Action Bar */}
-                      <div className="flex items-center justify-between pt-2 border-t border-border-muted/50">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] text-fg-subtle font-mono">{p.latency}</span>
-                          {onDeleteProvider && (
-                            <button
-                              onClick={() => {
-                                if (window.confirm(`Xóa cấu hình provider "${p.name}"?`)) {
-                                  onDeleteProvider(p.id);
-                                }
-                              }}
-                              className="text-fg-subtle hover:text-rose-400 p-1 rounded transition cursor-pointer"
-                              title="Delete provider"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-
-                        <button
-                          onClick={() => onTestConnection(p.id || p.name)}
-                          className="px-2.5 py-1 rounded bg-surface-2 hover:bg-surface-3 text-fg-editor text-[11px] border border-border-default hover:border-border-emphasis transition flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <RefreshCw className="w-3 h-3 text-fg-muted" />
-                          <span>{p.endpoint ? 'Probe & Verify' : 'Test Connection'}</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
             {/* SECTION 2: Connected OAuth & Account Identifiers */}
             <div className="space-y-4 min-w-0">
               <div className="flex items-center justify-between">
@@ -263,7 +134,7 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
                         <div className="flex items-center gap-2">
                           <h4 className="text-sm font-semibold text-fg-editor">{account.accountName}</h4>
                           <span className="text-[9px] font-mono px-1.5 py-0.2 rounded border bg-surface-2 border-border-default text-fg-editor">
-                            {account.authType === 'oauth' ? 'OAuth 2.0' : 'API Key'}
+                            {account.providerId === 'local' ? 'Local' : account.authType === 'oauth' ? 'OAuth 2.0' : 'API Key'}
                           </span>
                           {account.oauthTier && (
                             <span className="text-[9px] font-mono px-1.5 py-0.2 rounded text-indigo-400 bg-indigo-500/10 border border-indigo-500/20">
@@ -283,6 +154,8 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
                         title={account.statusLabel || account.status}
                       />
                     </div>
+
+                    {account.providerId === 'local' && <div className="flex items-center justify-between text-xs"><span className={account.status === 'active' ? 'text-emerald-400' : 'text-fg-muted'}>{account.status === 'active' ? 'Online' : 'Offline'}</span>{account.status !== 'active' && <button type="button" onClick={() => void refreshModels()} className="provider-oauth-action px-2 py-1 rounded">Retry</button>}</div>}
 
                     <div className="flex items-center justify-between pt-2 border-t border-border-muted/50 text-[11px] font-mono text-fg-subtle">
                       <span>Default: {account.defaultModel}</span>

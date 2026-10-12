@@ -1,3 +1,4 @@
+import WorktreeIcon from '~icons/codicon/worktree';
 import React from 'react';
 import {
   Activity,
@@ -7,7 +8,6 @@ import {
   FileDiff,
   FlaskConical,
   FolderTree,
-  GitBranch,
   Globe,
   NotebookTabs,
   ShieldCheck,
@@ -16,6 +16,8 @@ import {
   Layers,
   Server,
   Smartphone,
+  Search,
+  Compass,
 } from 'lucide-react';
 import { BrowserWorkbenchPane } from '@/components/views/BrowserWorkbenchPane';
 import { MobileSimulatorWorkbenchPane } from '@/components/views/MobileSimulatorWorkbenchPane';
@@ -62,16 +64,23 @@ export type OrcaTabId =
   | 'synthesis';
 
 export interface OrcaTab {
-  id: OrcaTabId;
+  id: string;
+  type?: OrcaTabId;
   title: string;
   url: string;
 }
 
+export function getTabType(tab: OrcaTab | { id: string; type?: OrcaTabId }): OrcaTabId {
+  if (tab.type) return tab.type;
+  const base = tab.id.split('-')[0] as OrcaTabId;
+  return base;
+}
+
 export interface ResourceTabsState {
   tabs: OrcaTab[];
-  activeTabId: OrcaTabId;
+  activeTabId: string;
   setTabs: React.Dispatch<React.SetStateAction<OrcaTab[]>>;
-  setActiveTabId: React.Dispatch<React.SetStateAction<OrcaTabId>>;
+  setActiveTabId: React.Dispatch<React.SetStateAction<string>>;
 }
 
 interface OrcaTabbedContainerProps {
@@ -88,6 +97,7 @@ interface OrcaTabbedContainerProps {
   onAskAgent?: (draft: string) => void;
   onHandoffToCoding?: (claims: unknown[]) => void;
   splitPercent?: number;
+  onOpenTab?: (id: OrcaTabId) => void;
 }
 
 export type ResourceDefinition = {
@@ -101,11 +111,11 @@ export type ResourceDefinition = {
   supportedOperations?: string[];
 };
 
-const DEFAULT_RESOURCES: ResourceDefinition[] = [
+export const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'files', title: 'Files', description: 'Repository tree, editors and source anchors.', icon: FolderTree, group: 'Engineering', status: 'available', supportedOperations: ['tree', 'read', 'write'] },
   { id: 'changes', title: 'Changes', description: 'Diff review, annotations and patch decisions.', icon: FileDiff, group: 'Engineering', status: 'available', supportedOperations: ['diff', 'file_diff', 'stage', 'unstage', 'discard'] },
   { id: 'terminal', title: 'Terminal', description: 'Bounded PTY streams scoped to an execution workspace.', icon: Terminal, group: 'Engineering', status: 'available', supportedOperations: ['spawn', 'write', 'resize', 'read', 'terminate', 'list', 'get'] },
-  { id: 'worktrees', title: 'Workspaces', description: 'Inspect daemon-owned folder and Git execution workspaces.', icon: GitBranch, group: 'Engineering', status: 'available' },
+  { id: 'worktrees', title: 'Workspaces', description: 'Inspect daemon-owned folder and Git execution workspaces.', icon: WorktreeIcon, group: 'Engineering', status: 'available' },
   { id: 'kanban', title: 'Agents', description: 'Worker runs, native coding harnesses (Claude Code, Codex, Goose), and agent loop dispatch.', icon: Bot, group: 'Engineering', status: 'available', supportedOperations: ['list_harnesses', 'get_harness', 'run_native', 'dispatch', 'cancel', 'steer'] },
   { id: 'evidence', title: 'Evidence', description: 'Criteria, receipts, verifier records and stale status.', icon: ShieldCheck, group: 'Engineering', status: 'available', supportedOperations: ['reviews.list', 'reviews.record', 'reviews.get', 'reviews.mark_stale'] },
   { id: 'dag', title: 'Workflow', description: 'Execution graph, dependencies, budgets and run state.', icon: Activity, group: 'Engineering', status: 'available' },
@@ -118,7 +128,7 @@ const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'artifacts', title: 'Artifacts', description: 'Inspect versions, lineage, annotations, provenance DAG and review findings.', icon: FileCode, group: 'Research', status: 'available', supportedOperations: ['list', 'get', 'record_lineage', 'lineage.list', 'lineage.graph', 'annotations.list', 'annotations.save'] },
   { id: 'browser', title: 'Browser', description: 'Persisted browser sessions and tab intents. Physical navigation and snapshots are degraded.', icon: Globe, group: 'Shared', status: 'degraded', reason: 'Browser execution adapter is not connected; navigation and snapshots fail closed.', supportedOperations: ['sessions.list', 'sessions.create', 'tabs.list', 'tabs.create', 'tabs.close'] },
   { id: 'emulator', title: 'Phone Simulator', description: 'Interactive mobile device simulator (iOS, Android, Responsive) for live frontend preview, touch gestures, and DOM inspection.', icon: Smartphone, group: 'Engineering', status: 'available', supportedOperations: ['preview', 'inspect_ax_tree', 'rotate', 'viewport_switch', 'touch_gesture'] },
-  { id: 'fleet', title: 'Remote Fleet', description: 'Persisted SSH host inventory. Remote probes and execution are degraded.', icon: Server, group: 'Engineering', status: 'degraded', reason: 'SSH transport is not connected; probes and remote execution fail closed.', supportedOperations: ['hosts.list', 'hosts.register', 'jobs.list', 'jobs.create'] },
+  { id: 'fleet', title: 'Remote Fleet', description: 'Remote host inventory for coding and research compute. SSH probes and execution are degraded.', icon: Server, group: 'Shared', status: 'degraded', reason: 'SSH transport is not connected; probes and remote execution fail closed.', supportedOperations: ['hosts.list', 'hosts.register', 'jobs.list', 'jobs.create'] },
   { id: 'notes', title: 'Notes', description: 'Task notes, scratchpads, and Markdown knowledge capture with version history.', icon: FileCode, group: 'Shared', status: 'available', supportedOperations: ['list', 'get', 'save', 'history'] },
 ];
 
@@ -175,6 +185,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   mode = 'code',
   onAskAgent,
   onHandoffToCoding,
+  onOpenTab,
 }) => {
   const [capabilities, setCapabilities] = React.useState<CapabilityDescriptor[]>([]);
   const [fetchFailed, setFetchFailed] = React.useState(false);
@@ -197,6 +208,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
           setCapabilitiesLoaded(true);
         }
       });
+
     return () => {
       isMounted = false;
     };
@@ -240,68 +252,231 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     });
   }, [capabilities, capabilitiesLoaded, fetchFailed]);
 
-  const activeId = resourceTabs.activeTabId;
-  const activeResource = resources.find((resource) => resource.id === activeId);
+  const activeTab = resourceTabs.tabs.find((t) => t.id === resourceTabs.activeTabId);
+  const activeType: OrcaTabId = activeTab ? getTabType(activeTab) : (resourceTabs.activeTabId.split('-')[0] as OrcaTabId);
+  const activeResource = resources.find((resource) => resource.id === activeType);
+
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [selectedGroup, setSelectedGroup] = React.useState<string>('All');
+
+  React.useEffect(() => {
+    setSelectedGroup('All');
+  }, [mode]);
 
   const openResource = (resource: ResourceDefinition) => {
-    resourceTabs.setTabs((previous) =>
-      previous.some((tab) => tab.id === resource.id)
-        ? previous
-        : [...previous, { id: resource.id, title: resource.title, url: urlFor(resource.id) }]
-    );
-    resourceTabs.setActiveTabId(resource.id);
+    const newTabId = `${resource.id}-${Date.now()}`;
+    const newTab: OrcaTab = {
+      id: newTabId,
+      type: resource.id,
+      title: resource.title,
+      url: urlFor(resource.id),
+    };
+    resourceTabs.setTabs((previous) => {
+      const activeIndex = previous.findIndex((t) => t.id === resourceTabs.activeTabId);
+      if (activeIndex !== -1 && getTabType(previous[activeIndex]) === 'tools') {
+        const next = [...previous];
+        next[activeIndex] = newTab;
+        return next;
+      }
+      return [...previous, newTab];
+    });
+    resourceTabs.setActiveTabId(newTabId);
   };
 
-  const visibleResources = resources.filter((resource) => {
-    if (mode === 'research') return resource.group !== 'Engineering';
-    if (mode === 'code') return resource.group !== 'Research';
-    return resource.group === 'Shared' || resource.id === 'evidence' || resource.id === 'literature';
+  // Scope visible resources strictly to current workbench mode
+  const visibleResources = React.useMemo(() => {
+    if (mode === 'code') {
+      return resources.filter(
+        (r) =>
+          r.group === 'Engineering' ||
+          r.id === 'fleet' ||
+          r.id === 'browser' ||
+          r.id === 'notes'
+      );
+    }
+    if (mode === 'research') {
+      return resources.filter(
+        (r) =>
+          r.group === 'Research' ||
+          r.id === 'fleet' ||
+          r.id === 'browser' ||
+          r.id === 'notes'
+      );
+    }
+    // Copilot: Assistant tools and shared utilities
+    return resources.filter(
+      (r) =>
+        r.id === 'notes' ||
+        r.id === 'browser' ||
+        r.id === 'fleet' ||
+        r.id === 'evidence' ||
+        r.id === 'artifacts'
+    );
+  }, [resources, mode]);
+
+  const categoryPills = React.useMemo(() => {
+    if (mode === 'code') return ['All', 'Engineering', 'Shared'] as const;
+    if (mode === 'research') return ['All', 'Research', 'Shared'] as const;
+    return ['All', 'Shared'] as const;
+  }, [mode]);
+
+  const headerMeta = React.useMemo(() => {
+    if (mode === 'code') {
+      return {
+        kicker: 'Coding Workbench',
+        title: 'Engineering Tools & Resources',
+        description: 'Repository inspection, execution surfaces, and developer tools for this session.',
+      };
+    }
+    if (mode === 'research') {
+      return {
+        kicker: 'Research Workbench',
+        title: 'Research Tools & Resources',
+        description: 'Literature, hypotheses, notebook kernels, and synthesis tools for this session.',
+      };
+    }
+    return {
+      kicker: 'Copilot Workbench',
+      title: 'Copilot Tools & Resources',
+      description: 'Assistant tools, scratchpads, and inspection surfaces for this session.',
+    };
+  }, [mode]);
+
+  const filteredResources = visibleResources.filter((resource) => {
+    const isShared = resource.group === 'Shared' || resource.id === 'fleet' || resource.id === 'browser' || resource.id === 'notes' || resource.id === 'evidence' || resource.id === 'artifacts';
+    const matchesGroup =
+      selectedGroup === 'All' ||
+      (selectedGroup === 'Engineering' && resource.group === 'Engineering') ||
+      (selectedGroup === 'Research' && resource.group === 'Research') ||
+      (selectedGroup === 'Shared' && isShared);
+    const q = searchQuery.trim().toLowerCase();
+    const matchesQuery =
+      !q ||
+      resource.title.toLowerCase().includes(q) ||
+      resource.description.toLowerCase().includes(q) ||
+      (resource.supportedOperations && resource.supportedOperations.some((op) => op.toLowerCase().includes(q)));
+    return matchesGroup && matchesQuery;
   });
 
-  if (activeId === 'tools') {
+  if (activeType === 'tools') {
     return (
-      <div className="h-full overflow-y-auto bg-[var(--color-canvas)] px-6 py-7 text-[var(--color-editor-fg)]">
+      <div className="h-full overflow-y-auto bg-[var(--color-canvas)] px-6 py-8 text-[var(--color-editor-fg)]">
         <div className="mx-auto max-w-4xl">
+          {/* Hero Header */}
           <div className="mb-6">
-            <div className="workbench-kicker">{mode} workbench</div>
-            <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">Resources</h1>
-            <p className="mt-1 max-w-xl text-xs leading-5 text-[var(--color-fg-muted)]">
-              Open a resource beside the same conversation. Tabs preserve the session; they do not
-              create a run, grant authority, or imply that an operation succeeded.
+            <div className="flex items-center gap-2 mb-2">
+              <span className="workbench-kicker">{headerMeta.kicker}</span>
+              <span className="text-[10px] text-fg-subtle">•</span>
+              <span className="text-[11px] text-fg-subtle flex items-center gap-1">
+                <Compass className="w-3.5 h-3.5 text-accent" /> New Tab
+              </span>
+            </div>
+            <h1 className="text-xl font-semibold tracking-[-0.02em] text-fg-editor">
+              {headerMeta.title}
+            </h1>
+            <p className="mt-1 text-xs leading-5 text-[var(--color-fg-muted)]">
+              {headerMeta.description}
             </p>
+
+            {/* Quick Search & Filters */}
+            <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Filter resources by name, description, or capability..."
+                  className="w-full bg-[var(--color-surface-1)] border border-[var(--color-border-default)] rounded-xl pl-10 pr-4 py-2 text-xs text-fg-editor placeholder:text-fg-subtle focus:outline-none focus:border-border-default focus:ring-1 focus:ring-border-default/20 transition"
+                  autoFocus
+                />
+              </div>
+
+              {/* Category Pills */}
+              <div className="flex items-center gap-1 bg-[var(--color-surface-1)] p-1 rounded-xl border border-[var(--color-border-muted)] shrink-0 text-xs">
+                {categoryPills.map((group) => (
+                  <button
+                    key={group}
+                    type="button"
+                    onClick={() => setSelectedGroup(group)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition ${
+                      selectedGroup === group
+                        ? 'bg-surface-2 text-fg-editor shadow-xs'
+                        : 'text-fg-muted hover:text-fg-editor hover:bg-surface-2/50'
+                    }`}
+                  >
+                    {group}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
+          {/* Cards Grid */}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {visibleResources.map((resource) => {
+            {filteredResources.map((resource) => {
               const Icon = resource.icon;
               return (
                 <button
                   key={resource.id}
                   type="button"
                   onClick={() => openResource(resource)}
-                  className="group rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-4 text-left transition hover:border-[var(--color-border-default)] hover:bg-[var(--color-surface-2)]"
+                  className="group rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-4 text-left transition hover:border-[var(--color-border-default)] hover:bg-[var(--color-surface-2)] hover:shadow-sm"
                 >
                   <div className="flex items-start justify-between">
-                    <Icon className="h-4 w-4 text-[var(--color-fg-muted)] group-hover:workbench-accent" />
-                    <span className={`text-[9px] font-semibold uppercase tracking-[0.08em] ${resource.status === 'available'
-                        ? 'text-emerald-500'
-                        : resource.status === 'degraded'
-                          ? 'text-amber-500'
-                          : 'text-[var(--color-fg-subtle)]'
-                      }`}>
+                    <div className="p-2 rounded-lg bg-[var(--color-canvas)] border border-[var(--color-border-muted)] group-hover:border-[var(--color-border-default)] transition">
+                      <Icon className="h-4 w-4 text-[var(--color-fg-muted)] group-hover:workbench-accent transition-colors" />
+                    </div>
+                    <span
+                      className={`text-[9px] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded ${
+                        resource.status === 'available'
+                          ? 'text-emerald-500 bg-emerald-500/10'
+                          : resource.status === 'degraded'
+                          ? 'text-amber-500 bg-amber-500/10'
+                          : 'text-[var(--color-fg-subtle)] bg-surface-2'
+                      }`}
+                    >
                       {resource.status === 'available' ? 'API' : resource.status === 'degraded' ? 'Degraded' : 'Planned'}
                     </span>
                   </div>
-                  <div className="mt-5 text-xs font-semibold">{resource.title}</div>
-                  <p className="mt-1.5 text-[11px] leading-5 text-[var(--color-fg-muted)]">{resource.description}</p>
+                  <div className="mt-4 text-xs font-semibold text-fg-editor group-hover:workbench-accent transition-colors">
+                    {resource.title}
+                  </div>
+                  <p className="mt-1 text-[11px] leading-5 text-[var(--color-fg-muted)] line-clamp-2">
+                    {resource.description}
+                  </p>
+
+                  {resource.supportedOperations && resource.supportedOperations.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1 pt-2 border-t border-[var(--color-border-muted)]/60">
+                      {resource.supportedOperations.slice(0, 3).map((op) => (
+                        <span key={op} className="text-[9.5px] font-mono px-1 py-0.2 rounded bg-[var(--color-canvas)] text-fg-subtle border border-[var(--color-border-muted)]">
+                          {op}
+                        </span>
+                      ))}
+                      {resource.supportedOperations.length > 3 && (
+                        <span className="text-[9.5px] font-mono px-1 text-fg-subtle">
+                          +{resource.supportedOperations.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </button>
               );
             })}
           </div>
 
-          <div className="mt-6 flex items-center gap-2 border-t border-[var(--color-border-muted)] pt-4 text-[10px] text-[var(--color-fg-subtle)]">
-            <Wrench className="h-3.5 w-3.5" />
-            Active session: {session?.title || 'No session selected'}
+          {filteredResources.length === 0 && (
+            <div className="p-8 text-center text-xs text-fg-subtle border border-dashed border-[var(--color-border-muted)] rounded-xl mt-4">
+              No matching resources found for "{searchQuery}".
+            </div>
+          )}
+
+          <div className="mt-8 flex items-center justify-between border-t border-[var(--color-border-muted)] pt-4 text-[10px] text-[var(--color-fg-subtle)]">
+            <div className="flex items-center gap-2">
+              <Wrench className="h-3.5 w-3.5" />
+              <span>Active session: {session?.title || 'No session selected'}</span>
+            </div>
+            <span>Click any card to open in this tab</span>
           </div>
         </div>
       </div>
@@ -340,7 +515,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     </div>
   );
 
-  if (activeId === 'browser') {
+  if (activeType === 'browser') {
     return frameResource(
       <BrowserWorkbenchPane
         onShowToast={onShowToast}
@@ -350,11 +525,11 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     );
   }
 
-  if (activeId === 'emulator') {
+  if (activeType === 'emulator') {
     return frameResource(<MobileSimulatorWorkbenchPane onShowToast={onShowToast} />);
   }
 
-  if (activeId === 'fleet') {
+  if (activeType === 'fleet') {
     return frameResource(
       <RemoteFleetWorkbenchPane
         onShowToast={onShowToast}
@@ -364,11 +539,11 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     );
   }
 
-  if (activeId === 'literature') {
-    return frameResource(<LiteraturePane onShowToast={onShowToast} />);
+  if (activeType === 'literature') {
+    return frameResource(<LiteraturePane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />);
   }
 
-  if (activeId === 'claims') {
+  if (activeType === 'claims') {
     return frameResource(
       <ClaimsMatrixPane
         onHandoffToCoding={(claims) => onHandoffToCoding?.(claims)}
@@ -377,56 +552,57 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     );
   }
 
-  if (activeId === 'knowledge') {
+  if (activeType === 'knowledge') {
     return frameResource(<ResearchMethodsPane />);
   }
 
-  if (activeId === 'experiments') {
-    return frameResource(<NotebookWorkspacePane sessionId={session?.id} onAskAgent={onAskAgent} onShowToast={onShowToast} />);
+  if (activeType === 'experiments') {
+    return frameResource(<NotebookWorkspacePane sessionId={session?.id} onAskAgent={onAskAgent} onShowToast={onShowToast} onOpenTab={onOpenTab} />);
   }
 
-  if (activeId === 'worktrees') {
+  if (activeType === 'worktrees') {
     return frameResource(<ExecutionWorkspacesPane />);
   }
 
-  if (activeId === 'terminal') {
+  if (activeType === 'terminal') {
     return frameResource(<TerminalWorkbenchPane />);
   }
 
-  if (activeId === 'files') {
-    return frameResource(<FilesWorkbenchPane />);
+  if (activeType === 'files') {
+    return frameResource(<FilesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />);
   }
 
-  if (activeId === 'changes') {
-    return frameResource(<ChangesWorkbenchPane />);
+  if (activeType === 'changes') {
+    return frameResource(<ChangesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />);
   }
 
-  if (activeId === 'kanban') {
-    return frameResource(<AgentsWorkbenchPane />);
+  if (activeType === 'kanban') {
+    return frameResource(<AgentsWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />);
   }
 
-  if (activeId === 'evidence') {
+  if (activeType === 'evidence') {
     return frameResource(<EvidenceWorkbenchPane onShowToast={onShowToast} />);
   }
 
-  if (activeId === 'runs') {
+  if (activeType === 'runs') {
     return frameResource(
       <RunsLedgerPane
-        onReproduce={(run) => onAskAgent?.(`Reproduce run ${run.runId}:\n\`${run.command}\``)}
+        sessionId={session?.id}
         onShowToast={onShowToast}
+        onOpenTab={onOpenTab}
       />
     );
   }
 
-  if (activeId === 'synthesis') {
+  if (activeType === 'synthesis') {
     return frameResource(<ResearchSynthesisPane onShowToast={onShowToast} />);
   }
 
-  if (activeId === 'artifacts') {
+  if (activeType === 'artifacts') {
     return frameResource(<ArtifactsWorkbenchPane onShowToast={onShowToast} />);
   }
 
-  if (activeId === 'notes') {
+  if (activeType === 'notes') {
     return frameResource(<NotesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} />);
   }
 

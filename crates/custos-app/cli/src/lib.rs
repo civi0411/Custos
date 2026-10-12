@@ -52,7 +52,9 @@ async fn custos_request(
 }
 
 #[tauri::command]
-async fn list_tasks(client: State<'_, Arc<LocalApiClient>>) -> Result<Vec<serde_json::Value>, String> {
+async fn list_tasks(
+    client: State<'_, Arc<LocalApiClient>>,
+) -> Result<Vec<serde_json::Value>, String> {
     let req = custos_daemon::ApiRequest {
         id: custos_domain::new_id("ipc"),
         method: "v1.tasks.list".into(),

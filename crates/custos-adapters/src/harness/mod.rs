@@ -9,3 +9,5 @@ pub use codex::CodexHarnessAdapter;
 pub use goose::GooseHarnessAdapter;
 pub use opencode::OpenCodeHarnessAdapter;
 pub use registry::*;
+
+mod live;

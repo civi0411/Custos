@@ -3,9 +3,9 @@
 //! Provides strictly scoped, fail-closed file tree browsing, file read/write,
 //! and Git diff / stage / discard operations bounded to an `ExecutionWorkspace`.
 
+use async_trait::async_trait;
 use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
-use async_trait::async_trait;
 use tokio::fs;
 use tokio::process::Command;
 use tracing::info;
@@ -187,7 +187,10 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
                     .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                     .map(|d| d.as_millis() as i64);
 
-                let is_readonly = metadata.as_ref().map(|m| m.permissions().readonly()).unwrap_or(false);
+                let is_readonly = metadata
+                    .as_ref()
+                    .map(|m| m.permissions().readonly())
+                    .unwrap_or(false);
 
                 // Compute path relative to workspace root
                 let rel_path = match path.strip_prefix(base_dir) {
@@ -225,9 +228,7 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
         }
 
         // Sort: directories first, then alphabetical path
-        entries.sort_by(|a, b| {
-            b.is_dir.cmp(&a.is_dir).then_with(|| a.path.cmp(&b.path))
-        });
+        entries.sort_by(|a, b| b.is_dir.cmp(&a.is_dir).then_with(|| a.path.cmp(&b.path)));
 
         Ok(WorkspaceFileTree {
             workspace_id: workspace.id.clone(),
@@ -257,7 +258,10 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
         }
 
         let metadata = fs::metadata(&target_path).await.map_err(|e| {
-            DomainError::Validation(format!("Failed to read metadata for '{}': {}", relative_path, e))
+            DomainError::Validation(format!(
+                "Failed to read metadata for '{}': {}",
+                relative_path, e
+            ))
         })?;
 
         if metadata.is_dir() {
@@ -289,7 +293,11 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
         }
 
         let truncated = bytes.len() > limit;
-        let read_slice = if truncated { &bytes[..limit] } else { &bytes[..] };
+        let read_slice = if truncated {
+            &bytes[..limit]
+        } else {
+            &bytes[..]
+        };
         let content_str = String::from_utf8_lossy(read_slice).to_string();
 
         Ok(WorkspaceFileContent::text(
@@ -381,20 +389,18 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
 
             let (old_path, file_path) = if rest.contains(" -> ") {
                 let mut parts = rest.split(" -> ");
-                (parts.next().map(String::from), parts.next().unwrap_or(rest).to_string())
+                (
+                    parts.next().map(String::from),
+                    parts.next().unwrap_or(rest).to_string(),
+                )
             } else {
                 (None, rest.to_string())
             };
 
             // Staged entry if index status is not ' ' or '?'
             if index_status != ' ' && index_status != '?' {
-                let mut entry = WorkspaceDiffEntry::new(
-                    &file_path,
-                    index_status.to_string(),
-                    true,
-                    0,
-                    0,
-                );
+                let mut entry =
+                    WorkspaceDiffEntry::new(&file_path, index_status.to_string(), true, 0, 0);
                 entry.old_path = old_path.clone();
                 entries.push(entry);
             }
@@ -406,21 +412,19 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
                 } else {
                     worktree_status.to_string()
                 };
-                let mut entry = WorkspaceDiffEntry::new(
-                    &file_path,
-                    status_code,
-                    false,
-                    0,
-                    0,
-                );
+                let mut entry = WorkspaceDiffEntry::new(&file_path, status_code, false, 0, 0);
                 entry.old_path = old_path;
                 entries.push(entry);
             }
         }
 
         // 2. Fetch numstat for unstaged & staged to compute line additions/deletions
-        let numstat_unstaged = run_git(base_dir, &["diff", "--numstat"]).await.unwrap_or_default();
-        let numstat_staged = run_git(base_dir, &["diff", "--cached", "--numstat"]).await.unwrap_or_default();
+        let numstat_unstaged = run_git(base_dir, &["diff", "--numstat"])
+            .await
+            .unwrap_or_default();
+        let numstat_staged = run_git(base_dir, &["diff", "--cached", "--numstat"])
+            .await
+            .unwrap_or_default();
 
         let mut total_additions = 0;
         let mut total_deletions = 0;
@@ -446,7 +450,9 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
 
         // 3. Full raw diff (combining staged and unstaged unified diffs)
         let diff_unstaged = run_git(base_dir, &["diff"]).await.unwrap_or_default();
-        let diff_staged = run_git(base_dir, &["diff", "--cached"]).await.unwrap_or_default();
+        let diff_staged = run_git(base_dir, &["diff", "--cached"])
+            .await
+            .unwrap_or_default();
         let raw_diff = if diff_staged.is_empty() {
             diff_unstaged
         } else if diff_unstaged.is_empty() {
@@ -556,7 +562,10 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
 
         if !out.status.success() {
             let err = String::from_utf8_lossy(&out.stderr);
-            return Err(DomainError::Validation(format!("git restore --staged failed: {}", err)));
+            return Err(DomainError::Validation(format!(
+                "git restore --staged failed: {}",
+                err
+            )));
         }
 
         info!(workspace_id = %workspace.id, path = %relative_path, "Unstaged file successfully");
@@ -611,7 +620,10 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
 
         if !out.status.success() {
             let err = String::from_utf8_lossy(&out.stderr);
-            return Err(DomainError::Validation(format!("git restore failed: {}", err)));
+            return Err(DomainError::Validation(format!(
+                "git restore failed: {}",
+                err
+            )));
         }
 
         info!(workspace_id = %workspace.id, path = %relative_path, "Discarded file changes successfully");
@@ -671,13 +683,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_file_read_write_lifecycle() {
-        let test_dir = std::env::temp_dir().join(format!("custos_ws_file_test_{}", std::process::id()));
+        let test_dir =
+            std::env::temp_dir().join(format!("custos_ws_file_test_{}", std::process::id()));
         let _ = fs::create_dir_all(&test_dir).await;
 
         let ws = ExecutionWorkspace::new(
             WorkspaceId::generate(),
             "test_ws".to_string(),
-            WorkspaceKind::Folder { path: test_dir.to_string_lossy().to_string() },
+            WorkspaceKind::Folder {
+                path: test_dir.to_string_lossy().to_string(),
+            },
             test_dir.to_string_lossy().to_string(),
         );
 
@@ -689,20 +704,32 @@ mod tests {
             "nested/dir/hello.txt",
             "Hello Custos Workspace File API!\nLine 2\n",
         );
-        let written = coord.write_file(&ws, write_params).await.expect("write file");
+        let written = coord
+            .write_file(&ws, write_params)
+            .await
+            .expect("write file");
         assert_eq!(written.path, "nested/dir/hello.txt");
         assert_eq!(written.line_count, 2);
         assert!(!written.is_binary);
 
         // 2. Read file back
-        let read = coord.read_file(&ws, "nested/dir/hello.txt", None).await.expect("read file");
+        let read = coord
+            .read_file(&ws, "nested/dir/hello.txt", None)
+            .await
+            .expect("read file");
         assert_eq!(read.content, "Hello Custos Workspace File API!\nLine 2\n");
         assert_eq!(read.line_count, 2);
 
         // 3. Get file tree
-        let tree = coord.get_file_tree(&ws, None, None).await.expect("file tree");
+        let tree = coord
+            .get_file_tree(&ws, None, None)
+            .await
+            .expect("file tree");
         assert!(tree.total_files >= 1);
-        assert!(tree.entries.iter().any(|e| e.path == "nested/dir/hello.txt"));
+        assert!(tree
+            .entries
+            .iter()
+            .any(|e| e.path == "nested/dir/hello.txt"));
 
         let _ = fs::remove_dir_all(&test_dir).await;
     }

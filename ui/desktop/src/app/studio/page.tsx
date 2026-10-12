@@ -2,8 +2,7 @@ import { useState, useEffect, useRef, type SetStateAction } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { type AppWorkspaceMode, AppWorkspaceShell } from '@/components/shell';
-import { type OrcaTab, type OrcaTabId, type ResourceTabsState } from '@/components/views/OrcaTabbedContainer';
-import { formatKeyCombo } from '@/lib/utils';
+import { type OrcaTab, type ResourceTabsState } from '@/components/views/OrcaTabbedContainer';
 import type { Session } from '@/types';
 import { daemonClient } from '@/api/daemon_client';
 
@@ -57,26 +56,44 @@ export function StudioPage() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isWebTabOpen, setIsWebTabOpen] = useState(false);
   const [isWebTabExpanded, setIsWebTabExpanded] = useState(false);
-  const [tabStates, setTabStates] = useState<Record<string, { tabs: OrcaTab[]; activeTabId: OrcaTabId }>>({});
-  const tabScope = `${currentProject}:${activeSessionId || 'no-session'}`;
-  const currentTabState = tabStates[tabScope] ?? {
-    tabs: [{ id: 'tools' as const, title: 'Resources', url: 'custos://resources' }],
-    activeTabId: 'tools' as const,
+  const [tabStates, setTabStates] = useState<Record<string, { tabs: OrcaTab[]; activeTabId: string }>>({});
+  const tabScope = `${currentProject}:${activeSessionId || 'no-session'}:${mode}`;
+
+  const getDefaultTabForMode = (m: AppWorkspaceMode): { tabs: OrcaTab[]; activeTabId: string } => {
+    if (m === 'code') {
+      return {
+        tabs: [{ id: 'files', type: 'files', title: 'Files', url: 'custos://resource/files' }],
+        activeTabId: 'files',
+      };
+    }
+    if (m === 'research') {
+      return {
+        tabs: [{ id: 'literature', type: 'literature', title: 'Sources', url: 'custos://resource/literature' }],
+        activeTabId: 'literature',
+      };
+    }
+    return {
+      tabs: [{ id: 'notes', type: 'notes', title: 'Notes', url: 'custos://resource/notes' }],
+      activeTabId: 'notes',
+    };
   };
+
+  const currentTabState = tabStates[tabScope] ?? getDefaultTabForMode(mode);
   const setTabs = (update: SetStateAction<OrcaTab[]>) => setTabStates((previous) => {
     const current = previous[tabScope] ?? currentTabState;
     const tabs = typeof update === 'function' ? update(current.tabs) : update;
     return { ...previous, [tabScope]: { ...current, tabs } };
   });
-  const setActiveTabId = (update: SetStateAction<OrcaTabId>) => setTabStates((previous) => {
+  const setActiveTabId = (update: SetStateAction<string>) => setTabStates((previous) => {
     const current = previous[tabScope] ?? currentTabState;
     const activeTabId = typeof update === 'function' ? update(current.activeTabId) : update;
     return { ...previous, [tabScope]: { ...current, activeTabId } };
   });
   const resourceTabs: ResourceTabsState = { ...currentTabState, setTabs, setActiveTabId };
   const openResources = (expanded: boolean) => {
-    setTabs((previous) => previous.some((tab) => tab.id === 'tools') ? previous : [...previous, { id: 'tools', title: 'Resources', url: 'custos://resources' }]);
-    setActiveTabId('tools');
+    const newTabId = `tools-${Date.now()}`;
+    setTabs((previous) => [...previous, { id: newTabId, type: 'tools', title: 'New Tab', url: 'custos://resources' }]);
+    setActiveTabId(newTabId);
     setIsWebTabExpanded(expanded);
     setIsWebTabOpen(true);
   };
@@ -109,8 +126,8 @@ export function StudioPage() {
       : candidates[0]?.id || '');
   };
 
-  const openFullChatIn = async (targetMode: AppWorkspaceMode) => {
-    const source = currentSessions.find((session) => session.id === activeSessionId);
+  const openFullChatIn = async (targetMode: AppWorkspaceMode, sourceId = activeSessionId) => {
+    const source = currentSessions.find((session) => session.id === sourceId);
     if (!source) return;
     try {
       await daemonClient.openSessionInLens(source.sessionId || source.id,
@@ -124,8 +141,8 @@ export function StudioPage() {
       [source.id]: Array.from(new Set([...(previous[source.id] || []), targetMode])),
     }));
     setLastSessionByLens((previous) => ({ ...previous, [`${currentProject}:${targetMode}`]: source.id }));
+    setActiveSessionId(source.id);
     setMode(targetMode);
-    showToast(`Opened the complete saved chat in ${targetMode === 'chat' ? 'Copilot' : targetMode === 'code' ? 'Coding' : 'Research'}. Agent context is prepared separately.`);
   };
 
   // Synchronize session ID from URL if present
@@ -161,15 +178,12 @@ export function StudioPage() {
       if (e.key === '1') {
         e.preventDefault();
         switchMode('chat');
-        showToast(`Opened Copilot view (${formatKeyCombo({ ctrlOrCmd: true, key: '1' })})`);
       } else if (e.key === '2') {
         e.preventDefault();
         switchMode('code');
-        showToast(`Opened Coding view (${formatKeyCombo({ ctrlOrCmd: true, key: '2' })})`);
       } else if (e.key === '3') {
         e.preventDefault();
         switchMode('research');
-        showToast(`Opened Research view (${formatKeyCombo({ ctrlOrCmd: true, key: '3' })})`);
       } else if (e.key === 'f' && e.shiftKey && e.metaKey) {
         e.preventDefault();
         setIsWebTabOpen(true);
@@ -199,9 +213,11 @@ export function StudioPage() {
           setActiveSessionId(available.find((session) => session.id === remembered)?.id || available[0]?.id || '');
         }}
         sessions={sessionsForMode(mode)}
+        allSessions={currentSessions}
         activeSessionId={activeSessionId}
         onSelectSession={selectSession}
         onOpenFullChatIn={openFullChatIn}
+        onOpenSessionHere={(id) => void openFullChatIn(mode, id)}
         onNewSession={() => setIsNewSessionOpen(true)}
         onSendMessage={(message) => {
           if (!activeSessionId || !sessionsForMode(mode).some((session) => session.id === activeSessionId)) {

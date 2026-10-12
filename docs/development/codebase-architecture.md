@@ -20,6 +20,8 @@
 
 > **Desktop resource-tab ownership:** [`AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) and [`OrcaTabbedContainer.tsx`](../../ui/desktop/src/components/views/OrcaTabbedContainer.tsx) render one shared shell/resource catalog for all three lenses. Research, workspace, notebook, terminal, files, changes, agents, evidence, browser and fleet panes now exist at different realization levels. A rendered pane is not proof that its physical operations work: browser/fleet/automation deliberately advertise degraded metadata-only operation while their effects fail closed. The container must gate every pane action from daemon `supported_operations`, not from its static resource table.
 
+> **Desktop picker and cross-lens navigation:** `AppWorkspaceShell.tsx` owns the transient `+` resource picker, while `OrcaTabbedContainer.tsx` owns the resource definitions and capability-gated panes. `WorkspaceSidebar.tsx` exposes project-wide session search; `StudioPage` persists `OpenLens` membership through the existing daemon command and selects the same canonical session in the target lens. These UI actions do not create tasks, runs, grants or duplicate journals.
+
 > **Capability projection invariant:** [`LocalApiDispatcher::list_capabilities`](../../crates/custos-daemon/src/api.rs) owns the canonical capability-to-resource mapping. The desktop catalog supplies labels/icons/grouping only; absence, loading failure or an unmatched `resource_id` produces `unavailable`, never optimistic availability. Degraded panes receive the exact operation set and gate controls locally. Research `runs` and `synthesis` are distinct resource projections even though both consume the Research repository.
 
 > **OpenCode adapter realization:** [`harness/opencode.rs`](../../crates/custos-adapters/src/harness/opencode.rs) can execute the local CLI as a provider-governed native process and normalize captured/mock event fixtures. Its HTTP/SSE production turn, remote cancellation, steering and exact usage are not composed. The profile must therefore keep those capabilities disabled, production `execute_turn` must fail explicitly, and native subprocess execution must enforce its configured timeout until a pinned server adapter is implemented.
@@ -30,6 +32,7 @@
 
 | New documentation file | Lines | Architectural responsibility | Key code exports |
 |---|---:|---|---|
+| [`../architecture/provider-and-adapter-boundaries.md`](../architecture/provider-and-adapter-boundaries.md) | 104 | Canonical ownership and convergence status for model contracts, vendor transports, local inference, native harnesses, MCP/A2A and host effects. Separates composed, compatibility, experimental, simulated and placeholder paths. | Documentation authority; no new runtime contract. |
 | [`9router-custos-integration-plan.md`](9router-custos-integration-plan.md) | 318 | Pinned 9Router extraction matrix plus complete Custos provider/desktop codebase blueprint: current dual model contracts, crate ownership, target model-turn/connection/route/attempt semantics, UI state ownership, migration and verification gates. Proposal only. | None; no runtime behavior added. |
 | [`system-design-9router-agentgateway-custos.md`](system-design-9router-agentgateway-custos.md) | 320 | Unified System Design Blueprint & Codebase Mapping: Mổ xẻ chi tiết 9Router & AgentGateway, thiết kế kiến trúc chuẩn công nghiệp tích hợp vào Rust native (`custos-provider`, `custos-adapters`, `custos-runtime`), sequence flows và developer playbook cho team. | Architecture blueprint. |
 
@@ -199,7 +202,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-domain`
 - **Chủ sở hữu chính (Owner):** **Vĩ (Chief Architect)**
 - **Quy tắc ranh giới:** Bất biến Zero-I/O tuyệt đối. Không tokio, rusqlite, reqwest, std::fs.
-- **Tổng số file Rust:** 37 files | **Tổng số dòng Rust:** 5,105 lines
+- **Tổng số file:** 51 tracked and added files | **Tổng số dòng mã:** 7,670 lines (Rust sources and Cargo manifests; 51 files)
 - **Mô tả chức năng:** Trái tim của hệ thống: Chứa toàn bộ thực thể thuần khiết, định danh (TaskId, SessionId), các bất biến miền, máy trạng thái tác vụ thuần túy và các khế ước sự kiện (Event Sourcing).
 
 #### Danh mục các file bên trong `crates/custos-domain/`:
@@ -220,9 +223,9 @@ Custos/
 | [`src/evidence.rs`](../../crates/custos-domain/src/evidence.rs) | 351 | Evidence, per-criterion verifier record và Task outcome projection với unknown/stale first-class | `enum EvidenceStatus`, `struct EvidenceRecord`, `struct CriterionVerificationRecord`, `struct TaskOutcome` |
 | [`src/fact.rs`](../../crates/custos-domain/src/fact.rs) | 13 | Thực thể sự thật Fact trích xuất từ môi trường | `struct Fact` |
 | [`src/ids.rs`](../../crates/custos-domain/src/ids.rs) | 46 | Generates a prefixed unique ID: `{prefix}_{uuidv4_simple}` | `fn new_id`, `type TaskId`, `fn digest`, `fn canonical_json` |
-| [`src/lib.rs`](../../crates/custos-domain/src/lib.rs) | 98 | Explicit module declarations và re-export bề mặt domain canonical | Domain public exports |
+| [`src/lib.rs`](../../crates/custos-domain/src/lib.rs) | 159 | Explicit module declarations và re-export bề mặt domain canonical | Domain public exports |
 | [`src/packet.rs`](../../crates/custos-domain/src/packet.rs) | 3 | Module packet: phục vụ các cấu trúc và chức năng liên quan | None |
-| [`src/run.rs`](../../crates/custos-domain/src/run.rs) | 644 | Run/WorkerRun/dispatch lifecycle, launch truth và per-attempt usage không đổi unknown thành zero | `struct Run`, `struct WorkerRun`, `struct LaunchAttempt`, `struct UsageRecord`, `enum UsageExecutorKind`, `enum UsageMeasurement` |
+| [`src/run.rs`](../../crates/custos-domain/src/run.rs) | 749 | Run/WorkerRun lifecycle, launch/usage truth and pure correlated live event/snapshot/replay DTOs | `Run`, `WorkerRun`, `LaunchAttempt`, `UsageRecord`, `LiveRunEvent`, `LiveRunSnapshot`, `LiveRunReplay` |
 | [`src/session.rs`](../../crates/custos-domain/src/session.rs) | 260 | Session compatibility model, canonical typed turn và session–Task attribution | `struct Session`, `struct ConversationTurn`, `struct SessionTaskBinding`, `enum WorkbenchLens` |
 | [`src/span.rs`](../../crates/custos-domain/src/span.rs) | 90 | Quản lý phân đoạn thực thi Span, SpanState | `enum SpanState`, `fn fmt`, `struct Span`, `fn new` |
 | [`src/task.rs`](../../crates/custos-domain/src/task.rs) | 309 | Task/contract/revision lifecycle với checked epoch và state-version arithmetic | `enum EvidenceKind`, `struct TaskContract`, `struct TaskRevision`, `struct Task`, `fn create_revision` |
@@ -244,7 +247,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-core`
 - **Chủ sở hữu chính (Owner):** **Vĩ (Chief Architect)**
 - **Quy tắc ranh giới:** Logic nghiệp vụ thuần túy; phụ thuộc độc quyền vào custos-domain.
-- **Tổng số file:** 61 files | **Tổng số dòng mã:** 5,944 lines
+- **Tổng số file:** 61 tracked and added files | **Tổng số dòng mã:** 6,784 lines (Rust sources and Cargo manifests; 61 files)
 - **Mô tả chức năng:** Bộ hạt nhân điều phối: Quản lý TaskStateMachine, AuthorityEngine, CompletionGate thẩm định bằng chứng, và cơ chế sandbox policy logic.
 
 #### Danh mục các file bên trong `crates/custos-core/`:
@@ -252,6 +255,8 @@ Custos/
 | Tập tin | Số dòng | Vai trò & Trách nhiệm kiến trúc | Các Struct / Trait / Hàm cốt lõi |
 |---|:---:|---|---|
 | [`Cargo.toml`](../../crates/custos-core/Cargo.toml) | 25 | Module Cargo: phục vụ các cấu trúc và chức năng liên quan | None |
+| [src/contracts/workflow.rs](../../crates/custos-core/src/contracts/workflow.rs) | 35 | Background workflow admission and session-scoped live snapshot/replay contract (Vĩ) | `WorkflowPort` |
+| [src/contracts/harness.rs](../../crates/custos-core/src/contracts/harness.rs) | 226 | Transport-neutral native observation and existing authority/profile contracts (Vinh + Vĩ) | `AgentRuntimePort, RunObserver, HarnessExecutionResult` |
 | [`src/authority/approvals.rs`](../../crates/custos-core/src/authority/approvals.rs) | 51 | Quản lý yêu cầu phê duyệt người dùng (ApprovalManager) | `struct ApprovalManager`, `fn new`, `fn request_approval`, `fn get` |
 | [`src/authority/audit.rs`](../../crates/custos-core/src/authority/audit.rs) | 82 | Ghi nhật ký kiểm toán hành vi an toàn (AuditLog, AuditEntry) | `struct AuditEntry`, `struct AuditLog`, `fn new`, `fn record` |
 | [`src/authority/grants.rs`](../../crates/custos-core/src/authority/grants.rs) | 37 | Kho lưu trữ quyền được cấp phát (GrantStore) | `struct GrantStore`, `fn new`, `fn insert`, `fn get` |
@@ -336,10 +341,12 @@ Custos/
 
 ### 3.4. Crate `custos-provider` — Layer 1: Model Contracts
 
+> **Convergence authority:** [Provider and adapter boundaries](../architecture/provider-and-adapter-boundaries.md) classifies the flat `ModelProvider` path as compatibility, the structured `ModelTurnRequest/Event` values as the convergence vocabulary, and the richer `types/base.rs::Provider` stack as retained implementation source until parity is proven. File presence does not imply composition or live capability.
+
 - **Đường dẫn thư mục:** `crates/custos-provider`
 - **Chủ sở hữu chính (Owner):** **Vĩ (AI/DS Lead)**
 - **Quy tắc ranh giới:** Trừu tượng hóa nhà cung cấp LLM; không coupling cứng vào SDK vendor.
-- **Tổng số file:** 47 files | **Tổng số dòng mã:** 34,387 lines
+- **Tổng số file:** 53 tracked and added files | **Tổng số dòng mã:** 31,578 lines (Rust sources and Cargo manifests; 49 files)
 - **Mô tả chức năng:** Khế ước kết nối mô hình ngôn ngữ: Trait ProviderPort, xử lý token streaming, chuẩn hóa wire formats (OpenAI, Anthropic, Google, Ollama), tính toán token budget.
 
 #### Danh mục các file bên trong `crates/custos-provider/`:
@@ -349,10 +356,10 @@ Custos/
 | [`Cargo.toml`](../../crates/custos-provider/Cargo.toml) | 41 | Module Cargo: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`build.rs`](../../crates/custos-provider/build.rs) | 14 | Module build: phục vụ các cấu trúc và chức năng liên quan | `fn main` |
 | [`src/conformance.rs`](../../crates/custos-provider/src/conformance.rs) | 50 | Asserts that a provider implementation adheres to the required ModelProvider contracts. | None |
-| [`src/events.rs`](../../crates/custos-provider/src/events.rs) | 93 | Các sự kiện phát sinh từ Model: ToolCall, TokenUsage, Chunk | `enum ProviderEventType`, `struct ToolCall`, `struct TokenUsage`, `struct ProviderEvent` |
+| [`src/events.rs`](../../crates/custos-provider/src/events.rs) | 109 | Các sự kiện phát sinh từ Model: ToolCall, TokenUsage, Chunk | `enum ProviderEventType`, `struct ToolCall`, `struct TokenUsage`, `struct ProviderEvent` |
 | [`src/lib.rs`](../../crates/custos-provider/src/lib.rs) | 14 | Module lib: phục vụ các cấu trúc và chức năng liên quan | None |
-| [`src/port.rs`](../../crates/custos-provider/src/port.rs) | 76 | Streaming generation returning an asynchronous receiver of ProviderEvents. | `trait ModelProvider`, `trait AgentRuntimePort`, `trait CapabilityPort` |
-| [`src/request.rs`](../../crates/custos-provider/src/request.rs) | 84 | Creates a simple request with reasonable defaults. | `struct ProviderRequest`, `fn simple`, `fn new`, `type ModelRequest` |
+| [`src/port.rs`](../../crates/custos-provider/src/port.rs) | 162 | Streaming generation returning an asynchronous receiver of ProviderEvents. | `trait ModelProvider`, `trait AgentRuntimePort`, `trait CapabilityPort` |
+| [`src/request.rs`](../../crates/custos-provider/src/request.rs) | 119 | Provider request with optional account pin and text response with nullable measured token usage. | `struct ProviderRequest`, `fn simple`, `fn new`, `type ModelRequest` |
 | [`src/tool.rs`](../../crates/custos-provider/src/tool.rs) | 25 | Định nghĩa ToolDefinition, ToolResult | `struct ToolResult`, `struct ToolDefinition`, `trait ToolPort` |
 | [`src/traits.rs`](../../crates/custos-provider/src/traits.rs) | 5 | Module traits: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/types/base.rs`](../../crates/custos-provider/src/types/base.rs) | 1124 | Metadata about a provider's configuration requirements and capabilities | `struct ProviderMetadata`, `struct ProviderDeprecation`, `fn new`, `fn with_models` |
@@ -425,7 +432,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-runtime`
 - **Chủ sở hữu chính (Owner):** **Vinh (Runtime & Client Lead) & Vĩ (Cognitive Lead)**
 - **Quy tắc ranh giới:** Quản lý vòng lặp thực thi, nhận thức S1/S2, và context compiler.
-- **Tổng số file:** 288 files | **Tổng số dòng mã:** 101,473 lines
+- **Tổng số file:** 336 tracked and added files | **Tổng số dòng mã:** 109,952 lines (Rust sources and Cargo manifests; 312 files)
 - **Mô tả chức năng:** Động cơ vận hành tác vụ: Agent execution loop, code hiện có cho routing S1/S2, context và workflow. OI đích chọn direct/one-worker/bounded graph theo policy và outcome; hiện diện của `routing.rs`/`workflow/` **không** xác nhận compiler, semantic preflight, calibrated utility hoặc evidence-triggered replan đã hoàn tất.
 
 #### Danh mục các file bên trong `crates/custos-runtime/`:
@@ -440,7 +447,7 @@ Custos/
 | [`src/agent/mod.rs`](../../crates/custos-runtime/src/agent/mod.rs) | 12 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/agent/operation.rs`](../../crates/custos-runtime/src/agent/operation.rs) | 270 | Note on a message something this operation did, so that a pipeline rebuilt | `type OperationFuture`, `struct SlashCommand`, `fn messages_since_kickoff`, `fn trailing_error` |
 | [`src/agent/reply.rs`](../../crates/custos-runtime/src/agent/reply.rs) | 170 | Coerce a string value based on the target JSON schema type definition | `fn coerce_value`, `fn try_coerce_number`, `fn try_coerce_boolean`, `fn coerce_object` |
-| [`src/agent/runtime_port.rs`](../../crates/custos-runtime/src/agent/runtime_port.rs) | 186 | Evaluates tool name and arguments to classify deterministic risk level | `struct GovernedAgentRuntime`, `fn new`, `fn classify_tool_risk`, `fn extract_target` |
+| [`src/agent/runtime_port.rs`](../../crates/custos-runtime/src/agent/runtime_port.rs) | 215 | Evaluates tool name and arguments to classify deterministic risk level | `struct GovernedAgentRuntime`, `fn new`, `fn classify_tool_risk`, `fn extract_target` |
 | [`src/agent/tool.rs`](../../crates/custos-runtime/src/agent/tool.rs) | 371 | Supplies tools whose definitions and implementations may vary by session. | `fn empty_input_schema`, `fn definition`, `fn pending_requests`, `fn interrupted_result` |
 | [`src/cognitive/approval_router.rs`](../../crates/custos-runtime/src/cognitive/approval_router.rs) | 161 | Module approval_router: phục vụ các cấu trúc và chức năng liên quan | `enum ApprovalKind`, `enum ApprovalDecision`, `struct ApprovalPolicy`, `fn default` |
 | [`src/cognitive/arbiter.rs`](../../crates/custos-runtime/src/cognitive/arbiter.rs) | 28 | Routes work to a low-cost or deliberate reasoning tier using explicit signals. | `struct CognitiveArbiter`, `fn new`, `fn with_policy`, `fn route` |
@@ -711,25 +718,28 @@ Custos/
 | [`src/memory_service/mod.rs`](../../crates/custos-runtime/src/memory_service/mod.rs) | 2 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/memory_service/traits.rs`](../../crates/custos-runtime/src/memory_service/traits.rs) | 17 | Module traits: phục vụ các cấu trúc và chức năng liên quan | `enum MemoryTier`, `trait MemoryStore` |
 | [`src/session/journal.rs`](../../crates/custos-runtime/src/session/journal.rs) | 35 | Module journal: phục vụ các cấu trúc và chức năng liên quan | `struct SessionJournal`, `fn new`, `fn append`, `fn tool_call_count` |
-| [`src/session/manager.rs`](../../crates/custos-runtime/src/session/manager.rs) | 376 | Session manager with durable journal, idempotent workbench-opening event and deletion cache eviction. | `struct SessionManager`, `fn with_store`, `fn open_in_lens`, `fn delete_session` |
+| [`src/session/manager.rs`](../../crates/custos-runtime/src/session/manager.rs) | 381 | Session manager with durable journal, idempotent workbench-opening event and deletion cache eviction. | `struct SessionManager`, `fn with_store`, `fn open_in_lens`, `fn delete_session` |
 | [`src/session/mod.rs`](../../crates/custos-runtime/src/session/mod.rs) | 235 | Session manager/store tests including durable lens opening. | `struct MockSessionStore`, `fn opening_session_in_another_lens_is_durable_and_idempotent` |
 | [`src/workflow/dispatcher.rs`](../../crates/custos-runtime/src/workflow/dispatcher.rs) | 295 | Điều phối ready WorkerRun và chống claim trùng trong cùng process; đọc trạng thái run bền vững nhưng active claim/lease epoch hiện còn nằm trong bộ nhớ. | `struct WorkflowDispatcher`, `fn claim_ready_task`, `fn release_claim`, `fn mark_dispatched` |
 | [`src/workflow/lease.rs`](../../crates/custos-runtime/src/workflow/lease.rs) | 230 | Workflow worker lease tạo thư mục `.custos/worktrees` và copy files khi merge; ownership process-local, khác `ExecutionWorkspace` Git worktree. | `struct WorkspaceLease`, `struct WorkspaceLeaseManager`, `fn acquire_lease`, `fn merge_lease` |
 | [`src/workflow/machine.rs`](../../crates/custos-runtime/src/workflow/machine.rs) | 397 | Module machine: phục vụ các cấu trúc và chức năng liên quan | `struct WorkflowState`, `fn default`, `enum OperationOutcome`, `trait WorkflowOperation` |
-| [`src/workflow/mod.rs`](../../crates/custos-runtime/src/workflow/mod.rs) | 15 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
+| [`src/workflow/mod.rs`](../../crates/custos-runtime/src/workflow/mod.rs) | 25 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/workflow/outbox.rs`](../../crates/custos-runtime/src/workflow/outbox.rs) | 9 | Module outbox: phục vụ các cấu trúc và chức năng liên quan | `struct OutboxMessage` |
 | [`src/workflow/scheduler.rs`](../../crates/custos-runtime/src/workflow/scheduler.rs) | 250 | Schedule a new workflow job | `struct ScheduledJobId`, `fn new`, `fn generate`, `fn fmt` |
-| [`src/workflow/task_runtime.rs`](../../crates/custos-runtime/src/workflow/task_runtime.rs) | 1,259 | WorkflowPort implementation for task dispatch, session-context assembly, failure cleanup and stale chat-turn recovery. | `struct TaskRuntime`, `fn with_session_store`, `fn start_run`, `fn request_cancel` |
+| [`src/workflow/task_runtime.rs`](../../crates/custos-runtime/src/workflow/task_runtime.rs) | 1535 | Workflow dispatch and durable model-run metadata for account identity, requested/actual model and measured usage. | `struct TaskRuntime`, `fn with_session_store`, `fn start_run`, `fn request_cancel` |
+| [`src/workflow/live.rs`](../../crates/custos-runtime/src/workflow/live.rs) | 413 | Bounded ephemeral replay, snapshot and cancellation (Vinh + Vĩ) | `LiveRuns`, `LiveObserver` |
 | [`src/integration/binding.rs`](../../crates/custos-runtime/src/integration/binding.rs) | 103 | Canonical Integration Binding definitions, lifecycle states, and mediation tiers | `enum IntegrationKind`, `enum LifecycleState`, `enum BindingDirection`, `enum MediationLevel`, `struct IntegrationBinding` |
 | [`src/integration/registry.rs`](../../crates/custos-runtime/src/integration/registry.rs) | 116 | Thread-safe registry managing external protocol bindings and lifecycle state transitions | `struct IntegrationRegistry`, `fn register`, `fn get`, `fn update_state`, `fn list_by_kind`, `fn list_enabled` |
 
 
 ### 3.7. Crate `custos-adapters` — Layer 2: External Adapters & Sandbox
 
+> **Implementation status authority:** [Provider and adapter boundaries](../architecture/provider-and-adapter-boundaries.md) distinguishes composed transports, rich uncomposed provider implementations, compatibility wrappers, test doubles, simulated protocol paths and empty sandbox placeholders. Only the daemon composition plus conformance evidence may promote an adapter to `live`.
+
 - **Đường dẫn thư mục:** `crates/custos-adapters`
 - **Chủ sở hữu chính (Owner):** **Trường (Sandbox) & Vinh (MCP/Harnesses) & Vĩ (Providers)**
 - **Quy tắc ranh giới:** Mọi dữ liệu ngoại vi đều là untrusted; cô lập an toàn trong sandbox.
-- **Tổng số file:** 175 tracked files | **Tổng số dòng mã:** 44,589 lines (Rust sources and Cargo manifest; 107 files)
+- **Tổng số file:** 177 tracked and added files | **Tổng số dòng mã:** 46,139 lines (Rust sources and Cargo manifests; 109 files)
 - **Mô tả chức năng:** Bộ điều hợp thế giới thực: OS Sandbox (Seatbelt macOS, Bubblewrap Linux), MCP Client STDIO/SSE, inference cục bộ (llama.cpp/MLX) và external harnesses.
 
 #### Danh mục các file bên trong `crates/custos-adapters/`:
@@ -798,17 +808,19 @@ Custos/
 | [`src/mcp/core/tutorial/tutorials/build-mcp-extension.md`](../../crates/custos-adapters/src/mcp/core/tutorial/tutorials/build-mcp-extension.md) | 415 | Module build-mcp-extension: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/mcp/core/tutorial/tutorials/first-game.md`](../../crates/custos-adapters/src/mcp/core/tutorial/tutorials/first-game.md) | 178 | Module first-game: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/mcp/mod.rs`](../../crates/custos-adapters/src/mcp/mod.rs) | 5 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
-| [`src/providers/antigravity/mod.rs`](../../crates/custos-adapters/src/providers/antigravity/mod.rs) | 571 | Antigravity IDE discovery without a project prerequisite, bounded managed-project onboarding for inference, single daily-runtime fallback for generic production 429, and explicit API quota diagnostics; live model catalog and text inference for Antigravity/Gemini OAuth; native harness remains unconfigured. | `AntigravityProvider`, `discover_project`, `probe_models`, `probe_codeassist_models`, `generate_content`, `generate_codeassist_content` |
+| [`src/providers/antigravity/mod.rs`](../../crates/custos-adapters/src/providers/antigravity/mod.rs) | 593 | Antigravity IDE discovery without a project prerequisite, bounded managed-project onboarding for inference, single daily-runtime fallback for generic production 429, and explicit API quota diagnostics; live model catalog and text inference for Antigravity/Gemini OAuth; native harness remains unconfigured. | `AntigravityProvider`, `discover_project`, `probe_models`, `probe_codeassist_models`, `generate_content`, `generate_codeassist_content` |
 | [`src/providers/claude/mod.rs`](../../crates/custos-adapters/src/providers/claude/mod.rs) | 36 | Unconfigured placeholder; fails closed instead of impersonating a Claude response. | `struct ClaudeProvider`, `fn new`, `fn default`, `fn provider_id` |
 | [`src/providers/codex/mod.rs`](../../crates/custos-adapters/src/providers/codex/mod.rs) | 36 | Unconfigured placeholder; fails closed instead of impersonating a Codex response. | `struct CodexProvider`, `fn new`, `fn default`, `fn provider_id` |
 | [`src/providers/fake/mod.rs`](../../crates/custos-adapters/src/providers/fake/mod.rs) | 146 | A fake provider for testing, replay fixtures, and end-to-end simulation. | `struct FakeProvider`, `fn new`, `fn with_default_text`, `fn enqueue_response` |
 | [`src/providers/local_model/mod.rs`](../../crates/custos-adapters/src/providers/local_model/mod.rs) | 45 | Unconfigured placeholder; real local inference uses separate backend integration. Fails closed instead of fabricating output. | `struct LocalModelProvider`, `fn new`, `fn with_model`, `fn default` |
 | [`src/providers/catalog.rs`](../../crates/custos-adapters/src/providers/catalog.rs) | 554 | Canonical metadata service and enrichment of discovered IDs; missing context window stays unknown. | `struct ModelCatalogService`, `fn get_catalog`, `fn merge_probed_models` |
-| [`src/providers/mod.rs`](../../crates/custos-adapters/src/providers/mod.rs) | 38 | Provider exports and regression test that unconfigured adapters do not fabricate model output. | `mod placeholder_tests` |
+| [`src/providers/mod.rs`](../../crates/custos-adapters/src/providers/mod.rs) | 56 | Provider exports and regression test that unconfigured adapters do not fabricate model output. | `mod placeholder_tests` |
 | [`src/providers/oauth_pkce.rs`](../../crates/custos-adapters/src/providers/oauth_pkce.rs) | 979 | Provider-specific PKCE with Google environment overrides and masked public native-client defaults, access-token UserInfo and ID-token display claims, refresh; real Copilot device authorization and transient session token exchange. | `OAuthPkceManager`, `oauth_settings`, `oauth_identity`, `start_copilot_device`, `complete_copilot_device`, `copilot_session_token` |
 | [`src/providers/openai_chat.rs`](../../crates/custos-adapters/src/providers/openai_chat.rs) | 279 | Live ModelPort adapter kết nối trực tiếp endpoint OpenAI Chat Completions với Bearer OAuth/API Key và chẩn đoán quota API | `struct OpenAiChatProvider`, `trait TokenProvider`, `fn new`, `fn generate` |
-| [`src/providers/probe.rs`](../../crates/custos-adapters/src/providers/probe.rs) | 517 | Account-scoped model discovery for API keys, Codex OAuth, Cloud Code Assist and Copilot. | `probe_endpoint_models`, `probe_oauth_models`, `probe_copilot_models` |
-| [`src/providers/router.rs`](../../crates/custos-adapters/src/providers/router.rs) | 823 | Namespace-aware text routing with explicit OAuth intent and provider-specific authentication. | `RouterModelProvider`, `CredentialResolver`, `uses_oauth` |
+| [`src/providers/probe.rs`](../../crates/custos-adapters/src/providers/probe.rs) | 737 | Model discovery and bounded account quota reads/parsers with explicit unavailable states. | `probe_endpoint_models`, `probe_oauth_models`, `probe_copilot_models` |
+| [`src/providers/router.rs`](../../crates/custos-adapters/src/providers/router.rs) | 1185 | Account-pinned text routing, native Ollama transport and provider-reported token usage. | `RouterModelProvider`, `CredentialResolver`, `uses_oauth` |
+| [`src/providers/streaming.rs`](../../crates/custos-adapters/src/providers/streaming.rs) | 632 | Incremental SSE/NDJSON decoding (Trường + Vinh) | `stream_response` |
+| [`src/harness/live.rs`](../../crates/custos-adapters/src/harness/live.rs) | 476 | Incremental native subprocess observations and cancellation (Trường + Vinh) | `run_observed_process` |
 | [`src/providers/providers/anthropic.rs`](../../crates/custos-adapters/src/providers/providers/anthropic.rs) | 856 | Builder for [`AnthropicProvider`]. | `struct AnthropicProvider`, `struct AnthropicProviderBuilder`, `fn new`, `fn api_client` |
 | [`src/providers/providers/api_client.rs`](../../crates/custos-adapters/src/providers/providers/api_client.rs) | 1092 | Configure TLS settings on a reqwest ClientBuilder | `type RequestBuilderDecorator`, `struct ApiClient`, `enum TransportPolicy`, `enum AuthMethod` |
 | [`src/providers/providers/azure_foundry.rs`](../../crates/custos-adapters/src/providers/providers/azure_foundry.rs) | 1395 | Module azure_foundry: phục vụ các cấu trúc và chức năng liên quan | `enum EndpointKind`, `fn endpoint_kind`, `fn is_project_endpoint`, `enum ModelPublisher` |
@@ -949,7 +961,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-daemon`
 - **Chủ sở hữu chính (Owner):** **Vĩ (Chief Architect)**
 - **Quy tắc ranh giới:** Daemon crate là composition root; `runtime.rs` ráp concrete storage/runtime/adapters, `main.rs` chỉ sở hữu listener/process lifecycle.
-- **Tổng số file:** 10 tracked files | **Tổng số dòng mã:** 9,701 lines (Rust sources and Cargo manifest; 10 files)
+- **Tổng số file:** 10 tracked and added files | **Tổng số dòng mã:** 10,644 lines (Rust sources and Cargo manifests; 10 files)
 - **Mô tả chức năng:** Tiến trình dịch vụ Custos phục vụ TCP, HTTP và stdio JSONL; sở hữu profile, SQLite, Local API dispatcher, OAuth loopback listener và recovery. HTTP RPC hiện cần auth/origin hardening.
 
 #### Danh mục các file bên trong `crates/custos-daemon/`:
@@ -957,14 +969,14 @@ Custos/
 | Tập tin | Số dòng | Vai trò & Trách nhiệm kiến trúc | Các Struct / Trait / Hàm cốt lõi |
 |---|:---:|---|---|
 | [`Cargo.toml`](../../crates/custos-daemon/Cargo.toml) | 40 | Manifest của composition root và các concrete dependency được phép ráp tại daemon. | None |
-| [`src/api.rs`](../../crates/custos-daemon/src/api.rs) | 6,681 | Local API dispatcher cho Task/Session/Run, capability/resource, workspace, research, notebook, provider, fleet và automation; models probe selects transport from credential metadata and exposes only verified account-scoped cache snapshots. | `struct LocalApiDispatcher`, `fn list_capabilities`, `fn handle_request` |
-| [`src/http_server.rs`](../../crates/custos-daemon/src/http_server.rs) | 165 | Loopback HTTP RPC/health listener; `POST /api/request` chuyển trực tiếp vào Local API, hiện cho wildcard CORS và thiếu caller/origin admission. | `fn start_http_server`, `fn handle_http_client` |
+| [`src/api.rs`](../../crates/custos-daemon/src/api.rs) | 6812 | Local API dispatcher with account-scoped discovery and durable usage/remote quota projections through existing ports. | `struct LocalApiDispatcher`, `fn list_capabilities`, `fn handle_request` |
+| [`src/http_server.rs`](../../crates/custos-daemon/src/http_server.rs) | 403 | Loopback RPC/health and scoped SSE transport, exact origin admission, heartbeat/replay/snapshot and bounded socket writes. | `fn start_http_server`, `fn handle_http_client` |
 | [`src/lib.rs`](../../crates/custos-daemon/src/lib.rs) | 18 | Export API, HTTP adapter, profile, runtime và Local API client/transport. | None |
-| [`src/local_api/lib.rs`](../../crates/custos-daemon/src/local_api/lib.rs) | 1,697 | Versioned request/response DTO, process/TCP transports và typed client methods, including session deletion request/client helper. Cần được tách module cơ học theo domain trong cùng crate khi refactor. | `struct ApiRequest`, `struct ApiResponse`, `struct ProcessTransport`, `struct TcpTransport`, `struct LocalApiClient` |
+| [`src/local_api/lib.rs`](../../crates/custos-daemon/src/local_api/lib.rs) | 1700 | Versioned request/response DTO, process/TCP transports và typed client methods, including session deletion request/client helper. Cần được tách module cơ học theo domain trong cùng crate khi refactor. | `struct ApiRequest`, `struct ApiResponse`, `struct ProcessTransport`, `struct TcpTransport`, `struct LocalApiClient` |
 | [`src/main.rs`](../../crates/custos-daemon/src/main.rs) | 121 | Composition/process entry point: singleton lock và loopback TCP + HTTP + stdio JSONL listeners. | `fn main` |
 | [`src/oauth_callback_server.rs`](../../crates/custos-daemon/src/oauth_callback_server.rs) | 712 | Provider-specific loopback callback capture, single-use state validation, cancellation and real device authorization lifecycle. | `OAuthCallbackServer`, `PendingOAuthContext`, `CallbackServerStatus`, `validate_manual_callback`, `cancel` |
 | [`src/profile.rs`](../../crates/custos-daemon/src/profile.rs) | 381 | Profile directory resolver, TCP/HTTP port discovery, singleton file lock và auto-connect helper. | `struct ProfileResolver`, `struct DaemonLock`, `fn ensure_daemon_client` |
-| [`src/runtime.rs`](../../crates/custos-daemon/src/runtime.rs) | 297 | Sole composition root with unified Codex/router selection, fail-closed credential refresh, durable store, harness registry, and Local API. | `struct CustosRuntime`, `struct DaemonCredentialResolver`, `fn bootstrap`, `fn bootstrap_profile` |
+| [`src/runtime.rs`](../../crates/custos-daemon/src/runtime.rs) | 306 | Sole composition root wiring RunPort usage queries and validating selected provider accounts. | `struct CustosRuntime`, `struct DaemonCredentialResolver`, `fn bootstrap`, `fn bootstrap_profile` |
 
 
 ### 3.10. Crate `custos-sdk` — Layer 4: Client Bindings
@@ -1025,11 +1037,11 @@ Custos/
 
 | File | Lines | Current responsibility | Key export |
 |---|---:|---|---|
-| [`ui/desktop/src/app/studio/page.tsx`](../../ui/desktop/src/app/studio/page.tsx) | 233 | Per-lens session filtering, last selection and durable same-session full-chat opening; only last-selection remains device-local | `StudioPage` |
-| [`ui/desktop/src/components/shell/AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) | 634 | Shared conversation/resource shell; empty lens has no selected conversation | `AppWorkspaceShell` |
-| [`ui/desktop/src/components/shell/WorkspaceSidebar.tsx`](../../ui/desktop/src/components/shell/WorkspaceSidebar.tsx) | 360 | Per-lens history list and full-chat destination control | `WorkspaceSidebar` |
-| [`ui/desktop/src/components/modals/NewSessionModal.tsx`](../../ui/desktop/src/components/modals/NewSessionModal.tsx) | 100 | Defaults new Task pack to the visible workbench | `NewSessionModal` |
-| [`ui/desktop/src/context/AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx) | 1543 | Daemon session/journal projection; keeps all sessions, filters non-message events and reads durable lens membership | `AppProvider`, `useAppContext` |
+| [`ui/desktop/src/app/studio/page.tsx`](../../ui/desktop/src/app/studio/page.tsx) | 236 | Per-lens session filtering, last selection and durable same-session full-chat opening from project search; only last-selection remains device-local | `StudioPage` |
+| [`ui/desktop/src/components/shell/AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) | 760 | Shared conversation/resource shell; speed dial new tab integration; empty lens has no selected conversation | `AppWorkspaceShell` |
+| [`ui/desktop/src/components/shell/WorkspaceSidebar.tsx`](../../ui/desktop/src/components/shell/WorkspaceSidebar.tsx) | 420 | Per-lens history, 3-dots session workbench mover, and project-wide session search | `WorkspaceSidebar` |
+| [`ui/desktop/src/components/modals/NewSessionModal.tsx`](../../ui/desktop/src/components/modals/NewSessionModal.tsx) | 101 | Defaults new Task pack to the visible workbench | `NewSessionModal` |
+| [`ui/desktop/src/context/AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx) | 1547 | Daemon session/journal projection; keeps all sessions, filters non-message events and reads durable lens membership | `AppProvider`, `useAppContext` |
 
 Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../tools/repo_intelligent/README.md) (62 lines) describes its derived SQLite index and optional MCP export. The product-facing Repo Intelligence location is `custos-runtime/src/context/repo_intelligence/`; do not treat the Python utility as an agent, canonical memory or mandatory runtime dependency.
 
@@ -1058,22 +1070,36 @@ Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../
 | [`cli/src/ui/spinner.rs`](../../crates/custos-app/cli/src/ui/spinner.rs) | 46 | Hiển thị hoạt ảnh tiến độ công việc | `struct CliSpinner`, `fn new`, `fn set_message`, `fn finish_success` |
 | [`desktop/Cargo.toml`](../../crates/custos-app/desktop/Cargo.toml) | 24 | Module Cargo Desktop: phục vụ biên dịch executable `custos-desktop` (Tauri/Webview) | None |
 | [`desktop/build.rs`](../../crates/custos-app/desktop/build.rs) | 4 | Build script Tauri cho desktop backend | `fn main` |
-| [`desktop/src/lib.rs`](../../crates/custos-app/desktop/src/lib.rs) | 55 | Tauri thin host: lấy `Arc<LocalApiClient>` theo profile, forward `custos_request`/`custos_dispatch` qua Local API; không bootstrap backend riêng | `fn greet`, `fn custos_request`, `fn custos_dispatch`, `fn run` |
+| [`desktop/src/lib.rs`](../../crates/custos-app/desktop/src/lib.rs) | 63 | Tauri thin host: lấy `Arc<LocalApiClient>` theo profile, forward `custos_request`/`custos_dispatch` qua Local API; không bootstrap backend riêng | `fn greet`, `fn custos_request`, `fn custos_dispatch`, `fn run` |
 | [`desktop/src/main.rs`](../../crates/custos-app/desktop/src/main.rs) | 7 | Điểm khởi đầu thực thi duy nhất của `custos-desktop` | None |
 
 #### Desktop provider projection files (Owner: Vinh)
 
 | File | Lines | Responsibility | Exports |
 |---|---:|---|---|
-| [AppContext.tsx](../../ui/desktop/src/context/AppContext.tsx) | 1540 | Provider hydration, verified cache fallback, retry and disconnect | `AppProvider`, `useAppContext` |
-| [ModelSelector.tsx](../../ui/desktop/src/components/chat/ModelSelector.tsx) | 379 | Discovered model picker with cache/error status and retry | `ModelSelector`, `getConnectedModelOptions`, `ModelOption` |
-| [CombosManager.tsx](../../ui/desktop/src/components/providers/CombosManager.tsx) | 530 | Combo targets from the same discovered account catalogs | `CombosManager` |
-| [provider_types.ts](../../ui/desktop/src/types/provider_types.ts) | 84 | Account catalog source, original timestamp and failure metadata | `ConnectedAccount` |
-| [AddProviderModal.tsx](../../ui/desktop/src/components/modals/AddProviderModal.tsx) | 839 | OAuth/API connection UI with PKCE/device authorization, fetched identity and cancellation. | `AddProviderModal` |
-| [ProvidersView.tsx](../../ui/desktop/src/components/providers/ProvidersView.tsx) | 362 | Account listing and provider branding. | `ProvidersView` |
-| [daemon_client.ts](../../ui/desktop/src/api/daemon_client.ts) | 950 | Typed IPC client including OAuth cancellation. | `DaemonClient` |
-| [domain.ts](../../ui/desktop/src/types/domain.ts) | 1077 | Desktop wire DTOs including provider authorization flow metadata. | `OAuthAuthorizeResult` |
-| [index.css](../../ui/desktop/src/index.css) | 1533 | Desktop theme and visible OAuth action button styles. | CSS styles |
+| [AppContext.tsx](../../ui/desktop/src/context/AppContext.tsx) | 1547 | Provider hydration, session/run restoration and background model/native chat projection | `AppProvider`, `useAppContext` |
+| [AgentsWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/AgentsWorkbenchPane.tsx) | 454 | Session-bound native launch and live run inspector (Vinh) | `AgentsWorkbenchPane` |
+| [ModelSelector.tsx](../../ui/desktop/src/components/chat/ModelSelector.tsx) | 385 | Discovered model picker with cache/error status and retry | `ModelSelector`, `getConnectedModelOptions`, `ModelOption` |
+| [CombosManager.tsx](../../ui/desktop/src/components/providers/CombosManager.tsx) | 531 | Combo targets from the same discovered account catalogs | `CombosManager` |
+| [provider_types.ts](../../ui/desktop/src/types/provider_types.ts) | 91 | Account catalog source, original timestamp and failure metadata | `ConnectedAccount` |
+| [AddProviderModal.tsx](../../ui/desktop/src/components/modals/AddProviderModal.tsx) | 895 | OAuth/API connection UI with PKCE/device authorization, fetched identity and cancellation. | `AddProviderModal` |
+| [ProvidersView.tsx](../../ui/desktop/src/components/providers/ProvidersView.tsx) | 235 | Account listing and provider branding. | `ProvidersView` |
+| [daemon_client.ts](../../ui/desktop/src/api/daemon_client.ts) | 1064 | Typed IPC client, profile HTTP discovery and deduplicated SSE reconnect. | `DaemonClient` |
+| [SettingsModal.tsx](../../ui/desktop/src/components/modals/SettingsModal.tsx) | 420 | Settings account status and usage navigation | `SettingsModal` |
+| [markdownMath.ts](../../ui/desktop/src/components/chat/markdownMath.ts) | 39 | Math AST normalization for escaped subscripts and display delimiters (Owner: Vinh) | `remarkNormalizeChatMath` |
+| [HighlightedCodeBlock.tsx](../../ui/desktop/src/components/chat/HighlightedCodeBlock.tsx) | 38 | Memoized highlight.js fenced-code projection with theme tokens and escaped fallback (Owner: Vinh) | `HighlightedCodeBlock` |
+| [AppHeader.tsx](../../ui/desktop/src/components/shell/AppHeader.tsx) | 384 | Workspace header and matching worktree tab icon (Owner: Vinh) | `AppHeader` |
+| [CommandPalette.tsx](../../ui/desktop/src/components/shell/CommandPalette.tsx) | 333 | Command navigation with worktree glyph (Owner: Vinh) | `CommandPalette` |
+| [WorktreeManagerModal.tsx](../../ui/desktop/src/components/modals/WorktreeManagerModal.tsx) | 512 | Managed worktree projection with semantic worktree glyph (Owner: Vinh) | `WorktreeManagerModal` |
+| [StatusBar.tsx](../../ui/desktop/src/components/shell/StatusBar.tsx) | 164 | Discrete app zoom presets and ten-percent stepping (Owner: Vinh) | `StatusBar` |
+| [layout.tsx](../../ui/desktop/src/app/layout.tsx) | 75 | Full viewport application layout with browser zoom compensation (Owner: Vinh) | `RootLayout` |
+| [default.json](../../crates/custos-app/desktop/capabilities/default.json) | 11 | Main-window permissions including native WebView zoom (Owner: Vinh) | `Tauri capability` |
+| [NativeSelect.tsx](../../ui/desktop/src/components/common/NativeSelect.tsx) | 32 | Shared neutral dropdown adapter for native single-choice options and change events (Owner: Vinh) | `NativeSelect` |
+| [CustomSelect.tsx](../../ui/desktop/src/components/common/CustomSelect.tsx) | 220 | Shared themed dropdown with keyboard selection and focus states (Owner: Vinh) | `CustomSelect`, `CustomSelectOption` |
+| [AgentIcons.tsx](../../ui/desktop/src/components/common/AgentIcons.tsx) | 27 | Build-time Iconify provider SVG wrappers and brand mapping | `ProviderBrandIcon`, existing named icon wrappers |
+| [UsageMonitor.tsx](../../ui/desktop/src/components/providers/UsageMonitor.tsx) | 173 | Provider-branded account usage, remote remaining quotas, compact view and collapsible account panels | `UsageMonitor, summarizeUsage` |
+| [domain.ts](../../ui/desktop/src/types/domain.ts) | 1102 | Desktop wire DTOs including provider authorization flow metadata. | `OAuthAuthorizeResult` |
+| [index.css](../../ui/desktop/src/index.css) | 1691 | Desktop theme and visible OAuth action button styles. | CSS styles |
 
 
 ---
@@ -1104,3 +1130,49 @@ Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../
 2. **Sole Composition Root:** Chỉ duy nhất `crates/custos-daemon/src/main.rs` được phép kết hợp các implementation cụ thể từ `custos-persistence` và `custos-adapters` vào `custos-runtime`.
 3. **Decoupled Client Access:** `custos-cli` và `ui/` tuyệt đối không được truy cập trực tiếp file cơ sở dữ liệu SQLite; mọi thao tác phải thông qua `custos-sdk` gửi yêu cầu đến Daemon qua Unix Domain Socket.
 4. **Proof-Carrying Verification:** Không một Agent nào được phép tự đánh dấu hoàn thành tác vụ nếu thiếu bằng chứng đã được thẩm tra độc lập qua `CompletionGate` tại `crates/custos-core/src/kernel/completion.rs`.
+
+**Ollama availability projection:** Existing AppContext owns visibility-aware local probing and offline/recovery state; ModelSelector renders cached offline models as disabled with Offline beside the model name, without a separate local account status/retry row, and preserves the selected local destination. ProvidersView and SettingsModal display Online/Offline and a retry action through daemon IPC. No persistent schema or new module is introduced.
+
+**Provider usage path:** Existing provider request/response token fields feed task_runtime Run metadata. LocalApiDispatcher receives RunPort from the daemon composition root and exposes v1.providers.usage; probe.rs owns provider quota fetch/parse helpers. Existing UsageMonitor consumes per-run account projections and separate quota snapshots, without localStorage sample metrics.
+
+**Provider request schema:** [`schemas/protocol/provider-request.v1.schema.json`](../../schemas/protocol/provider-request.v1.schema.json) declares the optional selected provider account identity; existing required fields are unchanged.
+
+**Live chat contracts:** Domain run.rs owns correlated event/replay DTOs. Core WorkflowPort adds opt-in background start and replay/snapshot reads; AgentRuntimePort adds transport-neutral observation. Runtime live.rs owns ephemeral buffers and task_runtime.rs retains terminal persistence. Daemon HTTP transports SSE with scoped admission; Tauri exposes profile HTTP discovery. Desktop daemon_client/AppContext/AppWorkspaceShell maintain one message per run. No new crate, dependency or database schema.
+
+Completion events retain optional actual model and legacy token estimates separately from measured input/output usage.
+
+`v1.workflow.session_runs` discovers durable run identities and journal timestamps by session metadata through existing task/run ports. Desktop reconnects these runs after hydration; restart projections report interrupted and never execute again.
+
+Native Agents workbench starts a session-bound background run through AppContext, projects that run into chat, and consumes the same SSE contract in its inspector.
+
+Terminal run metadata retains the canonical journal timestamp so hydration can restore run status onto the existing assistant entry without adding another message or changing the database schema.
+
+Live execution verification: streaming protocol/UTF-8/error/timeout fixtures, bounded replay and credential redaction, native stdout/stderr and Stop fixtures, scoped HTTP replay and slow-writer timeout, real Ollama `qwen2.5:0.5b` and installed Codex CLI. The existing Windows lease prefix test remains an unrelated failure.
+
+Native conversations retain harness/workspace identity from existing Task metadata. Follow-up prompts create new session-bound native runs in that workspace; no hidden native-agent session is resumed. The chat composer identifies the native harness instead of showing a cloud-model selector.
+
+SessionManager exposes an assistant-entry append variant returning the exact persisted journal entry; the existing void append contract remains compatible. Runtime uses that returned timestamp for run/journal correlation instead of reading the latest shared journal entry after an await.
+
+Conversation scroll edges use non-interactive, theme-aware backdrop blur overlays only where content extends beyond the viewport. AppWorkspaceShell tracks scroll bounds and observes content/viewport resizing; this is presentation-only and preserves chat follow-bottom behavior.
+
+Quota group projection: providers/probe.rs fetches Antigravity grouped quota summary before legacy fallbacks and annotates known bucket periods/groups. provider_types.ts carries optional window_kind/model_group metadata; UsageMonitor.tsx normalizes standard five-hour and weekly rows while retaining native exceptions and unknown data. Existing provider quota payload fields stay compatible; no persistence schema is added.
+
+#### Shared dropdown consumers
+
+| File | Lines | Responsibility | Exports |
+|---|---:|---|---|
+| [DelegateTaskModal.tsx](../../ui/desktop/src/components/modals/DelegateTaskModal.tsx) | 353 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [ArtifactInspector.tsx](../../ui/desktop/src/components/research/ArtifactInspector.tsx) | 468 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [ResearchSynthesisPane.tsx](../../ui/desktop/src/components/research/ResearchSynthesisPane.tsx) | 917 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [TableChart.tsx](../../ui/desktop/src/components/research/TableChart.tsx) | 334 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [BrowserWorkbenchPane.tsx](../../ui/desktop/src/components/views/BrowserWorkbenchPane.tsx) | 659 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [MobileSimulatorWorkbenchPane.tsx](../../ui/desktop/src/components/views/MobileSimulatorWorkbenchPane.tsx) | 492 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [RemoteFleetWorkbenchPane.tsx](../../ui/desktop/src/components/views/RemoteFleetWorkbenchPane.tsx) | 680 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [ChangesWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/ChangesWorkbenchPane.tsx) | 600 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [EvidenceWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/EvidenceWorkbenchPane.tsx) | 997 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [FilesWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/FilesWorkbenchPane.tsx) | 495 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+| [TerminalWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/TerminalWorkbenchPane.tsx) | 386 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+
+Conversation presentation omits message author/avatar headers and all message badges. The composer uses a transparent Send button with an accent-filled icon when the draft contains non-whitespace text; an accessible filled Stop icon occupies the same button while a response is active. Errors and activity details remain visible.
+
+Desktop toast feedback is reserved for actionable failures, unavailable operations and meaningful asynchronous results. Workbench navigation, model selection, prompt dispatch and immediate appearance changes remain quiet because their state is already visible. Unimplemented history/filter controls are disabled instead of emitting placeholder notifications.

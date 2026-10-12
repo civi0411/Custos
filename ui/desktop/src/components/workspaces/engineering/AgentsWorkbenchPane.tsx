@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { NativeSelect } from '@/components/common/NativeSelect';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Bot,
   Play,
@@ -14,6 +15,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
+import { useAppContext } from '@/context/AppContext';
 import { daemonClient } from '@/api/daemon_client';
 import {
   HarnessDescriptor,
@@ -21,8 +23,24 @@ import {
   RunHandle,
   ToolMediationLevel,
 } from '@/types/domain';
+import { JobActionButton } from '@/components/common';
+import type { OrcaTabId } from '@/components/views/OrcaTabbedContainer';
 
-export const AgentsWorkbenchPane: React.FC = () => {
+export interface AgentsWorkbenchPaneProps {
+  sessionId?: string;
+  onShowToast?: (msg: string) => void;
+  onOpenTab?: (id: OrcaTabId) => void;
+}
+
+export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
+  sessionId,
+  onShowToast,
+  onOpenTab,
+}) => {
+  const { startNativeConversation } = useAppContext();
+  const subscription = useRef<AbortController | null>(null);
+  const [activities, setActivities] = useState<import('@/types/domain').LiveRunSnapshot['activities']>([]);
+  useEffect(() => () => subscription.current?.abort(), []);
   const [harnesses, setHarnesses] = useState<HarnessDescriptor[]>([]);
   const [loadingHarnesses, setLoadingHarnesses] = useState<boolean>(true);
   const [selectedHarnessId, setSelectedHarnessId] = useState<string>('claude-code');
@@ -87,27 +105,26 @@ export const AgentsWorkbenchPane: React.FC = () => {
     setRunResult(null);
 
     try {
-      const task = await daemonClient.createTask({
-        title: instruction.trim().slice(0, 120),
-        metadata: {
-          kind: 'native_coding_agent',
-          harness_id: selectedHarnessId,
-          workspace_id: selectedWorkspaceId,
-        },
-      });
-      const result = await daemonClient.startRun({
-        task_id: task.id,
-        preferred_mode: 'native',
-        harness_id: selectedHarnessId,
-        workspace_id: selectedWorkspaceId,
-        prompt: instruction.trim(),
-      });
+      setActivities([]);
+      const { run: result, sessionId } = await startNativeConversation(instruction.trim(), selectedHarnessId, selectedWorkspaceId);
       setRunResult(result);
-      setStatusMessage(
-        result.status === 'completed'
-          ? `Task-backed run ${result.run_id.slice(0, 8)} completed; verification is still separate.`
-          : `Run ${result.run_id.slice(0, 8)} finished with status ${result.status}.`
-      );
+      subscription.current?.abort();
+      const controller = new AbortController(); subscription.current = controller;
+      let latest: import('@/types/domain').LiveRunSnapshot | null = null;
+      let timer: number | undefined;
+      const flush = () => {
+        timer = undefined; if (!latest) return;
+        setRunResult({ ...result, output: latest.text, status: (['completed','failed','cancelled'].includes(latest.status) ? latest.status : 'active') as RunHandle['status'] });
+        setStatusMessage(latest.reconnecting ? 'Reconnecting' : latest.status);
+        setActivities(latest.activities); setErrorMessage(latest.error || null);
+      };
+      try {
+        await daemonClient.watchRun(sessionId, result.run_id, snapshot => {
+          latest = snapshot;
+          if (['completed','failed','cancelled','interrupted'].includes(snapshot.status)) { if (timer !== undefined) window.clearTimeout(timer); flush(); }
+          else if (timer === undefined) timer = window.setTimeout(flush, 50);
+        }, controller.signal);
+      } finally { if (timer !== undefined) window.clearTimeout(timer); if (!controller.signal.aborted) flush(); }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Execution error encountered');
       setStatusMessage(null);
@@ -288,7 +305,7 @@ export const AgentsWorkbenchPane: React.FC = () => {
                       Target Execution Workspace
                     </label>
                     <div className="relative">
-                      <select
+                      <NativeSelect
                         value={selectedWorkspaceId}
                         onChange={(e) => setSelectedWorkspaceId(e.target.value)}
                         className="w-full appearance-none rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-3 py-2 pr-8 text-xs text-[var(--color-fg-default)] focus:border-[var(--color-border-focus)] focus:outline-none"
@@ -299,7 +316,7 @@ export const AgentsWorkbenchPane: React.FC = () => {
                             {ws.name} ({ws.path})
                           </option>
                         ))}
-                      </select>
+                      </NativeSelect>
                       <FolderGit2 className="pointer-events-none absolute right-2.5 top-2.5 h-3.5 w-3.5 text-[var(--color-fg-muted)]" />
                     </div>
                   </div>
@@ -321,14 +338,84 @@ export const AgentsWorkbenchPane: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-[var(--color-fg-muted)]">
-                    Instruction / Agent Goal Prompt
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-[var(--color-fg-muted)]">
+                      Instruction / Agent Goal Prompt
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-[var(--color-fg-subtle)] uppercase tracking-wider font-semibold">
+                        Autonomous Jobs:
+                      </span>
+                      <JobActionButton
+                        jobId="engineering__bugfix"
+                        label="Bugfix Job"
+                        icon={AlertTriangle}
+                        getInputs={() => {
+                          if (!selectedWorkspaceId || !instruction.trim()) return null;
+                          return {
+                            issue_description: instruction.trim(),
+                            allowed_paths: [selectedWorkspaceId],
+                          };
+                        }}
+                        sessionId={sessionId}
+                        workspaceId={selectedWorkspaceId}
+                        sourceTabId="kanban"
+                        onNavigate={onOpenTab}
+                        notReadyTooltip="Enter an instruction and select a workspace to run Bugfix job"
+                        readyTooltip="Run autonomous bugfix job with regression test verification"
+                        onShowToast={onShowToast}
+                        variant="toolbar"
+                        size="sm"
+                      />
+                      <JobActionButton
+                        jobId="engineering__feature"
+                        label="Feature Job"
+                        icon={Zap}
+                        getInputs={() => {
+                          if (!selectedWorkspaceId || !instruction.trim()) return null;
+                          return {
+                            specification: instruction.trim(),
+                            contracts: 'Comply with domain schemas and unit test suites',
+                          };
+                        }}
+                        sessionId={sessionId}
+                        workspaceId={selectedWorkspaceId}
+                        sourceTabId="kanban"
+                        onNavigate={onOpenTab}
+                        notReadyTooltip="Enter an instruction and select a workspace to run Feature job"
+                        readyTooltip="Run autonomous feature implementation job"
+                        onShowToast={onShowToast}
+                        variant="toolbar"
+                        size="sm"
+                      />
+                      <JobActionButton
+                        jobId="engineering__diagnose"
+                        label="Diagnose"
+                        icon={ShieldAlert}
+                        getInputs={() => {
+                          if (!selectedWorkspaceId || !instruction.trim()) return null;
+                          return {
+                            symptoms: instruction.trim(),
+                            environment: `Workspace: ${selectedWorkspaceId}, Harness: ${selectedHarnessId}`,
+                          };
+                        }}
+                        sessionId={sessionId}
+                        workspaceId={selectedWorkspaceId}
+                        sourceTabId="kanban"
+                        onNavigate={onOpenTab}
+                        notReadyTooltip="Enter an instruction and select a workspace to diagnose"
+                        readyTooltip="Investigate runtime errors, trace symptoms, and formulate hypotheses"
+                        onShowToast={onShowToast}
+                        variant="toolbar"
+                        size="sm"
+                      />
+                    </div>
+                  </div>
                   <textarea
                     rows={3}
                     value={instruction}
                     onChange={(e) => setInstruction(e.target.value)}
-                    placeholder="e.g. Inspect the current workspace and propose test suite improvements under Gate 4 assurance..."
+                    placeholder="e.g. Fix memory leak when handling large WebSocket payload..."
                     className="w-full rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-2)] p-3 font-mono text-xs text-[var(--color-fg-default)] placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-border-focus)] focus:outline-none"
                   />
                 </div>
@@ -376,6 +463,9 @@ export const AgentsWorkbenchPane: React.FC = () => {
               <span>{statusMessage}</span>
             </div>
           )}
+
+          {running && runResult && <button type="button" onClick={() => void daemonClient.cancelRun({run_id: runResult.run_id, reason: 'Stopped from native inspector'}).catch(error => setErrorMessage(String(error)))} className="mb-3 rounded border border-[var(--color-border-default)] px-3 py-1 text-xs text-[var(--color-fg-default)]">Stop</button>}
+          {activities.map((activity, index) => <details key={index} className="mb-2 rounded border border-[var(--color-border-default)] p-2 text-xs"><summary>{activity.kind === 'reasoning_summary' ? 'Reasoning summary' : activity.kind === 'tool_input' ? 'Tool input' : 'Tool output'}</summary><pre className="max-h-48 overflow-auto whitespace-pre-wrap">{JSON.stringify(activity.payload, null, 2)}</pre></details>)}
 
           {/* Task-backed run output */}
           {runResult && (

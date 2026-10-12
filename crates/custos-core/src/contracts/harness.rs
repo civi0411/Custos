@@ -156,7 +156,6 @@ pub struct HarnessDescriptor {
     pub profile: HarnessProfile,
 }
 
-
 /// Agent Runtime Port (Deep Dissection of Agent Loop & Native Harnesses)
 ///
 /// Dissects the legacy upstream execution loop into a strictly governed contract.
@@ -175,6 +174,15 @@ pub trait AgentRuntimePort: Send + Sync {
         worker_run: &WorkerRun,
         context_pack: &ContextPack,
     ) -> Result<Vec<ActionIntent>, DomainError>;
+
+    async fn run_native_observed(
+        &self,
+        instruction: &str,
+        cwd: &Path,
+        _observer: std::sync::Arc<dyn RunObserver>,
+    ) -> Result<HarnessExecutionResult, DomainError> {
+        self.run_native(instruction, cwd).await
+    }
 
     /// Signals cancellation to an ongoing agent run.
     async fn cancel_run(&self, _run_id: &str) -> Result<(), DomainError> {
@@ -208,4 +216,10 @@ pub trait AgentRuntimePort: Send + Sync {
             "Native subprocess execution not supported by this harness".into(),
         ))
     }
+}
+
+/// Transport-neutral, non-authoritative presentation observer.
+pub trait RunObserver: Send + Sync {
+    fn emit(&self, kind: &str, payload: serde_json::Value);
+    fn is_cancelled(&self) -> bool;
 }

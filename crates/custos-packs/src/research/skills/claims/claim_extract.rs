@@ -60,12 +60,20 @@ impl Skill for ClaimExtractSkill {
                 || s.contains("found that");
 
             if has_assertion_keywords || found_doi.is_some() || found_cite.is_some() {
+                let has_doi = found_doi.is_some();
+                let has_cite = found_cite.is_some();
+                let locator_valid = has_doi || has_cite;
                 claims.push(json!({
                     "id": format!("claim_{}", idx + 1),
                     "statement": s,
                     "doi": found_doi,
                     "citation": found_cite,
-                    "verified": found_doi.is_some(),
+                    "locator_valid": locator_valid,
+                    "locator_status": if locator_valid { "valid" } else { "missing" },
+                    "evidence_support": "unknown",
+                    "support_status": "unknown",
+                    "grounding_level": if has_doi || has_cite { "l1_surface" } else { "l0_ungrounded" },
+                    "verified": false, // Claim extractor only parses syntax; semantic verification requires passage audit
                 }));
             }
         }

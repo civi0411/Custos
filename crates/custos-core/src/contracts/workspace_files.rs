@@ -5,8 +5,8 @@
 
 use async_trait::async_trait;
 use custos_domain::{
-    DomainError, ExecutionWorkspace, WorkspaceDiffSummary, WorkspaceFileContent,
-    WorkspaceFileDiff, WorkspaceFileTree, WriteWorkspaceFileParams,
+    DomainError, ExecutionWorkspace, WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff,
+    WorkspaceFileTree, WriteWorkspaceFileParams,
 };
 
 #[async_trait]

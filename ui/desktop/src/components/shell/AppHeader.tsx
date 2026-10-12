@@ -1,3 +1,4 @@
+import WorktreeIcon from '~icons/codicon/worktree';
 import React from 'react';
 import {
   MessageSquare,
@@ -18,16 +19,16 @@ import {
   FileDiff,
   Terminal as TerminalIcon,
   FolderTree,
-  GitBranch,
   ShieldCheck,
   Activity,
   FileCode,
   BookOpen,
   NotebookTabs,
   Layers,
-  Server
+  Server,
+  LayoutGrid
 } from 'lucide-react';
-import type { OrcaTabId, ResourceTabsState } from '@/components/views/OrcaTabbedContainer';
+import { type OrcaTabId, type ResourceTabsState, getTabType } from '@/components/views/OrcaTabbedContainer';
 import { formatKeyCombo } from '@/lib/utils';
 
 // 3 primary workspace modes
@@ -49,7 +50,7 @@ interface AppHeaderProps {
   onToggleWebTab: () => void;
   onToggleExpandWebTab: () => void;
   resourceTabs: ResourceTabsState;
-  onCloseTab: (e: React.MouseEvent, tabId: OrcaTabId) => void;
+  onCloseTab: (e: React.MouseEvent, tabId: string) => void;
   onAddNewTab: () => void;
 
   // Lens presentation
@@ -61,6 +62,9 @@ interface AppHeaderProps {
   attentionCount?: number;
   onOpenAttention?: () => void;
   onOpenKanban?: () => void;
+
+  // Running jobs per tab indicator
+  runningJobsByTab?: Record<string, number>;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
@@ -69,7 +73,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onSwitchMode,
   isSidebarCollapsed,
   onToggleSidebar,
-  onShowToast,
+  onShowToast: _onShowToast,
   splitPercent,
   isWebTabOpen,
   isWebTabExpanded,
@@ -83,7 +87,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onOpenCommandPalette,
   attentionCount = 0,
   onOpenAttention,
-  onOpenKanban
+  onOpenKanban,
+  runningJobsByTab,
 }) => {
   const modes: { id: AppWorkspaceMode; label: string; icon: React.ElementType; shortcut: string; description: string }[] = [
     {
@@ -112,11 +117,11 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   const getTabIcon = (id: OrcaTabId, isActive: boolean) => {
     const cls = `w-3.5 h-3.5 ${isActive ? 'workbench-accent' : 'text-fg-muted group-hover:text-fg-editor transition-colors'}`;
     switch (id) {
-      case 'tools': return <Globe className={cls} />;
+      case 'tools': return <LayoutGrid className={cls} />;
       case 'changes': return <FileDiff className={cls} />;
       case 'terminal': return <TerminalIcon className={cls} />;
       case 'files': return <FolderTree className={cls} />;
-      case 'worktrees': return <GitBranch className={cls} />;
+      case 'worktrees': return <WorktreeIcon className={cls} />;
       case 'kanban': return <Bot className={cls} />;
       case 'evidence': return <ShieldCheck className={cls} />;
       case 'dag': return <Activity className={cls} />;
@@ -135,24 +140,24 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   };
 
   return (
-    <header className="h-12 bg-[var(--color-surface-1)] border-b border-[var(--color-border-muted)] flex items-center select-none z-30 shrink-0 font-sans text-xs overflow-hidden">
+    <header className="h-12 bg-[var(--color-surface-1)] border-[var(--color-border-muted)] flex items-center select-none z-30 shrink-0 font-sans text-xs overflow-hidden">
       {/* ── 1. LEFT: Nav Controls + Sidebar + Mode Switcher (Aligned to w-64 when expanded) ── */}
       <div
         className={`flex items-center justify-between shrink-0 h-full transition-all duration-300 ${
-          !isSidebarCollapsed ? 'w-64 px-3 border-r border-[var(--color-border-muted)]' : 'w-auto px-2.5 border-r border-[var(--color-border-muted)] gap-2.5'
+          !isSidebarCollapsed ? 'w-64 px-3 border-r border-[var(--color-border-muted)]' : 'w-auto px-2.5 border-[var(--color-border-muted)] gap-2.5'
         }`}
       >
         <div className="flex items-center gap-1">
           {/* Navigation History */}
           <button
-            onClick={() => { if (onShowToast) onShowToast('Back'); }}
+            disabled
             className="p-1 rounded text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
             title="Back"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => { if (onShowToast) onShowToast('Forward'); }}
+            disabled
             className="p-1 rounded text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
             title="Forward"
           >
@@ -179,7 +184,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 key={m.id}
                 onClick={() => {
                   onSwitchMode(m.id);
-                  if (onShowToast) onShowToast(`Switched to ${m.description} (${m.shortcut})`);
                 }}
                 title={`${m.label} (${m.shortcut}) — ${m.description}`}
                 className="workbench-switcher__item"
@@ -286,18 +290,29 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               {/* Resource Tabs */}
               {resourceTabs.tabs.map((tab) => {
                 const isActive = tab.id === resourceTabs.activeTabId;
+                const tabType = getTabType(tab);
+                const runningCount = runningJobsByTab?.[tab.id] ?? runningJobsByTab?.[tabType] ?? 0;
                 return (
                   <div
                     key={tab.id}
                     onClick={() => resourceTabs.setActiveTabId(tab.id)}
-                    className={`group flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer transition max-w-[160px] shrink-0 text-[12px] h-7 ${
+                    className={`group flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer transition max-w-[170px] shrink-0 text-[12px] h-7 ${
                       isActive
-                        ? 'bg-surface-2 text-fg-editor font-medium border border-border-default shadow-xs'
+                        ? 'bg-surface-2 text-fg-editor font-medium shadow-xs'
                         : 'bg-transparent text-fg-muted hover:text-fg-editor hover:bg-surface-2/60'
                     }`}
                   >
-                    {getTabIcon(tab.id, isActive)}
+                    {getTabIcon(tabType, isActive)}
                     <span className="truncate">{tab.title}</span>
+                    {runningCount > 0 && (
+                      <span
+                        className="inline-flex items-center gap-0.5 text-[10px] text-emerald-400 font-mono font-bold shrink-0 ml-0.5"
+                        title={`${runningCount} job${runningCount > 1 ? 's' : ''} running`}
+                      >
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        {runningCount > 1 && <span>{runningCount}</span>}
+                      </span>
+                    )}
                     <button
                       onClick={(e) => onCloseTab(e, tab.id)}
                       className="opacity-0 group-hover:opacity-100 hover:text-fg-editor p-0.5 rounded transition text-fg-muted shrink-0 ml-0.5"

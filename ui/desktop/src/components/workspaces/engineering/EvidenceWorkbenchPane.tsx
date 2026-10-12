@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ShieldCheck,
@@ -430,7 +431,7 @@ export const EvidenceWorkbenchPane: React.FC<EvidenceWorkbenchPaneProps> = ({ on
               />
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <select
+              <NativeSelect
                 value={targetTypeFilter}
                 onChange={(e) => setTargetTypeFilter(e.target.value)}
                 className="px-2 py-1 bg-bg-canvas border border-border-subtle rounded text-fg-muted focus:outline-none"
@@ -441,8 +442,8 @@ export const EvidenceWorkbenchPane: React.FC<EvidenceWorkbenchPaneProps> = ({ on
                     {t.label}
                   </option>
                 ))}
-              </select>
-              <select
+              </NativeSelect>
+              <NativeSelect
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="px-2 py-1 bg-bg-canvas border border-border-subtle rounded text-fg-muted focus:outline-none"
@@ -453,10 +454,10 @@ export const EvidenceWorkbenchPane: React.FC<EvidenceWorkbenchPaneProps> = ({ on
                     {s.label}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             </div>
             <div className="flex items-center justify-between pt-1">
-              <select
+              <NativeSelect
                 value={methodFilter}
                 onChange={(e) => setMethodFilter(e.target.value)}
                 className="px-2 py-1 bg-bg-canvas border border-border-subtle rounded text-xs text-fg-muted focus:outline-none"
@@ -467,7 +468,7 @@ export const EvidenceWorkbenchPane: React.FC<EvidenceWorkbenchPaneProps> = ({ on
                     {m.label}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
               <label className="flex items-center gap-1.5 text-[11px] text-fg-subtle cursor-pointer">
                 <input
                   type="checkbox"
@@ -762,7 +763,7 @@ export const EvidenceWorkbenchPane: React.FC<EvidenceWorkbenchPaneProps> = ({ on
                   <label className="block text-xs font-medium text-fg-subtle mb-1">
                     Target Type
                   </label>
-                  <select
+                  <NativeSelect
                     value={formTargetType}
                     onChange={(e) => setFormTargetType(e.target.value as ReviewTargetType)}
                     className="w-full px-3 py-1.5 text-xs bg-bg-canvas border border-border-subtle rounded-md text-fg-default focus:outline-none focus:border-border-default"
@@ -772,7 +773,7 @@ export const EvidenceWorkbenchPane: React.FC<EvidenceWorkbenchPaneProps> = ({ on
                         {t.label}
                       </option>
                     ))}
-                  </select>
+                  </NativeSelect>
                 </div>
 
                 <div>
@@ -809,7 +810,7 @@ export const EvidenceWorkbenchPane: React.FC<EvidenceWorkbenchPaneProps> = ({ on
                   <label className="block text-xs font-medium text-fg-subtle mb-1">
                     Review Method
                   </label>
-                  <select
+                  <NativeSelect
                     value={formMethod}
                     onChange={(e) => setFormMethod(e.target.value as ReviewMethod)}
                     className="w-full px-3 py-1.5 text-xs bg-bg-canvas border border-border-subtle rounded-md text-fg-default focus:outline-none focus:border-border-default"
@@ -819,14 +820,14 @@ export const EvidenceWorkbenchPane: React.FC<EvidenceWorkbenchPaneProps> = ({ on
                         {m.label}
                       </option>
                     ))}
-                  </select>
+                  </NativeSelect>
                 </div>
 
                 <div>
                   <label className="block text-xs font-medium text-fg-subtle mb-1">
                     Status
                   </label>
-                  <select
+                  <NativeSelect
                     value={formStatus}
                     onChange={(e) => setFormStatus(e.target.value as ReviewStatus)}
                     className="w-full px-3 py-1.5 text-xs bg-bg-canvas border border-border-subtle rounded-md text-fg-default focus:outline-none focus:border-border-default"
@@ -836,7 +837,7 @@ export const EvidenceWorkbenchPane: React.FC<EvidenceWorkbenchPaneProps> = ({ on
                         {s.label}
                       </option>
                     ))}
-                  </select>
+                  </NativeSelect>
                 </div>
               </div>
 
@@ -879,7 +880,7 @@ export const EvidenceWorkbenchPane: React.FC<EvidenceWorkbenchPaneProps> = ({ on
                 <div className="p-3 rounded-lg border border-border-subtle bg-bg-canvas/50 space-y-2">
                   <div className="grid grid-cols-4 gap-2">
                     <div>
-                      <select
+                      <NativeSelect
                         value={findingSeverity}
                         onChange={(e) => setFindingSeverity(e.target.value as FindingSeverity)}
                         className="w-full px-2 py-1 text-xs bg-bg-surface border border-border-subtle rounded text-fg-default"
@@ -889,7 +890,7 @@ export const EvidenceWorkbenchPane: React.FC<EvidenceWorkbenchPaneProps> = ({ on
                             {s.label}
                           </option>
                         ))}
-                      </select>
+                      </NativeSelect>
                     </div>
                     <div className="col-span-3">
                       <input

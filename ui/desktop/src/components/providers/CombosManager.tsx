@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useState } from 'react';
 import {
   Layers,
@@ -190,7 +191,7 @@ export const CombosManager: React.FC = () => {
 
         <button
           onClick={openCreateModal}
-          className="workbench-primary-action px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
+          className="btn-secondary px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>New Routing Combo</span>
@@ -482,7 +483,7 @@ export const CombosManager: React.FC = () => {
 
                   {/* Add Target Row */}
                   <div className="flex gap-2 pt-1">
-                    <select
+                    <NativeSelect
                       value={selectedAddModel}
                       onChange={(e) => setSelectedAddModel(e.target.value)}
                       className="flex-1 bg-surface-0 border border-border-default rounded-lg px-3 py-1.5 text-xs text-fg-editor focus:outline-none"
@@ -492,7 +493,7 @@ export const CombosManager: React.FC = () => {
                           {m.name} ({m.providerName}){m.badge === 'Cached' ? ' — Cached' : ''}
                         </option>
                       ))}
-                    </select>
+                    </NativeSelect>
                     <button
                       type="button"
                       onClick={handleAddTarget}
@@ -516,7 +517,7 @@ export const CombosManager: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  className="workbench-primary-action px-4 py-1.5 rounded-lg font-medium transition text-xs shadow-xs cursor-pointer"
+                  className="btn-primary px-4 py-1.5 rounded-lg font-medium transition text-xs shadow-xs cursor-pointer"
                 >
                   {editingCombo ? 'Save Changes' : 'Create Combo'}
                 </button>

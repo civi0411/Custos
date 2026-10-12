@@ -3,8 +3,8 @@
 //! Models safe file tree exploration, file read/write buffers, and Git diff inspection
 //! strictly scoped to an `ExecutionWorkspace`.
 
-use serde::{Deserialize, Serialize};
 use crate::WorkspaceId;
+use serde::{Deserialize, Serialize};
 
 /// Represents a single file or directory inside an execution workspace.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -25,7 +25,12 @@ pub struct WorkspaceFileEntry {
 }
 
 impl WorkspaceFileEntry {
-    pub fn new(path: impl Into<String>, name: impl Into<String>, is_dir: bool, size_bytes: u64) -> Self {
+    pub fn new(
+        path: impl Into<String>,
+        name: impl Into<String>,
+        is_dir: bool,
+        size_bytes: u64,
+    ) -> Self {
         Self {
             path: path.into(),
             name: name.into(),
@@ -111,11 +116,7 @@ impl WorkspaceFileContent {
         }
     }
 
-    pub fn binary(
-        workspace_id: WorkspaceId,
-        path: impl Into<String>,
-        size_bytes: usize,
-    ) -> Self {
+    pub fn binary(workspace_id: WorkspaceId, path: impl Into<String>, size_bytes: usize) -> Self {
         Self {
             workspace_id,
             path: path.into(),
@@ -145,7 +146,11 @@ fn default_true() -> bool {
 }
 
 impl WriteWorkspaceFileParams {
-    pub fn new(workspace_id: WorkspaceId, path: impl Into<String>, content: impl Into<String>) -> Self {
+    pub fn new(
+        workspace_id: WorkspaceId,
+        path: impl Into<String>,
+        content: impl Into<String>,
+    ) -> Self {
         Self {
             workspace_id,
             path: path.into(),
@@ -263,7 +268,8 @@ mod tests {
         let ws_id = WorkspaceId::generate();
         let params = WriteWorkspaceFileParams::new(ws_id.clone(), "test.txt", "hello");
         let json = serde_json::to_string(&params).expect("serialize");
-        let deserialized: WriteWorkspaceFileParams = serde_json::from_str(&json).expect("deserialize");
+        let deserialized: WriteWorkspaceFileParams =
+            serde_json::from_str(&json).expect("deserialize");
         assert_eq!(deserialized.path, "test.txt");
         assert!(deserialized.create_parents);
         assert!(deserialized.overwrite);

@@ -547,6 +547,39 @@ impl ProviderRepository {
         }
         Ok(list)
     }
+
+    pub fn list_oauth_tokens(&self) -> Result<Vec<OAuthTokenRecord>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT provider_id, service_type, access_token, refresh_token,
+                        expires_at, token_type, scope, created_at, updated_at
+                 FROM provider_oauth_tokens ORDER BY updated_at DESC",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(OAuthTokenRecord {
+                    provider_id: row.get(0)?,
+                    service_type: row.get(1)?,
+                    access_token: row.get(2)?,
+                    refresh_token: row.get(3)?,
+                    expires_at: row.get(4)?,
+                    token_type: row.get(5)?,
+                    scope: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                })
+            })
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut list = Vec::new();
+        for r in rows {
+            list.push(r.map_err(|e| DomainError::Validation(e.to_string()))?);
+        }
+        Ok(list)
+    }
 }
 
 #[cfg(test)]

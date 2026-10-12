@@ -62,9 +62,10 @@ impl PtyHandle {
             // Determine shell binary
             let default_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
             let (prog, args) = match command_override {
-                Some(cmd) if !cmd.trim().is_empty() => {
-                    (default_shell.clone(), vec!["-c".to_string(), cmd.to_string()])
-                }
+                Some(cmd) if !cmd.trim().is_empty() => (
+                    default_shell.clone(),
+                    vec!["-c".to_string(), cmd.to_string()],
+                ),
                 _ => (default_shell, vec!["-l".to_string()]),
             };
 
@@ -290,14 +291,8 @@ mod tests {
             let (tx, mut rx) = mpsc::channel(32);
             let temp = tempfile::tempdir().unwrap();
 
-            let (pty, _exit_rx) = PtyHandle::spawn(
-                temp.path(),
-                Some("echo hello_pty"),
-                80,
-                24,
-                tx,
-            )
-            .unwrap();
+            let (pty, _exit_rx) =
+                PtyHandle::spawn(temp.path(), Some("echo hello_pty"), 80, 24, tx).unwrap();
 
             assert!(pty.pid() > 0);
 
@@ -317,14 +312,7 @@ mod tests {
     fn test_pty_resize() {
         let (tx, _rx) = mpsc::channel(32);
         let temp = tempfile::tempdir().unwrap();
-        let (pty, _) = PtyHandle::spawn(
-            temp.path(),
-            None,
-            80,
-            24,
-            tx,
-        )
-        .unwrap();
+        let (pty, _) = PtyHandle::spawn(temp.path(), None, 80, 24, tx).unwrap();
 
         assert!(pty.resize(120, 40).is_ok());
     }

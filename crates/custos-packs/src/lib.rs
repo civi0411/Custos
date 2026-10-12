@@ -72,18 +72,28 @@ mod tests {
         assert!(registry.get_pack("assistant").is_some());
 
         // 2. Lens mapping
-        let coding_pack = registry.get_pack_for_lens(WorkbenchLens::Coding).expect("coding pack");
+        let coding_pack = registry
+            .get_pack_for_lens(WorkbenchLens::Coding)
+            .expect("coding pack");
         assert_eq!(coding_pack.manifest().id, "engineering");
 
-        let research_pack = registry.get_pack_for_lens(WorkbenchLens::Research).expect("research pack");
+        let research_pack = registry
+            .get_pack_for_lens(WorkbenchLens::Research)
+            .expect("research pack");
         assert_eq!(research_pack.manifest().id, "research");
 
-        let assistant_pack = registry.get_pack_for_lens(WorkbenchLens::Assistant).expect("assistant pack");
+        let assistant_pack = registry
+            .get_pack_for_lens(WorkbenchLens::Assistant)
+            .expect("assistant pack");
         assert_eq!(assistant_pack.manifest().id, "assistant");
 
         // 3. Total jobs count = 7 (eng) + 8 (res) + 5 (ast) = 20
         let all_jobs = registry.list_all_jobs();
-        assert_eq!(all_jobs.len(), 20, "Expected 20 standardized Workbench Jobs");
+        assert_eq!(
+            all_jobs.len(),
+            20,
+            "Expected 20 standardized Workbench Jobs"
+        );
 
         // Verify key jobs across all lenses
         assert!(registry.get_job("engineering__bugfix").is_some());
@@ -102,10 +112,14 @@ mod tests {
         assert!(repo_scout.read_only);
         assert_eq!(repo_scout.pack_id, "engineering");
 
-        let code_implementer = registry.get_role("code_implementer").expect("code implementer");
+        let code_implementer = registry
+            .get_role("code_implementer")
+            .expect("code implementer");
         assert!(!code_implementer.read_only);
 
-        let literature_scout = registry.get_role("literature_scout").expect("literature scout");
+        let literature_scout = registry
+            .get_role("literature_scout")
+            .expect("literature scout");
         assert!(literature_scout.read_only);
 
         let triage_worker = registry.get_role("triage_worker").expect("triage worker");

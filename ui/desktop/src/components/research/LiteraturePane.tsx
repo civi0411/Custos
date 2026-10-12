@@ -6,21 +6,41 @@ import {
   ShieldCheck,
   Plus,
   FileText,
-  Highlighter
+  Highlighter,
+  MessageSquare,
+  Sparkles,
+  GitCompare,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import { SourceRecord, PassageAnchor } from '@/types/research';
 import { daemonClient } from '@/api/daemon_client';
+import { JobActionButton } from '@/components/common';
+import type { OrcaTabId } from '@/components/views/OrcaTabbedContainer';
 
 interface LiteraturePaneProps {
+  sessionId?: string;
   onShowToast?: (msg: string) => void;
+  onOpenTab?: (id: OrcaTabId) => void;
 }
 
-export const LiteraturePane: React.FC<LiteraturePaneProps> = ({ onShowToast }) => {
+export const LiteraturePane: React.FC<LiteraturePaneProps> = ({ sessionId, onShowToast, onOpenTab }) => {
   const [sources, setSources] = useState<SourceRecord[]>([]);
   const [selectedSourceId, setSelectedSourceId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedText, setSelectedText] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [checkedSourceIds, setCheckedSourceIds] = useState<Set<string>>(new Set());
+
+  const toggleSourceCheck = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCheckedSourceIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   useEffect(() => {
     daemonClient
@@ -103,24 +123,46 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({ onShowToast }) =
           </button>
         </div>
 
-        {/* Search Input */}
-        <div className="p-3 border-b border-border-muted bg-surface-1">
-          <div className="relative group">
+        {/* Search Input & Deep Research Action */}
+        <div className="p-2.5 border-b border-border-muted bg-surface-1 flex items-center gap-1.5">
+          <div className="relative group flex-1">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-fg-subtle group-focus-within:text-fg-editor transition-colors" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by title, DOI..."
-              className="w-full bg-canvas-inset border border-border-default rounded-lg py-1.5 pl-8 pr-3 text-xs text-fg-editor placeholder-fg-subtle outline-none focus:border-border-default focus:ring-1 focus:ring-border-default transition"
+              className="w-full bg-canvas-inset border border-border-default rounded-lg py-1.5 pl-8 pr-2 text-xs text-fg-editor placeholder-fg-subtle outline-none focus:border-border-default focus:ring-1 focus:ring-border-default transition"
             />
           </div>
+          <JobActionButton
+            jobId="research__deep_research"
+            label="Synthesize"
+            icon={Sparkles}
+            getInputs={() => {
+              const topic = searchQuery.trim() || activeSource?.title || '';
+              if (!topic) return null;
+              return {
+                topic,
+                search_scope: 'literature_corpus',
+              };
+            }}
+            sessionId={sessionId}
+            sourceTabId="literature"
+            onNavigate={onOpenTab}
+            notReadyTooltip="Enter a search term or select a paper to synthesize"
+            readyTooltip="Synthesize literature on active topic"
+            onShowToast={onShowToast}
+            variant="toolbar"
+            size="sm"
+          />
         </div>
 
         {/* Sources Scroll Area */}
         <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 relative no-scrollbar">
           {filteredSources.map((source) => {
             const isSelected = source.id === selectedSourceId;
+            const isChecked = checkedSourceIds.has(source.id);
             return (
               <div
                 key={source.id}
@@ -135,9 +177,23 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({ onShowToast }) =
                 }`}
               >
                 <div className="flex items-start justify-between gap-1 mb-1.5">
-                  <span className="font-mono text-[10px] uppercase px-1.5 py-0.5 rounded bg-surface-3 text-fg-muted font-medium">
-                    {source.sourceType}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={(e) => toggleSourceCheck(source.id, e)}
+                      className="p-0.5 text-fg-muted hover:text-fg-editor transition"
+                      title={isChecked ? 'Deselect source' : 'Select for comparison'}
+                    >
+                      {isChecked ? (
+                        <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Square className="w-3.5 h-3.5 text-fg-subtle hover:text-fg-muted" />
+                      )}
+                    </button>
+                    <span className="font-mono text-[10px] uppercase px-1.5 py-0.5 rounded bg-surface-3 text-fg-muted font-medium">
+                      {source.sourceType}
+                    </span>
+                  </div>
                   {source.verified && (
                     <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-mono font-medium bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
                       <ShieldCheck size={11} /> Checked
@@ -159,6 +215,30 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({ onShowToast }) =
             );
           })}
         </div>
+
+        {/* Floating Compare Action Bar when ≥ 2 sources checked */}
+        {checkedSourceIds.size >= 2 && (
+          <div className="p-2.5 border-t border-border-muted bg-surface-2 flex items-center justify-between gap-2 shrink-0">
+            <span className="text-[11px] font-mono font-medium text-fg-muted">
+              {checkedSourceIds.size} selected
+            </span>
+            <JobActionButton
+              jobId="research__compare"
+              label={`Compare (${checkedSourceIds.size})`}
+              icon={GitCompare}
+              getInputs={() => ({
+                sources: Array.from(checkedSourceIds),
+                comparison_criteria: 'Methodological rigor, experimental datasets, reproducibility, and verified claims',
+              })}
+              sessionId={sessionId}
+              sourceTabId="literature"
+              onNavigate={onOpenTab}
+              onShowToast={onShowToast}
+              variant="toolbar"
+              size="sm"
+            />
+          </div>
+        )}
       </div>
 
       {/* ── RIGHT: DOCUMENT READER & PASSAGE ANCHORING ── */}
@@ -172,7 +252,26 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({ onShowToast }) =
             </span>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0">
+            <JobActionButton
+              jobId="research__source_qa"
+              label="Ask Paper"
+              icon={MessageSquare}
+              getInputs={() => {
+                if (!activeSource) return null;
+                return {
+                  source_locator: activeSource.doi || activeSource.id,
+                  question: `Analyze the primary claims, methodology, and empirical evidence in "${activeSource.title}"`,
+                };
+              }}
+              sessionId={sessionId}
+              sourceTabId="literature"
+              onNavigate={onOpenTab}
+              notReadyTooltip="Select a paper to ask questions"
+              readyTooltip={`Query claims and evidence in "${activeSource.title}"`}
+              onShowToast={onShowToast}
+              variant="toolbar"
+            />
             {activeSource.doi && (
               <a
                 href={`https://doi.org/${activeSource.doi}`}

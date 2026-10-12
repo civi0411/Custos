@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Layers,
@@ -639,7 +640,7 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
                     <label className="block text-[11px] font-medium text-[var(--color-fg-muted)] mb-1">
                       Execution Workspace / Worktree
                     </label>
-                    <select
+                    <NativeSelect
                       disabled={!isComposing && activeProposal?.status === 'handoff_completed'}
                       value={selectedWorkspaceId}
                       onChange={(e) => setSelectedWorkspaceId(e.target.value)}
@@ -651,7 +652,7 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
                           {ws.name} ({ws.kind.type}) - {ws.path}
                         </option>
                       ))}
-                    </select>
+                    </NativeSelect>
                   </div>
 
                   <div>

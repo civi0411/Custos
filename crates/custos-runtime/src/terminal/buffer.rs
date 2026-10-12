@@ -62,7 +62,12 @@ impl BoundedTerminalBuffer {
     }
 
     /// Reads output starting from `from_seq` up to `max_bytes`.
-    pub fn read_from(&self, session_id: &str, from_seq: u64, max_bytes: usize) -> TerminalOutputChunk {
+    pub fn read_from(
+        &self,
+        session_id: &str,
+        from_seq: u64,
+        max_bytes: usize,
+    ) -> TerminalOutputChunk {
         let max_bytes = if max_bytes == 0 { 64 * 1024 } else { max_bytes };
 
         if self.chunks.is_empty() {

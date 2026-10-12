@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useState } from 'react';
 import { 
   X, 
@@ -219,7 +220,7 @@ export const DelegateTaskModal: React.FC<DelegateTaskModalProps> = ({
                 <label className="block text-[11px] font-medium text-fg-muted mb-1">
                   Model Pin
                 </label>
-                <select
+                <NativeSelect
                   value={selectedModel}
                   onChange={(e) => setSelectedModel(e.target.value)}
                   className="w-full bg-surface-1 border border-border-default rounded-lg px-2.5 py-1.5 text-xs text-fg-editor focus:outline-none focus:border-border-emphasis"
@@ -228,7 +229,7 @@ export const DelegateTaskModal: React.FC<DelegateTaskModalProps> = ({
                   <option value="o3-mini">OpenAI o3-mini</option>
                   <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
                   <option value="deepseek-v3">DeepSeek V3 (Local)</option>
-                </select>
+                </NativeSelect>
               </div>
 
               <div>

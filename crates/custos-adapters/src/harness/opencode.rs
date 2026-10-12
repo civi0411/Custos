@@ -55,19 +55,14 @@ pub enum OpenCodeEvent {
         success: bool,
     },
     /// Interactive question or permission prompt emitted to user.
-    Question {
-        question_id: String,
-        prompt: String,
-    },
+    Question { question_id: String, prompt: String },
     /// Token usage metrics for the turn.
     Usage {
         input_tokens: u64,
         output_tokens: u64,
     },
     /// Turn completed.
-    Complete {
-        session_id: String,
-    },
+    Complete { session_id: String },
     /// Unknown or unsupported event kind.
     #[serde(other)]
     Unknown,
@@ -346,6 +341,13 @@ impl AgentRuntimePort for OpenCodeHarnessAdapter {
         }
     }
 
+    async fn run_native_observed(&self, instruction: &str, cwd: &Path, observer: std::sync::Arc<dyn custos_core::contracts::harness::RunObserver>) -> Result<HarnessExecutionResult, DomainError> {
+        if self.mock_mode { return self.run_native(instruction,cwd).await; }
+        let mut command=tokio::process::Command::new(&self.binary_path);
+        command.current_dir(cwd).arg("run").args(["--format","json"]).arg(instruction);
+        super::live::run_observed_process(command,observer,"opencode",self.default_timeout).await
+    }
+
     async fn run_native(
         &self,
         instruction: &str,
@@ -464,10 +466,7 @@ mod tests {
         assert_eq!(intents.len(), 1);
         assert_eq!(intents[0].name, "shell_exec");
         assert_eq!(intents[0].assurance, Assurance::ProviderGoverned);
-        assert_eq!(
-            intents[0].parameters["opencode_session_id"],
-            "ses_xyz"
-        );
+        assert_eq!(intents[0].parameters["opencode_session_id"], "ses_xyz");
 
         // Usage exact tokens
         assert_eq!(usage, Some((500, 120)));
@@ -478,10 +477,16 @@ mod tests {
         let adapter = OpenCodeHarnessAdapter::new("/tmp").with_mock_mode();
         let run = WorkerRun::new("task_1".to_string(), "opencode".to_string(), 3);
 
-        adapter.execute_turn(&run, &ContextPack::default()).await.unwrap();
+        adapter
+            .execute_turn(&run, &ContextPack::default())
+            .await
+            .unwrap();
 
         // Steer active run
-        assert!(adapter.steer_run(&run.id, "Please refine the test").await.is_ok());
+        assert!(adapter
+            .steer_run(&run.id, "Please refine the test")
+            .await
+            .is_ok());
 
         // Cancel active run
         assert!(adapter.cancel_run(&run.id).await.is_ok());
@@ -500,6 +505,8 @@ mod tests {
             .await
             .expect_err("unconnected transport must not look like a successful empty turn");
 
-        assert!(error.to_string().contains("HTTP/SSE turn transport is not connected"));
+        assert!(error
+            .to_string()
+            .contains("HTTP/SSE turn transport is not connected"));
     }
 }

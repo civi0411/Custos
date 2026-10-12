@@ -1,34 +1,44 @@
-import React, { useState, useRef, useEffect } from 'react';
+import StopIcon from '~icons/lucide/square';
+import WorktreeIcon from '~icons/codicon/worktree';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Send,
-  Terminal,
   FolderGit2,
-  GitBranch,
   Orbit,
-  Settings2,
   Plus,
   BookOpen,
   FlaskConical,
   MessageSquare,
   Sparkles,
-  Minimize2,
   Layers,
   ShieldCheck,
   Bot,
   Activity
 } from 'lucide-react';
 import { Session } from '@/types';
-import { OrcaTabbedContainer, type ResourceTabsState, type OrcaTabId } from '@/components/views/OrcaTabbedContainer';
+import { OrcaTabbedContainer, type ResourceTabsState, type OrcaTabId, type OrcaTab, getTabType } from '@/components/views/OrcaTabbedContainer';
 import { WorkspaceSidebar } from '@/components/shell/WorkspaceSidebar';
 import { AppHeader, type AppWorkspaceMode } from '@/components/shell/AppHeader';
 import { CommandPalette } from '@/components/shell/CommandPalette';
 import { AttentionBanner, type AttentionItem } from '@/components/shell/AttentionBanner';
-import { OpenAIIcon, ClaudeIcon } from '@/components/common/AgentIcons';
+import { JobActivityDock } from '@/components/shell/JobActivityDock';
+import { useJobRegistry } from '@/hooks/useJobRegistry';
 import { ModelSelector } from '@/components/chat/ModelSelector';
+
 import { useAppContext } from '@/context/AppContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+import { remarkNormalizeChatMath } from '@/components/chat/markdownMath';
+import { HighlightedCodeBlock } from '@/components/chat/HighlightedCodeBlock';
 import { formatKeyCombo } from '@/lib/utils';
+import { SlashCommandMenu, SLASH_COMMANDS, type SlashCommandDef } from '@/components/chat/SlashCommandMenu';
+import { daemonClient } from '@/api/daemon_client';
+
+
+
 
 interface AppWorkspaceShellProps {
   mode: AppWorkspaceMode;
@@ -37,9 +47,11 @@ interface AppWorkspaceShellProps {
   projectNames: string[];
   onSelectProject: (name: string) => void;
   sessions: Session[];
+  allSessions: Session[];
   activeSessionId: string;
   onSelectSession: (id: string) => void;
   onOpenFullChatIn?: (mode: AppWorkspaceMode) => void;
+  onOpenSessionHere?: (id: string) => void;
   onNewSession: () => void;
   onSendMessage: (text: string) => void;
   onClearHistory: () => void;
@@ -66,9 +78,11 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   projectNames,
   onSelectProject,
   sessions,
+  allSessions,
   activeSessionId,
   onSelectSession,
   onOpenFullChatIn,
+  onOpenSessionHere,
   onNewSession,
   onSendMessage,
   onClearHistory: _onClearHistory,
@@ -85,9 +99,9 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   isWebTabExpanded,
   onToggleWebTab,
   onToggleExpandWebTab,
-  openResources
+  openResources: _openResources
 }) => {
-  const { openSettings, selectedModel, handleSelectModel } = useAppContext();
+  const { openSettings, selectedModel, handleSelectModel, handleStopRun } = useAppContext();
   const [inputText, setInputText] = useState('');
   const [splitPercent, setSplitPercent] = useState<number>(() => {
     return mode === 'chat' ? 50 : 42;
@@ -103,6 +117,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   // Active session lookup
   const activeSession = sessions.find((s) => s.id === activeSessionId) || {
     id: '',
+    nativeHarnessId: undefined as string | undefined,
     title: 'No conversation',
     time: '',
     preview: '',
@@ -147,7 +162,6 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
         if (e.altKey) {
           e.preventDefault();
           openTab('kanban', 'Fleet Kanban', 'orca://kanban');
-          onShowToast?.(`Opened Fleet Kanban (${formatKeyCombo({ ctrlOrCmd: true, alt: true, key: 'K' })})`);
         } else {
           e.preventDefault();
           setIsCommandPaletteOpen((prev) => !prev);
@@ -161,42 +175,171 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onShowToast]);
 
+  const liveMessage = activeSession.messages.find(message => message.runId && !['completed','failed','cancelled','interrupted'].includes(message.runStatus || ''));
+  const dialogueRef = useRef<HTMLDivElement>(null);
+  const followBottom = useRef(true);
+
+  const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false });
+  const updateScrollEdges = () => {
+    const el = dialogueRef.current;
+    if (!el) return;
+    const canScroll = el.scrollHeight > el.clientHeight;
+    setScrollEdges({
+      top: canScroll && el.scrollTop > 12,
+      bottom: canScroll && el.scrollTop < el.scrollHeight - el.clientHeight - 12
+    });
+  };
+
+  useEffect(() => {
+    const el = dialogueRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => updateScrollEdges());
+    observer.observe(el);
+    updateScrollEdges();
+    return () => observer.disconnect();
+  }, [activeSessionId, hasMessages]);
+
+  useEffect(() => { followBottom.current = true; }, [activeSessionId]);
+  useEffect(() => {
+    if (followBottom.current && dialogueRef.current) dialogueRef.current.scrollTop = dialogueRef.current.scrollHeight;
+    updateScrollEdges();
+  }, [activeSession.messages]);
+
+  const { jobs, dispatchJob, updateJob } = useJobRegistry();
+
+  const executeSlashCommand = (cmd: SlashCommandDef, args: string) => {
+    setInputText('');
+
+    // 1. Dispatch in JobRegistry so active tabs & sidebar show running status immediately
+    const entryId = dispatchJob({
+      jobId: cmd.jobId,
+      jobName: cmd.label,
+      sourceTabId: mode === 'code' ? 'changes' : mode === 'research' ? 'literature' : undefined,
+    });
+
+    // 2. Transmit to session chat so conversation timeline captures user action transparently
+    const formattedPrompt = args.trim()
+      ? `${cmd.command} ${args.trim()}`
+      : `${cmd.command} - ${cmd.description}`;
+    onSendMessage(formattedPrompt);
+
+    // 3. Trigger daemon packs job
+    daemonClient
+      .runPacksJob({
+        jobId: cmd.jobId,
+        sessionId: activeSession.id,
+        inputs: cmd.getInputs(args, { sessionId: activeSession.id }),
+      })
+      .then((res) => {
+        const taskId = res.taskId || res.task_id || 'unknown';
+        updateJob(entryId, { taskId, status: 'done', endedAt: Date.now() });
+        onShowToast?.(`Executed ${cmd.command} (Task ${taskId})`);
+      })
+      .catch((err: any) => {
+        updateJob(entryId, { status: 'failed', error: err.message || String(err), endedAt: Date.now() });
+        onShowToast?.(`Failed to run ${cmd.command}: ${err.message || String(err)}`);
+      });
+  };
+
+  const handleSelectSlashCommand = (cmd: SlashCommandDef) => {
+    if (cmd.hasArgs) {
+      setInputText(`${cmd.command} `);
+    } else {
+      executeSlashCommand(cmd, '');
+    }
+  };
+
   const handleSend = () => {
-    if (!inputText.trim()) return;
+    const trimmed = inputText.trim();
+    if (!trimmed || liveMessage) return;
+
+    if (trimmed.startsWith('/')) {
+      const parts = trimmed.split(' ');
+      const cmdName = parts[0].toLowerCase();
+      const args = parts.slice(1).join(' ');
+      const match = SLASH_COMMANDS.find((c) => c.command.toLowerCase() === cmdName);
+      if (match) {
+        executeSlashCommand(match, args);
+        return;
+      }
+    }
+
     onSendMessage(inputText);
     setInputText('');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
+      // If a slash menu might be selecting, let enter submit command if handled
       e.preventDefault();
       handleSend();
     }
   };
 
   const openTab = (id: OrcaTabId, title: string, url: string) => {
-    resourceTabs.setTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, title, url }]));
-    resourceTabs.setActiveTabId(id);
-    openResources(false);
+    if (!isWebTabOpen) {
+      onToggleWebTab();
+    }
+    const activeTab = resourceTabs.tabs.find((t) => t.id === resourceTabs.activeTabId);
+    const newTabId = `${id}-${Date.now()}`;
+    const newTab: OrcaTab = { id: newTabId, type: id, title, url };
+
+    if (activeTab && getTabType(activeTab) === 'tools') {
+      resourceTabs.setTabs((prev) =>
+        prev.map((t) => (t.id === activeTab.id ? newTab : t))
+      );
+    } else {
+      const existing = resourceTabs.tabs.find((t) => getTabType(t) === id);
+      if (existing) {
+        resourceTabs.setActiveTabId(existing.id);
+        return;
+      }
+      resourceTabs.setTabs((prev) => [...prev, newTab]);
+    }
+    resourceTabs.setActiveTabId(newTabId);
+  };
+  const runningJobsByTab = useMemo(() => {
+    const counts: Record<string, number> = {};
+    jobs.forEach((j) => {
+      if ((j.status === 'running' || j.status === 'queued') && j.sourceTabId) {
+        counts[j.sourceTabId] = (counts[j.sourceTabId] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [jobs]);
+
+  const handleOpenTab = (id: OrcaTabId) => {
+    openTab(id, id.charAt(0).toUpperCase() + id.slice(1), `custos://resource/${id}`);
   };
 
-  const handleCloseTab = (e: React.MouseEvent, tabId: OrcaTabId) => {
+  const handleCloseTab = (e: React.MouseEvent, tabId: string) => {
     e.stopPropagation();
     if (resourceTabs.tabs.length <= 1) {
-      resourceTabs.setTabs([{ id: 'tools', title: 'Resources', url: 'custos://resources' }]);
-      resourceTabs.setActiveTabId('tools');
+      onToggleWebTab();
       return;
     }
     const nextTabs = resourceTabs.tabs.filter((t) => t.id !== tabId);
     resourceTabs.setTabs(nextTabs);
     if (resourceTabs.activeTabId === tabId) {
-      resourceTabs.setActiveTabId(nextTabs[nextTabs.length - 1].id);
+      const closedIndex = resourceTabs.tabs.findIndex((t) => t.id === tabId);
+      const nextActive = nextTabs[Math.max(0, closedIndex - 1)] || nextTabs[0];
+      resourceTabs.setActiveTabId(nextActive.id);
     }
   };
 
   const handleAddNewTab = () => {
-    resourceTabs.setTabs((prev) => (prev.some((t) => t.id === 'tools') ? prev : [...prev, { id: 'tools', title: 'Resources', url: 'custos://resources' }]));
-    resourceTabs.setActiveTabId('tools');
+    if (!isWebTabOpen) {
+      onToggleWebTab();
+    }
+    const newTabInstanceId = `tools-${Date.now()}`;
+    const newTab: OrcaTab = {
+      id: newTabInstanceId,
+      type: 'tools',
+      title: 'New Tab',
+      url: 'custos://resources'
+    };
+    resourceTabs.setTabs((prev) => [...prev, newTab]);
+    resourceTabs.setActiveTabId(newTabInstanceId);
   };
 
   // Lens metadata & personality
@@ -249,7 +392,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
             onClick: () => openTab('files', 'Files', 'custos://files')
           },
           {
-            icon: GitBranch,
+            icon: WorktreeIcon,
             label: 'Worktrees',
             onClick: () => openTab('worktrees', 'Worktrees', 'custos://worktrees')
           },
@@ -309,11 +452,6 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       onClick: () => openTab('kanban', 'Fleet Kanban', 'orca://kanban'),
       rightElement: <span className="text-[10px] text-fg-muted font-mono">{formatKeyCombo({ ctrlOrCmd: true, alt: true, key: 'K' })}</span>
     },
-    {
-      icon: Settings2,
-      label: 'Preferences & Settings',
-      onClick: () => openSettings('general')
-    }
   ];
 
   return (
@@ -344,6 +482,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           }
         }}
         onOpenKanban={() => openTab('kanban', 'Fleet Kanban', 'orca://kanban')}
+        runningJobsByTab={runningJobsByTab}
       />
 
       {/* ── 2. SUPERVISORY ATTENTION STRIP (OrCa Attention + SADE Authority Gate) ── */}
@@ -360,9 +499,11 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           projectNames={projectNames}
           onSelectProject={onSelectProject}
           sessions={sessions}
+          allSessions={allSessions}
           activeSessionId={activeSessionId}
           onSelectSession={onSelectSession}
           onOpenFullChatIn={onOpenFullChatIn}
+          onOpenSessionHere={onOpenSessionHere}
           onDeleteSession={onDeleteConversation}
           newTaskLabel={lensMeta.taskLabel}
           newTaskIcon={Plus}
@@ -396,7 +537,16 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
             }}
           >
             {/* Dialogue Messages Canvas */}
-            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+            <div className="relative flex-1 min-h-0">
+            <div
+              ref={dialogueRef}
+              onScroll={event => {
+                const element = event.currentTarget;
+                followBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+                updateScrollEdges();
+              }}
+              className="h-full overflow-y-auto px-6 py-6 space-y-6"
+            >
               {!hasMessages ? (
                 <div className="h-full flex flex-col items-center justify-center text-center my-auto pb-12">
                   <div className="w-14 h-14 rounded-xl bg-surface-1 border border-border-default flex items-center justify-center text-fg-muted mb-5">
@@ -426,54 +576,35 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   {activeSession.messages.map((msg, i) => {
                     const isUser = msg.role === 'user';
                     return (
-                      <div key={msg.id || i} className="space-y-2">
-                        <div className="flex items-center gap-2 text-xs">
-                          {isUser ? (
-                            <div className={`w-5 h-5 rounded-md ${lensMeta.avatarBg} text-fg-on-emphasis font-bold text-[9px] flex items-center justify-center shrink-0`}>
-                              {lensMeta.avatarText}
-                            </div>
-                          ) : (
-                            <div className="w-5 h-5 rounded-md bg-surface-2 text-fg-editor flex items-center justify-center shrink-0 p-0.5 border border-border-default">
-                              {mode === 'code' ? <OpenAIIcon size={13} /> : <ClaudeIcon size={13} />}
-                            </div>
-                          )}
-                          <span className="font-semibold text-fg-editor">{isUser ? 'You' : msg.author || 'Custos'}</span>
-                          {msg.badge && (
-                            <span className="px-1.5 py-0.2 rounded text-[10px] bg-surface-1 text-fg-muted border border-border-default">
-                              {msg.badge}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="text-[13px] leading-relaxed text-fg-editor space-y-3">
+                      <div
+                        key={msg.id || i}
+                        aria-label={isUser ? "User message" : "Agent message"}
+                        className={isUser ? "conversation-user-message space-y-2 mb-4" : "space-y-2.5 pb-6 border-b border-border-muted/40 last:border-b-0 min-w-0"}
+                      >
+                        {/* Message Content */}
+                        <div className="conversation-markdown text-[13px] leading-relaxed text-fg-editor space-y-3 min-w-0 break-words [overflow-wrap:anywhere]">
                           <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
+                            remarkPlugins={[remarkGfm, remarkMath, remarkNormalizeChatMath]}
+                            rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, strict: false, maxExpand: 1000, maxSize: 20 }]]}
                             components={{
-                              code({ className, children, ...props }) {
-                                const match = /language-(\w+)/.exec(className || '');
-                                if (match) {
-                                  return (
-                                    <div className="my-3 rounded-xl overflow-hidden bg-surface-0 border border-border-default font-mono text-[12px]">
-                                      <div className="px-3 py-1.5 bg-surface-1 text-[10px] text-fg-muted flex items-center gap-2">
-                                        <Terminal className="w-3 h-3" />
-                                        {match[1]}
-                                      </div>
-                                      <pre className="p-3.5 overflow-x-auto text-fg-editor">
-                                        <code>{String(children).replace(/\n$/, '')}</code>
-                                      </pre>
-                                    </div>
-                                  );
+                              pre({ children }) {
+                                const child = React.Children.toArray(children)[0];
+                                if (!React.isValidElement<{ className?: string; children?: React.ReactNode }>(child)) {
+                                  return <pre>{children}</pre>;
                                 }
-                                return (
-                                  <code className="px-1.5 py-0.5 rounded bg-surface-1 text-fg-editor border border-border-muted font-mono text-[12px]" {...props}>
-                                    {children}
-                                  </code>
-                                );
+                                const language = /(?:^|\s)language-([^\s]+)/.exec(child.props.className || '')?.[1];
+                                return <HighlightedCodeBlock code={String(child.props.children ?? '').replace(/\n$/, '')} language={language} />;
+                              },
+                              code({ children, className }) {
+                                return <code className={className || 'px-1.5 py-0.5 rounded bg-surface-1 text-fg-editor border border-border-muted font-mono text-[12px]'}>{children}</code>;
                               }
                             }}
                           >
                             {msg.text}
                           </ReactMarkdown>
+                          {!msg.text && msg.runId && !['completed','failed','cancelled','interrupted'].includes(msg.runStatus || '') && <p role="status" className="text-xs text-fg-muted">{msg.runStatus === 'thinking' ? 'Thinking...' : 'Running...'}</p>}
+                          {msg.liveError && <p role="alert" className="mt-2 text-xs text-amber-400">{msg.liveError}</p>}
+                          {msg.activities?.map((activity, index) => <details key={`${msg.runId}-activity-${index}`} className="mt-2 rounded-lg border border-border-muted bg-surface-1 p-2 text-xs"><summary className="cursor-pointer text-fg-muted">{activity.kind === 'reasoning_summary' ? 'Reasoning summary' : activity.kind === 'tool_input' ? 'Tool input' : 'Tool output'}</summary><pre className="mt-2 whitespace-pre-wrap break-words max-h-60 overflow-auto text-[11px]">{JSON.stringify(activity.payload, null, 2)}</pre></details>)}
                         </div>
                       </div>
                     );
@@ -482,9 +613,20 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
               )}
             </div>
 
+            <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-top ${scrollEdges.top ? 'is-visible' : ''}`} />
+            <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-bottom ${scrollEdges.bottom ? 'is-visible' : ''}`} />
+          </div>
+
             {/* DOCKED CHAT COMPOSER (Natural Flex Child) */}
             <div className="shrink-0 p-4 bg-canvas">
-              <div className="workbench-composer max-w-2xl mx-auto p-3 transition group">
+              <div className="workbench-composer max-w-2xl mx-auto p-3 transition group relative">
+                <SlashCommandMenu
+                  query={inputText}
+                  mode={mode}
+                  isOpen={inputText.startsWith('/') && (!inputText.includes(' ') || inputText.length <= 15)}
+                  onSelectCommand={handleSelectSlashCommand}
+                  onClose={() => {}}
+                />
                 <textarea
                   rows={2}
                   value={inputText}
@@ -494,34 +636,48 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-fg-editor placeholder-fg-subtle text-[13px] resize-none leading-relaxed"
                 />
 
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-border-muted">
+                <div className="flex items-center justify-between mt-2 pt-2">
                   <div className="flex items-center gap-2 text-fg-muted">
                     <button
-                      onClick={() => openResources(false)}
+                      onClick={handleAddNewTab}
                       className="p-1 hover:text-fg-editor transition rounded"
-                      title="Open Resources"
+                      title="Choose a resource"
                     >
                       <Plus className="w-4 h-4" />
                     </button>
                     <span className={`text-[11px] font-mono border border-border-default bg-surface-1 px-2 py-0.5 rounded ${lensMeta.iconColor}`}>
                       {lensMeta.badge}
                     </span>
-                    <ModelSelector
-                      currentModel={activeSession?.model || selectedModel}
-                      onSelectModel={handleSelectModel}
-                    />
+                    {activeSession.nativeHarnessId ? (
+                      <span className="rounded border border-border-default px-2 py-1 text-xs text-fg-editor">
+                        Native · {activeSession.nativeHarnessId}
+                      </span>
+                    ) : (
+                      <ModelSelector
+                        currentModel={activeSession?.model || selectedModel}
+                        onSelectModel={handleSelectModel}
+                      />
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={handleSend}
-                      disabled={!inputText.trim()}
+                      onClick={() => liveMessage?.runId ? void handleStopRun(liveMessage.runId) : handleSend()}
+                      disabled={!liveMessage && !inputText.trim()}
+                      aria-label={liveMessage ? 'Stop response' : 'Send message'}
+                      title={liveMessage ? 'Stop response' : 'Send message'}
                       className={`p-1.5 rounded-lg transition ${
-                        inputText.trim()
-                          ? 'workbench-primary-action'
-                          : 'text-fg-muted bg-surface-2'
+                        liveMessage
+                          ? 'bg-transparent workbench-accent hover:opacity-80'
+                          : inputText.trim()
+                          ? 'bg-transparent workbench-accent hover:opacity-80'
+                          : 'text-fg-muted bg-transparent cursor-not-allowed opacity-60'
                       }`}
                     >
-                      <Send className="w-4 h-4" />
+                      {liveMessage ? (
+                        <StopIcon className="w-4 h-4 fill-current" aria-hidden="true" />
+                      ) : (
+                        <Send className={`w-4 h-4 ${inputText.trim() ? 'fill-current' : ''}`} aria-hidden="true" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -561,57 +717,19 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                 onToggleExpand={onToggleExpandWebTab}
                 mode={mode}
                 splitPercent={splitPercent}
+                onOpenTab={handleOpenTab}
               />
             </div>
           )}
 
-          {/* FLOATING MINI DOCK (Only visible when tab canvas is maximized) */}
+          {/* FLOATING ACTIVITY DOCK (Only visible when tab canvas is maximized) */}
           {isWebTabExpanded && (
-            <div className="absolute z-50 bottom-5 right-5 w-[380px] pointer-events-auto animate-in slide-in-from-bottom-2 duration-150">
-              <div className="bg-surface-1/95 backdrop-blur-xl border border-border-default rounded-2xl p-3 shadow-[0_12px_45px_-10px_rgba(0,0,0,0.85)] focus-within:border-border-emphasis">
-                <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-border-muted text-[11px] text-fg-muted">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full ${lensMeta.activeColor}`} />
-                    <span className="font-medium text-fg-editor">{lensMeta.badge} (Floating)</span>
-                  </div>
-                  <button
-                    onClick={onToggleExpandWebTab}
-                    className="hover:text-fg-editor flex items-center gap-1 text-[10px] bg-surface-2 px-1.5 py-0.5 rounded transition"
-                    title="Restore split layout"
-                  >
-                    <Minimize2 size={11} /> Restore Split
-                  </button>
-                </div>
-
-                <textarea
-                  rows={1}
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={lensMeta.placeholder}
-                  className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-fg-editor placeholder-fg-subtle text-[13px] resize-none"
-                />
-
-                <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-border-muted">
-                  <ModelSelector
-                    currentModel={activeSession?.model || selectedModel}
-                    onSelectModel={handleSelectModel}
-                    compact
-                  />
-                  <button
-                    onClick={handleSend}
-                    disabled={!inputText.trim()}
-                    className={`p-1 rounded-lg transition ${
-                      inputText.trim()
-                        ? `${lensMeta.activeColor} text-fg-on-emphasis hover:opacity-90`
-                        : 'text-fg-muted bg-surface-2'
-                    }`}
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
+            <JobActivityDock
+              onRestoreSplit={onToggleExpandWebTab}
+              onOpenKanban={() => handleOpenTab('kanban')}
+              lensBadge={lensMeta.badge}
+              lensColor={lensMeta.activeColor}
+            />
           )}
         </div>
       </div>

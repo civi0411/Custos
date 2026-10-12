@@ -35,6 +35,9 @@ Workspace có nhiều Task; Task liên kết nhiều session; một session có 
 
 **Session theo từng lens:** Copilot, Coding và Research có danh sách chat và lựa chọn gần nhất riêng. Bấm icon lens khôi phục chat cuối của lens đích; nếu chưa có thì là trạng thái `No conversation`, không tự đem chat từ lens vừa rời đi. `Open full chat in…` gắn cùng session vào danh sách đích và hiển thị mọi turn còn được giữ trong canonical journal. `Continue as linked chat` tạo session mới có lineage và bản hiển thị timeline nguồn; model-visible context vẫn phải qua compiler, privacy và budget với receipt. Không gọi lịch sử hiển thị đầy đủ là inference context đầy đủ. Khi tiếp tục từ Research sang Coding, notebook code/dataset/figure là nguồn và artifact để kiểm, không phải patch repo được áp dụng tự động.
 
+Sidebar của mỗi lens còn có tìm kiếm trên tất cả session thuộc project. Chọn session ngoài lens gọi `OpenLens` rồi chọn cùng session ID trong lens hiện tại; không nhân bản journal và không mặc định chạy agent. Nút `+` mở resource picker nổi trên workspace, giữ tab đang xem cho tới khi người dùng chọn một resource. Danh mục Browser/Remote Fleet hiện phần metadata có thật và trạng thái transport chưa sẵn sàng theo capability registry; không dùng static catalog để tự quảng bá execution.
+Remote Fleet nằm trong resource chung để Coding và Research cùng xem inventory host; daemon phải quảng bá `hosts.ping` hoặc `exec` trước khi UI cho phép probe/chạy lệnh. Browser khởi đầu bằng tab trống, không giả trang mẫu hoặc nhãn sandbox khi chưa có transport và isolation receipt.
+
 ## 3. Luồng và nơi ra quyết định
 
 ```mermaid
@@ -313,7 +316,7 @@ Open lens chỉ đổi view và được phép tức thì. `Add Research/Coding/
 
 **Wide window:** khi không có pane phải, conversation dùng toàn vùng sau sidebar với max readable text width ở giữa, không giữ một cột chat cố định 45%. Khi mở pane, splitter cho hai vùng có min-width; dưới ngưỡng desktop hẹp chỉ một vùng chính cùng tab/drawer để tránh text/code bị ép dưới chiều rộng đọc được. Tab `New tab` không được mang tên một resource đã tồn tại, còn pane rỗng phải cho thấy chọn file/source/diff hoặc đóng pane. Pane layout có thể lưu local theo user/window, nhưng restore không mở process/agent hay đánh thức effect.
 
-**Tab tài nguyên do Studio shell sở hữu:** thứ tự, tab được chọn và thao tác đóng/mở nằm trên ba lens. Đổi lens dùng lại một tab strip, không remount ba tab store độc lập. `New tab` là một resource picker có một identity, không tạo thêm tab trùng ID. Đóng pane không để tab strip mồ côi trên header. Research có Literature, Claims, Experiments và Synthesis; mỗi tab hiện trạng thái chưa kết nối cho tới khi API cung cấp nguồn, claim hoặc run có version. Provenance của artifact nghiên cứu cần nối tới nguồn, code, environment và run khi có dữ liệu; đây là điều học từ [Claude Science](https://www.anthropic.com/news/claude-science-ai-workbench), không phải claim Custos đã có scientific backend.
+**Tab tài nguyên do Studio shell sở hữu theo từng lens/workbench:** thứ tự, tab được chọn và thao tác đóng/mở nằm trên ba lens độc lập (mỗi lens duy trì tab strip riêng biệt: Coding mở Files, Research mở Sources, Copilot mở Notes). Nút `+` mở New Tab nhiều lần như trình duyệt (mỗi tab có instance ID riêng), cho phép mở đồng thời nhiều terminal, files hoặc công cụ. Trang New Tab chỉ hiển thị danh mục hỗ trợ thuộc đúng workbench hiện tại (Coding: Engineering & Shared; Research: Research & Shared; Copilot: Assistant & Shared), kèm category pills và search lọc nhanh, không hiển thị tràn lan toàn bộ công cụ khác workbench. Đóng pane không để tab strip mồ côi trên header. Research có Literature, Claims, Experiments và Synthesis; mỗi tab hiện trạng thái chưa kết nối cho tới khi API cung cấp nguồn, claim hoặc run có version. Provenance của artifact nghiên cứu cần nối tới nguồn, code, environment và run khi có dữ liệu; đây là điều học từ [Claude Science](https://www.anthropic.com/news/claude-science-ai-workbench), không phải claim Custos đã có scientific backend.
 
 ### 11.3. Chi tiết bắt buộc theo lens
 
@@ -517,3 +520,76 @@ Một hành động UI phải có identity và kết quả quan sát được; p
 Trong Research, bôi chọn đoạn ở Reader hoặc câu trả lời chỉ tạo **selection candidate**. `Quote/Ask`, `Create passage anchor`, `Propose claim`, `Save memory` là bốn effect khác nhau: anchor cần source revision và offset/hash thật; claim vừa tạo ở trạng thái chưa đánh giá; memory cần scope/consent; không có thao tác nào tự tạo `SUPPORTS` hoặc `verified_by=deterministic_engine`. [Open Science selection actions](../../../open-science/apps/desktop/src/components/thread/SelectionActions.tsx) hữu ích cho thao tác nhanh nhưng chính nó không cung cấp criterion verification. Một artifact mở cạnh chat phải giữ artifact ID/version, có thể zoom/close mà không chạy lại compute; inspector tách code, inputs, environment, run, review và missing lineage. [Presented artifact pane](../../../open-science/apps/desktop/src/components/session/PresentedArtifactPane.tsx) và [trajectory](../../../open-science/apps/desktop/src/components/thread/TrajectoryPane.tsx) là mẫu UX, không là canonical journal.
 
 `Attention` trên cả ba lens dùng projection duy nhất của pending approvals, uncertain attempts, verifier blockers và worker requests. `Trajectory` dùng persisted events + ephemeral stream có sequence/correlation; thiếu timestamp phải hiện thứ tự sự kiện thay vì giả duration. Research figure/run/card không hiển thị “verified” chỉ vì có hash, exit code hoặc reviewer không báo lỗi. Đổi lens giữ session và selected resource; linked continuation qua model/harness khác luôn có ContextReceipt. Các trạng thái `loading`, `empty`, `error`, `degraded`, `unknown` phải nhìn thấy được trong UI và không fallback sang fixture giả ở production.
+
+### Ollama local connection
+
+The desktop Local tab connects to Ollama through daemon IPC using the existing local provider configuration. Native discovery uses /api/tags and optional /api/show metadata; discovered IDs use ollama/ namespaces. RouterModelProvider strips that namespace and sends bounded non-streaming /api/chat requests without credentials. Legacy generic local OpenAI-compatible endpoints remain supported. Empty discovery is not an OpenAI fallback. Provider saves retain the existing repository/outbox boundary. No new public DTO, schema, dependency or crate is introduced.
+
+Ollama availability is a transient desktop projection, separate from saved configuration. While visible, the desktop probes configured Ollama accounts every 15 seconds and on window focus. Failed probes retain cached model names as disabled offline choices; successful probes restore availability without changing the selected model or automatically resuming a prompt. Offline Ollama requests fail explicitly and never switch to a cloud model. Reconnection is available through the existing model refresh action; no credentials or configuration are deleted.
+
+### Provider usage monitoring
+
+Settings projects durable model-run usage through v1.providers.usage, composed by the daemon using the existing RunPort and task query. Run metadata records selected provider account, requested/actual model and optional provider-reported input/output/total tokens before/after dispatch. ProviderRequest carries an optional selected account ID, so routing resolves that account rather than charging an unrelated service alias. Unknown measurements remain null; no sample usage, synthetic quota, billed-cost claim or new database schema is introduced. ModelResponse extends its existing text contract with optional measured token counts. Quota snapshots are separately fetched on explicit refresh through adapter HTTP transport, with bounded timeouts, per-account errors and freshness. Unsupported APIs remain unavailable; local Ollama quota is not applicable. Historical runs lacking account identity remain unattributed. The desktop Local indicator shows Online/Offline without cache diagnostic prose.
+
+Provider brand icons are compiled locally from @iconify/json through unplugin-icons React components in the existing AgentIcons module. Only imported SVGs enter the desktop bundle; no runtime icon CDN is used. Usage quota windows display remaining percentage (100 minus validated provider used percentage); durable request/token usage remains measured consumption.
+
+Usage & Quotas supports Expanded and Compact presentation modes, stored as a local desktop preference. Compact account panels retain measured token totals and remaining-quota chips while hiding the model table and token breakdown. Each account can be collapsed independently without stopping refresh; remaining quota stays visible, and expanded panels retain reset times and snapshot freshness.
+
+Provider settings present connected identity/OAuth accounts as the sole account list, without a duplicate persisted-daemon provider section. Saved provider configuration remains owned by the daemon and account disconnect still uses the existing IPC path.
+
+### Live conversation execution
+
+Desktop chat opts into background workflow execution; legacy start-run calls remain blocking. Runtime registers the persisted run, ownership and cancellation before returning its handle. ModelProvider streaming and observable native harness events feed a bounded ephemeral run projection; canonical outcomes, journal messages and measured usage retain existing persistence/Outbox ownership. Public reasoning summaries are separate from answer text; unknown progress is never fabricated.
+
+The daemon exposes session/run-scoped SSE with monotonic event IDs, Last-Event-ID replay, 15-second heartbeat, a 1,000-event/2 MiB per-run replay bound, five-minute terminal retention and snapshot recovery for cursor gaps. Slow subscribers cannot block execution. Disconnect does not cancel a run. Snapshot and SSE admission verify the run/session association; origin checks remain enforced. Tauri resolves the profile HTTP endpoint through its thin host.
+
+Events carry session/turn/task/run correlation plus status, text deltas, public reasoning summaries, tool input/output, usage and canonical terminal result. Native observer callbacks are transport-neutral core contracts; adapters alone own incremental network/process reads. Cancellation reaches HTTP streaming receivers and native child processes. Activity payloads are bounded and redact credentials; display events never authorize tools.
+
+Desktop maintains one message per run, batches deltas at 50 ms, reconnects without resubmitting prompts, retains partial text on errors and only follows scrolling when already at the bottom. Terminal snapshots replace provisional output without duplicating journal entries. Restart restores durable results without automatically replaying execution.
+
+Completion events retain optional actual model and legacy token estimates separately from measured input/output usage.
+
+`v1.workflow.session_runs` discovers durable run identities and journal timestamps by session metadata through existing task/run ports. Desktop reconnects these runs after hydration; restart projections report interrupted and never execute again.
+
+Native Agents workbench starts a session-bound background run through AppContext, projects that run into chat, and consumes the same SSE contract in its inspector.
+
+Terminal run metadata retains the canonical journal timestamp so hydration can restore run status onto the existing assistant entry without adding another message or changing the database schema.
+
+Native conversations retain harness/workspace identity from existing Task metadata. Follow-up prompts create new session-bound native runs in that workspace; no hidden native-agent session is resumed. The chat composer identifies the native harness instead of showing a cloud-model selector.
+
+The live API uses the existing RPC envelope:
+
+| Operation | Contract |
+|---|---|
+| `v1.workflow.start_run` | `background: true` returns a registered run handle; omitted/false preserves blocking behavior. |
+| `v1.workflow.live_run` | Requires `session_id`, `run_id`, and a cursor; returns replay events and a canonical snapshot, with `gap` for an unavailable cursor. |
+| `v1.workflow.session_runs` | Returns session-scoped durable run identities, status, model/harness and optional canonical journal timestamp for hydration. |
+| `GET /api/events` | Requires `session_id` and `run_id`; accepts `cursor` or `Last-Event-ID`. Invalid session/run association returns HTTP 403. |
+
+SSE `run` payloads contain `id`, `session_id`, `turn_id`, `task_id`, `run_id`, `kind` and `payload`. SSE `snapshot` payloads contain the full current projection and cursor. `status` carries queued/running/thinking/tool-running or a terminal state; `text_delta` carries text; `reasoning_summary` carries public summary text; `tool_input`/`tool_output` carry redacted bounded activity; `usage` carries known measurements; `result` carries canonical status/text/error. Unavailable usage remains null. Activity is capped at 100 entries and 16 KiB per entry with explicit truncation markers. Upstream idle reads time out after 45 seconds; socket writes time out after five seconds. Native transport preserves the harness's configured execution timeout.
+
+SessionManager exposes an assistant-entry append variant returning the exact persisted journal entry; the existing void append contract remains compatible. Runtime uses that returned timestamp for run/journal correlation instead of reading the latest shared journal entry after an await.
+
+Opaque partial tool-argument fragments are omitted from the public activity projection; JSON-encoded tool payloads are decoded for recursive credential redaction before rendering. Display events remain non-authoritative.
+
+Chat fenced code is rendered locally with highlight.js in the desktop projection. Explicit language fences use registered grammars; unlabelled fences use bounded automatic detection. Unknown languages remain escaped plain text. Inline code retains its compact style; highlighting is derived from each streamed message without changing persistence or execution contracts.
+
+Conversation scroll edges use non-interactive, theme-aware backdrop blur overlays only where content extends beyond the viewport. AppWorkspaceShell tracks scroll bounds and observes content/viewport resizing; this is presentation-only and preserves chat follow-bottom behavior.
+
+Conversation user messages align right inside a softly contrasted theme-aware container; assistant responses retain their existing content layout. Neither role displays an avatar or author label. Live status, Stop and activity controls remain available. Worktree navigation uses the build-time Iconify codicon/worktree glyph consistently, without new dependencies or execution contracts.
+
+Desktop interface scale uses the current Tauri WebView zoom, with persisted discrete 70–160 percent levels in steps of ten. Browser preview uses document zoom with compensated root viewport dimensions. The main-window capability admits only the existing WebView zoom operation. Conversation composer replaces Send with an accessible Stop icon while a live run exists; message status badges are omitted while errors and activity remain visible.
+
+Conversation Markdown supports inline and display LaTeX through remark-math and rehype-katex, with bundled local KaTeX fonts/styles and trust disabled. A presentation-only math-node normalization handles double-dollar display delimiters and escaped subscript markers emitted by models; text macros and ordinary code/text remain unchanged. Invalid or partial streamed formulas fall back to visible source.
+
+Provider quota windows retain optional model group and explicit five-hour/weekly/other period metadata. Antigravity probes retrieveUserQuotaSummary first and keeps its independent Gemini and Claude/GPT buckets; existing quota/model-catalog probes remain fallbacks. Desktop presents two standard remaining-limit rows per group, marks absent windows as not reported and preserves unclassified provider windows separately. Local inference and GitHub Copilot keep their native quota formats. No weekly consumption is inferred from reset timestamps, model snapshots or Custos usage.
+
+Unattributed usage is presented as Historical usage with its per-model table; it has no account-level token summary or quota panel. The model table remains available in compact view.
+
+Desktop form controls share theme-aware dropdown surfaces, selected/focus states and accent-filled slider tracks. Existing CustomSelect retains its options contract and supports keyboard navigation; native range inputs retain browser keyboard behavior and explicit accessible labels. Control styling does not change provider or execution contracts.
+
+Application single-choice selects use the shared neutral dropdown projection instead of OS-specific popup surfaces. A NativeSelect presentation adapter retains native options, value and change-event behavior via a hidden select; disabled options remain unavailable. Dropdown selection uses neutral contrast without accent glow, while keyboard focus remains visible. No provider/runtime contract changes.
+
+Conversation presentation omits message author/avatar headers and all message badges. The composer uses a transparent Send button with an accent-filled icon when the draft contains non-whitespace text; an accessible filled Stop icon occupies the same button while a response is active. Errors and activity details remain visible.
+
+Desktop toast feedback is reserved for actionable failures, unavailable operations and meaningful asynchronous results. Workbench navigation, model selection, prompt dispatch and immediate appearance changes remain quiet because their state is already visible. Unimplemented history/filter controls are disabled instead of emitting placeholder notifications.

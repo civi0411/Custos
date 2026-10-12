@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   FolderTree,
@@ -15,10 +16,22 @@ import {
   ChevronDown,
   GitBranch,
   Lock,
+  BookOpen,
+  Sparkles,
+  Copy,
 } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
+import { JobActionButton } from '@/components/common';
 import { ExecutionWorkspace, WorkspaceFileEntry, WorkspaceFileContent } from '@/types/domain';
 import { formatKeyCombo } from '@/lib/utils';
+
+import type { OrcaTabId } from '@/components/views/OrcaTabbedContainer';
+
+export interface FilesWorkbenchPaneProps {
+  sessionId?: string;
+  onShowToast?: (msg: string) => void;
+  onOpenTab?: (id: OrcaTabId) => void;
+}
 
 function getFileIcon(name: string) {
   const ext = name.split('.').pop()?.toLowerCase();
@@ -88,7 +101,19 @@ function buildFileTree(entries: WorkspaceFileEntry[]): TreeNode {
   return root;
 }
 
-export const FilesWorkbenchPane: React.FC = () => {
+interface ContextMenuState {
+  x: number;
+  y: number;
+  path: string;
+  name: string;
+  isDir: boolean;
+}
+
+export const FilesWorkbenchPane: React.FC<FilesWorkbenchPaneProps> = ({
+  sessionId,
+  onShowToast,
+  onOpenTab,
+}) => {
   const [workspaces, setWorkspaces] = useState<ExecutionWorkspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('');
   const [loadingWorkspaces, setLoadingWorkspaces] = useState<boolean>(true);
@@ -98,6 +123,15 @@ export const FilesWorkbenchPane: React.FC = () => {
   const [loadingTree, setLoadingTree] = useState<boolean>(false);
   const [searchFilter, setSearchFilter] = useState<string>('');
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
+
+  // Context menu state for tree items
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+
+  useEffect(() => {
+    const handleCloseMenu = () => setContextMenu(null);
+    window.addEventListener('click', handleCloseMenu);
+    return () => window.removeEventListener('click', handleCloseMenu);
+  }, []);
 
   // Active file editor state
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null);
@@ -255,6 +289,18 @@ export const FilesWorkbenchPane: React.FC = () => {
         <div key={node.path} className="select-none">
           <div
             onClick={() => toggleDir(node.path)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setContextMenu({
+                x: Math.min(e.clientX, window.innerWidth - 220),
+                y: Math.min(e.clientY, window.innerHeight - 200),
+                path: node.path,
+                name: node.name,
+                isDir: true,
+              });
+            }}
+            title="Right-click for AI actions (Explain / Refactor)"
             style={{ paddingLeft: `${depth * 12 + 8}px` }}
             className="flex items-center gap-1.5 py-1 pr-2 hover:bg-[var(--color-surface-2)] cursor-pointer rounded text-[11px] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] transition"
           >
@@ -285,6 +331,18 @@ export const FilesWorkbenchPane: React.FC = () => {
       <div
         key={node.path}
         onClick={() => openFile(node.path)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setContextMenu({
+            x: Math.min(e.clientX, window.innerWidth - 220),
+            y: Math.min(e.clientY, window.innerHeight - 200),
+            path: node.path,
+            name: node.name,
+            isDir: false,
+          });
+        }}
+        title="Right-click for AI actions (Explain / Refactor)"
         style={{ paddingLeft: `${depth * 12 + 18}px` }}
         className={`flex items-center gap-1.5 py-1 pr-2 cursor-pointer rounded text-[11px] transition select-none ${
           isSelected
@@ -320,7 +378,7 @@ export const FilesWorkbenchPane: React.FC = () => {
           {/* Workspace dropdown */}
           <div className="flex items-center gap-2">
             <label className="text-[11px] text-[var(--color-fg-subtle)]">Workspace:</label>
-            <select
+            <NativeSelect
               value={selectedWorkspaceId}
               onChange={(e) => setSelectedWorkspaceId(e.target.value)}
               disabled={loadingWorkspaces}
@@ -331,7 +389,7 @@ export const FilesWorkbenchPane: React.FC = () => {
                   {ws.name} ({ws.kind.type === 'git' ? 'Git' : 'Folder'})
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           </div>
 
           {activeWorkspace && (
@@ -369,6 +427,26 @@ export const FilesWorkbenchPane: React.FC = () => {
             <RefreshCw className={`h-3 w-3 ${loadingTree ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
           </button>
+          <JobActionButton
+            jobId="engineering__repo_explain"
+            label="Explain Repo"
+            icon={BookOpen}
+            getInputs={() => {
+              if (!selectedWorkspaceId) return null;
+              return {
+                scope: '.',
+                query: 'Explain repository architecture, core modules, entrypoints, and dependencies',
+              };
+            }}
+            sessionId={sessionId}
+            workspaceId={selectedWorkspaceId}
+            sourceTabId="files"
+            onNavigate={onOpenTab}
+            notReadyTooltip="Select a workspace to explain repository"
+            readyTooltip="Analyze repository architecture, symbols, and dependencies"
+            onShowToast={onShowToast}
+            variant="toolbar"
+          />
         </div>
       </div>
 
@@ -433,6 +511,40 @@ export const FilesWorkbenchPane: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <JobActionButton
+                    jobId="engineering__repo_explain"
+                    label="Explain"
+                    icon={BookOpen}
+                    getInputs={() => activeFilePath ? {
+                      scope: activeFilePath,
+                      query: `Explain symbols, functions, and architecture of ${activeFilePath}`,
+                    } : null}
+                    sessionId={sessionId}
+                    workspaceId={selectedWorkspaceId}
+                    sourceTabId="files"
+                    onNavigate={onOpenTab}
+                    notReadyTooltip="Open a file to explain"
+                    readyTooltip={`Explain ${activeFilePath}`}
+                    onShowToast={onShowToast}
+                    variant="toolbar"
+                  />
+                  <JobActionButton
+                    jobId="engineering__refactor"
+                    label="Refactor"
+                    icon={Sparkles}
+                    getInputs={() => activeFilePath ? {
+                      scope: activeFilePath,
+                      invariants: 'Preserve function signatures and behavioral parity',
+                    } : null}
+                    sessionId={sessionId}
+                    workspaceId={selectedWorkspaceId}
+                    sourceTabId="files"
+                    onNavigate={onOpenTab}
+                    notReadyTooltip="Open a file to refactor"
+                    readyTooltip={`Refactor ${activeFilePath} preserving behavioral invariants`}
+                    onShowToast={onShowToast}
+                    variant="toolbar"
+                  />
                   <button
                     onClick={handleSaveFile}
                     disabled={savingFile || !isDirty}
@@ -489,6 +601,64 @@ export const FilesWorkbenchPane: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Context Menu for File Tree Nodes */}
+      {contextMenu && (
+        <div
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+          className="fixed z-50 min-w-[210px] rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] p-1.5 shadow-2xl backdrop-blur-md text-xs select-none"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-2.5 py-1 text-[10px] font-mono font-medium text-[var(--color-fg-subtle)] border-b border-[var(--color-border-subtle)]/60 mb-1 truncate">
+            {contextMenu.path}
+          </div>
+          <JobActionButton
+            jobId="engineering__repo_explain"
+            label={`Explain ${contextMenu.isDir ? 'Directory' : 'File'}`}
+            icon={BookOpen}
+            getInputs={() => ({
+              scope: contextMenu.path,
+              query: `Explain architectural role, dependencies, and implementation of ${contextMenu.path}`,
+            })}
+            sessionId={sessionId}
+            workspaceId={selectedWorkspaceId}
+            sourceTabId="files"
+            onNavigate={onOpenTab}
+            onShowToast={onShowToast}
+            variant="context-menu"
+            onSuccess={() => setContextMenu(null)}
+          />
+          <JobActionButton
+            jobId="engineering__refactor"
+            label={`Refactor ${contextMenu.isDir ? 'Scope' : 'File'}`}
+            icon={Sparkles}
+            getInputs={() => ({
+              scope: contextMenu.path,
+              invariants: 'Preserve API signatures, contracts, and tests parity',
+            })}
+            sessionId={sessionId}
+            workspaceId={selectedWorkspaceId}
+            sourceTabId="files"
+            onNavigate={onOpenTab}
+            onShowToast={onShowToast}
+            variant="context-menu"
+            onSuccess={() => setContextMenu(null)}
+          />
+          <div className="my-1 border-t border-[var(--color-border-subtle)]/60" />
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(contextMenu.path);
+              onShowToast?.(`Copied relative path: ${contextMenu.path}`);
+              setContextMenu(null);
+            }}
+            className="w-full flex items-center gap-1.5 px-3 py-1.5 text-xs text-left rounded text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-editor-fg)] transition"
+          >
+            <Copy className="h-3.5 w-3.5" />
+            <span>Copy Relative Path</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,6 +1,9 @@
 use crate::journal::SessionJournal;
 use custos_core::{SessionStateMachine, SessionStore};
-use custos_domain::{DomainError, Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus, TaskId, WorkbenchLens};
+use custos_domain::{
+    DomainError, Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus, TaskId,
+    WorkbenchLens,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -159,6 +162,11 @@ impl SessionManager {
         id: &SessionId,
         message: &str,
     ) -> Result<(), DomainError> {
+        self.append_assistant_entry(id,message).await.map(|_|())
+    }
+
+    /// Append an assistant response and return its exact persisted identity.
+    pub async fn append_assistant_entry(&self,id:&SessionId,message:&str)->Result<SessionJournalEntry,DomainError> {
         self.ensure_session_loaded(id).await?;
 
         let entry = {
@@ -181,7 +189,7 @@ impl SessionManager {
             store.append_journal(&entry).await?;
         }
 
-        Ok(())
+        Ok(entry)
     }
 
     /// Persist that a canonical conversation is visible in an additional lens.
@@ -202,9 +210,11 @@ impl SessionManager {
             kind: "Session".into(),
             id: id.to_string(),
         })?;
-        if journal.entries.iter().any(|entry| {
-            entry.entry_type == "workbench_opened" && entry.entry_data == lens_value
-        }) {
+        if journal
+            .entries
+            .iter()
+            .any(|entry| entry.entry_type == "workbench_opened" && entry.entry_data == lens_value)
+        {
             return Ok(());
         }
         let entry = SessionJournalEntry {

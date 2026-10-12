@@ -1,3 +1,5 @@
+import { isTauri } from '@tauri-apps/api/core';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import {
   MainTab,
@@ -6,7 +8,6 @@ import {
   ClientApiKey,
   Session,
   ModelCombo,
-  UsageRecord,
   ConnectedAccount,
   ProviderServiceId,
 } from '../types';
@@ -52,8 +53,6 @@ interface AppContextType {
   handleCreateCombo: (combo: Omit<ModelCombo, 'id' | 'createdAt'>) => void;
   handleUpdateCombo: (id: string, updates: Partial<ModelCombo>) => void;
   handleDeleteCombo: (id: string) => void;
-  usageRecords: UsageRecord[];
-  handleResetUsage: () => void;
   connectedAccounts: ConnectedAccount[];
   refreshModels: () => Promise<void>;
   setConnectedAccounts: React.Dispatch<React.SetStateAction<ConnectedAccount[]>>;
@@ -85,6 +84,8 @@ interface AppContextType {
   handleSelectModel: (model: string) => void;
 
   // Actions
+  startNativeConversation: (instruction: string, harness: string, workspace: string) => Promise<{ run: import('../types/domain').RunHandle; sessionId: string }>;
+  handleStopRun: (runId: string) => Promise<void>;
   handleSendMessage: (text: string, lens?: 'assistant' | 'coding' | 'research') => Promise<void>;
   handleClearHistory: () => void;
   handleDeleteConversation: (sessionId: string) => Promise<void>;
@@ -96,7 +97,7 @@ interface AppContextType {
   handleSaveProvider: (
     serviceOrParams: string | { service: string; apiKey?: string; endpointUrl?: string; model?: string; contextWindow?: number; fastMode?: boolean },
     apiKey?: string
-  ) => Promise<void> | void;
+  ) => Promise<void>;
   handleDeleteProvider: (id: string) => Promise<void> | void;
   handleTestConnection: (providerNameOrId: string) => Promise<void> | void;
   handleGenerateClientKey: () => Promise<void> | void;
@@ -293,85 +294,6 @@ const DEFAULT_COMBOS: ModelCombo[] = [
   },
 ];
 
-const DEFAULT_USAGE_RECORDS: UsageRecord[] = [
-  {
-    id: 'usage-1',
-    modelId: 'claude-3-7-sonnet',
-    modelName: 'Claude 3.7 Sonnet',
-    providerId: 'anthropic',
-    providerName: 'Anthropic',
-    accountName: 'Production Org',
-    inputTokens: 142500,
-    outputTokens: 38200,
-    totalTokens: 180700,
-    estimatedCostUsd: 1.02,
-    requestCount: 48,
-    quotaLimitTokens: 1000000,
-    quotaUsedTokens: 180700,
-    quotaPercent: 18,
-    rateLimitStatus: 'normal',
-    resetPeriod: 'Resets daily at 00:00 UTC',
-    lastUsedAt: 'Just now',
-  },
-  {
-    id: 'usage-2',
-    modelId: 'gpt-4o',
-    modelName: 'GPT-4o',
-    providerId: 'openai',
-    providerName: 'OpenAI',
-    accountName: 'Personal Key',
-    inputTokens: 215400,
-    outputTokens: 41600,
-    totalTokens: 257000,
-    estimatedCostUsd: 0.95,
-    requestCount: 62,
-    quotaLimitTokens: 500000,
-    quotaUsedTokens: 257000,
-    quotaPercent: 51,
-    rateLimitStatus: 'normal',
-    resetPeriod: 'Resets daily at 00:00 UTC',
-    lastUsedAt: '12m ago',
-  },
-  {
-    id: 'usage-3',
-    modelId: 'gemini-2.5-flash',
-    modelName: 'Gemini 2.5 Flash',
-    providerId: 'gemini',
-    providerName: 'Google Gemini',
-    accountName: 'Free Tier OAuth',
-    inputTokens: 820000,
-    outputTokens: 120000,
-    totalTokens: 940000,
-    estimatedCostUsd: 0.14,
-    requestCount: 155,
-    quotaLimitTokens: 1000000,
-    quotaUsedTokens: 940000,
-    quotaPercent: 94,
-    rateLimitStatus: 'throttled',
-    resetPeriod: 'Resets daily at 00:00 UTC',
-    lastUsedAt: '4m ago',
-  },
-  {
-    id: 'usage-4',
-    modelId: 'deepseek-chat',
-    modelName: 'DeepSeek Chat',
-    providerId: 'deepseek',
-    providerName: 'DeepSeek',
-    accountName: 'DeepSeek Dev',
-    inputTokens: 64000,
-    outputTokens: 18000,
-    totalTokens: 82000,
-    estimatedCostUsd: 0.03,
-    requestCount: 19,
-    quotaLimitTokens: 10000000,
-    quotaUsedTokens: 82000,
-    quotaPercent: 1,
-    rateLimitStatus: 'normal',
-    resetPeriod: 'Prepaid Balance',
-    lastUsedAt: '2h ago',
-  },
-];
-
 const AppContext = createContext<AppContextType | null>(null);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -424,23 +346,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [connectedAccounts]);
 
-  const [usageRecords, setUsageRecords] = useState<UsageRecord[]>(() => {
-    try {
-      const saved = localStorage.getItem('custos_usage_records');
-      return saved ? JSON.parse(saved) : DEFAULT_USAGE_RECORDS;
-    } catch {
-      return DEFAULT_USAGE_RECORDS;
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('custos_usage_records', JSON.stringify(usageRecords));
-    } catch (e) {
-      console.warn('Failed to save usage records to localStorage', e);
-    }
-  }, [usageRecords]);
-
   // Modals state
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [settingsTab, setSettingsTab] = useState<string>('general');
@@ -455,7 +360,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // UI Scale state
   const [uiScale, setUiScale] = useState<number>(() => {
     const saved = localStorage.getItem('custos_ui_scale');
-    return saved ? parseInt(saved, 10) : 100;
+    const value = Number(saved || 100);
+    return Math.min(160, Math.max(70, Math.round((Number.isFinite(value) ? value : 100) / 10) * 10));
   });
 
   // Toast state
@@ -470,19 +376,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 2500);
   }, []);
 
-  // UI Scale applicator - zoom the entire document root so the full screen/window scales uniformly
+  const zoomQueue = useRef<Promise<void>>(Promise.resolve());
   const applyUiScale = useCallback((scaleVal: number) => {
-    const rounded = Math.round(scaleVal / 10) * 10;
-    const clamped = Math.min(150, Math.max(70, rounded));
+    const rounded = Math.round((Number.isFinite(scaleVal) ? scaleVal : 100) / 10) * 10;
+    const clamped = Math.min(160, Math.max(70, rounded));
     setUiScale(clamped);
     localStorage.setItem('custos_ui_scale', clamped.toString());
-    document.documentElement.style.zoom = `${clamped / 100}`;
-    document.body.style.zoom = '';
   }, []);
+
+  useEffect(() => {
+    const factor = uiScale / 100;
+    document.documentElement.style.zoom = '';
+    document.body.style.zoom = '';
+    document.documentElement.style.setProperty('--app-browser-zoom', '1');
+    if (isTauri()) {
+      // Serialize native zoom changes so rapid clicks settle at the latest level.
+      zoomQueue.current = zoomQueue.current.then(() => getCurrentWebview().setZoom(factor)).catch(error => {
+        showToast(`Unable to zoom app: ${String(error)}`);
+      });
+    } else {
+      document.documentElement.style.zoom = String(factor);
+      document.documentElement.style.setProperty('--app-browser-zoom', String(factor));
+    }
+  }, [uiScale, showToast]);
 
   const handleSetUiScale = (val: number) => {
     applyUiScale(val);
-    showToast(`UI Scale: ${val}%`);
   };
 
   const handleStepUiScale = (delta: number) => {
@@ -565,7 +484,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           try {
             const probed = await daemonClient.probeModels(
               endpointUrl,
-              provider.service_type || serviceId,
+              serviceId === 'local' && provider.default_model?.startsWith('ollama/') ? 'ollama' : provider.service_type || serviceId,
               undefined,
               provider.id
             );
@@ -607,14 +526,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return null;
         }
 
-        const defaultModel =
-          provider.default_model && supportedModels.includes(provider.default_model)
-            ? provider.default_model
-            : supportedModels[0] || '';
+        const savedDefault = serviceId === 'local' && provider.default_model && !provider.default_model.startsWith('ollama/') && supportedModels.includes(`ollama/${provider.default_model}`)
+          ? `ollama/${provider.default_model}` : provider.default_model;
+        const defaultModel = savedDefault && supportedModels.includes(savedDefault)
+          ? savedDefault : supportedModels[0] || '';
         const contextWindow =
           catalogModels.find((model) => model.id === defaultModel)?.context_window ||
           provider.context_window ||
           catalogModels[0]?.context_window;
+        const available = connected && !(serviceId === 'local' && catalogSource !== 'live');
         const authType = tokenLooksOauth(tokenMeta)
           ? 'oauth'
           : 'api_key';
@@ -630,9 +550,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           oauthEmail: authType === 'oauth' && provider.name.includes('@') ? provider.name : undefined,
           oauthTier: authType === 'oauth' ? (serviceId === 'copilot' ? 'Connected via Device Flow' : 'Connected via PKCE') : undefined,
           oauthExpiresAt: tokenMeta?.expires_at ? safeIsoFromMillis(tokenMeta.expires_at) : undefined,
-          status: connected ? 'active' : 'offline',
-          statusLabel: connected ? 'Connected' : 'Offline',
-          badgeColor: connected ? '#10b981' : '#6b7280',
+          status: available ? 'active' : 'offline',
+          statusLabel: available ? 'Connected' : 'Ollama offline — start Ollama and retry',
+          badgeColor: available ? '#10b981' : '#6b7280',
           defaultModel,
           supportedModels,
           catalogModels, catalogSource, catalogError, catalogFetchedAt,
@@ -658,7 +578,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setSelectedModel((previous) => {
       const current = previous || localStorage.getItem('custos_selected_model') || '';
-      if (current && liveModelIds.has(current.toLowerCase())) {
+      if (current.startsWith('ollama/') || (current && liveModelIds.has(current.toLowerCase()))) {
         return current;
       }
       localStorage.setItem('custos_selected_model', fallbackModel);
@@ -667,6 +587,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     return { providers: providerRecords, keys: fetchedKeys, accounts: liveAccounts };
   }, []);
+
+  // Availability does not mutate saved configuration or switch the chosen model.
+  useEffect(() => {
+    const accounts = connectedAccounts.filter(a => a.providerId === 'local' && a.endpointUrl && (a.endpointUrl?.includes(':11434') || a.defaultModel?.startsWith('ollama/') || a.supportedModels.some(m => m.startsWith('ollama/'))));
+    if (!accounts.length) return;
+    let cancelled = false;
+    let probing = false;
+    const check = async () => {
+      if (probing || document.hidden) return;
+      probing = true;
+      try {
+        await Promise.all(accounts.map(async account => {
+          let updates: Partial<ConnectedAccount>;
+          try {
+            const result = await daemonClient.probeModels(account.endpointUrl!, 'ollama');
+            updates = {
+              status: 'active', statusLabel: 'Connected', badgeColor: '#10b981', catalogSource: 'live', catalogError: undefined, catalogFetchedAt: Date.now(),
+              supportedModels: result.models.map(m => m.id),
+              catalogModels: result.models.map((m, i) => ({ id: m.id, label: m.name || m.id, provider_type: 'local', is_default: i === 0, efforts: [], supports_fast_mode: false, context_window: m.context_window })),
+            };
+          } catch {
+            updates = { status: 'offline', statusLabel: 'Ollama offline', badgeColor: '#6b7280', catalogSource: account.catalogModels?.length ? 'cached' : 'unavailable', catalogError: 'Ollama is unavailable. Start Ollama, then retry. The selected model has not changed.' };
+          }
+          if (!cancelled) setConnectedAccounts(previous => previous.map(a => a.id === account.id && a.endpointUrl === account.endpointUrl ? { ...a, ...updates } : a));
+        }));
+      } finally { probing = false; }
+    };
+    const timer = window.setInterval(() => { void check(); }, 15000);
+    const onVisible = () => { if (!document.hidden) void check(); };
+    window.addEventListener('focus', onVisible);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', onVisible); document.removeEventListener('visibilitychange', onVisible); };
+  }, [connectedAccounts]);
 
   const handleSelectModel = useCallback((modelName: string) => {
     setSelectedModel(modelName);
@@ -689,7 +642,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
       });
     }
-    showToast(modelName ? `Active Model: ${modelName}` : 'No model selected');
   }, [activeSessionId, currentProject, showToast]);
 
   // Synchronize activeSession model only when it still belongs to a live account catalog.
@@ -761,6 +713,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             return {
               id: sessionId,
+              nativeHarnessId: t?.metadata?.kind === 'native_coding_agent' ? t.metadata.harness_id : undefined,
+              workspaceId: t?.metadata?.workspace_id,
               openedLenses: Array.from(new Set(journalList
                 .filter((entry) => entry.entry_type === 'workbench_opened')
                 .map((entry) => entry.entry_data)
@@ -770,11 +724,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               source: 'daemon',
               taskStatus: t ? String(t.status) : undefined,
               sessionId,
-              pack: t?.contract?.pack_id || t?.contract?.pack || 'assistant',
+              pack: t?.metadata?.kind === 'native_coding_agent' ? 'engineering' : t?.contract?.pack_id || t?.contract?.pack || 'assistant',
               title: t?.title || domainSession.title || domainSession.current_goal || `Conversation ${sessionId.slice(0, 8)}`,
               time: 'Live',
               preview: t ? `Status: ${t.status} | Contract: ${t.contract?.pack_id || 'general'}` : 'Unbound conversation',
-              model: (t?.contract as any)?.model || selectedModel || '',
+              model: t?.metadata?.kind === 'native_coding_agent' ? t.metadata.harness_id : (t?.contract as any)?.model || selectedModel || '',
               fileName: '',
               diffHunk: '',
               diffLinesCount: '',
@@ -790,6 +744,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   j.entry_type === 'user_message';
                 return {
                   id: j.id || String(j.entry_id || `${sessionId}-${j.occurred_at}`),
+                  recordedAt: j.occurred_at,
                   role: isUser ? 'user' : 'assistant',
                   author: isUser ? 'You' : (j.author || 'Custos Kernel'),
                   badge: j.badge,
@@ -806,6 +761,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...prev,
             'Custos Workspace': projectedSessions,
           }));
+
+          for (const chat of projectedSessions) {
+            const runs = await daemonClient.listSessionRuns(chat.sessionId || chat.id).catch(() => []);
+            for (const run of runs) {
+              if (run.journal_occurred_at) {
+                setProjectData(previous => ({...previous, 'Custos Workspace': (previous['Custos Workspace'] || []).map(item => item.id !== chat.id ? item : {...item, messages: item.messages.map(message => message.recordedAt === run.journal_occurred_at ? {...message, runId: run.run_id, runStatus: run.status, badge: run.status, author: run.model || message.author} : message)})}));
+              }
+              followLiveRun('Custos Workspace', chat.id, chat.sessionId || chat.id, run.run_id, run.model || 'Custos');
+            }
+          }
 
           setCurrentProject('Custos Workspace');
           setActiveSessionId((previous) => projectedSessions.some((session) => session.id === previous)
@@ -860,8 +825,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [uiScale]);
 
   // Actions
+  const pendingTurns = useRef(new Set<string>());
+  const liveConnections = useRef(new Map<string, AbortController>());
+  useEffect(() => () => { liveConnections.current.forEach(controller => controller.abort()); liveConnections.current.clear(); }, []);
+  const handleStopRun = async (runId: string) => {
+    try { await daemonClient.cancelRun({ run_id: runId, reason: 'Stopped from chat' }); }
+    catch (error) { showToast(error instanceof Error ? error.message : String(error)); }
+  };
+  const followLiveRun = (project: string, conversation: string, session: string, run: string, author: string) => {
+    if (liveConnections.current.has(run)) return;
+    const controller = new AbortController(); liveConnections.current.set(run, controller);
+    let timer: number | undefined;
+    let latest: import('../types/domain').LiveRunSnapshot | null = null;
+    const flush = () => {
+      timer = undefined;
+      const snapshot = latest; if (!snapshot) return;
+      setProjectData(previous => ({ ...previous, [project]: (previous[project] || []).map(chat => chat.id !== conversation ? chat : {
+        ...chat, messages: chat.messages.some(message => message.runId === run)
+          ? chat.messages.map(message => message.runId !== run ? message : { ...message, text: snapshot.text, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined })
+          : [...chat.messages, { id: `live-${run}`, role: 'assistant' as const, author, text: snapshot.text, runId: run, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined }],
+      }) }));
+    };
+    void daemonClient.watchRun(session, run, snapshot => {
+      latest = snapshot;
+      if (['completed', 'failed', 'cancelled', 'interrupted'].includes(snapshot.status)) { if (timer !== undefined) window.clearTimeout(timer); flush(); }
+      else if (timer === undefined) timer = window.setTimeout(flush, 50);
+    }, controller.signal).finally(() => { if (timer !== undefined) window.clearTimeout(timer); if (!controller.signal.aborted) flush(); liveConnections.current.delete(run); });
+  };
+
+  const startNativeConversation = async (instruction: string, harness: string, workspace: string) => {
+    const session = await daemonClient.createSession('assisted');
+    const task = await daemonClient.createTask({ title: instruction.slice(0, 120), metadata: { kind: 'native_coding_agent', pack_id: 'engineering', harness_id: harness, workspace_id: workspace, conversation_session_id: session.id } });
+    await daemonClient.attachSession({ session_id: session.id, task_id: task.id });
+    await daemonClient.appendSessionMessage(session.id, 'user', instruction);
+    const project = 'Custos Workspace';
+    const chat: Session = { nativeHarnessId: harness, workspaceId: workspace, id: session.id, sessionId: session.id, taskId: task.id, source: 'daemon', title: instruction.slice(0, 80), time: 'Live', preview: harness, model: harness, pack: 'engineering', fileName: '', diffHunk: '', diffLinesCount: '', summary: '', diffCode: [], messages: [{ role: 'user', author: 'You', text: instruction }] };
+    setProjectData(previous => ({ ...previous, [project]: [...(previous[project] || []), chat] }));
+    const run = await daemonClient.startRun({ background: true, task_id: task.id, session_id: session.id, turn_id: `turn_${crypto.randomUUID()}`, preferred_mode: 'native', harness_id: harness, workspace_id: workspace, prompt: instruction });
+    setCurrentProject(project); setActiveSessionId(session.id);
+    followLiveRun(project, session.id, session.id, run.run_id, harness);
+    return { run, sessionId: session.id };
+  };
+
   const handleSendMessage = async (text: string, lens?: 'assistant' | 'coding' | 'research') => {
     if (!activeSession) return;
+    if (activeSession.messages.some(message => message.runId && !['completed','failed','cancelled','interrupted'].includes(message.runStatus || ''))) { showToast('Stop or wait for the current run before sending another prompt.'); return; }
+    if (pendingTurns.current.has(activeSession.id)) return;
+    pendingTurns.current.add(activeSession.id);
     const userMsg = {
       role: 'user' as const,
       author: 'You',
@@ -912,6 +922,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     try {
+      if (activeSession.nativeHarnessId && activeSession.workspaceId && activeSession.sessionId) {
+        const harness = activeSession.nativeHarnessId;
+        const task = await daemonClient.createTask({ title: text.slice(0, 120), metadata: { kind: 'native_coding_agent', pack_id: 'engineering', harness_id: harness, workspace_id: activeSession.workspaceId, conversation_session_id: activeSession.sessionId } });
+        await daemonClient.appendSessionMessage(activeSession.sessionId, 'user', text);
+        const run = await daemonClient.startRun({ background: true, task_id: task.id, session_id: activeSession.sessionId, turn_id: `turn_${crypto.randomUUID()}`, preferred_mode: 'native', harness_id: harness, workspace_id: activeSession.workspaceId, prompt: text });
+        setProjectData(previous => ({ ...previous, [currentProject]: (previous[currentProject] || []).map(chat => chat.id !== activeSession.id ? chat : { ...chat, messages: [...chat.messages, { id: `live-${run.run_id}`, role: 'assistant' as const, author: harness, runId: run.run_id, runStatus: 'queued', badge: 'queued', text: '' }] }) }));
+        followLiveRun(currentProject, activeSession.id, activeSession.sessionId, run.run_id, harness);
+        return;
+      }
       const chosenModel = (selectedModel || activeSession.model || '').trim();
       const selectedCombo = combos.find((combo) => combo.id.toLowerCase() === chosenModel.toLowerCase());
 
@@ -937,6 +956,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         showToast('Select a concrete model, not a combo');
         return;
+      }
+
+      if (chosenModel.startsWith('ollama/')) {
+        const account = connectedAccounts.find(a => a.providerId === 'local' && a.status === 'active' && a.supportedModels.includes(chosenModel));
+        if (!account) {
+          appendAssistantMessage({ role: 'assistant', author: 'Custos Engine', badge: 'Ollama Unavailable', stepName: 'Model Gateway', text: 'Ollama is offline or the selected model is no longer installed. Start Ollama and use Retry models. Your prompt will not be sent to another provider.' });
+          showToast('Ollama unavailable — start Ollama and retry');
+          return;
+        }
+        // Recheck before dispatch to catch shutdowns between periodic probes.
+        try {
+          const probe = await daemonClient.probeModels(account.endpointUrl || 'http://localhost:11434', 'ollama');
+          if (!probe.models.some(model => model.id === chosenModel)) {
+            appendAssistantMessage({ role: 'assistant', author: 'Custos Engine', badge: 'Model Removed', text: 'The selected Ollama model is no longer installed. Refresh models and choose an installed model.' });
+            return;
+          }
+        } catch {
+          setConnectedAccounts(previous => previous.map(a => a.id === account.id ? { ...a, status: 'offline', statusLabel: 'Ollama offline', badgeColor: '#6b7280', catalogSource: 'cached', catalogError: 'Ollama is unavailable. Start Ollama and retry models.' } : a));
+          appendAssistantMessage({ role: 'assistant', author: 'Custos Engine', badge: 'Ollama Offline', text: 'Cannot connect to Ollama. Start Ollama and retry models, then resend your prompt. No other provider was used.' });
+          return;
+        }
       }
 
       const hasActiveAccount = connectedAccounts.some((account) => account.status === 'active');
@@ -984,8 +1024,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      showToast('Dispatching run to Custos Spine...');
-
       // 2. Ensure a daemon session exists, but run each chat turn on its own task
       // so active worker claims on the source task do not fence conversation turns.
       let targetSessionId = activeSession.sessionId;
@@ -1012,6 +1050,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             conversation_session_id: targetSessionId || activeSession.id,
             source_task_id: activeSession.taskId || activeSession.id,
             model: chosenModel,
+            provider_account_id: connectedAccounts.find(a => a.status === 'active' && a.supportedModels.includes(chosenModel))?.id,
           },
         });
         runTaskId = createdTask.id;
@@ -1038,8 +1077,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await daemonClient.appendSessionMessage(targetSessionId, 'user', text);
       }
 
-      // 3. Start workflow run with target model
+      // Register a cancellable background run before consuming its live projection.
       const run = await daemonClient.startRun({
+        background: true,
+        turn_id: `turn_${crypto.randomUUID()}`,
         task_id: runTaskId,
         preferred_mode: 'model',
         session_id: targetSessionId,
@@ -1048,40 +1089,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       const runId = run.run_id;
-      const outputText = run.output;
-      const isCompleted = run.status === 'completed';
-
-      const assistantMsg = {
-        role: 'assistant' as const,
-        author: chosenModel,
-        badge: isCompleted ? 'Live Inference' : `Run ${run.status}`,
-        stepName: `Run #${runId.slice(0, 8)}`,
-        text: outputText
-          ? outputText
-          : `Run ${runId} was accepted with status ${run.status}. Awaiting background completion.`,
-      };
-
-      setProjectData((prev) => {
-        const list = prev[currentProject] || [];
-        const updatedList = list.map((s) => {
-          if (s.id === activeSession.id) {
-            return {
-              ...s,
-              taskId: s.taskId,
-              sessionId: targetSessionId || s.sessionId,
-              messages: [...s.messages, assistantMsg],
-            };
-          }
-          return s;
-        });
-        return {
-          ...prev,
-          [currentProject]: updatedList,
-        };
-      });
-
-      showToast(`Run ${runId.slice(0, 8)}: ${run.status}`);
+      appendAssistantMessage({ role: 'assistant', author: chosenModel, badge: 'queued', stepName: `Run #${runId.slice(0, 8)}`, text: '' });
+      setProjectData(previous => ({ ...previous, [currentProject]: (previous[currentProject] || []).map(chat => chat.id !== activeSession.id ? chat : { ...chat, messages: chat.messages.map((message,index) => index === chat.messages.length - 1 ? { ...message, id: `live-${runId}`, runId, runStatus: 'queued' } : message) }) }));
+      if (targetSessionId) followLiveRun(currentProject, activeSession.id, targetSessionId, runId, chosenModel);
     } catch (err: any) {
+      if ((selectedModel || activeSession.model || '').startsWith('ollama/') && String(err?.message || err).includes('Ollama connection failed')) {
+        setConnectedAccounts(previous => previous.map(a => a.providerId === 'local' ? { ...a, status: 'offline', statusLabel: 'Ollama offline', badgeColor: '#6b7280', catalogSource: 'cached', catalogError: 'Ollama stopped during the request. Start Ollama and resend your prompt.' } : a));
+      }
       const errMsg = {
         role: 'assistant' as const,
         author: 'Custos Kernel',
@@ -1105,7 +1119,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           [currentProject]: updatedList,
         };
       });
-    }
+    } finally { pendingTurns.current.delete(activeSession.id); }
   };
 
   const handleClearHistory = () => {
@@ -1304,6 +1318,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err: any) {
       console.error('[SaveProvider] Error:', err);
       showToast(`Lỗi lưu provider: ${err?.message || err}`);
+      throw err;
     }
   };
 
@@ -1394,24 +1409,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('Routing Combo deleted');
   }, [selectedModel, showToast]);
 
-  const handleResetUsage = useCallback(() => {
-    setUsageRecords((prev) =>
-      prev.map((r) => ({
-        ...r,
-        inputTokens: 0,
-        outputTokens: 0,
-        totalTokens: 0,
-        estimatedCostUsd: 0,
-        requestCount: 0,
-        quotaUsedTokens: 0,
-        quotaPercent: 0,
-        rateLimitStatus: 'normal' as const,
-        lastUsedAt: 'Reset just now',
-      }))
-    );
-    showToast('Usage metrics reset successfully');
-  }, [showToast]);
-
   const ensureOAuthProviderRecord = useCallback(async (
     providerId: ProviderServiceId,
     accountName?: string
@@ -1495,8 +1492,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         handleCreateCombo,
         handleUpdateCombo,
         handleDeleteCombo,
-        usageRecords,
-        handleResetUsage,
         connectedAccounts,
         refreshModels: async () => { await refreshProviderState(); },
         setConnectedAccounts,
@@ -1519,6 +1514,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedModel,
         handleSelectModel,
         handleSendMessage,
+        handleStopRun,
+        startNativeConversation,
         handleClearHistory,
         handleDeleteConversation,
         handleAcceptAndRun,

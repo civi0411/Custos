@@ -31,7 +31,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  const presets = [85, 90, 100, 110, 120, 130, 140, 150];
+  const presets = [70, 80, 90, 100, 110, 120, 130, 140, 150, 160];
 
   return (
     <footer className="h-6 bg-surface-1 border-t border-border-muted px-3 flex items-center justify-between text-[11px] font-mono text-fg-muted shrink-0 z-30 select-none">
@@ -96,24 +96,26 @@ export const StatusBar: React.FC<StatusBarProps> = ({
                 <div className="flex items-center gap-2 pt-0.5">
                   <Tooltip content="Zoom Out (Ctrl+-)" position="top">
                     <button 
-                      onClick={() => onStepUiScale(-5)} 
+                      onClick={() => onStepUiScale(-10)}
                       className="w-6 h-6 rounded-md bg-surface-1 hover:bg-surface-2 text-fg-editor border border-border-default flex items-center justify-center font-mono text-xs transition cursor-pointer"
                     >
                       -
                     </button>
                   </Tooltip>
                   <input 
-                    type="range" 
-                    min="75" 
-                    max="150" 
-                    step="5" 
+                    type="range"
+                    aria-label="App zoom"
+                    style={{ '--range-progress': `${(uiScale - 70) / 90 * 100}%` } as React.CSSProperties}
+                    min="70"
+                    max="160"
+                    step="10"
                     value={uiScale} 
                     onChange={(e) => onSetUiScale(Number(e.target.value))}
-                    className="flex-1 accent-[var(--workbench-accent)] h-1.5 bg-surface-2 rounded-lg cursor-pointer"
+                    className="flex-1 min-w-0"
                   />
                   <Tooltip content="Zoom In (Ctrl++)" position="top">
                     <button 
-                      onClick={() => onStepUiScale(5)} 
+                      onClick={() => onStepUiScale(10)}
                       className="w-6 h-6 rounded-md bg-surface-1 hover:bg-surface-2 text-fg-editor border border-border-default flex items-center justify-center font-mono text-xs transition cursor-pointer"
                     >
                       +
@@ -125,7 +127,7 @@ export const StatusBar: React.FC<StatusBarProps> = ({
               {/* Presets Grid */}
               <div className="space-y-1 mb-1.5 px-1">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">Presets</div>
-                <div className="grid grid-cols-4 gap-1 font-mono text-[11px]">
+                <div className="grid grid-cols-5 gap-1 font-mono text-[11px]">
                   {presets.map((s) => (
                     <button
                       key={s}

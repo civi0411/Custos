@@ -1,3 +1,4 @@
+import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Globe,
@@ -9,7 +10,6 @@ import {
   Activity,
   Layers,
   ArrowRight,
-  ShieldCheck,
 } from 'lucide-react';
 import {
   BrowserSession,
@@ -38,7 +38,7 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [tabs, setTabs] = useState<BrowserTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
-  const [urlInput, setUrlInput] = useState<string>('https://example.com');
+  const [urlInput, setUrlInput] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeDrawer, setActiveDrawer] = useState<'snapshot' | 'console' | 'network'>('snapshot');
   const [newSessionName, setNewSessionName] = useState<string>('');
@@ -209,15 +209,13 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
           <span className="font-semibold text-zinc-100 tracking-wide text-[11px] uppercase">
             Scoped Browser Workbench
           </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
-            Step 10 Sandbox
-          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">{can('tabs.navigate') ? 'Navigation ready' : 'Saved tabs only'}</span>
         </div>
 
         {/* Sessions Selector & New Session */}
         <div className="flex items-center gap-2">
           {sessions.length > 0 ? (
-            <select
+            <NativeSelect
               value={activeSessionId || ''}
               onChange={(e) => setActiveSessionId(e.target.value)}
               className="bg-zinc-900 border border-zinc-700 text-zinc-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-zinc-500"
@@ -227,7 +225,7 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
                   {s.name} ({s.tabs?.length ?? 0} tabs)
                 </option>
               ))}
-            </select>
+            </NativeSelect>
           ) : (
             <span className="text-zinc-500 text-[11px]">No active sessions</span>
           )}
@@ -310,7 +308,7 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
         {activeSessionId && (
           <button
             disabled={!can('tabs.create')}
-            onClick={() => handleCreateTab('https://example.com')}
+            onClick={() => handleCreateTab('about:blank')}
             className="p-1 text-zinc-500 hover:text-zinc-200 disabled:hover:text-zinc-500 disabled:cursor-not-allowed rounded hover:bg-zinc-800 transition mb-0.5"
             title="Open New Tab"
           >
@@ -324,8 +322,8 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
         <button
           onClick={() => handleNavigate()}
           disabled={!can('tabs.navigate')}
-          className="p-1.5 rounded bg-zinc-800/50 text-zinc-500 cursor-not-allowed transition"
-          title="Browser navigation unavailable: scoped browser execution adapter is not connected"
+          className="p-1.5 rounded bg-zinc-800/50 text-zinc-400 enabled:hover:text-zinc-100 disabled:cursor-not-allowed transition"
+          title={can('tabs.navigate') ? 'Reload page' : 'Browser navigation is not connected'}
         >
           <RotateCw size={12} />
         </button>
@@ -336,14 +334,14 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
             disabled={!can('tabs.navigate')}
-            placeholder="Browser navigation unavailable (headless browser driver not connected)..."
-            className="w-full bg-zinc-950/60 border border-zinc-850 rounded-md px-3 py-1 text-xs text-zinc-500 font-mono tracking-tight focus:outline-none cursor-not-allowed"
+            placeholder={can('tabs.navigate') ? 'Enter a URL' : 'Navigation is not connected'}
+            className="w-full bg-zinc-950/60 border border-zinc-800 rounded-md px-3 py-1 text-xs text-zinc-200 font-mono tracking-tight focus:outline-none disabled:text-zinc-500 disabled:cursor-not-allowed"
           />
           <button
             type="submit"
             disabled={!can('tabs.navigate')}
-            title="Browser navigation unavailable: scoped browser execution adapter is not connected"
-            className="absolute right-1 px-2 py-0.5 bg-zinc-850 border border-zinc-800 text-zinc-500 rounded text-[11px] cursor-not-allowed"
+            title={can('tabs.navigate') ? 'Navigate' : 'Browser navigation is not connected'}
+            className="absolute right-1 px-2 py-0.5 bg-zinc-800 border border-zinc-700 text-zinc-400 rounded text-[11px] enabled:hover:text-zinc-100 disabled:cursor-not-allowed"
           >
             <ArrowRight size={11} />
           </button>
@@ -352,8 +350,8 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
         <button
           onClick={handleCaptureSnapshot}
           disabled={!can('tabs.snapshot')}
-          title="DOM snapshot capture unavailable: authenticated browser adapter is not connected"
-          className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800/50 border border-zinc-800 rounded text-zinc-500 font-medium text-[11px] cursor-not-allowed"
+          title={can('tabs.snapshot') ? 'Capture DOM snapshot' : 'DOM capture is not connected'}
+          className="flex items-center gap-1.5 px-2.5 py-1 bg-zinc-800/50 border border-zinc-800 rounded text-zinc-400 font-medium text-[11px] enabled:hover:text-zinc-100 disabled:cursor-not-allowed"
         >
           <Camera size={12} className="text-zinc-500" />
           <span>DOM Snapshot</span>
@@ -373,12 +371,12 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
               <Globe size={32} className="text-zinc-700" />
               <p className="text-zinc-400 font-medium text-xs">No active browser tab open.</p>
               <p className="text-zinc-600 text-[11px] max-w-sm">
-                Open a new tab to browse scoped documentation, execute UI validations, or capture DOM snapshots.
+                {can('tabs.navigate') ? 'Open a tab to browse scoped documentation and inspect the page.' : 'Saved browser tabs are available. Navigation and page capture require a browser adapter.'}
               </p>
               {activeSessionId ? (
                 <button
                   disabled={!can('tabs.create')}
-                  onClick={() => handleCreateTab('https://example.com')}
+                  onClick={() => handleCreateTab('about:blank')}
                   className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed border border-zinc-700 rounded text-zinc-200 text-xs font-medium transition"
                 >
                   Open First Tab
@@ -407,8 +405,7 @@ export const BrowserWorkbenchPane: React.FC<BrowserWorkbenchPaneProps> = ({
                   <p className="text-[11px] text-zinc-500 font-mono truncate">{activeTab.url}</p>
                 </div>
                 <div className="flex items-center gap-1.5 text-zinc-400 text-[11px]">
-                  <ShieldCheck size={14} className="text-emerald-400" />
-                  <span>Isolated Sandbox</span>
+                  <span>{can('tabs.navigate') ? 'Browser transport connected' : 'Page content unavailable'}</span>
                 </div>
               </div>
 

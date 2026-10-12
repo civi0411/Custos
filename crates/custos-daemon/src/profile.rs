@@ -14,10 +14,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum DaemonLockError {
     #[error("Daemon is already running (pid: {pid:?}) on lock file: {path}")]
-    AlreadyRunning {
-        pid: Option<u32>,
-        path: PathBuf,
-    },
+    AlreadyRunning { pid: Option<u32>, path: PathBuf },
     #[error("I/O error handling daemon lock at {path}: {source}")]
     Io {
         path: PathBuf,
@@ -184,7 +181,8 @@ pub fn ensure_daemon_client(
     }
 
     // 2. If daemon not reachable, attempt to spawn daemon binary
-    let daemon_bin = std::env::var("CUSTOS_DAEMON_BIN").unwrap_or_else(|_| "custos-daemon".to_string());
+    let daemon_bin =
+        std::env::var("CUSTOS_DAEMON_BIN").unwrap_or_else(|_| "custos-daemon".to_string());
     let mut cmd = std::process::Command::new(&daemon_bin);
 
     // Look for daemon next to current executable or in target/debug
@@ -230,7 +228,6 @@ pub fn ensure_daemon_client(
         profile.read_port()
     ))
 }
-
 
 /// Exclusive process-level lock held by the running daemon.
 ///
@@ -282,7 +279,8 @@ impl DaemonLock {
                 if e.kind() == std::io::ErrorKind::WouldBlock
                     || e.raw_os_error() == Some(35) // EWOULDBLOCK on unix
                     || e.raw_os_error() == Some(11) // EAGAIN on linux
-                    || e.raw_os_error() == Some(33) // ERROR_LOCK_VIOLATION on Windows
+                    || e.raw_os_error() == Some(33)
+                // ERROR_LOCK_VIOLATION on Windows
                 {
                     // Read existing PID if present
                     let mut content = String::new();

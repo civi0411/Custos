@@ -152,6 +152,7 @@ export interface CreateTaskParams {
 }
 
 export interface StartRunParams {
+  background?: boolean;
   task_id: string;
   instruction?: string;
   preferred_mode?: 'model' | 'native' | 'terminal';
@@ -1085,3 +1086,85 @@ export interface OAuthStatusResult {
   error?: string;
 }
 
+// ==========================================
+// Domain Packs & Workbench Jobs Types
+// ==========================================
+
+export interface DomainPackManifest {
+  id: string;
+  name: string;
+  version: string;
+  lens: string;
+  description: string;
+  supportedJobs?: string[];
+  supported_jobs?: string[];
+  supportedRoles?: string[];
+  supported_roles?: string[];
+}
+
+export interface PacksJobCatalogItem {
+  jobId: string;
+  job_id?: string;
+  lens: 'coding' | 'research' | 'assistant';
+  name: string;
+  description: string;
+  primaryRole: string;
+  primary_role?: string;
+  recommendedTopology: string;
+  recommended_topology?: string;
+  status: 'available' | 'degraded' | 'planned';
+  degradationReason?: string;
+  degradation_reason?: string;
+  requiredInputs: string[];
+  required_inputs?: string[];
+  expectedArtifacts: string[];
+  expected_artifacts?: string[];
+  requiredVerifiers: string[];
+  required_verifiers?: string[];
+  acceptanceRubric: string;
+  acceptance_rubric?: string;
+}
+
+export interface WorkerRole {
+  roleId: string;
+  role_id?: string;
+  packId: string;
+  pack_id?: string;
+  name: string;
+  description: string;
+  systemPrompt?: string;
+  system_prompt?: string;
+  defaultBudgetTokens?: number;
+  default_budget_tokens?: number;
+  allowedSkills?: string[];
+  allowed_skills?: string[];
+  readOnly: boolean;
+  read_only?: boolean;
+}
+
+export interface RunPacksJobResult {
+  taskId: string;
+  task_id?: string;
+  jobId: string;
+  job_id?: string;
+  status: string;
+  lens: string;
+  primaryRole?: string;
+  primary_role?: string;
+  recommendedTopology?: string;
+  recommended_topology?: string;
+}
+
+export interface LiveRunSnapshot {
+  cursor: number;
+  run_id: string;
+  task_id: string;
+  session_id: string;
+  turn_id: string;
+  status: string;
+  text: string;
+  activities: Array<{ kind: string; payload: Record<string, unknown> }>;
+  usage?: Record<string, number | null>;
+  error?: string | null;
+  reconnecting?: boolean;
+}

@@ -77,10 +77,12 @@ impl CooldownTracker {
     /// Record a failure with exponential backoff calculation (1s, 2s, 4s, 8s, up to 240s)
     pub async fn record_failure(&self, route_id: &str) -> Duration {
         let mut guard = self.cooldowns.write().await;
-        let entry = guard.entry(route_id.to_string()).or_insert(RouteCooldownEntry {
-            until: Instant::now(),
-            backoff_level: 0,
-        });
+        let entry = guard
+            .entry(route_id.to_string())
+            .or_insert(RouteCooldownEntry {
+                until: Instant::now(),
+                backoff_level: 0,
+            });
 
         entry.backoff_level = (entry.backoff_level + 1).min(8);
         let base_secs = 2u64.pow(entry.backoff_level.saturating_sub(1));
@@ -97,12 +99,17 @@ impl CooldownTracker {
     /// Mark a route as cooled down until now + duration
     pub async fn mark_cooldown(&self, route_id: &str, duration: Duration) {
         let mut guard = self.cooldowns.write().await;
-        let entry = guard.entry(route_id.to_string()).or_insert(RouteCooldownEntry {
-            until: Instant::now(),
-            backoff_level: 1,
-        });
+        let entry = guard
+            .entry(route_id.to_string())
+            .or_insert(RouteCooldownEntry {
+                until: Instant::now(),
+                backoff_level: 1,
+            });
         entry.until = Instant::now() + duration;
-        warn!("Provider route '{}' put in cooldown for {:?}", route_id, duration);
+        warn!(
+            "Provider route '{}' put in cooldown for {:?}",
+            route_id, duration
+        );
     }
 
     /// Check if a route is currently available (not in cooldown)
@@ -152,7 +159,10 @@ impl ModelProvider for FallbackRouter {
 
         for candidate in &self.candidates {
             if !self.tracker.is_available(&candidate.id).await {
-                info!("Skipping candidate '{}' due to active cooldown", candidate.id);
+                info!(
+                    "Skipping candidate '{}' due to active cooldown",
+                    candidate.id
+                );
                 continue;
             }
 
@@ -190,7 +200,10 @@ impl ModelProvider for FallbackRouter {
 
         for candidate in &self.candidates {
             if !self.tracker.is_available(&candidate.id).await {
-                info!("Skipping candidate '{}' due to active cooldown", candidate.id);
+                info!(
+                    "Skipping candidate '{}' due to active cooldown",
+                    candidate.id
+                );
                 continue;
             }
 
@@ -240,4 +253,3 @@ impl ModelProvider for FallbackRouter {
         }))
     }
 }
-

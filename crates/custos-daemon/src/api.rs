@@ -3,6 +3,7 @@
 //! Protocol types and dispatcher for IPC communication between CLI / UI / VS Code and custosd.
 
 use std::sync::Arc;
+use custos_domain::DomainError;
 
 pub use crate::custos_local_api::{
     AdvanceTaskRequest, ApiRequest, ApiResponse, ArchiveWorkspaceApiRequest,
@@ -14,18 +15,18 @@ pub use crate::custos_local_api::{
     METHOD_ARTIFACTS_GET, METHOD_ARTIFACTS_LINEAGE_GRAPH, METHOD_ARTIFACTS_LIST,
     METHOD_ARTIFACTS_RECORD_LINEAGE, METHOD_AUTOMATION_JOBS_CREATE, METHOD_AUTOMATION_JOBS_LIST,
     METHOD_AUTOMATION_JOBS_RUN, METHOD_BROWSER_SESSIONS_CREATE, METHOD_BROWSER_SESSIONS_LIST,
-    METHOD_BROWSER_TABS_CLOSE, METHOD_BROWSER_TABS_CREATE, METHOD_BROWSER_TABS_LIST,
-    METHOD_BROWSER_TABS_NAVIGATE, METHOD_BROWSER_TABS_SNAPSHOT, METHOD_BROWSER_TABS_CLICK,
-    METHOD_BROWSER_TABS_FILL, METHOD_BROWSER_TABS_SCREENSHOT, METHOD_CAPABILITIES_GET,
+    METHOD_BROWSER_TABS_CLICK, METHOD_BROWSER_TABS_CLOSE, METHOD_BROWSER_TABS_CREATE,
+    METHOD_BROWSER_TABS_FILL, METHOD_BROWSER_TABS_LIST, METHOD_BROWSER_TABS_NAVIGATE,
+    METHOD_BROWSER_TABS_SCREENSHOT, METHOD_BROWSER_TABS_SNAPSHOT, METHOD_CAPABILITIES_GET,
     METHOD_CAPABILITIES_LIST, METHOD_FLEET_EXEC, METHOD_FLEET_HOSTS_LIST, METHOD_FLEET_HOSTS_PING,
     METHOD_FLEET_HOSTS_REGISTER, METHOD_HARNESS_CANCEL, METHOD_HARNESS_GET, METHOD_HARNESS_LIST,
     METHOD_HARNESS_RUN_NATIVE, METHOD_HARNESS_STEER, METHOD_MODELS_CATALOG, METHOD_MODELS_PRICING,
     METHOD_MODELS_PROBE, METHOD_NOTEBOOK_CELLS_LIST, METHOD_NOTEBOOK_CELLS_SAVE,
     METHOD_NOTEBOOK_EXECUTE, METHOD_NOTEBOOK_INTERRUPT, METHOD_NOTEBOOK_RESET,
     METHOD_NOTEBOOK_STATUS, METHOD_NOTES_GET, METHOD_NOTES_HISTORY, METHOD_NOTES_LIST,
-    METHOD_NOTES_SAVE, METHOD_OAUTH_AUTHORIZE, METHOD_OAUTH_DELETE, METHOD_OAUTH_EXCHANGE,
-    METHOD_OAUTH_GET, METHOD_OAUTH_REFRESH, METHOD_OAUTH_CANCEL, METHOD_OAUTH_STATUS, METHOD_PROVIDERS_DELETE,
-    METHOD_PROVIDERS_GET, METHOD_PROVIDERS_LIST, METHOD_PROVIDERS_SAVE,
+    METHOD_NOTES_SAVE, METHOD_OAUTH_AUTHORIZE, METHOD_OAUTH_CANCEL, METHOD_OAUTH_DELETE,
+    METHOD_OAUTH_EXCHANGE, METHOD_OAUTH_GET, METHOD_OAUTH_REFRESH, METHOD_OAUTH_STATUS,
+    METHOD_PROVIDERS_DELETE, METHOD_PROVIDERS_GET, METHOD_PROVIDERS_LIST, METHOD_PROVIDERS_SAVE,
     METHOD_RESEARCH_ANCHORS_LIST, METHOD_RESEARCH_ANCHORS_SAVE, METHOD_RESEARCH_CLAIMS_LIST,
     METHOD_RESEARCH_CLAIMS_SAVE, METHOD_RESEARCH_HANDOFF_CODING, METHOD_RESEARCH_LINEAGE_LIST,
     METHOD_RESEARCH_RUNS_LIST, METHOD_RESEARCH_RUNS_SAVE, METHOD_RESEARCH_SOURCES_LIST,
@@ -40,6 +41,8 @@ pub use crate::custos_local_api::{
     METHOD_WORKSPACES_RECOVER, METHOD_WORKSPACE_DIFF, METHOD_WORKSPACE_FILES_READ,
     METHOD_WORKSPACE_FILES_TREE, METHOD_WORKSPACE_FILES_WRITE, METHOD_WORKSPACE_FILE_DIFF,
     METHOD_WORKSPACE_GIT_DISCARD, METHOD_WORKSPACE_GIT_STAGE, METHOD_WORKSPACE_GIT_UNSTAGE,
+    JobOperationalStatus, PacksJobCatalogItem, METHOD_PACKS_JOBS_GET, METHOD_PACKS_JOBS_LIST,
+    METHOD_PACKS_JOBS_RUN, METHOD_PACKS_MANIFESTS_LIST, METHOD_PACKS_ROLES_LIST,
 };
 use custos_adapters::harness::HarnessRegistry;
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
@@ -90,12 +93,17 @@ pub fn resolve_agent_browser_binary() -> Option<std::path::PathBuf> {
         if local_bin.exists() {
             return Some(local_bin);
         }
-        let orca_bin = home.join("Project/AgentHub/orca/node_modules/agent-browser/bin/agent-browser-darwin-arm64");
+        let orca_bin = home.join(
+            "Project/AgentHub/orca/node_modules/agent-browser/bin/agent-browser-darwin-arm64",
+        );
         if orca_bin.exists() {
             return Some(orca_bin);
         }
     }
-    if let Ok(output) = std::process::Command::new("which").arg("agent-browser").output() {
+    if let Ok(output) = std::process::Command::new("which")
+        .arg("agent-browser")
+        .output()
+    {
         if output.status.success() {
             let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
             let p = std::path::PathBuf::from(path_str);
@@ -125,6 +133,7 @@ pub struct LocalApiDispatcher {
     session_manager: Arc<SessionManager>,
     bridge_service: Arc<BridgeService>,
     workflow: Option<Arc<dyn WorkflowPort>>,
+    usage_runs: Option<Arc<dyn custos_core::contracts::storage::RunPort>>,
     workspace: Option<Arc<WorkspaceCoordinator>>,
     research: Option<Arc<ResearchRepository>>,
     providers: Option<Arc<ProviderRepository>>,
@@ -135,6 +144,7 @@ pub struct LocalApiDispatcher {
     fleet_automation: Option<Arc<FleetAutomationRepository>>,
     model_catalog: custos_adapters::providers::catalog::ModelCatalogService,
     oauth_callback_server: Option<Arc<crate::oauth_callback_server::OAuthCallbackServer>>,
+    pack_registry: Arc<custos_packs::DomainPackRegistry>,
 }
 
 impl LocalApiDispatcher {
@@ -148,6 +158,7 @@ impl LocalApiDispatcher {
             session_manager,
             bridge_service,
             workflow: None,
+            usage_runs: None,
             workspace: None,
             research: None,
             providers: None,
@@ -158,6 +169,7 @@ impl LocalApiDispatcher {
             fleet_automation: None,
             model_catalog: custos_adapters::providers::catalog::ModelCatalogService::new(),
             oauth_callback_server: None,
+            pack_registry: Arc::new(custos_packs::create_default_pack_registry()),
         }
     }
 
@@ -178,6 +190,11 @@ impl LocalApiDispatcher {
 
     pub fn with_terminal(mut self, terminal: Arc<TerminalCoordinator>) -> Self {
         self.terminal = terminal;
+        self
+    }
+
+    pub fn with_usage_runs(mut self, runs: Arc<dyn custos_core::contracts::storage::RunPort>) -> Self {
+        self.usage_runs = Some(runs);
         self
     }
 
@@ -214,6 +231,11 @@ impl LocalApiDispatcher {
         oauth_callback_server: Arc<crate::oauth_callback_server::OAuthCallbackServer>,
     ) -> Self {
         self.oauth_callback_server = Some(oauth_callback_server);
+        self
+    }
+
+    pub fn with_packs(mut self, pack_registry: Arc<custos_packs::DomainPackRegistry>) -> Self {
+        self.pack_registry = pack_registry;
         self
     }
 
@@ -603,6 +625,13 @@ impl LocalApiDispatcher {
         serde_json::to_string(&response).unwrap_or_else(|e| format!("{{\"error\":\"{e}\"}}"))
     }
 
+    pub async fn live_run(&self, session_id: &str, run_id: &str, cursor: u64) -> Result<custos_domain::LiveRunReplay, DomainError> {
+        if self.session_manager.get_session(&SessionId(session_id.into())).await.is_none() {
+            return Err(DomainError::Validation("Unknown session".into()));
+        }
+        self.workflow.as_ref().ok_or_else(|| DomainError::Validation("Workflow unavailable".into()))?.live_run(session_id, run_id, cursor).await
+    }
+
     pub async fn handle_request(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             "v1.ping" | "v1.health" => {
@@ -984,6 +1013,31 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
+            "v1.workflow.session_runs" => {
+                let Some(session)=req.params.get("session_id").and_then(|v|v.as_str()) else {return ApiResponse::error(req.id,"Missing session_id");};
+                if self.session_manager.get_session(&SessionId(session.to_string())).await.is_none() {return ApiResponse::error(req.id,"Unknown session");}
+                let Some(store)=&self.usage_runs else {return ApiResponse::error(req.id,"Run store unavailable");};
+                let tasks=match self.task_service.list_tasks().await {Ok(tasks)=>tasks,Err(e)=>return ApiResponse::error(req.id,e.to_string())};
+                let mut runs=Vec::new();
+                for task in tasks {
+                    let task_runs=match store.list_runs_for_task(&task.id).await {Ok(runs)=>runs,Err(e)=>return ApiResponse::error(req.id,e.to_string())};
+                    for run in task_runs {
+                        if run.metadata.get("session_id").and_then(|v|v.as_str())==Some(session) && (run.metadata.get("background").and_then(|v|v.as_bool())==Some(true) || run.metadata.get("journal_occurred_at").is_some() || !run.status.is_terminal()) {
+                            runs.push(serde_json::json!({"run_id":run.id,"model":run.metadata.get("requested_model").filter(|value|!value.is_null()).or_else(||run.metadata.get("harness_id")),"status":run.status.to_string(),"journal_occurred_at":run.metadata.get("journal_occurred_at")}));
+                        }
+                    }
+                }
+                ApiResponse::success(req.id,serde_json::json!(runs))
+            }
+            "v1.workflow.live_run" => {
+                let session = req.params.get("session_id").and_then(|v|v.as_str()).unwrap_or("");
+                let run = req.params.get("run_id").and_then(|v|v.as_str()).unwrap_or("");
+                let cursor = req.params.get("cursor").and_then(|v|v.as_u64()).unwrap_or(0);
+                match self.live_run(session,run,cursor).await {
+                    Ok(replay) => match serde_json::to_value(replay) { Ok(value) => ApiResponse::success(req.id,value), Err(error) => ApiResponse::error(req.id,error.to_string()) },
+                    Err(error) => ApiResponse::error(req.id,error.to_string()),
+                }
+            }
             METHOD_WORKFLOW_START_RUN => {
                 let workflow = match self.workflow.as_ref() {
                     Some(w) => w,
@@ -1076,9 +1130,11 @@ impl LocalApiDispatcher {
                     cmd = cmd.with_prompt(p);
                 }
 
-                match workflow.start_run(cmd).await {
+                let background = params.background;
+                let result = if background { workflow.start_run_background(cmd).await } else { workflow.start_run(cmd).await };
+                match result {
                     Ok(handle) => {
-                        if let (Some(ref sid), Some(ref out)) = (params.session_id.as_ref(), handle.output.as_ref()) {
+                        if let (Some(ref sid), Some(ref out)) = (params.session_id.as_ref().filter(|_| !background), handle.output.as_ref()) {
                             let _ = self
                                 .session_manager
                                 .append_assistant_message(&SessionId(sid.to_string()), out)
@@ -1315,7 +1371,8 @@ impl LocalApiDispatcher {
                         return ApiResponse::error(req.id, format!("Invalid source payload: {e}"))
                     }
                 };
-                let src = match custos_core::research_ingress::source_draft(src) {
+                let file_bytes = src.local_path.as_ref().and_then(|p| std::fs::read(p).ok());
+                let src = match custos_core::research_ingress::source_draft_with_bytes(src, file_bytes.as_deref()) {
                     Ok(src) => src,
                     Err(e) => return ApiResponse::error(req.id, e),
                 };
@@ -2823,6 +2880,52 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
+            "v1.providers.usage" => {
+                let Some(store) = &self.usage_runs else { return ApiResponse::error(req.id, "Usage store unavailable"); };
+                let tasks = match self.task_service.list_tasks().await { Ok(tasks) => tasks, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
+                let mut records = Vec::new();
+                for task in tasks {
+                    let runs = match store.list_runs_for_task(&task.id).await { Ok(runs) => runs, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
+                    for run in runs {
+                        if run.metadata.get("actual_mode").and_then(|v| v.as_str()) != Some("model") { continue; }
+                        if run.metadata.get("model_id").and_then(|v| v.as_str()).is_some_and(|id| id.starts_with("custos-")) { continue; }
+                        let usage = run.metadata.get("usage").cloned().unwrap_or(serde_json::Value::Null);
+                        let failure = run.metadata.get("failure_reason").and_then(|v| v.as_str()).unwrap_or("");
+                        records.push(serde_json::json!({"id":run.id,"account_id":run.metadata.get("provider_account_id"),"model":run.metadata.get("model_id").or_else(||run.metadata.get("requested_model")),"status":run.status.to_string(),"recorded_at":run.started_at,"input_tokens":usage.get("input_tokens"),"output_tokens":usage.get("output_tokens"),"total_tokens":usage.get("total_tokens"),"rate_limited":failure.contains("429") || failure.contains("RESOURCE_EXHAUSTED")}));
+                    }
+                }
+                let mut quotas = Vec::new();
+                if req.params.get("include_quota").and_then(|v| v.as_bool()) == Some(true) {
+                    if let Some(repo) = &self.providers {
+                        let providers = match repo.list_providers() { Ok(p) => p, Err(e) => return ApiResponse::error(req.id,e.to_string()) };
+                        for provider in providers {
+                            let mut snapshot = serde_json::json!({"account_id":provider.id,"status":if provider.service_type == "local" {"not_applicable"} else {"unsupported"},"windows":[],"fetched_at":chrono::Utc::now()});
+                            if provider.service_type != "local" {
+                                match repo.get_oauth_token(&provider.id) {
+                                    Ok(Some(mut token)) if token.refresh_token.is_some() || provider.service_type == "copilot" => {
+                                        if token.is_expired(120) && token.refresh_token.is_some() {
+                                            let refreshed = match custos_adapters::providers::oauth_pkce::oauth_settings(&token.service_type) {
+                                                Ok(settings) => custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(&settings.0,&settings.1).refresh_token(&settings.2,&token).await,
+                                                Err(e) => Err(e),
+                                            };
+                                            match refreshed { Ok(value) => { if let Err(e)=repo.save_oauth_token(&value) { return ApiResponse::error(req.id,e.to_string()); } token=value; }, Err(_) => { snapshot["status"]=serde_json::json!("unavailable"); snapshot["error"]=serde_json::json!("Reconnect account to refresh quota"); quotas.push(snapshot); continue; } }
+                                        }
+                                        match custos_adapters::providers::probe::probe_account_quota(&provider.service_type,&token.access_token).await {
+                                            Ok(value) => { snapshot["status"]=value["status"].clone(); snapshot["windows"]=value["windows"].clone(); snapshot["source"]=value["source"].clone(); },
+                                            Err(e) => { snapshot["status"]=serde_json::json!("unavailable"); snapshot["error"]=serde_json::json!(e.to_string()); }
+                                        }
+                                    },
+                                    Err(_) => { snapshot["status"]=serde_json::json!("unavailable"); },
+                                    _ => {}
+                                }
+                            }
+                            quotas.push(snapshot);
+                        }
+                    }
+                }
+                tracing::debug!(request_id = %req.id, records = records.len(), quota_accounts = quotas.len(), "Provider usage snapshot loaded");
+                ApiResponse::success(req.id, serde_json::json!({"records":records,"quotas":quotas,"fetched_at":chrono::Utc::now()}))
+            }
             "v1.models.pricing" => {
                 let model_id = req
                     .params
@@ -2918,11 +3021,15 @@ impl LocalApiDispatcher {
                     || std::env::var("GEMINI_API_KEY").is_ok()
                     || std::env::var("CUSTOS_PROVIDER").is_ok();
 
-                let oauth_token = if let Some(ref repo) = self.providers {
-                    repo.get_oauth_token("openai").ok().flatten()
+                let oauth_tokens = if let Some(ref repo) = self.providers {
+                    repo.list_oauth_tokens().unwrap_or_default()
                 } else {
-                    None
+                    Vec::new()
                 };
+
+                let active_oauth = oauth_tokens
+                    .into_iter()
+                    .find(|t| !t.access_token.trim().is_empty());
 
                 let configured_provider = if let Some(ref repo) = self.providers {
                     repo.list_providers().ok().and_then(|list| {
@@ -2937,14 +3044,22 @@ impl LocalApiDispatcher {
                     None
                 };
 
-                if let Some(tok) = oauth_token {
+                if let Some(tok) = active_oauth {
+                    let display_name = match tok.provider_id.as_str() {
+                        "openai" => "OpenAI (OAuth PKCE)".to_string(),
+                        "github-copilot" | "copilot" => "GitHub Copilot (OAuth)".to_string(),
+                        "google" | "gemini" => "Google Gemini (OAuth)".to_string(),
+                        "antigravity" => "Antigravity Sovereign (OAuth)".to_string(),
+                        other => format!("{other} (OAuth)"),
+                    };
                     ApiResponse::success(
                         req.id,
                         serde_json::json!({
                             "configured": true,
-                            "active_provider": "OpenAI (OAuth PKCE)",
-                            "message": "OAuth 2.0 PKCE authentication active",
+                            "active_provider": display_name,
+                            "message": format!("{display_name} authentication active"),
                             "expires_at": tok.expires_at,
+                            "provider_id": tok.provider_id,
                         }),
                     )
                 } else if has_env_key || configured_provider.is_some() {
@@ -2963,9 +3078,9 @@ impl LocalApiDispatcher {
                     ApiResponse::success(
                         req.id,
                         serde_json::json!({
-                            "configured": false,
-                            "active_provider": serde_json::Value::Null,
-                            "message": "Chưa có LLM nào được cấu hình hiện tại (No LLMs currently available)",
+                            "configured": true,
+                            "active_provider": "Custos Sovereign (Local / Offline)",
+                            "message": "Custos Offline Sovereign runtime sẵn sàng",
                         }),
                     )
                 }
@@ -4520,6 +4635,236 @@ impl LocalApiDispatcher {
                     req.id,
                     "Headless execution is unavailable until an executor and scoped authority checks are connected",
                 )
+            }
+            METHOD_PACKS_MANIFESTS_LIST => {
+                let manifests = self.pack_registry.list_packs();
+                match serde_json::to_value(&manifests) {
+                    Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_PACKS_JOBS_LIST => {
+                let filter_lens = req.params.get("lens").and_then(|v| v.as_str());
+                let filter_pack = req.params.get("pack_id").and_then(|v| v.as_str());
+                let all_jobs = self.pack_registry.list_all_jobs();
+                let mut catalog_items = Vec::new();
+
+                for job in all_jobs {
+                    if let Some(fl) = filter_lens {
+                        let matches_lens = match job.lens {
+                            custos_domain::WorkbenchLens::Coding => {
+                                fl.eq_ignore_ascii_case("coding") || fl.eq_ignore_ascii_case("code")
+                            }
+                            custos_domain::WorkbenchLens::Research => {
+                                fl.eq_ignore_ascii_case("research")
+                            }
+                            custos_domain::WorkbenchLens::Assistant => {
+                                fl.eq_ignore_ascii_case("assistant") || fl.eq_ignore_ascii_case("chat")
+                            }
+                        };
+                        if !matches_lens {
+                            continue;
+                        }
+                    }
+
+                    if let Some(fp) = filter_pack {
+                        if !job.job_id.starts_with(fp) {
+                            continue;
+                        }
+                    }
+
+                    let (status, reason) = match job.job_id.as_str() {
+                        "engineering__repo_explain"
+                        | "engineering__review"
+                        | "research__source_qa"
+                        | "research__dataset_audit"
+                        | "research__reproduce"
+                        | "assistant__inbox_triage"
+                        | "assistant__schedule_proposal" => (JobOperationalStatus::Available, None),
+
+                        "engineering__migration" => (
+                            JobOperationalStatus::Planned,
+                            Some("Multi-phase dependency migration requires external package registry connector".into()),
+                        ),
+                        "assistant__mutate_execution" => (
+                            JobOperationalStatus::Planned,
+                            Some("Governed outbox execution requires configured SMTP/Calendar live connector".into()),
+                        ),
+                        "assistant__reminder_automation" => (
+                            JobOperationalStatus::Planned,
+                            Some("Recurring reminder daemon automation is planned for post-MVP".into()),
+                        ),
+
+                        _ => (
+                            JobOperationalStatus::Degraded,
+                            Some("Requires model generation; currently operating in offline/mock mode pending provider configuration".into()),
+                        ),
+                    };
+
+                    catalog_items.push(PacksJobCatalogItem {
+                        job_id: job.job_id,
+                        lens: job.lens,
+                        name: job.name,
+                        description: job.description,
+                        primary_role: job.primary_role,
+                        recommended_topology: job.recommended_topology,
+                        status,
+                        degradation_reason: reason,
+                        required_inputs: job.required_inputs,
+                        expected_artifacts: job.expected_artifacts,
+                        required_verifiers: job.required_verifiers,
+                        acceptance_rubric: job.acceptance_rubric,
+                    });
+                }
+
+                match serde_json::to_value(&catalog_items) {
+                    Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_PACKS_JOBS_GET => {
+                let job_id = match req.params.get("job_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing job_id parameter"),
+                };
+
+                match self.pack_registry.get_job(job_id) {
+                    Some(job) => {
+                        let (status, reason) = match job.job_id.as_str() {
+                            "engineering__repo_explain"
+                            | "engineering__review"
+                            | "research__source_qa"
+                            | "research__dataset_audit"
+                            | "research__reproduce"
+                            | "assistant__inbox_triage"
+                            | "assistant__schedule_proposal" => (JobOperationalStatus::Available, None),
+
+                            "engineering__migration"
+                            | "assistant__mutate_execution"
+                            | "assistant__reminder_automation" => (
+                                JobOperationalStatus::Planned,
+                                Some("Capability planned for post-MVP or requires live external connector".into()),
+                            ),
+
+                            _ => (
+                                JobOperationalStatus::Degraded,
+                                Some("Requires model generation; currently operating in offline/mock mode pending provider configuration".into()),
+                            ),
+                        };
+
+                        let item = PacksJobCatalogItem {
+                            job_id: job.job_id,
+                            lens: job.lens,
+                            name: job.name,
+                            description: job.description,
+                            primary_role: job.primary_role,
+                            recommended_topology: job.recommended_topology,
+                            status,
+                            degradation_reason: reason,
+                            required_inputs: job.required_inputs,
+                            expected_artifacts: job.expected_artifacts,
+                            required_verifiers: job.required_verifiers,
+                            acceptance_rubric: job.acceptance_rubric,
+                        };
+
+                        match serde_json::to_value(&item) {
+                            Ok(val) => ApiResponse::success(req.id, val),
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
+                    None => ApiResponse::error(req.id, format!("Workbench Job '{job_id}' not found")),
+                }
+            }
+            METHOD_PACKS_ROLES_LIST => {
+                let filter_pack = req.params.get("pack_id").and_then(|v| v.as_str());
+                let roles = if let Some(pid) = filter_pack {
+                    match self.pack_registry.get_pack(pid) {
+                        Some(pack) => pack.roles(),
+                        None => return ApiResponse::error(req.id, format!("Domain pack '{pid}' not found")),
+                    }
+                } else {
+                    self.pack_registry.list_all_roles()
+                };
+
+                match serde_json::to_value(&roles) {
+                    Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_PACKS_JOBS_RUN => {
+                let job_id = match req.params.get("job_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing job_id parameter"),
+                };
+
+                let job = match self.pack_registry.get_job(job_id) {
+                    Some(j) => j,
+                    None => return ApiResponse::error(req.id, format!("Workbench Job '{job_id}' not found")),
+                };
+
+                let session_id = req.params.get("session_id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let workspace_id = req.params.get("workspace_id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let inputs = req.params.get("inputs").cloned().unwrap_or(serde_json::Value::Null);
+                if !inputs.is_null() {
+                    tracing::debug!(job_id = %job_id, inputs = ?inputs, "Running job with pre-populated inputs");
+                }
+
+                let title = format!("[{}] {}", job.name, job.description);
+                let mut metadata = serde_json::json!({
+                    "source": "packs_job",
+                    "job_id": job.job_id,
+                    "pack_id": match job.lens {
+                        custos_domain::WorkbenchLens::Coding => "engineering",
+                        custos_domain::WorkbenchLens::Research => "research",
+                        custos_domain::WorkbenchLens::Assistant => "assistant",
+                    },
+                    "lens": match job.lens {
+                        custos_domain::WorkbenchLens::Coding => "coding",
+                        custos_domain::WorkbenchLens::Research => "research",
+                        custos_domain::WorkbenchLens::Assistant => "assistant",
+                    },
+                    "primary_role": job.primary_role,
+                    "inputs": inputs,
+                });
+                if let Some(ref sid) = session_id {
+                    metadata["session_id"] = serde_json::json!(sid);
+                }
+                if let Some(ref wid) = workspace_id {
+                    metadata["workspace_id"] = serde_json::json!(wid);
+                }
+
+                let cmd = CreateTask {
+                    title,
+                    metadata: Some(metadata),
+                    contract: None,
+                };
+
+                match self.task_service.execute_create(cmd).await {
+                    Ok((task, _event)) => {
+                        if let Some(ref sid) = session_id {
+                            let _ = self
+                                .session_manager
+                                .append_user_message(
+                                    &SessionId(sid.clone()),
+                                    &format!("Started workbench job `{}` (Task {})", job.job_id, task.id),
+                                )
+                                .await;
+                        }
+
+                        ApiResponse::success(
+                            req.id,
+                            serde_json::json!({
+                                "task_id": task.id,
+                                "job_id": job.job_id,
+                                "status": "created",
+                                "lens": job.lens,
+                                "primary_role": job.primary_role,
+                                "recommended_topology": job.recommended_topology,
+                            }),
+                        )
+                    }
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
             }
             unknown => ApiResponse::error(req.id, format!("Unknown method: {unknown}")),
         }
@@ -6325,7 +6670,10 @@ mod tests {
         };
         let exec_fleet_res = dispatcher.handle_request(exec_fleet_req).await;
         assert!(!exec_fleet_res.is_success());
-        assert!(exec_fleet_res.error.unwrap().contains("remote execution adapter"));
+        assert!(exec_fleet_res
+            .error
+            .unwrap()
+            .contains("remote execution adapter"));
 
         // 3. Automation definitions are durable, while running needs an executor.
         let create_job_req = ApiRequest {
@@ -6366,6 +6714,36 @@ mod tests {
             .unwrap();
         assert_eq!(persisted.status, HeadlessJobStatus::Pending);
         assert_eq!(persisted.exit_code, None);
+    }
+
+    #[tokio::test]
+    async fn provider_usage_reads_durable_runs_without_duplicates_or_secrets() {
+        use custos_core::contracts::storage::RunPort;
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let service = Arc::new(TaskService::new(store.clone()));
+        let sessions = Arc::new(SessionManager::with_store(store.clone()));
+        let bridge = Arc::new(BridgeService::new(sessions.clone(),service.clone()));
+        let dispatcher = LocalApiDispatcher::new(service,sessions,bridge).with_usage_runs(store.clone()).with_providers(Arc::new(store.providers().clone()));
+        let response = dispatcher.handle_request(ApiRequest::new("task", "v1.tasks.create", serde_json::json!({"title":"Usage fixture"}))).await;
+        let id = response.result.as_ref().unwrap()["id"].as_str().unwrap().to_string();
+        let mut run = custos_domain::Run::new(id,1);
+        run.metadata=serde_json::json!({"actual_mode":"model","provider_account_id":"account-A","requested_model":"ollama/test","usage":{"input_tokens":7,"output_tokens":3,"total_tokens":10},"secret":"never-export"});
+        store.save_run(&run).await.unwrap();
+        for _ in 0..2 {
+            let report=dispatcher.handle_request(ApiRequest::new("usage", "v1.providers.usage",serde_json::json!({}))).await;
+            assert!(report.is_success());
+            let value=report.result.unwrap();
+            assert_eq!(value["records"].as_array().unwrap().len(),1);
+            assert_eq!(value["records"][0]["account_id"],"account-A");
+            assert_eq!(value["records"][0]["total_tokens"],10);
+            assert!(!value.to_string().contains("never-export"));
+        }
+        run.metadata["usage"]=serde_json::Value::Null;
+        run.metadata["failure_reason"]=serde_json::json!("429 RESOURCE_EXHAUSTED");
+        store.save_run(&run).await.unwrap();
+        let value=dispatcher.handle_request(ApiRequest::new("usage", "v1.providers.usage",serde_json::json!({}))).await.result.unwrap();
+        assert!(value["records"][0]["total_tokens"].is_null());
+        assert_eq!(value["records"][0]["rate_limited"],true);
     }
 
     #[tokio::test]
@@ -6677,5 +7055,163 @@ mod tests {
         let get_res_3 = dispatcher.handle_request(get_req_3).await;
         assert!(get_res_3.is_success());
         assert!(get_res_3.result.unwrap().is_null());
+    }
+
+    #[tokio::test]
+    async fn test_packs_api_lifecycle() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("custos_packs_test.db");
+        let store =
+            Arc::new(custos_persistence::SqliteTaskStore::new(&db_path.to_string_lossy()).unwrap());
+        let task_service = Arc::new(TaskService::new(store.clone()));
+        let session_manager = Arc::new(SessionManager::with_store(store.clone()));
+        let bridge_service = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
+        let pack_registry = Arc::new(custos_packs::create_default_pack_registry());
+        let dispatcher = LocalApiDispatcher::new(task_service.clone(), session_manager.clone(), bridge_service)
+            .with_packs(pack_registry);
+
+        // 1. List Pack Manifests via v1.packs.manifests.list
+        let man_req = ApiRequest {
+            id: "pack_1".into(),
+            method: METHOD_PACKS_MANIFESTS_LIST.into(),
+            params: serde_json::json!({}),
+        };
+        let man_res = dispatcher.handle_request(man_req).await;
+        assert!(man_res.is_success(), "man_res failed: {:?}", man_res.error);
+        let manifests: Vec<custos_packs::DomainPackManifest> =
+            serde_json::from_value(man_res.result.unwrap()).unwrap();
+        assert_eq!(manifests.len(), 3);
+        assert!(manifests.iter().any(|m| m.id == "engineering"));
+        assert!(manifests.iter().any(|m| m.id == "research"));
+        assert!(manifests.iter().any(|m| m.id == "assistant"));
+
+        // 2. List Jobs (All 20 Jobs) via v1.packs.jobs.list
+        let jobs_req = ApiRequest {
+            id: "pack_2".into(),
+            method: METHOD_PACKS_JOBS_LIST.into(),
+            params: serde_json::json!({}),
+        };
+        let jobs_res = dispatcher.handle_request(jobs_req).await;
+        assert!(jobs_res.is_success());
+        let catalog: Vec<PacksJobCatalogItem> =
+            serde_json::from_value(jobs_res.result.unwrap()).unwrap();
+        assert_eq!(catalog.len(), 20, "Expected 20 standardized Workbench Jobs");
+
+        // Verify status mapping:
+        let repo_explain = catalog.iter().find(|j| j.job_id == "engineering__repo_explain").unwrap();
+        assert_eq!(repo_explain.status, JobOperationalStatus::Available);
+        assert!(repo_explain.degradation_reason.is_none());
+
+        let source_qa = catalog.iter().find(|j| j.job_id == "research__source_qa").unwrap();
+        assert_eq!(source_qa.status, JobOperationalStatus::Available);
+
+        let inbox_triage = catalog.iter().find(|j| j.job_id == "assistant__inbox_triage").unwrap();
+        assert_eq!(inbox_triage.status, JobOperationalStatus::Available);
+
+        let bugfix = catalog.iter().find(|j| j.job_id == "engineering__bugfix").unwrap();
+        assert_eq!(bugfix.status, JobOperationalStatus::Degraded);
+        assert!(bugfix.degradation_reason.is_some());
+
+        let migration = catalog.iter().find(|j| j.job_id == "engineering__migration").unwrap();
+        assert_eq!(migration.status, JobOperationalStatus::Planned);
+
+        // 2b. Filter Jobs by Lens
+        let coding_req = ApiRequest {
+            id: "pack_2b".into(),
+            method: METHOD_PACKS_JOBS_LIST.into(),
+            params: serde_json::json!({ "lens": "coding" }),
+        };
+        let coding_res = dispatcher.handle_request(coding_req).await;
+        assert!(coding_res.is_success());
+        let coding_catalog: Vec<PacksJobCatalogItem> =
+            serde_json::from_value(coding_res.result.unwrap()).unwrap();
+        assert_eq!(coding_catalog.len(), 7, "Expected 7 Engineering Jobs in coding lens");
+
+        let research_req = ApiRequest {
+            id: "pack_2c".into(),
+            method: METHOD_PACKS_JOBS_LIST.into(),
+            params: serde_json::json!({ "lens": "research" }),
+        };
+        let research_res = dispatcher.handle_request(research_req).await;
+        let research_catalog: Vec<PacksJobCatalogItem> =
+            serde_json::from_value(research_res.result.unwrap()).unwrap();
+        assert_eq!(research_catalog.len(), 8, "Expected 8 Research Jobs in research lens");
+
+        // 3. Get Specific Job via v1.packs.jobs.get
+        let get_req = ApiRequest {
+            id: "pack_3".into(),
+            method: METHOD_PACKS_JOBS_GET.into(),
+            params: serde_json::json!({ "job_id": "engineering__repo_explain" }),
+        };
+        let get_res = dispatcher.handle_request(get_req).await;
+        assert!(get_res.is_success());
+        let job_item: PacksJobCatalogItem =
+            serde_json::from_value(get_res.result.unwrap()).unwrap();
+        assert_eq!(job_item.job_id, "engineering__repo_explain");
+        assert_eq!(job_item.primary_role, "repo_scout");
+        assert_eq!(job_item.status, JobOperationalStatus::Available);
+
+        // 3b. Get Missing Job
+        let missing_req = ApiRequest {
+            id: "pack_3b".into(),
+            method: METHOD_PACKS_JOBS_GET.into(),
+            params: serde_json::json!({ "job_id": "non_existent_job" }),
+        };
+        let missing_res = dispatcher.handle_request(missing_req).await;
+        assert!(!missing_res.is_success());
+        assert!(missing_res.error.unwrap().contains("not found"));
+
+        // 4. List Roles via v1.packs.roles.list
+        let roles_req = ApiRequest {
+            id: "pack_4".into(),
+            method: METHOD_PACKS_ROLES_LIST.into(),
+            params: serde_json::json!({}),
+        };
+        let roles_res = dispatcher.handle_request(roles_req).await;
+        assert!(roles_res.is_success());
+        let all_roles: Vec<custos_packs::WorkerRole> =
+            serde_json::from_value(roles_res.result.unwrap()).unwrap();
+        assert_eq!(all_roles.len(), 12, "Expected 12 specialized Worker Roles");
+
+        let eng_roles_req = ApiRequest {
+            id: "pack_4b".into(),
+            method: METHOD_PACKS_ROLES_LIST.into(),
+            params: serde_json::json!({ "pack_id": "engineering" }),
+        };
+        let eng_roles_res = dispatcher.handle_request(eng_roles_req).await;
+        let eng_roles: Vec<custos_packs::WorkerRole> =
+            serde_json::from_value(eng_roles_res.result.unwrap()).unwrap();
+        assert_eq!(eng_roles.len(), 4, "Expected 4 Engineering Worker Roles");
+
+        // 5. Run Workbench Job via v1.packs.jobs.run
+        let session = session_manager.create_session(custos_domain::SessionMode::Bare).await;
+        let run_req = ApiRequest {
+            id: "pack_5".into(),
+            method: METHOD_PACKS_JOBS_RUN.into(),
+            params: serde_json::json!({
+                "job_id": "engineering__repo_explain",
+                "session_id": session.id.0,
+                "inputs": {
+                    "query": "TokenBucket",
+                    "scope": ["crates/custos-core"]
+                }
+            }),
+        };
+        let run_res = dispatcher.handle_request(run_req).await;
+        assert!(run_res.is_success(), "run_res failed: {:?}", run_res.error);
+        let run_val = run_res.result.unwrap();
+        assert_eq!(run_val.get("status").unwrap().as_str(), Some("created"));
+        assert_eq!(run_val.get("job_id").unwrap().as_str(), Some("engineering__repo_explain"));
+        let task_id = run_val.get("task_id").unwrap().as_str().unwrap();
+
+        // Verify task was created in TaskService with provenance metadata
+        let task = task_service.get_task(task_id).await.unwrap().expect("task exists");
+        assert_eq!(task.metadata.get("source").unwrap().as_str(), Some("packs_job"));
+        assert_eq!(task.metadata.get("job_id").unwrap().as_str(), Some("engineering__repo_explain"));
+        assert_eq!(task.metadata.get("pack_id").unwrap().as_str(), Some("engineering"));
+        assert_eq!(task.metadata.get("primary_role").unwrap().as_str(), Some("repo_scout"));
     }
 }

@@ -141,7 +141,9 @@ impl StepExecutor for WorkerExecutor {
                 action.assurance = custos_domain::Assurance::CustosMediated;
 
                 let permit = if let Some(ref kernel) = self.kernel {
-                    let p = kernel.request_permit(node_id, &action, "worker_executor").await?;
+                    let p = kernel
+                        .request_permit(node_id, &action, "worker_executor")
+                        .await?;
                     kernel.consume_permit(&p.id, &action).await?
                 } else {
                     return Err(DomainError::Unauthorized(format!(

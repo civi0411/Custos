@@ -3,9 +3,9 @@
 //! Models versioned markdown notes, research scratchpads, and task annotations
 //! with cryptographic content addressing and artifact lineage integration.
 
-use serde::{Deserialize, Serialize};
 use crate::error::DomainError;
 use crate::ids::{digest, new_id};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NoteRecord {
@@ -121,7 +121,10 @@ mod tests {
 
         assert_eq!(note.version, 2);
         assert_eq!(prev.version, 1);
-        assert_eq!(prev.content, "# Hypothesis\nThe model exhibits linear latent structure.");
+        assert_eq!(
+            prev.content,
+            "# Hypothesis\nThe model exhibits linear latent structure."
+        );
         assert_ne!(note.content_hash, prev.content_hash);
     }
 }

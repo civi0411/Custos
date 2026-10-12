@@ -120,12 +120,18 @@ pub fn parse_openai_sse_chunk(
     }
 
     let parsed: Value = serde_json::from_str(data_str).ok()?;
-    let model = parsed.get("model").and_then(|v| v.as_str()).map(String::from);
+    let model = parsed
+        .get("model")
+        .and_then(|v| v.as_str())
+        .map(String::from);
     let resp_id = parsed.get("id").and_then(|v| v.as_str()).map(String::from);
 
     // Check usage block
     if let Some(usage) = parsed.get("usage") {
-        let prompt_tokens = usage.get("prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+        let prompt_tokens = usage
+            .get("prompt_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
         let completion_tokens = usage
             .get("completion_tokens")
             .and_then(|v| v.as_u64())
@@ -189,7 +195,11 @@ pub fn parse_openai_sse_chunk(
             // Tool call delta
             if let Some(tc_array) = delta.get("tool_calls").and_then(|tc| tc.as_array()) {
                 if let Some(tc) = tc_array.get(0) {
-                    let id = tc.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    let id = tc
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
                     let name = tc
                         .get("function")
                         .and_then(|f| f.get("name"))

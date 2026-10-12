@@ -65,20 +65,27 @@ export interface ModelCombo {
 
 export interface UsageRecord {
   id: string;
-  modelId: string;
-  modelName: string;
-  providerId: ProviderServiceId;
-  providerName: string;
-  accountName: string;
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  estimatedCostUsd: number;
-  requestCount: number;
-  quotaLimitTokens: number; // e.g. 1_000_000 daily
-  quotaUsedTokens: number;
-  quotaPercent: number; // 0 - 100
-  rateLimitStatus: 'normal' | 'throttled' | 'exhausted';
-  resetPeriod: string; // e.g. "Resets daily at 00:00 UTC"
-  lastUsedAt: string;
+  account_id: string | null;
+  model: string | null;
+  status: string;
+  recorded_at: string;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  total_tokens: number | null;
+  rate_limited: boolean;
+}
+
+export interface ProviderQuotaSnapshot {
+  account_id: string;
+  status: 'available' | 'unavailable' | 'unsupported' | 'not_applicable';
+  source?: 'provider' | 'provider_catalog';
+  windows: { name: string; used_percent: number; resets_at: string | number | null; window_kind?: 'five_hour' | 'weekly' | 'other'; model_group?: 'gemini' | 'claude_gpt' }[];
+  fetched_at: string;
+  error?: string;
+}
+
+export interface ProviderUsageReport {
+  records: UsageRecord[];
+  quotas: ProviderQuotaSnapshot[];
+  fetched_at: string;
 }

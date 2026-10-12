@@ -12,7 +12,9 @@ pub fn research_profile() -> PackProfile {
         vec![
             ExecutionTopology::T0Direct,
             ExecutionTopology::T1SingleWorker,
+            ExecutionTopology::T2StagedPipeline,
             ExecutionTopology::T3ReadFanOut,
+            ExecutionTopology::T4Worktree,
         ],
         "citation_coverage_oracle",
         15_000,

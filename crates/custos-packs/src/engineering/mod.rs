@@ -69,7 +69,9 @@ impl DomainPack for EngineeringPack {
             name: "Engineering Pack".to_string(),
             version: "0.1.0".to_string(),
             lens: WorkbenchLens::Coding,
-            description: "Autonomous software engineering, git workflows, test execution and linting".to_string(),
+            description:
+                "Autonomous software engineering, git workflows, test execution and linting"
+                    .to_string(),
             supported_jobs: jobs,
             supported_roles: roles,
         }
@@ -218,7 +220,9 @@ impl DomainPack for EngineeringPack {
     }
 
     async fn initialize(&self) -> Result<(), DomainError> {
-        tracing::info!("Initialized Engineering Domain Pack with AST, Git, and Verifier capabilities");
+        tracing::info!(
+            "Initialized Engineering Domain Pack with AST, Git, and Verifier capabilities"
+        );
         Ok(())
     }
 }

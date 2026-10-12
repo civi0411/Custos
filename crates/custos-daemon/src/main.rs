@@ -37,9 +37,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let local_api = runtime.local_api.clone();
 
     // Bind HTTP Server on loopback (default 3000, or env CUSTOS_HTTP_BIND)
-    let http_bind = std::env::var("CUSTOS_HTTP_BIND").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
+    let http_bind =
+        std::env::var("CUSTOS_HTTP_BIND").unwrap_or_else(|_| "127.0.0.1:3000".to_string());
     let http_api = local_api.clone();
-    let (http_port, http_task) = match custos_daemon::start_http_server(&http_bind, http_api).await {
+    let (http_port, http_task) = match custos_daemon::start_http_server(&http_bind, http_api).await
+    {
         Ok(res) => res,
         Err(err) => {
             eprintln!("Notice: primary HTTP bind on {http_bind} failed ({err}), falling back to dynamic port...");
@@ -72,7 +74,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     };
                     if let Ok(mut encoded) = serde_json::to_vec(&response) {
                         encoded.push(b'\n');
-                        if writer.write_all(&encoded).await.is_err() || writer.flush().await.is_err() {
+                        if writer.write_all(&encoded).await.is_err()
+                            || writer.flush().await.is_err()
+                        {
                             break;
                         }
                     }

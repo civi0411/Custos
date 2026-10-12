@@ -29,7 +29,9 @@ pub struct BedrockMessage {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum BedrockContentBlock {
-    Text { text: String },
+    Text {
+        text: String,
+    },
     ToolUse {
         #[serde(rename = "toolUse")]
         tool_use: BedrockToolUse,

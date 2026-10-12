@@ -79,7 +79,10 @@ impl CapabilityDescriptor {
             status: CapabilityStatus::Available,
             description: description.into(),
             resource_id: resource_id.map(ToString::to_string),
-            supported_operations: supported_operations.into_iter().map(ToString::to_string).collect(),
+            supported_operations: supported_operations
+                .into_iter()
+                .map(ToString::to_string)
+                .collect(),
             version: "0.1.0".to_string(),
         }
     }
@@ -124,7 +127,10 @@ impl CapabilityDescriptor {
             },
             description: description.into(),
             resource_id: resource_id.map(ToString::to_string),
-            supported_operations: supported_operations.into_iter().map(ToString::to_string).collect(),
+            supported_operations: supported_operations
+                .into_iter()
+                .map(ToString::to_string)
+                .collect(),
             version: "0.1.0".to_string(),
         }
     }

@@ -15,6 +15,7 @@ import {
   Copy,
   Check,
 } from 'lucide-react';
+import { ProviderBrandIcon } from '@/components/common/AgentIcons';
 import { CustomSelect, CustomSelectOption } from '../CustomSelect';
 import { daemonClient } from '@/api/daemon_client';
 import { ProbedModel, ModelCatalogOption, ProviderServiceId } from '@/types';
@@ -30,7 +31,7 @@ interface AddProviderModalProps {
     model?: string;
     contextWindow?: number;
     fastMode?: boolean;
-  }) => void;
+  }) => Promise<void>;
 }
 
 const providerOptions: CustomSelectOption[] = [
@@ -38,25 +39,25 @@ const providerOptions: CustomSelectOption[] = [
     value: 'anthropic',
     label: 'Anthropic Claude',
     sublabel: 'Claude 3.7 Sonnet, 3.5 Haiku',
-    icon: <img src="/assets/provider-logo/anthropic.jpg" alt="Anthropic" className="w-4 h-4 rounded object-cover" />,
+    icon: <ProviderBrandIcon provider="anthropic" size={16} />,
   },
   {
     value: 'openai',
     label: 'OpenAI / Codex',
     sublabel: 'GPT-4o, o3-mini, o1',
-    icon: <img src="/assets/provider-logo/openai.jpg" alt="OpenAI" className="w-4 h-4 rounded object-cover" />,
+    icon: <ProviderBrandIcon provider="openai" size={16} />,
   },
   {
     value: 'gemini',
     label: 'Google Cloud / Gemini',
     sublabel: 'Gemini 2.5 Pro, Flash (1M tokens)',
-    icon: <img src="/assets/provider-logo/gemini.jpg" alt="Google" className="w-4 h-4 rounded object-cover" />,
+    icon: <ProviderBrandIcon provider="gemini" size={16} />,
   },
   {
     value: 'deepseek',
     label: 'DeepSeek',
     sublabel: 'DeepSeek V3, R1 Reasoner',
-    icon: <img src="/assets/provider-logo/deepseek.jpg" alt="DeepSeek" className="w-4 h-4 rounded object-cover" />,
+    icon: <ProviderBrandIcon provider="deepseek" size={16} />,
   },
   {
     value: 'local',
@@ -86,7 +87,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   const { handleConnectOAuth } = useAppContext();
 
   // Auth Mode: API Key or OAuth
-  const [authMode, setAuthMode] = useState<'api_key' | 'oauth'>('api_key');
+  const [authMode, setAuthMode] = useState<'api_key' | 'oauth' | 'local'>('api_key');
 
   // API Key Form State
   const [providerService, setProviderService] = useState('anthropic');
@@ -99,8 +100,48 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   const [rawProbed, setRawProbed] = useState<ProbedModel[]>([]);
   const [isProbing, setIsProbing] = useState(false);
   const [probeStatus, setProbeStatus] = useState<{ type: 'idle' | 'success' | 'error'; message?: string }>({ type: 'idle' });
+  const [localUrl, setLocalUrl] = useState('http://localhost:11434');
+  const [localModels, setLocalModels] = useState<ProbedModel[]>([]);
+  const [localModel, setLocalModel] = useState('');
+  const [localError, setLocalError] = useState('');
+  const [localConnected, setLocalConnected] = useState(false);
+  const [localBusy, setLocalBusy] = useState(false);
+  const localGeneration = useRef(0);
+  const connectLocal = async () => {
+    const generation = ++localGeneration.current;
+    setLocalBusy(true); setLocalError(''); setLocalConnected(false);
+    try {
+      const result = await daemonClient.probeModels(localUrl.trim(), 'ollama');
+      if (generation !== localGeneration.current) return;
+      const models = result?.models || [];
+      setLocalModels(models);
+      setLocalModel(models.some(m => m.id === localModel) ? localModel : models[0]?.id || '');
+      setLocalConnected(true);
+      if (!models.length) setLocalError('No installed models. Run ollama pull <model>, then refresh.');
+      else if (localModel && !models.some(m => m.id === localModel)) setLocalError('The previously selected model was removed. Select an installed model.');
+    } catch (err: any) {
+      if (generation !== localGeneration.current) return;
+      setLocalModels([]); setLocalModel('');
+      setLocalError(`Check the URL and ensure Ollama is running: ${err?.message || err}`);
+    } finally { if (generation === localGeneration.current) setLocalBusy(false); }
+  };
+  const saveLocal = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const model = localModels.find(m => m.id === localModel);
+    if (!localConnected || !model || localBusy) return;
+    setLocalBusy(true); setLocalError('');
+    try {
+      await onSaveProvider({ service: 'local', apiKey: '', endpointUrl: localUrl.trim(), model: model.id, contextWindow: model.context_window || undefined });
+      onClose();
+    } catch (err: any) { setLocalError(`Save failed: ${err?.message || err}`); }
+    finally { setLocalBusy(false); }
+  };
   const [fastMode, setFastMode] = useState(true);
   const [reasoningEffort, setReasoningEffort] = useState('medium');
+
+  useEffect(() => {
+    if (!isOpen) { localGeneration.current++; setLocalConnected(false); setLocalModels([]); setLocalModel(''); setLocalError(''); setLocalBusy(false); }
+  }, [isOpen]);
 
   // OAuth Form State
   const [oauthProvider, setOauthProvider] = useState<ProviderServiceId>('openai');
@@ -336,7 +377,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
     }
   };
 
-  const handleSubmitApiKey = (e: React.FormEvent) => {
+  const handleSubmitApiKey = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!apiKey.trim() && providerService !== 'local') {
       alert('Vui lòng nhập API Key cho cloud provider.');
@@ -347,7 +388,8 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
     const catalogMatch = rawCatalog.find((m) => m.id === selectedModel);
     const contextWindow = probedMatch?.context_window || catalogMatch?.context_window || 128000;
 
-    onSaveProvider({
+    try {
+    await onSaveProvider({
       service: providerService,
       apiKey: apiKey.trim(),
       endpointUrl: endpointUrl.trim() || undefined,
@@ -358,9 +400,9 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
 
     setApiKey('');
     onClose();
+    } catch (err: any) { setProbeStatus({ type: 'error', message: `Save failed: ${err?.message || err}` }); }
   };
 
-  const selectedOption = providerOptions.find((opt) => opt.value === providerService);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 select-none">
@@ -402,24 +444,38 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                 : 'border-transparent text-fg-muted hover:text-fg-editor'
             }`}
           >
-            <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+            <ShieldCheck className="w-3.5 h-3.5" />
             <span>OAuth 2.0 / SSO Connect</span>
           </button>
+          <button type="button" onClick={() => setAuthMode('local')} className={`pb-2.5 px-3 font-medium border-b-2 flex items-center gap-1.5 ${authMode === 'local' ? 'border-workbench-accent text-fg-editor' : 'border-transparent text-fg-muted'}`}><Server className="w-3.5 h-3.5" />Local</button>
         </div>
 
         {/* TAB 1: API KEY */}
-        {authMode === 'api_key' ? (
+        {authMode === 'local' ? (
+          <form onSubmit={saveLocal} className="flex flex-col min-h-0">
+            <div className="p-5 space-y-4 text-xs overflow-y-auto">
+              <p className="text-fg-editor font-semibold flex gap-2"><ProviderBrandIcon provider="ollama" size={16} />Ollama local models</p>
+              <label className="block space-y-2 text-fg-editor"><span>Endpoint Base URL</span>
+                <input type="url" required value={localUrl} disabled={localBusy} onChange={e => { setLocalUrl(e.target.value); localGeneration.current++; setLocalConnected(false); setLocalModels([]); setLocalModel(''); setLocalError(''); }} className="w-full bg-surface-0 border border-border-default rounded-lg px-3 py-2 text-fg-editor" />
+              </label>
+              <button type="button" onClick={connectLocal} disabled={localBusy || !localUrl.trim()} className="provider-oauth-action rounded-lg px-3 py-2 flex gap-2 items-center disabled:opacity-50"><RefreshCw className={`w-4 h-4 ${localBusy ? 'animate-spin' : ''}`} />{localBusy ? 'Connecting...' : 'Connect / Refresh models'}</button>
+              {localError && <p role="alert" className="text-red-400 break-words">{localError}</p>}
+              {localConnected && localModels.length > 0 && <p role="status" className="text-emerald-400">Connected · {localModels.length} installed models</p>}
+              <label className="block text-fg-editor">Model</label>
+              <CustomSelect value={localModel} onChange={setLocalModel} options={localModels.map(m => ({ value: m.id, label: m.name || m.id, sublabel: m.context_window ? `${m.context_window} tokens` : 'Context unknown' }))} headerTitle="Installed Ollama models" />
+            </div>
+            <div className="border-t border-border-muted p-4 flex justify-end gap-2">
+              <button type="button" onClick={onClose} disabled={localBusy} className="text-fg-editor px-3 py-2">Cancel</button>
+              <button type="submit" disabled={localBusy || !localConnected || !localModels.some(m => m.id === localModel)} className="provider-oauth-action rounded-lg px-3 py-2 disabled:opacity-50">{localBusy ? 'Please wait...' : 'Save & Activate Provider'}</button>
+            </div>
+          </form>
+        ) : authMode === 'api_key' ? (
           <form onSubmit={handleSubmitApiKey} className="flex flex-col flex-1 min-h-0 overflow-hidden">
             <div className="p-5 space-y-4 text-xs overflow-y-auto min-h-0 flex-1">
               {/* Provider Service Picker */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="font-medium text-fg-editor">Provider Service</label>
-                  {selectedOption?.icon && (
-                    <div className="w-5 h-5 rounded-md overflow-hidden shrink-0 shadow-xs flex items-center justify-center">
-                      {selectedOption.icon}
-                    </div>
-                  )}
                 </div>
                 <CustomSelect
                   value={providerService}
@@ -587,11 +643,11 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                 <label className="font-medium text-fg-editor">Select OAuth Identity Provider</label>
                 <div className="grid grid-cols-2 gap-2.5">
                   {[
-                    { id: 'antigravity', name: 'Antigravity', sub: 'Google OAuth / PKCE', icon: '/assets/provider-logo/gemini.jpg' },
-                    { id: 'copilot', name: 'GitHub Copilot', sub: 'Device Authorization', icon: '/assets/provider-logo/github-copilot.jpg' },
-                    { id: 'gemini', name: 'Google Cloud Gemini', sub: 'Google OAuth 2.0', icon: '/assets/provider-logo/gemini.jpg' },
-                    { id: 'openai', name: 'OpenAI Platform', sub: 'OAuth Team / Enterprise', icon: '/assets/provider-logo/openai.jpg' },
-                    { id: 'anthropic', name: 'Anthropic Claude', sub: 'Console OAuth Login', icon: '/assets/provider-logo/anthropic.jpg' },
+                    { id: 'antigravity', name: 'Antigravity', sub: 'Google OAuth / PKCE' },
+                    { id: 'copilot', name: 'GitHub Copilot', sub: 'Device Authorization' },
+                    { id: 'gemini', name: 'Google Cloud Gemini', sub: 'Google OAuth 2.0' },
+                    { id: 'openai', name: 'OpenAI Platform', sub: 'OAuth Team / Enterprise' },
+                    { id: 'anthropic', name: 'Anthropic Claude', sub: 'Console OAuth Login' },
                   ].map((p) => (
                     <button
                       key={p.id}
@@ -604,7 +660,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                       }`}
                     >
                       <div className="w-6 h-6 rounded-md overflow-hidden shrink-0 border border-border-muted">
-                        <img src={p.icon} alt={p.name} className="w-full h-full object-cover" />
+                        <ProviderBrandIcon provider={p.id} size={24} />
                       </div>
                       <div className="min-w-0">
                         <div className="font-semibold text-xs text-fg-editor truncate">{p.name}</div>

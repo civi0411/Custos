@@ -135,8 +135,14 @@ mod tests {
         let store = Arc::new(MockSessionStore::new());
         let manager = SessionManager::with_store(store.clone());
         let session = manager.create_session(SessionMode::Assisted).await;
-        manager.open_in_lens(&session.id, WorkbenchLens::Coding).await.unwrap();
-        manager.open_in_lens(&session.id, WorkbenchLens::Coding).await.unwrap();
+        manager
+            .open_in_lens(&session.id, WorkbenchLens::Coding)
+            .await
+            .unwrap();
+        manager
+            .open_in_lens(&session.id, WorkbenchLens::Coding)
+            .await
+            .unwrap();
         let restored = SessionManager::with_store(store);
         let journal = restored.get_journal(&session.id).await.unwrap();
         assert_eq!(journal.entries.len(), 1);
