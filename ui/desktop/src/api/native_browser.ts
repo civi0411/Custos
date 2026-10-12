@@ -18,3 +18,13 @@ export function browserCommand(id: string, action: string, fields: Record<string
   void next.finally(() => { if (queues.get(id) === next) queues.delete(id); }).catch(() => {});
   return next;
 }
+
+export function normalizeBrowserUrl(raw: string): string {
+  const value = raw.trim();
+  if (!value || value === 'about:blank') return 'about:blank';
+  if (/^:\d+(\/.*)?$/.test(value)) return `http://localhost${value}`;
+  if (/^(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?(\/.*)?$/i.test(value)) return `http://${value}`;
+  if (/^[a-z][a-z\d+.-]*:/i.test(value)) return value;
+  if (/^[^\s]+\.[a-z]{2,}(:\d+)?(\/.*)?$/i.test(value)) return `https://${value}`;
+  return `https://duckduckgo.com/?q=${encodeURIComponent(value)}`;
+}

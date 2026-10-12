@@ -5,7 +5,8 @@
   "permissions": [
     "core:default",
     "core:webview:allow-set-webview-zoom",
-    "opener:default"
+    "opener:default",
+    "core:window:allow-set-theme"
   ],
   "webviews": [
     "main"
