@@ -1036,7 +1036,7 @@ Custos/
 | File | Lines | Current responsibility | Key export |
 |---|---:|---|---|
 | [`ui/desktop/src/app/studio/page.tsx`](../../ui/desktop/src/app/studio/page.tsx) | 233 | Per-lens session filtering, last selection and durable same-session full-chat opening; only last-selection remains device-local | `StudioPage` |
-| [`ui/desktop/src/components/shell/AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) | 640 | Shared conversation/resource shell; empty lens has no selected conversation | `AppWorkspaceShell` |
+| [`ui/desktop/src/components/shell/AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) | 725 | Shared conversation/resource shell; headerless transcript and shared Send/Stop icon control; empty lens has no selected conversation | `AppWorkspaceShell` |
 | [`ui/desktop/src/components/shell/WorkspaceSidebar.tsx`](../../ui/desktop/src/components/shell/WorkspaceSidebar.tsx) | 361 | Per-lens history list and full-chat destination control | `WorkspaceSidebar` |
 | [`ui/desktop/src/components/modals/NewSessionModal.tsx`](../../ui/desktop/src/components/modals/NewSessionModal.tsx) | 101 | Defaults new Task pack to the visible workbench | `NewSessionModal` |
 | [`ui/desktop/src/context/AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx) | 1547 | Daemon session/journal projection; keeps all sessions, filters non-message events and reads durable lens membership | `AppProvider`, `useAppContext` |
@@ -1170,3 +1170,7 @@ Quota group projection: providers/probe.rs fetches Antigravity grouped quota sum
 | [EvidenceWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/EvidenceWorkbenchPane.tsx) | 997 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
 | [FilesWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/FilesWorkbenchPane.tsx) | 495 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
 | [TerminalWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/TerminalWorkbenchPane.tsx) | 386 | Existing presentation consumer using shared neutral dropdowns (Owner: Vinh) | Existing component exports |
+
+Conversation presentation omits message author/avatar headers and all message badges. The composer uses a transparent Send button with an accent-filled icon when the draft contains non-whitespace text; an accessible filled Stop icon occupies the same button while a response is active. Errors and activity details remain visible.
+
+Desktop toast feedback is reserved for actionable failures, unavailable operations and meaningful asynchronous results. Workbench navigation, model selection, prompt dispatch and immediate appearance changes remain quiet because their state is already visible. Unimplemented history/filter controls are disabled instead of emitting placeholder notifications.

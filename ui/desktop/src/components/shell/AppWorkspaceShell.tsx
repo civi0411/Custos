@@ -36,19 +36,8 @@ import { HighlightedCodeBlock } from '@/components/chat/HighlightedCodeBlock';
 import { formatKeyCombo } from '@/lib/utils';
 import { SlashCommandMenu, SLASH_COMMANDS, type SlashCommandDef } from '@/components/chat/SlashCommandMenu';
 import { daemonClient } from '@/api/daemon_client';
-import { OpenAIIcon, ClaudeIcon, GeminiIcon, ProviderBrandIcon } from '@/components/common/AgentIcons';
 
-const renderAgentIcon = (author?: string, currentMode?: AppWorkspaceMode) => {
-  const name = (author || '').toLowerCase();
-  if (name.includes('claude') || name.includes('anthropic')) return <ClaudeIcon size={13} />;
-  if (name.includes('openai') || name.includes('gpt') || name.includes('codex')) return <OpenAIIcon size={13} />;
-  if (name.includes('gemini') || name.includes('google')) return <GeminiIcon size={13} />;
-  if (name.includes('antigravity')) return <ProviderBrandIcon provider="antigravity" size={13} />;
-  if (name.includes('deepseek')) return <ProviderBrandIcon provider="deepseek" size={13} />;
-  if (currentMode === 'code') return <OpenAIIcon size={13} />;
-  if (currentMode === 'research') return <ClaudeIcon size={13} />;
-  return <GeminiIcon size={13} />;
-};
+
 
 
 interface AppWorkspaceShellProps {
@@ -169,7 +158,6 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
         if (e.altKey) {
           e.preventDefault();
           openTab('kanban', 'Fleet Kanban', 'orca://kanban');
-          onShowToast?.(`Opened Fleet Kanban (${formatKeyCombo({ ctrlOrCmd: true, alt: true, key: 'K' })})`);
         } else {
           e.preventDefault();
           setIsCommandPaletteOpen((prev) => !prev);
@@ -565,38 +553,8 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                         aria-label={isUser ? "User message" : "Agent message"}
                         className={isUser ? "conversation-user-message space-y-2 mb-4" : "space-y-2.5 pb-6 border-b border-border-muted/40 last:border-b-0 min-w-0"}
                       >
-                        {/* Message Header */}
-                        <div className="flex items-center gap-2.5 text-xs">
-                          {isUser ? (
-                            <div className={`w-5 h-5 rounded-md ${lensMeta.avatarBg} text-fg-on-emphasis font-bold text-[9px] flex items-center justify-center shrink-0 shadow-xs`}>
-                              {lensMeta.avatarText}
-                            </div>
-                          ) : (
-                            <div className="w-5 h-5 rounded-md bg-surface-2 text-fg-editor flex items-center justify-center shrink-0 p-0.5 border border-border-default shadow-xs">
-                              {renderAgentIcon(msg.author, mode)}
-                            </div>
-                          )}
-                          <span className="font-semibold text-fg-editor text-[12.5px]">
-                            {isUser ? 'You' : msg.author || 'Custos Agent'}
-                          </span>
-                          {msg.badge && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-surface-1 text-fg-muted border border-border-default font-mono">
-                              {msg.badge}
-                            </span>
-                          )}
-                          {msg.runId && !['completed', 'failed', 'cancelled', 'interrupted'].includes(msg.runStatus || '') && (
-                            <button
-                              type="button"
-                              onClick={() => void handleStopRun(msg.runId!)}
-                              className="rounded border border-border-default px-2 py-0.5 text-[10px] text-fg-editor hover:bg-surface-2 transition flex items-center gap-1"
-                            >
-                              <StopIcon className="w-2.5 h-2.5" /> Stop
-                            </button>
-                          )}
-                        </div>
-
                         {/* Message Content */}
-                        <div className="conversation-markdown text-[13px] leading-relaxed text-fg-editor pl-7 space-y-3 min-w-0 break-words [overflow-wrap:anywhere]">
+                        <div className="conversation-markdown text-[13px] leading-relaxed text-fg-editor space-y-3 min-w-0 break-words [overflow-wrap:anywhere]">
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm, remarkMath, remarkNormalizeChatMath]}
                             rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, strict: false, maxExpand: 1000, maxSize: 20 }]]}
@@ -650,7 +608,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-fg-editor placeholder-fg-subtle text-[13px] resize-none leading-relaxed"
                 />
 
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-border-muted">
+                <div className="flex items-center justify-between mt-2 pt-2">
                   <div className="flex items-center gap-2 text-fg-muted">
                     <button
                       onClick={() => openResources(false)}
@@ -681,16 +639,16 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                       title={liveMessage ? 'Stop response' : 'Send message'}
                       className={`p-1.5 rounded-lg transition ${
                         liveMessage
-                          ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                          ? 'bg-transparent workbench-accent hover:opacity-80'
                           : inputText.trim()
-                          ? 'workbench-primary-action'
-                          : 'text-fg-muted bg-surface-2 cursor-not-allowed opacity-60'
+                          ? 'bg-transparent workbench-accent hover:opacity-80'
+                          : 'text-fg-muted bg-transparent cursor-not-allowed opacity-60'
                       }`}
                     >
                       {liveMessage ? (
                         <StopIcon className="w-4 h-4 fill-current" aria-hidden="true" />
                       ) : (
-                        <Send className="w-4 h-4" aria-hidden="true" />
+                        <Send className={`w-4 h-4 ${inputText.trim() ? 'fill-current' : ''}`} aria-hidden="true" />
                       )}
                     </button>
                   </div>

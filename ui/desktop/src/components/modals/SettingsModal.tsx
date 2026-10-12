@@ -66,7 +66,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
   initialTab,
-  onShowToast,
+  onShowToast: _onShowToast,
 }) => {
   const {
     uiScale,
@@ -106,7 +106,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     localStorage.setItem(APPEARANCE_KEY, JSON.stringify(next));
     document.documentElement.dataset.density = next.density;
     document.documentElement.dataset.reduceMotion = String(next.reduceMotion);
-    onShowToast('Appearance preference saved on this device');
   };
 
   const nav = [

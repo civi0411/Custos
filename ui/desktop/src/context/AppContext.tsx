@@ -642,7 +642,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
       });
     }
-    showToast(modelName ? `Active Model: ${modelName}` : 'No model selected');
   }, [activeSessionId, currentProject, showToast]);
 
   // Synchronize activeSession model only when it still belongs to a live account catalog.
@@ -1024,8 +1023,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         showToast('Chưa có LLM nào được cấu hình hiện tại');
         return;
       }
-
-      showToast('Dispatching run to Custos Spine...');
 
       // 2. Ensure a daemon session exists, but run each chat turn on its own task
       // so active worker claims on the source task do not fence conversation turns.

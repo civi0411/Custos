@@ -76,7 +76,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   avatarColor,
   avatarText,
   avatarTextColor = 'text-fg-on-emphasis',
-  onShowToast,
+  onShowToast: _onShowToast,
   onOpenSettings,
   isSidebarCollapsed
 }) => {
@@ -112,7 +112,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         {/* + New Task Button */}
         <button
           onClick={onNewSession}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-2 hover:bg-surface-3 text-fg-editor text-[13px] font-medium transition border border-border-default mb-3 group"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-2 hover:bg-surface-3 text-fg-editor text-[13px] font-medium transition mb-3 group"
         >
           <NewTaskIcon className={`w-4 h-4 ${newTaskIconColor} group-hover:text-fg-editor transition`} />
           <span>{newTaskLabel}</span>
@@ -144,7 +144,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         <div className="flex items-center justify-between px-3 py-1 text-[11px] font-medium text-fg-subtle mb-1">
           <span>{sessionsTitle}</span>
           <button
-            onClick={() => { if (onShowToast) onShowToast('Filter sessions'); }}
+            disabled
             className="p-1 hover:text-fg-editor transition rounded text-fg-muted"
             title="Filter"
           >

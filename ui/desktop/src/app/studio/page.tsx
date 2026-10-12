@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { type AppWorkspaceMode, AppWorkspaceShell } from '@/components/shell';
 import { type OrcaTab, type OrcaTabId, type ResourceTabsState } from '@/components/views/OrcaTabbedContainer';
-import { formatKeyCombo } from '@/lib/utils';
 import type { Session } from '@/types';
 import { daemonClient } from '@/api/daemon_client';
 
@@ -125,7 +124,6 @@ export function StudioPage() {
     }));
     setLastSessionByLens((previous) => ({ ...previous, [`${currentProject}:${targetMode}`]: source.id }));
     setMode(targetMode);
-    showToast(`Opened the complete saved chat in ${targetMode === 'chat' ? 'Copilot' : targetMode === 'code' ? 'Coding' : 'Research'}. Agent context is prepared separately.`);
   };
 
   // Synchronize session ID from URL if present
@@ -161,15 +159,12 @@ export function StudioPage() {
       if (e.key === '1') {
         e.preventDefault();
         switchMode('chat');
-        showToast(`Opened Copilot view (${formatKeyCombo({ ctrlOrCmd: true, key: '1' })})`);
       } else if (e.key === '2') {
         e.preventDefault();
         switchMode('code');
-        showToast(`Opened Coding view (${formatKeyCombo({ ctrlOrCmd: true, key: '2' })})`);
       } else if (e.key === '3') {
         e.preventDefault();
         switchMode('research');
-        showToast(`Opened Research view (${formatKeyCombo({ ctrlOrCmd: true, key: '3' })})`);
       } else if (e.key === 'f' && e.shiftKey && e.metaKey) {
         e.preventDefault();
         setIsWebTabOpen(true);
