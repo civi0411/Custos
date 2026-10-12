@@ -11,6 +11,13 @@ import {
   ArrowRight,
   Send,
   Check,
+  Home,
+  Globe,
+  Sparkles,
+  Terminal,
+  Search,
+  Wifi,
+  Battery,
 } from 'lucide-react';
 import { NativeSelect } from '@/components/common/NativeSelect';
 
@@ -68,6 +75,8 @@ const DEVICE_PRESETS: DevicePreset[] = [
   },
 ];
 
+const SPRINGBOARD_URL = 'custos://springboard';
+
 interface MobileSimulatorWorkbenchPaneProps {
   onShowToast?: (message: string) => void;
   defaultUrl?: string;
@@ -76,13 +85,13 @@ interface MobileSimulatorWorkbenchPaneProps {
 
 export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPaneProps> = ({
   onShowToast,
-  defaultUrl = 'http://localhost:5173',
+  defaultUrl = SPRINGBOARD_URL,
   onAskAgent,
 }) => {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('iphone-15-pro');
   const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
   const [scale, setScale] = useState<number>(0.75);
-  const [urlInput, setUrlInput] = useState<string>(defaultUrl);
+  const [urlInput, setUrlInput] = useState<string>(defaultUrl === SPRINGBOARD_URL ? '' : defaultUrl);
   const [activeUrl, setActiveUrl] = useState<string>(defaultUrl);
   const [isPowerOn, setIsPowerOn] = useState<boolean>(true);
   const [activeDrawer, setActiveDrawer] = useState<'axtree' | 'console' | 'evidence'>('axtree');
@@ -97,16 +106,25 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
   const screenWidth = orientation === 'portrait' ? device.width : device.height;
   const screenHeight = orientation === 'portrait' ? device.height : device.width;
 
-  const handleNavigate = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    const trimmed = urlInput.trim();
-    if (!trimmed) return;
-    const formatted = trimmed.startsWith('http') ? trimmed : `http://${trimmed}`;
+  const handleNavigate = (target?: string) => {
+    const raw = (target !== undefined ? target : urlInput).trim();
+    if (!raw || raw === SPRINGBOARD_URL || raw === 'about:blank') {
+      setActiveUrl(SPRINGBOARD_URL);
+      setUrlInput('');
+      return;
+    }
+    const formatted = raw.startsWith('http://') || raw.startsWith('https://')
+      ? raw
+      : raw.startsWith(':')
+      ? `http://localhost${raw}`
+      : `http://${raw}`;
+
     setActiveUrl(formatted);
     setUrlInput(formatted);
   };
 
   const handleReload = () => {
+    if (activeUrl === SPRINGBOARD_URL) return;
     if (iframeRef.current) {
       iframeRef.current.src = activeUrl;
     }
@@ -119,6 +137,16 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
 
   // Accessibility Tree (AX Tree) representation for Agent ingestion & responsive verification
   const mockAxTree = useMemo(() => {
+    if (activeUrl === SPRINGBOARD_URL) {
+      return [
+        { id: '1', role: 'banner', name: 'Mobile Status Bar', bounds: { x: 0, y: 0, w: screenWidth, h: 48 } },
+        { id: '2', role: 'grid', name: 'Home Screen Springboard', bounds: { x: 20, y: 80, w: screenWidth - 40, h: 320 } },
+        { id: '3', role: 'button', name: 'App: Local Dev Vite (:5173)', bounds: { x: 24, y: 90, w: 64, h: 64 } },
+        { id: '4', role: 'button', name: 'App: Mobile Web Browser', bounds: { x: 104, y: 90, w: 64, h: 64 } },
+        { id: '5', role: 'button', name: 'App: Design Inspo (Linear)', bounds: { x: 184, y: 90, w: 64, h: 64 } },
+        { id: '6', role: 'searchbox', name: 'Quick Search / URL', bounds: { x: 20, y: screenHeight - 110, w: screenWidth - 40, h: 44 } },
+      ];
+    }
     return [
       { id: '1', role: 'banner', name: 'App Header', bounds: { x: 0, y: 0, w: screenWidth, h: 56 } },
       { id: '2', role: 'heading', level: 1, name: 'Active Project Viewport', bounds: { x: 16, y: 12, w: 240, h: 32 } },
@@ -128,13 +156,13 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
       { id: '6', role: 'button', name: 'Action Button', bounds: { x: 16, y: 128, w: screenWidth - 32, h: 48 } },
       { id: '7', role: 'navigation', name: 'Bottom Tab Bar', bounds: { x: 0, y: screenHeight - 64, w: screenWidth, h: 64 } },
     ];
-  }, [screenWidth, screenHeight]);
+  }, [screenWidth, screenHeight, activeUrl]);
 
   const handleInsertToChat = () => {
     const axSummary = mockAxTree
       .map((n) => `- [${n.role}] "${n.name}" (${n.bounds.w}×${n.bounds.h}px)`)
       .join('\n');
-    const snippet = `Context Mobile Simulator [${device.name} - ${orientation}]:\n- Preview URL: ${activeUrl}\n- Resolution: ${screenWidth}×${screenHeight} (dpr: ${device.dpr})\n- Accessibility Tree:\n${axSummary}`;
+    const snippet = `Context Mobile Simulator [${device.name} - ${orientation}]:\n- Active View: ${activeUrl}\n- Resolution: ${screenWidth}×${screenHeight} (dpr: ${device.dpr})\n- Accessibility Tree:\n${axSummary}`;
     if (onAskAgent) {
       onAskAgent(snippet);
       setJustInserted(true);
@@ -145,6 +173,8 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
       onShowToast?.(`Copied mobile context to clipboard.`);
     }
   };
+
+  const isSpringboard = activeUrl === SPRINGBOARD_URL;
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)] text-xs overflow-hidden select-none font-sans">
@@ -166,7 +196,7 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
 
           <div className="flex items-center gap-1.5 text-[11px] text-[var(--color-fg-subtle)]">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-            <span>Live Preview</span>
+            <span>{isSpringboard ? 'Home Screen' : 'Live Preview'}</span>
           </div>
         </div>
 
@@ -251,19 +281,38 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
       {/* Address & Quick Server Bar */}
       <div className="flex items-center gap-2 px-3.5 py-1.5 bg-[var(--color-surface-2)] border-b border-[var(--color-border-default)] shrink-0">
         <button
+          onClick={() => handleNavigate(SPRINGBOARD_URL)}
+          className={`p-1.5 rounded transition border ${
+            isSpringboard
+              ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30'
+              : 'bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-3)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] border-[var(--color-border-muted)]'
+          }`}
+          title="Home Screen Springboard"
+        >
+          <Home className="h-3 w-3" />
+        </button>
+
+        <button
           onClick={handleReload}
-          className="p-1.5 rounded bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-3)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] transition border border-[var(--color-border-muted)]"
+          disabled={isSpringboard}
+          className="p-1.5 rounded bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-3)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] transition border border-[var(--color-border-muted)] disabled:opacity-30"
           title="Reload Preview Frame"
         >
           <RefreshCw className="h-3 w-3" />
         </button>
 
-        <form onSubmit={handleNavigate} className="flex-1 flex items-center relative">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleNavigate();
+          }}
+          className="flex-1 flex items-center relative"
+        >
           <input
             type="text"
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
-            placeholder="e.g. http://localhost:5173, http://localhost:3000..."
+            placeholder="Search web or enter mobile URL (e.g. http://localhost:5173, linear.app)..."
             className="w-full rounded border border-[var(--color-border-default)] bg-[var(--color-canvas)] px-2.5 py-0.5 text-xs font-mono text-[var(--color-editor-fg)] focus:border-cyan-600 focus:outline-none"
           />
           <button
@@ -277,29 +326,32 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
         {/* Quick Local Server Presets */}
         <div className="flex items-center gap-1 text-[10px] font-mono">
           <button
-            onClick={() => {
-              setUrlInput('http://localhost:5173');
-              setActiveUrl('http://localhost:5173');
-            }}
-            className="px-1.5 py-0.5 rounded bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-3)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] border border-[var(--color-border-muted)] transition"
+            onClick={() => handleNavigate('http://localhost:5173')}
+            className={`px-1.5 py-0.5 rounded border transition ${
+              activeUrl.includes(':5173')
+                ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300 font-semibold'
+                : 'bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-3)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] border-[var(--color-border-muted)]'
+            }`}
           >
             :5173
           </button>
           <button
-            onClick={() => {
-              setUrlInput('http://localhost:3000');
-              setActiveUrl('http://localhost:3000');
-            }}
-            className="px-1.5 py-0.5 rounded bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-3)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] border border-[var(--color-border-muted)] transition"
+            onClick={() => handleNavigate('http://localhost:3000')}
+            className={`px-1.5 py-0.5 rounded border transition ${
+              activeUrl.includes(':3000')
+                ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300 font-semibold'
+                : 'bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-3)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] border-[var(--color-border-muted)]'
+            }`}
           >
             :3000
           </button>
           <button
-            onClick={() => {
-              setUrlInput('http://localhost:8080');
-              setActiveUrl('http://localhost:8080');
-            }}
-            className="px-1.5 py-0.5 rounded bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-3)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] border border-[var(--color-border-muted)] transition"
+            onClick={() => handleNavigate('http://localhost:8080')}
+            className={`px-1.5 py-0.5 rounded border transition ${
+              activeUrl.includes(':8080')
+                ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300 font-semibold'
+                : 'bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-3)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] border-[var(--color-border-muted)]'
+            }`}
           >
             :8080
           </button>
@@ -353,16 +405,91 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
                   </>
                 )}
 
-                {/* Display Content */}
+                {/* Display Content: Springboard Home Screen or Live Iframe */}
                 {isPowerOn ? (
-                  <iframe
-                    ref={iframeRef}
-                    key={activeUrl}
-                    src={activeUrl}
-                    title={device.name}
-                    className="w-full h-full flex-1 border-0 bg-white"
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                  />
+                  isSpringboard ? (
+                    /* Mobile Springboard / Home Launcher */
+                    <div className="flex-1 flex flex-col justify-between p-6 bg-gradient-to-b from-zinc-900 via-slate-900 to-black text-white select-none">
+                      {/* Top Status Bar */}
+                      <div className="flex items-center justify-between text-[11px] font-semibold tracking-tight px-1 pt-1">
+                        <span>9:41</span>
+                        <div className="flex items-center gap-1.5 opacity-80">
+                          <Wifi className="h-3 w-3" />
+                          <Battery className="h-3.5 w-3.5" />
+                        </div>
+                      </div>
+
+                      {/* App Grid */}
+                      <div className="grid grid-cols-3 gap-6 my-auto pt-6 px-2">
+                        {/* App 1: Local Dev App */}
+                        <button
+                          onClick={() => handleNavigate('http://localhost:5173')}
+                          className="flex flex-col items-center gap-1.5 group cursor-pointer"
+                        >
+                          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center shadow-lg group-hover:scale-105 transition">
+                            <Terminal className="h-6 w-6 text-white" />
+                          </div>
+                          <span className="text-[10px] font-medium text-zinc-300">Dev :5173</span>
+                        </button>
+
+                        {/* App 2: Web Browser */}
+                        <button
+                          onClick={() => handleNavigate('https://duckduckgo.com')}
+                          className="flex flex-col items-center gap-1.5 group cursor-pointer"
+                        >
+                          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-600 to-blue-500 flex items-center justify-center shadow-lg group-hover:scale-105 transition">
+                            <Globe className="h-6 w-6 text-white" />
+                          </div>
+                          <span className="text-[10px] font-medium text-zinc-300">Web</span>
+                        </button>
+
+                        {/* App 3: Mobile Inspo */}
+                        <button
+                          onClick={() => handleNavigate('https://linear.app')}
+                          className="flex flex-col items-center gap-1.5 group cursor-pointer"
+                        >
+                          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-400 flex items-center justify-center shadow-lg group-hover:scale-105 transition">
+                            <Sparkles className="h-6 w-6 text-white" />
+                          </div>
+                          <span className="text-[10px] font-medium text-zinc-300">Inspo</span>
+                        </button>
+
+                        {/* App 4: Next.js :3000 */}
+                        <button
+                          onClick={() => handleNavigate('http://localhost:3000')}
+                          className="flex flex-col items-center gap-1.5 group cursor-pointer"
+                        >
+                          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-zinc-700 to-zinc-900 border border-zinc-600 flex items-center justify-center shadow-lg group-hover:scale-105 transition">
+                            <span className="text-xs font-bold text-white">N</span>
+                          </div>
+                          <span className="text-[10px] font-medium text-zinc-300">Next :3000</span>
+                        </button>
+                      </div>
+
+                      {/* Bottom Search Bar */}
+                      <div className="pb-4">
+                        <div
+                          onClick={() => {
+                            const target = prompt('Enter URL or search term:', 'http://localhost:5173');
+                            if (target) handleNavigate(target);
+                          }}
+                          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-[11px] text-zinc-300 cursor-pointer hover:bg-white/15 transition shadow-sm"
+                        >
+                          <Search className="h-3 w-3 text-zinc-400" />
+                          <span>Search or enter URL...</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <iframe
+                      ref={iframeRef}
+                      key={activeUrl}
+                      src={activeUrl}
+                      title={device.name}
+                      className="w-full h-full flex-1 border-0 bg-white"
+                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                    />
+                  )
                 ) : (
                   <div className="flex-1 flex flex-col items-center justify-center bg-black text-zinc-600 text-[11px]">
                     <Power className="h-8 w-8 mb-2 opacity-30" />
@@ -370,9 +497,15 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
                   </div>
                 )}
 
-                {/* Home Indicator Bar */}
+                {/* Home Indicator Bar (Click to return to Springboard) */}
                 {isPowerOn && orientation === 'portrait' && (
-                  <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-32 h-1 bg-white/60 rounded-full z-30 pointer-events-none" />
+                  <div
+                    onClick={() => handleNavigate(SPRINGBOARD_URL)}
+                    className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-32 h-2.5 flex items-center justify-center z-30 cursor-pointer group"
+                    title="Tap to return Home"
+                  >
+                    <div className="w-28 h-1 bg-white/60 group-hover:bg-white group-hover:h-1.5 rounded-full transition-all" />
+                  </div>
                 )}
               </div>
             </div>
@@ -460,7 +593,7 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
                 <div className="p-2.5 rounded-lg bg-[var(--color-surface-2)] border border-[var(--color-border-muted)] space-y-1">
                   <p className="text-emerald-400">[info] Simulator viewport: {screenWidth}×{screenHeight} @{device.dpr}x</p>
                   <p className="text-[var(--color-fg-muted)]">[log] Active orientation: {orientation}</p>
-                  <p className="text-[var(--color-fg-muted)]">[log] Frame src: {activeUrl}</p>
+                  <p className="text-[var(--color-fg-muted)]">[log] Active view: {activeUrl}</p>
                 </div>
               </div>
             )}
