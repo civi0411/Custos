@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { NativeSelect } from '@/components/common/NativeSelect';
 import { useAppContext } from '@/context/AppContext';
 import {
   SlidersHorizontal,
@@ -62,7 +63,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   sessions,
   activeSessionId,
   onSelectSession,
-  onOpenFullChatIn: _onOpenFullChatIn,
+  onOpenFullChatIn,
   onDeleteSession,
   newTaskLabel,
   newTaskIcon: NewTaskIcon,
@@ -150,6 +151,30 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             <SlidersHorizontal className="w-3.5 h-3.5" />
           </button>
         </div>
+
+        {activeSessionId && onOpenFullChatIn && (
+          <div className="px-3 pb-2">
+            <label className="block text-[11px] text-fg-subtle">
+              Open chat in
+              <NativeSelect
+                aria-label="Open complete conversation in another workbench"
+                value=""
+                onChange={(event) => {
+                  const destination = event.target.value;
+                  if (destination === 'chat' || destination === 'code' || destination === 'research') {
+                    onOpenFullChatIn(destination);
+                  }
+                }}
+                className="mt-1 w-full rounded-md border border-border-default bg-surface-1 px-2 py-1 text-fg-editor text-[11px]"
+              >
+                <option value="" disabled>Choose workbench…</option>
+                <option value="chat">Copilot</option>
+                <option value="code">Coding</option>
+                <option value="research">Research</option>
+              </NativeSelect>
+            </label>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-0.5 pr-1 no-scrollbar min-h-0 text-[12.5px]">
           {sessions.length === 0 ? (

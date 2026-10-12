@@ -185,9 +185,31 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   const liveMessage = activeSession.messages.find(message => message.runId && !['completed','failed','cancelled','interrupted'].includes(message.runStatus || ''));
   const dialogueRef = useRef<HTMLDivElement>(null);
   const followBottom = useRef(true);
+
+  const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false });
+  const updateScrollEdges = () => {
+    const el = dialogueRef.current;
+    if (!el) return;
+    const canScroll = el.scrollHeight > el.clientHeight;
+    setScrollEdges({
+      top: canScroll && el.scrollTop > 12,
+      bottom: canScroll && el.scrollTop < el.scrollHeight - el.clientHeight - 12
+    });
+  };
+
+  useEffect(() => {
+    const el = dialogueRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => updateScrollEdges());
+    observer.observe(el);
+    updateScrollEdges();
+    return () => observer.disconnect();
+  }, [activeSessionId, hasMessages]);
+
   useEffect(() => { followBottom.current = true; }, [activeSessionId]);
   useEffect(() => {
     if (followBottom.current && dialogueRef.current) dialogueRef.current.scrollTop = dialogueRef.current.scrollHeight;
+    updateScrollEdges();
   }, [activeSession.messages]);
 
   const { jobs, dispatchJob, updateJob } = useJobRegistry();
@@ -494,7 +516,15 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           >
             {/* Dialogue Messages Canvas */}
             <div className="relative flex-1 min-h-0">
-            <div ref={dialogueRef} onScroll={event => { const element = event.currentTarget; followBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; }} className="h-full overflow-y-auto px-6 py-6 space-y-6">
+            <div
+              ref={dialogueRef}
+              onScroll={event => {
+                const element = event.currentTarget;
+                followBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+                updateScrollEdges();
+              }}
+              className="h-full overflow-y-auto px-6 py-6 space-y-6"
+            >
               {!hasMessages ? (
                 <div className="h-full flex flex-col items-center justify-center text-center my-auto pb-12">
                   <div className="w-14 h-14 rounded-xl bg-surface-1 border border-border-default flex items-center justify-center text-fg-muted mb-5">
@@ -527,7 +557,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                       <div
                         key={msg.id || i}
                         aria-label={isUser ? "User message" : "Agent message"}
-                        className="space-y-2.5 pb-6 border-b border-border-muted/40 last:border-b-0 min-w-0"
+                        className={isUser ? "conversation-user-message space-y-2 mb-4" : "space-y-2.5 pb-6 border-b border-border-muted/40 last:border-b-0 min-w-0"}
                       >
                         {/* Message Header */}
                         <div className="flex items-center gap-2.5 text-xs">
@@ -590,7 +620,10 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                 </div>
               )}
             </div>
-            </div>
+
+            <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-top ${scrollEdges.top ? 'is-visible' : ''}`} />
+            <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-bottom ${scrollEdges.bottom ? 'is-visible' : ''}`} />
+          </div>
 
             {/* DOCKED CHAT COMPOSER (Natural Flex Child) */}
             <div className="shrink-0 p-4 bg-canvas">
