@@ -20,6 +20,8 @@
 
 > **Desktop resource-tab ownership:** [`AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) and [`OrcaTabbedContainer.tsx`](../../ui/desktop/src/components/views/OrcaTabbedContainer.tsx) render one shared shell/resource catalog for all three lenses. Research, workspace, notebook, terminal, files, changes, agents, evidence, browser and fleet panes now exist at different realization levels. A rendered pane is not proof that its physical operations work: browser/fleet/automation deliberately advertise degraded metadata-only operation while their effects fail closed. The container must gate every pane action from daemon `supported_operations`, not from its static resource table.
 
+> **Desktop picker and cross-lens navigation:** `AppWorkspaceShell.tsx` owns the transient `+` resource picker, while `OrcaTabbedContainer.tsx` owns the resource definitions and capability-gated panes. `WorkspaceSidebar.tsx` exposes project-wide session search; `StudioPage` persists `OpenLens` membership through the existing daemon command and selects the same canonical session in the target lens. These UI actions do not create tasks, runs, grants or duplicate journals.
+
 > **Capability projection invariant:** [`LocalApiDispatcher::list_capabilities`](../../crates/custos-daemon/src/api.rs) owns the canonical capability-to-resource mapping. The desktop catalog supplies labels/icons/grouping only; absence, loading failure or an unmatched `resource_id` produces `unavailable`, never optimistic availability. Degraded panes receive the exact operation set and gate controls locally. Research `runs` and `synthesis` are distinct resource projections even though both consume the Research repository.
 
 > **OpenCode adapter realization:** [`harness/opencode.rs`](../../crates/custos-adapters/src/harness/opencode.rs) can execute the local CLI as a provider-governed native process and normalize captured/mock event fixtures. Its HTTP/SSE production turn, remote cancellation, steering and exact usage are not composed. The profile must therefore keep those capabilities disabled, production `execute_turn` must fail explicitly, and native subprocess execution must enforce its configured timeout until a pinned server adapter is implemented.
@@ -1035,9 +1037,9 @@ Custos/
 
 | File | Lines | Current responsibility | Key export |
 |---|---:|---|---|
-| [`ui/desktop/src/app/studio/page.tsx`](../../ui/desktop/src/app/studio/page.tsx) | 233 | Per-lens session filtering, last selection and durable same-session full-chat opening; only last-selection remains device-local | `StudioPage` |
-| [`ui/desktop/src/components/shell/AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) | 725 | Shared conversation/resource shell; headerless transcript and shared Send/Stop icon control; empty lens has no selected conversation | `AppWorkspaceShell` |
-| [`ui/desktop/src/components/shell/WorkspaceSidebar.tsx`](../../ui/desktop/src/components/shell/WorkspaceSidebar.tsx) | 361 | Per-lens history list and full-chat destination control | `WorkspaceSidebar` |
+| [`ui/desktop/src/app/studio/page.tsx`](../../ui/desktop/src/app/studio/page.tsx) | 236 | Per-lens session filtering, last selection and durable same-session full-chat opening from project search; only last-selection remains device-local | `StudioPage` |
+| [`ui/desktop/src/components/shell/AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) | 760 | Shared conversation/resource shell; speed dial new tab integration; empty lens has no selected conversation | `AppWorkspaceShell` |
+| [`ui/desktop/src/components/shell/WorkspaceSidebar.tsx`](../../ui/desktop/src/components/shell/WorkspaceSidebar.tsx) | 420 | Per-lens history, 3-dots session workbench mover, and project-wide session search | `WorkspaceSidebar` |
 | [`ui/desktop/src/components/modals/NewSessionModal.tsx`](../../ui/desktop/src/components/modals/NewSessionModal.tsx) | 101 | Defaults new Task pack to the visible workbench | `NewSessionModal` |
 | [`ui/desktop/src/context/AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx) | 1547 | Daemon session/journal projection; keeps all sessions, filters non-message events and reads durable lens membership | `AppProvider`, `useAppContext` |
 

@@ -1328,6 +1328,8 @@ Trong quá trình vận hành cường độ cao với nhiều luồng đọc gh
 
 **Hiệu đính về lịch sử chat:** mỗi workbench có danh sách session riêng theo `home_lens` và các lens được người dùng gắn thêm. Mở một lens khác mặc định khôi phục session đang chọn của lens ấy, không tự kéo chat vừa rời đi. Người dùng có thể chọn **Open full chat in…** để hiển thị cùng canonical journal ở lens đích, hoặc **Continue as linked chat** để tạo session mới có lineage đến toàn bộ timeline nguồn. `Full` mô tả phạm vi lịch sử **hiển thị và có thể truy xuất**; nó không hứa nhét vô hạn turn vào một lần inference. Model chỉ nhận transcript/summary/source refs sau privacy check và context budget, với receipt ghi rõ phần nào thực sự được gửi, bị cắt hoặc không chuyển được. Research notebook phục vụ khám phá, demo và phân tích dữ liệu; code trong notebook không tự là patch vào Coding repo.
 
+**Điều hướng hội thoại và resource:** mỗi workbench có lịch sử riêng nhưng phải có lối tìm mọi session trong project và mở một session nguồn ngay tại workbench hiện tại qua `OpenLens`. Bộ chọn resource từ nút `+` là lớp giao diện tạm thời trên workspace; chọn resource mới tạo/chọn tab resource, còn mở bộ chọn không thay tab đang xem. Browser và Remote Fleet chỉ cho thao tác trong `supported_operations` do daemon trả về; nhãn degraded giải thích phần transport chưa nối và không đồng nghĩa có browser/SSH thực thi.
+
 | Pha | Engineering | Research | Assistant |
 | --- | --- | --- | --- |
 | **Ingest** | Git snapshot, source files | PDF/web, DOI, dataset refs | Notes, contacts, mail/calendar |

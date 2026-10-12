@@ -38,7 +38,7 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
   const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
   const [jobs, setJobs] = useState<HeadlessAutomationJob[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [commandInput, setCommandInput] = useState<string>('uname -a');
+  const [commandInput, setCommandInput] = useState<string>('');
   const [execReceipts, setExecReceipts] = useState<FleetExecReceipt[]>([]);
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
   const [isPinging, setIsPinging] = useState<boolean>(false);
@@ -49,10 +49,10 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
 
   // New Host Form
   const [newHostName, setNewHostName] = useState<string>('');
-  const [newHostAddress, setNewHostAddress] = useState<string>('127.0.0.1');
+  const [newHostAddress, setNewHostAddress] = useState<string>('');
   const [newHostPort, setNewHostPort] = useState<number>(22);
-  const [newHostUser, setNewHostUser] = useState<string>('ubuntu');
-  const [newHostKeyPath, setNewHostKeyPath] = useState<string>('~/.ssh/id_ed25519');
+  const [newHostUser, setNewHostUser] = useState<string>('');
+  const [newHostKeyPath, setNewHostKeyPath] = useState<string>('');
 
   // New Job Form
   const [newJobName, setNewJobName] = useState<string>('');

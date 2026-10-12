@@ -16,6 +16,8 @@ import {
   Layers,
   Server,
   Smartphone,
+  Search,
+  Compass,
 } from 'lucide-react';
 import { BrowserWorkbenchPane } from '@/components/views/BrowserWorkbenchPane';
 import { MobileSimulatorWorkbenchPane } from '@/components/views/MobileSimulatorWorkbenchPane';
@@ -102,7 +104,7 @@ export type ResourceDefinition = {
   supportedOperations?: string[];
 };
 
-const DEFAULT_RESOURCES: ResourceDefinition[] = [
+export const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'files', title: 'Files', description: 'Repository tree, editors and source anchors.', icon: FolderTree, group: 'Engineering', status: 'available', supportedOperations: ['tree', 'read', 'write'] },
   { id: 'changes', title: 'Changes', description: 'Diff review, annotations and patch decisions.', icon: FileDiff, group: 'Engineering', status: 'available', supportedOperations: ['diff', 'file_diff', 'stage', 'unstage', 'discard'] },
   { id: 'terminal', title: 'Terminal', description: 'Bounded PTY streams scoped to an execution workspace.', icon: Terminal, group: 'Engineering', status: 'available', supportedOperations: ['spawn', 'write', 'resize', 'read', 'terminate', 'list', 'get'] },
@@ -119,7 +121,7 @@ const DEFAULT_RESOURCES: ResourceDefinition[] = [
   { id: 'artifacts', title: 'Artifacts', description: 'Inspect versions, lineage, annotations, provenance DAG and review findings.', icon: FileCode, group: 'Research', status: 'available', supportedOperations: ['list', 'get', 'record_lineage', 'lineage.list', 'lineage.graph', 'annotations.list', 'annotations.save'] },
   { id: 'browser', title: 'Browser', description: 'Persisted browser sessions and tab intents. Physical navigation and snapshots are degraded.', icon: Globe, group: 'Shared', status: 'degraded', reason: 'Browser execution adapter is not connected; navigation and snapshots fail closed.', supportedOperations: ['sessions.list', 'sessions.create', 'tabs.list', 'tabs.create', 'tabs.close'] },
   { id: 'emulator', title: 'Phone Simulator', description: 'Interactive mobile device simulator (iOS, Android, Responsive) for live frontend preview, touch gestures, and DOM inspection.', icon: Smartphone, group: 'Engineering', status: 'available', supportedOperations: ['preview', 'inspect_ax_tree', 'rotate', 'viewport_switch', 'touch_gesture'] },
-  { id: 'fleet', title: 'Remote Fleet', description: 'Persisted SSH host inventory. Remote probes and execution are degraded.', icon: Server, group: 'Engineering', status: 'degraded', reason: 'SSH transport is not connected; probes and remote execution fail closed.', supportedOperations: ['hosts.list', 'hosts.register', 'jobs.list', 'jobs.create'] },
+  { id: 'fleet', title: 'Remote Fleet', description: 'Remote host inventory for coding and research compute. SSH probes and execution are degraded.', icon: Server, group: 'Shared', status: 'degraded', reason: 'SSH transport is not connected; probes and remote execution fail closed.', supportedOperations: ['hosts.list', 'hosts.register', 'jobs.list', 'jobs.create'] },
   { id: 'notes', title: 'Notes', description: 'Task notes, scratchpads, and Markdown knowledge capture with version history.', icon: FileCode, group: 'Shared', status: 'available', supportedOperations: ['list', 'get', 'save', 'history'] },
 ];
 
@@ -246,12 +248,21 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   const activeId = resourceTabs.activeTabId;
   const activeResource = resources.find((resource) => resource.id === activeId);
 
+  const [searchQuery, setSearchQuery] = React.useState('');
+  const [selectedGroup, setSelectedGroup] = React.useState<'all' | 'Engineering' | 'Research' | 'Shared'>('all');
+
   const openResource = (resource: ResourceDefinition) => {
-    resourceTabs.setTabs((previous) =>
-      previous.some((tab) => tab.id === resource.id)
-        ? previous
-        : [...previous, { id: resource.id, title: resource.title, url: urlFor(resource.id) }]
-    );
+    resourceTabs.setTabs((previous) => {
+      const alreadyHasTarget = previous.some((tab) => tab.id === resource.id);
+      if (alreadyHasTarget) {
+        return previous.filter((tab) => tab.id !== 'tools' || tab.id === resource.id);
+      }
+      return previous.map((tab) =>
+        tab.id === 'tools'
+          ? { id: resource.id, title: resource.title, url: urlFor(resource.id) }
+          : tab
+      );
+    });
     resourceTabs.setActiveTabId(resource.id);
   };
 
@@ -261,50 +272,136 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
     return resource.group === 'Shared' || resource.id === 'evidence' || resource.id === 'literature';
   });
 
+  const filteredResources = visibleResources.filter((resource) => {
+    const matchesGroup = selectedGroup === 'all' || resource.group === selectedGroup;
+    const q = searchQuery.trim().toLowerCase();
+    const matchesQuery =
+      !q ||
+      resource.title.toLowerCase().includes(q) ||
+      resource.description.toLowerCase().includes(q) ||
+      (resource.supportedOperations && resource.supportedOperations.some((op) => op.toLowerCase().includes(q)));
+    return matchesGroup && matchesQuery;
+  });
+
   if (activeId === 'tools') {
     return (
-      <div className="h-full overflow-y-auto bg-[var(--color-canvas)] px-6 py-7 text-[var(--color-editor-fg)]">
+      <div className="h-full overflow-y-auto bg-[var(--color-canvas)] px-6 py-8 text-[var(--color-editor-fg)]">
         <div className="mx-auto max-w-4xl">
+          {/* Hero Header */}
           <div className="mb-6">
-            <div className="workbench-kicker">{mode} workbench</div>
-            <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">Resources</h1>
-            <p className="mt-1 max-w-xl text-xs leading-5 text-[var(--color-fg-muted)]">
-              Open a resource beside the same conversation. Tabs preserve the session; they do not
-              create a run, grant authority, or imply that an operation succeeded.
+            <div className="flex items-center gap-2 mb-2">
+              <span className="workbench-kicker">{mode} workbench</span>
+              <span className="text-[10px] text-fg-subtle">•</span>
+              <span className="text-[11px] text-fg-subtle flex items-center gap-1">
+                <Compass className="w-3.5 h-3.5 text-accent" /> New Tab
+              </span>
+            </div>
+            <h1 className="text-xl font-semibold tracking-[-0.02em] text-fg-editor">
+              Resource Catalog & Speed Dial
+            </h1>
+            <p className="mt-1 text-xs leading-5 text-[var(--color-fg-muted)]">
+              Choose an execution surface or inspection resource to open in this tab. Tabs preserve the active conversation session.
             </p>
+
+            {/* Quick Search & Filters */}
+            <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle pointer-events-none" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Filter resources by name, description, or capability (e.g. terminal, files, git, claims)..."
+                  className="w-full bg-[var(--color-surface-1)] border border-[var(--color-border-default)] rounded-xl pl-10 pr-4 py-2 text-xs text-fg-editor placeholder:text-fg-subtle focus:outline-none focus:border-border-default focus:ring-1 focus:ring-border-default/20 transition"
+                  autoFocus
+                />
+              </div>
+
+              {/* Category Pills */}
+              <div className="flex items-center gap-1 bg-[var(--color-surface-1)] p-1 rounded-xl border border-[var(--color-border-muted)] shrink-0 text-xs">
+                {(['all', 'Engineering', 'Research', 'Shared'] as const).map((group) => (
+                  <button
+                    key={group}
+                    type="button"
+                    onClick={() => setSelectedGroup(group)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition ${
+                      selectedGroup === group
+                        ? 'bg-surface-2 text-fg-editor shadow-xs'
+                        : 'text-fg-muted hover:text-fg-editor hover:bg-surface-2/50'
+                    }`}
+                  >
+                    {group === 'all' ? 'All' : group}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
+          {/* Cards Grid */}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {visibleResources.map((resource) => {
+            {filteredResources.map((resource) => {
               const Icon = resource.icon;
               return (
                 <button
                   key={resource.id}
                   type="button"
                   onClick={() => openResource(resource)}
-                  className="group rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-4 text-left transition hover:border-[var(--color-border-default)] hover:bg-[var(--color-surface-2)]"
+                  className="group rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-4 text-left transition hover:border-[var(--color-border-default)] hover:bg-[var(--color-surface-2)] hover:shadow-sm"
                 >
                   <div className="flex items-start justify-between">
-                    <Icon className="h-4 w-4 text-[var(--color-fg-muted)] group-hover:workbench-accent" />
-                    <span className={`text-[9px] font-semibold uppercase tracking-[0.08em] ${resource.status === 'available'
-                        ? 'text-emerald-500'
-                        : resource.status === 'degraded'
-                          ? 'text-amber-500'
-                          : 'text-[var(--color-fg-subtle)]'
-                      }`}>
+                    <div className="p-2 rounded-lg bg-[var(--color-canvas)] border border-[var(--color-border-muted)] group-hover:border-[var(--color-border-default)] transition">
+                      <Icon className="h-4 w-4 text-[var(--color-fg-muted)] group-hover:workbench-accent transition-colors" />
+                    </div>
+                    <span
+                      className={`text-[9px] font-semibold uppercase tracking-[0.08em] px-1.5 py-0.5 rounded ${
+                        resource.status === 'available'
+                          ? 'text-emerald-500 bg-emerald-500/10'
+                          : resource.status === 'degraded'
+                          ? 'text-amber-500 bg-amber-500/10'
+                          : 'text-[var(--color-fg-subtle)] bg-surface-2'
+                      }`}
+                    >
                       {resource.status === 'available' ? 'API' : resource.status === 'degraded' ? 'Degraded' : 'Planned'}
                     </span>
                   </div>
-                  <div className="mt-5 text-xs font-semibold">{resource.title}</div>
-                  <p className="mt-1.5 text-[11px] leading-5 text-[var(--color-fg-muted)]">{resource.description}</p>
+                  <div className="mt-4 text-xs font-semibold text-fg-editor group-hover:workbench-accent transition-colors">
+                    {resource.title}
+                  </div>
+                  <p className="mt-1 text-[11px] leading-5 text-[var(--color-fg-muted)] line-clamp-2">
+                    {resource.description}
+                  </p>
+
+                  {resource.supportedOperations && resource.supportedOperations.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1 pt-2 border-t border-[var(--color-border-muted)]/60">
+                      {resource.supportedOperations.slice(0, 3).map((op) => (
+                        <span key={op} className="text-[9.5px] font-mono px-1 py-0.2 rounded bg-[var(--color-canvas)] text-fg-subtle border border-[var(--color-border-muted)]">
+                          {op}
+                        </span>
+                      ))}
+                      {resource.supportedOperations.length > 3 && (
+                        <span className="text-[9.5px] font-mono px-1 text-fg-subtle">
+                          +{resource.supportedOperations.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </button>
               );
             })}
           </div>
 
-          <div className="mt-6 flex items-center gap-2 border-t border-[var(--color-border-muted)] pt-4 text-[10px] text-[var(--color-fg-subtle)]">
-            <Wrench className="h-3.5 w-3.5" />
-            Active session: {session?.title || 'No session selected'}
+          {filteredResources.length === 0 && (
+            <div className="p-8 text-center text-xs text-fg-subtle border border-dashed border-[var(--color-border-muted)] rounded-xl mt-4">
+              No matching resources found for "{searchQuery}".
+            </div>
+          )}
+
+          <div className="mt-8 flex items-center justify-between border-t border-[var(--color-border-muted)] pt-4 text-[10px] text-[var(--color-fg-subtle)]">
+            <div className="flex items-center gap-2">
+              <Wrench className="h-3.5 w-3.5" />
+              <span>Active session: {session?.title || 'No session selected'}</span>
+            </div>
+            <span>Click any card to open in this tab</span>
           </div>
         </div>
       </div>
