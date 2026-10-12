@@ -72,7 +72,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onSwitchMode,
   isSidebarCollapsed,
   onToggleSidebar,
-  onShowToast,
+  onShowToast: _onShowToast,
   splitPercent,
   isWebTabOpen,
   isWebTabExpanded,
@@ -149,14 +149,14 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         <div className="flex items-center gap-1">
           {/* Navigation History */}
           <button
-            onClick={() => { if (onShowToast) onShowToast('Back'); }}
+            disabled
             className="p-1 rounded text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
             title="Back"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={() => { if (onShowToast) onShowToast('Forward'); }}
+            disabled
             className="p-1 rounded text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
             title="Forward"
           >
@@ -183,7 +183,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                 key={m.id}
                 onClick={() => {
                   onSwitchMode(m.id);
-                  if (onShowToast) onShowToast(`Switched to ${m.description} (${m.shortcut})`);
                 }}
                 title={`${m.label} (${m.shortcut}) — ${m.description}`}
                 className="workbench-switcher__item"
