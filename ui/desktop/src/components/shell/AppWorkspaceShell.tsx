@@ -190,23 +190,54 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     if (followBottom.current && dialogueRef.current) dialogueRef.current.scrollTop = dialogueRef.current.scrollHeight;
   }, [activeSession.messages]);
 
+  const { jobs, dispatchJob, updateJob } = useJobRegistry();
+
+  const currentLens: 'coding' | 'research' | 'assistant' =
+    mode === 'code' ? 'coding' : mode === 'research' ? 'research' : 'assistant';
+
+  const primaryQuickCommands = useMemo(() => {
+    return SLASH_COMMANDS.filter((cmd) => cmd.lens === currentLens).slice(0, 4);
+  }, [currentLens]);
+
+  const executeSlashCommand = (cmd: SlashCommandDef, args: string) => {
+    setInputText('');
+
+    // 1. Dispatch in JobRegistry so active tabs & sidebar show running status immediately
+    const entryId = dispatchJob({
+      jobId: cmd.jobId,
+      jobName: cmd.label,
+      sourceTabId: mode === 'code' ? 'changes' : mode === 'research' ? 'literature' : undefined,
+    });
+
+    // 2. Transmit to session chat so conversation timeline captures user action transparently
+    const formattedPrompt = args.trim()
+      ? `${cmd.command} ${args.trim()}`
+      : `${cmd.command} - ${cmd.description}`;
+    onSendMessage(formattedPrompt);
+
+    // 3. Trigger daemon packs job
+    daemonClient
+      .runPacksJob({
+        jobId: cmd.jobId,
+        sessionId: activeSession.id,
+        inputs: cmd.getInputs(args, { sessionId: activeSession.id }),
+      })
+      .then((res) => {
+        const taskId = res.taskId || res.task_id || 'unknown';
+        updateJob(entryId, { taskId, status: 'done', endedAt: Date.now() });
+        onShowToast?.(`Executed ${cmd.command} (Task ${taskId})`);
+      })
+      .catch((err: any) => {
+        updateJob(entryId, { status: 'failed', error: err.message || String(err), endedAt: Date.now() });
+        onShowToast?.(`Failed to run ${cmd.command}: ${err.message || String(err)}`);
+      });
+  };
+
   const handleSelectSlashCommand = (cmd: SlashCommandDef) => {
     if (cmd.hasArgs) {
       setInputText(`${cmd.command} `);
     } else {
-      setInputText('');
-      daemonClient
-        .runPacksJob({
-          jobId: cmd.jobId,
-          sessionId: activeSession.id,
-          inputs: cmd.getInputs('', { sessionId: activeSession.id }),
-        })
-        .then((res) => {
-          onShowToast?.(`Executed ${cmd.command} (Task ${res.taskId || res.task_id})`);
-        })
-        .catch((err: any) => {
-          onShowToast?.(`Failed to run ${cmd.command}: ${err.message || String(err)}`);
-        });
+      executeSlashCommand(cmd, '');
     }
   };
 
@@ -220,19 +251,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       const args = parts.slice(1).join(' ');
       const match = SLASH_COMMANDS.find((c) => c.command.toLowerCase() === cmdName);
       if (match) {
-        setInputText('');
-        daemonClient
-          .runPacksJob({
-            jobId: match.jobId,
-            sessionId: activeSession.id,
-            inputs: match.getInputs(args, { sessionId: activeSession.id }),
-          })
-          .then((res) => {
-            onShowToast?.(`Executed ${match.command} (Task ${res.taskId || res.task_id})`);
-          })
-          .catch((err: any) => {
-            onShowToast?.(`Failed to run ${match.command}: ${err.message || String(err)}`);
-          });
+        executeSlashCommand(match, args);
         return;
       }
     }
@@ -254,8 +273,6 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     resourceTabs.setActiveTabId(id);
     openResources(false);
   };
-
-  const { jobs } = useJobRegistry();
   const runningJobsByTab = useMemo(() => {
     const counts: Partial<Record<OrcaTabId, number>> = {};
     jobs.forEach((j) => {
@@ -587,10 +604,46 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
               <div className="workbench-composer max-w-2xl mx-auto p-3 transition group relative">
                 <SlashCommandMenu
                   query={inputText}
+                  mode={mode}
                   isOpen={inputText.startsWith('/') && (!inputText.includes(' ') || inputText.length <= 15)}
                   onSelectCommand={handleSelectSlashCommand}
                   onClose={() => {}}
                 />
+
+                {/* Workspace Action Quick Chips */}
+                {!inputText && (
+                  <div className="mb-2 pb-2 border-b border-border-muted/40 flex items-center gap-1.5 overflow-x-auto text-[11px] no-scrollbar">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-fg-subtle shrink-0 mr-1 flex items-center gap-1">
+                      <span className={`w-1.5 h-1.5 rounded-full ${
+                        mode === 'code' ? 'bg-sky-400' : mode === 'research' ? 'bg-purple-400' : 'bg-amber-400'
+                      }`} />
+                      {lensMeta.badge} Tác vụ:
+                    </span>
+                    {primaryQuickCommands.map((cmd) => {
+                      const Icon = cmd.icon;
+                      return (
+                        <button
+                          key={cmd.command}
+                          type="button"
+                          onClick={() => handleSelectSlashCommand(cmd)}
+                          title={cmd.description}
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md font-mono text-[11px] border transition shrink-0 ${
+                            mode === 'code'
+                              ? 'border-sky-500/25 bg-sky-500/5 text-sky-400 hover:bg-sky-500/15 hover:border-sky-500/40 active:scale-[0.98]'
+                              : mode === 'research'
+                              ? 'border-purple-500/25 bg-purple-500/5 text-purple-400 hover:bg-purple-500/15 hover:border-purple-500/40 active:scale-[0.98]'
+                              : 'border-amber-500/25 bg-amber-500/5 text-amber-400 hover:bg-amber-500/15 hover:border-amber-500/40 active:scale-[0.98]'
+                          }`}
+                        >
+                          <Icon className="w-3 h-3 shrink-0" />
+                          <span className="font-semibold">{cmd.command}</span>
+                          <span className="text-[10px] text-fg-subtle font-sans opacity-85">{cmd.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
                 <textarea
                   rows={2}
                   value={inputText}

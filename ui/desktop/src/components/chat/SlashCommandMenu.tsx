@@ -8,21 +8,73 @@ import {
   Clock,
   Database,
   Sparkles,
+  Wrench,
+  FlaskConical,
+  Table,
+  Inbox,
 } from 'lucide-react';
+
+export type WorkspaceLens = 'coding' | 'research' | 'assistant';
 
 export interface SlashCommandDef {
   command: string;
   label: string;
   description: string;
   jobId: string;
-  lens: 'coding' | 'research' | 'assistant';
+  lens: WorkspaceLens;
   icon: React.ElementType;
   hasArgs?: boolean;
   argPlaceholder?: string;
   getInputs: (args: string, context: { sessionId?: string; workspaceId?: string }) => Record<string, unknown>;
 }
 
+export const LENS_THEME_CONFIG: Record<
+  WorkspaceLens,
+  {
+    badgeLabel: string;
+    workspaceTitle: string;
+    textClass: string;
+    borderClass: string;
+    bgClass: string;
+    badgeClass: string;
+    activeIconClass: string;
+    indicatorClass: string;
+  }
+> = {
+  coding: {
+    badgeLabel: 'Coding',
+    workspaceTitle: 'Engineering / Lập trình',
+    textClass: 'text-sky-400',
+    borderClass: 'border-sky-500/30',
+    bgClass: 'bg-sky-500/10',
+    badgeClass: 'border-sky-500/40 bg-sky-500/10 text-sky-400',
+    activeIconClass: 'border-sky-500/50 bg-sky-500/20 text-sky-400 shadow-sky-500/10',
+    indicatorClass: 'bg-sky-400',
+  },
+  research: {
+    badgeLabel: 'Research',
+    workspaceTitle: 'Research / Nghiên cứu',
+    textClass: 'text-purple-400',
+    borderClass: 'border-purple-500/30',
+    bgClass: 'bg-purple-500/10',
+    badgeClass: 'border-purple-500/40 bg-purple-500/10 text-purple-400',
+    activeIconClass: 'border-purple-500/50 bg-purple-500/20 text-purple-400 shadow-purple-500/10',
+    indicatorClass: 'bg-purple-400',
+  },
+  assistant: {
+    badgeLabel: 'Copilot',
+    workspaceTitle: 'Copilot / Trợ lý',
+    textClass: 'text-amber-400',
+    borderClass: 'border-amber-500/30',
+    bgClass: 'bg-amber-500/10',
+    badgeClass: 'border-amber-500/40 bg-amber-500/10 text-amber-400',
+    activeIconClass: 'border-amber-500/50 bg-amber-500/20 text-amber-400 shadow-amber-500/10',
+    indicatorClass: 'bg-amber-400',
+  },
+};
+
 export const SLASH_COMMANDS: SlashCommandDef[] = [
+  // Coding / Engineering Actions
   {
     command: '/review',
     label: 'Code Review',
@@ -65,6 +117,79 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     }),
   },
   {
+    command: '/refactor',
+    label: 'Refactor Scope',
+    description: 'Improve codebase structure while strictly preserving behavioral parity',
+    jobId: 'engineering__refactor',
+    lens: 'coding',
+    icon: Wrench,
+    hasArgs: true,
+    argPlaceholder: '<file or module path>',
+    getInputs: (args) => ({
+      scope: args.trim() || '.',
+      invariants: 'Preserve API signatures, contracts, and tests parity',
+    }),
+  },
+
+  // Research / Scientific Actions
+  {
+    command: '/deep-research',
+    label: 'Deep Synthesis',
+    description: 'Autonomous research synthesis across scientific corpus and papers',
+    jobId: 'research__deep_research',
+    lens: 'research',
+    icon: Sparkles,
+    hasArgs: true,
+    argPlaceholder: '<research topic>',
+    getInputs: (args) => ({
+      topic: args.trim() || 'Research landscape synthesis',
+      search_scope: 'all',
+    }),
+  },
+  {
+    command: '/audit',
+    label: 'Dataset Audit',
+    description: 'Audit dataset distribution, schema integrity, and anomaly split',
+    jobId: 'research__dataset_audit',
+    lens: 'research',
+    icon: Database,
+    hasArgs: true,
+    argPlaceholder: '[dataset path]',
+    getInputs: (args) => ({
+      dataset_path: args.trim() || 'artifacts/dataset',
+      benchmark_split: 'eval',
+    }),
+  },
+  {
+    command: '/hypothesis',
+    label: 'Hypothesis Protocol',
+    description: 'Formulate experimental protocol and statistical verification setup',
+    jobId: 'research__hypothesis_test',
+    lens: 'research',
+    icon: FlaskConical,
+    hasArgs: true,
+    argPlaceholder: '<hypothesis statement>',
+    getInputs: (args) => ({
+      hypothesis: args.trim() || 'Core hypothesis under investigation',
+      metrics: ['accuracy', 'p-value', 'f1'],
+    }),
+  },
+  {
+    command: '/claims',
+    label: 'Claims Matrix',
+    description: 'Extract and verify empirical claims across literature sources',
+    jobId: 'research__claims_matrix',
+    lens: 'research',
+    icon: Table,
+    hasArgs: true,
+    argPlaceholder: '[domain scope]',
+    getInputs: (args) => ({
+      scope: args.trim() || 'Active literature corpus',
+    }),
+  },
+
+  // Assistant / Copilot Actions
+  {
     command: '/qa',
     label: 'Personal QA',
     description: 'Ask personal assistant a focused question or query',
@@ -93,6 +218,19 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
     }),
   },
   {
+    command: '/triage',
+    label: 'Inbox Triage',
+    description: 'Categorize, summarize, and prioritize pending communications',
+    jobId: 'assistant__inbox_triage',
+    lens: 'assistant',
+    icon: Inbox,
+    hasArgs: false,
+    getInputs: () => ({
+      scope: 'pending',
+      threshold: 'medium',
+    }),
+  },
+  {
     command: '/remind',
     label: 'Reminder Automation',
     description: 'Automate a scheduled reminder or cron notification',
@@ -106,39 +244,12 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
       target_action: args.trim() || 'Daily reminder',
     }),
   },
-  {
-    command: '/audit',
-    label: 'Dataset Audit',
-    description: 'Audit dataset distribution and schema integrity',
-    jobId: 'research__dataset_audit',
-    lens: 'research',
-    icon: Database,
-    hasArgs: true,
-    argPlaceholder: '[dataset path]',
-    getInputs: (args) => ({
-      dataset_path: args.trim() || 'artifacts/dataset',
-      benchmark_split: 'eval',
-    }),
-  },
-  {
-    command: '/deep-research',
-    label: 'Deep Synthesis',
-    description: 'Autonomous research synthesis across scientific corpus',
-    jobId: 'research__deep_research',
-    lens: 'research',
-    icon: Sparkles,
-    hasArgs: true,
-    argPlaceholder: '<research topic>',
-    getInputs: (args) => ({
-      topic: args.trim() || 'Research landscape synthesis',
-      search_scope: 'all',
-    }),
-  },
 ];
 
 export interface SlashCommandMenuProps {
   query: string;
   isOpen: boolean;
+  mode?: 'code' | 'research' | 'chat';
   onSelectCommand: (cmd: SlashCommandDef) => void;
   onClose: () => void;
 }
@@ -146,27 +257,43 @@ export interface SlashCommandMenuProps {
 export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
   query,
   isOpen,
+  mode = 'code',
   onSelectCommand,
   onClose,
 }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  const activeLens: WorkspaceLens =
+    mode === 'code' ? 'coding' : mode === 'research' ? 'research' : 'assistant';
+  const currentTheme = LENS_THEME_CONFIG[activeLens];
+
   // Filter commands by the query string after '/'
   const normalizedQuery = query.startsWith('/') ? query.slice(1).toLowerCase().split(' ')[0] : '';
 
-  const filteredCommands = useMemo(() => {
-    if (!normalizedQuery) return SLASH_COMMANDS;
-    return SLASH_COMMANDS.filter(
-      (c) =>
-        c.command.toLowerCase().includes(normalizedQuery) ||
-        c.label.toLowerCase().includes(normalizedQuery) ||
-        c.description.toLowerCase().includes(normalizedQuery)
-    );
-  }, [normalizedQuery]);
+  const { activeCommands, otherCommands, flatCommands } = useMemo(() => {
+    let filtered = SLASH_COMMANDS;
+    if (normalizedQuery) {
+      filtered = SLASH_COMMANDS.filter(
+        (c) =>
+          c.command.toLowerCase().includes(normalizedQuery) ||
+          c.label.toLowerCase().includes(normalizedQuery) ||
+          c.description.toLowerCase().includes(normalizedQuery) ||
+          c.lens.toLowerCase().includes(normalizedQuery)
+      );
+    }
+
+    const active = filtered.filter((c) => c.lens === activeLens);
+    const other = filtered.filter((c) => c.lens !== activeLens);
+    return {
+      activeCommands: active,
+      otherCommands: other,
+      flatCommands: [...active, ...other],
+    };
+  }, [normalizedQuery, activeLens]);
 
   useEffect(() => {
     setSelectedIndex(0);
-  }, [filteredCommands]);
+  }, [flatCommands]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -174,14 +301,14 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelectedIndex((prev) => (prev + 1) % Math.max(1, filteredCommands.length));
+        setSelectedIndex((prev) => (prev + 1) % Math.max(1, flatCommands.length));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setSelectedIndex((prev) => (prev - 1 + filteredCommands.length) % Math.max(1, filteredCommands.length));
+        setSelectedIndex((prev) => (prev - 1 + flatCommands.length) % Math.max(1, flatCommands.length));
       } else if (e.key === 'Enter' || e.key === 'Tab') {
-        if (filteredCommands.length > 0) {
+        if (flatCommands.length > 0) {
           e.preventDefault();
-          onSelectCommand(filteredCommands[selectedIndex]);
+          onSelectCommand(flatCommands[selectedIndex]);
         }
       } else if (e.key === 'Escape') {
         e.preventDefault();
@@ -191,63 +318,157 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, selectedIndex, filteredCommands, onSelectCommand, onClose]);
+  }, [isOpen, selectedIndex, flatCommands, onSelectCommand, onClose]);
 
-  if (!isOpen || filteredCommands.length === 0) return null;
+  if (!isOpen || flatCommands.length === 0) return null;
 
   return (
-    <div className="absolute bottom-full left-0 right-0 mb-2 max-h-72 overflow-y-auto rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)]/95 p-1.5 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in-50 slide-in-from-bottom-2 duration-100">
-      <div className="px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider text-[var(--color-fg-subtle)] border-b border-[var(--color-border-subtle)]/60 mb-1 flex items-center justify-between">
-        <span>Workbench Slash Commands</span>
-        <span>↑↓ Navigate • ↵ Select</span>
+    <div className="absolute bottom-full left-0 right-0 mb-2 max-h-80 overflow-y-auto rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)]/95 p-1.5 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in-50 slide-in-from-bottom-2 duration-100">
+      {/* Top Header with Active Workspace Context */}
+      <div className="px-2.5 py-1.5 text-[10px] font-mono uppercase tracking-wider text-[var(--color-fg-subtle)] border-b border-[var(--color-border-subtle)]/60 mb-1.5 flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <span className={`inline-block h-1.5 w-1.5 rounded-full ${currentTheme.indicatorClass}`} />
+          <span className="font-semibold text-[var(--color-editor-fg)]">{currentTheme.workspaceTitle}</span>
+          <span className="text-[var(--color-fg-subtle)]">· Slash Actions</span>
+        </div>
+        <span className="text-[9px] text-[var(--color-fg-subtle)]">↑↓ Chọn • ↵ Kích hoạt</span>
       </div>
-      <div className="space-y-0.5">
-        {filteredCommands.map((cmd, idx) => {
-          const Icon = cmd.icon;
-          const isSelected = idx === selectedIndex;
-          return (
-            <button
-              key={cmd.command}
-              type="button"
-              onClick={() => onSelectCommand(cmd)}
-              onMouseEnter={() => setSelectedIndex(idx)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-xs transition ${
-                isSelected
-                  ? 'bg-[var(--color-surface-3)] text-[var(--color-editor-fg)]'
-                  : 'text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-3)]/60 hover:text-[var(--color-editor-fg)]'
-              }`}
-            >
-              <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border ${
-                isSelected
-                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400'
-                  : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] text-[var(--color-fg-subtle)]'
-              }`}>
-                <Icon className="h-3.5 w-3.5" />
+
+      <div className="space-y-1">
+        {/* Section 1: Active Workspace Recommended Actions */}
+        {activeCommands.length > 0 && (
+          <div className="space-y-0.5">
+            <div className="px-2.5 pt-1 pb-0.5 flex items-center justify-between text-[10px] font-medium text-[var(--color-fg-subtle)]">
+              <span className="flex items-center gap-1">
+                <span className={currentTheme.textClass}>★</span>
+                <span>Khuyến nghị cho Không gian hiện tại</span>
+              </span>
+              <span className={`rounded px-1.5 py-0.2 text-[9px] font-mono uppercase border ${currentTheme.badgeClass}`}>
+                {currentTheme.badgeLabel}
+              </span>
+            </div>
+
+            {activeCommands.map((cmd) => {
+              const flatIndex = flatCommands.indexOf(cmd);
+              const isSelected = flatIndex === selectedIndex;
+              const Icon = cmd.icon;
+              const theme = LENS_THEME_CONFIG[cmd.lens];
+
+              return (
+                <button
+                  key={cmd.command}
+                  type="button"
+                  onClick={() => onSelectCommand(cmd)}
+                  onMouseEnter={() => setSelectedIndex(flatIndex)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-xs transition select-none ${
+                    isSelected
+                      ? `bg-[var(--color-surface-3)] text-[var(--color-editor-fg)] ring-1 ${theme.borderClass}`
+                      : 'text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-3)]/60 hover:text-[var(--color-editor-fg)]'
+                  }`}
+                >
+                  <div
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition ${
+                      isSelected
+                        ? theme.activeIconClass
+                        : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] text-[var(--color-fg-subtle)]'
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`font-mono font-semibold ${theme.textClass}`}>
+                        {cmd.command}
+                      </span>
+                      {cmd.argPlaceholder && (
+                        <span className="font-mono text-[10px] text-[var(--color-fg-subtle)] truncate">
+                          {cmd.argPlaceholder}
+                        </span>
+                      )}
+                      <span className="text-[11px] font-medium text-[var(--color-editor-fg)]">
+                        {cmd.label}
+                      </span>
+                      <span
+                        className={`ml-auto rounded px-1.5 py-0.2 text-[9px] font-mono uppercase border ${theme.badgeClass}`}
+                      >
+                        {theme.badgeLabel}
+                      </span>
+                    </div>
+                    <div className="truncate text-[11px] text-[var(--color-fg-subtle)] mt-0.5">
+                      {cmd.description}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Section 2: Other Workspace Actions */}
+        {otherCommands.length > 0 && (
+          <div className="space-y-0.5 pt-1">
+            {activeCommands.length > 0 && (
+              <div className="px-2.5 pt-1.5 pb-0.5 border-t border-[var(--color-border-subtle)]/40 flex items-center justify-between text-[10px] font-medium text-[var(--color-fg-subtle)]">
+                <span>Tác vụ Không gian làm việc khác</span>
+                <span className="text-[9px] font-mono text-[var(--color-fg-subtle)] opacity-70">Toàn hệ thống</span>
               </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-semibold text-emerald-400">
-                    {cmd.command}
-                  </span>
-                  {cmd.argPlaceholder && (
-                    <span className="font-mono text-[10px] text-[var(--color-fg-subtle)]">
-                      {cmd.argPlaceholder}
-                    </span>
-                  )}
-                  <span className="text-[11px] font-medium text-[var(--color-editor-fg)]">
-                    {cmd.label}
-                  </span>
-                  <span className="ml-auto rounded bg-[var(--color-surface-1)] px-1.5 py-0.2 text-[9px] font-mono uppercase text-[var(--color-fg-subtle)]">
-                    {cmd.lens}
-                  </span>
-                </div>
-                <div className="truncate text-[11px] text-[var(--color-fg-subtle)] mt-0.5">
-                  {cmd.description}
-                </div>
-              </div>
-            </button>
-          );
-        })}
+            )}
+
+            {otherCommands.map((cmd) => {
+              const flatIndex = flatCommands.indexOf(cmd);
+              const isSelected = flatIndex === selectedIndex;
+              const Icon = cmd.icon;
+              const theme = LENS_THEME_CONFIG[cmd.lens];
+
+              return (
+                <button
+                  key={cmd.command}
+                  type="button"
+                  onClick={() => onSelectCommand(cmd)}
+                  onMouseEnter={() => setSelectedIndex(flatIndex)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-left text-xs transition select-none ${
+                    isSelected
+                      ? `bg-[var(--color-surface-3)] text-[var(--color-editor-fg)] ring-1 ${theme.borderClass}`
+                      : 'text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-3)]/60 hover:text-[var(--color-editor-fg)] opacity-85 hover:opacity-100'
+                  }`}
+                >
+                  <div
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition ${
+                      isSelected
+                        ? theme.activeIconClass
+                        : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] text-[var(--color-fg-subtle)]'
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className={`font-mono font-medium ${theme.textClass}`}>
+                        {cmd.command}
+                      </span>
+                      {cmd.argPlaceholder && (
+                        <span className="font-mono text-[10px] text-[var(--color-fg-subtle)] truncate">
+                          {cmd.argPlaceholder}
+                        </span>
+                      )}
+                      <span className="text-[11px] text-[var(--color-editor-fg)]">
+                        {cmd.label}
+                      </span>
+                      <span
+                        className={`ml-auto rounded px-1.5 py-0.2 text-[9px] font-mono uppercase border ${theme.badgeClass}`}
+                      >
+                        {theme.badgeLabel}
+                      </span>
+                    </div>
+                    <div className="truncate text-[10px] text-[var(--color-fg-subtle)] mt-0.5">
+                      {cmd.description}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
