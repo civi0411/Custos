@@ -712,6 +712,9 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                 mode={mode}
                 splitPercent={splitPercent}
                 onOpenTab={handleOpenTab}
+                onAskAgent={(draft) => {
+                  setInputText((prev) => (prev ? `${prev}\n\n${draft}` : draft));
+                }}
               />
             </div>
           )}

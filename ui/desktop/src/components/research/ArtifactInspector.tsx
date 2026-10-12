@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   XCircle,
   GitCompare,
+  Send,
 } from 'lucide-react';
 import { ArtifactInspectorData, ArtifactTab } from '@/types/research';
 
@@ -28,6 +29,7 @@ interface ArtifactInspectorProps {
   onClose?: () => void;
   isMaximized?: boolean;
   onToggleMaximize?: () => void;
+  onAskAgent?: (draft: string) => void;
 }
 
 function computeSimpleLineDiff(oldText: string, newText: string) {
@@ -61,6 +63,7 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
   onClose,
   isMaximized,
   onToggleMaximize,
+  onAskAgent,
 }) => {
   const [activeTab, setActiveTab] = useState<ArtifactTab>('Code');
   const [versionIdx, setVersionIdx] = useState<number>(() => {
@@ -172,6 +175,19 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
 
         {/* Right Header Controls */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {onAskAgent && (
+            <button
+              onClick={() => {
+                const snippet = `Context Artifact [${data.title || data.filename} (${currentVersion.label})]:\n\`\`\`${data.language || 'text'}\n${activeCode}\n\`\`\``;
+                onAskAgent(snippet);
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm"
+              title="Insert artifact code into chat input"
+            >
+              <Send size={12} />
+              <span>Insert to Chat</span>
+            </button>
+          )}
           <button
             onClick={handleCopy}
             className="p-1.5 rounded-lg text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"

@@ -576,11 +576,11 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   }
 
   if (activeType === 'artifacts') {
-    return frameResource(<ArtifactsWorkbenchPane onShowToast={onShowToast} />);
+    return frameResource(<ArtifactsWorkbenchPane onShowToast={onShowToast} onAskAgent={onAskAgent} />);
   }
 
   if (activeType === 'notes') {
-    return frameResource(<NotesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} />);
+    return frameResource(<NotesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} onAskAgent={onAskAgent} />);
   }
 
   return activeResource
