@@ -6,10 +6,12 @@
 pub mod ast;
 pub mod git;
 pub mod test;
+pub mod ui;
 
 pub use ast::{AstSearchSkill, LexicalSearchSkill};
 pub use git::GitPatchSkill;
 pub use test::CargoTestSkill;
+pub use ui::{ComponentCloneSkill, LocalUiDiagnosticSkill};
 
 use async_trait::async_trait;
 use custos_domain::DomainError;
@@ -24,6 +26,8 @@ pub fn register_engineering_skills(registry: &mut SkillRegistry) {
     registry.register(Arc::new(LexicalSearchSkill));
     registry.register(Arc::new(GitPatchSkill));
     registry.register(Arc::new(CargoTestSkill));
+    registry.register(Arc::new(ComponentCloneSkill));
+    registry.register(Arc::new(LocalUiDiagnosticSkill));
 
     // Configure tier permissions for SystemTwo / engineering pack
     registry.set_tier_permissions(
@@ -35,6 +39,8 @@ pub fn register_engineering_skills(registry: &mut SkillRegistry) {
             "cargo_test".into(),
             "file_read".into(),
             "lexical_search".into(),
+            "component_clone".into(),
+            "local_ui_diagnostic".into(),
         ],
     );
 
@@ -46,6 +52,8 @@ pub fn register_engineering_skills(registry: &mut SkillRegistry) {
             "ast_search".into(),
             "file_read".into(),
             "lexical_search".into(),
+            "component_clone".into(),
+            "local_ui_diagnostic".into(),
         ],
     );
 }
