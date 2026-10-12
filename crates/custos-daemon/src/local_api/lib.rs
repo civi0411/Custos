@@ -140,6 +140,68 @@ pub const METHOD_OAUTH_DELETE: &str = "v1.oauth.delete";
 pub const METHOD_OAUTH_CANCEL: &str = "v1.oauth.cancel";
 pub const METHOD_OAUTH_STATUS: &str = "v1.oauth.status";
 
+pub const METHOD_PACKS_MANIFESTS_LIST: &str = "v1.packs.manifests.list";
+pub const METHOD_PACKS_JOBS_LIST: &str = "v1.packs.jobs.list";
+pub const METHOD_PACKS_JOBS_GET: &str = "v1.packs.jobs.get";
+pub const METHOD_PACKS_ROLES_LIST: &str = "v1.packs.roles.list";
+pub const METHOD_PACKS_JOBS_RUN: &str = "v1.packs.jobs.run";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JobOperationalStatus {
+    Available,
+    Degraded,
+    Planned,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PacksJobCatalogItem {
+    pub job_id: String,
+    pub lens: custos_domain::WorkbenchLens,
+    pub name: String,
+    pub description: String,
+    pub primary_role: String,
+    pub recommended_topology: custos_domain::oi::ExecutionTopology,
+    pub status: JobOperationalStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub degradation_reason: Option<String>,
+    pub required_inputs: Vec<String>,
+    pub expected_artifacts: Vec<String>,
+    pub required_verifiers: Vec<String>,
+    pub acceptance_rubric: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListPacksJobsParams {
+    #[serde(default)]
+    pub lens: Option<String>,
+    #[serde(default)]
+    pub pack_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetPacksJobParams {
+    pub job_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListPacksRolesParams {
+    #[serde(default)]
+    pub pack_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunPacksJobRequest {
+    pub job_id: String,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+    #[serde(default)]
+    pub inputs: serde_json::Value,
+}
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OAuthAuthorizeParams {
     #[serde(default)]

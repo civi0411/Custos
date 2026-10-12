@@ -34,8 +34,14 @@ pub struct AnthropicMessage {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum AnthropicContentBlock {
-    Text { text: String },
-    ToolUse { id: String, name: String, input: Value },
+    Text {
+        text: String,
+    },
+    ToolUse {
+        id: String,
+        name: String,
+        input: Value,
+    },
 }
 
 /// Convert Custos `ModelTurnRequest` into Anthropic Messages request payload
@@ -162,10 +168,7 @@ pub fn parse_anthropic_sse_event(
                         });
                     }
                     "thinking_delta" => {
-                        let thinking = delta
-                            .get("thinking")
-                            .and_then(|t| t.as_str())
-                            .unwrap_or("");
+                        let thinking = delta.get("thinking").and_then(|t| t.as_str()).unwrap_or("");
                         return Some(ModelTurnEvent {
                             attempt_id,
                             sequence,
@@ -205,7 +208,10 @@ pub fn parse_anthropic_sse_event(
         }
         "message_delta" => {
             if let Some(usage) = data_json.get("usage") {
-                let output_tokens = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                let output_tokens = usage
+                    .get("output_tokens")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
                 return Some(ModelTurnEvent {
                     attempt_id,
                     sequence,

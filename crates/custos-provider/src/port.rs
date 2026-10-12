@@ -48,7 +48,12 @@ pub trait ModelProvider: Send + Sync {
         let requested_model = req.requested_model.clone();
 
         let has_non_text_blocks = req.structured_messages.iter().any(|m| {
-            m.content.iter().any(|c| !matches!(c, crate::types::conversation::message::MessageContentBlock::Text(_)))
+            m.content.iter().any(|c| {
+                !matches!(
+                    c,
+                    crate::types::conversation::message::MessageContentBlock::Text(_)
+                )
+            })
         });
         let has_tools = !req.tool_schemas.is_empty();
 
@@ -96,9 +101,7 @@ pub trait ModelProvider: Send + Sync {
                             actual_provider: Some(provider_id.clone()),
                             actual_model: Some(requested_model),
                             actual_transport: Some("legacy_bridge".to_string()),
-                            delta: crate::turn::TurnDelta::Text {
-                                text: resp.content,
-                            },
+                            delta: crate::turn::TurnDelta::Text { text: resp.content },
                             usage_certainty: Some("estimated".to_string()),
                             provider_response_id: None,
                         })

@@ -195,7 +195,9 @@ impl DomainPack for AssistantPack {
     }
 
     async fn initialize(&self) -> Result<(), DomainError> {
-        tracing::info!("Initialized Assistant Domain Pack with Triage, Agenda, and Acceptance capabilities");
+        tracing::info!(
+            "Initialized Assistant Domain Pack with Triage, Agenda, and Acceptance capabilities"
+        );
         Ok(())
     }
 }

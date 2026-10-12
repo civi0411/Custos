@@ -157,13 +157,12 @@ mod tests {
     #[test]
     fn test_strip_agent_card_suffix() {
         assert_eq!(
-            strip_agent_card_suffix("http://localhost:8080/agents/custos/.well-known/agent-card.json"),
+            strip_agent_card_suffix(
+                "http://localhost:8080/agents/custos/.well-known/agent-card.json"
+            ),
             "http://localhost:8080/agents/custos"
         );
-        assert_eq!(
-            strip_agent_card_suffix("/.well-known/agent.json"),
-            ""
-        );
+        assert_eq!(strip_agent_card_suffix("/.well-known/agent.json"), "");
     }
 
     #[test]

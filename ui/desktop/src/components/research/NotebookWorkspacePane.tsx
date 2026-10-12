@@ -13,24 +13,29 @@ import {
   AlertCircle,
   Save,
   RefreshCw,
+  FlaskConical,
 } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
+import { JobActionButton } from '@/components/common';
 import type {
   NotebookCell,
   NotebookKernelState,
   NotebookCellType,
   CellExecutionStatus,
 } from '@/types/domain';
+import type { OrcaTabId } from '@/components/views/OrcaTabbedContainer';
 
 interface NotebookWorkspacePaneProps {
   sessionId?: string;
   onAskAgent?: (draftText: string) => void;
   onShowToast?: (msg: string) => void;
+  onOpenTab?: (id: OrcaTabId) => void;
 }
 
 export const NotebookWorkspacePane: React.FC<NotebookWorkspacePaneProps> = ({
   sessionId = 'default-notebook-session',
   onShowToast,
+  onOpenTab,
 }) => {
   const [cells, setCells] = useState<NotebookCell[]>([]);
   const [kernelState, setKernelState] = useState<NotebookKernelState | null>(null);
@@ -271,6 +276,31 @@ export const NotebookWorkspacePane: React.FC<NotebookWorkspacePaneProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2">
+          <JobActionButton
+            jobId="research__experiment_design"
+            label="Design Experiment"
+            icon={FlaskConical}
+            getInputs={() => {
+              if (cells.length === 0) return null;
+              const notebookContext = cells
+                .map((c) => `# Cell ${c.cell_index} (${c.cell_type})\n${c.source}`)
+                .join('\n\n');
+              return {
+                research_question: cells[0]?.source?.slice(0, 300) || 'Design automated experiment protocol',
+                constraints: 'Constrained to authorized Python kernel without unsanctioned network mutations',
+                notebook_context: notebookContext,
+              };
+            }}
+            sessionId={sessionId}
+            sourceTabId="experiments"
+            onNavigate={onOpenTab}
+            notReadyTooltip="Notebook has no cells to design experiment"
+            readyTooltip="Generate structured experiment protocol based on active notebook"
+            onShowToast={onShowToast}
+            variant="toolbar"
+            size="sm"
+          />
+
           <button
             onClick={handleInterrupt}
             disabled={!runningCellId}

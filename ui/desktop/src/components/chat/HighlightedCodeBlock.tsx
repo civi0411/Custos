@@ -1,8 +1,5 @@
 import { memo, useMemo } from 'react';
-import hljs from 'highlight.js/lib/common';
-import rust from 'highlight.js/lib/languages/rust';
-
-hljs.registerLanguage('rust', rust);
+import hljs from 'highlight.js';
 
 export const HighlightedCodeBlock = memo(function HighlightedCodeBlock({
   code,

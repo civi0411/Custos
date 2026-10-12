@@ -10,9 +10,16 @@ import Server from '~icons/lucide/server';
 import Cpu from '~icons/lucide/cpu';
 
 type IconProps = { size?: number; className?: string };
+
 const brands: Record<string, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
-  openai: OpenAI, anthropic: Claude, gemini: Gemini, deepseek: DeepSeek,
-  copilot: Copilot, antigravity: Antigravity, ollama: Ollama, local: Ollama,
+  openai: OpenAI,
+  anthropic: Claude,
+  gemini: Gemini,
+  deepseek: DeepSeek,
+  copilot: Copilot,
+  antigravity: Antigravity,
+  ollama: Ollama,
+  local: Ollama,
   server: Server,
 };
 

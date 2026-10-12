@@ -30,6 +30,7 @@
 
 | New documentation file | Lines | Architectural responsibility | Key code exports |
 |---|---:|---|---|
+| [`../architecture/provider-and-adapter-boundaries.md`](../architecture/provider-and-adapter-boundaries.md) | 104 | Canonical ownership and convergence status for model contracts, vendor transports, local inference, native harnesses, MCP/A2A and host effects. Separates composed, compatibility, experimental, simulated and placeholder paths. | Documentation authority; no new runtime contract. |
 | [`9router-custos-integration-plan.md`](9router-custos-integration-plan.md) | 318 | Pinned 9Router extraction matrix plus complete Custos provider/desktop codebase blueprint: current dual model contracts, crate ownership, target model-turn/connection/route/attempt semantics, UI state ownership, migration and verification gates. Proposal only. | None; no runtime behavior added. |
 | [`system-design-9router-agentgateway-custos.md`](system-design-9router-agentgateway-custos.md) | 320 | Unified System Design Blueprint & Codebase Mapping: Mổ xẻ chi tiết 9Router & AgentGateway, thiết kế kiến trúc chuẩn công nghiệp tích hợp vào Rust native (`custos-provider`, `custos-adapters`, `custos-runtime`), sequence flows và developer playbook cho team. | Architecture blueprint. |
 
@@ -337,6 +338,8 @@ Custos/
 | [`src/store.rs`](../../crates/custos-persistence/src/store.rs) | 1,103 | SQLite-backed persistent storage implementing TaskStore, SessionStore, RunPort and related ports. | `struct SqliteTaskStore`, `fn new_in_memory`, `fn new`, `fn db` |
 
 ### 3.4. Crate `custos-provider` — Layer 1: Model Contracts
+
+> **Convergence authority:** [Provider and adapter boundaries](../architecture/provider-and-adapter-boundaries.md) classifies the flat `ModelProvider` path as compatibility, the structured `ModelTurnRequest/Event` values as the convergence vocabulary, and the richer `types/base.rs::Provider` stack as retained implementation source until parity is proven. File presence does not imply composition or live capability.
 
 - **Đường dẫn thư mục:** `crates/custos-provider`
 - **Chủ sở hữu chính (Owner):** **Vĩ (AI/DS Lead)**
@@ -728,6 +731,8 @@ Custos/
 
 
 ### 3.7. Crate `custos-adapters` — Layer 2: External Adapters & Sandbox
+
+> **Implementation status authority:** [Provider and adapter boundaries](../architecture/provider-and-adapter-boundaries.md) distinguishes composed transports, rich uncomposed provider implementations, compatibility wrappers, test doubles, simulated protocol paths and empty sandbox placeholders. Only the daemon composition plus conformance evidence may promote an adapter to `live`.
 
 - **Đường dẫn thư mục:** `crates/custos-adapters`
 - **Chủ sở hữu chính (Owner):** **Trường (Sandbox) & Vinh (MCP/Harnesses) & Vĩ (Providers)**

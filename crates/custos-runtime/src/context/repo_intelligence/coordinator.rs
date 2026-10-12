@@ -213,8 +213,10 @@ mod tests {
 
     #[test]
     fn test_repo_coordinator_git_head_resolution() {
-        let temp_dir =
-            std::env::temp_dir().join(format!("custos_git_coord_{}", custos_domain::new_id("gitcoord")));
+        let temp_dir = std::env::temp_dir().join(format!(
+            "custos_git_coord_{}",
+            custos_domain::new_id("gitcoord")
+        ));
         std::fs::create_dir_all(&temp_dir).unwrap();
 
         // Initialize Git repo and make initial commit

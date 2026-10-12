@@ -247,7 +247,8 @@ mod tests {
     fn test_resolve_with_reasoning_requirement() {
         let registry = ComboRegistry::default();
         // o1 has reasoning: true
-        let resolved = registry.resolve_candidates("reasoning-combo", &[RequiredCapability::Reasoning]);
+        let resolved =
+            registry.resolve_candidates("reasoning-combo", &[RequiredCapability::Reasoning]);
         assert_eq!(resolved[0], "o1");
     }
 

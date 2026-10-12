@@ -88,6 +88,7 @@ interface OrcaTabbedContainerProps {
   onAskAgent?: (draft: string) => void;
   onHandoffToCoding?: (claims: unknown[]) => void;
   splitPercent?: number;
+  onOpenTab?: (id: OrcaTabId) => void;
 }
 
 export type ResourceDefinition = {
@@ -175,6 +176,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   mode = 'code',
   onAskAgent,
   onHandoffToCoding,
+  onOpenTab,
 }) => {
   const [capabilities, setCapabilities] = React.useState<CapabilityDescriptor[]>([]);
   const [fetchFailed, setFetchFailed] = React.useState(false);
@@ -197,6 +199,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
           setCapabilitiesLoaded(true);
         }
       });
+
     return () => {
       isMounted = false;
     };
@@ -365,7 +368,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   }
 
   if (activeId === 'literature') {
-    return frameResource(<LiteraturePane onShowToast={onShowToast} />);
+    return frameResource(<LiteraturePane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />);
   }
 
   if (activeId === 'claims') {
@@ -382,7 +385,7 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   }
 
   if (activeId === 'experiments') {
-    return frameResource(<NotebookWorkspacePane sessionId={session?.id} onAskAgent={onAskAgent} onShowToast={onShowToast} />);
+    return frameResource(<NotebookWorkspacePane sessionId={session?.id} onAskAgent={onAskAgent} onShowToast={onShowToast} onOpenTab={onOpenTab} />);
   }
 
   if (activeId === 'worktrees') {
@@ -394,15 +397,15 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   }
 
   if (activeId === 'files') {
-    return frameResource(<FilesWorkbenchPane />);
+    return frameResource(<FilesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />);
   }
 
   if (activeId === 'changes') {
-    return frameResource(<ChangesWorkbenchPane />);
+    return frameResource(<ChangesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />);
   }
 
   if (activeId === 'kanban') {
-    return frameResource(<AgentsWorkbenchPane />);
+    return frameResource(<AgentsWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />);
   }
 
   if (activeId === 'evidence') {
@@ -412,8 +415,9 @@ export const OrcaTabbedContainer: React.FC<OrcaTabbedContainerProps> = ({
   if (activeId === 'runs') {
     return frameResource(
       <RunsLedgerPane
-        onReproduce={(run) => onAskAgent?.(`Reproduce run ${run.runId}:\n\`${run.command}\``)}
+        sessionId={session?.id}
         onShowToast={onShowToast}
+        onOpenTab={onOpenTab}
       />
     );
   }

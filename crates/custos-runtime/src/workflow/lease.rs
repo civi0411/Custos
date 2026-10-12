@@ -279,11 +279,16 @@ mod tests {
         fs::write(&collision_file, "malicious").unwrap();
 
         let err_collision = manager.merge_lease(&lease, Some("src"));
-        assert!(err_collision.is_err(), "Must prevent prefix collision (src_other vs src)");
+        assert!(
+            err_collision.is_err(),
+            "Must prevent prefix collision (src_other vs src)"
+        );
 
         // 2. Traversal in prefix: "src/../../etc" must be rejected
         let err_traversal_prefix = manager.merge_lease(&lease, Some("src/../../etc"));
-        assert!(err_traversal_prefix.is_err(), "Must reject traversal in prefix");
+        assert!(
+            err_traversal_prefix.is_err(),
+            "Must reject traversal in prefix"
+        );
     }
 }
-

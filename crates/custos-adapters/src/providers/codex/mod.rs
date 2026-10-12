@@ -1,9 +1,9 @@
 //! CodexProvider Adapter / OpenAI Live Model Provider
 
+use crate::providers::openai_chat::OpenAiChatProvider;
 use async_trait::async_trait;
 use custos_domain::DomainError;
 use custos_provider::{ModelProvider, ModelRequest, ModelResponse};
-use crate::providers::openai_chat::OpenAiChatProvider;
 
 pub struct CodexProvider {
     inner: OpenAiChatProvider,
@@ -20,7 +20,10 @@ impl CodexProvider {
         Self { inner }
     }
 
-    pub fn with_token_provider(mut self, provider: std::sync::Arc<dyn crate::providers::openai_chat::TokenProvider>) -> Self {
+    pub fn with_token_provider(
+        mut self,
+        provider: std::sync::Arc<dyn crate::providers::openai_chat::TokenProvider>,
+    ) -> Self {
         self.inner = self.inner.with_token_provider(provider);
         self
     }

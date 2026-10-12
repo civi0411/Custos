@@ -156,7 +156,6 @@ pub struct HarnessDescriptor {
     pub profile: HarnessProfile,
 }
 
-
 /// Agent Runtime Port (Deep Dissection of Agent Loop & Native Harnesses)
 ///
 /// Dissects the legacy upstream execution loop into a strictly governed contract.

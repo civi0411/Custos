@@ -1,8 +1,15 @@
-//! Custos Adapters
+//! Custos external adapter implementations.
 //!
-//! External adapters: Model Providers (Claude, Codex, Antigravity, Local),
-//! Model Context Protocol (MCP), OS Sandboxes (Seatbelt, Bubblewrap),
-//! Local Inference, Download Manager, and Roaming.
+//! This crate owns concrete I/O: model connections, vendor transports, local
+//! inference, native agent harnesses, MCP/A2A transports, filesystem/process
+//! capabilities, workspaces and platform isolation. It implements contracts
+//! owned by `custos-provider` and `custos-core`; it does not decide Task
+//! completion, mint authority or own product routing policy.
+//!
+//! Module presence is not a readiness claim. Several modules are compatibility
+//! wrappers, test doubles, protocol scaffolds or fail-closed placeholders. The
+//! daemon is the production composition root and must expose only capabilities
+//! backed by conformance evidence.
 
 pub mod a2a;
 pub mod download_manager;
@@ -12,6 +19,7 @@ pub mod mcp;
 pub mod providers;
 pub mod roaming;
 pub mod sandbox;
+pub mod tools;
 pub mod workspace;
 
 pub mod model {

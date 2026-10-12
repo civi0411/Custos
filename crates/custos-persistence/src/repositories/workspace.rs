@@ -24,15 +24,21 @@ impl WorkspaceRepository {
     pub fn save_workspace(&self, ws: &ExecutionWorkspace) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
         let (kind_type, kind_json) = match &ws.kind {
-            WorkspaceKind::Git { .. } => {
-                ("git", serde_json::to_string(&ws.kind).map_err(|e| DomainError::Validation(e.to_string()))?)
-            }
-            WorkspaceKind::Folder { .. } => {
-                ("folder", serde_json::to_string(&ws.kind).map_err(|e| DomainError::Validation(e.to_string()))?)
-            }
-            WorkspaceKind::RemoteSsh { .. } => {
-                ("remote_ssh", serde_json::to_string(&ws.kind).map_err(|e| DomainError::Validation(e.to_string()))?)
-            }
+            WorkspaceKind::Git { .. } => (
+                "git",
+                serde_json::to_string(&ws.kind)
+                    .map_err(|e| DomainError::Validation(e.to_string()))?,
+            ),
+            WorkspaceKind::Folder { .. } => (
+                "folder",
+                serde_json::to_string(&ws.kind)
+                    .map_err(|e| DomainError::Validation(e.to_string()))?,
+            ),
+            WorkspaceKind::RemoteSsh { .. } => (
+                "remote_ssh",
+                serde_json::to_string(&ws.kind)
+                    .map_err(|e| DomainError::Validation(e.to_string()))?,
+            ),
         };
 
         let (status_str, status_reason) = match &ws.status {
@@ -57,8 +63,8 @@ impl WorkspaceRepository {
                 metadata["dirty_manifest"] = val;
             }
         }
-        let metadata_json = serde_json::to_string(&metadata)
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let metadata_json =
+            serde_json::to_string(&metadata).map_err(|e| DomainError::Validation(e.to_string()))?;
 
         conn.execute(
             "INSERT INTO execution_workspaces (
@@ -93,7 +99,10 @@ impl WorkspaceRepository {
         Ok(())
     }
 
-    pub fn get_workspace(&self, id: &WorkspaceId) -> Result<Option<ExecutionWorkspace>, DomainError> {
+    pub fn get_workspace(
+        &self,
+        id: &WorkspaceId,
+    ) -> Result<Option<ExecutionWorkspace>, DomainError> {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(

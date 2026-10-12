@@ -3,9 +3,9 @@
 //! Provides browser session, tab, and snapshot contracts scoped to execution
 //! workspaces. Network isolation and DNS-aware SSRF enforcement remain adapter duties.
 
-use serde::{Deserialize, Serialize};
 use crate::error::DomainError;
 use crate::ids::new_id;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -64,7 +64,10 @@ pub struct BrowserTab {
 }
 
 impl BrowserTab {
-    pub fn new(session_id: impl Into<String>, initial_url: impl Into<String>) -> Result<Self, DomainError> {
+    pub fn new(
+        session_id: impl Into<String>,
+        initial_url: impl Into<String>,
+    ) -> Result<Self, DomainError> {
         let url = initial_url.into();
         validate_browser_url(&url)?;
         let now = chrono::Utc::now().timestamp_millis();
@@ -72,7 +75,11 @@ impl BrowserTab {
             id: new_id("tab"),
             session_id: session_id.into(),
             url: url.clone(),
-            title: if url.is_empty() { "New Tab".to_string() } else { url },
+            title: if url.is_empty() {
+                "New Tab".to_string()
+            } else {
+                url
+            },
             status: BrowserTabStatus::Idle,
             active: true,
             last_snapshot: None,
@@ -153,14 +160,12 @@ pub fn validate_browser_url(raw_url: &str) -> Result<(), DomainError> {
     };
 
     // Extract authority (host + optional port) up to next '/', '?', or '#'
-    let authority = rest
-        .split(['/', '?', '#'])
-        .next()
-        .unwrap_or("")
-        .trim();
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("").trim();
 
     if authority.is_empty() {
-        return Err(DomainError::Validation("URL must contain a valid hostname.".to_string()));
+        return Err(DomainError::Validation(
+            "URL must contain a valid hostname.".to_string(),
+        ));
     }
 
     let (host, maybe_port) = if let Some((h, p)) = authority.rsplit_once(':') {
@@ -170,15 +175,15 @@ pub fn validate_browser_url(raw_url: &str) -> Result<(), DomainError> {
     };
 
     if host.is_empty() {
-        return Err(DomainError::Validation("URL must contain a valid hostname.".to_string()));
+        return Err(DomainError::Validation(
+            "URL must contain a valid hostname.".to_string(),
+        ));
     }
 
     let lower = host.to_lowercase();
 
     // Permit scoped loopback development servers and SSH port forward targets (ports 1024..=65535)
-    let is_loopback = lower == "localhost"
-        || lower == "127.0.0.1"
-        || lower == "[::1]";
+    let is_loopback = lower == "localhost" || lower == "127.0.0.1" || lower == "[::1]";
     if is_loopback && maybe_port.is_some_and(|p| p >= 1024) {
         let _ = scheme;
         return Ok(());

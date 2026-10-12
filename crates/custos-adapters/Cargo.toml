@@ -37,7 +37,9 @@ tracing = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 reqwest = { workspace = true }
-rmcp = { workspace = true }
+rmcp = { workspace = true, features = ["transport-io"] }
+schemars = { workspace = true }
+indoc = { workspace = true }
 which = { workspace = true }
 bytes = { workspace = true }
 url = { workspace = true }

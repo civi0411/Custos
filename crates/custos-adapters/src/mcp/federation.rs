@@ -32,7 +32,11 @@ impl McpFederationHub {
     }
 
     /// Register an MCP server under a specific namespace prefix
-    pub async fn register_server(&self, prefix: impl Into<String>, client: Arc<dyn McpClientTrait>) {
+    pub async fn register_server(
+        &self,
+        prefix: impl Into<String>,
+        client: Arc<dyn McpClientTrait>,
+    ) {
         let prefix = prefix.into();
         info!("Registering MCP server under namespace prefix '{}'", prefix);
         let mut guard = self.servers.write().await;
@@ -84,12 +88,13 @@ impl McpFederationHub {
         let original_name = parts[1];
 
         let guard = self.servers.read().await;
-        let client = guard.get(prefix).cloned().ok_or_else(|| {
-            DomainError::NotFound {
+        let client = guard
+            .get(prefix)
+            .cloned()
+            .ok_or_else(|| DomainError::NotFound {
                 kind: "McpServer".to_string(),
                 id: prefix.to_string(),
-            }
-        })?;
+            })?;
 
         client
             .call_tool(ctx, original_name, args)

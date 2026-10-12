@@ -66,7 +66,11 @@ impl CodexHarnessAdapter {
 
     /// Normalizes tool calls and code patch proposals into structured ActionIntents.
     /// Strictly tags them as `ProviderGoverned` to uphold Gate 4.
-    pub fn normalize_output_to_intents(&self, task_id: &str, raw_output: &str) -> Vec<ActionIntent> {
+    pub fn normalize_output_to_intents(
+        &self,
+        task_id: &str,
+        raw_output: &str,
+    ) -> Vec<ActionIntent> {
         let mut intents = Vec::new();
 
         for line in raw_output.lines() {
@@ -78,12 +82,21 @@ impl CodexHarnessAdapter {
             if trimmed.starts_with('{') && trimmed.ends_with('}') {
                 if let Ok(val) = serde_json::from_str::<serde_json::Value>(trimmed) {
                     if let Some(tool_call) = val.get("function").or_else(|| val.get("tool_call")) {
-                        let name = tool_call.get("name").and_then(|v| v.as_str()).unwrap_or("codex_exec");
-                        let args = tool_call.get("arguments").cloned().unwrap_or(serde_json::Value::Null);
+                        let name = tool_call
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("codex_exec");
+                        let args = tool_call
+                            .get("arguments")
+                            .cloned()
+                            .unwrap_or(serde_json::Value::Null);
 
                         let (action_name, target, risk) = match name {
                             "apply_patch" | "write_file" => {
-                                let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("unknown");
+                                let path = args
+                                    .get("path")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("unknown");
                                 ("write_file", path.to_string(), RiskLevel::High)
                             }
                             "exec_shell" | "bash" => {

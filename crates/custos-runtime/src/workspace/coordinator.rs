@@ -8,8 +8,8 @@
 //! - Explicit failure tracking ('SetupFailed') rather than blind retries
 //! - Clean separation of host provisioning (WorkspaceProvider) and storage (WorkspaceRepository).
 
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::{error, info, warn};
 
 use custos_core::contracts::workspace::{WorkspaceProvider, WorkspaceRepository};
@@ -167,16 +167,15 @@ impl WorkspaceCoordinator {
     }
 
     /// Inspects the dirty status and uncommitted changes of a workspace.
-    pub async fn inspect_dirty(
-        &self,
-        id: &WorkspaceId,
-    ) -> Result<DirtyManifest, DomainError> {
-        let ws = self.repository.get_workspace(id).await?.ok_or_else(|| {
-            DomainError::NotFound {
+    pub async fn inspect_dirty(&self, id: &WorkspaceId) -> Result<DirtyManifest, DomainError> {
+        let ws = self
+            .repository
+            .get_workspace(id)
+            .await?
+            .ok_or_else(|| DomainError::NotFound {
                 kind: "ExecutionWorkspace".into(),
                 id: id.to_string(),
-            }
-        })?;
+            })?;
         self.provider.inspect_dirty(&ws).await
     }
 
@@ -185,12 +184,14 @@ impl WorkspaceCoordinator {
         &self,
         id: &WorkspaceId,
     ) -> Result<ExecutionWorkspace, DomainError> {
-        let mut ws = self.repository.get_workspace(id).await?.ok_or_else(|| {
-            DomainError::NotFound {
-                kind: "ExecutionWorkspace".into(),
-                id: id.to_string(),
-            }
-        })?;
+        let mut ws =
+            self.repository
+                .get_workspace(id)
+                .await?
+                .ok_or_else(|| DomainError::NotFound {
+                    kind: "ExecutionWorkspace".into(),
+                    id: id.to_string(),
+                })?;
 
         let is_valid = self.provider.recover(&ws).await.unwrap_or(false);
         if is_valid {
@@ -240,7 +241,8 @@ impl WorkspaceCoordinator {
         id: &WorkspaceId,
         delete_physical: bool,
     ) -> Result<(), DomainError> {
-        self.archive_workspace_with_force(id, delete_physical, false).await
+        self.archive_workspace_with_force(id, delete_physical, false)
+            .await
     }
 
     /// Archives a workspace with dirty protection: if delete_physical is true and workspace is dirty,
@@ -252,12 +254,14 @@ impl WorkspaceCoordinator {
         force: bool,
     ) -> Result<(), DomainError> {
         info!(workspace_id = %id, delete_physical, force, "Archiving ExecutionWorkspace");
-        let ws = self.repository.get_workspace(id).await?.ok_or_else(|| {
-            DomainError::NotFound {
+        let ws = self
+            .repository
+            .get_workspace(id)
+            .await?
+            .ok_or_else(|| DomainError::NotFound {
                 kind: "ExecutionWorkspace".into(),
                 id: id.to_string(),
-            }
-        })?;
+            })?;
 
         if delete_physical {
             if !force {
@@ -490,7 +494,10 @@ mod tests {
         // Archiving with delete_physical = true must be rejected when workspace has uncommitted changes
         let err = coordinator.archive_workspace(&ws.id, true).await;
         assert!(err.is_err());
-        assert!(err.unwrap_err().to_string().contains("contains uncommitted changes"));
+        assert!(err
+            .unwrap_err()
+            .to_string()
+            .contains("contains uncommitted changes"));
 
         // Passing force = true explicitly bypasses dirty guard and archives
         let res = coordinator

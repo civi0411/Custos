@@ -52,9 +52,7 @@ pub enum WorkspaceKind {
         base_commit: Option<String>,
     },
     /// Simple filesystem folder (Research datasets, notes, Assistant connectors)
-    Folder {
-        path: String,
-    },
+    Folder { path: String },
     /// Remote SSH workspace environment
     RemoteSsh {
         host: String,
@@ -228,7 +226,9 @@ impl ExecutionWorkspace {
     pub fn validate_path_safety(&self) -> Result<(), DomainError> {
         let trimmed_path = self.path.trim();
         if trimmed_path.is_empty() {
-            return Err(DomainError::Validation("Workspace path cannot be empty".into()));
+            return Err(DomainError::Validation(
+                "Workspace path cannot be empty".into(),
+            ));
         }
 
         // Check for path traversal components in workspace path
@@ -242,7 +242,9 @@ impl ExecutionWorkspace {
         }
 
         // Prohibit targeting root or critical system directories
-        let prohibited = ["/", "/bin", "/sbin", "/usr", "/etc", "/System", "/dev", "/proc", "/sys"];
+        let prohibited = [
+            "/", "/bin", "/sbin", "/usr", "/etc", "/System", "/dev", "/proc", "/sys",
+        ];
         for forbidden in &prohibited {
             if trimmed_path == *forbidden {
                 return Err(DomainError::Validation(format!(
@@ -254,13 +256,13 @@ impl ExecutionWorkspace {
 
         match &self.kind {
             WorkspaceKind::Git {
-                repo_path,
-                branch,
-                ..
+                repo_path, branch, ..
             } => {
                 let trimmed_repo = repo_path.trim();
                 if trimmed_repo.is_empty() {
-                    return Err(DomainError::Validation("Git repo path cannot be empty".into()));
+                    return Err(DomainError::Validation(
+                        "Git repo path cannot be empty".into(),
+                    ));
                 }
                 for comp in std::path::Path::new(trimmed_repo).components() {
                     if matches!(comp, std::path::Component::ParentDir) {
@@ -272,7 +274,9 @@ impl ExecutionWorkspace {
                 }
                 let trimmed_branch = branch.trim();
                 if trimmed_branch.is_empty() {
-                    return Err(DomainError::Validation("Git branch name cannot be empty".into()));
+                    return Err(DomainError::Validation(
+                        "Git branch name cannot be empty".into(),
+                    ));
                 }
                 if trimmed_branch.contains("..") || trimmed_branch.starts_with('/') {
                     return Err(DomainError::Validation(format!(
@@ -289,7 +293,9 @@ impl ExecutionWorkspace {
             WorkspaceKind::Folder { path } => {
                 let trimmed_folder = path.trim();
                 if trimmed_folder.is_empty() {
-                    return Err(DomainError::Validation("Folder path cannot be empty".into()));
+                    return Err(DomainError::Validation(
+                        "Folder path cannot be empty".into(),
+                    ));
                 }
                 for comp in std::path::Path::new(trimmed_folder).components() {
                     if matches!(comp, std::path::Component::ParentDir) {
@@ -301,15 +307,17 @@ impl ExecutionWorkspace {
                 }
             }
             WorkspaceKind::RemoteSsh {
-                host,
-                remote_path,
-                ..
+                host, remote_path, ..
             } => {
                 if host.trim().is_empty() {
-                    return Err(DomainError::Validation("Remote SSH host cannot be empty".into()));
+                    return Err(DomainError::Validation(
+                        "Remote SSH host cannot be empty".into(),
+                    ));
                 }
                 if remote_path.trim().is_empty() {
-                    return Err(DomainError::Validation("Remote SSH path cannot be empty".into()));
+                    return Err(DomainError::Validation(
+                        "Remote SSH path cannot be empty".into(),
+                    ));
                 }
             }
         }
@@ -432,9 +440,7 @@ mod tests {
         let ws_root = ExecutionWorkspace::new(
             WorkspaceId::generate(),
             "root-ws",
-            WorkspaceKind::Folder {
-                path: "/".into(),
-            },
+            WorkspaceKind::Folder { path: "/".into() },
             "/",
         );
         assert!(ws_root.validate_path_safety().is_err());
@@ -466,4 +472,3 @@ mod tests {
         assert!(ws_valid.validate_path_safety().is_ok());
     }
 }
-

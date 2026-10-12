@@ -110,4 +110,3 @@ pub struct ModelCatalogResult {
     pub models: Vec<ModelCatalogOption>,
     pub fetched_at: i64,
 }
-

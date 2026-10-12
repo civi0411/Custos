@@ -120,7 +120,7 @@ impl MemoryServer {
              This extension stores and retrieves categorized information with tagging support.
 
              Storage:
-             - Local: .goose/memory/ (project-specific)
+             - Local: .custos/memory/ (project-specific)
              - Global: ~/.config/goose/memory/ (user-wide)
 
              Save proactively when users share preferences, project configurations, workflow patterns,
@@ -209,7 +209,7 @@ impl MemoryServer {
                 .cloned()
                 .or_else(|| std::env::current_dir().ok())
                 .unwrap_or_else(|| PathBuf::from("."));
-            local_base.join(".goose").join("memory")
+            local_base.join(".custos").join("memory")
         };
         Ok(base_dir.join(format!("{}.txt", category)))
     }
@@ -226,7 +226,7 @@ impl MemoryServer {
                 .cloned()
                 .or_else(|| std::env::current_dir().ok())
                 .unwrap_or_else(|| PathBuf::from("."));
-            local_base.join(".goose").join("memory")
+            local_base.join(".custos").join("memory")
         };
         let mut memories = HashMap::new();
         if base_dir.exists() {
@@ -378,7 +378,7 @@ impl MemoryServer {
                 .cloned()
                 .or_else(|| std::env::current_dir().ok())
                 .unwrap_or_else(|| PathBuf::from("."));
-            local_base.join(".goose").join("memory")
+            local_base.join(".custos").join("memory")
         };
         if base_dir.exists() {
             fs::remove_dir_all(&base_dir)?;
@@ -538,7 +538,7 @@ mod tests {
             global_memory_dir: memory_base.join("global"),
         };
 
-        let local_memory_dir = working_dir.join(".goose").join("memory");
+        let local_memory_dir = working_dir.join(".custos").join("memory");
 
         assert!(!router.global_memory_dir.exists());
         assert!(!local_memory_dir.exists());
@@ -647,7 +647,7 @@ mod tests {
             global_memory_dir: memory_base.join("global"),
         };
 
-        let local_memory_dir = working_dir.join(".goose").join("memory");
+        let local_memory_dir = working_dir.join(".custos").join("memory");
         assert!(!local_memory_dir.exists());
 
         router
@@ -788,7 +788,7 @@ mod tests {
         }
 
         assert_eq!(fs::read_to_string(outside_file).unwrap(), "secret");
-        assert!(!working_dir.join(".goose").exists());
+        assert!(!working_dir.join(".custos").exists());
     }
 
     #[test]
@@ -813,7 +813,7 @@ mod tests {
             .unwrap();
 
         assert!(working_dir
-            .join(".goose/memory/project notes_2026.txt")
+            .join(".custos/memory/project notes_2026.txt")
             .is_file());
     }
 
@@ -822,7 +822,7 @@ mod tests {
     fn test_retrieve_all_skips_invalid_legacy_categories() {
         let temp_dir = tempdir().unwrap();
         let working_dir = temp_dir.path().join("working");
-        let memory_dir = working_dir.join(".goose/memory");
+        let memory_dir = working_dir.join(".custos/memory");
         fs::create_dir_all(&memory_dir).unwrap();
         fs::write(memory_dir.join("valid.txt"), "kept").unwrap();
         fs::write(memory_dir.join("work:api.txt"), "legacy").unwrap();

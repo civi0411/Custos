@@ -9,11 +9,11 @@ use custos_domain::{
     AnnotationRecord, AnnotationStatus, AnnotationTarget, ArtifactLineageGraph,
     ArtifactLineageNode, ArtifactSummary, CellExecutionStatus, ClaimEvidenceLink,
     ClaimGroundingLevel, DomainError, EnvSnapshot, EnvironmentSpec, EvidenceRelation,
-    ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus, KernelStatus,
-    LineageGraphEdge, LineageGraphNode, NoteRecord, NoteVersionRecord, NotebookCell,
-    NotebookCellType, NotebookKernelState, PassageAnchor, SynthesisProposalStatus, Recipe, RecipeInput,
-    ResearchClaim, ResearchExperimentRun, ResearchSynthesisProposal, ReviewFinding, ReviewMethod,
-    ReviewStatus, ReviewTargetType, ReviewerRecord, SourceRecord,
+    ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus, KernelStatus, LineageGraphEdge,
+    LineageGraphNode, NoteRecord, NoteVersionRecord, NotebookCell, NotebookCellType,
+    NotebookKernelState, PassageAnchor, Recipe, RecipeInput, ResearchClaim, ResearchExperimentRun,
+    ResearchSynthesisProposal, ReviewFinding, ReviewMethod, ReviewStatus, ReviewTargetType,
+    ReviewerRecord, SourceRecord, SynthesisProposalStatus,
 };
 use rusqlite::{params, types::Type};
 
@@ -672,7 +672,8 @@ impl ResearchRepository {
                 ver.content_hash,
                 ver.created_at,
             ],
-        ).map_err(|e| DomainError::Validation(e.to_string()))?;
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         Ok(())
     }
@@ -906,7 +907,10 @@ impl ResearchRepository {
         Ok(())
     }
 
-    pub fn get_notebook_kernel_state(&self, session_id: &str) -> Result<NotebookKernelState, DomainError> {
+    pub fn get_notebook_kernel_state(
+        &self,
+        session_id: &str,
+    ) -> Result<NotebookKernelState, DomainError> {
         let existing = {
             let conn = self.db.lock()?;
             let mut stmt = conn
@@ -963,7 +967,10 @@ impl ResearchRepository {
         }
     }
 
-    pub fn save_notebook_kernel_state(&self, state: &NotebookKernelState) -> Result<(), DomainError> {
+    pub fn save_notebook_kernel_state(
+        &self,
+        state: &NotebookKernelState,
+    ) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
         let status_str = match state.status {
             KernelStatus::Idle => "idle",
@@ -989,7 +996,8 @@ impl ResearchRepository {
                 state.created_at,
                 state.updated_at,
             ],
-        ).map_err(|e| DomainError::Validation(e.to_string()))?;
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         Ok(())
     }
@@ -1102,7 +1110,8 @@ impl ResearchRepository {
         let mut sql = "SELECT id, target_type, target_id, reviewer, method, status,
                               evidence_summary, evidence_digest, findings_json, is_fresh,
                               created_at, updated_at
-                       FROM reviewer_records WHERE 1=1".to_string();
+                       FROM reviewer_records WHERE 1=1"
+            .to_string();
 
         let mut params_vec: Vec<String> = Vec::new();
         if let Some(tt) = target_type_str {
@@ -1270,7 +1279,9 @@ impl ResearchRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         match rows.next() {
-            Some(row) => Ok(Some(row.map_err(|e| DomainError::Validation(e.to_string()))?)),
+            Some(row) => Ok(Some(
+                row.map_err(|e| DomainError::Validation(e.to_string()))?,
+            )),
             None => Ok(None),
         }
     }
@@ -1294,7 +1305,9 @@ impl ResearchRepository {
         Ok(proposals)
     }
 
-    fn row_to_synthesis_proposal(row: &rusqlite::Row) -> rusqlite::Result<ResearchSynthesisProposal> {
+    fn row_to_synthesis_proposal(
+        row: &rusqlite::Row,
+    ) -> rusqlite::Result<ResearchSynthesisProposal> {
         let claims_json: String = row.get(3)?;
         let claims = serde_json::from_str(&claims_json).unwrap_or_default();
         let recipes_json: String = row.get(4)?;
@@ -2016,7 +2029,8 @@ mod tests {
             )
             .expect("update note");
         repo.save_note(&note).expect("save updated note");
-        repo.save_note_version(&prev_ver).expect("save note version");
+        repo.save_note_version(&prev_ver)
+            .expect("save note version");
 
         let note_versions = repo.list_note_versions(&note_id).expect("list versions");
         assert_eq!(note_versions.len(), 1);
@@ -2042,20 +2056,29 @@ mod tests {
                 file_path: Some("crates/custos-runtime/src/lib.rs".into()),
                 line_number: Some(42),
             }],
-        ).expect("create review");
+        )
+        .expect("create review");
 
         repo.save_review(&review).expect("save review");
-        let fetched_rev = repo.get_review(&review.id).expect("get review").expect("review exists");
+        let fetched_rev = repo
+            .get_review(&review.id)
+            .expect("get review")
+            .expect("review exists");
         assert_eq!(fetched_rev.target_id, "patch_hash_987");
         assert_eq!(fetched_rev.status, ReviewStatus::Approved);
         assert!(fetched_rev.is_fresh);
         assert_eq!(fetched_rev.findings.len(), 1);
 
-        let filtered_revs = repo.list_reviews(Some(ReviewTargetType::Diff), Some("patch_hash_987")).expect("list reviews");
+        let filtered_revs = repo
+            .list_reviews(Some(ReviewTargetType::Diff), Some("patch_hash_987"))
+            .expect("list reviews");
         assert_eq!(filtered_revs.len(), 1);
 
         repo.mark_review_stale(&review.id).expect("mark stale");
-        let stale_rev = repo.get_review(&review.id).expect("get review").expect("review exists");
+        let stale_rev = repo
+            .get_review(&review.id)
+            .expect("get review")
+            .expect("review exists");
         assert!(!stale_rev.is_fresh);
 
         // 10. Research Synthesis Proposal
@@ -2080,10 +2103,15 @@ mod tests {
             vec!["eval_table.csv".into()],
             Some("ws_default".into()),
             Some("feature/attention-bounds".into()),
-        ).expect("create synthesis proposal");
+        )
+        .expect("create synthesis proposal");
 
-        repo.save_synthesis_proposal(&proposal).expect("save proposal");
-        let fetched_prop = repo.get_synthesis_proposal(&proposal.id).expect("get proposal").expect("proposal exists");
+        repo.save_synthesis_proposal(&proposal)
+            .expect("save proposal");
+        let fetched_prop = repo
+            .get_synthesis_proposal(&proposal.id)
+            .expect("get proposal")
+            .expect("proposal exists");
         assert_eq!(fetched_prop.title, "Empirical Attention Bounds");
         assert_eq!(fetched_prop.claims.len(), 1);
         assert_eq!(fetched_prop.recipes.len(), 1);

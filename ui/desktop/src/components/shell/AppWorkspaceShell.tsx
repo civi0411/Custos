@@ -1,6 +1,6 @@
 import StopIcon from '~icons/lucide/square';
 import WorktreeIcon from '~icons/codicon/worktree';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Send,
   FolderGit2,
@@ -10,7 +10,6 @@ import {
   FlaskConical,
   MessageSquare,
   Sparkles,
-  Minimize2,
   Layers,
   ShieldCheck,
   Bot,
@@ -22,7 +21,10 @@ import { WorkspaceSidebar } from '@/components/shell/WorkspaceSidebar';
 import { AppHeader, type AppWorkspaceMode } from '@/components/shell/AppHeader';
 import { CommandPalette } from '@/components/shell/CommandPalette';
 import { AttentionBanner, type AttentionItem } from '@/components/shell/AttentionBanner';
+import { JobActivityDock } from '@/components/shell/JobActivityDock';
+import { useJobRegistry } from '@/hooks/useJobRegistry';
 import { ModelSelector } from '@/components/chat/ModelSelector';
+
 import { useAppContext } from '@/context/AppContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -32,6 +34,22 @@ import 'katex/dist/katex.min.css';
 import { remarkNormalizeChatMath } from '@/components/chat/markdownMath';
 import { HighlightedCodeBlock } from '@/components/chat/HighlightedCodeBlock';
 import { formatKeyCombo } from '@/lib/utils';
+import { SlashCommandMenu, SLASH_COMMANDS, type SlashCommandDef } from '@/components/chat/SlashCommandMenu';
+import { daemonClient } from '@/api/daemon_client';
+import { OpenAIIcon, ClaudeIcon, GeminiIcon, ProviderBrandIcon } from '@/components/common/AgentIcons';
+
+const renderAgentIcon = (author?: string, currentMode?: AppWorkspaceMode) => {
+  const name = (author || '').toLowerCase();
+  if (name.includes('claude') || name.includes('anthropic')) return <ClaudeIcon size={13} />;
+  if (name.includes('openai') || name.includes('gpt') || name.includes('codex')) return <OpenAIIcon size={13} />;
+  if (name.includes('gemini') || name.includes('google')) return <GeminiIcon size={13} />;
+  if (name.includes('antigravity')) return <ProviderBrandIcon provider="antigravity" size={13} />;
+  if (name.includes('deepseek')) return <ProviderBrandIcon provider="deepseek" size={13} />;
+  if (currentMode === 'code') return <OpenAIIcon size={13} />;
+  if (currentMode === 'research') return <ClaudeIcon size={13} />;
+  return <GeminiIcon size={13} />;
+};
+
 
 interface AppWorkspaceShellProps {
   mode: AppWorkspaceMode;
@@ -168,37 +186,99 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   const liveMessage = activeSession.messages.find(message => message.runId && !['completed','failed','cancelled','interrupted'].includes(message.runStatus || ''));
   const dialogueRef = useRef<HTMLDivElement>(null);
   const followBottom = useRef(true);
+
   const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false });
   const updateScrollEdges = () => {
-    const element = dialogueRef.current;
-    if (!element) return;
-    const top = element.scrollTop > 2;
-    const bottom = element.scrollHeight - element.scrollTop - element.clientHeight > 2;
-    setScrollEdges(previous => previous.top === top && previous.bottom === bottom ? previous : { top, bottom });
+    const el = dialogueRef.current;
+    if (!el) return;
+    const canScroll = el.scrollHeight > el.clientHeight;
+    setScrollEdges({
+      top: canScroll && el.scrollTop > 12,
+      bottom: canScroll && el.scrollTop < el.scrollHeight - el.clientHeight - 12
+    });
   };
+
   useEffect(() => {
-    const element = dialogueRef.current;
-    if (!element) return;
-    const observer = new ResizeObserver(updateScrollEdges);
-    observer.observe(element);
-    if (element.firstElementChild) observer.observe(element.firstElementChild);
+    const el = dialogueRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => updateScrollEdges());
+    observer.observe(el);
     updateScrollEdges();
     return () => observer.disconnect();
   }, [activeSessionId, hasMessages]);
+
   useEffect(() => { followBottom.current = true; }, [activeSessionId]);
   useEffect(() => {
     if (followBottom.current && dialogueRef.current) dialogueRef.current.scrollTop = dialogueRef.current.scrollHeight;
     updateScrollEdges();
   }, [activeSession.messages]);
 
+  const { jobs, dispatchJob, updateJob } = useJobRegistry();
+
+  const executeSlashCommand = (cmd: SlashCommandDef, args: string) => {
+    setInputText('');
+
+    // 1. Dispatch in JobRegistry so active tabs & sidebar show running status immediately
+    const entryId = dispatchJob({
+      jobId: cmd.jobId,
+      jobName: cmd.label,
+      sourceTabId: mode === 'code' ? 'changes' : mode === 'research' ? 'literature' : undefined,
+    });
+
+    // 2. Transmit to session chat so conversation timeline captures user action transparently
+    const formattedPrompt = args.trim()
+      ? `${cmd.command} ${args.trim()}`
+      : `${cmd.command} - ${cmd.description}`;
+    onSendMessage(formattedPrompt);
+
+    // 3. Trigger daemon packs job
+    daemonClient
+      .runPacksJob({
+        jobId: cmd.jobId,
+        sessionId: activeSession.id,
+        inputs: cmd.getInputs(args, { sessionId: activeSession.id }),
+      })
+      .then((res) => {
+        const taskId = res.taskId || res.task_id || 'unknown';
+        updateJob(entryId, { taskId, status: 'done', endedAt: Date.now() });
+        onShowToast?.(`Executed ${cmd.command} (Task ${taskId})`);
+      })
+      .catch((err: any) => {
+        updateJob(entryId, { status: 'failed', error: err.message || String(err), endedAt: Date.now() });
+        onShowToast?.(`Failed to run ${cmd.command}: ${err.message || String(err)}`);
+      });
+  };
+
+  const handleSelectSlashCommand = (cmd: SlashCommandDef) => {
+    if (cmd.hasArgs) {
+      setInputText(`${cmd.command} `);
+    } else {
+      executeSlashCommand(cmd, '');
+    }
+  };
+
   const handleSend = () => {
-    if (!inputText.trim() || liveMessage) return;
+    const trimmed = inputText.trim();
+    if (!trimmed || liveMessage) return;
+
+    if (trimmed.startsWith('/')) {
+      const parts = trimmed.split(' ');
+      const cmdName = parts[0].toLowerCase();
+      const args = parts.slice(1).join(' ');
+      const match = SLASH_COMMANDS.find((c) => c.command.toLowerCase() === cmdName);
+      if (match) {
+        executeSlashCommand(match, args);
+        return;
+      }
+    }
+
     onSendMessage(inputText);
     setInputText('');
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
+      // If a slash menu might be selecting, let enter submit command if handled
       e.preventDefault();
       handleSend();
     }
@@ -207,6 +287,25 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   const openTab = (id: OrcaTabId, title: string, url: string) => {
     resourceTabs.setTabs((prev) => (prev.some((t) => t.id === id) ? prev : [...prev, { id, title, url }]));
     resourceTabs.setActiveTabId(id);
+    openResources(false);
+  };
+  const runningJobsByTab = useMemo(() => {
+    const counts: Partial<Record<OrcaTabId, number>> = {};
+    jobs.forEach((j) => {
+      if ((j.status === 'running' || j.status === 'queued') && j.sourceTabId) {
+        counts[j.sourceTabId] = (counts[j.sourceTabId] || 0) + 1;
+      }
+    });
+    return counts as Record<OrcaTabId, number>;
+  }, [jobs]);
+
+  const handleOpenTab = (id: OrcaTabId) => {
+    const existing = resourceTabs.tabs.find((t) => t.id === id);
+    if (existing) {
+      resourceTabs.setActiveTabId(id);
+    } else {
+      openTab(id, id.charAt(0).toUpperCase() + id.slice(1), `custos://resource/${id}`);
+    }
     openResources(false);
   };
 
@@ -369,6 +468,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           }
         }}
         onOpenKanban={() => openTab('kanban', 'Fleet Kanban', 'orca://kanban')}
+        runningJobsByTab={runningJobsByTab}
       />
 
       {/* ── 2. SUPERVISORY ATTENTION STRIP (OrCa Attention + SADE Authority Gate) ── */}
@@ -422,7 +522,15 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           >
             {/* Dialogue Messages Canvas */}
             <div className="relative flex-1 min-h-0">
-            <div ref={dialogueRef} onScroll={event => { const element = event.currentTarget; followBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80; updateScrollEdges(); }} className="h-full overflow-y-auto px-6 py-6 space-y-6">
+            <div
+              ref={dialogueRef}
+              onScroll={event => {
+                const element = event.currentTarget;
+                followBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+                updateScrollEdges();
+              }}
+              className="h-full overflow-y-auto px-6 py-6 space-y-6"
+            >
               {!hasMessages ? (
                 <div className="h-full flex flex-col items-center justify-center text-center my-auto pb-12">
                   <div className="w-14 h-14 rounded-xl bg-surface-1 border border-border-default flex items-center justify-center text-fg-muted mb-5">
@@ -452,8 +560,43 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   {activeSession.messages.map((msg, i) => {
                     const isUser = msg.role === 'user';
                     return (
-                      <div key={msg.id || i} aria-label={isUser ? "User message" : "Agent message"} className={isUser ? "conversation-user-message space-y-2" : "space-y-2 min-w-0"}>
-                        <div className="conversation-markdown text-[13px] leading-relaxed text-fg-editor space-y-3 min-w-0 break-words [overflow-wrap:anywhere]">
+                      <div
+                        key={msg.id || i}
+                        aria-label={isUser ? "User message" : "Agent message"}
+                        className={isUser ? "conversation-user-message space-y-2 mb-4" : "space-y-2.5 pb-6 border-b border-border-muted/40 last:border-b-0 min-w-0"}
+                      >
+                        {/* Message Header */}
+                        <div className="flex items-center gap-2.5 text-xs">
+                          {isUser ? (
+                            <div className={`w-5 h-5 rounded-md ${lensMeta.avatarBg} text-fg-on-emphasis font-bold text-[9px] flex items-center justify-center shrink-0 shadow-xs`}>
+                              {lensMeta.avatarText}
+                            </div>
+                          ) : (
+                            <div className="w-5 h-5 rounded-md bg-surface-2 text-fg-editor flex items-center justify-center shrink-0 p-0.5 border border-border-default shadow-xs">
+                              {renderAgentIcon(msg.author, mode)}
+                            </div>
+                          )}
+                          <span className="font-semibold text-fg-editor text-[12.5px]">
+                            {isUser ? 'You' : msg.author || 'Custos Agent'}
+                          </span>
+                          {msg.badge && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-surface-1 text-fg-muted border border-border-default font-mono">
+                              {msg.badge}
+                            </span>
+                          )}
+                          {msg.runId && !['completed', 'failed', 'cancelled', 'interrupted'].includes(msg.runStatus || '') && (
+                            <button
+                              type="button"
+                              onClick={() => void handleStopRun(msg.runId!)}
+                              className="rounded border border-border-default px-2 py-0.5 text-[10px] text-fg-editor hover:bg-surface-2 transition flex items-center gap-1"
+                            >
+                              <StopIcon className="w-2.5 h-2.5" /> Stop
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Message Content */}
+                        <div className="conversation-markdown text-[13px] leading-relaxed text-fg-editor pl-7 space-y-3 min-w-0 break-words [overflow-wrap:anywhere]">
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm, remarkMath, remarkNormalizeChatMath]}
                             rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, strict: false, maxExpand: 1000, maxSize: 20 }]]}
@@ -484,13 +627,20 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
               )}
             </div>
 
-              <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-top ${scrollEdges.top ? 'is-visible' : ''}`} />
-              <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-bottom ${scrollEdges.bottom ? 'is-visible' : ''}`} />
-            </div>
+            <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-top ${scrollEdges.top ? 'is-visible' : ''}`} />
+            <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-bottom ${scrollEdges.bottom ? 'is-visible' : ''}`} />
+          </div>
 
             {/* DOCKED CHAT COMPOSER (Natural Flex Child) */}
             <div className="shrink-0 p-4 bg-canvas">
-              <div className="workbench-composer max-w-2xl mx-auto p-3 transition group">
+              <div className="workbench-composer max-w-2xl mx-auto p-3 transition group relative">
+                <SlashCommandMenu
+                  query={inputText}
+                  mode={mode}
+                  isOpen={inputText.startsWith('/') && (!inputText.includes(' ') || inputText.length <= 15)}
+                  onSelectCommand={handleSelectSlashCommand}
+                  onClose={() => {}}
+                />
                 <textarea
                   rows={2}
                   value={inputText}
@@ -500,7 +650,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-fg-editor placeholder-fg-subtle text-[13px] resize-none leading-relaxed"
                 />
 
-                <div className="flex items-center justify-between mt-2 pt-2">
+                <div className="flex items-center justify-between mt-2 pt-2 border-t border-border-muted">
                   <div className="flex items-center gap-2 text-fg-muted">
                     <button
                       onClick={() => openResources(false)}
@@ -512,8 +662,16 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                     <span className={`text-[11px] font-mono border border-border-default bg-surface-1 px-2 py-0.5 rounded ${lensMeta.iconColor}`}>
                       {lensMeta.badge}
                     </span>
-                    {activeSession.nativeHarnessId ? <span className="rounded border border-border-default px-2 py-1 text-xs text-fg-editor">Native · {activeSession.nativeHarnessId}</span> : <ModelSelector currentModel={activeSession?.model || selectedModel}
-                      onSelectModel={handleSelectModel} />}
+                    {activeSession.nativeHarnessId ? (
+                      <span className="rounded border border-border-default px-2 py-1 text-xs text-fg-editor">
+                        Native · {activeSession.nativeHarnessId}
+                      </span>
+                    ) : (
+                      <ModelSelector
+                        currentModel={activeSession?.model || selectedModel}
+                        onSelectModel={handleSelectModel}
+                      />
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -521,15 +679,19 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                       disabled={!liveMessage && !inputText.trim()}
                       aria-label={liveMessage ? 'Stop response' : 'Send message'}
                       title={liveMessage ? 'Stop response' : 'Send message'}
-                      className={`p-1.5 rounded-lg bg-transparent transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed ${
-                        liveMessage || inputText.trim()
-                          ? 'workbench-accent'
-                          : 'text-fg-muted'
+                      className={`p-1.5 rounded-lg transition ${
+                        liveMessage
+                          ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                          : inputText.trim()
+                          ? 'workbench-primary-action'
+                          : 'text-fg-muted bg-surface-2 cursor-not-allowed opacity-60'
                       }`}
                     >
-                      {liveMessage
-                        ? <StopIcon className="w-4 h-4" fill="currentColor" aria-hidden="true" />
-                        : <Send className="w-4 h-4" fill={inputText.trim() ? 'currentColor' : 'none'} aria-hidden="true" />}
+                      {liveMessage ? (
+                        <StopIcon className="w-4 h-4 fill-current" aria-hidden="true" />
+                      ) : (
+                        <Send className="w-4 h-4" aria-hidden="true" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -569,55 +731,19 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                 onToggleExpand={onToggleExpandWebTab}
                 mode={mode}
                 splitPercent={splitPercent}
+                onOpenTab={handleOpenTab}
               />
             </div>
           )}
 
-          {/* FLOATING MINI DOCK (Only visible when tab canvas is maximized) */}
+          {/* FLOATING ACTIVITY DOCK (Only visible when tab canvas is maximized) */}
           {isWebTabExpanded && (
-            <div className="absolute z-50 bottom-5 right-5 w-[380px] pointer-events-auto animate-in slide-in-from-bottom-2 duration-150">
-              <div className="bg-surface-1/95 backdrop-blur-xl border border-border-default rounded-2xl p-3 shadow-[0_12px_45px_-10px_rgba(0,0,0,0.85)] focus-within:border-border-emphasis">
-                <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-border-muted text-[11px] text-fg-muted">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full ${lensMeta.activeColor}`} />
-                    <span className="font-medium text-fg-editor">{lensMeta.badge} (Floating)</span>
-                  </div>
-                  <button
-                    onClick={onToggleExpandWebTab}
-                    className="hover:text-fg-editor flex items-center gap-1 text-[10px] bg-surface-2 px-1.5 py-0.5 rounded transition"
-                    title="Restore split layout"
-                  >
-                    <Minimize2 size={11} /> Restore Split
-                  </button>
-                </div>
-
-                <textarea
-                  rows={1}
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={lensMeta.placeholder}
-                  className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-fg-editor placeholder-fg-subtle text-[13px] resize-none"
-                />
-
-                <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-border-muted">
-                  {activeSession.nativeHarnessId ? <span className="rounded border border-border-default px-2 py-1 text-xs text-fg-editor">Native · {activeSession.nativeHarnessId}</span> : <ModelSelector currentModel={activeSession?.model || selectedModel}
-                    onSelectModel={handleSelectModel}
-                    compact />}
-                  <button
-                    onClick={handleSend}
-                    disabled={!inputText.trim()}
-                    className={`p-1 rounded-lg transition ${
-                      inputText.trim()
-                        ? `${lensMeta.activeColor} text-fg-on-emphasis hover:opacity-90`
-                        : 'text-fg-muted bg-surface-2'
-                    }`}
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
+            <JobActivityDock
+              onRestoreSplit={onToggleExpandWebTab}
+              onOpenKanban={() => handleOpenTab('kanban')}
+              lensBadge={lensMeta.badge}
+              lensColor={lensMeta.activeColor}
+            />
           )}
         </div>
       </div>

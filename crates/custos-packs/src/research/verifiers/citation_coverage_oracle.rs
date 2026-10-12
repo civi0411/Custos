@@ -88,7 +88,9 @@ impl PackVerifier for CitationCoverageOracle {
                 .get("level")
                 .or_else(|| claim.get("grounding_level"))
                 .and_then(Value::as_str)
-                .map(|s| s.eq_ignore_ascii_case("l0_ungrounded") || s.eq_ignore_ascii_case("ungrounded"))
+                .map(|s| {
+                    s.eq_ignore_ascii_case("l0_ungrounded") || s.eq_ignore_ascii_case("ungrounded")
+                })
                 .unwrap_or(false);
 
             // Check semantic support & locator status

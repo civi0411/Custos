@@ -1,9 +1,6 @@
 use crate::api::LocalApiDispatcher;
 use custos_adapters::harness::{ClaudeCodeHarnessAdapter, HarnessRegistry};
-use custos_adapters::providers::{
-    ClaudeProvider, CredentialResolver, FakeProvider, LocalModelProvider,
-    RouterModelProvider,
-};
+use custos_adapters::providers::{CredentialResolver, FakeProvider, RouterModelProvider};
 use custos_adapters::sandbox::SovereignDeveloperAdapter;
 use custos_bridge::BridgeService;
 use custos_core::contracts::harness::AgentRuntimePort;
@@ -41,7 +38,9 @@ pub struct CustosRuntime {
 }
 
 impl CustosRuntime {
-    pub fn bootstrap_profile(profile: &crate::profile::ProfileResolver) -> Result<Self, DomainError> {
+    pub fn bootstrap_profile(
+        profile: &crate::profile::ProfileResolver,
+    ) -> Result<Self, DomainError> {
         let db_path = profile.database_path();
         Self::bootstrap(&db_path.to_string_lossy())
     }
@@ -58,16 +57,21 @@ impl CustosRuntime {
         let provider_name = std::env::var("CUSTOS_PROVIDER").unwrap_or_default();
         let model: Arc<dyn ModelPort> = match provider_name.to_lowercase().as_str() {
             "fake" => Arc::new(FakeProvider::new("fake")),
-            "claude" | "anthropic" => Arc::new(ClaudeProvider::new()),
-            "local" => Arc::new(LocalModelProvider::new()),
-            "codex" => router_provider.clone(),
+            // All configured model API connections currently converge through
+            // the router compatibility path. Do not select the fail-closed
+            // Claude/local wrapper types as production implementations merely
+            // because their Rust modules exist. Native coding agents use the
+            // AgentRuntimePort harness registry below, not ModelPort.
             _ => router_provider.clone(),
         };
 
         Self::bootstrap_with_store_and_model(store, model)
     }
 
-    pub fn bootstrap_with_model(database_path: &str, model: Arc<dyn ModelPort>) -> Result<Self, DomainError> {
+    pub fn bootstrap_with_model(
+        database_path: &str,
+        model: Arc<dyn ModelPort>,
+    ) -> Result<Self, DomainError> {
         let store = Arc::new(SqliteTaskStore::new(database_path)?);
         Self::bootstrap_with_store_and_model(store, model)
     }
@@ -101,10 +105,21 @@ impl CustosRuntime {
                 let now_ms = chrono::Utc::now().timestamp_millis();
                 // Check tokens expiring within the next 10 minutes (600 seconds)
                 let threshold_ms = now_ms + (600 * 1000);
-                if let Ok(expiring) = sweeper_store.providers().list_expiring_oauth_tokens(threshold_ms) {
+                if let Ok(expiring) = sweeper_store
+                    .providers()
+                    .list_expiring_oauth_tokens(threshold_ms)
+                {
                     for tok in expiring {
-                        let settings = match custos_adapters::providers::oauth_pkce::oauth_settings(&tok.service_type) { Ok(v) => v, Err(_) => continue };
-                        let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(&settings.0, &settings.1);
+                        let settings = match custos_adapters::providers::oauth_pkce::oauth_settings(
+                            &tok.service_type,
+                        ) {
+                            Ok(v) => v,
+                            Err(_) => continue,
+                        };
+                        let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(
+                            &settings.0,
+                            &settings.1,
+                        );
                         tracing::info!(provider_id = %tok.provider_id, "Sweeper job refreshing expiring OAuth token");
                         if let Ok(refreshed) = manager.refresh_token(&settings.2, &tok).await {
                             let _ = sweeper_store.providers().save_oauth_token(&refreshed);
@@ -121,11 +136,13 @@ impl CustosRuntime {
         ));
 
         let mut harness_reg = HarnessRegistry::default_with_workspace(workspace_root.clone());
-        let governed = Arc::new(custos_runtime::agent::runtime_port::GovernedAgentRuntime::new(
-            model.clone(),
-            "Custos Governed Agent Runtime",
-            vec![],
-        ));
+        let governed = Arc::new(
+            custos_runtime::agent::runtime_port::GovernedAgentRuntime::new(
+                model.clone(),
+                "Custos Governed Agent Runtime",
+                vec![],
+            ),
+        );
         harness_reg.register(
             governed,
             "Governed Agent Runtime",
@@ -153,7 +170,8 @@ impl CustosRuntime {
                 .with_lease_manager(lease_manager.clone()),
         );
 
-        let workspace_provider = Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new());
+        let workspace_provider =
+            Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new());
         let workspace_coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
             store.clone(),
             workspace_provider,
@@ -161,9 +179,11 @@ impl CustosRuntime {
         let terminal_coordinator = Arc::new(custos_runtime::TerminalCoordinator::new());
         let python_coordinator = Arc::new(custos_runtime::PythonKernelCoordinator::new());
 
-        let oauth_callback_server = Arc::new(crate::oauth_callback_server::OAuthCallbackServer::new(
-            store.clone(),
-        ));
+        let oauth_callback_server = Arc::new(
+            crate::oauth_callback_server::OAuthCallbackServer::new(store.clone()),
+        );
+
+        let pack_registry = Arc::new(custos_packs::create_default_pack_registry());
 
         let local_api = Arc::new(
             LocalApiDispatcher::new(
@@ -180,10 +200,9 @@ impl CustosRuntime {
             .with_providers(Arc::new(store.providers().clone()))
             .with_fleet_automation(Arc::new(store.fleet_automation().clone()))
             .with_oauth_callback_server(oauth_callback_server)
-            .with_harnesses(harnesses.clone()),
+            .with_harnesses(harnesses.clone())
+            .with_packs(pack_registry.clone()),
         );
-
-        let pack_registry = Arc::new(custos_packs::create_default_pack_registry());
 
         Ok(Self {
             store,
@@ -220,21 +239,31 @@ impl CredentialResolver for DaemonCredentialResolver {
         Ok(())
     }
     async fn uses_oauth(&self, provider_id: &str) -> Result<bool, DomainError> {
-        Ok(self.store.providers().get_oauth_token(provider_id)?
-            .is_some_and(|tok| tok.refresh_token.is_some() || tok.scope.as_deref().is_some_and(|s| !s.trim().is_empty())))
+        Ok(self
+            .store
+            .providers()
+            .get_oauth_token(provider_id)?
+            .is_some_and(|tok| {
+                tok.refresh_token.is_some()
+                    || tok.scope.as_deref().is_some_and(|s| !s.trim().is_empty())
+            }))
     }
     async fn get_token(&self, provider_id: &str) -> Result<Option<String>, DomainError> {
         let repo = self.store.providers();
         if let Some(tok) = repo.get_oauth_token(provider_id)? {
             if tok.is_expired(120) {
                 if tok.refresh_token.is_none() {
-                    return Err(DomainError::Validation("Provider credentials expired; reconnect the account".into()));
+                    return Err(DomainError::Validation(
+                        "Provider credentials expired; reconnect the account".into(),
+                    ));
                 }
-                let settings = custos_adapters::providers::oauth_pkce::oauth_settings(&tok.service_type)?;
-                let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(&settings.0, &settings.1);
-                let refreshed = manager.refresh_token(
-                    &settings.2, &tok
-                ).await?;
+                let settings =
+                    custos_adapters::providers::oauth_pkce::oauth_settings(&tok.service_type)?;
+                let manager = custos_adapters::providers::oauth_pkce::OAuthPkceManager::new(
+                    &settings.0,
+                    &settings.1,
+                );
+                let refreshed = manager.refresh_token(&settings.2, &tok).await?;
                 repo.save_oauth_token(&refreshed)?;
                 return Ok(Some(refreshed.access_token));
             }
@@ -272,35 +301,57 @@ impl CredentialResolver for DaemonCredentialResolver {
     }
 }
 
-
-
 #[cfg(test)]
 mod credential_tests {
     use super::*;
     fn token(oauth: bool) -> custos_domain::OAuthTokenRecord {
-        custos_domain::OAuthTokenRecord { provider_id: "openai".into(), service_type: "openai".into(),
+        custos_domain::OAuthTokenRecord {
+            provider_id: "openai".into(),
+            service_type: "openai".into(),
             access_token: if oauth { "opaque-oauth" } else { "eyJ-api-key" }.into(),
             refresh_token: if oauth { Some("refresh".into()) } else { None },
-            expires_at: i64::MAX / 2, token_type: "bearer".into(), scope: None, created_at: 1, updated_at: 1 }
+            expires_at: i64::MAX / 2,
+            token_type: "bearer".into(),
+            scope: None,
+            created_at: 1,
+            updated_at: 1,
+        }
     }
     #[tokio::test]
     async fn credential_metadata_controls_authentication_not_token_prefix() {
         let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
-        let resolver = DaemonCredentialResolver { store: store.clone() };
+        let resolver = DaemonCredentialResolver {
+            store: store.clone(),
+        };
         store.providers().save_oauth_token(&token(true)).unwrap();
         assert!(resolver.uses_oauth("openai").await.unwrap());
-        assert_eq!(resolver.get_token("openai").await.unwrap().unwrap(), "opaque-oauth");
+        assert_eq!(
+            resolver.get_token("openai").await.unwrap().unwrap(),
+            "opaque-oauth"
+        );
         store.providers().save_oauth_token(&token(false)).unwrap();
         assert!(!resolver.uses_oauth("openai").await.unwrap());
-        assert_eq!(resolver.get_token("openai").await.unwrap().unwrap(), "eyJ-api-key");
+        assert_eq!(
+            resolver.get_token("openai").await.unwrap().unwrap(),
+            "eyJ-api-key"
+        );
     }
     #[tokio::test]
     async fn expired_oauth_without_refresh_fails_closed() {
         let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
-        let resolver = DaemonCredentialResolver { store: store.clone() };
-        let mut expired = token(false); expired.scope = Some("openid".into()); expired.expires_at = 0;
+        let resolver = DaemonCredentialResolver {
+            store: store.clone(),
+        };
+        let mut expired = token(false);
+        expired.scope = Some("openid".into());
+        expired.expires_at = 0;
         store.providers().save_oauth_token(&expired).unwrap();
         assert!(resolver.uses_oauth("openai").await.unwrap());
-        assert!(resolver.get_token("openai").await.unwrap_err().to_string().contains("expired"));
+        assert!(resolver
+            .get_token("openai")
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("expired"));
     }
 }

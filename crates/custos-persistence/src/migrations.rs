@@ -39,27 +39,21 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../migrations/0013_workflow_revisions.sql"))?;
     conn.execute_batch(include_str!("../migrations/0014_node_placements.sql"))?;
     conn.execute_batch(include_str!("../migrations/0015_replan_records.sql"))?;
-    conn.execute_batch(include_str!(
-        "../migrations/0016_execution_workspaces.sql"
-    ))?;
+    conn.execute_batch(include_str!("../migrations/0016_execution_workspaces.sql"))?;
     conn.execute_batch(include_str!(
         "../migrations/0017_research_lineage_and_claims.sql"
     ))?;
     conn.execute_batch(include_str!(
         "../migrations/0018_research_recipes_and_annotations.sql"
     ))?;
-    conn.execute_batch(include_str!(
-        "../migrations/0019_providers_and_keys.sql"
-    ))?;
+    conn.execute_batch(include_str!("../migrations/0019_providers_and_keys.sql"))?;
     conn.execute_batch(include_str!(
         "../migrations/0020_notes_and_artifact_registry.sql"
     ))?;
     conn.execute_batch(include_str!(
         "../migrations/0021_notebook_cells_and_kernels.sql"
     ))?;
-    conn.execute_batch(include_str!(
-        "../migrations/0022_reviewer_records.sql"
-    ))?;
+    conn.execute_batch(include_str!("../migrations/0022_reviewer_records.sql"))?;
     conn.execute_batch(include_str!(
         "../migrations/0023_research_synthesis_proposals.sql"
     ))?;
@@ -73,22 +67,29 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         .collect::<Result<Vec<_>, _>>()?;
 
     if !existing_provider_cols.iter().any(|c| c == "default_model") {
-        let _ = conn.execute("ALTER TABLE providers_config ADD COLUMN default_model TEXT", []);
+        let _ = conn.execute(
+            "ALTER TABLE providers_config ADD COLUMN default_model TEXT",
+            [],
+        );
     }
     if !existing_provider_cols.iter().any(|c| c == "context_window") {
-        let _ = conn.execute("ALTER TABLE providers_config ADD COLUMN context_window INTEGER", []);
+        let _ = conn.execute(
+            "ALTER TABLE providers_config ADD COLUMN context_window INTEGER",
+            [],
+        );
     }
     if !existing_provider_cols.iter().any(|c| c == "fast_mode") {
-        let _ = conn.execute("ALTER TABLE providers_config ADD COLUMN fast_mode INTEGER", []);
+        let _ = conn.execute(
+            "ALTER TABLE providers_config ADD COLUMN fast_mode INTEGER",
+            [],
+        );
     }
 
     conn.execute_batch(include_str!(
         "../migrations/0025_provider_model_catalog.sql"
     ))?;
 
-    conn.execute_batch(include_str!(
-        "../migrations/0026_provider_oauth_tokens.sql"
-    ))?;
+    conn.execute_batch(include_str!("../migrations/0026_provider_oauth_tokens.sql"))?;
 
     conn.execute_batch(include_str!(
         "../migrations/0027_dispatch_claims_and_fencing.sql"

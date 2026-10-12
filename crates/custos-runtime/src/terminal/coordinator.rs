@@ -110,9 +110,7 @@ impl TerminalPort for TerminalCoordinator {
             initial_session.rows,
             output_tx,
         )
-        .map_err(|e| {
-            DomainError::Validation(format!("failed to spawn PTY process: {e}"))
-        })?;
+        .map_err(|e| DomainError::Validation(format!("failed to spawn PTY process: {e}")))?;
 
         let instance = Arc::new(TerminalSessionInstance {
             session: RwLock::new(initial_session.clone()),
@@ -165,12 +163,12 @@ impl TerminalPort for TerminalCoordinator {
     async fn write(&self, session_id: &str, data: &[u8]) -> Result<usize, DomainError> {
         let instance = {
             let lock = self.sessions.read().await;
-            lock.get(session_id).cloned().ok_or_else(|| {
-                DomainError::NotFound {
+            lock.get(session_id)
+                .cloned()
+                .ok_or_else(|| DomainError::NotFound {
                     kind: "terminal_session".into(),
                     id: session_id.to_string(),
-                }
-            })?
+                })?
         };
 
         let pty_guard = instance.pty.read().await;
@@ -188,12 +186,12 @@ impl TerminalPort for TerminalCoordinator {
     async fn resize(&self, session_id: &str, cols: u16, rows: u16) -> Result<(), DomainError> {
         let instance = {
             let lock = self.sessions.read().await;
-            lock.get(session_id).cloned().ok_or_else(|| {
-                DomainError::NotFound {
+            lock.get(session_id)
+                .cloned()
+                .ok_or_else(|| DomainError::NotFound {
                     kind: "terminal_session".into(),
                     id: session_id.to_string(),
-                }
-            })?
+                })?
         };
 
         {
@@ -204,9 +202,8 @@ impl TerminalPort for TerminalCoordinator {
 
         let pty_guard = instance.pty.read().await;
         if let Some(pty) = pty_guard.as_ref() {
-            pty.resize(cols, rows).map_err(|e| {
-                DomainError::Validation(format!("failed to resize terminal: {e}"))
-            })?;
+            pty.resize(cols, rows)
+                .map_err(|e| DomainError::Validation(format!("failed to resize terminal: {e}")))?;
         }
         Ok(())
     }
@@ -219,12 +216,12 @@ impl TerminalPort for TerminalCoordinator {
     ) -> Result<TerminalOutputChunk, DomainError> {
         let instance = {
             let lock = self.sessions.read().await;
-            lock.get(session_id).cloned().ok_or_else(|| {
-                DomainError::NotFound {
+            lock.get(session_id)
+                .cloned()
+                .ok_or_else(|| DomainError::NotFound {
                     kind: "terminal_session".into(),
                     id: session_id.to_string(),
-                }
-            })?
+                })?
         };
 
         let chunk = {
@@ -237,12 +234,12 @@ impl TerminalPort for TerminalCoordinator {
     async fn terminate(&self, session_id: &str) -> Result<(), DomainError> {
         let instance = {
             let lock = self.sessions.read().await;
-            lock.get(session_id).cloned().ok_or_else(|| {
-                DomainError::NotFound {
+            lock.get(session_id)
+                .cloned()
+                .ok_or_else(|| DomainError::NotFound {
                     kind: "terminal_session".into(),
                     id: session_id.to_string(),
-                }
-            })?
+                })?
         };
 
         {
@@ -292,12 +289,12 @@ impl TerminalPort for TerminalCoordinator {
     async fn get_session(&self, session_id: &str) -> Result<TerminalSession, DomainError> {
         let inst = {
             let lock = self.sessions.read().await;
-            lock.get(session_id).cloned().ok_or_else(|| {
-                DomainError::NotFound {
+            lock.get(session_id)
+                .cloned()
+                .ok_or_else(|| DomainError::NotFound {
                     kind: "terminal_session".into(),
                     id: session_id.to_string(),
-                }
-            })?
+                })?
         };
 
         let sess = inst.session.read().await.clone();
@@ -317,13 +314,7 @@ mod tests {
 
         // 1. Spawn echo command
         let session = coord
-            .spawn(
-                "ws-test",
-                temp.path(),
-                Some("echo hello_world"),
-                80,
-                24,
-            )
+            .spawn("ws-test", temp.path(), Some("echo hello_world"), 80, 24)
             .await
             .unwrap();
 

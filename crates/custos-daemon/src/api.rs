@@ -15,18 +15,18 @@ pub use crate::custos_local_api::{
     METHOD_ARTIFACTS_GET, METHOD_ARTIFACTS_LINEAGE_GRAPH, METHOD_ARTIFACTS_LIST,
     METHOD_ARTIFACTS_RECORD_LINEAGE, METHOD_AUTOMATION_JOBS_CREATE, METHOD_AUTOMATION_JOBS_LIST,
     METHOD_AUTOMATION_JOBS_RUN, METHOD_BROWSER_SESSIONS_CREATE, METHOD_BROWSER_SESSIONS_LIST,
-    METHOD_BROWSER_TABS_CLOSE, METHOD_BROWSER_TABS_CREATE, METHOD_BROWSER_TABS_LIST,
-    METHOD_BROWSER_TABS_NAVIGATE, METHOD_BROWSER_TABS_SNAPSHOT, METHOD_BROWSER_TABS_CLICK,
-    METHOD_BROWSER_TABS_FILL, METHOD_BROWSER_TABS_SCREENSHOT, METHOD_CAPABILITIES_GET,
+    METHOD_BROWSER_TABS_CLICK, METHOD_BROWSER_TABS_CLOSE, METHOD_BROWSER_TABS_CREATE,
+    METHOD_BROWSER_TABS_FILL, METHOD_BROWSER_TABS_LIST, METHOD_BROWSER_TABS_NAVIGATE,
+    METHOD_BROWSER_TABS_SCREENSHOT, METHOD_BROWSER_TABS_SNAPSHOT, METHOD_CAPABILITIES_GET,
     METHOD_CAPABILITIES_LIST, METHOD_FLEET_EXEC, METHOD_FLEET_HOSTS_LIST, METHOD_FLEET_HOSTS_PING,
     METHOD_FLEET_HOSTS_REGISTER, METHOD_HARNESS_CANCEL, METHOD_HARNESS_GET, METHOD_HARNESS_LIST,
     METHOD_HARNESS_RUN_NATIVE, METHOD_HARNESS_STEER, METHOD_MODELS_CATALOG, METHOD_MODELS_PRICING,
     METHOD_MODELS_PROBE, METHOD_NOTEBOOK_CELLS_LIST, METHOD_NOTEBOOK_CELLS_SAVE,
     METHOD_NOTEBOOK_EXECUTE, METHOD_NOTEBOOK_INTERRUPT, METHOD_NOTEBOOK_RESET,
     METHOD_NOTEBOOK_STATUS, METHOD_NOTES_GET, METHOD_NOTES_HISTORY, METHOD_NOTES_LIST,
-    METHOD_NOTES_SAVE, METHOD_OAUTH_AUTHORIZE, METHOD_OAUTH_DELETE, METHOD_OAUTH_EXCHANGE,
-    METHOD_OAUTH_GET, METHOD_OAUTH_REFRESH, METHOD_OAUTH_CANCEL, METHOD_OAUTH_STATUS, METHOD_PROVIDERS_DELETE,
-    METHOD_PROVIDERS_GET, METHOD_PROVIDERS_LIST, METHOD_PROVIDERS_SAVE,
+    METHOD_NOTES_SAVE, METHOD_OAUTH_AUTHORIZE, METHOD_OAUTH_CANCEL, METHOD_OAUTH_DELETE,
+    METHOD_OAUTH_EXCHANGE, METHOD_OAUTH_GET, METHOD_OAUTH_REFRESH, METHOD_OAUTH_STATUS,
+    METHOD_PROVIDERS_DELETE, METHOD_PROVIDERS_GET, METHOD_PROVIDERS_LIST, METHOD_PROVIDERS_SAVE,
     METHOD_RESEARCH_ANCHORS_LIST, METHOD_RESEARCH_ANCHORS_SAVE, METHOD_RESEARCH_CLAIMS_LIST,
     METHOD_RESEARCH_CLAIMS_SAVE, METHOD_RESEARCH_HANDOFF_CODING, METHOD_RESEARCH_LINEAGE_LIST,
     METHOD_RESEARCH_RUNS_LIST, METHOD_RESEARCH_RUNS_SAVE, METHOD_RESEARCH_SOURCES_LIST,
@@ -41,6 +41,8 @@ pub use crate::custos_local_api::{
     METHOD_WORKSPACES_RECOVER, METHOD_WORKSPACE_DIFF, METHOD_WORKSPACE_FILES_READ,
     METHOD_WORKSPACE_FILES_TREE, METHOD_WORKSPACE_FILES_WRITE, METHOD_WORKSPACE_FILE_DIFF,
     METHOD_WORKSPACE_GIT_DISCARD, METHOD_WORKSPACE_GIT_STAGE, METHOD_WORKSPACE_GIT_UNSTAGE,
+    JobOperationalStatus, PacksJobCatalogItem, METHOD_PACKS_JOBS_GET, METHOD_PACKS_JOBS_LIST,
+    METHOD_PACKS_JOBS_RUN, METHOD_PACKS_MANIFESTS_LIST, METHOD_PACKS_ROLES_LIST,
 };
 use custos_adapters::harness::HarnessRegistry;
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
@@ -91,12 +93,17 @@ pub fn resolve_agent_browser_binary() -> Option<std::path::PathBuf> {
         if local_bin.exists() {
             return Some(local_bin);
         }
-        let orca_bin = home.join("Project/AgentHub/orca/node_modules/agent-browser/bin/agent-browser-darwin-arm64");
+        let orca_bin = home.join(
+            "Project/AgentHub/orca/node_modules/agent-browser/bin/agent-browser-darwin-arm64",
+        );
         if orca_bin.exists() {
             return Some(orca_bin);
         }
     }
-    if let Ok(output) = std::process::Command::new("which").arg("agent-browser").output() {
+    if let Ok(output) = std::process::Command::new("which")
+        .arg("agent-browser")
+        .output()
+    {
         if output.status.success() {
             let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
             let p = std::path::PathBuf::from(path_str);
@@ -137,6 +144,7 @@ pub struct LocalApiDispatcher {
     fleet_automation: Option<Arc<FleetAutomationRepository>>,
     model_catalog: custos_adapters::providers::catalog::ModelCatalogService,
     oauth_callback_server: Option<Arc<crate::oauth_callback_server::OAuthCallbackServer>>,
+    pack_registry: Arc<custos_packs::DomainPackRegistry>,
 }
 
 impl LocalApiDispatcher {
@@ -161,6 +169,7 @@ impl LocalApiDispatcher {
             fleet_automation: None,
             model_catalog: custos_adapters::providers::catalog::ModelCatalogService::new(),
             oauth_callback_server: None,
+            pack_registry: Arc::new(custos_packs::create_default_pack_registry()),
         }
     }
 
@@ -222,6 +231,11 @@ impl LocalApiDispatcher {
         oauth_callback_server: Arc<crate::oauth_callback_server::OAuthCallbackServer>,
     ) -> Self {
         self.oauth_callback_server = Some(oauth_callback_server);
+        self
+    }
+
+    pub fn with_packs(mut self, pack_registry: Arc<custos_packs::DomainPackRegistry>) -> Self {
+        self.pack_registry = pack_registry;
         self
     }
 
@@ -4622,6 +4636,236 @@ impl LocalApiDispatcher {
                     "Headless execution is unavailable until an executor and scoped authority checks are connected",
                 )
             }
+            METHOD_PACKS_MANIFESTS_LIST => {
+                let manifests = self.pack_registry.list_packs();
+                match serde_json::to_value(&manifests) {
+                    Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_PACKS_JOBS_LIST => {
+                let filter_lens = req.params.get("lens").and_then(|v| v.as_str());
+                let filter_pack = req.params.get("pack_id").and_then(|v| v.as_str());
+                let all_jobs = self.pack_registry.list_all_jobs();
+                let mut catalog_items = Vec::new();
+
+                for job in all_jobs {
+                    if let Some(fl) = filter_lens {
+                        let matches_lens = match job.lens {
+                            custos_domain::WorkbenchLens::Coding => {
+                                fl.eq_ignore_ascii_case("coding") || fl.eq_ignore_ascii_case("code")
+                            }
+                            custos_domain::WorkbenchLens::Research => {
+                                fl.eq_ignore_ascii_case("research")
+                            }
+                            custos_domain::WorkbenchLens::Assistant => {
+                                fl.eq_ignore_ascii_case("assistant") || fl.eq_ignore_ascii_case("chat")
+                            }
+                        };
+                        if !matches_lens {
+                            continue;
+                        }
+                    }
+
+                    if let Some(fp) = filter_pack {
+                        if !job.job_id.starts_with(fp) {
+                            continue;
+                        }
+                    }
+
+                    let (status, reason) = match job.job_id.as_str() {
+                        "engineering__repo_explain"
+                        | "engineering__review"
+                        | "research__source_qa"
+                        | "research__dataset_audit"
+                        | "research__reproduce"
+                        | "assistant__inbox_triage"
+                        | "assistant__schedule_proposal" => (JobOperationalStatus::Available, None),
+
+                        "engineering__migration" => (
+                            JobOperationalStatus::Planned,
+                            Some("Multi-phase dependency migration requires external package registry connector".into()),
+                        ),
+                        "assistant__mutate_execution" => (
+                            JobOperationalStatus::Planned,
+                            Some("Governed outbox execution requires configured SMTP/Calendar live connector".into()),
+                        ),
+                        "assistant__reminder_automation" => (
+                            JobOperationalStatus::Planned,
+                            Some("Recurring reminder daemon automation is planned for post-MVP".into()),
+                        ),
+
+                        _ => (
+                            JobOperationalStatus::Degraded,
+                            Some("Requires model generation; currently operating in offline/mock mode pending provider configuration".into()),
+                        ),
+                    };
+
+                    catalog_items.push(PacksJobCatalogItem {
+                        job_id: job.job_id,
+                        lens: job.lens,
+                        name: job.name,
+                        description: job.description,
+                        primary_role: job.primary_role,
+                        recommended_topology: job.recommended_topology,
+                        status,
+                        degradation_reason: reason,
+                        required_inputs: job.required_inputs,
+                        expected_artifacts: job.expected_artifacts,
+                        required_verifiers: job.required_verifiers,
+                        acceptance_rubric: job.acceptance_rubric,
+                    });
+                }
+
+                match serde_json::to_value(&catalog_items) {
+                    Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_PACKS_JOBS_GET => {
+                let job_id = match req.params.get("job_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing job_id parameter"),
+                };
+
+                match self.pack_registry.get_job(job_id) {
+                    Some(job) => {
+                        let (status, reason) = match job.job_id.as_str() {
+                            "engineering__repo_explain"
+                            | "engineering__review"
+                            | "research__source_qa"
+                            | "research__dataset_audit"
+                            | "research__reproduce"
+                            | "assistant__inbox_triage"
+                            | "assistant__schedule_proposal" => (JobOperationalStatus::Available, None),
+
+                            "engineering__migration"
+                            | "assistant__mutate_execution"
+                            | "assistant__reminder_automation" => (
+                                JobOperationalStatus::Planned,
+                                Some("Capability planned for post-MVP or requires live external connector".into()),
+                            ),
+
+                            _ => (
+                                JobOperationalStatus::Degraded,
+                                Some("Requires model generation; currently operating in offline/mock mode pending provider configuration".into()),
+                            ),
+                        };
+
+                        let item = PacksJobCatalogItem {
+                            job_id: job.job_id,
+                            lens: job.lens,
+                            name: job.name,
+                            description: job.description,
+                            primary_role: job.primary_role,
+                            recommended_topology: job.recommended_topology,
+                            status,
+                            degradation_reason: reason,
+                            required_inputs: job.required_inputs,
+                            expected_artifacts: job.expected_artifacts,
+                            required_verifiers: job.required_verifiers,
+                            acceptance_rubric: job.acceptance_rubric,
+                        };
+
+                        match serde_json::to_value(&item) {
+                            Ok(val) => ApiResponse::success(req.id, val),
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
+                    None => ApiResponse::error(req.id, format!("Workbench Job '{job_id}' not found")),
+                }
+            }
+            METHOD_PACKS_ROLES_LIST => {
+                let filter_pack = req.params.get("pack_id").and_then(|v| v.as_str());
+                let roles = if let Some(pid) = filter_pack {
+                    match self.pack_registry.get_pack(pid) {
+                        Some(pack) => pack.roles(),
+                        None => return ApiResponse::error(req.id, format!("Domain pack '{pid}' not found")),
+                    }
+                } else {
+                    self.pack_registry.list_all_roles()
+                };
+
+                match serde_json::to_value(&roles) {
+                    Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_PACKS_JOBS_RUN => {
+                let job_id = match req.params.get("job_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing job_id parameter"),
+                };
+
+                let job = match self.pack_registry.get_job(job_id) {
+                    Some(j) => j,
+                    None => return ApiResponse::error(req.id, format!("Workbench Job '{job_id}' not found")),
+                };
+
+                let session_id = req.params.get("session_id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let workspace_id = req.params.get("workspace_id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let inputs = req.params.get("inputs").cloned().unwrap_or(serde_json::Value::Null);
+                if !inputs.is_null() {
+                    tracing::debug!(job_id = %job_id, inputs = ?inputs, "Running job with pre-populated inputs");
+                }
+
+                let title = format!("[{}] {}", job.name, job.description);
+                let mut metadata = serde_json::json!({
+                    "source": "packs_job",
+                    "job_id": job.job_id,
+                    "pack_id": match job.lens {
+                        custos_domain::WorkbenchLens::Coding => "engineering",
+                        custos_domain::WorkbenchLens::Research => "research",
+                        custos_domain::WorkbenchLens::Assistant => "assistant",
+                    },
+                    "lens": match job.lens {
+                        custos_domain::WorkbenchLens::Coding => "coding",
+                        custos_domain::WorkbenchLens::Research => "research",
+                        custos_domain::WorkbenchLens::Assistant => "assistant",
+                    },
+                    "primary_role": job.primary_role,
+                    "inputs": inputs,
+                });
+                if let Some(ref sid) = session_id {
+                    metadata["session_id"] = serde_json::json!(sid);
+                }
+                if let Some(ref wid) = workspace_id {
+                    metadata["workspace_id"] = serde_json::json!(wid);
+                }
+
+                let cmd = CreateTask {
+                    title,
+                    metadata: Some(metadata),
+                    contract: None,
+                };
+
+                match self.task_service.execute_create(cmd).await {
+                    Ok((task, _event)) => {
+                        if let Some(ref sid) = session_id {
+                            let _ = self
+                                .session_manager
+                                .append_user_message(
+                                    &SessionId(sid.clone()),
+                                    &format!("Started workbench job `{}` (Task {})", job.job_id, task.id),
+                                )
+                                .await;
+                        }
+
+                        ApiResponse::success(
+                            req.id,
+                            serde_json::json!({
+                                "task_id": task.id,
+                                "job_id": job.job_id,
+                                "status": "created",
+                                "lens": job.lens,
+                                "primary_role": job.primary_role,
+                                "recommended_topology": job.recommended_topology,
+                            }),
+                        )
+                    }
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
             unknown => ApiResponse::error(req.id, format!("Unknown method: {unknown}")),
         }
     }
@@ -6426,7 +6670,10 @@ mod tests {
         };
         let exec_fleet_res = dispatcher.handle_request(exec_fleet_req).await;
         assert!(!exec_fleet_res.is_success());
-        assert!(exec_fleet_res.error.unwrap().contains("remote execution adapter"));
+        assert!(exec_fleet_res
+            .error
+            .unwrap()
+            .contains("remote execution adapter"));
 
         // 3. Automation definitions are durable, while running needs an executor.
         let create_job_req = ApiRequest {
@@ -6808,5 +7055,163 @@ mod tests {
         let get_res_3 = dispatcher.handle_request(get_req_3).await;
         assert!(get_res_3.is_success());
         assert!(get_res_3.result.unwrap().is_null());
+    }
+
+    #[tokio::test]
+    async fn test_packs_api_lifecycle() {
+        let dir = tempfile::tempdir().unwrap();
+        let db_path = dir.path().join("custos_packs_test.db");
+        let store =
+            Arc::new(custos_persistence::SqliteTaskStore::new(&db_path.to_string_lossy()).unwrap());
+        let task_service = Arc::new(TaskService::new(store.clone()));
+        let session_manager = Arc::new(SessionManager::with_store(store.clone()));
+        let bridge_service = Arc::new(BridgeService::new(
+            session_manager.clone(),
+            task_service.clone(),
+        ));
+        let pack_registry = Arc::new(custos_packs::create_default_pack_registry());
+        let dispatcher = LocalApiDispatcher::new(task_service.clone(), session_manager.clone(), bridge_service)
+            .with_packs(pack_registry);
+
+        // 1. List Pack Manifests via v1.packs.manifests.list
+        let man_req = ApiRequest {
+            id: "pack_1".into(),
+            method: METHOD_PACKS_MANIFESTS_LIST.into(),
+            params: serde_json::json!({}),
+        };
+        let man_res = dispatcher.handle_request(man_req).await;
+        assert!(man_res.is_success(), "man_res failed: {:?}", man_res.error);
+        let manifests: Vec<custos_packs::DomainPackManifest> =
+            serde_json::from_value(man_res.result.unwrap()).unwrap();
+        assert_eq!(manifests.len(), 3);
+        assert!(manifests.iter().any(|m| m.id == "engineering"));
+        assert!(manifests.iter().any(|m| m.id == "research"));
+        assert!(manifests.iter().any(|m| m.id == "assistant"));
+
+        // 2. List Jobs (All 20 Jobs) via v1.packs.jobs.list
+        let jobs_req = ApiRequest {
+            id: "pack_2".into(),
+            method: METHOD_PACKS_JOBS_LIST.into(),
+            params: serde_json::json!({}),
+        };
+        let jobs_res = dispatcher.handle_request(jobs_req).await;
+        assert!(jobs_res.is_success());
+        let catalog: Vec<PacksJobCatalogItem> =
+            serde_json::from_value(jobs_res.result.unwrap()).unwrap();
+        assert_eq!(catalog.len(), 20, "Expected 20 standardized Workbench Jobs");
+
+        // Verify status mapping:
+        let repo_explain = catalog.iter().find(|j| j.job_id == "engineering__repo_explain").unwrap();
+        assert_eq!(repo_explain.status, JobOperationalStatus::Available);
+        assert!(repo_explain.degradation_reason.is_none());
+
+        let source_qa = catalog.iter().find(|j| j.job_id == "research__source_qa").unwrap();
+        assert_eq!(source_qa.status, JobOperationalStatus::Available);
+
+        let inbox_triage = catalog.iter().find(|j| j.job_id == "assistant__inbox_triage").unwrap();
+        assert_eq!(inbox_triage.status, JobOperationalStatus::Available);
+
+        let bugfix = catalog.iter().find(|j| j.job_id == "engineering__bugfix").unwrap();
+        assert_eq!(bugfix.status, JobOperationalStatus::Degraded);
+        assert!(bugfix.degradation_reason.is_some());
+
+        let migration = catalog.iter().find(|j| j.job_id == "engineering__migration").unwrap();
+        assert_eq!(migration.status, JobOperationalStatus::Planned);
+
+        // 2b. Filter Jobs by Lens
+        let coding_req = ApiRequest {
+            id: "pack_2b".into(),
+            method: METHOD_PACKS_JOBS_LIST.into(),
+            params: serde_json::json!({ "lens": "coding" }),
+        };
+        let coding_res = dispatcher.handle_request(coding_req).await;
+        assert!(coding_res.is_success());
+        let coding_catalog: Vec<PacksJobCatalogItem> =
+            serde_json::from_value(coding_res.result.unwrap()).unwrap();
+        assert_eq!(coding_catalog.len(), 7, "Expected 7 Engineering Jobs in coding lens");
+
+        let research_req = ApiRequest {
+            id: "pack_2c".into(),
+            method: METHOD_PACKS_JOBS_LIST.into(),
+            params: serde_json::json!({ "lens": "research" }),
+        };
+        let research_res = dispatcher.handle_request(research_req).await;
+        let research_catalog: Vec<PacksJobCatalogItem> =
+            serde_json::from_value(research_res.result.unwrap()).unwrap();
+        assert_eq!(research_catalog.len(), 8, "Expected 8 Research Jobs in research lens");
+
+        // 3. Get Specific Job via v1.packs.jobs.get
+        let get_req = ApiRequest {
+            id: "pack_3".into(),
+            method: METHOD_PACKS_JOBS_GET.into(),
+            params: serde_json::json!({ "job_id": "engineering__repo_explain" }),
+        };
+        let get_res = dispatcher.handle_request(get_req).await;
+        assert!(get_res.is_success());
+        let job_item: PacksJobCatalogItem =
+            serde_json::from_value(get_res.result.unwrap()).unwrap();
+        assert_eq!(job_item.job_id, "engineering__repo_explain");
+        assert_eq!(job_item.primary_role, "repo_scout");
+        assert_eq!(job_item.status, JobOperationalStatus::Available);
+
+        // 3b. Get Missing Job
+        let missing_req = ApiRequest {
+            id: "pack_3b".into(),
+            method: METHOD_PACKS_JOBS_GET.into(),
+            params: serde_json::json!({ "job_id": "non_existent_job" }),
+        };
+        let missing_res = dispatcher.handle_request(missing_req).await;
+        assert!(!missing_res.is_success());
+        assert!(missing_res.error.unwrap().contains("not found"));
+
+        // 4. List Roles via v1.packs.roles.list
+        let roles_req = ApiRequest {
+            id: "pack_4".into(),
+            method: METHOD_PACKS_ROLES_LIST.into(),
+            params: serde_json::json!({}),
+        };
+        let roles_res = dispatcher.handle_request(roles_req).await;
+        assert!(roles_res.is_success());
+        let all_roles: Vec<custos_packs::WorkerRole> =
+            serde_json::from_value(roles_res.result.unwrap()).unwrap();
+        assert_eq!(all_roles.len(), 12, "Expected 12 specialized Worker Roles");
+
+        let eng_roles_req = ApiRequest {
+            id: "pack_4b".into(),
+            method: METHOD_PACKS_ROLES_LIST.into(),
+            params: serde_json::json!({ "pack_id": "engineering" }),
+        };
+        let eng_roles_res = dispatcher.handle_request(eng_roles_req).await;
+        let eng_roles: Vec<custos_packs::WorkerRole> =
+            serde_json::from_value(eng_roles_res.result.unwrap()).unwrap();
+        assert_eq!(eng_roles.len(), 4, "Expected 4 Engineering Worker Roles");
+
+        // 5. Run Workbench Job via v1.packs.jobs.run
+        let session = session_manager.create_session(custos_domain::SessionMode::Bare).await;
+        let run_req = ApiRequest {
+            id: "pack_5".into(),
+            method: METHOD_PACKS_JOBS_RUN.into(),
+            params: serde_json::json!({
+                "job_id": "engineering__repo_explain",
+                "session_id": session.id.0,
+                "inputs": {
+                    "query": "TokenBucket",
+                    "scope": ["crates/custos-core"]
+                }
+            }),
+        };
+        let run_res = dispatcher.handle_request(run_req).await;
+        assert!(run_res.is_success(), "run_res failed: {:?}", run_res.error);
+        let run_val = run_res.result.unwrap();
+        assert_eq!(run_val.get("status").unwrap().as_str(), Some("created"));
+        assert_eq!(run_val.get("job_id").unwrap().as_str(), Some("engineering__repo_explain"));
+        let task_id = run_val.get("task_id").unwrap().as_str().unwrap();
+
+        // Verify task was created in TaskService with provenance metadata
+        let task = task_service.get_task(task_id).await.unwrap().expect("task exists");
+        assert_eq!(task.metadata.get("source").unwrap().as_str(), Some("packs_job"));
+        assert_eq!(task.metadata.get("job_id").unwrap().as_str(), Some("engineering__repo_explain"));
+        assert_eq!(task.metadata.get("pack_id").unwrap().as_str(), Some("engineering"));
+        assert_eq!(task.metadata.get("primary_role").unwrap().as_str(), Some("repo_scout"));
     }
 }
