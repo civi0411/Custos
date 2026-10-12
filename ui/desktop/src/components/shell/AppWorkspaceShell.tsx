@@ -1,4 +1,5 @@
 import StopIcon from '~icons/lucide/square';
+import WorktreeIcon from '~icons/codicon/worktree';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   Send,
@@ -375,6 +376,11 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
             icon: FolderGit2,
             label: 'Workspace Explorer',
             onClick: () => openTab('files', 'Files', 'custos://files')
+          },
+          {
+            icon: WorktreeIcon,
+            label: 'Worktrees',
+            onClick: () => openTab('worktrees', 'Worktrees', 'custos://worktrees')
           },
           {
             icon: Orbit,
