@@ -114,6 +114,13 @@ pub const METHOD_BROWSER_TABS_FILL: &str = "v1.browser.tabs.fill";
 pub const METHOD_BROWSER_TABS_SCREENSHOT: &str = "v1.browser.tabs.screenshot";
 pub const METHOD_BROWSER_TABS_CLOSE: &str = "v1.browser.tabs.close";
 
+pub const METHOD_EMULATOR_DEVICES_LIST: &str = "v1.emulator.devices.list";
+pub const METHOD_EMULATOR_LAUNCH: &str = "v1.emulator.devices.launch";
+pub const METHOD_EMULATOR_NAVIGATE: &str = "v1.emulator.devices.navigate";
+pub const METHOD_EMULATOR_SNAPSHOT: &str = "v1.emulator.devices.snapshot";
+pub const METHOD_EMULATOR_SCREENSHOT: &str = "v1.emulator.devices.screenshot";
+pub const METHOD_EMULATOR_TAP: &str = "v1.emulator.devices.tap";
+
 pub const METHOD_FLEET_HOSTS_LIST: &str = "v1.fleet.hosts.list";
 pub const METHOD_FLEET_HOSTS_REGISTER: &str = "v1.fleet.hosts.register";
 pub const METHOD_FLEET_HOSTS_PING: &str = "v1.fleet.hosts.ping";

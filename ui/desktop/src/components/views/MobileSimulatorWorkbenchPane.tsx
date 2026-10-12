@@ -18,8 +18,11 @@ import {
   Search,
   Wifi,
   Battery,
+  Cpu,
+  Loader2,
 } from 'lucide-react';
 import { NativeSelect } from '@/components/common/NativeSelect';
+import { daemonClient } from '@/api/daemon_client';
 
 interface DevicePreset {
   id: string;
@@ -98,6 +101,17 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
   const [justInserted, setJustInserted] = useState<boolean>(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
+  // Governed Mobile Simulator Backend Engine State
+  const [engineMode, setEngineMode] = useState<'governed' | 'responsive_frame'>('governed');
+  const [emulatorSessionId, setEmulatorSessionId] = useState<string | null>(null);
+  const [emulatorScreenshot, setEmulatorScreenshot] = useState<string | null>(null);
+  const [emulatorSnapshot, setEmulatorSnapshot] = useState<{
+    snapshot?: string;
+    refs?: Record<string, { name?: string; role?: string }>;
+    origin?: string;
+  } | null>(null);
+  const [isNavigatingEmulator, setIsNavigatingEmulator] = useState<boolean>(false);
+
   const device = useMemo(
     () => DEVICE_PRESETS.find((d) => d.id === selectedDeviceId) ?? DEVICE_PRESETS[0],
     [selectedDeviceId]
@@ -106,11 +120,64 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
   const screenWidth = orientation === 'portrait' ? device.width : device.height;
   const screenHeight = orientation === 'portrait' ? device.height : device.width;
 
+  const executeEmulatorNavigation = async (url: string) => {
+    setIsNavigatingEmulator(true);
+    try {
+      const devId = selectedDeviceId.replace(/-/g, '_');
+      const sessId = emulatorSessionId || `mobile_${devId}_${Date.now()}`;
+      if (!emulatorSessionId) {
+        setEmulatorSessionId(sessId);
+        await daemonClient.launchEmulatorDevice({
+          device_id: devId,
+          session_id: sessId,
+          url,
+        });
+      } else {
+        await daemonClient.navigateEmulator(sessId, url);
+      }
+
+      const shot = await daemonClient.captureEmulatorScreenshot(sessId);
+      if (shot?.image_base64) {
+        setEmulatorScreenshot(shot.image_base64);
+      }
+
+      const snap = await daemonClient.snapshotEmulator(sessId);
+      if (snap) {
+        setEmulatorSnapshot(snap);
+      }
+    } catch (err: any) {
+      console.warn('Mobile emulator error:', err);
+    } finally {
+      setIsNavigatingEmulator(false);
+    }
+  };
+
+  const handleTap = async (refKey: string) => {
+    if (!emulatorSessionId) return;
+    onShowToast?.(`Tapping ${refKey}...`);
+    try {
+      await daemonClient.tapEmulator(emulatorSessionId, refKey);
+      const shot = await daemonClient.captureEmulatorScreenshot(emulatorSessionId);
+      if (shot?.image_base64) {
+        setEmulatorScreenshot(shot.image_base64);
+      }
+      const snap = await daemonClient.snapshotEmulator(emulatorSessionId);
+      if (snap) {
+        setEmulatorSnapshot(snap);
+      }
+      onShowToast?.(`Tapped ${refKey}`);
+    } catch (err: any) {
+      onShowToast?.(`Tap failed: ${err.message || err}`);
+    }
+  };
+
   const handleNavigate = (target?: string) => {
     const raw = (target !== undefined ? target : urlInput).trim();
     if (!raw || raw === SPRINGBOARD_URL || raw === 'about:blank') {
       setActiveUrl(SPRINGBOARD_URL);
       setUrlInput('');
+      setEmulatorScreenshot(null);
+      setEmulatorSnapshot(null);
       return;
     }
     const formatted = raw.startsWith('http://') || raw.startsWith('https://')
@@ -121,11 +188,17 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
 
     setActiveUrl(formatted);
     setUrlInput(formatted);
+
+    if (engineMode === 'governed') {
+      executeEmulatorNavigation(formatted);
+    }
   };
 
   const handleReload = () => {
     if (activeUrl === SPRINGBOARD_URL) return;
-    if (iframeRef.current) {
+    if (engineMode === 'governed') {
+      executeEmulatorNavigation(activeUrl);
+    } else if (iframeRef.current) {
       iframeRef.current.src = activeUrl;
     }
     onShowToast?.(`Reloaded ${activeUrl}`);
@@ -158,11 +231,11 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
     ];
   }, [screenWidth, screenHeight, activeUrl]);
 
-  const handleInsertToChat = () => {
+  const handleInsertToChat = (customSnippet?: string) => {
     const axSummary = mockAxTree
       .map((n) => `- [${n.role}] "${n.name}" (${n.bounds.w}×${n.bounds.h}px)`)
       .join('\n');
-    const snippet = `Context Mobile Simulator [${device.name} - ${orientation}]:\n- Active View: ${activeUrl}\n- Resolution: ${screenWidth}×${screenHeight} (dpr: ${device.dpr})\n- Accessibility Tree:\n${axSummary}`;
+    const snippet = customSnippet || `Context Mobile Simulator [${device.name} - ${orientation}]:\n- Active View: ${activeUrl}\n- Resolution: ${screenWidth}×${screenHeight} (dpr: ${device.dpr})\n- Accessibility Tree:\n${axSummary}`;
     if (onAskAgent) {
       onAskAgent(snippet);
       setJustInserted(true);
@@ -202,9 +275,39 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
 
         {/* Device Switcher & Hardware Controls */}
         <div className="flex items-center gap-2">
+          {/* Engine Mode Toggle */}
+          <button
+            onClick={() => {
+              const next = engineMode === 'governed' ? 'responsive_frame' : 'governed';
+              setEngineMode(next);
+              onShowToast?.(`Mobile Engine: ${next === 'governed' ? 'Governed Mobile CDP' : 'Direct Responsive Frame'}`);
+              if (activeUrl !== SPRINGBOARD_URL) {
+                if (next === 'governed') {
+                  executeEmulatorNavigation(activeUrl);
+                } else {
+                  setEmulatorScreenshot(null);
+                }
+              }
+            }}
+            className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs font-mono transition ${
+              engineMode === 'governed'
+                ? 'border-cyan-500/40 bg-cyan-500/15 text-cyan-300'
+                : 'border-[var(--color-border-default)] bg-[var(--color-surface-2)] text-[var(--color-fg-muted)]'
+            }`}
+            title="Toggle between Governed Mobile CDP Engine and Direct Responsive Frame"
+          >
+            <Cpu className="h-3 w-3 text-cyan-400" />
+            <span>{engineMode === 'governed' ? 'CDP Mobile' : 'Local Frame'}</span>
+          </button>
+
           <NativeSelect
             value={selectedDeviceId}
-            onChange={(e) => setSelectedDeviceId(e.target.value)}
+            onChange={(e) => {
+              setSelectedDeviceId(e.target.value);
+              if (engineMode === 'governed' && activeUrl !== SPRINGBOARD_URL) {
+                setEmulatorSessionId(null);
+              }
+            }}
             className="rounded border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-2 py-1 text-xs text-[var(--color-editor-fg)] focus:outline-none"
           >
             {DEVICE_PRESETS.map((d) => (
@@ -259,7 +362,7 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
 
           {/* Primary Action Button: Insert to Chat */}
           <button
-            onClick={handleInsertToChat}
+            onClick={() => handleInsertToChat()}
             className="flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-1 text-xs font-medium text-white transition shadow-sm"
             title="Insert mobile layout & AX Tree into chat input"
           >
@@ -480,6 +583,23 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
                         </div>
                       </div>
                     </div>
+                  ) : engineMode === 'governed' && emulatorScreenshot ? (
+                    /* Live Governed Mobile Screencast Canvas */
+                    <div className="relative w-full h-full flex flex-col items-center justify-start overflow-auto bg-slate-950">
+                      {isNavigatingEmulator && (
+                        <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/50 backdrop-blur-xs">
+                          <div className="flex items-center gap-2 rounded-lg bg-[var(--color-surface-1)] px-3 py-1.5 text-xs border border-[var(--color-border-default)] shadow-xl text-cyan-400">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            <span>Simulating Mobile Viewport...</span>
+                          </div>
+                        </div>
+                      )}
+                      <img
+                        src={emulatorScreenshot}
+                        alt="Mobile Screencast"
+                        className="w-full h-auto block select-none pointer-events-auto"
+                      />
+                    </div>
                   ) : (
                     <iframe
                       ref={iframeRef}
@@ -564,26 +684,64 @@ export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPane
           <div className="flex-1 overflow-y-auto p-3 text-xs">
             {activeDrawer === 'axtree' && (
               <div className="space-y-2">
-                <div className="text-[11px] text-[var(--color-fg-subtle)] mb-2">
-                  Semantic Accessibility Tree for agent UI review and testing:
+                <div className="flex items-center justify-between text-[11px] mb-2">
+                  <span className="text-[var(--color-fg-subtle)]">
+                    Accessibility Tree Nodes ({emulatorSnapshot?.refs ? Object.keys(emulatorSnapshot.refs).length : mockAxTree.length}):
+                  </span>
+                  <button
+                    onClick={() => {
+                      const summary = emulatorSnapshot?.snapshot || mockAxTree.map((n) => `- [${n.role}] ${n.name}`).join('\n');
+                      handleInsertToChat(
+                        `Mobile AX Tree Audit Task for ${device.name} (${activeUrl}):\n${summary}\nAudit responsive layout, touch target sizes (>44px), and accessibility labels.`
+                      );
+                    }}
+                    className="flex items-center gap-1 text-[11px] text-cyan-400 hover:underline"
+                  >
+                    <Send className="h-3 w-3" />
+                    <span>Audit (AI Agent)</span>
+                  </button>
                 </div>
 
                 <div className="space-y-1.5">
-                  {mockAxTree.map((node) => (
-                    <div
-                      key={node.id}
-                      className="p-2 rounded-lg bg-[var(--color-surface-2)] border border-[var(--color-border-muted)]"
-                    >
-                      <div className="flex items-center justify-between text-[10px]">
-                        <span className="text-cyan-400 font-semibold uppercase">{node.role}</span>
-                        <span className="text-[var(--color-fg-muted)]">{node.bounds.w}×{node.bounds.h}px</span>
+                  {emulatorSnapshot?.refs && Object.keys(emulatorSnapshot.refs).length > 0 ? (
+                    Object.entries(emulatorSnapshot.refs).map(([refKey, info]) => (
+                      <div
+                        key={refKey}
+                        className="flex items-center justify-between p-2 rounded-lg bg-[var(--color-surface-2)] border border-[var(--color-border-muted)]"
+                      >
+                        <div className="truncate mr-2">
+                          <div className="flex items-center gap-1 text-[10px]">
+                            <span className="text-emerald-400 font-bold font-mono">@{refKey}</span>
+                            <span className="text-cyan-400 uppercase font-mono">[{info.role || 'element'}]</span>
+                          </div>
+                          <div className="text-[var(--color-editor-fg)] text-xs mt-0.5 truncate">{info.name || refKey}</div>
+                        </div>
+                        <button
+                          onClick={() => handleTap(refKey)}
+                          className="px-2 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-mono text-[10px] shrink-0"
+                          title="Tap element on mobile simulator"
+                        >
+                          Tap
+                        </button>
                       </div>
-                      <div className="text-[var(--color-editor-fg)] text-xs mt-0.5 truncate">{node.name}</div>
-                      <div className="text-[10px] text-[var(--color-fg-subtle)] mt-0.5">
-                        Pos: ({node.bounds.x}, {node.bounds.y})
+                    ))
+                  ) : (
+                    mockAxTree.map((node) => (
+                      <div
+                        key={node.id}
+                        className="p-2 rounded-lg bg-[var(--color-surface-2)] border border-[var(--color-border-muted)]"
+                      >
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="text-cyan-400 font-semibold uppercase">{node.role}</span>
+                          <span className="text-[var(--color-fg-muted)]">{node.bounds.w}×{node.bounds.h}px</span>
+                        </div>
+                        <div className="text-[var(--color-editor-fg)] text-xs mt-0.5 truncate">{node.name}</div>
+                        <div className="text-[10px] text-[var(--color-fg-subtle)] mt-0.5">
+                          Pos: ({node.bounds.x}, {node.bounds.y})
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             )}

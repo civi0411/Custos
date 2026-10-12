@@ -609,3 +609,10 @@ The native host registry serializes lifecycle requests by resource identity. Int
 ### Conversation rendering performance
 
 The desktop shell memoizes Markdown by message text so typing in the composer, changing resource layout and scrolling do not reparse unchanged Markdown, math or code. Scroll-edge state changes only when top/bottom visibility actually changes; follow-bottom behavior still updates for every scroll. Resource content is memoized separately with stable shell callbacks, so composer edits do not rerender unrelated panes. Live message text and error/activity projections continue to update normally. This is a presentation optimization with no domain, daemon, authority or persistence contract change.
+
+
+### Workbench integration from the development branch
+
+The shared desktop shell retains the lazy native manual Browser and conversation-render memoization while integrating the existing development branch's Workflow DAG pane, emulator DTO/client methods and Remote Fleet UI/backend updates. The incoming iframe/CDP Browser presentation does not replace native manual browsing. Browser automation and emulator requests remain separate daemon APIs, not privileges granted to native web content.
+
+The imported daemon code discovers agent-browser/SSH executables and accepts explicit browser/fleet connectivity flags. Discovery and flags do not certify Kernel permit mediation or verified completion. Browser capability metadata still advertises its limited operation set; Fleet availability is conditional on repository/transport discovery. Workflow default stage/evidence values are presentation fixtures, not verified Task evidence. This integration preserves upstream implementations without asserting architectural certification of those engines.
