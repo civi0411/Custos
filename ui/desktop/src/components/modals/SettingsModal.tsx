@@ -1,8 +1,12 @@
 import { NativeSelect } from '@/components/common/NativeSelect';
 import { ProviderBrandIcon } from '@/components/common/AgentIcons';
 import React, { useEffect, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import {
   Cpu,
+  ChevronDown,
+  ArrowUp,
+  ArrowDown,
   Database,
   Info,
   Keyboard,
@@ -79,6 +83,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setActiveTab(allowed.includes(initialTab as SettingsTab) ? initialTab as SettingsTab : 'general');
     void checkDaemon();
   }, [isOpen, initialTab]);
+
+  const [routingPolicies, setRoutingPolicies] = useState<Record<string, { round_robin: boolean; account_order: string[] }>>({});
+  const [routingBusy, setRoutingBusy] = useState(false);
+  const [routingError, setRoutingError] = useState('');
+  const [expandedProviders, setExpandedProviders] = useState<Record<string, boolean>>({});
+  const systemReducedMotion = useReducedMotion();
+  const reducePanelMotion = appearance.reduceMotion || systemReducedMotion;
+  const routingServices = [...new Set(connectedAccounts.map(a => a.providerId))].sort().join(',');
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setRoutingError('');
+    Promise.all([...new Set(connectedAccounts.map(a => a.providerId))].map(async service => [service, await daemonClient.getProviderRouting(service)] as const))
+      .then(values => { if (!cancelled) setRoutingPolicies(Object.fromEntries(values)); })
+      .catch(error => { if (!cancelled) setRoutingError(String(error?.message || error)); });
+    return () => { cancelled = true; };
+  }, [isOpen, routingServices]);
+  const orderedAccounts = [...connectedAccounts].sort((a,b) => {
+    const serviceOrder = a.providerId.localeCompare(b.providerId);
+    if (serviceOrder) return serviceOrder;
+    const order = routingPolicies[a.providerId]?.account_order || [];
+    const position = (id: string) => { const index = order.indexOf(id); return index < 0 ? Number.MAX_SAFE_INTEGER : index; };
+    return position(a.id) - position(b.id);
+  });
+  const updateRouting = async (service: string, enabled: boolean, order: string[]) => {
+    setRoutingBusy(true); setRoutingError('');
+    try {
+      const policy = await daemonClient.saveProviderRouting(service, enabled, order);
+      setRoutingPolicies(previous => ({ ...previous, [service]: policy }));
+    } catch (error: any) { setRoutingError(error?.message || String(error)); }
+    finally { setRoutingBusy(false); }
+  };
+  const moveAccount = (id: string, service: string, direction: number) => {
+    const order = orderedAccounts.filter(a => a.providerId === service).map(a => a.id);
+    const from = order.indexOf(id), to = from + direction;
+    if (from < 0 || to < 0 || to >= order.length) return;
+    [order[from], order[to]] = [order[to], order[from]];
+    void updateRouting(service, routingPolicies[service]?.round_robin || false, order);
+  };
 
   if (!isOpen) return null;
 
@@ -286,12 +329,49 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <span className="text-[10px] lowercase text-[var(--color-fg-subtle)]">{connectedAccounts.length} accounts</span>
                       </div>
                       {connectedAccounts.length === 0 && <p className="rounded-lg border border-[var(--color-border-muted)] p-4 text-xs text-[var(--color-fg-muted)]">No connected accounts. Use Connect Provider to add one.</p>}
-                      {connectedAccounts.map((account) => (
-                        <div key={account.id} className="flex items-center justify-between rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3">
-                          <div>
+                      {routingError && <p role="alert" className="text-xs text-rose-400">{routingError}</p>}
+                      {[...new Set(orderedAccounts.map(a => a.providerId))].map(service => {
+                        const accounts = orderedAccounts.filter(a => a.providerId === service);
+                        const expanded = expandedProviders[service] || false;
+                        const enabled = routingPolicies[service]?.round_robin || false;
+                        const providerName = accounts[0].providerName;
+                        return (
+                          <section key={service} aria-label={`${providerName} accounts`} className="overflow-hidden rounded-xl border border-border-muted bg-surface-1">
+                            <div className="flex items-center gap-3 p-3">
+                              <button type="button" aria-expanded={expanded} aria-controls={`provider-accounts-${service}`} onClick={() => setExpandedProviders(previous => ({ ...previous, [service]: !expanded }))} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1 text-left">
+                                <ProviderBrandIcon provider={service} size={20} />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold">{providerName}</span><span className="rounded border border-border-muted px-1.5 py-0.5 font-mono text-[9px] text-fg-muted">{accounts.length} {accounts.length === 1 ? 'account' : 'accounts'}</span></div>
+                                  <p className="mt-1 text-[10px] text-fg-muted">{enabled ? 'Rotate accounts within this provider' : 'Use the highest-priority eligible account'}</p>
+                                </div>
+                                <ChevronDown size={15} style={{ transitionDuration: reducePanelMotion ? '0ms' : '240ms' }} className={`shrink-0 text-fg-muted transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                              </button>
+                              <div className="flex shrink-0 items-center gap-2 border-l border-border-muted pl-3">
+                                <span className="text-[10px] text-fg-muted">Round-robin</span>
+                                <button type="button" role="switch" aria-label={`Round-robin for ${providerName}`} aria-checked={enabled} disabled={routingBusy || !routingPolicies[service]} onClick={() => void updateRouting(service, !enabled, accounts.map(a => a.id))} className={`relative h-5 w-9 rounded-full border transition-colors disabled:opacity-40 ${enabled ? 'border-emerald-500 bg-emerald-500' : 'border-border-default bg-surface-3'}`}>
+                                  <span className={`absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform ${enabled ? 'left-0.5 translate-x-4' : 'left-0.5'}`} />
+                                </button>
+                                <span className={`w-5 text-[9px] font-mono ${enabled ? 'text-emerald-500' : 'text-fg-muted'}`}>{enabled ? 'On' : 'Off'}</span>
+                              </div>
+                            </div>
+                            <AnimatePresence initial={false}>
+                            {expanded && <motion.div
+                              key={service}
+                              id={`provider-accounts-${service}`}
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: reducePanelMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+                              className="overflow-hidden"
+                              inert={!expanded}
+                              aria-hidden={!expanded}
+                            >
+                      {accounts.map((account, priority) => (
+                        <div key={account.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-border-muted px-4 py-3">
+                          <div className="min-w-0 flex-1">
                             <div className="text-xs font-semibold flex items-center gap-2">
                               <ProviderBrandIcon provider={account.providerId} size={16} />
-                              <span>{account.accountName}</span>
+                              <span className="truncate">{account.accountName}</span>
                               <span className="text-[9px] px-1.5 py-0.2 rounded font-mono border bg-surface-2 text-fg-editor border-border-default">
                                 {account.providerId === 'local' ? 'Local' : account.authType === 'oauth' ? 'OAuth 2.0' : 'API Key'}
                               </span>
@@ -301,14 +381,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 </span>
                               )}
                             </div>
-                            <div className="mt-1 font-mono text-[10px] text-[var(--color-fg-muted)] flex items-center gap-1.5">
-                              <span>{account.providerName}</span>
-                              {account.oauthEmail && <span>· {account.oauthEmail}</span>}
-                              <span>· {account.defaultModel}</span>
+                            <div className="mt-1 font-mono text-[10px] text-[var(--color-fg-muted)] flex flex-wrap items-center gap-1.5">
+                              {account.providerId == 'local' && <span>{account.providerName} · {account.defaultModel}</span>}
                               {account.providerId === 'local' && <span className={account.status === 'active' ? 'text-emerald-400' : 'text-fg-muted'}>· {account.status === 'active' ? 'Online' : 'Offline'}</span>}
                             </div>
                           </div>
                           <div className="flex items-center gap-3">
+                            <span className="text-[10px] text-fg-muted">Priority {priority + 1}</span>
+                            <button type="button" aria-label={`Increase priority of ${account.accountName}`} disabled={routingBusy || !routingPolicies[account.providerId] || priority === 0} onClick={() => moveAccount(account.id, account.providerId, -1)} className="rounded border border-border-muted p-1.5 hover:bg-surface-2 disabled:opacity-30"><ArrowUp size={12} /></button>
+                            <button type="button" aria-label={`Decrease priority of ${account.accountName}`} disabled={routingBusy || !routingPolicies[account.providerId] || priority === accounts.length - 1} onClick={() => moveAccount(account.id, account.providerId, 1)} className="rounded border border-border-muted p-1.5 hover:bg-surface-2 disabled:opacity-30"><ArrowDown size={12} /></button>
+
                             <span
                               className="w-2 h-2 rounded-full shrink-0"
                               style={{ backgroundColor: account.badgeColor || '#10b981' }}
@@ -329,6 +411,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           </div>
                         </div>
                       ))}
+                            </motion.div>}
+                            </AnimatePresence>
+                          </section>
+                        );
+                      })}
                     </div>
 
                     {/* Section 3: Local Gateway Keys */}

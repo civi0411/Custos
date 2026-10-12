@@ -309,7 +309,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-persistence`
 - **Chủ sở hữu chính (Owner):** **Trường (Systems & Persistence Lead)**
 - **Quy tắc ranh giới:** Triệt tiêu lỗi đói WAL (P0), single-writer connection, runtime version check.
-- **Tổng số file:** 51 tracked and added files | **Tổng số dòng mã:** 8,573 lines (Rust sources and Cargo manifests; 23 files)
+- **Tổng số file:** 52 tracked and added files | **Tổng số dòng mã:** 8,650 lines (Rust sources and Cargo manifests; 23 files)
 - **Mô tả chức năng:** Hạ tầng lưu trữ bền vững SQLite WAL mode, schema migrations, Event Store, Transactional Outbox, và CAS Content-Addressable Storage.
 
 #### Danh mục các file bên trong `crates/custos-persistence/`:
@@ -331,11 +331,12 @@ Custos/
 | [`src/artifacts/traits.rs`](../../crates/custos-persistence/src/artifacts/traits.rs) | 9 | Trait trừu tượng ArtifactStore | `trait ArtifactStore` |
 | [`src/connection.rs`](../../crates/custos-persistence/src/connection.rs) | 57 | Managed thread-safe SQLite connection handle. | `struct DbConnection`, `fn open_in_memory`, `fn open`, `fn configure_and_migrate` |
 | [`src/lib.rs`](../../crates/custos-persistence/src/lib.rs) | 12 | Module lib: phục vụ các cấu trúc và chức năng liên quan | None |
-| [`src/migrations.rs`](../../crates/custos-persistence/src/migrations.rs) | 100 | Thực thi các script migration tự động | `fn run_migrations` |
+| [`src/migrations.rs`](../../crates/custos-persistence/src/migrations.rs) | 101 | Thực thi các script migration tự động | `fn run_migrations` |
 | [Secure credential migration](../../crates/custos-persistence/migrations/0028_secure_provider_credentials.sql) | 18 | Database namespace, metadata and operation journal (Owner: Trường) | SQLite migration |
+| [`migrations/0029_provider_account_routing.sql`](../../crates/custos-persistence/migrations/0029_provider_account_routing.sql) | 7 | Internal per-service account order, round-robin mode and cursor | `provider_account_routing` |
 | [`src/repositories/continuation.rs`](../../crates/custos-persistence/src/repositories/continuation.rs) | 124 | Gói tiếp tục ContinuationPacket kèm mã băm SHA-256 bảo đảm an toàn khi tiếp tục | `struct ContinuationRepository`, `fn new`, `fn save_continuation`, `fn get_latest_continuation` |
 | [`src/repositories/mod.rs`](../../crates/custos-persistence/src/repositories/mod.rs) | 29 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
-| [`src/repositories/providers.rs`](../../crates/custos-persistence/src/repositories/providers.rs) | 698 | Provider configuration/catalogs and legacy migration reads; plaintext credential writes are test-only. | `ProviderRepository`, `save_catalog_models`, `catalog_fetched_at`, `credential_metadata`, `prepare_credential_operation` |
+| [`src/repositories/providers.rs`](../../crates/custos-persistence/src/repositories/providers.rs) | 774 | Provider configuration/catalogs and legacy migration reads; plaintext credential writes are test-only. | `ProviderRepository`, `save_catalog_models`, `catalog_fetched_at`, `credential_metadata`, `prepare_credential_operation` |
 | [Provider credential metadata](../../crates/custos-persistence/src/repositories/provider_credentials.rs) | 321 | Generation CAS, FULL durability, recovery and outbox (Owner: Trường) | CredentialMetadata, CredentialOperation |
 | [`src/repositories/session.rs`](../../crates/custos-persistence/src/repositories/session.rs) | 226 | SQLite Session and canonical journal repository, including session+journal deletion | `struct SessionRepository`, `fn new`, `fn get_session`, `fn list_sessions`, `fn delete_session` |
 | [`src/repositories/span.rs`](../../crates/custos-persistence/src/repositories/span.rs) | 134 | Quản lý phân đoạn thực thi Span, SpanState | `struct SpanRepository`, `fn new`, `fn get_span`, `fn save_span` |
@@ -742,7 +743,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-adapters`
 - **Chủ sở hữu chính (Owner):** **Trường (Sandbox) & Vinh (MCP/Harnesses) & Vĩ (Providers)**
 - **Quy tắc ranh giới:** Mọi dữ liệu ngoại vi đều là untrusted; cô lập an toàn trong sandbox.
-- **Tổng số file:** 179 tracked and added files | **Tổng số dòng mã:** 46,999 lines (Rust sources and Cargo manifests; 111 files)
+- **Tổng số file:** 111 tracked and added files | **Tổng số dòng mã:** 47,044 lines (Rust sources and Cargo manifests; 111 files)
 - **Mô tả chức năng:** Bộ điều hợp thế giới thực: OS Sandbox (Seatbelt macOS, Bubblewrap Linux), MCP Client STDIO/SSE, inference cục bộ (llama.cpp/MLX) và external harnesses.
 
 #### Danh mục các file bên trong `crates/custos-adapters/`:
@@ -821,7 +822,7 @@ Custos/
 | [`src/providers/oauth_pkce.rs`](../../crates/custos-adapters/src/providers/oauth_pkce.rs) | 979 | Provider-specific PKCE with Google environment overrides and masked public native-client defaults, access-token UserInfo and ID-token display claims, refresh; real Copilot device authorization and transient session token exchange. | `OAuthPkceManager`, `oauth_settings`, `oauth_identity`, `start_copilot_device`, `complete_copilot_device`, `copilot_session_token` |
 | [`src/providers/openai_chat.rs`](../../crates/custos-adapters/src/providers/openai_chat.rs) | 279 | Live ModelPort adapter kết nối trực tiếp endpoint OpenAI Chat Completions với Bearer OAuth/API Key và chẩn đoán quota API | `struct OpenAiChatProvider`, `trait TokenProvider`, `fn new`, `fn generate` |
 | [`src/providers/probe.rs`](../../crates/custos-adapters/src/providers/probe.rs) | 737 | Model discovery and bounded account quota reads/parsers with explicit unavailable states. | `probe_endpoint_models`, `probe_oauth_models`, `probe_copilot_models` |
-| [`src/providers/router.rs`](../../crates/custos-adapters/src/providers/router.rs) | 1185 | Account-pinned text routing, native Ollama transport and provider-reported token usage. | `RouterModelProvider`, `CredentialResolver`, `uses_oauth` |
+| [`src/providers/router.rs`](../../crates/custos-adapters/src/providers/router.rs) | 1487 | Account-pinned text routing, native Ollama transport and provider-reported token usage. | `RouterModelProvider`, `CredentialResolver`, `uses_oauth` |
 | [`src/providers/streaming.rs`](../../crates/custos-adapters/src/providers/streaming.rs) | 632 | Incremental SSE/NDJSON decoding (Trường + Vinh) | `stream_response` |
 | [OS credential vault](../../crates/custos-adapters/src/providers/credential_vault.rs) | 175 | Segmented keyring bundles and validation (Owner: Vinh) | KeyringCredentialVault |
 | [`src/harness/live.rs`](../../crates/custos-adapters/src/harness/live.rs) | 476 | Incremental native subprocess observations and cancellation (Trường + Vinh) | `run_observed_process` |
@@ -965,7 +966,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-daemon`
 - **Chủ sở hữu chính (Owner):** **Vĩ (Chief Architect)**
 - **Quy tắc ranh giới:** Daemon crate là composition root; `runtime.rs` ráp concrete storage/runtime/adapters, `main.rs` chỉ sở hữu listener/process lifecycle.
-- **Tổng số file:** 12 tracked and added files | **Tổng số dòng mã:** 12,566 lines (Rust sources and Cargo manifests; 12 files)
+- **Tổng số file:** 12 tracked and added files | **Tổng số dòng mã:** 12,667 lines (Rust sources and Cargo manifests; 12 files)
 - **Mô tả chức năng:** Tiến trình dịch vụ Custos phục vụ TCP, HTTP và stdio JSONL; sở hữu profile, SQLite, Local API dispatcher, OAuth loopback listener và recovery. HTTP RPC hiện cần auth/origin hardening.
 
 #### Danh mục các file bên trong `crates/custos-daemon/`:
@@ -973,14 +974,14 @@ Custos/
 | Tập tin | Số dòng | Vai trò & Trách nhiệm kiến trúc | Các Struct / Trait / Hàm cốt lõi |
 |---|:---:|---|---|
 | [`Cargo.toml`](../../crates/custos-daemon/Cargo.toml) | 40 | Manifest của composition root và các concrete dependency được phép ráp tại daemon. | None |
-| [`src/api.rs`](../../crates/custos-daemon/src/api.rs) | 7556 | Local API dispatcher with account-scoped discovery and durable usage/remote quota projections through existing ports. | `struct LocalApiDispatcher`, `fn list_capabilities`, `fn handle_request` |
+| [`src/api.rs`](../../crates/custos-daemon/src/api.rs) | 7574 | Local API dispatcher with account-scoped discovery and durable usage/remote quota projections through existing ports. | `struct LocalApiDispatcher`, `fn list_capabilities`, `fn handle_request` |
 | [`src/http_server.rs`](../../crates/custos-daemon/src/http_server.rs) | 403 | Loopback RPC/health and scoped SSE transport, exact origin admission, heartbeat/replay/snapshot and bounded socket writes. | `fn start_http_server`, `fn handle_http_client` |
 | [`src/lib.rs`](../../crates/custos-daemon/src/lib.rs) | 22 | Export API, HTTP adapter, profile, runtime và Local API client/transport. | None |
 | [`src/local_api/lib.rs`](../../crates/custos-daemon/src/local_api/lib.rs) | 1769 | Versioned request/response DTO, process/TCP transports và typed client methods, including session deletion request/client helper. Cần được tách module cơ học theo domain trong cùng crate khi refactor. | `struct ApiRequest`, `struct ApiResponse`, `struct ProcessTransport`, `struct TcpTransport`, `struct LocalApiClient` |
 | [`src/main.rs`](../../crates/custos-daemon/src/main.rs) | 131 | Composition/process entry point: singleton lock và loopback TCP + HTTP + stdio JSONL listeners. | `fn main` |
-| [`src/oauth_callback_server.rs`](../../crates/custos-daemon/src/oauth_callback_server.rs) | 717 | Provider-specific loopback callback capture, single-use state validation, cancellation and real device authorization lifecycle. | `OAuthCallbackServer`, `PendingOAuthContext`, `CallbackServerStatus`, `validate_manual_callback`, `cancel` |
+| [`src/oauth_callback_server.rs`](../../crates/custos-daemon/src/oauth_callback_server.rs) | 718 | Provider-specific loopback callback capture, single-use state validation, cancellation and real device authorization lifecycle. | `OAuthCallbackServer`, `PendingOAuthContext`, `CallbackServerStatus`, `validate_manual_callback`, `cancel` |
 | [`src/profile.rs`](../../crates/custos-daemon/src/profile.rs) | 381 | Profile directory resolver, TCP/HTTP port discovery, singleton file lock và auto-connect helper. | `struct ProfileResolver`, `struct DaemonLock`, `fn ensure_daemon_client` |
-| [`src/runtime.rs`](../../crates/custos-daemon/src/runtime.rs) | 376 | Sole composition root wiring RunPort usage queries and validating selected provider accounts. | `struct CustosRuntime`, `struct DaemonCredentialResolver`, `fn bootstrap`, `fn bootstrap_profile` |
+| [`src/runtime.rs`](../../crates/custos-daemon/src/runtime.rs) | 458 | Sole composition root wiring RunPort usage queries and validating selected provider accounts. | `struct CustosRuntime`, `struct DaemonCredentialResolver`, `fn bootstrap`, `fn bootstrap_profile` |
 | [Provider credential service](../../crates/custos-daemon/src/credentials.rs) | 496 | Secure lifecycle, migration, recovery and account locking (Owner: Vĩ) | ProviderCredentials |
 | [Credential tests](../../crates/custos-daemon/src/credential_tests.rs) | 527 | Failure injection and isolated native keyring validation (Owner: Vĩ) | Test fixtures |
 
@@ -1047,7 +1048,7 @@ Custos/
 | [`ui/desktop/src/components/shell/AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) | 756 | Shared conversation/resource shell; memoized Markdown, change-only scroll edges and stable resource callbacks; empty lens has no selected conversation | `AppWorkspaceShell` |
 | [`ui/desktop/src/components/shell/WorkspaceSidebar.tsx`](../../ui/desktop/src/components/shell/WorkspaceSidebar.tsx) | 420 | Per-lens history, 3-dots session workbench mover, and project-wide session search | `WorkspaceSidebar` |
 | [`ui/desktop/src/components/modals/NewSessionModal.tsx`](../../ui/desktop/src/components/modals/NewSessionModal.tsx) | 101 | Defaults new Task pack to the visible workbench | `NewSessionModal` |
-| [`ui/desktop/src/context/AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx) | 1595 | Daemon session/journal projection; keeps all sessions, filters non-message events and reads durable lens membership | `AppProvider`, `useAppContext` |
+| [`ui/desktop/src/context/AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx) | 1600 | Daemon session/journal projection; keeps all sessions, filters non-message events and reads durable lens membership | `AppProvider`, `useAppContext` |
 
 Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../tools/repo_intelligent/README.md) (62 lines) describes its derived SQLite index and optional MCP export. The product-facing Repo Intelligence location is `custos-runtime/src/context/repo_intelligence/`; do not treat the Python utility as an agent, canonical memory or mandatory runtime dependency.
 
@@ -1092,15 +1093,15 @@ Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../
 | [MobileSimulatorWorkbenchPane.tsx](../../ui/desktop/src/components/views/MobileSimulatorWorkbenchPane.tsx) | 126 | Lazy native phone web preview, fitted device viewport, orientation and power/Home lifecycle (Owner: Vinh) | `MobileSimulatorWorkbenchPane` |
 | [BrowserWorkbenchPane.tsx](../../ui/desktop/src/components/views/BrowserWorkbenchPane.tsx) | 75 | Lazy native Browser toolbar, skeleton, loading/errors, viewport and overlay-aware bounds (Owner: Vinh) | `BrowserWorkbenchPane`, `normalizeBrowserUrl` |
 | [OrcaTabbedContainer.tsx](../../ui/desktop/src/components/views/OrcaTabbedContainer.tsx) | 627 | Memoized shared resource catalog and lazy retained browser tabs (Owner: Vinh) | `OrcaTabbedContainer`, `ResourceContent` |
-| [AppContext.tsx](../../ui/desktop/src/context/AppContext.tsx) | 1595 | Provider hydration, session/run restoration, native chat and device appearance/theme state | `AppProvider`, `useAppContext` |
+| [AppContext.tsx](../../ui/desktop/src/context/AppContext.tsx) | 1600 | Provider hydration, session/run restoration, native chat and device appearance/theme state | `AppProvider`, `useAppContext` |
 | [AgentsWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/AgentsWorkbenchPane.tsx) | 454 | Session-bound native launch and live run inspector (Vinh) | `AgentsWorkbenchPane` |
 | [ModelSelector.tsx](../../ui/desktop/src/components/chat/ModelSelector.tsx) | 874 | Account-attributed model picker with explicit Copilot grouping and filters | `ModelSelector`, `getConnectedModelOptions`, `ModelOption` |
 | [CombosManager.tsx](../../ui/desktop/src/components/providers/CombosManager.tsx) | 531 | Combo targets from the same discovered account catalogs | `CombosManager` |
 | [provider_types.ts](../../ui/desktop/src/types/provider_types.ts) | 91 | Account catalog source, original timestamp and failure metadata | `ConnectedAccount` |
-| [AddProviderModal.tsx](../../ui/desktop/src/components/modals/AddProviderModal.tsx) | 898 | OAuth/API connection UI with PKCE/device authorization, fetched identity and cancellation. | `AddProviderModal` |
+| [AddProviderModal.tsx](../../ui/desktop/src/components/modals/AddProviderModal.tsx) | 896 | OAuth/API connection UI with PKCE/device authorization, fetched identity and cancellation. | `AddProviderModal` |
 | [ProvidersView.tsx](../../ui/desktop/src/components/providers/ProvidersView.tsx) | 235 | Account listing and provider branding. | `ProvidersView` |
-| [daemon_client.ts](../../ui/desktop/src/api/daemon_client.ts) | 1145 | Typed IPC client, profile HTTP discovery, deduplicated SSE reconnect and upstream emulator/screenshot methods. | `DaemonClient` |
-| [SettingsModal.tsx](../../ui/desktop/src/components/modals/SettingsModal.tsx) | 410 | Settings account/usage navigation and device Light/Dark/System appearance controls | `SettingsModal` |
+| [daemon_client.ts](../../ui/desktop/src/api/daemon_client.ts) | 1157 | Typed IPC client, profile HTTP discovery, deduplicated SSE reconnect and upstream emulator/screenshot methods. | `DaemonClient` |
+| [SettingsModal.tsx](../../ui/desktop/src/components/modals/SettingsModal.tsx) | 497 | Settings account/usage navigation and device Light/Dark/System appearance controls | `SettingsModal` |
 | [markdownMath.ts](../../ui/desktop/src/components/chat/markdownMath.ts) | 39 | Math AST normalization for escaped subscripts and display delimiters (Owner: Vinh) | `remarkNormalizeChatMath` |
 | [HighlightedCodeBlock.tsx](../../ui/desktop/src/components/chat/HighlightedCodeBlock.tsx) | 38 | Memoized highlight.js fenced-code projection with theme tokens and escaped fallback (Owner: Vinh) | `HighlightedCodeBlock` |
 | [AppHeader.tsx](../../ui/desktop/src/components/shell/AppHeader.tsx) | 384 | Workspace header and matching worktree tab icon (Owner: Vinh) | `AppHeader` |
@@ -1228,3 +1229,7 @@ Phone media/layout validation: the mobile identity preserves the installed Chrom
 This authorized slice introduces internal storage contracts and SQLite metadata only, not new product crates or public domain schemas. File counts increase by five Rust modules and one SQLite migration. Existing API/runtime/callback, provider repository, migration loader and desktop provider UI/types are updated in place. The crate metrics and touched source rows above include the implementation.
 
 Secure credential validation: all 43 daemon tests pass, including the isolated Windows migration/restart fixture; the adapter native long-token/Unicode/corruption fixture also passes. These tests verify failure handling, generation conflict, interrupted operations, migration/restart, token segmentation, corruption detection and cleanup. Frontend production build, desktop/daemon cargo check and production daemon build pass. Two browser UI fixtures verify save error/success, clearing inputs, absence from localStorage and no HTTP retry after credential IPC rejection. No real provider credentials or paid API calls are used. Existing backups and macOS/Linux native certification are outside this verification.
+
+Multi-account routing slice: existing ProviderRepository owns `routing_policy`, `save_routing_policy` and `select_account`; daemon API exposes policy read/write and automatic route reservations. Existing CredentialResolver delegates unpinned dispatch selection to DaemonCredentialResolver. AddProviderModal generates account IDs for all auth flows; SettingsModal edits persisted account order and round-robin inside collapsible provider panels with isolated account lists; existing Framer Motion animates measured height and opacity, honoring app and system reduced-motion preferences. AppContext pins each reserved account in chat Task metadata.
+
+Multi-account validation: fake-vault daemon tests cover priority, rotation, concurrent reservations, model/endpoint binding, locked storage and isolated deletion; adapter HTTP fixtures verify automatic generate/stream routes and pinned accounts; persistence verifies cursor/policy restart and outbox; desktop mocked UI verifies independent API-key/Copilot connections, priority controls and failed-policy-save state. No paid provider calls are used.

@@ -2625,6 +2625,24 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
+            "v1.providers.routing.get" | "v1.providers.routing.save" | "v1.providers.route" => {
+                let repo = match self.providers.as_ref() { Some(repo)=>repo,None=>return ApiResponse::error(req.id,"ProviderRepository not configured") };
+                let service = req.params.get("service_type").and_then(|v|v.as_str()).unwrap_or("");
+                if service.is_empty() { return ApiResponse::error(req.id,"Missing provider service"); }
+                let result = match req.method.as_str() {
+                    "v1.providers.route" => {
+                        let model = req.params.get("model").and_then(|v|v.as_str()).unwrap_or("");
+                        crate::runtime::reserve_provider_account(repo,service,model).map(|account|serde_json::json!({"account_id":account}))
+                    },
+                    "v1.providers.routing.save" => {
+                        let enabled = match req.params.get("round_robin").and_then(|v|v.as_bool()) { Some(v)=>v,None=>return ApiResponse::error(req.id,"Missing round_robin mode") };
+                        let order: Vec<String> = match req.params.get("account_order").cloned().map(serde_json::from_value) { Some(Ok(v))=>v,_=>return ApiResponse::error(req.id,"Invalid account order") };
+                        repo.save_routing_policy(service,enabled,&order).and_then(|()|repo.routing_policy(service))
+                    },
+                    _ => repo.routing_policy(service),
+                };
+                return match result { Ok(value)=>ApiResponse::success(req.id,value),Err(e)=>ApiResponse::error(req.id,e.to_string()) };
+            }
             "v1.providers.save" => {
                 let providers_repo = match self.providers.as_ref() {
                     Some(p) => p,
@@ -3121,7 +3139,7 @@ impl LocalApiDispatcher {
                     return match custos_adapters::providers::oauth_pkce::start_copilot_device().await {
                         Ok(mut device) => {
                             if device.get("device_code").and_then(|v| v.as_str()).is_none() || device.get("user_code").and_then(|v| v.as_str()).is_none() { return ApiResponse::error(req.id, "Invalid GitHub device authorization response"); }
-                            server.start_copilot_device(device.clone());
+                            server.start_copilot_device(device.clone(), params.provider_id.clone().unwrap_or_else(|| "copilot".into()));
                             if let Some(object) = device.as_object_mut() { object.remove("device_code"); }
                             device["flow_type"] = serde_json::json!("device_code");
                             device["authorization_url"] = device.get("verification_uri").cloned().unwrap_or(serde_json::json!("https://github.com/login/device"));

@@ -242,6 +242,30 @@ impl CustosRuntime {
     }
 }
 
+pub(crate) fn reserve_provider_account(repo: &custos_persistence::ProviderRepository, service: &str, model: &str) -> Result<Option<String>, DomainError> {
+    let providers = repo.list_providers()?;
+    let mut eligible = Vec::new();
+    let mut stored = false;
+    for account in providers.iter().filter(|p| p.service_type == service) {
+        stored = true;
+        if !matches!(account.status.as_str(), "active"|"configured"|"primary"|"standby") { continue; }
+        let metadata = repo.credential_metadata(&account.id)?;
+        if service != "local" && !metadata.as_ref().is_some_and(|m| m.state == "active" && (m.has_refresh_token || m.expires_at > chrono::Utc::now().timestamp_millis())) { continue; }
+        let oauth = metadata.as_ref().is_some_and(|m| m.has_refresh_token || m.scope.as_deref().is_some_and(|s| !s.is_empty()));
+        let endpoint = account.endpoint_url.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or(match service {
+            "openai" => "https://api.openai.com/v1", "anthropic" => "https://api.anthropic.com/v1", "gemini" => "https://generativelanguage.googleapis.com", "copilot" => "https://api.githubcopilot.com", "antigravity" => "https://cloudcode-pa.googleapis.com", "deepseek" => "https://api.deepseek.com/v1", "local" => "http://localhost:11434", _ => "",
+        });
+        let key = format!("verified-probe:{}:{}:{}:{}",account.id,endpoint.trim().trim_end_matches('/'),if oauth {"oauth"} else {"api_key"},metadata.as_ref().map(|m| m.created_at).unwrap_or(0));
+        if repo.list_catalog_models(Some(&key))?.iter().any(|m|m.id.eq_ignore_ascii_case(model)) {
+            eligible.push(account.id.clone());
+        }
+    }
+    if stored && eligible.is_empty() { return Err(DomainError::Validation("No active account advertises this model. Refresh models or reconnect the provider.".into())); }
+    let selected = repo.select_account(service,&eligible)?;
+    tracing::debug!(service, account_id = ?selected, "Reserved provider account");
+    Ok(selected)
+}
+
 struct DaemonCredentialResolver {
     store: Arc<SqliteTaskStore>,
     credentials: Arc<crate::credentials::ProviderCredentials>,
@@ -249,6 +273,9 @@ struct DaemonCredentialResolver {
 
 #[async_trait::async_trait]
 impl CredentialResolver for DaemonCredentialResolver {
+    async fn select_account(&self, service: &str, model: &str) -> Result<Option<String>, DomainError> {
+        reserve_provider_account(&self.store.providers(), service, model)
+    }
     async fn validate_account(&self, account_id: &str, service: &str) -> Result<(), DomainError> {
         let record = self.store.providers().get_provider(account_id)?.ok_or_else(|| DomainError::Validation("Selected provider account no longer exists".into()))?;
         if record.service_type != service {
@@ -373,4 +400,59 @@ mod credential_tests {
             .to_string()
             .contains("expired"));
     }
+    #[tokio::test]
+    async fn account_pool_priority_rotation_catalog_binding_and_delete() {
+        let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+        let service = Arc::new(crate::credentials::ProviderCredentials::new(Arc::new(store.providers().clone()), Arc::new(crate::credential_tests::FakeVault::default())));
+        let repo=store.providers();
+        for id in ["A","B","C"] {
+            let config=custos_domain::ProviderConfig { id:id.into(), name:id.into(),service_type:"openai".into(),api_key_masked:"none".into(),status:"active".into(),endpoint_url:Some("https://api.openai.com/v1".into()),default_model:None,context_window:None,fast_mode:None,created_at:0,updated_at:0 };
+            service.save_provider(&config,Some(&format!("fixture-{id}"))).await.unwrap();
+            let meta=repo.credential_metadata(id).unwrap().unwrap();
+            let key=format!("verified-probe:{id}:https://api.openai.com/v1:api_key:{}",meta.created_at);
+            let model=custos_domain::ModelCatalogOption{id:if id=="C" {"gpt-other"} else {"gpt-test"}.into(),label:id.into(),provider_type:"openai".into(),description:None,is_default:false,default_effort:None,efforts:vec![],supports_fast_mode:false,context_window:None,pricing:None};
+            repo.save_catalog_models(&key,&[model]).unwrap();
+        }
+        assert_eq!(reserve_provider_account(&repo,"openai","gpt-test").unwrap().as_deref(),Some("A"));
+        repo.save_routing_policy("openai",false,&["B".into(),"A".into(),"C".into()]).unwrap();
+        for _ in 0..3 { assert_eq!(reserve_provider_account(&repo,"openai","gpt-test").unwrap().as_deref(),Some("B")); }
+        repo.save_routing_policy("openai",true,&["B".into(),"A".into(),"C".into()]).unwrap();
+        for expected in ["B","A","B","A"] { assert_eq!(reserve_provider_account(&repo,"openai","gpt-test").unwrap().as_deref(),Some(expected)); }
+        assert!(repo.save_routing_policy("openai",true,&["A".into(),"A".into()]).is_err());
+        assert!(repo.save_routing_policy("copilot",true,&["A".into()]).is_err());
+        assert!(reserve_provider_account(&repo,"openai","missing").is_err());
+        service.delete("B",true).await.unwrap();
+        assert_eq!(reserve_provider_account(&repo,"openai","gpt-test").unwrap().as_deref(),Some("A"));
+        assert_eq!(service.get_oauth_token("A").await.unwrap().unwrap().access_token,"fixture-A");
+        let mut config=repo.get_provider("A").unwrap().unwrap();
+        config.endpoint_url=Some("https://different.invalid/v1".into());
+        repo.save_provider(&config).unwrap();
+        assert!(reserve_provider_account(&repo,"openai","gpt-test").is_err());
+    }
+
+    #[tokio::test]
+    async fn account_pool_concurrent_reservations_are_balanced_and_locked_selection_fails_closed() {
+        let store=Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+        let vault=Arc::new(crate::credential_tests::FakeVault::default());
+        let service=Arc::new(crate::credentials::ProviderCredentials::new(Arc::new(store.providers().clone()),vault.clone()));
+        let repo=store.providers();
+        for id in ["A","B"] {
+            let config=custos_domain::ProviderConfig{id:id.into(),name:id.into(),service_type:"copilot".into(),api_key_masked:"none".into(),status:"active".into(),endpoint_url:Some("https://api.githubcopilot.com".into()),default_model:None,context_window:None,fast_mode:None,created_at:0,updated_at:0};
+            let mut tok=token(true); tok.provider_id=id.into();tok.service_type="copilot".into();
+            service.save_oauth_connection(&tok,Some(&config)).await.unwrap();
+            let key=format!("verified-probe:{id}:https://api.githubcopilot.com:oauth:{}",tok.created_at);
+            let model=custos_domain::ModelCatalogOption{id:"copilot/claude-test".into(),label:"Claude".into(),provider_type:"copilot".into(),description:None,is_default:false,default_effort:None,efforts:vec![],supports_fast_mode:false,context_window:None,pricing:None};
+            repo.save_catalog_models(&key,&[model]).unwrap();
+        }
+        repo.save_routing_policy("copilot",true,&["A".into(),"B".into()]).unwrap();
+        let mut handles=vec![];
+        for _ in 0..20 { let repo=(*repo).clone();handles.push(tokio::task::spawn_blocking(move||reserve_provider_account(&repo,"copilot","copilot/claude-test").unwrap().unwrap())); }
+        let mut a=0; for handle in handles { if handle.await.unwrap()=="A" {a+=1;} } assert_eq!(a,10);
+        vault.fail_read.store(true,std::sync::atomic::Ordering::SeqCst);
+        let resolver=DaemonCredentialResolver{store,credentials:service};
+        let selected=resolver.select_account("copilot","copilot/claude-test").await.unwrap().unwrap();
+        assert!(resolver.get_token(&selected).await.is_err());
+        assert!(resolver.validate_account(&selected,"anthropic").await.is_err());
+    }
+
 }
