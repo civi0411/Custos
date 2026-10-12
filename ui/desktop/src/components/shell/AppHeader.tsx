@@ -28,7 +28,7 @@ import {
   Server,
   LayoutGrid
 } from 'lucide-react';
-import type { OrcaTabId, ResourceTabsState } from '@/components/views/OrcaTabbedContainer';
+import { type OrcaTabId, type ResourceTabsState, getTabType } from '@/components/views/OrcaTabbedContainer';
 import { formatKeyCombo } from '@/lib/utils';
 
 // 3 primary workspace modes
@@ -50,7 +50,7 @@ interface AppHeaderProps {
   onToggleWebTab: () => void;
   onToggleExpandWebTab: () => void;
   resourceTabs: ResourceTabsState;
-  onCloseTab: (e: React.MouseEvent, tabId: OrcaTabId) => void;
+  onCloseTab: (e: React.MouseEvent, tabId: string) => void;
   onAddNewTab: () => void;
 
   // Lens presentation
@@ -64,7 +64,7 @@ interface AppHeaderProps {
   onOpenKanban?: () => void;
 
   // Running jobs per tab indicator
-  runningJobsByTab?: Record<OrcaTabId, number>;
+  runningJobsByTab?: Record<string, number>;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
@@ -290,7 +290,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               {/* Resource Tabs */}
               {resourceTabs.tabs.map((tab) => {
                 const isActive = tab.id === resourceTabs.activeTabId;
-                const runningCount = runningJobsByTab?.[tab.id] ?? 0;
+                const tabType = getTabType(tab);
+                const runningCount = runningJobsByTab?.[tab.id] ?? runningJobsByTab?.[tabType] ?? 0;
                 return (
                   <div
                     key={tab.id}
@@ -301,7 +302,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                         : 'bg-transparent text-fg-muted hover:text-fg-editor hover:bg-surface-2/60'
                     }`}
                   >
-                    {getTabIcon(tab.id, isActive)}
+                    {getTabIcon(tabType, isActive)}
                     <span className="truncate">{tab.title}</span>
                     {runningCount > 0 && (
                       <span
