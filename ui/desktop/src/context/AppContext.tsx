@@ -875,6 +875,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Actions
   const pendingTurns = useRef(new Set<string>());
   const liveConnections = useRef(new Map<string, AbortController>());
+  const livePresentations = useRef(new Map<string, () => void>());
+  const activeLiveView = useRef({ project: currentProject, conversation: activeSessionId });
+  activeLiveView.current = { project: currentProject, conversation: activeSessionId };
+  const streamReducedMotion = useRef(appearance.reduceMotion);
+  streamReducedMotion.current = appearance.reduceMotion;
+  useEffect(() => {
+    const sync = () => livePresentations.current.forEach(refresh => refresh());
+    sync();
+    document.addEventListener('visibilitychange', sync);
+    return () => document.removeEventListener('visibilitychange', sync);
+  }, [currentProject, activeSessionId, appearance.reduceMotion]);
   useEffect(() => () => { liveConnections.current.forEach(controller => controller.abort()); liveConnections.current.clear(); }, []);
   const handleStopRun = async (runId: string) => {
     try { await daemonClient.cancelRun({ run_id: runId, reason: 'Stopped from chat' }); }
@@ -884,21 +895,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (liveConnections.current.has(run)) return;
     const controller = new AbortController(); liveConnections.current.set(run, controller);
     let timer: number | undefined;
+    let frame: number | undefined;
+    let lastPaint = -Infinity;
     let latest: import('../types/domain').LiveRunSnapshot | null = null;
-    const flush = () => {
-      timer = undefined;
-      const snapshot = latest; if (!snapshot) return;
+    let displayedText = '';
+    let initialFlush = true;
+    const systemMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const isVisible = () => !document.hidden && activeLiveView.current.project === project && activeLiveView.current.conversation === conversation;
+    const cancelPending = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      timer = undefined; frame = undefined;
+    };
+    const schedule = () => {
+      if (controller.signal.aborted || frame !== undefined || timer !== undefined) return;
+      if (isVisible()) frame = window.requestAnimationFrame(paint);
+      else timer = window.setTimeout(() => { timer = undefined; flush(true); }, 200);
+    };
+    const paint = (timestamp: number) => {
+      frame = undefined;
+      if (controller.signal.aborted) return;
+      if (!isVisible()) { flush(true); return; }
+      if (timestamp - lastPaint >= 40) flush();
+      else schedule();
+    };
+    const flush = (immediate = false) => {
+      const snapshot = latest; if (!snapshot || controller.signal.aborted) return;
+      const bypass = immediate || initialFlush || !isVisible() || streamReducedMotion.current || systemMotion.matches || !snapshot.text.startsWith(displayedText);
+      const remaining = snapshot.text.length - displayedText.length;
+      let end = bypass || remaining > 4096 ? snapshot.text.length : Math.min(snapshot.text.length, displayedText.length + Math.max(12, Math.ceil(remaining * 0.6)));
+      // Avoid splitting a UTF-16 surrogate pair while revealing text.
+      const trailing = snapshot.text.charCodeAt(end - 1);
+      if (end < snapshot.text.length && trailing >= 0xD800 && trailing <= 0xDBFF) end += 1;
+      displayedText = snapshot.text.slice(0, end);
+      initialFlush = false;
+      lastPaint = performance.now();
+      const text = displayedText;
       setProjectData(previous => ({ ...previous, [project]: (previous[project] || []).map(chat => chat.id !== conversation ? chat : {
         ...chat, messages: chat.messages.some(message => message.runId === run)
-          ? chat.messages.map(message => message.runId !== run ? message : { ...message, text: snapshot.text, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined })
-          : [...chat.messages, { id: `live-${run}`, role: 'assistant' as const, author, text: snapshot.text, runId: run, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined }],
+          ? chat.messages.map(message => message.runId !== run ? message : { ...message, text, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined })
+          : [...chat.messages, { id: `live-${run}`, role: 'assistant' as const, author, text, runId: run, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined }],
       }) }));
+      if (displayedText !== snapshot.text && !immediate) schedule();
     };
+    const refresh = () => { cancelPending(); if (latest) flush(true); };
+    livePresentations.current.set(run, refresh);
+    systemMotion.addEventListener('change', refresh);
+    controller.signal.addEventListener('abort', cancelPending, { once: true });
     void daemonClient.watchRun(session, run, snapshot => {
       latest = snapshot;
-      if (['completed', 'failed', 'cancelled', 'interrupted'].includes(snapshot.status)) { if (timer !== undefined) window.clearTimeout(timer); flush(); }
-      else if (timer === undefined) timer = window.setTimeout(flush, 50);
-    }, controller.signal).finally(() => { if (timer !== undefined) window.clearTimeout(timer); if (!controller.signal.aborted) flush(); liveConnections.current.delete(run); });
+      if (['completed', 'failed', 'cancelled', 'interrupted'].includes(snapshot.status)) { cancelPending(); flush(true); }
+      else schedule();
+    }, controller.signal).finally(() => {
+      cancelPending();
+      if (!controller.signal.aborted) flush(true);
+      systemMotion.removeEventListener('change', refresh);
+      livePresentations.current.delete(run);
+      liveConnections.current.delete(run);
+    });
   };
 
   const startNativeConversation = async (instruction: string, harness: string, workspace: string) => {
