@@ -5,7 +5,6 @@ import {
   Search,
   ChevronDown,
   Settings,
-  ShieldCheck,
   Trash2,
   MoreVertical,
   Code2,
@@ -422,10 +421,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                     <div className="text-xs font-semibold text-fg-editor truncate">Chí Vĩ</div>
                     <div className="text-[11px] text-fg-muted truncate">Lead Architect • Sovereign</div>
                   </div>
-                </div>
-                <div className="mt-2 flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10.5px]">
-                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-                  <span className="truncate">Zero-IO Strict Barrier Active</span>
                 </div>
               </div>
 

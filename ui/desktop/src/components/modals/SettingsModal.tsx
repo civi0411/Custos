@@ -337,7 +337,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         const providerName = accounts[0].providerName;
                         return (
                           <section key={service} aria-label={`${providerName} accounts`} className="overflow-hidden rounded-xl border border-border-muted bg-surface-1">
-                            <div className="flex items-center gap-3 p-3">
+                            <div className="flex items-center gap-3 py-1 px-2">
                               <button type="button" aria-expanded={expanded} aria-controls={`provider-accounts-${service}`} onClick={() => setExpandedProviders(previous => ({ ...previous, [service]: !expanded }))} className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1 text-left">
                                 <ProviderBrandIcon provider={service} size={20} />
                                 <div className="min-w-0 flex-1">

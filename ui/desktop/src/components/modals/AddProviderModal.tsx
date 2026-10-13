@@ -472,7 +472,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
             </div>
             <div className="border-t border-border-muted p-4 flex justify-end gap-2">
               <button type="button" onClick={closeAndClearSecret} disabled={localBusy} className="text-fg-editor px-3 py-2">Cancel</button>
-              <button type="submit" disabled={localBusy || !localConnected || !localModels.some(m => m.id === localModel)} className="provider-oauth-action rounded-lg px-3 py-2 disabled:opacity-50">{localBusy ? 'Please wait...' : 'Save & Activate Provider'}</button>
+              <button type="submit" disabled={localBusy || !localConnected || !localModels.some(m => m.id === localModel)} className="btn-primary rounded-lg px-3 py-2 disabled:opacity-50">{localBusy ? 'Please wait...' : 'Save & Activate Provider'}</button>
             </div>
           </form>
         ) : authMode === 'api_key' ? (
@@ -619,7 +619,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="provider-oauth-action px-4 py-1.5 rounded-lg font-medium transition text-xs shadow-xs cursor-pointer"
+                className="btn-primary px-4 py-1.5 rounded-lg font-medium transition text-xs shadow-xs cursor-pointer"
               >
                 Save & Activate Provider
               </button>
@@ -629,7 +629,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
           /* TAB 2: OAUTH SSO */
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
             <div className="p-5 space-y-4 text-xs overflow-y-auto min-h-0 flex-1">
-              <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl flex items-start gap-3">
+              <div className="p-3 bg-indigo-500/10 rounded-xl flex items-start gap-3">
                 <ShieldCheck className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
                   <div className="font-semibold text-fg-editor">OAuth 2.0 Sovereign Authorization</div>
@@ -642,7 +642,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
               {/* OAuth Providers */}
               <div className="space-y-1.5">
                 <label className="font-medium text-fg-editor">Select OAuth Identity Provider</label>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-2 gap-2.5 pt-2">
                   {[
                     { id: 'antigravity', name: 'Antigravity', sub: 'Google OAuth / PKCE' },
                     { id: 'copilot', name: 'GitHub Copilot', sub: 'Device Authorization' },
@@ -654,13 +654,13 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                       key={p.id}
                       type="button"
                       onClick={() => handleSelectOauthProvider(p.id as ProviderServiceId)}
-                      className={`p-3 rounded-xl border text-left transition cursor-pointer flex items-center gap-2.5 ${
+                      className={`p-3 rounded-xl text-left transition cursor-pointer flex items-center gap-2.5 ${
                         oauthProvider === p.id
-                          ? 'bg-surface-2 border-workbench-accent text-fg-editor shadow-xs'
-                          : 'bg-surface-0 border-border-default text-fg-muted hover:border-border-emphasis'
+                          ? 'bg-surface-2 text-fg-editor shadow-xs'
+                          : 'bg-surface-0 text-fg-muted'
                       }`}
                     >
-                      <div className="w-6 h-6 rounded-md overflow-hidden shrink-0 border border-border-muted">
+                      <div className="w-6 h-6 shrink-0">
                         <ProviderBrandIcon provider={p.id} size={24} />
                       </div>
                       <div className="min-w-0">
@@ -672,19 +672,18 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                 </div>
               </div>
 
-              <p className="text-fg-muted text-xs">Your account identity is retrieved after authorization. No name or email input is required.</p>
               {/* OpenAI PKCE Interactive Box */}
               {(
-                <div className="p-3.5 bg-surface-0 border border-border-default rounded-xl space-y-3 font-mono text-xs">
+                <div className="p-3.5 bg-surface-0 rounded-xl space-y-3 font-mono text-xs">
                   <div className="flex items-center justify-between text-fg-subtle text-[11px]">
                     <span className="font-semibold text-fg-editor">{oauthProvider === 'copilot' ? 'GitHub Device Authorization' : `${oauthProviderLabel} PKCE Flow (RFC 7636)`}</span>
-                    <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                    <span className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
                       {oauthProvider === 'copilot' ? 'Device Flow' : 'PKCE S256'}
                     </span>
                   </div>
 
                   {!authUrlResult ? (
-                    <div className="flex flex-col items-center justify-center p-4 bg-surface-2/60 rounded-xl border border-dashed border-border-default space-y-3">
+                    <div className="flex flex-col items-center justify-center p-4 bg-surface-2/60 rounded-xl space-y-3">
                       <p className="text-[11px] text-fg-muted text-center font-sans">
                         Click below to authorize {oauthProviderLabel} in your browser. {oauthProvider === 'copilot' ? 'Enter the device code shown here on GitHub.' : oauthProvider === 'anthropic' ? 'Paste the authorization code#state from Claude below.' : 'Custos captures the callback automatically; manual paste is available below.'}
                       </p>
@@ -840,7 +839,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
             </div>
 
             {/* Footer */}
-            <div className="h-14 border-t border-border-muted px-5 flex items-center justify-end gap-2 bg-surface-1 shrink-0">
+            <div className="h-14 px-5 flex items-center justify-end gap-2 bg-surface-1 shrink-0">
               <button
                 type="button"
                 onClick={closeAndClearSecret}
@@ -862,7 +861,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                   }
                 }}
                 disabled={exchangeSuccess || isGeneratingUrl || isExchangingCode}
-                className="provider-oauth-action px-4 py-1.5 rounded-lg font-medium transition text-xs shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                className="btn-primary px-4 py-1.5 rounded-lg font-medium transition text-xs shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
               >
                 {isExchangingCode ? (
                   <>
@@ -876,7 +875,6 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                   </>
                 ) : (
                   <>
-                    <ShieldCheck className="w-3.5 h-3.5" />
                     <span>
                       {!authUrlResult
                         ? `Log in with ${oauthProviderLabel}`
