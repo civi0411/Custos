@@ -217,13 +217,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       sourceTabId: mode === 'code' ? 'changes' : mode === 'research' ? 'literature' : undefined,
     });
 
-    // 2. Transmit to session chat so conversation timeline captures user action transparently
-    const formattedPrompt = args.trim()
-      ? `${cmd.command} ${args.trim()}`
-      : `${cmd.command} - ${cmd.description}`;
-    onSendMessage(formattedPrompt);
-
-    // 3. Trigger daemon packs job
+    // 2. Trigger daemon packs job directly (single accepted command path; avoid double-dispatch into chat LLM)
     daemonClient
       .runPacksJob({
         jobId: cmd.jobId,
@@ -232,8 +226,8 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       })
       .then((res) => {
         const taskId = res.taskId || res.task_id || 'unknown';
-        updateJob(entryId, { taskId, status: 'done', endedAt: Date.now() });
-        onShowToast?.(`Executed ${cmd.command} (Task ${taskId})`);
+        updateJob(entryId, { taskId, status: 'started', endedAt: Date.now() });
+        onShowToast?.(`Started ${cmd.command} (Task ${taskId})`);
       })
       .catch((err: any) => {
         updateJob(entryId, { status: 'failed', error: err.message || String(err), endedAt: Date.now() });

@@ -115,9 +115,9 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({ sessionId, onSho
             <span className="workbench-kicker">Corpus</span>
           </div>
           <button
-            onClick={() => onShowToast?.('Add Source via DOI or PDF upload')}
-            className="p-1 rounded-md text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
-            title="Add Source (DOI / URL / PDF)"
+            disabled
+            className="p-1 rounded-md text-fg-subtle opacity-50 cursor-not-allowed transition"
+            title="Add Source (DOI / URL / PDF) — Ingest pipeline connector pending (P2b)"
           >
             <Plus size={15} />
           </button>

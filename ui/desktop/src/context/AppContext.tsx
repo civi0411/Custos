@@ -233,6 +233,12 @@ const uniqueModels = (models: string[]): string[] => {
   });
 };
 
+const AI_LOCAL_ACCOUNT_ID = 'ai-local-auto';
+const AI_LOCAL_ENDPOINT = 'http://localhost:11434';
+
+const isTransientAiLocalAccount = (account?: ConnectedAccount): boolean =>
+  account?.id === AI_LOCAL_ACCOUNT_ID;
+
 
 const DEFAULT_COMBOS: ModelCombo[] = [
   {
@@ -566,6 +572,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
 
     const liveAccounts = accounts.filter((account): account is ConnectedAccount => account !== null);
+    const hasSavedLocalAccount = providerRecords.some(
+      (provider) => normalizeProviderServiceId(provider.service_type || provider.id) === 'local'
+    );
+
+    if (!hasSavedLocalAccount) {
+      try {
+        const discovered = await daemonClient.probeModels(AI_LOCAL_ENDPOINT, 'ollama');
+        const localModels = uniqueModels(discovered.models.map((model) => model.id));
+        if (localModels.length > 0) {
+          liveAccounts.unshift({
+            id: AI_LOCAL_ACCOUNT_ID,
+            providerId: 'local',
+            providerName: 'AI Local',
+            accountName: 'AI Local (Ollama)',
+            authType: 'api_key',
+            endpointUrl: AI_LOCAL_ENDPOINT,
+            status: 'active',
+            statusLabel: 'Ready without sign-in',
+            badgeColor: '#10b981',
+            defaultModel: localModels[0],
+            supportedModels: localModels,
+            catalogModels: discovered.models.map((model, index) => ({
+              id: model.id,
+              label: model.name || model.id,
+              description: model.description,
+              provider_type: 'local',
+              is_default: index === 0,
+              efforts: [],
+              supports_fast_mode: false,
+              context_window: model.context_window,
+            })),
+            catalogSource: 'live',
+            catalogFetchedAt: Date.now(),
+            contextWindow: discovered.models[0]?.context_window,
+            latencyMs: 0,
+            createdAt: new Date().toISOString(),
+            lastUsedAt: 'Available locally',
+          });
+        }
+      } catch {
+        // AI Local is optional. Keep provider hydration usable when Ollama is not running.
+      }
+    }
     setConnectedAccounts(liveAccounts);
 
     const liveModelIds = new Set(
@@ -578,9 +627,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setSelectedModel((previous) => {
       const current = previous || localStorage.getItem('custos_selected_model') || '';
-      if (current.startsWith('ollama/') || (current && liveModelIds.has(current.toLowerCase()))) {
+      if (current && liveModelIds.has(current.toLowerCase())) {
         return current;
       }
+      const hasActiveLocal = liveAccounts.some(
+        (account) => account.providerId === 'local' && account.status === 'active'
+      );
+      if (current.startsWith('ollama/') && !hasActiveLocal) return current;
       localStorage.setItem('custos_selected_model', fallbackModel);
       return fallbackModel;
     });
@@ -938,11 +991,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         appendAssistantMessage({
           role: 'assistant',
           author: 'Custos Engine',
-          badge: 'Model Required',
-          stepName: 'Model Gateway',
-          text: 'Select a connected model before sending chat. Add an API key or complete PKCE in Providers, then choose one of the discovered models.',
+          badge: 'AI Local Unavailable',
+          stepName: 'AI Local',
+          text: 'No local model is available yet. Start Ollama and install at least one model, then use Retry models. You can chat without signing in as soon as AI Local discovers it.',
         });
-        showToast('Select a connected model first');
+        showToast('Start Ollama or connect a provider');
         return;
       }
 
@@ -979,7 +1032,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      const hasActiveAccount = connectedAccounts.some((account) => account.status === 'active');
+      const selectedAccount = connectedAccounts.find(
+        (account) => account.status === 'active' && account.supportedModels.includes(chosenModel)
+      );
+      const hasActiveAccount = Boolean(selectedAccount);
       if (!hasActiveAccount) {
         appendAssistantMessage({
           role: 'assistant',
@@ -1050,7 +1106,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             conversation_session_id: targetSessionId || activeSession.id,
             source_task_id: activeSession.taskId || activeSession.id,
             model: chosenModel,
-            provider_account_id: connectedAccounts.find(a => a.status === 'active' && a.supportedModels.includes(chosenModel))?.id,
+            ...(!isTransientAiLocalAccount(selectedAccount)
+              ? { provider_account_id: selectedAccount?.id }
+              : {}),
           },
         });
         runTaskId = createdTask.id;

@@ -457,6 +457,8 @@ canonical crate instead of creating a parallel crate with a logical subsystem na
 
 5. **CLI chat-first:** `custos` mở phiên chat chung. Phím `/` phải mở command palette ngay mà không cần Enter; `/mode` mở tầng chọn `/code`, `/research`, `/assistant`. Mode được chọn phải hiện trên prompt dưới dạng `custos-code`, `custos-research` hoặc `custos-assistant`.
 
+**CLI interaction refinement:** mode, provider login and model selection are independent controls. `/mode` changes the domain behavior without starting OAuth or changing the selected model; `/login` and `/model` own those actions. Default `custos` chat remains an honestly labelled lightweight local path when the daemon is unavailable, while specialized model execution gates on an explicitly selected account/model. Specialized requests carry domain constraints: Code accepts programming and software-engineering work, Research performs evidence-oriented analysis, and Assistant handles coordination and user-approved effects.
+
 ## 2.3 Ba Vùng Tin Cậy (Trust Zones) và Assurance Labels
 
 Toàn bộ thực thể trong hệ thống được phân định rõ ràng vào 3 Vùng Tin Cậy:
@@ -2476,6 +2478,8 @@ Custos giữ kiến trúc đa crate theo trách nhiệm domain/core/runtime/pack
 
 Giữ crate boundaries hiện hữu; không thêm ADE shell/UI crate hoặc phantom `custos-gui`. `crates/custos-app/{cli,desktop}` là vị trí hosts đang có, `ui/desktop` là frontend sản phẩm chính; `ui/cli` là frontend React riêng cần compatibility audit. Số crate không là tiêu chí đúng kiến trúc. Cây physical phải lấy từ [catalog](docs/development/codebase-architecture.md), không lấy target diagram làm kết quả audit.
 
+CLI tương tác phát hành từ `ui/cli/bin/custos-cli.js` là một Local API client, không phải model runtime thứ hai. Trước model-backed Code/Research/Assistant work, CLI phải xác minh một account provider đã kết nối, chỉ hiển thị model trả về từ `v1.models.probe` hoặc verified account cache, và ghi `provider_account_id` vào Task metadata cùng model đã chọn vào `StartRunCommand`. OAuth secret chỉ được daemon/persistence giữ; CLI không ghi token vào file cấu hình. Mode là workflow lens, provider/model là compute selection độc lập. Thanh hoạt động ở đáy chỉ phản chiếu trạng thái run và phải dừng khi run hoàn tất, lỗi hoặc bị ngắt.
+
 | Chủ đề | Địa chỉ chịu trách nhiệm |
 |---|---|
 | Pure types/reference IDs | `crates/custos-domain/src/` |
@@ -3001,6 +3005,8 @@ Toàn bộ các quyết định thiết kế kiến trúc của Custos đều đ
 ### Ollama local connection
 
 The desktop Local tab connects to Ollama through daemon IPC using the existing local provider configuration. Native discovery uses /api/tags and optional /api/show metadata; discovered IDs use ollama/ namespaces. RouterModelProvider strips that namespace and sends bounded non-streaming /api/chat requests without credentials. Legacy generic local OpenAI-compatible endpoints remain supported. Empty discovery is not an OpenAI fallback. Provider saves retain the existing repository/outbox boundary. No new public DTO, schema, dependency or crate is introduced.
+
+Desktop chat also exposes this transport as **AI Local** without requiring a saved provider account. During provider hydration it probes the standard loopback Ollama endpoint through daemon IPC, projects installed models as a transient local account, and selects the first discovered local model only when no valid model is already selected. This discovery does not persist credentials or provider configuration. The transient account identifier is presentation-only and is not sent as `provider_account_id`; runtime therefore uses the existing credential-free local route. If Ollama is absent or has no installed model, chat remains fail-closed with an actionable local-runtime message rather than substituting a cloud or mock response.
 
 Ollama availability is a transient desktop projection, separate from saved configuration. While visible, the desktop probes configured Ollama accounts every 15 seconds and on window focus. Failed probes retain cached model names as disabled offline choices; successful probes restore availability without changing the selected model or automatically resuming a prompt. Offline Ollama requests fail explicitly and never switch to a cloud model. Reconnection is available through the existing model refresh action; no credentials or configuration are deleted.
 
