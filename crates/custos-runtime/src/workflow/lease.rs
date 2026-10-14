@@ -41,6 +41,10 @@ impl WorkspaceLease {
             // Safety: Only delete within .custos/worktrees directory to prevent arbitrary directory removal
             let expected_parent = self.base_path.join(".custos").join("worktrees");
             if self.lease_path.starts_with(&expected_parent) && self.lease_path != expected_parent {
+                let _ = std::process::Command::new("git")
+                    .current_dir(&self.base_path)
+                    .args(["worktree", "remove", "--force", &self.lease_path.to_string_lossy()])
+                    .output();
                 let _ = fs::remove_dir_all(&self.lease_path);
             }
         }
@@ -104,12 +108,31 @@ impl WorkspaceLeaseManager {
             .join("worktrees")
             .join(&lease_id);
 
-        fs::create_dir_all(&lease_path).map_err(|e| {
-            DomainError::Validation(format!(
-                "Failed to create workspace lease dir at {:?}: {}",
-                lease_path, e
-            ))
-        })?;
+        let git_dir = self.base_dir.join(".git");
+        let mut worktree_created = false;
+        if git_dir.exists() {
+            if let Some(parent) = lease_path.parent() {
+                let _ = fs::create_dir_all(parent);
+            }
+            let output = std::process::Command::new("git")
+                .current_dir(&self.base_dir)
+                .args(["worktree", "add", "--detach", &lease_path.to_string_lossy(), "HEAD"])
+                .output();
+            if let Ok(out) = output {
+                if out.status.success() {
+                    worktree_created = true;
+                }
+            }
+        }
+
+        if !worktree_created {
+            fs::create_dir_all(&lease_path).map_err(|e| {
+                DomainError::Validation(format!(
+                    "Failed to create workspace lease dir at {:?}: {}",
+                    lease_path, e
+                ))
+            })?;
+        }
 
         let lease = WorkspaceLease {
             lease_id: lease_id.clone(),

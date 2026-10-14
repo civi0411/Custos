@@ -516,7 +516,7 @@ impl TaskRuntime {
                 wrun.continuation_packet_ref = Some(format!("launch:{}", launch.id));
 
                 // Resolve execution workspace & effective directory
-                let (effective_dir, maybe_resolved_ws_id) = if let Some(ref ws_coord) = self.workspace_coordinator {
+                let (base_workspace_dir, maybe_resolved_ws_id) = if let Some(ref ws_coord) = self.workspace_coordinator {
                     if let Some(ref ws_id_str) = cmd.workspace_id {
                         let ws_id = custos_domain::WorkspaceId::new(ws_id_str);
                         if let Ok(Some(ws)) = ws_coord.get_workspace(&ws_id).await {
@@ -542,9 +542,16 @@ impl TaskRuntime {
                     (std::path::PathBuf::from("."), None)
                 };
 
+                let (effective_dir, isolation_level) = if let Some(ref l) = lease {
+                    (l.lease_path().to_path_buf(), "isolated_worktree_lease")
+                } else {
+                    (base_workspace_dir.clone(), "shared_live_checkout")
+                };
+
                 if let Some(ref ws_id) = maybe_resolved_ws_id {
                     run.metadata["workspace_id"] = serde_json::json!(ws_id.to_string());
                 }
+                run.metadata["isolation_level"] = serde_json::json!(isolation_level);
                 run.metadata["effective_workspace_path"] = serde_json::json!(effective_dir.display().to_string());
 
                 // Capture baseline commit before execution if workspace coordinator is available
@@ -594,8 +601,23 @@ impl TaskRuntime {
                     run.metadata["output"] = serde_json::json!(combined_output);
                     turn_output = Some(combined_output);
 
-                    // Post-execution: Capture Git dirty status and unified diff if workspace is managed
-                    if let (Some(ref ws_coord), Some(ref ws_id)) = (&self.workspace_coordinator, &maybe_resolved_ws_id) {
+                    // Post-execution: Capture Git dirty status and unified diff
+                    if let Some(ref l) = lease {
+                        if let Ok(files) = l.collect_modified_files() {
+                            let rel_strs: Vec<String> = files.iter().map(|f| f.display().to_string()).collect();
+                            run.metadata["isolated_modified_files"] = serde_json::json!(rel_strs);
+                        }
+                        let diff_out = std::process::Command::new("git")
+                            .current_dir(l.lease_path())
+                            .args(["diff", "HEAD"])
+                            .output();
+                        if let Ok(out) = diff_out {
+                            let diff_str = String::from_utf8_lossy(&out.stdout).to_string();
+                            if !diff_str.is_empty() {
+                                run.metadata["isolated_worktree_diff"] = serde_json::json!(diff_str);
+                            }
+                        }
+                    } else if let (Some(ref ws_coord), Some(ref ws_id)) = (&self.workspace_coordinator, &maybe_resolved_ws_id) {
                         if let Ok(dirty) = ws_coord.inspect_dirty(ws_id).await {
                             run.metadata["dirty_manifest"] = serde_json::to_value(&dirty).unwrap_or_default();
                             run.metadata["diff_stat"] = serde_json::json!({
@@ -909,10 +931,22 @@ impl TaskRuntime {
                     RunStatus::Failed
                 })?;
                 run.metadata["completion_reason"] = serde_json::json!(if native_succeeded {
-                    "native_process_completed"
+                    "native_turn_completed"
                 } else {
                     "native_process_failed"
                 });
+                run.metadata["turn_completion"] = serde_json::json!("process_exit");
+                run.metadata["task_criteria_verified"] = serde_json::json!(false);
+                run.metadata["verification_status"] = serde_json::json!("unverified_external_effects_require_evidence");
+
+                if let Some(ref outbox) = self.outbox {
+                    if let Ok(uncertain) = outbox.list_by_status(OutboxStatus::Uncertain).await {
+                        run.metadata["uncertain_effects_count"] = serde_json::json!(uncertain.len());
+                    }
+                } else if let Some(count) = run.metadata.get("observed_effect_count") {
+                    run.metadata["uncertain_effects_count"] = count.clone();
+                }
+
                 if let Some(ref store) = self.run_store {
                     store.save_run(&run).await?;
                     store.save_worker_run(&wrun).await?;
@@ -972,14 +1006,20 @@ impl WorkflowPort for TaskRuntime {
         reason: &str,
     ) -> Result<CancelReceipt, DomainError> {
         if self.live.cancel(run_id) {
-            let task_id=self.active_runs.read().await.get(run_id).map(|run|run.task_id.clone()).unwrap_or_default();
-            tracing::info!(run_id=run_id,task_id=%task_id,"Live run cancellation requested");
-            let uncertain_effects_count=if let Some(outbox)=&self.outbox {
-                let uncertain=outbox.list_by_status(OutboxStatus::Uncertain).await?;
-                let dispatching=outbox.list_by_status(OutboxStatus::Dispatching).await?;
+            let task_id = self.active_runs.read().await.get(run_id).map(|run| run.task_id.clone()).unwrap_or_default();
+            let harness_id = self.active_runs.read().await.get(run_id).and_then(|r| r.metadata.get("harness_id").and_then(|h| h.as_str().map(str::to_string)));
+            if let Some(ref hid) = harness_id {
+                if let Ok(harness) = self.resolve_harness(Some(hid)) {
+                    let _ = harness.cancel_run(run_id).await;
+                }
+            }
+            tracing::info!(run_id = run_id, task_id = %task_id, "Live run cancellation requested");
+            let uncertain_effects_count = if let Some(outbox) = &self.outbox {
+                let uncertain = outbox.list_by_status(OutboxStatus::Uncertain).await?;
+                let dispatching = outbox.list_by_status(OutboxStatus::Dispatching).await?;
                 u32::try_from(uncertain.len().saturating_add(dispatching.len())).unwrap_or(u32::MAX)
-            } else {0};
-            return Ok(CancelReceipt { run_id:run_id.into(), cancelled_at:Utc::now(), reason:reason.into(), uncertain_effects_count });
+            } else { 0 };
+            return Ok(CancelReceipt { run_id: run_id.into(), cancelled_at: Utc::now(), reason: reason.into(), uncertain_effects_count });
         }
         let run = {
             let mut runs = self.active_runs.write().await;
