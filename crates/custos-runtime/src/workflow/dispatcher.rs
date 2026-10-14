@@ -69,15 +69,18 @@ impl WorkflowDispatcher {
 
         // 2. Check persistence for active worker runs and active claims if run_store is attached
         if let Some(ref store) = self.run_store {
-            let active_wruns = store.list_worker_runs_for_task(task_id).await?;
-            if let Some(active) = active_wruns
-                .into_iter()
-                .find(|w| w.status == RunStatus::Active)
-            {
-                return Err(DomainError::Conflict(format!(
-                    "Task '{}' is already claimed and actively running under worker run '{}' (assigned to '{}')",
-                    task_id, active.id, active.worker_id
-                )));
+            // For whole-task claims (node_id is None), verify no active worker run exists
+            if node_id.is_none() {
+                let active_wruns = store.list_worker_runs_for_task(task_id).await?;
+                if let Some(active) = active_wruns
+                    .into_iter()
+                    .find(|w| w.status == RunStatus::Active)
+                {
+                    return Err(DomainError::Conflict(format!(
+                        "Task '{}' is already claimed and actively running under worker run '{}' (assigned to '{}')",
+                        task_id, active.id, active.worker_id
+                    )));
+                }
             }
 
             if let Ok(Some(active_claim)) = store.get_active_claim(task_id, node_id).await {

@@ -12,8 +12,8 @@ pub struct GatewaySpan {
     pub provider_id: String,
     pub model_id: String,
     pub latency_ms: u64,
-    pub tokens_used: u64,
-    pub cost_usd: f32,
+    pub tokens_used: Option<u64>,
+    pub cost_usd: Option<f32>,
     pub timestamp: String,
 }
 
@@ -37,8 +37,8 @@ impl GatewayTracer {
         provider_id: String,
         model_id: String,
         latency_ms: u64,
-        tokens_used: u64,
-        cost_usd: f32,
+        tokens_used: Option<u64>,
+        cost_usd: Option<f32>,
     ) {
         let span = GatewaySpan {
             trace_id,

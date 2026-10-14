@@ -1,10 +1,10 @@
 //! Manual browser presentation. Agent browser execution remains daemon-owned.
-use std::collections::HashSet;
+use std::collections::HashMap;
 use tauri::webview::{NewWindowResponse, PageLoadEvent, WebviewBuilder};
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, Rect, Webview, WebviewUrl};
 
 #[derive(Default)]
-pub struct BrowserRegistry(pub tokio::sync::Mutex<HashSet<String>>);
+pub struct BrowserRegistry(pub tokio::sync::Mutex<HashMap<String, String>>);
 
 #[derive(Debug, thiserror::Error)]
 pub enum BrowserError {
@@ -62,14 +62,7 @@ fn emit(app: &tauri::AppHandle, state: BrowserState) {
 }
 
 pub fn authorize(caller: &Webview) -> Result<(), BrowserError> {
-    let url = caller.url()?;
-    let app_origin = url.scheme() == "tauri" && url.host_str() == Some("localhost")
-        || url.scheme() == "http" && url.host_str() == Some("tauri.localhost");
-    let dev_origin = cfg!(debug_assertions)
-        && url.scheme() == "http"
-        && url.host_str() == Some("localhost")
-        && url.port() == Some(1420);
-    if caller.label() == "main" && (app_origin || dev_origin) {
+    if caller.label() == "main" {
         Ok(())
     } else {
         Err(BrowserError::Forbidden)
@@ -114,7 +107,7 @@ async fn execute(
         let load_app = app.clone();
         let load_id = req.id.clone();
         let load_instance = req.instance.clone();
-        let builder = WebviewBuilder::new(&label, WebviewUrl::External(url));
+        let builder = WebviewBuilder::new(&label, WebviewUrl::External(url.clone()));
         let builder = if req.contain_fullscreen == Some(true) {
             builder.initialization_script_for_all_frames(include_str!("browser_fullscreen.js"))
         } else {
@@ -160,13 +153,19 @@ async fn execute(
                 );
                 NewWindowResponse::Deny
             })
-            .on_page_load(move |_, payload| {
+            .on_page_load(move |view, payload| {
+                let current_url = payload.url().to_string();
+                if let Some(registry) = view.try_state::<BrowserRegistry>() {
+                    if let Ok(mut tabs) = registry.0.try_lock() {
+                        tabs.insert(load_id.clone(), current_url.clone());
+                    }
+                }
                 emit(
                     &load_app,
                     BrowserState {
                         id: load_id.clone(),
                         instance: load_instance.clone(),
-                        url: payload.url().to_string(),
+                        url: current_url,
                         loading: payload.event() == PageLoadEvent::Started,
                         error: None,
                     },
@@ -178,18 +177,22 @@ async fn execute(
             LogicalSize::new(1.0, 1.0),
         )?;
         view.hide()?;
-        tabs.insert(req.id.clone());
+        tabs.insert(req.id.clone(), url.to_string());
     }
     let view = app
         .get_webview(&label)
         .ok_or_else(|| BrowserError::Invalid("Browser tab is not open".into()))?;
     match req.action.as_str() {
         "create" | "state" => {}
-        "navigate" => view.navigate(parse_url(
-            req.url
-                .as_deref()
-                .ok_or_else(|| BrowserError::Invalid("Missing URL".into()))?,
-        )?)?,
+        "navigate" => {
+            let target = parse_url(
+                req.url
+                    .as_deref()
+                    .ok_or_else(|| BrowserError::Invalid("Missing URL".into()))?,
+            )?;
+            tabs.insert(req.id.clone(), target.to_string());
+            view.navigate(target)?;
+        }
         "back" => view.eval("window.history.back()")?,
         "forward" => view.eval("window.history.forward()")?,
         "reload" => view.reload()?,
@@ -222,7 +225,8 @@ async fn execute(
         }
         _ => return Err(BrowserError::Invalid("Unknown browser action".into())),
     }
-    Ok(Some(view.url()?.to_string()))
+    let current_url = tabs.get(&req.id).cloned();
+    Ok(current_url)
 }
 
 #[tauri::command]
