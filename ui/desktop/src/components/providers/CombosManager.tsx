@@ -3,13 +3,11 @@ import React, { useState } from 'react';
 import {
   Layers,
   Plus,
-  Play,
   Trash2,
   Edit2,
   ArrowRight,
   Shuffle,
   ShieldCheck,
-  CheckCircle2,
   MoveUp,
   MoveDown,
   X,
@@ -32,15 +30,6 @@ export const CombosManager: React.FC = () => {
   const [strategy, setStrategy] = useState<ComboStrategy>('fallback');
   const [targets, setTargets] = useState<ComboModelTarget[]>([]);
   const [selectedAddModel, setSelectedAddModel] = useState('');
-
-  // Simulation State
-  const [simulatingComboId, setSimulatingComboId] = useState<string | null>(null);
-  const [simResult, setSimResult] = useState<{
-    comboId: string;
-    step: string;
-    message: string;
-    success: boolean;
-  } | null>(null);
 
   const openCreateModal = () => {
     setName('');
@@ -137,41 +126,6 @@ export const CombosManager: React.FC = () => {
     setIsCreateModalOpen(false);
   };
 
-  const handleSimulateRoute = (combo: ModelCombo) => {
-    setSimulatingComboId(combo.id);
-    setSimResult(null);
-
-    setTimeout(() => {
-      if (combo.strategy === 'fallback') {
-        const primary = combo.targets[0]?.modelName || 'Primary Model';
-        const fallback = combo.targets[1]?.modelName || 'Fallback Model';
-        setSimResult({
-          comboId: combo.id,
-          step: 'Failover Triggered',
-          message: `Diverted from ${primary} (simulated HTTP 429 Rate Limit) -> Route dispatched to ${fallback} (HTTP 200 OK, latency: 41ms)`,
-          success: true,
-        });
-      } else if (combo.strategy === 'round_robin') {
-        const chosen = combo.targets[Math.floor(Math.random() * combo.targets.length)]?.modelName || 'Target';
-        setSimResult({
-          comboId: combo.id,
-          step: 'Balanced Route Dispatched',
-          message: `Load balancer routed request to ${chosen} based on weight distribution (HTTP 200 OK, latency: 33ms)`,
-          success: true,
-        });
-      } else {
-        const cheapest = combo.targets[combo.targets.length - 1]?.modelName || 'Cost-efficient target';
-        setSimResult({
-          comboId: combo.id,
-          step: 'Cost Optimizer Routed',
-          message: `Dispatched to ${cheapest} saving ~74% token cost per million (HTTP 200 OK, latency: 29ms)`,
-          success: true,
-        });
-      }
-      setSimulatingComboId(null);
-    }, 600);
-  };
-
   return (
     <div className="space-y-6">
       {/* Top Action Bar */}
@@ -179,13 +133,13 @@ export const CombosManager: React.FC = () => {
         <div>
           <h2 className="text-sm font-semibold text-fg-editor flex items-center gap-2">
             <Layers className="w-4 h-4 text-workbench-accent" />
-            <span>Virtual Model Routing Combos</span>
+            <span>Routing presets</span>
             <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-surface-2 border border-border-muted text-fg-subtle">
-              {combos.length} Combos
+              {combos.length} Presets
             </span>
           </h2>
           <p className="text-xs text-fg-muted mt-0.5">
-            OmniRoute / 9Router architecture: Combine models into high-availability fallback chains and load balancers.
+            Saved locally as design presets. The daemon does not execute combo routing yet.
           </p>
         </div>
 
@@ -203,9 +157,9 @@ export const CombosManager: React.FC = () => {
         {combos.length === 0 ? (
           <div className="p-8 text-center rounded-xl border border-dashed border-border-default bg-surface-1/50 space-y-3">
             <Layers className="w-8 h-8 mx-auto text-fg-subtle" />
-            <h3 className="text-sm font-medium text-fg-editor">No routing combos configured</h3>
+            <h3 className="text-sm font-medium text-fg-editor">No routing presets saved</h3>
             <p className="text-xs text-fg-muted max-w-md mx-auto">
-              Create a combo to automatically fail over across multiple providers when rate limits or outages occur.
+              You can save a routing design, but it will not affect model execution until a daemon route policy is implemented.
             </p>
             <button
               onClick={openCreateModal}
@@ -251,16 +205,6 @@ export const CombosManager: React.FC = () => {
                 {/* Top Actions */}
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button
-                    onClick={() => handleSimulateRoute(combo)}
-                    disabled={simulatingComboId === combo.id}
-                    className="px-2.5 py-1 rounded-md text-[11px] font-medium bg-surface-2 hover:bg-surface-3 text-fg-editor border border-border-default hover:border-border-emphasis transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
-                    title="Simulate route failover and inspect response"
-                  >
-                    <Play className={`w-3 h-3 text-emerald-400 ${simulatingComboId === combo.id ? 'animate-spin' : ''}`} />
-                    <span>{simulatingComboId === combo.id ? 'Simulating...' : 'Test Route'}</span>
-                  </button>
-
-                  <button
                     onClick={() => openEditModal(combo)}
                     className="p-1.5 rounded-md hover:bg-surface-2 text-fg-muted hover:text-fg-editor transition cursor-pointer"
                     title="Edit combo pipeline"
@@ -281,17 +225,6 @@ export const CombosManager: React.FC = () => {
                   </button>
                 </div>
               </div>
-
-              {/* Simulation Feedback Alert */}
-              {simResult && simResult.comboId === combo.id && (
-                <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-xs text-emerald-300 flex items-start gap-2 animate-in fade-in duration-200">
-                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400 mt-0.5" />
-                  <div>
-                    <span className="font-semibold">{simResult.step}: </span>
-                    <span>{simResult.message}</span>
-                  </div>
-                </div>
-              )}
 
               {/* Pipeline Sequence Visualization */}
               <div className="pt-2 border-t border-border-muted/60">
@@ -399,9 +332,9 @@ export const CombosManager: React.FC = () => {
                   <label className="font-medium text-fg-editor">Routing Strategy</label>
                   <div className="grid grid-cols-3 gap-2">
                     {[
-                      { id: 'fallback', label: 'Fallback Chain', desc: 'Auto failover on 429/5xx' },
-                      { id: 'round_robin', label: 'Round Robin', desc: 'Even load balancing' },
-                      { id: 'cost_optimized', label: 'Cost Optimized', desc: 'Cheapest model first' },
+                      { id: 'fallback', label: 'Fallback design', desc: 'Proposed order for fallback' },
+                      { id: 'round_robin', label: 'Round-robin design', desc: 'Proposed weighted rotation' },
+                      { id: 'cost_optimized', label: 'Cost design', desc: 'Proposed cost preference' },
                     ].map((s) => (
                       <button
                         key={s.id}

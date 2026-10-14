@@ -11,6 +11,7 @@ import {
   CancelRunParams,
   ExecutionWorkspace,
   CreateWorkspaceParams,
+  WorkspaceDetectionResult,
   CapabilityDescriptor,
   DirtyManifest,
   SpawnTerminalParams,
@@ -65,6 +66,9 @@ import {
   EmulatorSession,
   EmulatorSnapshotResult,
   EmulatorScreenshotResult,
+  AssistantDraft,
+  OutboxActionItem,
+  ResourceActionCapability,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -103,6 +107,9 @@ const normalizeWorkspace = (wire: any): ExecutionWorkspace => {
     : wire.dirtyManifest ?? null;
   const ownerTaskId = wire.owner_task_id ?? wire.ownerTaskId ?? null;
   const baseCommitHash = wire.base_commit_hash ?? wire.baseCommitHash ?? null;
+  const runningAgentId = wire.running_agent_id ?? wire.runningAgentId ?? null;
+  const agentStatus = wire.agent_status ?? wire.agentStatus ?? null;
+  const activeBranch = wire.active_branch ?? wire.activeBranch ?? null;
 
   return {
     ...wire,
@@ -114,6 +121,12 @@ const normalizeWorkspace = (wire: any): ExecutionWorkspace => {
     baseCommitHash,
     dirty_manifest: dirtyManifest,
     dirtyManifest,
+    running_agent_id: runningAgentId,
+    runningAgentId,
+    agent_status: agentStatus,
+    agentStatus,
+    active_branch: activeBranch,
+    activeBranch,
   } as ExecutionWorkspace;
 };
 
@@ -206,6 +219,18 @@ export class DaemonClient {
     }
   }
 
+  async getSessionMetrics(sessionId?: string): Promise<{
+    session_id?: string;
+    tokens_in: number;
+    tokens_out: number;
+    total_tokens: number;
+    estimated_cost_usd: number;
+    active_runs: number;
+    pending_approvals: number;
+  }> {
+    return this.request('v1.sessions.metrics', { session_id: sessionId });
+  }
+
   async getProviderUsage(includeQuota = false): Promise<import('../types/provider_types').ProviderUsageReport> {
     return this.request('v1.providers.usage', { include_quota: includeQuota });
   }
@@ -278,8 +303,8 @@ export class DaemonClient {
     return this.request<Task>('v1.tasks.get', { task_id: taskId });
   }
 
-  async listTasks(): Promise<Task[]> {
-    return this.request<Task[]>('v1.tasks.list', {});
+  async listTasks(sessionId?: string): Promise<Task[]> {
+    return this.request<Task[]>('v1.tasks.list', { session_id: sessionId });
   }
 
   async cancelTask(taskId: string, reason?: string): Promise<Task> {
@@ -443,6 +468,91 @@ export class DaemonClient {
       return raw.map(normalizeWorkspace);
     }
     return normalizeWorkspace(raw);
+  }
+
+  async detectWorkspace(path: string): Promise<WorkspaceDetectionResult> {
+    return this.request<WorkspaceDetectionResult>('v1.workspaces.detect', { path });
+  }
+
+  async pickFolder(): Promise<string | null> {
+    const res = await this.request<{ path: string | null }>('v1.workspaces.pick_folder', {});
+    return res?.path ?? null;
+  }
+
+  async spawnCandidates(params: {
+    task_id: string;
+    base_workspace_id?: string;
+    repo_path?: string;
+    count?: number;
+    base_commit_hash?: string;
+    harness_ids?: string[];
+    setup_script?: string;
+  }): Promise<{ task_id: string; candidates: ExecutionWorkspace[] }> {
+    const raw = await this.request<{ task_id: string; candidates: unknown[] }>('v1.workspaces.candidates.spawn', params);
+    return {
+      task_id: raw.task_id,
+      candidates: (raw.candidates || []).map(normalizeWorkspace),
+    };
+  }
+
+  async compareCandidates(params: {
+    task_id?: string;
+    workspace_ids?: string[];
+  }): Promise<{
+    count: number;
+    candidates: Array<{
+      workspace_id: string;
+      name: string;
+      path: string;
+      branch: string;
+      base_commit_hash?: string;
+      is_dirty: boolean;
+      modified_count: number;
+      untracked_count: number;
+      deleted_count: number;
+      modified_files: string[];
+      untracked_files: string[];
+      deleted_files: string[];
+      diff: string;
+      status: string;
+    }>;
+  }> {
+    return this.request('v1.workspaces.candidates.compare', params);
+  }
+
+  async integrateCandidate(params: {
+    winner_workspace_id: string;
+    target_branch?: string;
+    loser_workspace_ids?: string[];
+    force_loser_cleanup?: boolean;
+  }): Promise<{
+    winner_workspace_id: string;
+    winner_branch: string;
+    target_branch: string;
+    is_stale_base: boolean;
+    current_target_head?: string;
+    winner_base_commit?: string;
+    merge_success: boolean;
+    merge_detail: string;
+    loser_cleanup: Array<{ workspace_id: string; success: boolean; error?: string }>;
+  }> {
+    return this.request('v1.workspaces.integrate', params);
+  }
+
+  // ---------------------------------------------------------
+  // Settings & Quotas API
+  // ---------------------------------------------------------
+
+  async getSettings(): Promise<Record<string, string>> {
+    return this.request<Record<string, string>>('v1.settings.get', {});
+  }
+
+  async setSettings(settings: Record<string, string | number | boolean>): Promise<Record<string, string>> {
+    const payload: Record<string, string> = {};
+    for (const [k, v] of Object.entries(settings)) {
+      payload[k] = String(v);
+    }
+    return this.request<Record<string, string>>('v1.settings.set', payload);
   }
 
   // ---------------------------------------------------------
@@ -1114,9 +1224,11 @@ export class DaemonClient {
     return this.request<HeadlessAutomationJob>('v1.automation.jobs.create', params);
   }
 
-  async runHeadlessJob(jobId: string): Promise<HeadlessAutomationJob> {
+  async runHeadlessJob(jobId: string, permitId?: string): Promise<HeadlessAutomationJob> {
     return this.request<HeadlessAutomationJob>('v1.automation.jobs.run', {
       job_id: jobId,
+      permit_id: permitId,
+      force_execute: true,
     });
   }
 
@@ -1151,6 +1263,72 @@ export class DaemonClient {
       workspace_id: params.workspaceId,
       inputs: params.inputs ?? {},
     });
+  }
+
+  // ---------------------------------------------------------
+  // Assistant Drafts & Outbox API
+  // ---------------------------------------------------------
+
+  async listDrafts(sessionId?: string, taskId?: string): Promise<AssistantDraft[]> {
+    const drafts = await this.request<unknown[]>('v1.assistant.drafts.list', {
+      session_id: sessionId,
+      task_id: taskId,
+    });
+    return drafts.map((d) => fromDaemon<AssistantDraft>(d));
+  }
+
+  async getDraft(id: string): Promise<AssistantDraft> {
+    return fromDaemon<AssistantDraft>(await this.request<unknown>('v1.assistant.drafts.get', { id }));
+  }
+
+  async saveDraft(draft: Partial<AssistantDraft> & { id?: string; title: string; kind?: string; content: string }): Promise<AssistantDraft> {
+    const payload = {
+      ...draft,
+      id: draft.id || `draft-${Date.now()}`,
+      kind: draft.kind || 'email',
+    };
+    return fromDaemon<AssistantDraft>(await this.request<unknown>('v1.assistant.drafts.save', toDaemon(payload)));
+  }
+
+  async deleteDraft(id: string): Promise<boolean> {
+    const res = await this.request<{ deleted: boolean }>('v1.assistant.drafts.delete', { id });
+    return Boolean(res?.deleted);
+  }
+
+  async listOutbox(taskId?: string): Promise<OutboxActionItem[]> {
+    const items = await this.request<unknown[]>('v1.assistant.outbox.list', { task_id: taskId });
+    return items.map((i) => fromDaemon<OutboxActionItem>(i));
+  }
+
+  async approveOutbox(id: string): Promise<any> {
+    return this.request<any>('v1.assistant.outbox.approve', { id });
+  }
+
+  async dispatchOutbox(id: string): Promise<any> {
+    return this.request<any>('v1.assistant.outbox.dispatch', { id });
+  }
+
+  async createOutbox(params: { action_type?: string; task_id?: string; content?: string }): Promise<any> {
+    return this.request<any>('v1.assistant.outbox.create', params);
+  }
+
+  // ---------------------------------------------------------
+  // Multi-Agent Worktree Steering & Capabilities API
+  // ---------------------------------------------------------
+
+  async steerWorkspaceAgent(workspaceId: string, instruction: string): Promise<any> {
+    return this.request<any>('v1.workspaces.agent_steer', {
+      workspace_id: workspaceId,
+      instruction,
+    });
+  }
+
+  async getResourceCapabilities(resourceId: string, workspaceId?: string): Promise<ResourceActionCapability[]> {
+    const list = await this.request<unknown[]>('v1.resources.capabilities', {
+      resource_id: resourceId,
+      workspace_id: workspaceId,
+    });
+    return list.map((c) => fromDaemon<ResourceActionCapability>(c));
   }
 }
 

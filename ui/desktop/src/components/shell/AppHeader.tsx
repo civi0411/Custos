@@ -26,18 +26,29 @@ import {
   NotebookTabs,
   Layers,
   Server,
-  LayoutGrid
+  LayoutGrid,
+  Smartphone,
+  Send,
+  FileText,
+  Users,
+  Calendar,
+  GitBranch,
 } from 'lucide-react';
-import { type OrcaTabId, type ResourceTabsState, getTabType } from '@/components/views/OrcaTabbedContainer';
+import { type OrcaTabId, type ResourceTabsState, getTabType } from '@/components/workbenches/OrcaTabbedContainer';
 import { formatKeyCombo } from '@/lib/utils';
+import { useAppContext } from '@/context/AppContext';
+import { getAgentBrandIcon } from '@/components/common/AgentIcons';
 
-// 3 primary workspace modes
-export type AppWorkspaceMode = 'chat' | 'code' | 'research';
+
+// Three workbench lenses over the current Workspace and Task/Session state.
+export type ActiveWorkbench = 'copilot' | 'engineering' | 'research';
+export type AppWorkspaceMode = ActiveWorkbench;
 
 interface AppHeaderProps {
-  mode: AppWorkspaceMode;
+  mode: ActiveWorkbench;
   workspaceTitle?: string;
-  onSwitchMode: (mode: AppWorkspaceMode) => void;
+  activeWorkspace?: import('@/types/domain').ExecutionWorkspace | null;
+  onSwitchMode: (mode: ActiveWorkbench) => void;
 
   isSidebarCollapsed: boolean;
   onToggleSidebar: () => void;
@@ -70,6 +81,7 @@ interface AppHeaderProps {
 export const AppHeader: React.FC<AppHeaderProps> = ({
   mode,
   workspaceTitle,
+  activeWorkspace,
   onSwitchMode,
   isSidebarCollapsed,
   onToggleSidebar,
@@ -90,62 +102,73 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onOpenKanban,
   runningJobsByTab,
 }) => {
-  const modes: { id: AppWorkspaceMode; label: string; icon: React.ElementType; shortcut: string; description: string }[] = [
+  const { activeDetection } = useAppContext();
+  const modes: { id: ActiveWorkbench; label: string; icon: React.ElementType; shortcut: string; description: string }[] = [
     {
-      id: 'chat',
+      id: 'copilot',
       label: 'Copilot',
       icon: MessageSquare,
       shortcut: formatKeyCombo({ ctrlOrCmd: true, key: '1' }),
-      description: 'Custos Copilot workspace'
+      description: 'Copilot workbench'
     },
     {
-      id: 'code',
+      id: 'engineering',
       label: 'Coding',
       icon: Code2,
       shortcut: formatKeyCombo({ ctrlOrCmd: true, key: '2' }),
-      description: 'Custos Coding ADE'
+      description: 'Coding workbench'
     },
     {
       id: 'research',
       label: 'Research',
       icon: FlaskConical,
       shortcut: formatKeyCombo({ ctrlOrCmd: true, key: '3' }),
-      description: 'Custos Science Lab'
+      description: 'Research workbench'
     }
   ];
 
-  const getTabIcon = (id: OrcaTabId, isActive: boolean) => {
+  const getTabIcon = (id: OrcaTabId, isActive: boolean, agentId?: string) => {
     const cls = `w-3.5 h-3.5 ${isActive ? 'workbench-accent' : 'text-fg-muted group-hover:text-fg-editor transition-colors'}`;
+    if (agentId || id === 'agents') {
+      return getAgentBrandIcon(agentId || 'agents', 14, 'shrink-0');
+    }
     switch (id) {
       case 'tools': return <LayoutGrid className={cls} />;
-      case 'changes': return <FileDiff className={cls} />;
-      case 'terminal': return <TerminalIcon className={cls} />;
       case 'files': return <FolderTree className={cls} />;
+      case 'changes': return <FileDiff className={cls} />;
+      case 'activity': return <Activity className={cls} />;
+      case 'terminal': return <TerminalIcon className={cls} />;
       case 'worktrees': return <WorktreeIcon className={cls} />;
       case 'kanban': return <Bot className={cls} />;
       case 'evidence': return <ShieldCheck className={cls} />;
       case 'dag': return <Activity className={cls} />;
       case 'browser': return <Globe className={cls} />;
-      case 'notes': return <FileCode className={cls} />;
+      case 'emulator': return <Smartphone className={cls} />;
       case 'literature': return <BookOpen className={cls} />;
+      case 'findings': return <ShieldCheck className={cls} />;
       case 'claims': return <ShieldCheck className={cls} />;
-      case 'knowledge': return <FlaskConical className={cls} />;
+      case 'lab': return <FlaskConical className={cls} />;
       case 'experiments': return <NotebookTabs className={cls} />;
       case 'runs': return <FlaskConical className={cls} />;
+      case 'knowledge': return <FlaskConical className={cls} />;
       case 'synthesis': return <Layers className={cls} />;
       case 'artifacts': return <FileCode className={cls} />;
+      case 'drafts': return <FileText className={cls} />;
+      case 'outbox': return <Send className={cls} />;
+      case 'contacts': return <Users className={cls} />;
+      case 'calendar': return <Calendar className={cls} />;
+      case 'notes': return <FileCode className={cls} />;
       case 'fleet': return <Server className={cls} />;
       default: return <Globe className={cls} />;
     }
   };
 
   return (
-    <header className="h-12 bg-[var(--color-surface-1)] border-[var(--color-border-muted)] flex items-center select-none z-30 shrink-0 font-sans text-xs overflow-hidden">
+    <header className="h-12 bg-surface-1 border-b border-border-default flex items-center select-none z-30 shrink-0 font-sans text-xs overflow-hidden">
       {/* ── 1. LEFT: Nav Controls + Sidebar + Mode Switcher (Aligned to w-64 when expanded) ── */}
       <div
-        className={`flex items-center justify-between shrink-0 h-full transition-all duration-300 ${
-          !isSidebarCollapsed ? 'w-64 px-3 border-r border-[var(--color-border-muted)]' : 'w-auto px-2.5 border-[var(--color-border-muted)] gap-2.5'
-        }`}
+        className={`flex items-center justify-between shrink-0 h-full transition-all duration-300 ${!isSidebarCollapsed ? 'w-64 px-3 border-r border-border-default' : 'w-auto px-2.5 border-r border-border-default gap-2.5'
+          }`}
       >
         <div className="flex items-center gap-1">
           {/* Navigation History */}
@@ -174,24 +197,25 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           </button>
         </div>
 
-        {/* 3-Mode Lens Switcher Pill (Icon-only) */}
-        <div className="workbench-switcher" role="tablist" aria-label="Choose workbench">
+        {/* 3-Mode Lens Switcher Segmented Control */}
+        <div className="flex items-center gap-0.5 bg-surface-2 p-0.5 rounded-lg border border-border-muted" role="tablist" aria-label="Choose workbench">
           {modes.map((m) => {
             const Icon = m.icon;
             const isActive = mode === m.id;
             return (
               <button
                 key={m.id}
-                onClick={() => {
-                  onSwitchMode(m.id);
-                }}
+                onClick={() => onSwitchMode(m.id)}
                 title={`${m.label} (${m.shortcut}) — ${m.description}`}
-                className="workbench-switcher__item"
+                className={`flex h-7 w-8 items-center justify-center rounded-md transition cursor-pointer ${isActive
+                    ? 'bg-surface-0 text-fg-editor border border-border-default shadow-xs font-semibold'
+                    : 'text-fg-muted hover:text-fg-editor hover:bg-surface-3/50 border border-transparent'
+                  }`}
                 role="tab"
                 aria-selected={isActive}
                 aria-label={m.label}
               >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? 'workbench-accent' : ''}`} />
+                <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'workbench-accent' : 'text-fg-subtle'}`} />
               </button>
             );
           })}
@@ -206,18 +230,17 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
             width: isWebTabExpanded
               ? '0%'
               : isWebTabOpen
-              ? `${splitPercent}%`
-              : '100%',
+                ? `${splitPercent}%`
+                : '100%',
             display: isWebTabExpanded ? 'none' : 'flex'
           }}
-          className={`h-full items-center justify-between px-4 shrink-0 bg-[var(--color-surface-1)] ${
-            isWebTabOpen && !isWebTabExpanded ? 'border-r border-border-muted' : ''
-          }`}
+          className={`h-full items-center justify-between px-4 shrink-0 bg-surface-1 ${isWebTabOpen && !isWebTabExpanded ? 'border-r border-border-default' : ''
+            }`}
         >
           {/* Session Title & Lens Badge */}
           <div className="flex items-center gap-2 min-w-0">
             <div className="flex items-center gap-1.5 text-[12px] text-fg-editor font-medium truncate">
-              {mode === 'code' ? (
+              {mode === 'engineering' ? (
                 <Code2 className="w-3.5 h-3.5 workbench-accent shrink-0" />
               ) : mode === 'research' ? (
                 <FlaskConical className="w-3.5 h-3.5 workbench-accent shrink-0" />
@@ -226,6 +249,17 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               )}
               <span className="truncate">{workspaceTitle || 'Session'}</span>
             </div>
+            {mode === 'engineering' && (activeWorkspace?.active_branch || (activeWorkspace?.kind?.type === 'git' ? activeWorkspace.kind.branch : null) || activeDetection?.branch) && (
+              <div className="hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded bg-surface-2 text-[10px] font-mono text-fg-muted shrink-0 border border-border-default">
+                <GitBranch className="w-3 h-3 text-fg-subtle shrink-0" />
+                <span className="text-fg-editor truncate max-w-[90px]">
+                  {activeWorkspace?.active_branch || (activeWorkspace?.kind?.type === 'git' ? activeWorkspace.kind.branch : null) || activeDetection?.branch}
+                </span>
+                {Boolean(activeWorkspace ? (activeWorkspace.dirty_manifest?.is_dirty ?? activeWorkspace.dirtyManifest?.is_dirty) : activeDetection?.is_dirty) && (
+                  <span className="text-amber-500 font-medium shrink-0">• {activeWorkspace ? (activeWorkspace.dirty_manifest?.modified_files?.length ?? activeWorkspace.dirtyManifest?.modified_files?.length ?? 0) : (activeDetection?.dirty_count ?? 0)}*</span>
+                )}
+              </div>
+            )}
             <span className={`workbench-kicker shrink-0 hidden sm:inline ${lensIconColor}`}>
               {lensBadge}
             </span>
@@ -233,7 +267,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
           {/* Quick Triggers when Right Pane is Closed */}
           {!isWebTabOpen && (
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
+
               {onOpenCommandPalette && (
                 <button
                   onClick={onOpenCommandPalette}
@@ -296,13 +331,12 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                   <div
                     key={tab.id}
                     onClick={() => resourceTabs.setActiveTabId(tab.id)}
-                    className={`group flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer transition max-w-[170px] shrink-0 text-[12px] h-7 ${
-                      isActive
-                        ? 'bg-surface-2 text-fg-editor font-medium shadow-xs'
-                        : 'bg-transparent text-fg-muted hover:text-fg-editor hover:bg-surface-2/60'
-                    }`}
+                    className={`group flex items-center gap-1.5 px-2.5 py-1 rounded-md cursor-pointer transition max-w-[170px] shrink-0 text-[12px] h-7 ${isActive
+                      ? 'bg-surface-2 text-fg-editor font-medium shadow-xs'
+                      : 'bg-transparent text-fg-muted hover:text-fg-editor hover:bg-surface-2/60'
+                      }`}
                   >
-                    {getTabIcon(tabType, isActive)}
+                    {getTabIcon(tabType, isActive, tab.agentId)}
                     <span className="truncate">{tab.title}</span>
                     {runningCount > 0 && (
                       <span
@@ -332,10 +366,12 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               >
                 <Plus className="w-3.5 h-3.5" />
               </button>
+
+
             </div>
 
             {/* Right Quick Controls */}
-            <div className="flex items-center gap-1 shrink-0 pl-2 border-l border-border-muted">
+            <div className="flex items-center gap-1 shrink-0 pl-2 border-l border-border-default">
               {/* Jump Palette Trigger */}
               {onOpenCommandPalette && (
                 <button
@@ -353,12 +389,12 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               {attentionCount > 0 && (
                 <button
                   onClick={onOpenAttention}
-                  className="flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-500 text-[11px] font-medium animate-pulse"
+                  className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface-2 border border-border-default text-fg-editor text-[11px] font-medium hover:bg-surface-3 transition"
                   title={`${attentionCount} actions require your attention`}
                 >
-                  <AlertCircle className="w-3 h-3" />
-                  <span className="hidden sm:inline text-[10px]">Needs You</span>
-                  <span className="bg-amber-500 text-white px-1 rounded-full text-[9px] font-bold">{attentionCount}</span>
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                  <span className="hidden sm:inline text-[10px]">Attention</span>
+                  <span className="bg-surface-3 text-fg-editor px-1 rounded text-[9px] font-mono font-semibold">{attentionCount}</span>
                 </button>
               )}
 

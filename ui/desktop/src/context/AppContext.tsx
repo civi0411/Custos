@@ -14,11 +14,13 @@ import {
 } from '../types';
 import { daemonClient } from '../api/daemon_client';
 import {
+  ExecutionWorkspace,
   ModelCatalogOption,
   OAuthTokenRecord,
   ProviderConfigRecord,
   Task,
   SessionJournalEntry,
+  WorkspaceDetectionResult,
 } from '../types/domain';
 
 interface AppContextType {
@@ -32,10 +34,18 @@ interface AppContextType {
   activeSession: Session | null;
   currentSessions: Session[];
   tasks: Task[];
+  // Workspaces & Physical Execution Context (SSOT matching Left and Right)
+  workspaces: ExecutionWorkspace[];
+  activeWorkspaceId: string;
+  setActiveWorkspaceId: (id: string) => void;
+  activeWorkspace: ExecutionWorkspace | null;
+  refreshWorkspaces: () => Promise<ExecutionWorkspace[]>;
 
   // Navigation & Layout
   currentTab: MainTab;
   setCurrentTab: (tab: MainTab) => void;
+  activeWorkbench: 'engineering' | 'research' | 'copilot';
+  setActiveWorkbench: (wb: 'engineering' | 'research' | 'copilot') => void;
   isSessionsCollapsed: boolean;
   setIsSessionsCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   isRightExplorerOpen: boolean;
@@ -68,6 +78,12 @@ interface AppContextType {
   openSettings: (tab?: string) => void;
   isNewSessionOpen: boolean;
   setIsNewSessionOpen: (open: boolean) => void;
+  isOpenProjectOpen: boolean;
+  setIsOpenProjectOpen: (open: boolean) => void;
+  handleProjectOpened: (project: { name: string; path: string; isGit: boolean; branch?: string }) => void;
+  handleOpenFolderDirect: () => Promise<void>;
+  activeDetection: WorkspaceDetectionResult | null;
+  refreshWorkspaceDetection: () => Promise<void>;
   isAddProviderOpen: boolean;
   setIsAddProviderOpen: (open: boolean) => void;
 
@@ -99,6 +115,7 @@ interface AppContextType {
   handleRejectDiff: () => void;
   handleCopyDiff: () => void;
   handleCreateNewSession: (title: string, pack: 'engineering' | 'research' | 'assistant') => Promise<void>;
+  handleCreateChatSession: (pack: 'engineering' | 'research' | 'assistant') => Promise<void>;
   handleNewProjectPrompt: () => void;
   handleSaveProvider: (
     serviceOrParams: string | { service: string; accountName?: string; apiKey?: string; endpointUrl?: string; model?: string; contextWindow?: number; fastMode?: boolean },
@@ -130,7 +147,7 @@ function mapBackendProvider(p: any): ProviderItem {
     name: p.name,
     model: modelName,
     status,
-    statusLabel: p.status === 'configured' ? 'Configured & Active' : p.status_label || (status === 'primary' ? 'Verified & Active' : 'Offline'),
+    statusLabel: p.status === 'configured' ? 'Configured' : p.status_label || (status === 'primary' ? 'Enabled' : 'Offline'),
     badgeColor: status === 'primary' ? '#10b981' : status === 'standby' ? '#3b82f6' : '#6b7280',
     apiKey: p.api_key_masked || (p.api_key && p.api_key.trim().length > 0 ? `${p.api_key.slice(0, 6)}••••••••` : 'Chưa cấu hình'),
     quotaUsed: p.quota_used || undefined,
@@ -140,7 +157,7 @@ function mapBackendProvider(p: any): ProviderItem {
     defaultModel: p.default_model || p.model || undefined,
     contextWindow: p.context_window || undefined,
     fastMode: p.fast_mode || undefined,
-    latency: p.latency_ms ? `${p.latency_ms}ms` : '32ms',
+    latency: typeof p.latency_ms === 'number' ? `${p.latency_ms}ms` : 'Not measured',
     iconType,
   };
 }
@@ -246,77 +263,140 @@ const isTransientAiLocalAccount = (account?: ConnectedAccount): boolean =>
   account?.id === AI_LOCAL_ACCOUNT_ID;
 
 
-const DEFAULT_COMBOS: ModelCombo[] = [
-  {
-    id: 'combo-fast-coding',
-    name: 'Primary Coding + Fallback',
-    description: 'Claude 3.7 Sonnet as primary, failing over to GPT-4o if rate limited or offline.',
-    strategy: 'fallback',
-    enabled: true,
-    createdAt: new Date().toISOString(),
-    targets: [
-      {
-        modelId: 'claude-3-7-sonnet',
-        modelName: 'Claude 3.7 Sonnet',
-        providerId: 'anthropic',
-        providerName: 'Anthropic',
-        priority: 1,
-      },
-      {
-        modelId: 'gpt-4o',
-        modelName: 'GPT-4o',
-        providerId: 'openai',
-        providerName: 'OpenAI',
-        priority: 2,
-      },
-      {
-        modelId: 'deepseek-chat',
-        modelName: 'DeepSeek Chat',
-        providerId: 'deepseek',
-        providerName: 'DeepSeek',
-        priority: 3,
-      },
-    ],
-  },
-  {
-    id: 'combo-round-robin',
-    name: 'Multi-Model Round Robin',
-    description: 'Distributes load evenly across Gemini 2.5 Flash and GPT-4o-mini.',
-    strategy: 'round_robin',
-    enabled: true,
-    createdAt: new Date().toISOString(),
-    targets: [
-      {
-        modelId: 'gemini-2.5-flash',
-        modelName: 'Gemini 2.5 Flash',
-        providerId: 'gemini',
-        providerName: 'Google Gemini',
-        priority: 1,
-        weight: 50,
-      },
-      {
-        modelId: 'gpt-4o-mini',
-        modelName: 'GPT-4o Mini',
-        providerId: 'openai',
-        providerName: 'OpenAI',
-        priority: 2,
-        weight: 50,
-      },
-    ],
-  },
-];
-
 const AppContext = createContext<AppContextType | null>(null);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Projects & Sessions state
   const [projectData, setProjectData] = useState<ProjectData>({ 'Custos Workspace': [] });
   const [currentProject, setCurrentProject] = useState<string>('Custos Workspace');
+  const [activeDetection, setActiveDetection] = useState<WorkspaceDetectionResult | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string>('');
   const [tasks, setTasks] = useState<Task[]>([]);
 
+  // Workspaces SSOT state (Authoritative execution context matching Left and Right)
+  const [workspaces, setWorkspaces] = useState<ExecutionWorkspace[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<string>(() => {
+    try {
+      return localStorage.getItem('custos.active_workspace_id') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const setActiveWorkspaceId = useCallback((id: string) => {
+    setActiveWorkspaceIdState(id);
+    try {
+      if (id) {
+        localStorage.setItem('custos.active_workspace_id', id);
+      }
+    } catch {}
+  }, []);
+
+  const refreshWorkspaces = useCallback(async () => {
+    try {
+      const list = await daemonClient.listWorkspaces();
+      const valid = list.filter((w) => {
+        const s = typeof w.status === 'string' ? w.status : (w.status as any)?.setup_failed ? 'failed' : 'unknown';
+        return s !== 'archived';
+      });
+      // Live sync dirty manifest for active workspace so left badge, header, and diff are always synchronized
+      const currentActive = localStorage.getItem('custos.active_workspace_id') || '';
+      if (currentActive && valid.some((w) => w.id === currentActive)) {
+        try {
+          const dirty = await daemonClient.inspectWorkspaceDirty(currentActive);
+          const idx = valid.findIndex((w) => w.id === currentActive);
+          if (idx >= 0) {
+            valid[idx] = { ...valid[idx], dirty_manifest: dirty, dirtyManifest: dirty };
+          }
+        } catch {}
+      }
+      setWorkspaces(valid);
+      if (valid.length > 0) {
+        setActiveWorkspaceIdState((prev) => {
+          if (prev && valid.some((w) => w.id === prev)) return prev;
+          const ready = valid.find((w) => w.status === 'ready') || valid[0];
+          return ready.id;
+        });
+      }
+      return valid;
+    } catch (e) {
+      console.warn('Failed to load workspaces:', e);
+      return [];
+    }
+  }, []);
+
+  const activeWorkspace = React.useMemo(() => {
+    return workspaces.find((w) => w.id === activeWorkspaceId) || null;
+  }, [workspaces, activeWorkspaceId]);
+
+  useEffect(() => {
+    void refreshWorkspaces();
+    const interval = setInterval(() => {
+      void refreshWorkspaces();
+    }, 4000);
+    const onFocus = () => {
+      void refreshWorkspaces();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [refreshWorkspaces]);
+
+  const refreshWorkspaceDetection = useCallback(async () => {
+    const currentPath = localStorage.getItem('custos_current_project_path');
+    if (currentPath) {
+      try {
+        const det = await daemonClient.detectWorkspace(currentPath);
+        setActiveDetection(det);
+      } catch (e) {
+        console.warn('Failed to detect workspace:', e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const currentPath = localStorage.getItem('custos_current_project_path');
+    if (currentPath) {
+      daemonClient.detectWorkspace(currentPath).then((det) => {
+        setActiveDetection(det);
+        if (det.name && det.name !== 'Project') {
+          setCurrentProject(det.name);
+        }
+      }).catch(() => {});
+    } else {
+      daemonClient.listWorkspaces().then((list) => {
+        const active = list.find((w) => w.status !== 'archived');
+        if (active && active.path) {
+          daemonClient.detectWorkspace(active.path).then((det) => {
+            setActiveDetection(det);
+            if (det.name) setCurrentProject(det.name);
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+  }, []);
+
   // Navigation & Layout state
   const [currentTab, setCurrentTab] = useState<MainTab>('studio');
+  const [activeWorkbench, setActiveWorkbenchState] = useState<'engineering' | 'research' | 'copilot'>(() => {
+    try {
+      const saved = localStorage.getItem('custos.workspace.mode.v2');
+      if (saved === 'copilot' || saved === 'chat') return 'copilot';
+      if (saved === 'engineering' || saved === 'code') return 'engineering';
+      if (saved === 'research') return 'research';
+    } catch { }
+    return 'engineering';
+  });
+
+  const setActiveWorkbench = useCallback((wb: 'engineering' | 'research' | 'copilot') => {
+    setActiveWorkbenchState(wb);
+    try {
+      localStorage.setItem('custos.workspace.mode.v2', wb);
+    } catch { }
+  }, []);
+
   const [isSessionsCollapsed, setIsSessionsCollapsed] = useState<boolean>(false);
   const [isRightExplorerOpen, setIsRightExplorerOpen] = useState<boolean>(true);
 
@@ -332,9 +412,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [combos, setCombos] = useState<ModelCombo[]>(() => {
     try {
       const saved = localStorage.getItem('custos_combos');
-      return saved ? JSON.parse(saved) : DEFAULT_COMBOS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return DEFAULT_COMBOS;
+      return [];
     }
   });
 
@@ -362,7 +442,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [settingsTab, setSettingsTab] = useState<string>('general');
   const [isNewSessionOpen, setIsNewSessionOpen] = useState<boolean>(false);
+  const [isOpenProjectOpen, setIsOpenProjectOpen] = useState<boolean>(false);
   const [isAddProviderOpen, setIsAddProviderOpen] = useState<boolean>(false);
+
+  // Sync projects with daemon ExecutionWorkspaces on mount
+  useEffect(() => {
+    daemonClient.listWorkspaces().then((workspaces) => {
+      const active = (workspaces || []).filter((w) => {
+        const s = typeof w.status === 'string' ? w.status : (w.status as any)?.setup_failed ? 'failed' : 'unknown';
+        return s !== 'archived' && s !== 'failed';
+      });
+      if (active.length > 0) {
+        setProjectData((prev) => {
+          const next = { ...prev };
+          for (const ws of active) {
+            const wsName = ws.name || ws.path.split('/').pop() || ws.id;
+            if (!next[wsName]) {
+              next[wsName] = [];
+            }
+          }
+          return next;
+        });
+        const saved = localStorage.getItem('custos_current_project');
+        if (saved && active.some((w) => (w.name || w.path.split('/').pop()) === saved)) {
+          setCurrentProject(saved);
+        } else {
+          setCurrentProject(active[0].name || active[0].path.split('/').pop() || 'Custos Workspace');
+        }
+      }
+    }).catch((err) => {
+      console.warn('Failed to load daemon workspaces on boot:', err);
+    });
+  }, []);
 
   const openSettings = useCallback((tab?: string) => {
     if (tab) setSettingsTab(tab);
@@ -822,6 +933,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 .filter((lens): lens is 'chat' | 'code' | 'research' =>
                   lens === 'chat' || lens === 'code' || lens === 'research'))),
               taskId,
+              taskTitle: t?.title,
               source: 'daemon',
               taskStatus: t ? String(t.status) : undefined,
               sessionId,
@@ -858,9 +970,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             };
           });
 
+          // A Task without a real Session remains a Task. Never invent a
+          // conversation whose session ID is actually a Task ID.
+          const allProjected = projectedSessions;
+
           setProjectData((prev) => ({
             ...prev,
-            'Custos Workspace': projectedSessions,
+            'Custos Workspace': allProjected,
           }));
 
           for (const chat of projectedSessions) {
@@ -874,8 +990,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
 
           setCurrentProject('Custos Workspace');
-          setActiveSessionId((previous) => projectedSessions.some((session) => session.id === previous)
-            ? previous : '');
+          setActiveSessionId((previous) => allProjected.some((session) => session.id === previous)
+            ? previous : (allProjected[0]?.id || ''));
         }
       } catch (err) {
         console.warn('[DaemonClient] Could not load data from daemon:', err);
@@ -1310,7 +1426,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       return { ...prev, [currentProject]: updatedList };
     });
-    showToast('Demo conversation cleared in this window');
+    showToast('Conversation cleared in this window');
   };
 
   const handleDeleteConversation = useCallback(async (sessionId: string) => {
@@ -1389,6 +1505,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // 2. Create Session in Custos Daemon
       const createdSession = await daemonClient.createSession('assisted');
       await daemonClient.attachSession({ session_id: createdSession.id, task_id: createdTask.id });
+      await daemonClient.openSessionInLens(createdSession.id, pack === 'engineering' ? 'coding' : pack === 'assistant' ? 'assistant' : 'research');
 
       const newSessionItem: Session = {
         id: createdSession.id,
@@ -1397,6 +1514,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         taskStatus: createdTask.status,
         sessionId: createdSession.id,
         pack,
+        openedLenses: [pack === 'engineering' ? 'code' : pack === 'assistant' ? 'chat' : 'research'],
         title: createdTask.title,
         time: 'Just now',
         preview: `${pack} task · ${createdTask.status}`,
@@ -1418,6 +1536,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       setActiveSessionId(createdSession.id);
+      setTasks((previous) => [createdTask, ...previous]);
       setIsNewSessionOpen(false);
       showToast(`Created Task ${createdTask.id.slice(0, 8)}`);
 
@@ -1427,20 +1546,93 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const handleNewProjectPrompt = () => {
-    const name = window.prompt('Enter new Project Name:');
-    if (name && name.trim()) {
-      const cleanName = name.trim();
-      setProjectData((prev) => {
-        if (prev[cleanName]) return prev;
-        return {
-          ...prev,
-          [cleanName]: [],
-        };
-      });
-      setCurrentProject(cleanName);
-      showToast(`Created project: ${cleanName}`);
+  const handleCreateChatSession = async (pack: 'engineering' | 'research' | 'assistant') => {
+    try {
+      const createdSession = await daemonClient.createSession('assisted');
+      await daemonClient.openSessionInLens(createdSession.id, pack === 'engineering' ? 'coding' : pack === 'assistant' ? 'assistant' : 'research');
+      const conversation: Session = {
+        id: createdSession.id,
+        sessionId: createdSession.id,
+        source: 'daemon',
+        pack,
+        openedLenses: [pack === 'engineering' ? 'code' : pack === 'assistant' ? 'chat' : 'research'],
+        title: `Conversation ${createdSession.id.slice(0, 8)}`,
+        time: 'Just now',
+        preview: 'Unbound conversation',
+        model: selectedModel || '',
+        fileName: '',
+        diffHunk: '',
+        diffLinesCount: '',
+        summary: '',
+        messages: [],
+        diffCode: [],
+      };
+      setProjectData((previous) => ({
+        ...previous,
+        [currentProject]: [conversation, ...(previous[currentProject] || [])],
+      }));
+      setActiveSessionId(createdSession.id);
+      setIsNewSessionOpen(false);
+    } catch (error) {
+      showToast(`Could not create chat: ${error instanceof Error ? error.message : String(error)}`);
     }
+  };
+
+  const handleProjectOpened = (project: { name: string; path: string; isGit: boolean; branch?: string }) => {
+    setProjectData((prev) => {
+      if (prev[project.name]) return prev;
+      return {
+        ...prev,
+        [project.name]: [],
+      };
+    });
+    setCurrentProject(project.name);
+    try {
+      localStorage.setItem('custos_current_project', project.name);
+      localStorage.setItem('custos_current_project_path', project.path);
+    } catch {}
+    if (project.path) {
+      daemonClient.detectWorkspace(project.path).then((det) => {
+        setActiveDetection(det);
+      }).catch(() => {});
+    }
+  };
+
+  const handleOpenFolderDirect = async () => {
+    try {
+      const chosen = await daemonClient.pickFolder();
+      if (!chosen) return;
+      const detection = await daemonClient.detectWorkspace(chosen);
+      setActiveDetection(detection);
+      const name = detection.name || chosen.split('/').filter(Boolean).pop() || 'Project';
+      const isGit = detection.is_git;
+      const branch = detection.branch || 'main';
+
+      await daemonClient.createWorkspace({
+        name,
+        path: detection.root_path || chosen,
+        kind: {
+          type: 'folder',
+          path: detection.root_path || chosen,
+        },
+      });
+
+      handleProjectOpened({
+        name,
+        path: detection.root_path || chosen,
+        isGit,
+        branch: isGit ? branch : undefined,
+      });
+
+      showToast(`Opened project: ${name} ${isGit ? `(${branch})` : ''}`);
+    } catch (err: any) {
+      console.warn('Direct pick folder fallback to dialog:', err);
+      setIsOpenProjectOpen(true);
+    }
+  };
+
+  const handleNewProjectPrompt = () => {
+    handleOpenFolderDirect();
   };
 
   const handleSaveProvider = async (
@@ -1511,13 +1703,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         showToast(`Không tìm thấy provider ${providerNameOrId}`);
         return;
       }
-      if (provider.endpoint) {
-        const probeRes = await daemonClient.probeModels(provider.endpoint, provider.iconType, undefined, provider.id);
-        await refreshProviderState();
-        showToast(`✓ Đã kết nối endpoint ${provider.name}! Tìm thấy ${probeRes.count} models.`);
-      } else {
-        showToast(`✓ Đã xác minh kết nối provider ${provider.name} qua Daemon protocol.`);
-      }
+      const probeRes = await daemonClient.probeModels(provider.endpoint || '', undefined, undefined, provider.id);
+      await refreshProviderState();
+      showToast(`✓ Probe thành công ${provider.name}; daemon tìm thấy ${probeRes.count} models.`);
     } catch (err: any) {
       showToast(`Lỗi kết nối provider: ${err?.message || err}`);
     }
@@ -1641,8 +1829,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeSession,
         currentSessions,
         tasks,
+        workspaces,
+        activeWorkspaceId,
+        setActiveWorkspaceId,
+        activeWorkspace,
+        refreshWorkspaces,
         currentTab,
         setCurrentTab,
+        activeWorkbench,
+        setActiveWorkbench,
         isSessionsCollapsed,
         setIsSessionsCollapsed,
         isRightExplorerOpen,
@@ -1669,6 +1864,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         openSettings,
         isNewSessionOpen,
         setIsNewSessionOpen,
+        isOpenProjectOpen,
+        setIsOpenProjectOpen,
+        handleProjectOpened,
+        handleOpenFolderDirect,
+        activeDetection,
+        refreshWorkspaceDetection,
         isAddProviderOpen,
         setIsAddProviderOpen,
         appearance,
@@ -1690,6 +1891,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         handleRejectDiff,
         handleCopyDiff,
         handleCreateNewSession,
+        handleCreateChatSession,
         handleNewProjectPrompt,
         handleSaveProvider,
         handleDeleteProvider,

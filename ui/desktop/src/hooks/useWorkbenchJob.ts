@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { daemonClient } from '@/api/daemon_client';
 import { PacksJobCatalogItem, RunPacksJobResult } from '@/types/domain';
 import { useJobRegistry, JOB_RESULT_TAB } from '@/context/JobRegistryContext';
-import type { OrcaTabId } from '@/components/views/OrcaTabbedContainer';
+import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 
 // Global cache for catalog items to avoid repeated network round-trips
 let cachedJobsCatalog: PacksJobCatalogItem[] | null = null;

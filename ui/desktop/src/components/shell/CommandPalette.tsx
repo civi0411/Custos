@@ -15,19 +15,19 @@ import {
   Plus,
   ArrowRight
 } from 'lucide-react';
-import type { AppWorkspaceMode } from './AppHeader';
-import type { OrcaTabId } from '@/components/views/OrcaTabbedContainer';
+import type { ActiveWorkbench } from './AppHeader';
+import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 import { formatKeyCombo } from '@/lib/utils';
 
 export interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
-  onSwitchMode: (mode: AppWorkspaceMode) => void;
+  onSwitchMode: (mode: ActiveWorkbench) => void;
   onOpenTab: (id: OrcaTabId, title: string, url: string) => void;
   onNewSession: () => void;
   onOpenSettings: () => void;
   onOpenWorktrees: () => void;
-  currentMode: AppWorkspaceMode;
+  currentMode: ActiveWorkbench;
 }
 
 interface PaletteItem {
@@ -87,26 +87,26 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   const allItems: PaletteItem[] = [
     // Lenses
     {
-      id: 'mode-chat',
+      id: 'mode-copilot',
       category: 'modes',
       title: 'Switch to Copilot Lens',
       subtitle: 'Conversational steering & architecture advisory',
       icon: MessageSquare,
       iconColor: 'text-[#cc785c]',
-      badge: currentMode === 'chat' ? 'Current' : undefined,
+      badge: currentMode === 'copilot' ? 'Current' : undefined,
       shortcut: `${formatKeyCombo({ ctrlOrCmd: true, key: '1' })}`,
-      action: () => { onSwitchMode('chat'); onClose(); }
+      action: () => { onSwitchMode('copilot'); onClose(); }
     },
     {
-      id: 'mode-code',
+      id: 'mode-engineering',
       category: 'modes',
       title: 'Switch to Coding Workbench (ADE)',
       subtitle: 'Worktrees, code editing, terminal & git diffs',
       icon: Code2,
       iconColor: 'text-[#58a6ff]',
-      badge: currentMode === 'code' ? 'Current' : undefined,
+      badge: currentMode === 'engineering' ? 'Current' : undefined,
       shortcut: `${formatKeyCombo({ ctrlOrCmd: true, key: '2' })}`,
-      action: () => { onSwitchMode('code'); onClose(); }
+      action: () => { onSwitchMode('engineering'); onClose(); }
     },
     {
       id: 'mode-research',

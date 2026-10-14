@@ -29,6 +29,7 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
   onOpenAddProviderModal,
   onGenerateClientKey,
   onRevokeClientKey,
+  onTestConnection,
 }) => {
   const { connectedAccounts, handleDeleteAccount, refreshModels } = useAppContext();
   const [activeSubTab, setActiveSubTab] = useState<'providers' | 'combos' | 'usage'>('providers');
@@ -159,16 +160,26 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
 
                     <div className="flex items-center justify-between pt-2 border-t border-border-muted/50 text-[11px] font-mono text-fg-subtle">
                       <span>Default: {account.defaultModel}</span>
-                      <button
-                        onClick={() => {
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => onTestConnection(account.id)}
+                          className="text-fg-muted hover:text-fg-editor transition cursor-pointer"
+                        >
+                          Test connection
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
                           if (window.confirm(`Disconnect account "${account.accountName}"?`)) {
                             handleDeleteAccount(account.id);
                           }
-                        }}
-                        className="text-rose-400 hover:text-rose-300 transition cursor-pointer"
-                      >
-                        Disconnect
-                      </button>
+                          }}
+                          className="text-rose-400 hover:text-rose-300 transition cursor-pointer"
+                        >
+                          Disconnect
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

@@ -249,7 +249,7 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
 export interface SlashCommandMenuProps {
   query: string;
   isOpen: boolean;
-  mode?: 'code' | 'research' | 'chat';
+  mode?: 'code' | 'research' | 'chat' | 'engineering' | 'copilot';
   onSelectCommand: (cmd: SlashCommandDef) => void;
   onClose: () => void;
 }
@@ -257,14 +257,14 @@ export interface SlashCommandMenuProps {
 export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
   query,
   isOpen,
-  mode = 'code',
+  mode = 'engineering',
   onSelectCommand,
   onClose,
 }) => {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const activeLens: WorkspaceLens =
-    mode === 'code' ? 'coding' : mode === 'research' ? 'research' : 'assistant';
+    mode === 'code' || mode === 'engineering' ? 'coding' : mode === 'research' ? 'research' : 'assistant';
   const currentTheme = LENS_THEME_CONFIG[activeLens];
 
   // Filter commands by the query string after '/'

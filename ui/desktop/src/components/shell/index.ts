@@ -6,3 +6,4 @@ export * from './WorkspaceSidebar';
 export * from './AppWorkspaceShell';
 export * from './CommandPalette';
 export * from './AttentionBanner';
+export * from './WorkspaceTree';

@@ -16,7 +16,7 @@ import {
   Check,
 } from 'lucide-react';
 import { ProviderBrandIcon } from '@/components/common/AgentIcons';
-import { CustomSelect, CustomSelectOption } from '../CustomSelect';
+import { CustomSelect, CustomSelectOption } from '../common/CustomSelect';
 import { daemonClient } from '@/api/daemon_client';
 import { ProbedModel, ModelCatalogOption, ProviderServiceId } from '@/types';
 import { useAppContext } from '@/context/AppContext';

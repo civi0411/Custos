@@ -156,6 +156,22 @@
 
   --statusbar-bg: #f0f0f0;
   --statusbar-fg: #6e6e80;
+
+  /* ── SADE Workbench Mode Tokens ───────────────────────── */
+  --wb-engineering: #10b981;
+  --wb-engineering-bg: rgba(16, 185, 129, 0.08);
+  --wb-engineering-border: rgba(16, 185, 129, 0.25);
+  --wb-engineering-glow: rgba(16, 185, 129, 0.20);
+
+  --wb-research: #8b5cf6;
+  --wb-research-bg: rgba(139, 92, 246, 0.08);
+  --wb-research-border: rgba(139, 92, 246, 0.25);
+  --wb-research-glow: rgba(139, 92, 246, 0.20);
+
+  --wb-copilot: #3b82f6;
+  --wb-copilot-bg: rgba(59, 130, 246, 0.08);
+  --wb-copilot-border: rgba(59, 130, 246, 0.25);
+  --wb-copilot-glow: rgba(59, 130, 246, 0.20);
 }
 
 :root[data-theme="dark"] {
@@ -243,21 +259,42 @@ html[data-reduce-motion='true'] *::after {
    One calm shell; workbench identity is a small editorial cue.
    ============================================================ */
 
-.custos-workspace {
-  --workbench-accent: var(--color-copilot);
-  --workbench-accent-soft: var(--color-copilot-subtle);
+.custos-workspace,
+[data-workbench="copilot"] {
+  --workbench-accent: var(--wb-copilot);
+  --workbench-accent-soft: var(--wb-copilot-bg);
+  --workbench-accent-border: var(--wb-copilot-border);
+  --workbench-accent-glow: var(--wb-copilot-glow);
   background: var(--color-canvas);
   color: var(--color-editor-fg);
 }
 
-.custos-workspace[data-workbench="code"] {
-  --workbench-accent: var(--color-coding);
-  --workbench-accent-soft: var(--color-coding-subtle);
+.custos-workspace[data-workbench="engineering"],
+.custos-workspace[data-workbench="code"],
+.custos-workspace[data-workbench="coding"],
+[data-workbench="engineering"],
+[data-workbench="code"],
+[data-workbench="coding"] {
+  --workbench-accent: var(--wb-engineering);
+  --workbench-accent-soft: var(--wb-engineering-bg);
+  --workbench-accent-border: var(--wb-engineering-border);
+  --workbench-accent-glow: var(--wb-engineering-glow);
 }
 
-.custos-workspace[data-workbench="research"] {
-  --workbench-accent: var(--color-research);
-  --workbench-accent-soft: var(--color-research-subtle);
+.custos-workspace[data-workbench="research"],
+[data-workbench="research"] {
+  --workbench-accent: var(--wb-research);
+  --workbench-accent-soft: var(--wb-research-bg);
+  --workbench-accent-border: var(--wb-research-border);
+  --workbench-accent-glow: var(--wb-research-glow);
+}
+
+.custos-workspace[data-workbench="copilot"],
+[data-workbench="copilot"] {
+  --workbench-accent: var(--wb-copilot);
+  --workbench-accent-soft: var(--wb-copilot-bg);
+  --workbench-accent-border: var(--wb-copilot-border);
+  --workbench-accent-glow: var(--wb-copilot-glow);
 }
 
 .workbench-accent {
@@ -269,7 +306,30 @@ html[data-reduce-motion='true'] *::after {
 }
 
 .workbench-accent-border {
-  border-color: color-mix(in srgb, var(--workbench-accent) 46%, transparent);
+  border-color: var(--workbench-accent-border, color-mix(in srgb, var(--workbench-accent) 46%, transparent));
+}
+
+.workbench-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background-color: var(--workbench-accent);
+  box-shadow: 0 0 6px var(--workbench-accent-glow, transparent);
+  flex-shrink: 0;
+}
+
+.workbench-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  background-color: var(--workbench-accent-soft);
+  color: var(--workbench-accent);
+  border: 1px solid var(--workbench-accent-border);
 }
 
 .workbench-switcher {
@@ -1287,22 +1347,6 @@ input[type="checkbox"]:disabled {
   animation: agent-pulse 1.5s ease-in-out infinite;
 }
 
-/* ============================================================
-   DEMO MODE BANNER
-   ============================================================ */
-
-.demo-banner {
-  background: rgba(210, 153, 34, 0.08);
-  border-bottom: 1px solid rgba(210, 153, 34, 0.25);
-  color: #d29922;
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  padding: 4px 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
 
 /* ============================================================
    CHAT SCROLL MASK — fade at edges

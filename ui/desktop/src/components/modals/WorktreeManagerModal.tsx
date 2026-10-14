@@ -48,11 +48,11 @@ const mapToManagedWorktree = (ws: ExecutionWorkspace): ManagedWorktree => {
     id: ws.id,
     branch,
     path: ws.path,
-    baseCommit: ws.lineage?.base_commit || 'a3f2d1e',
+    baseCommit: ws.lineage?.base_commit || 'HEAD',
     host,
     status,
     modifiedFilesCount: ws.metadata?.modifiedFilesCount ?? 0,
-    assignedAgent: ws.metadata?.assignedAgent ?? 'Claude Code',
+    assignedAgent: ws.metadata?.assignedAgent ?? '—',
     createdAt: isMain
       ? 'Main Checkout'
       : ws.created_at

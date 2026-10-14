@@ -2,7 +2,7 @@ import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { StatusBar, Toast } from '@/components/shell';
-import { SettingsModal, NewSessionModal, AddProviderModal } from '@/components/modals';
+import { SettingsModal, NewSessionModal, AddProviderModal, OpenProjectModal } from '@/components/modals';
 
 /**
  * RootLayout
@@ -18,6 +18,9 @@ export const RootLayout: React.FC = () => {
     settingsTab,
     isNewSessionOpen,
     setIsNewSessionOpen,
+    isOpenProjectOpen,
+    setIsOpenProjectOpen,
+    handleProjectOpened,
     isAddProviderOpen,
     setIsAddProviderOpen,
     uiScale,
@@ -26,7 +29,11 @@ export const RootLayout: React.FC = () => {
     toastMessage,
     showToast,
     selectedModel,
+    activeSessionId,
+    activeWorkbench,
+    activeDetection,
     handleCreateNewSession,
+    handleCreateChatSession,
     handleSaveProvider
   } = useAppContext();
 
@@ -40,7 +47,11 @@ export const RootLayout: React.FC = () => {
       {/* Bottom Status Bar */}
       <StatusBar
         activeSessionTitle={activeSession?.title || 'Custos Sovereign Workspace'}
+        activeSessionId={activeSession?.id || activeSessionId}
         activeModel={activeSession?.model || selectedModel || 'No model selected'}
+        activeWorkbench={activeWorkbench}
+        activeBranch={activeDetection?.branch}
+        isDirty={activeDetection?.is_dirty}
         uiScale={uiScale}
         onSetUiScale={handleSetUiScale}
         onStepUiScale={handleStepUiScale}
@@ -58,6 +69,15 @@ export const RootLayout: React.FC = () => {
         isOpen={isNewSessionOpen}
         onClose={() => setIsNewSessionOpen(false)}
         onCreateSession={handleCreateNewSession}
+        onCreateChat={handleCreateChatSession}
+        activeWorkbench={activeWorkbench}
+      />
+
+      <OpenProjectModal
+        isOpen={isOpenProjectOpen}
+        onClose={() => setIsOpenProjectOpen(false)}
+        onProjectOpened={handleProjectOpened}
+        onShowToast={showToast}
       />
 
       <AddProviderModal
