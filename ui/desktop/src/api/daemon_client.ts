@@ -55,12 +55,16 @@ import {
   ModelCatalogResult,
   ProviderConfigRecord,
   OAuthAuthorizeResult,
-  OAuthTokenRecord,
+  OAuthConnectionMetadata,
   OAuthStatusResult,
   DomainPackManifest,
   PacksJobCatalogItem,
   WorkerRole,
   RunPacksJobResult,
+  EmulatorDevice,
+  EmulatorSession,
+  EmulatorSnapshotResult,
+  EmulatorScreenshotResult,
 } from '../types/domain';
 import {
   SourceRecord,
@@ -229,6 +233,9 @@ export class DaemonClient {
       try {
         return await invoke<T>('custos_request', { method, params });
       } catch (err: any) {
+        // A rejected credential operation is an application error, not a request
+        // to repeat a save/exchange through a second transport.
+        if (method.startsWith('v1.providers.') || method.startsWith('v1.oauth.') || (method === 'v1.models.probe' && params.api_key)) throw err;
         console.warn(`[DaemonClient] Tauri invoke failed on ${method}, falling back to HTTP:`, err);
         return this.requestHttp<T>(method, params);
       }
@@ -521,6 +528,18 @@ export class DaemonClient {
   // Providers, Keys & LLM Status API
   // ---------------------------------------------------------
 
+  async getProviderRouting(service: string): Promise<{ service_type: string; round_robin: boolean; account_order: string[] }> {
+    return this.request('v1.providers.routing.get', { service_type: service });
+  }
+
+  async saveProviderRouting(service: string, roundRobin: boolean, accountOrder: string[]): Promise<{ service_type: string; round_robin: boolean; account_order: string[] }> {
+    return this.request('v1.providers.routing.save', { service_type: service, round_robin: roundRobin, account_order: accountOrder });
+  }
+
+  async reserveProviderAccount(service: string, model: string): Promise<{ account_id: string | null }> {
+    return this.request('v1.providers.route', { service_type: service, model });
+  }
+
   async listProviders(): Promise<any[]> {
     return this.request<any[]>('v1.providers.list', {});
   }
@@ -561,16 +580,16 @@ export class DaemonClient {
     client_id?: string;
     redirect_uri?: string;
     token_endpoint?: string;
-  }): Promise<OAuthTokenRecord> {
-    return this.request<OAuthTokenRecord>('v1.oauth.exchange', params);
+  }): Promise<OAuthConnectionMetadata> {
+    return this.request<OAuthConnectionMetadata>('v1.oauth.exchange', params);
   }
 
-  async refreshOAuthToken(provider_id: string = 'openai'): Promise<OAuthTokenRecord> {
-    return this.request<OAuthTokenRecord>('v1.oauth.refresh', { provider_id });
+  async refreshOAuthToken(provider_id: string = 'openai'): Promise<OAuthConnectionMetadata> {
+    return this.request<OAuthConnectionMetadata>('v1.oauth.refresh', { provider_id });
   }
 
-  async getOAuthToken(provider_id: string = 'openai'): Promise<OAuthTokenRecord | null> {
-    return this.request<OAuthTokenRecord | null>('v1.oauth.get', { provider_id });
+  async getOAuthToken(provider_id: string = 'openai'): Promise<OAuthConnectionMetadata | null> {
+    return this.request<OAuthConnectionMetadata | null>('v1.oauth.get', { provider_id });
   }
 
   async deleteOAuthToken(provider_id: string = 'openai'): Promise<{ deleted: boolean; provider_id: string }> {
@@ -1009,8 +1028,8 @@ export class DaemonClient {
     });
   }
 
-  async screenshotBrowserTab(tabId: string): Promise<{ path: string }> {
-    return this.request<{ path: string }>('v1.browser.tabs.screenshot', {
+  async screenshotBrowserTab(tabId: string): Promise<{ path: string; tab_id?: string; image_base64?: string }> {
+    return this.request<{ path: string; tab_id?: string; image_base64?: string }>('v1.browser.tabs.screenshot', {
       tab_id: tabId,
     });
   }
@@ -1018,6 +1037,43 @@ export class DaemonClient {
   async closeBrowserTab(tabId: string): Promise<{ closed: boolean; tab_id: string }> {
     return this.request<{ closed: boolean; tab_id: string }>('v1.browser.tabs.close', {
       tab_id: tabId,
+    });
+  }
+
+  // ==========================================
+  // Mobile Simulator / Emulator API
+  // ==========================================
+  async listEmulatorDevices(): Promise<EmulatorDevice[]> {
+    return this.request<EmulatorDevice[]>('v1.emulator.devices.list', {});
+  }
+
+  async launchEmulatorDevice(params: { device_id?: string; session_id?: string; url?: string }): Promise<EmulatorSession> {
+    return this.request<EmulatorSession>('v1.emulator.devices.launch', params);
+  }
+
+  async navigateEmulator(sessionId: string, url: string): Promise<{ session_id: string; url: string; status: string }> {
+    return this.request<{ session_id: string; url: string; status: string }>('v1.emulator.devices.navigate', {
+      session_id: sessionId,
+      url,
+    });
+  }
+
+  async snapshotEmulator(sessionId: string): Promise<EmulatorSnapshotResult> {
+    return this.request<EmulatorSnapshotResult>('v1.emulator.devices.snapshot', {
+      session_id: sessionId,
+    });
+  }
+
+  async captureEmulatorScreenshot(sessionId: string): Promise<EmulatorScreenshotResult> {
+    return this.request<EmulatorScreenshotResult>('v1.emulator.devices.screenshot', {
+      session_id: sessionId,
+    });
+  }
+
+  async tapEmulator(sessionId: string, ref: string): Promise<{ session_id: string; ref: string; tapped: boolean }> {
+    return this.request<{ session_id: string; ref: string; tapped: boolean }>('v1.emulator.devices.tap', {
+      session_id: sessionId,
+      ref,
     });
   }
 
@@ -1032,8 +1088,8 @@ export class DaemonClient {
     return this.request<RemoteHostNode>('v1.fleet.hosts.register', params);
   }
 
-  async pingRemoteHost(hostId: string): Promise<{ host_id: string; status: string; ping_ms?: number }> {
-    return this.request<{ host_id: string; status: string; ping_ms?: number }>('v1.fleet.hosts.ping', {
+  async pingRemoteHost(hostId: string): Promise<{ host_id: string; status: string; ping_ms?: number; error?: string }> {
+    return this.request<{ host_id: string; status: string; ping_ms?: number; error?: string }>('v1.fleet.hosts.ping', {
       host_id: hostId,
     });
   }

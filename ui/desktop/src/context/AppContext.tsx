@@ -1,3 +1,4 @@
+import { APPEARANCE_KEY, readAppearance, applyAppearance, type AppearancePreferences } from '@/lib/appearance';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
@@ -56,7 +57,7 @@ interface AppContextType {
   connectedAccounts: ConnectedAccount[];
   refreshModels: () => Promise<void>;
   setConnectedAccounts: React.Dispatch<React.SetStateAction<ConnectedAccount[]>>;
-  handleConnectOAuth: (providerId: ProviderServiceId, accountName: string, email?: string) => Promise<void>;
+  handleConnectOAuth: (providerId: string, accountName: string, email?: string) => Promise<void>;
   handleDeleteAccount: (accountId: string) => Promise<void>;
 
   // Modals
@@ -69,6 +70,11 @@ interface AppContextType {
   setIsNewSessionOpen: (open: boolean) => void;
   isAddProviderOpen: boolean;
   setIsAddProviderOpen: (open: boolean) => void;
+
+  // Device-local appearance
+  appearance: AppearancePreferences;
+  resolvedTheme: 'light' | 'dark';
+  updateAppearance: (next: Partial<AppearancePreferences>) => void;
 
   // UI Scale
   uiScale: number;
@@ -95,7 +101,7 @@ interface AppContextType {
   handleCreateNewSession: (title: string, pack: 'engineering' | 'research' | 'assistant') => Promise<void>;
   handleNewProjectPrompt: () => void;
   handleSaveProvider: (
-    serviceOrParams: string | { service: string; apiKey?: string; endpointUrl?: string; model?: string; contextWindow?: number; fastMode?: boolean },
+    serviceOrParams: string | { service: string; accountName?: string; apiKey?: string; endpointUrl?: string; model?: string; contextWindow?: number; fastMode?: boolean },
     apiKey?: string
   ) => Promise<void>;
   handleDeleteProvider: (id: string) => Promise<void> | void;
@@ -221,7 +227,7 @@ const safeIsoFromMillis = (value?: number): string => {
 };
 
 const tokenLooksOauth = (token?: OAuthTokenRecord | null): boolean =>
-  Boolean(token?.has_refresh_token || token?.refresh_token || token?.scope?.trim());
+  Boolean(token?.has_refresh_token || token?.scope?.trim());
 
 const uniqueModels = (models: string[]): string[] => {
   const seen = new Set<string>();
@@ -363,6 +369,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsSettingsOpen(true);
   }, []);
 
+  const [appearance, setAppearance] = useState<AppearancePreferences>(readAppearance);
+  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const resolvedTheme = appearance.theme === 'system' ? (systemDark ? 'dark' : 'light') : appearance.theme;
+  useEffect(() => {
+    if (appearance.theme !== 'system') return;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const update = () => setSystemDark(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, [appearance.theme]);
+  useEffect(() => {
+    const sync = (event: StorageEvent) => {
+      if (event.key !== APPEARANCE_KEY && event.key !== null) return;
+      const saved = readAppearance();
+      if (saved.theme === 'system') setSystemDark(window.matchMedia('(prefers-color-scheme: dark)').matches);
+      setAppearance(saved);
+    };
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
+  }, []);
+  useEffect(() => { applyAppearance(appearance, resolvedTheme); }, [appearance, resolvedTheme]);
+  const themeQueue = useRef<Promise<void>>(Promise.resolve());
+  useEffect(() => {
+    if (!isTauri()) return;
+    const theme = appearance.theme === 'system' ? null : resolvedTheme;
+    themeQueue.current = themeQueue.current
+      .then(async () => {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        await getCurrentWindow().setTheme(theme);
+      })
+      .catch(error => console.warn('Native window theme could not be applied', error));
+  }, [appearance.theme, resolvedTheme]);
+  const updateAppearance = useCallback((next: Partial<AppearancePreferences>) => {
+    if (next.theme === 'system') setSystemDark(window.matchMedia('(prefers-color-scheme: dark)').matches);
+    setAppearance(previous => {
+      const updated = { ...previous, ...next };
+      try { localStorage.setItem(APPEARANCE_KEY, JSON.stringify(updated)); }
+      catch (error) { console.warn('Device appearance could not be saved', error); }
+      return updated;
+    });
+  }, []);
+
   // UI Scale state
   const [uiScale, setUiScale] = useState<number>(() => {
     const saved = localStorage.getItem('custos_ui_scale');
@@ -444,7 +493,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       const token = await daemonClient.getOAuthToken(providerId).catch(() => null);
-      if (!tokenLooksOauth(token) || (!token?.connected && !token?.access_token)) {
+      if (!tokenLooksOauth(token) || !token?.connected) {
         continue;
       }
 
@@ -473,18 +522,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const accounts = await Promise.all(
       providerRecords.map(async (provider): Promise<ConnectedAccount | null> => {
         const serviceId = normalizeProviderServiceId(provider.service_type || provider.id);
-        const connected = isProviderConnected(provider);
+        let connected = isProviderConnected(provider);
         const endpointUrl = provider.endpoint_url || defaultProbeBaseUrl(serviceId);
 
         let tokenMeta: OAuthTokenRecord | null = null;
-        tokenMeta = await daemonClient.getOAuthToken(provider.id).catch(() => null);
-        if (!tokenMeta && provider.id !== serviceId) {
-          tokenMeta = await daemonClient.getOAuthToken(serviceId).catch(() => null);
-        }
+        let credentialError: string | undefined;
+        tokenMeta = await daemonClient.getOAuthToken(provider.id).catch((error) => { credentialError = error instanceof Error ? error.message : String(error); return null; });
+        if (serviceId !== 'local') connected = connected && tokenMeta?.connected === true;
 
         let catalogModels: ModelCatalogOption[] = [];
         let catalogSource: 'live' | 'cached' | 'unavailable' = 'unavailable';
-        let catalogError: string | undefined;
+        let catalogError: string | undefined = credentialError;
         let catalogFetchedAt: number | undefined;
         if (connected && endpointUrl) {
           try {
@@ -528,7 +576,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         const supportedModels = uniqueModels(catalogModels.map((model) => model.id));
 
-        if (!connected || (provider.api_key_masked === 'oauth' && !tokenMeta?.connected)) {
+        if (!credentialError && (!connected || (provider.api_key_masked === 'oauth' && !tokenMeta?.connected))) {
           return null;
         }
 
@@ -541,7 +589,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           provider.context_window ||
           catalogModels[0]?.context_window;
         const available = connected && !(serviceId === 'local' && catalogSource !== 'live');
-        const authType = tokenLooksOauth(tokenMeta)
+        const authType = tokenLooksOauth(tokenMeta) || provider.api_key_masked === 'oauth'
           ? 'oauth'
           : 'api_key';
 
@@ -549,7 +597,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           id: provider.id,
           providerId: serviceId,
           providerName: PROVIDER_LABELS[serviceId] || provider.name,
-          accountName: authType === 'oauth' ? `${PROVIDER_LABELS[serviceId]} Account` : provider.name || PROVIDER_LABELS[serviceId] || provider.id,
+          accountName: provider.name || `${PROVIDER_LABELS[serviceId]} Account`,
           authType,
           apiKeyMasked: authType === 'api_key' ? provider.api_key_masked : undefined,
           endpointUrl,
@@ -557,7 +605,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           oauthTier: authType === 'oauth' ? (serviceId === 'copilot' ? 'Connected via Device Flow' : 'Connected via PKCE') : undefined,
           oauthExpiresAt: tokenMeta?.expires_at ? safeIsoFromMillis(tokenMeta.expires_at) : undefined,
           status: available ? 'active' : 'offline',
-          statusLabel: available ? 'Connected' : 'Ollama offline — start Ollama and retry',
+          statusLabel: available ? 'Connected' : credentialError || (serviceId === 'local' ? 'Ollama offline — start Ollama and retry' : 'Reconnect provider'),
           badgeColor: available ? '#10b981' : '#6b7280',
           defaultModel,
           supportedModels,
@@ -880,6 +928,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Actions
   const pendingTurns = useRef(new Set<string>());
   const liveConnections = useRef(new Map<string, AbortController>());
+  const livePresentations = useRef(new Map<string, () => void>());
+  const activeLiveView = useRef({ project: currentProject, conversation: activeSessionId });
+  activeLiveView.current = { project: currentProject, conversation: activeSessionId };
+  const streamReducedMotion = useRef(appearance.reduceMotion);
+  streamReducedMotion.current = appearance.reduceMotion;
+  useEffect(() => {
+    const sync = () => livePresentations.current.forEach(refresh => refresh());
+    sync();
+    document.addEventListener('visibilitychange', sync);
+    return () => document.removeEventListener('visibilitychange', sync);
+  }, [currentProject, activeSessionId, appearance.reduceMotion]);
   useEffect(() => () => { liveConnections.current.forEach(controller => controller.abort()); liveConnections.current.clear(); }, []);
   const handleStopRun = async (runId: string) => {
     try { await daemonClient.cancelRun({ run_id: runId, reason: 'Stopped from chat' }); }
@@ -889,21 +948,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (liveConnections.current.has(run)) return;
     const controller = new AbortController(); liveConnections.current.set(run, controller);
     let timer: number | undefined;
+    let frame: number | undefined;
+    let lastPaint = -Infinity;
     let latest: import('../types/domain').LiveRunSnapshot | null = null;
-    const flush = () => {
-      timer = undefined;
-      const snapshot = latest; if (!snapshot) return;
+    let displayedText = '';
+    let initialFlush = true;
+    const systemMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const isVisible = () => !document.hidden && activeLiveView.current.project === project && activeLiveView.current.conversation === conversation;
+    const cancelPending = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      timer = undefined; frame = undefined;
+    };
+    const schedule = () => {
+      if (controller.signal.aborted || frame !== undefined || timer !== undefined) return;
+      if (isVisible()) frame = window.requestAnimationFrame(paint);
+      else timer = window.setTimeout(() => { timer = undefined; flush(true); }, 200);
+    };
+    const paint = (timestamp: number) => {
+      frame = undefined;
+      if (controller.signal.aborted) return;
+      if (!isVisible()) { flush(true); return; }
+      if (timestamp - lastPaint >= 40) flush();
+      else schedule();
+    };
+    const flush = (immediate = false) => {
+      const snapshot = latest; if (!snapshot || controller.signal.aborted) return;
+      const bypass = immediate || initialFlush || !isVisible() || streamReducedMotion.current || systemMotion.matches || !snapshot.text.startsWith(displayedText);
+      const remaining = snapshot.text.length - displayedText.length;
+      let end = bypass || remaining > 4096 ? snapshot.text.length : Math.min(snapshot.text.length, displayedText.length + Math.max(12, Math.ceil(remaining * 0.6)));
+      // Avoid splitting a UTF-16 surrogate pair while revealing text.
+      const trailing = snapshot.text.charCodeAt(end - 1);
+      if (end < snapshot.text.length && trailing >= 0xD800 && trailing <= 0xDBFF) end += 1;
+      displayedText = snapshot.text.slice(0, end);
+      initialFlush = false;
+      lastPaint = performance.now();
+      const text = displayedText;
       setProjectData(previous => ({ ...previous, [project]: (previous[project] || []).map(chat => chat.id !== conversation ? chat : {
         ...chat, messages: chat.messages.some(message => message.runId === run)
-          ? chat.messages.map(message => message.runId !== run ? message : { ...message, text: snapshot.text, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined })
-          : [...chat.messages, { id: `live-${run}`, role: 'assistant' as const, author, text: snapshot.text, runId: run, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined }],
+          ? chat.messages.map(message => message.runId !== run ? message : { ...message, text, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined })
+          : [...chat.messages, { id: `live-${run}`, role: 'assistant' as const, author, text, runId: run, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined }],
       }) }));
+      if (displayedText !== snapshot.text && !immediate) schedule();
     };
+    const refresh = () => { cancelPending(); if (latest) flush(true); };
+    livePresentations.current.set(run, refresh);
+    systemMotion.addEventListener('change', refresh);
+    controller.signal.addEventListener('abort', cancelPending, { once: true });
     void daemonClient.watchRun(session, run, snapshot => {
       latest = snapshot;
-      if (['completed', 'failed', 'cancelled', 'interrupted'].includes(snapshot.status)) { if (timer !== undefined) window.clearTimeout(timer); flush(); }
-      else if (timer === undefined) timer = window.setTimeout(flush, 50);
-    }, controller.signal).finally(() => { if (timer !== undefined) window.clearTimeout(timer); if (!controller.signal.aborted) flush(); liveConnections.current.delete(run); });
+      if (['completed', 'failed', 'cancelled', 'interrupted'].includes(snapshot.status)) { cancelPending(); flush(true); }
+      else schedule();
+    }, controller.signal).finally(() => {
+      cancelPending();
+      if (!controller.signal.aborted) flush(true);
+      systemMotion.removeEventListener('change', refresh);
+      livePresentations.current.delete(run);
+      liveConnections.current.delete(run);
+    });
   };
 
   const startNativeConversation = async (instruction: string, harness: string, workspace: string) => {
@@ -1011,8 +1113,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
+      let routedAccountId: string;
+      try {
+        const modelAccount = connectedAccounts.find(a => a.status === 'active' && a.supportedModels.includes(chosenModel));
+        if (!modelAccount) throw new Error('No connected account supports this model');
+        const route = await daemonClient.reserveProviderAccount(modelAccount.providerId, chosenModel);
+        if (!route.account_id) throw new Error('No eligible account is available');
+        routedAccountId = route.account_id;
+      } catch (error: any) {
+        appendAssistantMessage({ role: 'assistant', author: 'Custos Engine', badge: 'Account Unavailable', text: error?.message || String(error) });
+        return;
+      }
+
       if (chosenModel.startsWith('ollama/')) {
-        const account = connectedAccounts.find(a => a.providerId === 'local' && a.status === 'active' && a.supportedModels.includes(chosenModel));
+        const account = connectedAccounts.find(a => a.id === routedAccountId && a.status === 'active');
         if (!account) {
           appendAssistantMessage({ role: 'assistant', author: 'Custos Engine', badge: 'Ollama Unavailable', stepName: 'Model Gateway', text: 'Ollama is offline or the selected model is no longer installed. Start Ollama and use Retry models. Your prompt will not be sent to another provider.' });
           showToast('Ollama unavailable — start Ollama and retry');
@@ -1330,7 +1444,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const handleSaveProvider = async (
-    serviceOrParams: string | { service: string; apiKey?: string; endpointUrl?: string; model?: string; contextWindow?: number; fastMode?: boolean },
+    serviceOrParams: string | { service: string; accountName?: string; apiKey?: string; endpointUrl?: string; model?: string; contextWindow?: number; fastMode?: boolean },
     maybeApiKey?: string
   ) => {
     try {
@@ -1342,8 +1456,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const contextWindow = isObj ? serviceOrParams.contextWindow : undefined;
       const fastMode = isObj ? serviceOrParams.fastMode : undefined;
 
-      const existing = providers.find((p) => p.name.toLowerCase().includes(service.toLowerCase()) || p.id === service);
-      const providerId = existing?.id || service.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      const providerId = `${normalizeProviderServiceId(service)}-${crypto.randomUUID()}`;
       const providerType =
         service.toLowerCase().includes('claude') || service.toLowerCase().includes('anthropic') ? 'anthropic' :
         service.toLowerCase().includes('openai') || service.toLowerCase().includes('gpt') ? 'openai' :
@@ -1355,10 +1468,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       await daemonClient.saveProvider({
         id: providerId,
-        name: existing?.name || service,
+        name: (isObj && serviceOrParams.accountName?.trim()) || `${service} Account ${providerId.slice(-6)}`,
         service_type: providerType,
         provider_type: providerType,
-        model: defaultModel || existing?.model || '',
+        model: defaultModel || '',
         default_model: defaultModel,
         api_key: apiKey,
         endpoint_url: resolvedEndpoint,
@@ -1372,7 +1485,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       await refreshProviderState();
       setIsAddProviderOpen(false);
-      showToast(`Provider ${service} đã được cập nhật thành công vào Backend SQLite!`);
+      showToast(`Provider ${service} đã được lưu với credential bảo mật!`);
     } catch (err: any) {
       console.error('[SaveProvider] Error:', err);
       showToast(`Lỗi lưu provider: ${err?.message || err}`);
@@ -1468,20 +1581,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [selectedModel, showToast]);
 
   const ensureOAuthProviderRecord = useCallback(async (
-    providerId: ProviderServiceId,
+    providerId: string,
     accountName?: string
   ) => {
-    const token = await daemonClient.getOAuthToken(providerId).catch(() => null);
-    if (!token?.connected && !token?.access_token) {
-      return;
-    }
+    const token = await daemonClient.getOAuthToken(providerId);
+    if (!token?.connected) throw new Error('OAuth account credentials were not saved. Retry the connection.');
 
-    const providerRecords = (await daemonClient.listProviders().catch(() => [])) as ProviderConfigRecord[];
-    const serviceId = normalizeProviderServiceId(providerId);
-    const existing = providerRecords.find((provider) =>
-      provider.id === providerId ||
-      normalizeProviderServiceId(provider.service_type || provider.id) === serviceId
-    );
+    const providerRecords = (await daemonClient.listProviders()) as ProviderConfigRecord[];
+    const existing = providerRecords.find((provider) => provider.id === providerId);
+    const serviceId = normalizeProviderServiceId(existing?.service_type || providerId);
 
     if (existing && isProviderConnected(existing)) {
       return;
@@ -1501,11 +1609,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
-  const handleConnectOAuth = useCallback(async (providerId: ProviderServiceId, accountName: string, _email?: string) => {
+  const handleConnectOAuth = useCallback(async (providerId: string, accountName: string, _email?: string) => {
     await ensureOAuthProviderRecord(providerId, accountName);
     const refreshed = await refreshProviderState();
-    const account = refreshed.accounts.find((item) => item.providerId === providerId);
-    showToast(`Connected ${account?.accountName || accountName || PROVIDER_LABELS[providerId]} via OAuth`);
+    const account = refreshed.accounts.find((item) => item.id === providerId);
+    showToast(`Connected ${account?.accountName || accountName || PROVIDER_LABELS[normalizeProviderServiceId(providerId)]} via OAuth`);
   }, [ensureOAuthProviderRecord, refreshProviderState, showToast]);
 
   const handleDeleteAccount = useCallback(async (accountId: string) => {
@@ -1514,7 +1622,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       await daemonClient.deleteOAuthToken(account.id);
       await daemonClient.deleteProvider(account.id);
-      if (account.id !== account.providerId) await daemonClient.deleteOAuthToken(account.providerId);
       await refreshProviderState();
       showToast('Account disconnected');
     } catch (err) {
@@ -1564,6 +1671,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsNewSessionOpen,
         isAddProviderOpen,
         setIsAddProviderOpen,
+        appearance,
+        resolvedTheme,
+        updateAppearance,
         uiScale,
         handleSetUiScale,
         handleStepUiScale,

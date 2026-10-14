@@ -144,14 +144,19 @@ mod tests {
         assert!(registry.contains("cargo_test"));
         assert!(registry.contains("git_patch"));
         assert!(registry.contains("ast_search"));
+        assert!(registry.contains("component_clone"));
+        assert!(registry.contains("local_ui_diagnostic"));
 
         // Research
         assert!(registry.contains("doi_verify"));
         assert!(registry.contains("claim_extract"));
+        assert!(registry.contains("web_extract"));
 
         // Assistant
         assert!(registry.contains("payload_lock"));
         assert!(registry.contains("contact_resolve"));
+        assert!(registry.contains("ax_tree_audit"));
+        assert!(registry.contains("browser_subagent_dispatch"));
     }
 
     #[test]

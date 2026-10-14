@@ -1,471 +1,126 @@
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Smartphone, RotateCw, Power, RefreshCw, Home, Globe, ArrowLeft, ArrowRight, MessageSquarePlus, Loader2 } from 'lucide-react';
 import { NativeSelect } from '@/components/common/NativeSelect';
-import React, { useState, useMemo, useRef } from 'react';
-import {
-  Smartphone,
-  RotateCw,
-  Power,
-  RefreshCw,
-  Copy,
-  Terminal,
-  ShieldCheck,
-  Camera,
-  ZoomIn,
-  ZoomOut,
-  ArrowRight,
-  Sparkles,
-} from 'lucide-react';
+import { normalizeBrowserUrl } from '@/api/native_browser';
+import { useNativeBrowser } from '@/hooks/useNativeBrowser';
 
-interface DevicePreset {
-  id: string;
-  name: string;
-  platform: 'ios' | 'android' | 'tablet';
-  width: number;
-  height: number;
-  dpr: number;
-  bezelRadius: string;
-  notchType: 'island' | 'punchhole' | 'classic' | 'tablet';
-}
-
-const DEVICE_PRESETS: DevicePreset[] = [
-  {
-    id: 'iphone-15-pro',
-    name: 'iPhone 15 Pro',
-    platform: 'ios',
-    width: 393,
-    height: 852,
-    dpr: 3.0,
-    bezelRadius: '48px',
-    notchType: 'island',
-  },
-  {
-    id: 'pixel-8',
-    name: 'Google Pixel 8',
-    platform: 'android',
-    width: 412,
-    height: 915,
-    dpr: 2.6,
-    bezelRadius: '42px',
-    notchType: 'punchhole',
-  },
-  {
-    id: 'iphone-se',
-    name: 'iPhone SE (3rd Gen)',
-    platform: 'ios',
-    width: 375,
-    height: 667,
-    dpr: 2.0,
-    bezelRadius: '32px',
-    notchType: 'classic',
-  },
-  {
-    id: 'ipad-mini',
-    name: 'iPad Mini (6th Gen)',
-    platform: 'tablet',
-    width: 744,
-    height: 1133,
-    dpr: 2.0,
-    bezelRadius: '28px',
-    notchType: 'tablet',
-  },
+const DEVICES = [
+  { id: 'iphone-15-pro', name: 'iPhone 15 Pro', width: 393, height: 852, radius: 48 },
+  { id: 'pixel-8', name: 'Google Pixel 8', width: 412, height: 915, radius: 42 },
+  { id: 'iphone-se', name: 'iPhone SE (3rd Gen)', width: 375, height: 667, radius: 32 },
+  { id: 'ipad-mini', name: 'iPad Mini (6th Gen)', width: 744, height: 1133, radius: 28 },
 ];
 
+// Request mobile layouts while preserving the installed Chromium media engine/version.
+const mobileUserAgent = navigator.userAgent.includes('Chrome/')
+  ? navigator.userAgent.replace(/\([^)]*\)/, '(Linux; Android 10; K)').replace(' Safari/', ' Mobile Safari/').replace(' Edg/', ' EdgA/')
+  : undefined;
+
 interface MobileSimulatorWorkbenchPaneProps {
-  onShowToast?: (message: string) => void;
-  defaultUrl?: string;
+  tabId: string;
+  url: string;
+  active: boolean;
+  onUrlChange: (url: string) => void;
+  onAskAgent?: (draft: string) => void;
 }
 
-export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPaneProps> = ({
-  onShowToast: _onShowToast,
-  defaultUrl = 'http://localhost:5173',
-}) => {
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('iphone-15-pro');
-  const [orientation, setOrientation] = useState<'portrait' | 'landscape'>('portrait');
-  const [scale, setScale] = useState<number>(0.75);
-  const [urlInput, setUrlInput] = useState<string>(defaultUrl);
-  const [activeUrl, setActiveUrl] = useState<string>(defaultUrl);
-  const [isPowerOn, setIsPowerOn] = useState<boolean>(true);
-  const [activeDrawer, setActiveDrawer] = useState<'axtree' | 'console' | 'evidence'>('axtree');
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+export const MobileSimulatorWorkbenchPane: React.FC<MobileSimulatorWorkbenchPaneProps> = ({ tabId, url, active, onUrlChange, onAskAgent }) => {
+  const [deviceId, setDeviceId] = useState(DEVICES[0].id);
+  const [landscape, setLandscape] = useState(false);
+  const [powered, setPowered] = useState(true);
+  const [requestedScale, setRequestedScale] = useState(0.75);
+  const [pageUrl, setPageUrl] = useState(url);
+  const [address, setAddress] = useState(url === 'about:blank' ? '' : url);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const canvas = useRef<HTMLDivElement>(null);
+  const viewport = useRef<HTMLDivElement>(null);
+  const device = DEVICES.find(item => item.id === deviceId) ?? DEVICES[0];
+  const width = landscape ? device.height : device.width;
+  const height = landscape ? device.width : device.height;
+  const pageHeight = height - 88;
+  const scale = Math.max(0.1, Math.min(requestedScale, (canvasSize.width - 32) / (width + 24), (canvasSize.height - 32) / (height + 24)));
+  const home = pageUrl === 'about:blank';
+  const urlChanged = useCallback((current: string) => {
+    setPageUrl(current);
+    setAddress(current === 'about:blank' ? '' : current);
+    onUrlChange(current);
+  }, [onUrlChange]);
+  const browser = useNativeBrowser({ tabId, url: pageUrl, active, enabled: powered && !home,
+    viewport, zoom: scale, layoutKey: `${deviceId}:${landscape}:${scale}`, userAgent: mobileUserAgent, containFullscreen: true, onUrlChange: urlChanged });
 
-  const device = useMemo(
-    () => DEVICE_PRESETS.find((d) => d.id === selectedDeviceId) ?? DEVICE_PRESETS[0],
-    [selectedDeviceId]
-  );
+  useEffect(() => {
+    const el = canvas.current;
+    if (!el) return;
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      setCanvasSize(previous => previous.width === rect.width && previous.height === rect.height ? previous : { width: rect.width, height: rect.height });
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    update();
+    return () => observer.disconnect();
+  }, []);
 
-  const screenWidth = orientation === 'portrait' ? device.width : device.height;
-  const screenHeight = orientation === 'portrait' ? device.height : device.width;
-
-  const handleNavigate = (e?: React.FormEvent) => {
-    e?.preventDefault();
-    const trimmed = urlInput.trim();
-    if (!trimmed) return;
-    setActiveUrl(trimmed.startsWith('http') ? trimmed : `http://${trimmed}`);
+  const navigate = (raw = address) => {
+    const target = normalizeBrowserUrl(raw);
+    try {
+      const parsed = new URL(target);
+      if (!['http:', 'https:'].includes(parsed.protocol) && target !== 'about:blank') throw new Error('Only HTTP, HTTPS and about:blank are supported');
+      browser.setError(null);
+      if (target === 'about:blank') {
+        setPageUrl(target); setAddress(''); onUrlChange(target);
+      } else {
+        setPageUrl(target); setAddress(target); onUrlChange(target);
+        if (browser.ready) void browser.command('navigate', { url: target });
+      }
+    } catch (reason) { browser.setError(String(reason)); }
   };
-
-  const handleReload = () => {
-    if (iframeRef.current) {
-      iframeRef.current.src = activeUrl;
-    }
-  };
-
-  const toggleOrientation = () => {
-    setOrientation((prev) => (prev === 'portrait' ? 'landscape' : 'portrait'));
-  };
-
-  // Mock Accessibility Tree (AX Tree) representation for Coding Agent ingestion
-  const mockAxTree = useMemo(() => {
-    return [
-      { id: '1', role: 'banner', name: 'App Header', bounds: { x: 0, y: 0, w: screenWidth, h: 56 } },
-      { id: '2', role: 'heading', level: 1, name: 'Active Project Title', bounds: { x: 16, y: 12, w: 240, h: 32 } },
-      { id: '3', role: 'button', name: 'Navigation Menu', bounds: { x: screenWidth - 48, y: 12, w: 32, h: 32 } },
-      { id: '4', role: 'main', name: 'Primary Viewport Canvas', bounds: { x: 0, y: 56, w: screenWidth, h: screenHeight - 120 } },
-      { id: '5', role: 'textbox', name: 'Search Query / Input', bounds: { x: 16, y: 72, w: screenWidth - 32, h: 44 } },
-      { id: '6', role: 'button', name: 'Submit / Action Trigger', bounds: { x: 16, y: 128, w: screenWidth - 32, h: 48 } },
-      { id: '7', role: 'navigation', name: 'Bottom Tab Bar', bounds: { x: 0, y: screenHeight - 64, w: screenWidth, h: 64 } },
-    ];
-  }, [screenWidth, screenHeight]);
-
-  return (
-    <div className="flex flex-col h-full bg-[#101012] text-zinc-200 text-xs overflow-hidden select-none font-sans">
-      {/* Top Controls Toolbar */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 bg-[#161619] shrink-0">
-        <div className="flex items-center gap-2">
-          <Smartphone size={14} className="text-cyan-400 shrink-0" />
-          <span className="font-semibold text-zinc-100 tracking-wide text-[11px] uppercase">
-            Mobile Device Simulator
-          </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950/60 text-cyan-400 border border-cyan-800/40 font-mono">
-            {device.platform.toUpperCase()}
-          </span>
-        </div>
-
-        {/* Device Switcher & Orientation Controls */}
-        <div className="flex items-center gap-2">
-          <NativeSelect
-            value={selectedDeviceId}
-            onChange={(e) => setSelectedDeviceId(e.target.value)}
-            className="bg-zinc-900 border border-zinc-700 text-zinc-200 rounded px-2 py-1 text-xs focus:outline-none focus:border-zinc-500"
-          >
-            {DEVICE_PRESETS.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name} ({d.width}×{d.height})
-              </option>
-            ))}
-          </NativeSelect>
-
-          <button
-            onClick={toggleOrientation}
-            className="flex items-center gap-1 px-2 py-1 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded text-zinc-300 text-[11px] transition"
-            title="Rotate Device"
-          >
-            <RotateCw size={12} className={orientation === 'landscape' ? 'text-cyan-400' : ''} />
-            <span className="capitalize">{orientation}</span>
-          </button>
-
-          {/* Scale Presets */}
-          <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded px-1">
-            <button
-              onClick={() => setScale((s) => Math.max(0.4, Number((s - 0.1).toFixed(2))))}
-              className="p-1 text-zinc-400 hover:text-zinc-200"
-              title="Zoom Out"
-            >
-              <ZoomOut size={12} />
-            </button>
-            <span className="font-mono text-[10px] text-zinc-400 px-1.5">{Math.round(scale * 100)}%</span>
-            <button
-              onClick={() => setScale((s) => Math.min(1.2, Number((s + 0.1).toFixed(2))))}
-              className="p-1 text-zinc-400 hover:text-zinc-200"
-              title="Zoom In"
-            >
-              <ZoomIn size={12} />
-            </button>
-          </div>
-
-          {/* Power Toggle */}
-          <button
-            onClick={() => setIsPowerOn(!isPowerOn)}
-            className={`p-1.5 rounded border transition ${
-              isPowerOn
-                ? 'bg-zinc-800 hover:bg-zinc-700 text-emerald-400 border-zinc-700'
-                : 'bg-red-950/40 text-red-400 border-red-800/40'
-            }`}
-            title={isPowerOn ? 'Turn Screen Off' : 'Turn Screen On'}
-          >
-            <Power size={12} />
-          </button>
-        </div>
+  const control = 'h-7 w-7 shrink-0 rounded flex items-center justify-center hover:bg-surface-2 disabled:opacity-30';
+  return <div className="h-full flex flex-col bg-canvas text-editor-fg text-xs overflow-hidden">
+    <div className="shrink-0 flex flex-wrap items-center gap-2 border-b border-border-muted bg-surface-1 px-3 py-2">
+      <Smartphone size={15} className="text-[var(--color-accent)]" /><span className="font-semibold">Phone Simulator</span>
+      <div className="ml-auto flex items-center gap-2">
+        <NativeSelect aria-label="Preview device" value={deviceId} onChange={event => setDeviceId(event.target.value)}>{DEVICES.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</NativeSelect>
+        <button className={control} aria-label="Rotate device" title="Rotate device" onClick={() => setLandscape(value => !value)}><RotateCw size={15} /></button>
+        <button className={control} aria-label={powered ? 'Turn screen off' : 'Turn screen on'} title={powered ? 'Turn screen off' : 'Turn screen on'} onClick={() => setPowered(value => !value)}><Power size={15} className={powered ? 'text-[var(--color-accent)]' : 'text-fg-muted'} /></button>
       </div>
-
-      {/* Address & Quick Destination Bar */}
-      <div className="flex items-center gap-2 px-3 py-1.5 bg-[#141416] border-b border-zinc-800 shrink-0">
-        <button
-          onClick={handleReload}
-          className="p-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition"
-          title="Reload Frame"
-        >
-          <RefreshCw size={12} />
-        </button>
-
-        <form onSubmit={handleNavigate} className="flex-1 flex items-center relative">
-          <input
-            type="text"
-            value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
-            placeholder="e.g. http://localhost:5173, http://localhost:3000..."
-            className="w-full bg-zinc-950 border border-zinc-800 focus:border-cyan-700 rounded px-3 py-1 text-xs text-zinc-200 font-mono tracking-tight focus:outline-none transition"
-          />
-          <button
-            type="submit"
-            className="absolute right-1 px-2 py-0.5 bg-cyan-900/60 hover:bg-cyan-800/80 border border-cyan-700/60 text-cyan-200 rounded text-[11px]"
-          >
-            <ArrowRight size={11} />
-          </button>
-        </form>
-
-        {/* Quick Local Server Presets */}
-        <div className="flex items-center gap-1 text-[10px] font-mono">
-          <button
-            onClick={() => {
-              setUrlInput('http://localhost:5173');
-              setActiveUrl('http://localhost:5173');
-            }}
-            className="px-1.5 py-0.5 rounded bg-zinc-800/60 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition"
-          >
-            :5173
-          </button>
-          <button
-            onClick={() => {
-              setUrlInput('http://localhost:3000');
-              setActiveUrl('http://localhost:3000');
-            }}
-            className="px-1.5 py-0.5 rounded bg-zinc-800/60 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition"
-          >
-            :3000
-          </button>
-          <button
-            onClick={() => {
-              setUrlInput('http://localhost:8080');
-              setActiveUrl('http://localhost:8080');
-            }}
-            className="px-1.5 py-0.5 rounded bg-zinc-800/60 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 transition"
-          >
-            :8080
-          </button>
-        </div>
-      </div>
-
-      {/* Main Workbench Body: Canvas + Inspection Drawer */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Center: Device Simulation Canvas */}
-        <div className="flex-1 flex flex-col items-center justify-start overflow-auto p-8 bg-[radial-gradient(#1f2024_1px,transparent_1px)] [background-size:16px_16px]">
-          <div
-            className="relative transition-all duration-300 ease-out origin-top flex flex-col items-center"
-            style={{
-              transform: `scale(${scale})`,
-              marginBottom: `${Math.max(40, screenHeight * scale * 0.1)}px`,
-            }}
-          >
-            {/* Realistic Physical Device Frame */}
-            <div
-              className="relative p-[10px] bg-[#232428] rounded-[52px] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),0_0_0_1px_rgba(255,255,255,0.08)] border border-zinc-700/60 flex flex-col"
-              style={{
-                width: `${screenWidth + 20}px`,
-                height: `${screenHeight + 20}px`,
-                borderRadius: device.bezelRadius,
-              }}
-            >
-              {/* Outer Edge Hardware Accent / Antennas */}
-              <div className="absolute -left-[3px] top-24 w-[3px] h-8 bg-zinc-600/70 rounded-l-xs" title="Volume Up" />
-              <div className="absolute -left-[3px] top-36 w-[3px] h-8 bg-zinc-600/70 rounded-l-xs" title="Volume Down" />
-              <div className="absolute -right-[3px] top-28 w-[3px] h-12 bg-zinc-600/70 rounded-r-xs" title="Power Button" />
-
-              {/* Inner Screen Display Bezel */}
-              <div
-                className="relative flex-1 bg-black overflow-hidden flex flex-col shadow-inner"
-                style={{
-                  borderRadius: `calc(${device.bezelRadius} - 8px)`,
-                }}
-              >
-                {/* Dynamic Island / Notch Simulation */}
-                {isPowerOn && (
-                  <>
-                    {device.notchType === 'island' && orientation === 'portrait' && (
-                      <div className="absolute top-2 left-1/2 -translate-x-1/2 w-28 h-6 bg-black rounded-full z-30 flex items-center justify-between px-2.5 shadow-md border border-zinc-800/80">
-                        <div className="w-2.5 h-2.5 rounded-full bg-zinc-900 border border-zinc-700" />
-                        <div className="w-2 h-2 rounded-full bg-emerald-500/80 animate-pulse" title="Microphone / Camera Active" />
-                      </div>
-                    )}
-                    {device.notchType === 'punchhole' && orientation === 'portrait' && (
-                      <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-black rounded-full z-30 border border-zinc-800" />
-                    )}
-                  </>
-                )}
-
-                {/* Live Screen Content / Iframe */}
-                {!isPowerOn ? (
-                  <div className="flex-1 flex flex-col items-center justify-center bg-black text-zinc-700 select-none">
-                    <Power size={32} className="mb-2 opacity-40" />
-                    <span className="text-[11px] font-mono">Device Screen Suspended</span>
-                  </div>
-                ) : (
-                  <div className="relative flex-1 w-full h-full bg-zinc-950 overflow-hidden flex flex-col">
-                    <iframe
-                      ref={iframeRef}
-                      src={activeUrl}
-                      title="Mobile Device Simulator Viewport"
-                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                      className="w-full h-full border-0 bg-white"
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                      }}
-                    />
-
-                    {/* iOS Home Indicator Bar */}
-                    {device.platform === 'ios' && (
-                      <div className="absolute bottom-1.5 left-1/2 -translate-x-1/2 w-32 h-1 bg-zinc-400/60 rounded-full z-20 pointer-events-none" />
-                    )}
-                  </div>
-                )}
-              </div>
+    </div>
+    <form className="shrink-0 flex items-center gap-2 border-b border-border-muted px-3 py-2" onSubmit={event => { event.preventDefault(); navigate(); }}>
+      <button type="button" className={control} aria-label="Phone home" disabled={!powered} onClick={() => navigate('about:blank')}><Home size={14} /></button>
+      <button type="button" className={control} aria-label="Reload phone preview" disabled={!browser.ready || !powered} onClick={() => void browser.command('reload')}>{browser.loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}</button>
+      <input aria-label="Phone browser address" className="min-w-0 flex-1 rounded border border-border-default bg-surface-1 px-2 py-1.5 font-mono focus:outline-none focus:border-[var(--color-accent)]" value={address} onChange={event => setAddress(event.target.value)} placeholder="Enter URL, :5173 or search" />
+      <button type="submit" disabled={!powered || !browser.native} className="rounded px-2 py-1.5 hover:bg-surface-2 disabled:opacity-30">Go</button>
+      <button type="button" className={control} aria-label="Insert phone context into chat" disabled={home || !powered || !browser.ready} onClick={() => onAskAgent?.(`Phone web preview: ${device.name}\nURL: ${browser.currentUrl}\nViewport: ${width} x ${pageHeight} CSS pixels\nOrientation: ${landscape ? 'landscape' : 'portrait'}`)}><MessageSquarePlus size={15} /></button>
+    </form>
+    <div className="h-0.5 shrink-0 bg-border-muted" role="progressbar" aria-label="Loading phone page" aria-hidden={!browser.loading}>{browser.loading && <div className="h-full bg-[var(--color-accent)] animate-pulse" />}</div>
+    <div ref={canvas} className="relative min-h-0 flex-1 flex items-center justify-center overflow-hidden bg-canvas-inset p-4">
+      <div className="relative shrink-0" style={{ width: (width + 24) * scale, height: (height + 24) * scale }}>
+        <div className="absolute left-0 top-0 border-2 border-zinc-600 bg-zinc-900 p-[10px] shadow-xl" style={{ width: width + 24, height: height + 24, borderRadius: device.radius, transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+          <div className="h-full flex flex-col overflow-hidden bg-canvas" style={{ borderRadius: device.radius - 12 }}>
+            <div className="h-11 shrink-0 flex items-center justify-between px-5 bg-surface-1 text-editor-fg"><span className="font-semibold text-[11px]">{device.name}</span><span className="text-[10px] text-fg-muted">{powered ? browser.loading ? 'Loading' : home ? 'Home' : 'Web preview' : 'Off'}</span></div>
+            <div className="relative min-h-0 flex-1">
+              <div ref={viewport} className="absolute inset-0 bg-canvas" />
+              {!powered ? <div className="absolute inset-0 flex items-center justify-center bg-black text-zinc-400"><Power size={26} /></div>
+                : !browser.native ? <div className="absolute inset-0 flex items-center justify-center bg-canvas p-8 text-center text-fg-muted">Open Custos desktop to use the native phone preview.</div>
+                : browser.error ? <div role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-canvas p-8 text-center"><p>{browser.error}</p><button className="rounded border border-border-default bg-surface-2 px-4 py-2" onClick={browser.retry}>Retry</button></div>
+                : home ? <div className="absolute inset-0 bg-canvas flex flex-col items-center justify-center gap-6 p-8 text-center">
+                  <div className="rounded-2xl bg-[var(--color-accent-subtle)] p-5 text-[var(--color-accent)]"><Globe size={34} /></div><div><h2 className="text-lg font-semibold">Preview a mobile page</h2><p className="mt-2 text-sm text-fg-muted">Enter a web address above or open a local dev server.</p></div>
+                  <div className="flex flex-wrap justify-center gap-3"><button className="rounded-lg border border-border-default bg-surface-1 px-4 py-2" onClick={() => navigate(':5173')}>Dev :5173</button><button className="rounded-lg border border-border-default bg-surface-1 px-4 py-2" onClick={() => navigate('https://duckduckgo.com')}>Search the web</button></div>
+                </div>
+                : !browser.ready ? <div role="status" aria-label="Preparing phone preview" className="absolute inset-0 bg-canvas p-8 space-y-5 motion-safe:animate-pulse"><span className="sr-only">Preparing phone preview...</span><div className="h-6 w-3/4 rounded bg-surface-2" /><div className="h-40 rounded bg-surface-1" /><div className="h-3 rounded bg-surface-2" /><div className="h-3 w-2/3 rounded bg-surface-2" /></div> : null}
             </div>
-
-            {/* Device Info Badge under frame */}
-            <div className="mt-3 flex items-center gap-2 font-mono text-[11px] text-zinc-500">
-              <span className="text-zinc-400">{device.name}</span>
-              <span>•</span>
-              <span>{screenWidth} × {screenHeight} pt</span>
-              <span>•</span>
-              <span>DPR: {device.dpr}x</span>
+            <div className="h-11 shrink-0 flex items-center justify-center gap-6 border-t border-border-muted bg-surface-1">
+              <button className={control} aria-label="Phone back" disabled={!browser.ready} onClick={() => void browser.command('back')}><ArrowLeft size={16} /></button>
+              <button className={control} aria-label="Phone home screen" disabled={!powered} onClick={() => navigate('about:blank')}><Home size={16} /></button>
+              <button className={control} aria-label="Phone forward" disabled={!browser.ready} onClick={() => void browser.command('forward')}><ArrowRight size={16} /></button>
             </div>
-          </div>
-        </div>
-
-        {/* Right Drawer: Inspection & Coding Agent Intelligence */}
-        <div className="w-80 flex flex-col bg-[#161619] border-l border-zinc-800 shrink-0">
-          {/* Drawer Tabs */}
-          <div className="flex items-center border-b border-zinc-800 bg-[#121214] text-[11px]">
-            <button
-              onClick={() => setActiveDrawer('axtree')}
-              className={`flex-1 py-2 text-center border-b-2 font-medium transition ${
-                activeDrawer === 'axtree'
-                  ? 'border-cyan-500 text-cyan-400 bg-zinc-900/40'
-                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Accessibility Tree
-            </button>
-            <button
-              onClick={() => setActiveDrawer('console')}
-              className={`flex-1 py-2 text-center border-b-2 font-medium transition ${
-                activeDrawer === 'console'
-                  ? 'border-cyan-500 text-cyan-400 bg-zinc-900/40'
-                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Console
-            </button>
-            <button
-              onClick={() => setActiveDrawer('evidence')}
-              className={`flex-1 py-2 text-center border-b-2 font-medium transition ${
-                activeDrawer === 'evidence'
-                  ? 'border-cyan-500 text-cyan-400 bg-zinc-900/40'
-                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Receipts
-            </button>
-          </div>
-
-          {/* Drawer Content */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-3 font-mono text-[11px]">
-            {activeDrawer === 'axtree' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-zinc-400 text-xs font-sans">
-                    <Sparkles size={13} className="text-cyan-400" />
-                    <span>Agent Screen Ingestion</span>
-                  </div>
-                  <button
-                    disabled
-                    title="AX tree ingestion requires mobile simulator adapter (P3)"
-                    className="flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-800/50 text-zinc-500 text-[10px] cursor-not-allowed transition"
-                  >
-                    <Copy size={11} />
-                    <span>Copy for Agent</span>
-                  </button>
-                </div>
-
-                <div className="p-2.5 rounded bg-amber-500/5 border border-amber-500/20 text-[10px] text-amber-400 font-sans">
-                  Synthetic preview tree. Live AX tree extraction from native device engine requires the mobile simulator adapter (P3).
-                </div>
-
-                <div className="space-y-1.5">
-                  {mockAxTree.map((node) => (
-                    <div
-                      key={node.id}
-                      className="p-2 rounded bg-zinc-900/60 border border-zinc-800 hover:border-zinc-700 transition"
-                    >
-                      <div className="flex items-center justify-between text-[10px]">
-                        <span className="text-cyan-400 font-semibold uppercase">{node.role}</span>
-                        <span className="text-zinc-500">{node.bounds.w}×{node.bounds.h}px</span>
-                      </div>
-                      <div className="text-zinc-200 text-xs mt-0.5 truncate">{node.name}</div>
-                      <div className="text-[10px] text-zinc-600 mt-0.5">
-                        Pos: ({node.bounds.x}, {node.bounds.y})
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {activeDrawer === 'console' && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs font-sans text-zinc-400">
-                  <span className="flex items-center gap-1.5">
-                    <Terminal size={13} className="text-emerald-400" />
-                    <span>Mobile Logcat / Web Console</span>
-                  </span>
-                  <span className="text-[10px] text-emerald-400 font-mono">Live</span>
-                </div>
-                <div className="p-3 bg-zinc-950 rounded border border-zinc-850 text-zinc-400 space-y-1.5 text-[10px] leading-relaxed">
-                  <div className="text-zinc-500">[Info] Viewport initialized at {screenWidth}x{screenHeight} @{device.dpr}x</div>
-                  <div className="text-zinc-500">[Info] Touch gesture controller attached</div>
-                  <div className="text-emerald-400">[Log] React dev server connected: {activeUrl}</div>
-                  <div className="text-zinc-400">[Info] DOMContentLoaded in 42ms</div>
-                </div>
-              </div>
-            )}
-
-            {activeDrawer === 'evidence' && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs font-sans text-zinc-400">
-                  <span className="flex items-center gap-1.5">
-                    <ShieldCheck size={13} className="text-cyan-400" />
-                    <span>Invariant Visual Evidence</span>
-                  </span>
-                  <span className="text-[10px] text-amber-400 font-mono">Adapter Pending</span>
-                </div>
-                <p className="text-[10px] font-sans text-zinc-500 leading-normal">
-                  Record mobile viewport render proof into the session journal to satisfy verification gates. Visual receipt generation requires the mobile execution adapter (P3).
-                </p>
-                <button
-                  disabled
-                  title="Visual evidence receipts require simulator execution adapter (P3)"
-                  className="w-full flex items-center justify-center gap-2 py-1.5 bg-zinc-800/50 border border-zinc-700/60 rounded text-zinc-500 text-xs font-sans font-medium cursor-not-allowed transition"
-                >
-                  <Camera size={13} />
-                  <span>Record Render Receipt (Adapter Pending)</span>
-                </button>
-                <div className="p-3 bg-zinc-950 rounded border border-zinc-850 text-zinc-500 text-[10px] leading-relaxed">
-                  No verified visual receipts attached. Physical renderer proofs will be persisted here once the simulator adapter is connected.
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>
     </div>
-  );
+    <div className="shrink-0 flex items-center justify-between gap-3 border-t border-border-muted bg-surface-1 px-3 py-2 text-[10px] text-fg-muted">
+      <span title="Responsive preview using the installed browser engine. Chromium requests mobile layouts with its actual engine version. Device presets change dimensions; OS, touch and DPR are not emulated.">{width} x {pageHeight} CSS viewport</span>
+      <label className="flex items-center gap-2" title="Maximum preview scale; the device also fits the available canvas.">Scale<input style={{ '--range-progress': `${(requestedScale * 100 - 30) / 90 * 100}%` } as React.CSSProperties} aria-label="Phone preview scale" type="range" min="30" max="120" step="10" value={requestedScale * 100} onChange={event => setRequestedScale(Number(event.target.value) / 100)} /><span className="w-8 font-mono">{Math.round(scale * 100)}%</span></label>
+    </div>
+  </div>;
 };

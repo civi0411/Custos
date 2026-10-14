@@ -37,7 +37,7 @@ pub struct PendingOAuthContext {
 }
 
 pub struct OAuthCallbackServer {
-    store: Arc<SqliteTaskStore>,
+    credentials: Arc<crate::credentials::ProviderCredentials>,
     pending: std::sync::Mutex<Option<PendingOAuthContext>>,
     status_tx: watch::Sender<CallbackServerStatus>,
     status_rx: watch::Receiver<CallbackServerStatus>,
@@ -69,16 +69,21 @@ fn mask_oauth_token(token: &str) -> String {
     if token.trim().is_empty() {
         return "none".to_string();
     }
-    let prefix: String = token.chars().take(6).collect();
-    format!("{prefix}********")
+    "oauth".to_string()
 }
 
 impl OAuthCallbackServer {
     pub fn new(store: Arc<SqliteTaskStore>) -> Self {
+        let repo=Arc::new(store.providers().clone());
+        #[cfg(test)] let credentials=crate::credential_tests::fake_credentials(repo);
+        #[cfg(not(test))] let credentials=Arc::new(crate::credentials::ProviderCredentials::new(repo,Arc::new(custos_adapters::providers::credential_vault::KeyringCredentialVault)));
+        Self::with_credentials(credentials)
+    }
+    pub fn with_credentials(credentials: Arc<crate::credentials::ProviderCredentials>) -> Self {
         let (status_tx, status_rx) = watch::channel(CallbackServerStatus::Idle);
         let (shutdown_tx, _) = broadcast::channel(4);
         Self {
-            store,
+            credentials,
             pending: std::sync::Mutex::new(None),
             status_tx,
             status_rx,
@@ -86,11 +91,11 @@ impl OAuthCallbackServer {
         }
     }
 
-    pub fn start_copilot_device(&self, device: serde_json::Value) {
+    pub fn start_copilot_device(&self, device: serde_json::Value, account_id: String) {
         self.cancel();
         let mut shutdown = self.shutdown_tx.subscribe();
         let status = self.status_tx.clone();
-        let store = self.store.clone();
+        let credentials = self.credentials.clone();
         let _ = status.send(CallbackServerStatus::Listening { port: 0 });
         tokio::spawn(async move {
             let result = tokio::select! {
@@ -98,9 +103,10 @@ impl OAuthCallbackServer {
                 result = custos_adapters::providers::oauth_pkce::complete_copilot_device(&device) => result,
             };
             match result {
-                Ok((token, identity)) => {
+                Ok((mut token, identity)) => {
+                    token.provider_id = account_id.clone();
                     let config = ProviderConfig {
-                        id: "copilot".into(),
+                        id: account_id.clone(),
                         service_type: "copilot".into(),
                         name: identity.unwrap_or_else(|| "GitHub Copilot".into()),
                         api_key_masked: "oauth".into(),
@@ -112,10 +118,10 @@ impl OAuthCallbackServer {
                         created_at: token.created_at,
                         updated_at: token.updated_at,
                     };
-                    match store.providers().save_oauth_connection(&token, &config) {
+                    match credentials.save_oauth_connection(&token, Some(&config)).await {
                         Ok(_) => {
                             let _ = status.send(CallbackServerStatus::Completed {
-                                provider_id: "copilot".into(),
+                                provider_id: account_id.clone(),
                             });
                         }
                         Err(e) => {
@@ -275,7 +281,7 @@ impl OAuthCallbackServer {
 
         let status_tx = self.status_tx.clone();
         let mut shutdown_rx = self.shutdown_tx.subscribe();
-        let store = self.store.clone();
+        let credentials = self.credentials.clone();
 
         tokio::spawn(async move {
             tracing::info!(
@@ -399,7 +405,7 @@ impl OAuthCallbackServer {
                                 .await
                             {
                                 Ok((tokens, identity)) => {
-                                    let providers = store.providers();
+
                                     let now = chrono::Utc::now().timestamp_millis();
                                     let provider_config = ProviderConfig {
                                         id: context.provider_id.clone(),
@@ -425,7 +431,7 @@ impl OAuthCallbackServer {
                                         updated_at: now,
                                     };
                                     if let Err(err) =
-                                        providers.save_oauth_connection(&tokens, &provider_config)
+                                        credentials.save_oauth_connection(&tokens, Some(&provider_config)).await
                                     {
                                         tracing::error!(
                                             "Failed to persist OAuth provider config: {err}"

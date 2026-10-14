@@ -26,6 +26,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let runtime = Arc::new(CustosRuntime::bootstrap_profile(&profile)?);
+    // Attempt legacy scrubbing before HTTP/SSE readers start. A locked vault
+    // must not prevent the desktop from opening; the owned operation can retry.
+    match tokio::time::timeout(std::time::Duration::from_secs(5), runtime.credentials.initialize()).await {
+        Ok(Ok(())) => {},
+        _ => eprintln!("Provider secure storage needs attention; affected accounts remain blocked"),
+    }
     let database_path = profile.database_path();
 
     // Bind TCP Listener on loopback

@@ -1,5 +1,6 @@
 pub mod antigravity;
 pub mod catalog;
+pub mod credential_vault;
 pub mod claude;
 pub mod codex;
 pub mod fake;

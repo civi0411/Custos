@@ -1,8 +1,23 @@
 <!doctype html>
-<html lang="en" class="dark h-full w-full overflow-hidden">
+<html lang="en" class="h-full w-full overflow-hidden">
 
 <head>
   <meta charset="UTF-8" />
+  <script>
+    // Apply device appearance before the first paint; React owns subsequent updates.
+    (() => {
+      let preferences = {};
+      try { preferences = JSON.parse(localStorage.getItem('custos.appearance.preferences') || '{}') || {}; } catch {}
+      const preference = preferences.theme === 'light' || preferences.theme === 'dark' ? preferences.theme : 'system';
+      const theme = preference === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : preference;
+      const root = document.documentElement;
+      root.dataset.theme = theme;
+      root.classList.toggle('dark', theme === 'dark');
+      root.style.colorScheme = theme;
+      root.dataset.density = preferences.density === 'compact' ? 'compact' : 'comfortable';
+      root.dataset.reduceMotion = String(preferences.reduceMotion === true);
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Custos SADE — Supervised Agent Development Environment</title>
   <meta name="description" content="Custos SADE: local-first agent workspace for Coding, Research, and Assistant workbenches." />

@@ -7,12 +7,63 @@ use rusqlite::params;
 
 #[derive(Clone)]
 pub struct ProviderRepository {
-    db: DbConnection,
+    pub(super) db: DbConnection,
 }
 
 impl ProviderRepository {
     pub fn new(db: DbConnection) -> Self {
         Self { db }
+    }
+
+    pub fn routing_policy(&self, service: &str) -> Result<serde_json::Value, DomainError> {
+        use rusqlite::OptionalExtension;
+        let conn = self.db.lock()?;
+        let policy: Option<(bool, String)> = conn.query_row(
+            "SELECT round_robin, account_order FROM provider_account_routing WHERE service_type=?1",
+            params![service], |row| Ok((row.get(0)?, row.get(1)?)),
+        ).optional().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let (enabled, order) = policy.unwrap_or((false, "[]".into()));
+        let order: Vec<String> = serde_json::from_str(&order).map_err(|_| DomainError::Validation("Invalid account routing policy".into()))?;
+        Ok(serde_json::json!({"service_type":service,"round_robin":enabled,"account_order":order}))
+    }
+
+    pub fn save_routing_policy(&self, service: &str, enabled: bool, order: &[String]) -> Result<(), DomainError> {
+        let mut conn = self.db.lock()?;
+        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let mut seen = std::collections::HashSet::new();
+        for account in order {
+            let matches: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM providers_config WHERE id=?1 AND service_type=?2)", params![account,service], |row| row.get(0)).map_err(|e| DomainError::Validation(e.to_string()))?;
+            if !matches || !seen.insert(account) { return Err(DomainError::Validation("Account order must contain distinct accounts belonging to this provider".into())); }
+        }
+        let encoded = serde_json::to_string(order).map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.execute("INSERT INTO provider_account_routing(service_type,round_robin,account_order,cursor) VALUES(?1,?2,?3,0) ON CONFLICT(service_type) DO UPDATE SET round_robin=excluded.round_robin,account_order=excluded.account_order,cursor=0",params![service,enabled,encoded]).map_err(|e| DomainError::Validation(e.to_string()))?;
+        Self::record_provider_event(&tx,"provider.routing.updated",service,service,chrono::Utc::now().timestamp_millis())?;
+        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))
+    }
+
+    pub fn select_account(&self, service: &str, eligible: &[String]) -> Result<Option<String>, DomainError> {
+        use rusqlite::OptionalExtension;
+        if eligible.is_empty() { return Ok(None); }
+        let mut conn = self.db.lock()?;
+        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        let row: Option<(bool,String,i64)> = tx.query_row("SELECT round_robin,account_order,cursor FROM provider_account_routing WHERE service_type=?1",params![service],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional().map_err(|e|DomainError::Validation(e.to_string()))?;
+        let (enabled,encoded,cursor)=row.unwrap_or((false,"[]".into(),0));
+        let order: Vec<String>=serde_json::from_str(&encoded).map_err(|_|DomainError::Validation("Invalid account routing policy".into()))?;
+        let mut pool=Vec::new();
+        for id in eligible {
+            let available: bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM providers_config p WHERE p.id=?1 AND p.service_type=?2 AND p.status IN ('active','configured','primary','standby') AND (?2='local' OR EXISTS(SELECT 1 FROM provider_credentials c WHERE c.provider_id=p.id AND c.state='active')))",params![id,service],|r|r.get(0)).map_err(|e|DomainError::Validation(e.to_string()))?;
+            if available && !pool.contains(id) { pool.push(id.clone()); }
+        }
+        if pool.is_empty() { return Err(DomainError::Validation("No eligible provider account remains available".into())); }
+        pool.sort_by_key(|id| order.iter().position(|candidate|candidate==id).unwrap_or(usize::MAX));
+        let index=if enabled { (cursor.max(0) as usize)%pool.len() } else {0};
+        let selected=pool[index].clone();
+        if enabled {
+            tx.execute("UPDATE provider_account_routing SET cursor=?2 WHERE service_type=?1",params![service,((index+1)%pool.len()) as i64]).map_err(|e|DomainError::Validation(e.to_string()))?;
+        }
+        Self::record_provider_event(&tx,"provider.account.selected",&selected,service,chrono::Utc::now().timestamp_millis())?;
+        tx.commit().map_err(|e|DomainError::Validation(e.to_string()))?;
+        Ok(Some(selected))
     }
 
     pub fn list_providers(&self) -> Result<Vec<ProviderConfig>, DomainError> {
@@ -106,7 +157,7 @@ impl ProviderRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))
     }
 
-    fn write_provider(
+    pub(super) fn write_provider(
         conn: &rusqlite::Connection,
         config: &ProviderConfig,
     ) -> Result<(), DomainError> {
@@ -146,14 +197,17 @@ impl ProviderRepository {
     }
 
     pub fn delete_provider(&self, id: &str) -> Result<bool, DomainError> {
-        let conn = self.db.lock()?;
-        let _ = conn.execute(
+        let mut conn = self.db.lock()?;
+        let tx=conn.transaction().map_err(|_|DomainError::Validation("Provider deletion failed".into()))?;
+        tx.execute(
             "DELETE FROM provider_model_catalog WHERE provider_id = ?1",
             params![id],
-        );
-        let changed = conn
+        ).map_err(|_|DomainError::Validation("Provider deletion failed".into()))?;
+        let changed = tx
             .execute("DELETE FROM providers_config WHERE id = ?1", params![id])
             .map_err(|e| DomainError::Validation(e.to_string()))?;
+        Self::record_provider_event(&tx,"provider.config.deleted",id,"metadata",chrono::Utc::now().timestamp_millis())?;
+        tx.commit().map_err(|_|DomainError::Validation("Provider deletion failed".into()))?;
         Ok(changed > 0)
     }
 
@@ -364,6 +418,7 @@ impl ProviderRepository {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn save_oauth_token(&self, token: &OAuthTokenRecord) -> Result<(), DomainError> {
         let mut conn = self.db.lock()?;
         let tx = conn
@@ -381,6 +436,7 @@ impl ProviderRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))
     }
 
+    #[cfg(test)]
     pub fn save_oauth_connection(
         &self,
         token: &OAuthTokenRecord,
@@ -408,7 +464,7 @@ impl ProviderRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))
     }
 
-    fn record_provider_event(
+    pub(super) fn record_provider_event(
         conn: &rusqlite::Connection,
         topic: &str,
         provider_id: &str,
@@ -430,6 +486,7 @@ impl ProviderRepository {
         Ok(())
     }
 
+    #[cfg(test)]
     fn write_oauth_token(
         conn: &rusqlite::Connection,
         token: &OAuthTokenRecord,
@@ -502,6 +559,7 @@ impl ProviderRepository {
         }
     }
 
+    #[cfg(test)]
     pub fn delete_oauth_token(&self, provider_id: &str) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
         conn.execute(
@@ -512,6 +570,7 @@ impl ProviderRepository {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn list_expiring_oauth_tokens(
         &self,
         threshold_ms: i64,
@@ -548,6 +607,7 @@ impl ProviderRepository {
         Ok(list)
     }
 
+    #[cfg(test)]
     pub fn list_oauth_tokens(&self) -> Result<Vec<OAuthTokenRecord>, DomainError> {
         let conn = self.db.lock()?;
         let mut stmt = conn
@@ -686,4 +746,29 @@ mod catalog_snapshot_tests {
             .unwrap();
         assert_eq!(events, 2);
     }
+    #[test]
+    fn routing_policy_and_cursor_survive_restart() {
+        let dir=tempfile::tempdir().unwrap();
+        let path=dir.path().join("routing.db");
+        {
+            let store=crate::SqliteTaskStore::new(path.to_str().unwrap()).unwrap();
+            let repo=store.providers();
+            for id in ["A","B"] {
+                let config=ProviderConfig{id:id.into(),name:id.into(),service_type:"local".into(),api_key_masked:"none".into(),status:"active".into(),endpoint_url:None,default_model:None,context_window:None,fast_mode:None,created_at:0,updated_at:0};
+                repo.save_provider(&config).unwrap();
+            }
+            repo.save_routing_policy("local",true,&["B".into(),"A".into()]).unwrap();
+            assert_eq!(repo.select_account("local",&["A".into(),"B".into()]).unwrap().as_deref(),Some("B"));
+        }
+        let store=crate::SqliteTaskStore::new(path.to_str().unwrap()).unwrap();
+        let repo=store.providers();
+        assert_eq!(repo.routing_policy("local").unwrap()["round_robin"],true);
+        assert_eq!(repo.select_account("local",&["A".into(),"B".into()]).unwrap().as_deref(),Some("A"));
+        repo.save_routing_policy("local",false,&["A".into(),"B".into()]).unwrap();
+        assert_eq!(repo.select_account("local",&["A".into(),"B".into()]).unwrap().as_deref(),Some("A"));
+        let conn=repo.db.lock().unwrap();
+        let count:i64=conn.query_row("SELECT COUNT(*) FROM outbox_messages WHERE topic='provider.account.selected'",[],|r|r.get(0)).unwrap();
+        assert_eq!(count,3);
+    }
+
 }

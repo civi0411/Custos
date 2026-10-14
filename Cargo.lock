@@ -1499,7 +1499,9 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "thiserror 1.0.69",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1545,6 +1547,7 @@ name = "custos-daemon"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "base64 0.21.7",
  "chrono",
  "custos-adapters",
  "custos-bridge",

@@ -8,6 +8,10 @@ import {
   Activity,
   X,
   Layers,
+  AlertTriangle,
+  RefreshCw,
+  Clock,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   RemoteHostNode,
@@ -61,6 +65,9 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
 
   const selectedHost = hosts.find((h) => h.id === selectedHostId) ?? hosts[0] ?? null;
 
+  const canExec = can('fleet.exec') || can('exec');
+  const canPing = can('hosts.ping');
+
   const loadHosts = useCallback(async () => {
     if (!can('hosts.list')) {
       setHosts([]);
@@ -102,7 +109,7 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
   const handleRegisterHost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newHostName.trim() || !newHostAddress.trim() || !newHostUser.trim()) {
-      onShowToast?.('Please fill in name, address, and user.');
+      onShowToast?.('Please fill in required host fields.');
       return;
     }
 
@@ -110,17 +117,21 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
       const params: RegisterHostParams = {
         name: newHostName.trim(),
         host: newHostAddress.trim(),
-        port: newHostPort || 22,
+        port: newHostPort,
         user: newHostUser.trim(),
         private_key_path: newHostKeyPath.trim() || undefined,
-        labels: { cluster: 'default', tier: 'worker' },
+        labels: { managed_by: 'custos-daemon' },
       };
-      const node = await daemonClient.registerRemoteHost(params);
-      setHosts((prev) => [...prev, node]);
-      setSelectedHostId(node.id);
+
+      const registered = await daemonClient.registerRemoteHost(params);
+      setHosts((prev) => [...prev, registered]);
+      setSelectedHostId(registered.id);
       setIsRegisterModalOpen(false);
       setNewHostName('');
-      onShowToast?.(`Remote host '${node.name}' registered.`);
+      setNewHostAddress('');
+      setNewHostUser('');
+      setNewHostKeyPath('');
+      onShowToast?.(`Host '${registered.name}' registered successfully.`);
     } catch (err) {
       onShowToast?.(`Failed to register host: ${String(err)}`);
     }
@@ -135,8 +146,7 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
           h.id === hostId
             ? {
                 ...h,
-                status: res.status as any,
-                last_ping_ms: res.ping_ms ?? h.last_ping_ms,
+                status: res.status === 'online' ? 'online' : 'offline',
                 lastPingMs: res.ping_ms ?? h.lastPingMs,
               }
             : h
@@ -145,7 +155,7 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
       if (res.status === 'online') {
         onShowToast?.(`Node online. Latency: ${res.ping_ms ?? 0}ms.`);
       } else {
-        onShowToast?.(`Host ping failed: ${res.status}`);
+        onShowToast?.(`Host ping offline: ${res.error || res.status}`);
       }
     } catch (err) {
       onShowToast?.(`Ping probe failed: ${String(err)}`);
@@ -209,84 +219,105 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#121214] text-zinc-200 text-xs overflow-hidden select-none font-sans">
-      {/* Top Header / Mode Switcher */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-800 bg-[#18181b]">
+    <div className="flex flex-col h-full w-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)] text-xs overflow-hidden select-none font-sans relative">
+      {/* 48px Standard Pane Header */}
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-5 z-10">
+        <div className="flex items-center gap-2.5">
+          <Server className="w-4 h-4 workbench-accent" />
+          <span className="text-xs font-semibold text-[var(--color-editor-fg)]">
+            Remote Fleet & Automation
+          </span>
+          <span className="text-[10px] text-[var(--color-fg-muted)] font-mono font-medium bg-[var(--color-surface-2)] px-2 py-0.5 rounded border border-[var(--color-border-muted)] ml-1">
+            {hosts.length} node(s) • {jobs.length} job(s)
+          </span>
+        </div>
+
         <div className="flex items-center gap-2">
-          <Server size={14} className="text-cyan-400 shrink-0" />
-          <span className="font-semibold text-zinc-100 tracking-wide text-[11px] uppercase">
-            Remote SSH Fleet & Headless Automation
-          </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 font-mono">
-            Roadmap Step 10
-          </span>
-        </div>
+          {canPing && canExec ? (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-mono font-medium">
+              <ShieldCheck className="w-3 h-3" />
+              <span>SSH Connected</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[10px] font-mono font-medium">
+              <AlertTriangle className="w-3 h-3" />
+              <span>Fail-Closed</span>
+            </div>
+          )}
 
-        <div className="flex items-center gap-1 bg-zinc-900 p-0.5 rounded border border-zinc-800">
-          <button
-            onClick={() => setActiveTab('nodes')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition ${
-              activeTab === 'nodes'
-                ? 'bg-zinc-800 text-zinc-100 shadow-xs'
-                : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <Server size={12} />
-            <span>Fleet Nodes ({hosts.length})</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('automation')}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-medium transition ${
-              activeTab === 'automation'
-                ? 'bg-zinc-800 text-zinc-100 shadow-xs'
-                : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <Layers size={12} />
-            <span>Headless Jobs ({jobs.length})</span>
-          </button>
+          <div className="flex items-center gap-0.5 bg-[var(--color-surface-2)] p-0.5 rounded-lg border border-[var(--color-border-default)]">
+            <button
+              onClick={() => setActiveTab('nodes')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition ${
+                activeTab === 'nodes'
+                  ? 'bg-[var(--color-surface-0)] text-[var(--color-editor-fg)] shadow-xs font-semibold'
+                  : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+              }`}
+            >
+              <Server size={12} />
+              <span>Nodes ({hosts.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('automation')}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition ${
+                activeTab === 'automation'
+                  ? 'bg-[var(--color-surface-0)] text-[var(--color-editor-fg)] shadow-xs font-semibold'
+                  : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+              }`}
+            >
+              <Layers size={12} />
+              <span>Jobs ({jobs.length})</span>
+            </button>
+          </div>
         </div>
-      </div>
+      </header>
 
-      {/* Capability status from daemon, never inferred from persisted hosts. */}
-      <div className="bg-amber-500/10 border-b border-amber-500/20 px-3 py-1.5 flex items-center justify-between text-[11px] text-amber-300 shrink-0">
-        <div className="flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-          <span>{capabilityReason || 'Remote Fleet capability is degraded.'}</span>
+      {/* Degradation Alert if not fully connected */}
+      {(!canPing || !canExec) && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 flex items-center justify-between text-[11px] text-amber-300 shrink-0">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            <span>{capabilityReason || 'OpenSSH transport is not connected; remote execution and latency probes fail closed.'}</span>
+          </div>
+          <span className="font-mono text-[10px] text-amber-300/80 uppercase tracking-wider">Governed Transport</span>
         </div>
-        <span className="font-mono text-[10px] text-amber-300/80">Fail-Closed</span>
-      </div>
+      )}
 
       {/* Main Tab Content */}
       {activeTab === 'nodes' ? (
         <div className="flex-1 flex overflow-hidden">
           {/* Left: Nodes List */}
-          <div className="w-72 flex flex-col border-r border-zinc-800 bg-[#161619]">
-            <div className="flex items-center justify-between p-3 border-b border-zinc-800">
-              <span className="text-[11px] font-semibold text-zinc-400">Inventory Nodes</span>
+          <div className="w-72 flex flex-col border-r border-[var(--color-border-muted)] bg-[var(--color-surface-1)]">
+            <div className="flex items-center justify-between p-3 border-b border-[var(--color-border-muted)]">
+              <span className="text-[11px] font-semibold text-[var(--color-fg-muted)] uppercase tracking-wider">
+                Fleet Inventory
+              </span>
               <button
                 disabled={!can('hosts.register')}
                 onClick={() => setIsRegisterModalOpen(true)}
-                className="flex items-center gap-1 px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed border border-zinc-700 rounded text-zinc-200 text-[11px] transition"
+                className="flex items-center gap-1 px-2.5 py-1 bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-0)] disabled:opacity-40 disabled:cursor-not-allowed border border-[var(--color-border-default)] rounded-md text-[var(--color-editor-fg)] text-[11px] font-medium transition shadow-xs"
               >
-                <Plus size={11} />
+                <Plus size={12} className="workbench-accent" />
                 <span>Add Node</span>
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+            <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
               {isLoading ? (
-                <div className="text-center p-4 text-zinc-500">Loading nodes...</div>
+                <div className="text-center p-6 text-[var(--color-fg-muted)] flex items-center justify-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Loading nodes...</span>
+                </div>
               ) : hosts.length === 0 ? (
-                <div className="text-center p-6 space-y-2">
-                  <Server size={24} className="text-zinc-700 mx-auto" />
-                  <p className="text-zinc-500 text-[11px]">No remote SSH nodes.</p>
+                <div className="text-center p-8 space-y-3">
+                  <Server size={28} className="text-[var(--color-fg-subtle)] mx-auto opacity-50" />
+                  <p className="text-[var(--color-fg-muted)] text-[11px]">No remote SSH nodes in inventory.</p>
                   <button
                     disabled={!can('hosts.register')}
                     onClick={() => setIsRegisterModalOpen(true)}
-                    className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed border border-zinc-700 rounded text-zinc-300 text-[11px]"
+                    className="px-3 py-1.5 bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md text-[var(--color-editor-fg)] text-[11px] font-medium transition"
                   >
-                    Register Node
+                    Register First Node
                   </button>
                 </div>
               ) : (
@@ -297,28 +328,28 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
                     <div
                       key={host.id}
                       onClick={() => setSelectedHostId(host.id)}
-                      className={`p-2.5 rounded-lg border cursor-pointer transition space-y-1 ${
+                      className={`p-3 rounded-lg border cursor-pointer transition space-y-1.5 ${
                         isSelected
-                          ? 'bg-zinc-800/80 border-cyan-800 text-zinc-100 shadow-xs'
-                          : 'bg-zinc-900/40 border-zinc-800/80 text-zinc-400 hover:bg-zinc-800/40 hover:text-zinc-200'
+                          ? 'bg-[var(--color-surface-0)] border-[var(--workbench-accent)] text-[var(--color-editor-fg)] shadow-xs'
+                          : 'bg-[var(--color-surface-2)]/60 border-[var(--color-border-subtle)] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-editor-fg)]'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold text-xs text-zinc-200">{host.name}</span>
+                        <span className="font-semibold text-xs text-[var(--color-editor-fg)]">{host.name}</span>
                         <span
-                          className={`px-1.5 py-0.2 rounded text-[10px] font-mono border ${
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${
                             isOnline
-                              ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/40'
-                              : 'bg-zinc-900 text-zinc-500 border-zinc-800'
+                              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                              : 'bg-[var(--color-surface-1)] text-[var(--color-fg-subtle)] border-[var(--color-border-muted)]'
                           }`}
                         >
                           {host.status}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between text-[10px] text-zinc-500 font-mono">
+                      <div className="flex items-center justify-between text-[10px] text-[var(--color-fg-muted)] font-mono">
                         <span>{host.user}@{host.host}:{host.port}</span>
                         {host.last_ping_ms != null && (
-                          <span className="text-emerald-400">{host.last_ping_ms}ms</span>
+                          <span className="text-emerald-400 font-medium">{host.last_ping_ms}ms</span>
                         )}
                       </div>
                     </div>
@@ -329,98 +360,133 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
           </div>
 
           {/* Right: Node Detail & Execution Console */}
-          <div className="flex-1 flex flex-col bg-zinc-950 overflow-hidden">
+          <div className="flex-1 flex flex-col bg-[var(--color-canvas)] overflow-hidden">
             {!selectedHost ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-zinc-500">
-                <Server size={32} className="text-zinc-700 mb-2" />
-                <p>Select or register an SSH host node to inspect its persisted configuration.</p>
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-[var(--color-fg-muted)] space-y-2">
+                <Server size={36} className="text-[var(--color-fg-subtle)] opacity-40" />
+                <p className="text-xs">Select or register an SSH host node to inspect or run remote commands.</p>
               </div>
             ) : (
               <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Node Top Banner */}
-                <div className="flex items-center justify-between p-3 border-b border-zinc-800 bg-[#18181b]">
-                  <div className="flex items-center gap-3">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-zinc-100 text-xs">
-                          {selectedHost.name}
-                        </span>
-                        <span className="text-[10px] font-mono text-zinc-400">
-                          ({selectedHost.user}@{selectedHost.host}:{selectedHost.port})
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-[10px] text-zinc-500 font-mono">
-                        <span>ID: {selectedHost.id}</span>
-                        <span>•</span>
-                        <span>Auth: {selectedHost.auth_method.type}</span>
-                      </div>
+                <div className="flex items-center justify-between p-3.5 border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)]">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-[var(--color-editor-fg)] text-xs">
+                        {selectedHost.name}
+                      </span>
+                      <span className="text-[10px] font-mono text-[var(--color-fg-muted)]">
+                        ({selectedHost.user}@{selectedHost.host}:{selectedHost.port})
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.2 rounded text-[10px] font-mono border ${
+                          selectedHost.status === 'online'
+                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                            : 'bg-[var(--color-surface-2)] text-[var(--color-fg-subtle)] border-[var(--color-border-muted)]'
+                        }`}
+                      >
+                        {selectedHost.status}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[10px] text-[var(--color-fg-muted)] font-mono">
+                      <span>ID: {selectedHost.id}</span>
+                      <span>•</span>
+                      <span>Auth: {selectedHost.auth_method.type}</span>
+                      {selectedHost.last_ping_ms != null && (
+                        <>
+                          <span>•</span>
+                          <span className="text-emerald-400">RTT: {selectedHost.last_ping_ms}ms</span>
+                        </>
+                      )}
                     </div>
                   </div>
 
                   <button
-                    disabled={!can('hosts.ping') || isPinging}
+                    disabled={!canPing || isPinging}
                     onClick={() => handlePingHost(selectedHost.id)}
-                    title="SSH probe unavailable until the governed remote adapter is connected"
-                    className="flex items-center gap-1 px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed border border-zinc-700 rounded text-zinc-200 text-[11px] transition"
+                    title={canPing ? 'Send OpenSSH ping probe to test latency and reachability' : 'SSH probe unavailable until governed remote adapter is connected'}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-0)] disabled:opacity-40 disabled:cursor-not-allowed border border-[var(--color-border-default)] rounded-md text-[var(--color-editor-fg)] text-[11px] font-medium transition shadow-xs"
                   >
-                    <Activity size={12} className={isPinging ? 'text-amber-400 animate-spin' : 'text-emerald-400'} />
-                    <span>{isPinging ? 'Pinging...' : 'Ping Probe'}</span>
+                    <Activity size={12} className={isPinging ? 'text-amber-400 animate-spin' : 'workbench-accent'} />
+                    <span>{isPinging ? 'Probing...' : 'Ping Probe'}</span>
                   </button>
                 </div>
 
                 {/* Command Runner Bar */}
                 <form
                   onSubmit={handleExecCommand}
-                  className="flex items-center gap-2 p-3 border-b border-zinc-800 bg-[#161619]"
+                  className="flex items-center gap-2 p-3 border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)]/60"
                 >
-                  <Terminal size={14} className="text-zinc-500 shrink-0" />
+                  <Terminal size={14} className="text-[var(--color-fg-muted)] shrink-0" />
                   <input
                     type="text"
                     value={commandInput}
                     onChange={(e) => setCommandInput(e.target.value)}
-                    disabled={!can('exec') || isExecuting}
-                    placeholder="Remote execution unavailable until a governed adapter is connected"
-                    className="flex-1 bg-zinc-950/60 border border-zinc-800 rounded px-3 py-1 font-mono text-xs text-zinc-500 focus:outline-none disabled:cursor-not-allowed"
+                    disabled={!canExec || isExecuting}
+                    placeholder={canExec ? "Enter shell command to execute on remote host (e.g. nvidia-smi, uname -a, docker ps)..." : "Remote execution unavailable until governed OpenSSH adapter is connected"}
+                    className="flex-1 bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-3 py-1.5 font-mono text-xs text-[var(--color-editor-fg)] placeholder-[var(--color-fg-subtle)] focus:border-[var(--workbench-accent)] focus:outline-none transition disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                   <button
                     type="submit"
-                    disabled={!can('exec') || isExecuting || !commandInput.trim()}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-cyan-700 hover:bg-cyan-600 disabled:bg-zinc-850 disabled:text-zinc-500 border border-cyan-600 disabled:border-zinc-800 rounded text-zinc-100 font-medium text-[11px] transition"
+                    disabled={!canExec || isExecuting || !commandInput.trim()}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[var(--workbench-accent)] hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed rounded-md text-white font-medium text-[11px] transition shadow-xs"
                   >
                     <Play size={11} />
-                    <span>{isExecuting ? 'Running...' : 'Execute'}</span>
+                    <span>{isExecuting ? 'Executing...' : 'Run'}</span>
                   </button>
                 </form>
 
                 {/* Execution Receipts Stream */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 font-mono text-[11px]">
-                  <span className="text-[10px] font-sans font-semibold uppercase text-zinc-500 tracking-wider">
-                    Execution Receipts Ledger
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-sans font-semibold uppercase text-[var(--color-fg-muted)] tracking-wider">
+                      Execution Receipts Ledger ({execReceipts.length})
+                    </span>
+                    {execReceipts.length > 0 && (
+                      <button
+                        onClick={() => setExecReceipts([])}
+                        className="text-[10px] font-sans text-[var(--color-fg-subtle)] hover:text-[var(--color-editor-fg)]"
+                      >
+                        Clear History
+                      </button>
+                    )}
+                  </div>
 
                   {execReceipts.length === 0 ? (
-                    <div className="p-6 text-center text-zinc-600 font-sans text-xs">
-                      No executions recorded on this node yet. Enter a command above to dispatch.
+                    <div className="p-8 text-center text-[var(--color-fg-muted)] font-sans text-xs space-y-1">
+                      <p>No commands executed on this node yet.</p>
+                      <p className="text-[11px] text-[var(--color-fg-subtle)]">Enter a shell command above to dispatch an OpenSSH execution run.</p>
                     </div>
                   ) : (
                     execReceipts.map((rcpt) => (
                       <div
                         key={rcpt.execution_id}
-                        className="rounded-lg bg-zinc-900/60 border border-zinc-800 p-3 space-y-2"
+                        className="rounded-lg bg-[var(--color-surface-1)] border border-[var(--color-border-default)] p-3 space-y-2 shadow-xs"
                       >
-                        <div className="flex items-center justify-between border-b border-zinc-800/60 pb-1.5 text-zinc-400">
+                        <div className="flex items-center justify-between border-b border-[var(--color-border-muted)] pb-1.5 text-[var(--color-fg-muted)]">
                           <div className="flex items-center gap-2">
-                            <span className="text-cyan-400 font-bold">$ {rcpt.command}</span>
-                            <span className="text-[10px] px-1 py-0.2 rounded bg-zinc-800 text-zinc-400">
+                            <span className="workbench-accent font-bold">$ {rcpt.command}</span>
+                            <span
+                              className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                                rcpt.exit_code === 0
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                  : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                              }`}
+                            >
                               exit {rcpt.exit_code ?? 0}
                             </span>
                           </div>
-                          <span className="text-zinc-500 text-[10px]">{rcpt.duration_ms}ms</span>
+                          <span className="text-[var(--color-fg-subtle)] text-[10px] flex items-center gap-1">
+                            <Clock size={10} />
+                            <span>{rcpt.duration_ms}ms</span>
+                          </span>
                         </div>
-                        <div className="text-zinc-300 whitespace-pre-wrap text-xs font-mono bg-zinc-950 p-2 rounded border border-zinc-900">
-                          {rcpt.stdout || '<empty stdout>'}
+                        <div className="text-[var(--color-editor-fg)] whitespace-pre-wrap text-xs font-mono bg-[var(--color-surface-0)] p-2.5 rounded-md border border-[var(--color-border-muted)] overflow-x-auto">
+                          {rcpt.stdout || <span className="text-[var(--color-fg-subtle)] italic">&lt;empty stdout&gt;</span>}
                           {rcpt.stderr && (
-                            <span className="text-red-400 block mt-1">{rcpt.stderr}</span>
+                            <span className="text-red-400 block mt-1.5 pt-1.5 border-t border-[var(--color-border-muted)]">
+                              {rcpt.stderr}
+                            </span>
                           )}
                         </div>
                       </div>
@@ -433,30 +499,30 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
         </div>
       ) : (
         /* Automation Tab Content */
-        <div className="flex-1 flex flex-col bg-zinc-950 overflow-hidden">
-          <div className="flex items-center justify-between p-3 border-b border-zinc-800 bg-[#161619]">
+        <div className="flex-1 flex flex-col bg-[var(--color-canvas)] overflow-hidden">
+          <div className="flex items-center justify-between p-3.5 border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)]">
             <div className="space-y-0.5">
-              <span className="font-semibold text-zinc-200 text-xs">Headless Job Registry</span>
-              <p className="text-zinc-500 text-[11px]">
-                Autonomous batch executions, verification recipes, and scheduled regression checks.
+              <span className="font-semibold text-[var(--color-editor-fg)] text-xs">Headless Automation Registry</span>
+              <p className="text-[var(--color-fg-muted)] text-[11px]">
+                Autonomous batch executions, verification recipes, and continuous regression checks.
               </p>
             </div>
             <button
               disabled={!can('jobs.create')}
               onClick={() => setIsCreateJobModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed border border-zinc-700 rounded text-zinc-200 text-xs font-medium transition"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-0)] disabled:opacity-40 disabled:cursor-not-allowed border border-[var(--color-border-default)] rounded-md text-[var(--color-editor-fg)] text-xs font-medium transition shadow-xs"
             >
-              <Plus size={12} />
+              <Plus size={12} className="workbench-accent" />
               <span>Create Headless Job</span>
             </button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {jobs.length === 0 ? (
-              <div className="text-center p-12 text-zinc-600 space-y-2">
-                <Layers size={32} className="text-zinc-700 mx-auto" />
-                <p className="text-zinc-400 text-xs font-medium">No headless jobs registered.</p>
-                <p className="text-[11px]">Define automated batch jobs with verification evidence.</p>
+              <div className="text-center p-12 text-[var(--color-fg-muted)] space-y-2">
+                <Layers size={32} className="text-[var(--color-fg-subtle)] mx-auto opacity-40" />
+                <p className="text-[var(--color-editor-fg)] text-xs font-medium">No headless jobs registered.</p>
+                <p className="text-[11px]">Define automated batch jobs with verification evidence requirements.</p>
               </div>
             ) : (
               jobs.map((job) => {
@@ -464,43 +530,41 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
                 return (
                   <div
                     key={job.id}
-                    className="p-4 rounded-lg bg-zinc-900/50 border border-zinc-800 space-y-3"
+                    className="p-4 rounded-lg bg-[var(--color-surface-1)] border border-[var(--color-border-default)] space-y-3 shadow-xs"
                   >
                     <div className="flex items-center justify-between">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-zinc-200 text-xs">{job.name}</span>
+                          <span className="font-semibold text-[var(--color-editor-fg)] text-xs">{job.name}</span>
                           <span
-                            className={`px-1.5 py-0.2 rounded text-[10px] font-mono border ${
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-mono border ${
                               isCompleted
-                                ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/40'
-                                : 'bg-amber-950/60 text-amber-400 border-amber-800/40'
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                : 'bg-amber-500/10 text-amber-300 border-amber-500/20'
                             }`}
                           >
                             {job.status}
                           </span>
                         </div>
-                        <p className="text-[11px] text-zinc-500 font-mono">
+                        <p className="text-[11px] text-[var(--color-fg-muted)] font-mono">
                           ID: {job.id} • Target: {job.spec.target_type}
                         </p>
                       </div>
 
                       <button
-                        disabled={true}
-                        title="Headless job execution unavailable: executor adapter not connected"
                         onClick={() => handleRunJob(job.id)}
-                        className="flex items-center gap-1.5 px-3 py-1 bg-zinc-800/50 border border-zinc-800 rounded text-zinc-500 text-xs font-medium cursor-not-allowed"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md text-[var(--color-editor-fg)] text-xs font-medium transition shadow-xs"
                       >
-                        <Play size={11} className="text-zinc-500" />
+                        <Play size={11} className="workbench-accent" />
                         <span>Run Job</span>
                       </button>
                     </div>
 
-                    <div className="p-2.5 rounded bg-zinc-950 border border-zinc-900 font-mono text-[11px] space-y-1 text-zinc-300">
-                      <div className="text-zinc-500 text-[10px]">Command / Script:</div>
+                    <div className="p-2.5 rounded-md bg-[var(--color-surface-0)] border border-[var(--color-border-muted)] font-mono text-[11px] space-y-1 text-[var(--color-editor-fg)]">
+                      <div className="text-[var(--color-fg-muted)] text-[10px]">Command / Script:</div>
                       <div>{job.spec.command_or_script}</div>
                       {job.output_log && (
-                        <div className="pt-2 border-t border-zinc-900 text-zinc-400 whitespace-pre-wrap text-[10px]">
+                        <div className="pt-2 border-t border-[var(--color-border-muted)] text-[var(--color-fg-muted)] whitespace-pre-wrap text-[10px]">
                           {job.output_log}
                         </div>
                       )}
@@ -515,13 +579,13 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
 
       {/* Modal: Register SSH Host */}
       {isRegisterModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-[#18181b] border border-zinc-800 rounded-xl w-full max-w-md p-5 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <span className="font-semibold text-zinc-100 text-xs">Register Remote SSH Host</span>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-[var(--color-surface-1)] border border-[var(--color-border-default)] rounded-xl w-full max-w-md p-5 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-[var(--color-border-muted)] pb-2.5">
+              <span className="font-semibold text-[var(--color-editor-fg)] text-xs">Register Remote SSH Host</span>
               <button
                 onClick={() => setIsRegisterModalOpen(false)}
-                className="text-zinc-500 hover:text-zinc-300"
+                className="text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]"
               >
                 <X size={14} />
               </button>
@@ -529,72 +593,75 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
 
             <form onSubmit={handleRegisterHost} className="space-y-3">
               <div>
-                <label className="text-zinc-400 text-[11px] block mb-1">Node Name</label>
+                <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">Node Name</label>
                 <input
                   type="text"
-                  placeholder="e.g. GPU Worker 01"
+                  placeholder="e.g. Cluster GPU Node 01"
                   value={newHostName}
                   onChange={(e) => setNewHostName(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-200 focus:outline-none"
+                  className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2">
-                  <label className="text-zinc-400 text-[11px] block mb-1">Host IP / FQDN</label>
+                  <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">Host IP / FQDN</label>
                   <input
                     type="text"
                     value={newHostAddress}
                     onChange={(e) => setNewHostAddress(e.target.value)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-200 focus:outline-none"
+                    placeholder="192.168.1.50 or host.internal"
+                    className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none"
                     required
                   />
                 </div>
                 <div>
-                  <label className="text-zinc-400 text-[11px] block mb-1">Port</label>
+                  <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">Port</label>
                   <input
                     type="number"
                     value={newHostPort}
                     onChange={(e) => setNewHostPort(parseInt(e.target.value) || 22)}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-200 focus:outline-none"
+                    className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-zinc-400 text-[11px] block mb-1">SSH Username</label>
+                <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">SSH Username</label>
                 <input
                   type="text"
+                  placeholder="e.g. ubuntu, root, dev"
                   value={newHostUser}
                   onChange={(e) => setNewHostUser(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-200 focus:outline-none"
+                  className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-zinc-400 text-[11px] block mb-1">Private Key Path</label>
+                <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">Private Key Path (optional)</label>
                 <input
                   type="text"
+                  placeholder="~/.ssh/id_ed25519"
                   value={newHostKeyPath}
                   onChange={(e) => setNewHostKeyPath(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-200 focus:outline-none font-mono"
+                  className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none font-mono"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--color-border-muted)]">
                 <button
                   type="button"
                   onClick={() => setIsRegisterModalOpen(false)}
-                  className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs"
+                  className="px-3 py-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-0)] text-[var(--color-editor-fg)] text-xs border border-[var(--color-border-default)]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={!can('hosts.register')}
-                  className="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-zinc-100 text-xs font-medium"
+                  className="px-3.5 py-1.5 rounded-md bg-[var(--workbench-accent)] hover:opacity-90 text-white text-xs font-medium shadow-xs"
                 >
                   Register Node
                 </button>
@@ -606,13 +673,13 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
 
       {/* Modal: Create Headless Job */}
       {isCreateJobModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-[#18181b] border border-zinc-800 rounded-xl w-full max-w-md p-5 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <span className="font-semibold text-zinc-100 text-xs">Create Headless Job</span>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-[var(--color-surface-1)] border border-[var(--color-border-default)] rounded-xl w-full max-w-md p-5 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-[var(--color-border-muted)] pb-2.5">
+              <span className="font-semibold text-[var(--color-editor-fg)] text-xs">Create Headless Job</span>
               <button
                 onClick={() => setIsCreateJobModalOpen(false)}
-                className="text-zinc-500 hover:text-zinc-300"
+                className="text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]"
               >
                 <X size={14} />
               </button>
@@ -620,23 +687,23 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
 
             <form onSubmit={handleCreateJob} className="space-y-3">
               <div>
-                <label className="text-zinc-400 text-[11px] block mb-1">Job Name</label>
+                <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">Job Name</label>
                 <input
                   type="text"
                   placeholder="e.g. Nightly Benchmark Sweep"
                   value={newJobName}
                   onChange={(e) => setNewJobName(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-200 focus:outline-none"
+                  className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-zinc-400 text-[11px] block mb-1">Target Execution Type</label>
+                <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">Target Execution Type</label>
                 <NativeSelect
                   value={newJobTargetType}
                   onChange={(e) => setNewJobTargetType(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-200 focus:outline-none"
+                  className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none"
                 >
                   <option value="local_process">local_process (Host Process)</option>
                   <option value="remote_ssh">remote_ssh (Fleet Node)</option>
@@ -645,28 +712,28 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
               </div>
 
               <div>
-                <label className="text-zinc-400 text-[11px] block mb-1">Command or Script</label>
+                <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">Command or Script</label>
                 <textarea
                   rows={3}
                   value={newJobCommand}
                   onChange={(e) => setNewJobCommand(e.target.value)}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-200 focus:outline-none font-mono"
+                  className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none font-mono"
                   required
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--color-border-muted)]">
                 <button
                   type="button"
                   onClick={() => setIsCreateJobModalOpen(false)}
-                  className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs"
+                  className="px-3 py-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-0)] text-[var(--color-editor-fg)] text-xs border border-[var(--color-border-default)]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={!can('jobs.create')}
-                  className="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-zinc-100 text-xs font-medium"
+                  className="px-3.5 py-1.5 rounded-md bg-[var(--workbench-accent)] hover:opacity-90 text-white text-xs font-medium shadow-xs"
                 >
                   Save Job
                 </button>

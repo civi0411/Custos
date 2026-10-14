@@ -154,6 +154,8 @@ export interface CreateTaskParams {
 export interface StartRunParams {
   background?: boolean;
   task_id: string;
+  actor?: string;
+  workflow_revision?: string;
   instruction?: string;
   preferred_mode?: 'model' | 'native' | 'terminal';
   workspace_id?: string;
@@ -1064,11 +1066,9 @@ export interface OAuthAuthorizeResult {
   interval?: number;
 }
 
-export interface OAuthTokenRecord {
+export interface OAuthConnectionMetadata {
   provider_id: string;
   service_type: string;
-  access_token?: string;
-  refresh_token?: string;
   expires_at?: number;
   token_type?: string;
   scope?: string;
@@ -1168,3 +1168,40 @@ export interface LiveRunSnapshot {
   error?: string | null;
   reconnecting?: boolean;
 }
+
+export interface EmulatorDevice {
+  id: string;
+  name: string;
+  platform: 'iOS' | 'Android' | 'iPadOS';
+  width: number;
+  height: number;
+  scale: number;
+  user_agent: string;
+  status: 'ready' | 'running' | 'offline';
+}
+
+export interface EmulatorSession {
+  session_id: string;
+  device_id: string;
+  width: number;
+  height: number;
+  scale: number;
+  url: string;
+  status: string;
+}
+
+export interface EmulatorSnapshotResult {
+  session_id: string;
+  snapshot: string;
+  refs: Record<string, { name?: string; role?: string }>;
+  origin: string;
+}
+
+export interface EmulatorScreenshotResult {
+  session_id: string;
+  path?: string;
+  image_base64?: string;
+}
+
+/** Compatibility name for metadata-only OAuth responses. */
+export type OAuthTokenRecord = OAuthConnectionMetadata;

@@ -104,7 +104,7 @@ export function ProviderIcon({
 }
 
 export function formatModelDisplayName(rawId: string): string {
-  let clean = rawId.replace(/^antigravity\//i, '').replace(/^ollama\//i, '');
+  let clean = rawId.replace(/^antigravity\//i, '').replace(/^ollama\//i, '').replace(/^copilot\//i, '');
   clean = clean.replace(/-(high|medium|low|extra-low|tiered)$/i, '');
 
   if (clean.toLowerCase().includes('gemini-3.8-flash')) return 'Gemini 3.8 Flash';
@@ -166,8 +166,9 @@ export function getConnectedModelOptions(accounts: import('@/types').ConnectedAc
 
       const metadata = account.catalogModels?.find((m) => m.id === id);
       const info = getProviderInfo(id);
-      const provider = (account.providerId as ModelOption['provider']) || info.provider;
-      const providerName = account.providerName || info.label;
+      // A route namespace identifies the serving connection, regardless of model family.
+      const provider = info.provider === 'copilot' ? 'copilot' : (account.providerId as ModelOption['provider']) || info.provider;
+      const providerName = provider === 'copilot' ? 'GitHub Copilot' : account.providerName || info.label;
 
       const idLower = id.toLowerCase();
       const isReasoning =
@@ -479,6 +480,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
 
     const order: Array<ModelOption['provider']> = [
       'antigravity',
+      'copilot',
       'gemini',
       'anthropic',
       'openai',
@@ -533,6 +535,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     const list = Array.from(set);
     const order: Array<ModelOption['provider']> = [
       'antigravity',
+      'copilot',
       'openai',
       'gemini',
       'anthropic',
@@ -629,6 +632,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   const label =
                     prov === 'antigravity'
                       ? 'Antigravity'
+                      : prov === 'copilot'
+                      ? 'GitHub Copilot'
                       : prov === 'openai'
                       ? 'OpenAI'
                       : prov === 'anthropic'
