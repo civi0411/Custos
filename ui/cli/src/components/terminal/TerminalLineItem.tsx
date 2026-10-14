@@ -26,10 +26,11 @@ export const TerminalLineItem: React.FC<TerminalLineItemProps> = ({
   onPermitDecision,
 }) => {
   if (line.type === 'banner') {
+    if (hasChatted) return null;
     return (
       <TerminalBanner
         key={line.id}
-        showNotice={!hasChatted}
+        showNotice
         onOpenModeSelector={onOpenModeSelector}
         onRunCommand={onRunCommand}
       />
@@ -55,7 +56,7 @@ export const TerminalLineItem: React.FC<TerminalLineItemProps> = ({
   }
 
   if (line.type === 'input') {
-    const modeSlug = getModeSlug(currentMode);
+    const modeSlug = getModeSlug(line.metadata?.mode || currentMode);
     const cfg = AVAILABLE_MODES.find((m) => m.slug === modeSlug);
     const badgeColor = cfg ? cfg.color : '#38bdf8';
     const cleanPrompt = line.content.replace(/^[a-zA-Z-]+\s*❯\s*/, '');

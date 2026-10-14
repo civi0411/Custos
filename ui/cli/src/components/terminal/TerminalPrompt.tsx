@@ -9,9 +9,9 @@ interface TerminalPromptProps {
   isProcessing: boolean;
   showModeSelector: boolean;
   vibeSession: VibeSessionState;
-  inputRef: RefObject<HTMLInputElement | null>;
-  onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  inputRef: RefObject<HTMLTextAreaElement | null>;
+  onInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onToggleModeSelector: () => void;
   onSend: () => void;
 }
@@ -32,6 +32,10 @@ export const TerminalPrompt: React.FC<TerminalPromptProps> = ({
   const modeSlug = getModeSlug(currentMode as OperationalMode);
   const cfg = AVAILABLE_MODES.find((m) => m.slug === modeSlug);
   const badgeColor = cfg ? cfg.color : '#60a5fa';
+  const promptStyle = {
+    borderLeftColor: badgeColor,
+    '--mode-accent': badgeColor,
+  } as React.CSSProperties & { '--mode-accent': string };
 
   const getPlaceholder = () => {
     if (showModeSelector) return "Gõ để lọc mode hoặc lệnh... (Esc để đóng)";
@@ -41,27 +45,17 @@ export const TerminalPrompt: React.FC<TerminalPromptProps> = ({
     return "add a new field or task for Custos...";
   };
 
-  const dynamicWidth = Math.max(540, Math.min(window.innerWidth - 60, inputVal.length * 9.5 + 85));
-  const modeLabel = normalizedMode === 'custos' ? 'Build' : modeSlug.charAt(0).toUpperCase() + modeSlug.slice(1);
+  const modeLabel = normalizedMode === 'custos' ? 'Custos' : cfg?.mode || currentMode;
 
   return (
-    <div
-      className="opencode-prompt-container"
-      style={{
-        width: `${dynamicWidth}px`,
-        maxWidth: 'calc(100vw - 48px)',
-      }}
-    >
+    <div className="opencode-prompt-container">
       <div
         className="gpt-chat-bar opencode-chat-box"
-        style={{
-          borderLeftColor: badgeColor,
-        }}
+        style={promptStyle}
       >
         <div className="opencode-input-row">
-          <input
+          <textarea
             ref={inputRef}
-            type="text"
             className="gpt-chat-input"
             value={inputVal}
             onChange={onInputChange}
@@ -70,6 +64,9 @@ export const TerminalPrompt: React.FC<TerminalPromptProps> = ({
             autoFocus
             disabled={isProcessing}
             spellCheck={false}
+            rows={1}
+            aria-label="Nhập tin nhắn"
+            style={{ caretColor: badgeColor }}
           />
 
           <div className="opencode-action-btns">

@@ -2755,13 +2755,17 @@ input:focus-visible {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  padding: 30px 24px 80px 24px;
+  padding: 30px 24px 18px 24px;
   overflow-y: auto;
   overflow-x: hidden;
   height: 100%;
   max-height: 100%;
   flex: 1;
+  min-height: 0;
   box-sizing: border-box;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  touch-action: pan-y;
 }
 
 .terminal-view-card.is-welcome .terminal-screen::-webkit-scrollbar {
@@ -2792,19 +2796,19 @@ input:focus-visible {
 
 .opencode-user-card {
   width: 100%;
-  background: transparent;
-  border: none;
+  background: #171717;
+  border: 1px solid #252525;
   border-left: 3px solid #38bdf8;
-  border-radius: 0;
-  padding: 4px 14px;
+  border-radius: 2px;
+  padding: 10px 14px;
   color: #f1f5f9;
   font-family: var(--font-mono);
   font-size: 0.95rem;
   font-weight: 600;
   text-align: left;
-  box-shadow: none;
-  margin-top: 14px;
-  margin-bottom: 6px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
+  margin-top: 18px;
+  margin-bottom: 10px;
 }
 
 .opencode-user-text {
@@ -2814,7 +2818,7 @@ input:focus-visible {
 
 .opencode-assistant-msg {
   width: 100%;
-  padding: 2px 0 14px 14px;
+  padding: 2px 12px 12px 18px;
   color: #d4d4d4;
   font-family: var(--font-mono);
   font-size: 0.88rem;
@@ -2961,6 +2965,22 @@ input:focus-visible {
   display: flex;
   flex-direction: column;
   margin: 0 auto;
+  width: 100%;
+  max-width: 780px;
+}
+
+.terminal-composer-dock {
+  flex: 0 0 auto;
+  width: 100%;
+  padding: 10px 24px 14px;
+  background: linear-gradient(to bottom, rgba(8, 8, 8, 0.72), #080808 28%);
+  z-index: 45;
+}
+
+.terminal-composer-dock .terminal-prompt-wrapper {
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
 }
 
 /* OpenCode-style box */
@@ -2983,9 +3003,10 @@ input:focus-visible {
 
 .opencode-chat-box:focus-within {
   border-color: #3a3a3a;
-  border-left-color: #38bdf8;
+  border-left-color: var(--mode-accent, #38bdf8);
   background: #1e1e1e;
-  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.12), 0 6px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--mode-accent, #38bdf8) 22%, transparent),
+    0 6px 24px rgba(0, 0, 0, 0.45);
 }
 
 .opencode-input-row {
@@ -3006,6 +3027,11 @@ input:focus-visible {
   caret-color: #38bdf8;
   text-align: left;
   padding: 0;
+  min-height: 23px;
+  max-height: 144px;
+  line-height: 1.5;
+  resize: none;
+  overflow-y: auto;
 }
 
 .opencode-input-row .gpt-chat-input::placeholder {
@@ -3041,7 +3067,7 @@ input:focus-visible {
 }
 
 .opencode-send-btn.active {
-  color: #38bdf8;
+  color: var(--mode-accent, #38bdf8);
 }
 
 .opencode-send-btn:disabled {
@@ -3122,11 +3148,11 @@ input:focus-visible {
 
 @media (max-width: 620px) {
   .terminal-view-card.is-welcome .terminal-screen {
-    padding-bottom: 112px;
+    padding: 24px 14px 10px;
   }
 
-  .terminal-view-card.is-welcome .terminal-bottom-container {
-    transform: translate(-50%, 24px);
+  .terminal-composer-dock {
+    padding: 8px 14px 10px;
   }
 
   .terminal-view-card.is-welcome .gpt-mode-pill span,

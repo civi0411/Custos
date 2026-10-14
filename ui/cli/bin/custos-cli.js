@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { spawn } from 'node:child_process';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,6 +19,12 @@ const __dirname = path.dirname(__filename);
 const VERSION = '0.1.1';
 const CHAT_WIDTH = 58;
 let alternateScreenActive = false;
+let daemonPortPromise = null;
+const PROVIDERS = [
+  { id: 'openai', serviceType: 'openai', name: 'OpenAI Codex', manualCode: false },
+  { id: 'anthropic', serviceType: 'anthropic', name: 'Claude', manualCode: true },
+  { id: 'antigravity', serviceType: 'antigravity', name: 'Antigravity', manualCode: false },
+];
 const COMMANDS = [
   'assistant',
   'clear',
@@ -26,12 +33,121 @@ const COMMANDS = [
   'diff',
   'help',
   'list',
+  'login',
+  'logout',
   'mode',
+  'model',
   'permit',
   'research',
   'status',
   'vibe',
 ];
+
+function getProfileDir() {
+  if (process.env.CUSTOS_PROFILE_DIR) return process.env.CUSTOS_PROFILE_DIR;
+  const profile = process.env.CUSTOS_PROFILE || 'default';
+  const root = process.env.CUSTOS_HOME || path.join(os.homedir(), '.custos');
+  return path.join(root, 'profiles', profile);
+}
+
+function readDaemonHttpPort() {
+  try {
+    return Number.parseInt(fs.readFileSync(path.join(getProfileDir(), 'daemon.http_port'), 'utf8').trim(), 10) || null;
+  } catch {
+    return null;
+  }
+}
+
+async function daemonHealth(port, timeoutMs = 350) {
+  if (!port) return false;
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/health`, {
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForDaemonHttp(timeoutMs = 900) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const port = readDaemonHttpPort();
+    if (port && await daemonHealth(port)) return port;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return null;
+}
+
+function daemonCandidates() {
+  const executable = process.platform === 'win32' ? 'custos-daemon.exe' : 'custos-daemon';
+  const workspaceRoot = path.resolve(__dirname, '..', '..', '..');
+  return [
+    process.env.CUSTOS_DAEMON_BIN,
+    path.join(workspaceRoot, 'target', 'debug', executable),
+    path.join(workspaceRoot, 'target', 'release', executable),
+    'custos-daemon',
+  ].filter(Boolean);
+}
+
+async function ensureDaemonHttpPort() {
+  const existing = readDaemonHttpPort();
+  if (existing && await daemonHealth(existing)) return existing;
+
+  const candidates = daemonCandidates();
+  const daemonBinary = candidates.find((candidate) => candidate === 'custos-daemon' || fs.existsSync(candidate));
+  if (!daemonBinary) {
+    throw new Error('Backend chưa được cài. Hãy build custos-daemon hoặc đặt CUSTOS_DAEMON_BIN. Chat thường vẫn dùng được.');
+  }
+
+  let launchFailed = false;
+  try {
+    const child = spawn(daemonBinary, [], { detached: true, stdio: 'ignore', windowsHide: true });
+    child.once('error', () => { launchFailed = true; });
+    child.unref();
+  } catch {
+    launchFailed = true;
+  }
+
+  const workspaceBinary = path.isAbsolute(daemonBinary) && fs.existsSync(daemonBinary);
+  const port = await waitForDaemonHttp(launchFailed ? 250 : workspaceBinary ? 5000 : 900);
+  if (port) return port;
+  throw new Error(`Backend chưa sẵn sàng (${daemonBinary}). Hãy build/chạy custos-daemon hoặc đặt CUSTOS_DAEMON_BIN. Chat thường vẫn dùng được.`);
+}
+
+async function daemonRequest(method, params = {}) {
+  if (!daemonPortPromise) {
+    daemonPortPromise = ensureDaemonHttpPort().catch((error) => {
+      daemonPortPromise = null;
+      throw error;
+    });
+  }
+  const port = await daemonPortPromise;
+  let response;
+  try {
+    response = await fetch(`http://127.0.0.1:${port}/api/request`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: `cli_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, method, params }),
+    });
+  } catch {
+    daemonPortPromise = null;
+    throw new Error('Mất kết nối với custos-daemon. Chat thường vẫn dùng được; hãy khởi động lại backend để dùng provider.');
+  }
+  if (!response.ok) throw new Error(`Daemon HTTP ${response.status}`);
+  const envelope = await response.json();
+  if (envelope.error) throw new Error(envelope.error);
+  return envelope.result;
+}
+
+function openExternalUrl(url) {
+  const command = process.platform === 'win32' ? 'rundll32' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+  const args = process.platform === 'win32' ? ['url.dll,FileProtocolHandler', url] : [url];
+  const child = spawn(command, args, { detached: true, stdio: 'ignore', windowsHide: true });
+  child.on('error', () => {});
+  child.unref();
+}
 
 function editDistance(left, right) {
   const rows = Array.from({ length: right.length + 1 }, (_, index) => index);
@@ -83,6 +199,15 @@ function leaveAlternateScreen() {
   if (!alternateScreenActive) return;
   outputDevice.write('\x1b[?1049l');
   alternateScreenActive = false;
+}
+
+function shutdownCli(exitCode = 0) {
+  outputDevice.write('\x1b[?1006l\x1b[?1000l\x1b[?25h');
+  if (inputDevice.isTTY && inputDevice.isRaw) inputDevice.setRawMode(false);
+  inputDevice.pause();
+  leaveAlternateScreen();
+  outputDevice.write(chalk.dim('\n  Tạm biệt! Custos đã thoát.\n\n'));
+  process.exit(exitCode);
 }
 
 function padToWidth(content, width) {
@@ -177,6 +302,97 @@ function wrapString(str, maxWidth) {
   return lines.length > 0 ? lines : [''];
 }
 
+function cleanMarkdownInline(text) {
+  return String(text || '')
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 ($2)')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/~~([^~]+)~~/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/(^|\s)[*_]([^*_]+)[*_](?=\s|$)/g, '$1$2')
+    .replace(/\\([\\`*_{}\[\]()#+\-.!>])/g, '$1');
+}
+
+function renderTerminalMarkdown(sourceLines, maxWidth, accentColor) {
+  const rendered = [];
+  let inCode = false;
+
+  for (const sourceLine of sourceLines || []) {
+    const raw = String(sourceLine || '');
+    const fence = raw.match(/^\s*```\s*([^`]*)$/);
+    if (fence) {
+      if (!inCode) {
+        const language = fence[1].trim();
+        rendered.push(chalk.rgb(82, 82, 82)(`┌${'─'.repeat(Math.max(1, maxWidth - 1))}`));
+        if (language) rendered.push(chalk.rgb(125, 125, 125)(`  ${language}`));
+      } else {
+        rendered.push(chalk.rgb(82, 82, 82)(`└${'─'.repeat(Math.max(1, maxWidth - 1))}`));
+      }
+      inCode = !inCode;
+      continue;
+    }
+
+    if (inCode) {
+      for (const line of wrapString(raw, Math.max(8, maxWidth - 2))) {
+        rendered.push(chalk.bgRgb(22, 22, 22).rgb(205, 205, 205)(`  ${line}`));
+      }
+      continue;
+    }
+
+    if (/^\s*([-*_])(?:\s*\1){2,}\s*$/.test(raw)) {
+      rendered.push(chalk.rgb(75, 75, 75)('─'.repeat(maxWidth)));
+      continue;
+    }
+
+    const heading = raw.match(/^\s{0,3}#{1,6}\s+(.+)$/);
+    if (heading) {
+      for (const line of wrapString(cleanMarkdownInline(heading[1]), maxWidth)) {
+        rendered.push(chalk.hex(accentColor).bold(line));
+      }
+      continue;
+    }
+
+    const bullet = raw.match(/^\s*[-*+]\s+(.+)$/);
+    if (bullet) {
+      const lines = wrapString(cleanMarkdownInline(bullet[1]), Math.max(8, maxWidth - 2));
+      lines.forEach((line, index) => rendered.push(
+        `${index === 0 ? chalk.hex(accentColor)('•') : ' '} ${chalk.rgb(215, 215, 215)(line)}`,
+      ));
+      continue;
+    }
+
+    const ordered = raw.match(/^\s*(\d+)[.)]\s+(.+)$/);
+    if (ordered) {
+      const prefix = `${ordered[1]}.`;
+      const lines = wrapString(cleanMarkdownInline(ordered[2]), Math.max(8, maxWidth - prefix.length - 1));
+      lines.forEach((line, index) => rendered.push(
+        `${index === 0 ? chalk.hex(accentColor)(prefix) : ' '.repeat(prefix.length)} ${chalk.rgb(215, 215, 215)(line)}`,
+      ));
+      continue;
+    }
+
+    const quote = raw.match(/^\s*>\s?(.*)$/);
+    if (quote) {
+      for (const line of wrapString(cleanMarkdownInline(quote[1]), Math.max(8, maxWidth - 2))) {
+        rendered.push(`${chalk.hex(accentColor)('│')} ${chalk.italic.rgb(175, 175, 175)(line)}`);
+      }
+      continue;
+    }
+
+    if (/^\s*\|?(?:\s*:?-+:?\s*\|)+\s*$/.test(raw)) continue;
+    const tableText = raw.includes('|')
+      ? raw.replace(/^\s*\|?|\|?\s*$/g, '').split('|').map((cell) => cleanMarkdownInline(cell.trim())).join(' │ ')
+      : cleanMarkdownInline(raw);
+    for (const line of wrapString(tableText, maxWidth)) {
+      rendered.push(chalk.rgb(215, 215, 215)(line));
+    }
+  }
+
+  if (inCode) rendered.push(chalk.rgb(82, 82, 82)(`└${'─'.repeat(Math.max(1, maxWidth - 1))}`));
+  return rendered;
+}
+
 function printCentered(content = '') {
   const visibleWidth = stripAnsi(content).length;
   const leftPadding = Math.max(0, Math.floor((getTerminalWidth() - visibleWidth) / 2));
@@ -267,9 +483,10 @@ export function printModeCard(mode) {
 
 export async function promptSlashSelection() {
   return promptCenteredPalette([
-    { name: 'Code', description: 'Lập trình, sửa lỗi và kiểm thử', value: { type: 'mode', value: 'code' } },
-    { name: 'Research', description: 'Phân tích và đối chiếu bằng chứng', value: { type: 'mode', value: 'research' } },
-    { name: 'Assistant', description: 'Điều phối tác vụ và phê duyệt', value: { type: 'mode', value: 'assistant' } },
+    { name: 'mode', description: 'Chọn phạm vi Code, Research hoặc Assistant', value: { type: 'submenu', value: 'mode' } },
+    { name: 'model', description: 'Đổi provider hoặc model hiện tại', value: { type: 'action', value: 'model' } },
+    { name: 'login', description: 'Đăng nhập Codex, Claude hoặc Antigravity', value: { type: 'action', value: 'login' } },
+    { name: 'logout', description: 'Đăng xuất khỏi provider đang kết nối', value: { type: 'action', value: 'logout' } },
     { name: 'vibe', description: 'Khởi chạy quy trình tương tác', value: { type: 'action', value: 'vibe' } },
     { name: 'tasks', description: 'Xem danh sách nhiệm vụ', value: { type: 'action', value: 'list' } },
     { name: 'create', description: 'Tạo nhiệm vụ mới', value: { type: 'action', value: 'create' } },
@@ -403,6 +620,197 @@ function promptCenteredPalette(items, title) {
     inputDevice.on('keypress', onPaletteKeypress);
     render();
   });
+}
+
+async function providerConnection(provider) {
+  const connection = await daemonRequest('v1.oauth.get', { provider_id: provider.id });
+  return connection?.connected ? { ...provider, connection } : null;
+}
+
+async function loginProvider(provider) {
+  const authorization = await daemonRequest('v1.oauth.authorize', {
+    provider_id: provider.id,
+    service_type: provider.serviceType,
+  });
+  if (!authorization?.authorization_url) {
+    throw new Error(`Daemon không trả về authorization URL cho ${provider.name}.`);
+  }
+
+  openExternalUrl(authorization.authorization_url);
+  outputDevice.write('\x1b[2J\x1b[H');
+  console.log(chalk.cyan(`\n  Đã mở trang đăng nhập ${provider.name} trong trình duyệt.`));
+
+  if (provider.manualCode) {
+    const codeOrUrl = await input({
+      message: chalk.white('Dán authorization code hoặc callback URL sau khi đăng nhập:'),
+    });
+    await daemonRequest('v1.oauth.exchange', {
+      provider_id: provider.id,
+      service_type: provider.serviceType,
+      code_or_url: codeOrUrl.trim(),
+      code_verifier: authorization.code_verifier,
+    });
+  } else {
+    const spinner = ora(chalk.cyan(`Đang chờ ${provider.name} xác nhận đăng nhập...`)).start();
+    const deadline = Date.now() + 180_000;
+    let completed = false;
+    while (Date.now() < deadline) {
+      const status = await daemonRequest('v1.oauth.status');
+      if (status?.status === 'completed') {
+        completed = true;
+        break;
+      }
+      if (status?.status === 'failed') {
+        spinner.fail(chalk.red(status.error || 'Đăng nhập thất bại.'));
+        throw new Error(status.error || `Đăng nhập ${provider.name} thất bại.`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 750));
+    }
+    if (!completed) {
+      spinner.fail(chalk.red('Đăng nhập hết thời gian chờ.'));
+      throw new Error(`Đăng nhập ${provider.name} hết thời gian chờ.`);
+    }
+    spinner.succeed(chalk.green(`Đã kết nối ${provider.name}.`));
+  }
+
+  const connected = await providerConnection(provider);
+  if (!connected) throw new Error(`${provider.name} chưa có credential hợp lệ sau đăng nhập.`);
+  return connected;
+}
+
+export function modelDisplayName(modelId, providerName = '') {
+  const rawId = String(modelId || '').split('/').pop() || String(modelId || '');
+  const id = rawId.toLowerCase();
+
+  const claude = id.match(/^claude-(opus|sonnet|haiku)-(\d+)-(\d+)(.*)$/);
+  if (claude) {
+    const suffix = claude[4].split('-').filter(Boolean);
+    const qualifiers = suffix.map((part) => part === 'thinking' ? 'Thinking' : part[0].toUpperCase() + part.slice(1));
+    return `Claude ${claude[1][0].toUpperCase()}${claude[1].slice(1)} ${claude[2]}.${claude[3]}${qualifiers.length ? ` (${qualifiers.join(', ')})` : ''}`;
+  }
+
+  const gemini = id.match(/^gemini-(\d+(?:\.\d+)?)-(.+)$/);
+  if (gemini) {
+    const parts = gemini[2].split('-');
+    const family = parts.shift();
+    let name = `Gemini ${gemini[1]} ${family ? family[0].toUpperCase() + family.slice(1) : ''}`.trim();
+    const qualifiers = [];
+    for (let index = 0; index < parts.length; index += 1) {
+      const part = parts[index];
+      if (part === 'lite' || part === 'image') name += ` ${part[0].toUpperCase()}${part.slice(1)}`;
+      else if (part === 'extra' && parts[index + 1] === 'low') {
+        qualifiers.push('Extra Low');
+        index += 1;
+      } else qualifiers.push(part[0].toUpperCase() + part.slice(1));
+    }
+    return `${name}${qualifiers.length ? ` (${qualifiers.join(', ')})` : ''}`;
+  }
+
+  const gpt = id.match(/^gpt-(\d+(?:\.\d+)?)(?:-(.+))?$/);
+  if (gpt) {
+    const suffix = gpt[2]?.split('-').map((part) => part[0].toUpperCase() + part.slice(1)).join(' ');
+    return `GPT-${gpt[1]}${suffix ? ` ${suffix}` : ''}`;
+  }
+
+  const openAiReasoning = id.match(/^(o\d+)(?:-(.+))?$/);
+  if (openAiReasoning) {
+    const suffix = openAiReasoning[2]?.split('-').map((part) => part[0].toUpperCase() + part.slice(1)).join(' ');
+    return `${openAiReasoning[1].toUpperCase()}${suffix ? ` ${suffix}` : ''}`;
+  }
+
+  const words = rawId.split(/[-_:]+/).filter(Boolean).map((part) => {
+    if (/^\d+(?:\.\d+)*$/.test(part)) return part;
+    if (['ai', 'llm', 'vl', 'r1'].includes(part.toLowerCase())) return part.toUpperCase();
+    return part[0].toUpperCase() + part.slice(1);
+  });
+  return words.join(' ') || providerName || 'Model';
+}
+
+async function probeProviderModels(provider) {
+  const response = await daemonRequest('v1.models.probe', {
+    provider_id: provider.id,
+    provider_type: provider.serviceType,
+  });
+  return (response?.models || [])
+    .filter((model) => model?.id)
+    .map((model) => ({
+      ...model,
+      providerName: model.name,
+      name: modelDisplayName(model.id, provider.name),
+    }));
+}
+
+async function promptProviderModelSelection(currentSelection = null) {
+  const states = await Promise.all(PROVIDERS.map(async (provider) => {
+    try {
+      return await providerConnection(provider);
+    } catch {
+      return null;
+    }
+  }));
+
+  const provider = await promptCenteredPalette(
+    PROVIDERS.map((item, index) => ({
+      name: item.name,
+      description: states[index] ? 'Đã đăng nhập' : 'Chưa đăng nhập · Enter để kết nối',
+      value: { item, connection: states[index] },
+    })),
+    'Chọn provider',
+  );
+  if (!provider) return currentSelection;
+
+  const connected = provider.connection || await loginProvider(provider.item);
+  const spinner = ora(chalk.cyan(`Đang tải model từ ${connected.name}...`)).start();
+  let models;
+  try {
+    models = await probeProviderModels(connected);
+    spinner.stop();
+  } catch (error) {
+    spinner.fail(chalk.red(`Không tải được model: ${error.message}`));
+    throw error;
+  }
+  if (models.length === 0) throw new Error(`${connected.name} không trả về model khả dụng.`);
+
+  const model = await promptCenteredPalette(models.map((item) => ({
+    name: item.name || item.id,
+    description: item.description || item.id,
+    value: item,
+  })), `Model · ${connected.name}`);
+  if (!model) return currentSelection;
+  return { provider: connected, model };
+}
+
+async function promptModeOnly(currentMode, currentSelection) {
+  const mode = await promptModeSelection();
+  if (!mode) return { mode: currentMode, selection: currentSelection };
+  return { mode, selection: currentSelection };
+}
+
+async function promptProviderLogout(currentSelection = null) {
+  const connectedProviders = (await Promise.all(PROVIDERS.map(async (provider) => {
+    try {
+      return await providerConnection(provider);
+    } catch {
+      return null;
+    }
+  }))).filter(Boolean);
+
+  if (connectedProviders.length === 0) {
+    throw new Error('Chưa có provider nào đang đăng nhập.');
+  }
+
+  const provider = await promptCenteredPalette(connectedProviders.map((item) => ({
+    name: item.name,
+    description: 'Đã đăng nhập · Enter để đăng xuất',
+    value: item,
+  })), 'Đăng xuất provider');
+  if (!provider) return { selection: currentSelection, provider: null };
+
+  await daemonRequest('v1.oauth.delete', { provider_id: provider.id });
+  return {
+    selection: currentSelection?.provider?.id === provider.id ? null : currentSelection,
+    provider,
+  };
 }
 
 const DATA_DIR = path.join(os.homedir(), '.custos');
@@ -695,7 +1103,7 @@ function getAgentTheme(mode = 'code') {
     code: { name: 'Build', color: '#38bdf8' },
     research: { name: 'Plan', color: '#f59e0b' },
     assistant: { name: 'Assistant', color: '#10b981' },
-    custos: { name: 'Build', color: '#38bdf8' },
+    custos: { name: 'Chat', color: '#a78bfa' },
   };
   return configs[modeKey] || configs.code;
 }
@@ -716,15 +1124,27 @@ export function printUserMessageCard(promptText, mode = 'code') {
   console.log();
 }
 
-function renderHeroFrame({ currentInput = '', cursorPos = 0, currentMode = 'custos', chatTurns = [], scrollOffset = 0 }) {
+function renderHeroFrame({
+  currentInput = '',
+  cursorPos = 0,
+  currentMode = 'custos',
+  chatTurns = [],
+  scrollOffset = 0,
+  scrollState,
+  selectedProvider,
+  selectedModel,
+  activity,
+}) {
   const termW = getTerminalWidth();
   const termH = process.stdout.rows || 30;
 
   const agentTheme = getAgentTheme(currentMode);
   const modeBadge = agentTheme.name;
   const agentColor = agentTheme.color;
-  const modelName = 'Claude Opus 4.5';
-  const engineName = 'OpenCode Zen';
+  const rawModelName = selectedModel?.name || selectedModel?.id || (currentMode === 'custos' ? 'Local lightweight' : 'Chưa chọn model');
+  const modelName = rawModelName.length > 28 ? `${rawModelName.slice(0, 27)}…` : rawModelName;
+  const rawEngineName = selectedProvider?.name || (currentMode === 'custos' ? 'Không cần đăng nhập' : 'Provider');
+  const engineName = rawEngineName.length > 16 ? `${rawEngineName.slice(0, 15)}…` : rawEngineName;
 
   const placeholderText = 'add a new field or task for Custos...';
   const minBoxW = 60;
@@ -772,7 +1192,7 @@ function renderHeroFrame({ currentInput = '', cursorPos = 0, currentMode = 'cust
   const line3 = boxIndentStr + blueBar + bg(statusContent + ' '.repeat(padStatusRight));
 
   const shortcutHint = (chatTurns && chatTurns.length > 0)
-    ? `${chalk.rgb(150, 150, 150)('pgup/pgdn')} ${chalk.rgb(105, 105, 105)('cuộn')}  ${chalk.rgb(150, 150, 150)('tab')} ${chalk.rgb(105, 105, 105)('switch agent')}  ${chalk.rgb(150, 150, 150)('ctrl+p')} ${chalk.rgb(105, 105, 105)('commands')}`
+    ? `${chalk.rgb(150, 150, 150)('wheel/pgup')} ${chalk.rgb(105, 105, 105)('cuộn')}  ${chalk.rgb(150, 150, 150)('tab')} ${chalk.rgb(105, 105, 105)('switch agent')}  ${chalk.rgb(150, 150, 150)('ctrl+p')} ${chalk.rgb(105, 105, 105)('commands')}`
     : `${chalk.rgb(150, 150, 150)('tab')} ${chalk.rgb(105, 105, 105)('switch agent')}  ${chalk.rgb(150, 150, 150)('ctrl+p')} ${chalk.rgb(105, 105, 105)('commands')}`;
 
   const shortcutsVisibleLen = stripAnsi(shortcutHint).length;
@@ -780,6 +1200,11 @@ function renderHeroFrame({ currentInput = '', cursorPos = 0, currentMode = 'cust
   const lineShortcuts = ' '.repeat(boxLeft + padShortcuts) + shortcutHint;
 
   const output = [];
+
+  if (scrollState) {
+    scrollState.maxScroll = 0;
+    scrollState.effectiveScroll = 0;
+  }
 
   if (!chatTurns || chatTurns.length === 0) {
     const totalLines = BANNER_ART_RAW.length + 3 + 5 + 7;
@@ -839,11 +1264,9 @@ function renderHeroFrame({ currentInput = '', cursorPos = 0, currentMode = 'cust
         }
       });
 
-      for (const rLine of (turn.responseLines || [])) {
-        const wrappedResp = wrapString(rLine, maxTextW);
-        for (const wLine of wrappedResp) {
-          allHistoryLines.push(boxIndentStr + '  ' + chalk.rgb(215, 215, 215)(padToWidth(wLine, innerW - 1)));
-        }
+      const renderedResponse = renderTerminalMarkdown(turn.responseLines || [], maxTextW, turnTheme.color);
+      for (const responseLine of renderedResponse) {
+        allHistoryLines.push(boxIndentStr + '  ' + padToWidth(responseLine, innerW - 1));
       }
 
       if (turn.meta) {
@@ -852,13 +1275,18 @@ function renderHeroFrame({ currentInput = '', cursorPos = 0, currentMode = 'cust
       allHistoryLines.push('');
     }
 
-    const promptRows = 5; // empty row + line1 + line2 + line3 + shortcuts
+    const promptRows = activity ? 6 : 5; // empty row + prompt + optional activity + shortcuts
     const indicatorRows = 1;
     const availableHistoryRows = Math.max(4, termH - promptRows - indicatorRows);
 
     const totalLines = allHistoryLines.length;
     const maxScroll = Math.max(0, totalLines - availableHistoryRows);
     const effectiveScroll = Math.max(0, Math.min(scrollOffset, maxScroll));
+
+    if (scrollState) {
+      scrollState.maxScroll = maxScroll;
+      scrollState.effectiveScroll = effectiveScroll;
+    }
 
     if (totalLines <= availableHistoryRows) {
       for (const hLine of allHistoryLines) {
@@ -870,7 +1298,7 @@ function renderHeroFrame({ currentInput = '', cursorPos = 0, currentMode = 'cust
       const visibleLines = allHistoryLines.slice(startIndex, endIndex);
 
       if (startIndex > 0) {
-        output.push(boxIndentStr + chalk.rgb(120, 120, 120)('▲ ') + chalk.dim(`Còn ${startIndex} dòng phía trên [PageUp / Ctrl+↑ để cuộn]`) + '\x1b[K');
+        output.push(boxIndentStr + chalk.rgb(120, 120, 120)('▲ ') + chalk.dim(`Còn ${startIndex} dòng phía trên [con lăn / PageUp để cuộn]`) + '\x1b[K');
       } else {
         output.push('\x1b[K');
       }
@@ -888,6 +1316,21 @@ function renderHeroFrame({ currentInput = '', cursorPos = 0, currentMode = 'cust
   output.push(line1 + '\x1b[K');
   output.push(line2 + '\x1b[K');
   output.push(line3 + '\x1b[K');
+  if (activity) {
+    const railWidth = 10;
+    const position = activity.frame % (railWidth * 2 - 2);
+    const cursor = position < railWidth ? position : railWidth * 2 - 2 - position;
+    const rail = Array.from({ length: railWidth }, (_, index) => index === cursor ? '■' : '·').join('');
+    output.push(
+      boxIndentStr +
+      chalk.hex(agentColor)(rail) +
+      '  ' +
+      chalk.white.bold(activity.label || 'agent đang chạy') +
+      '  ' +
+      chalk.rgb(115, 115, 115)('esc interrupt') +
+      '\x1b[K',
+    );
+  }
   output.push(lineShortcuts + '\x1b[K');
 
   const currentTotal = output.length;
@@ -910,17 +1353,30 @@ function waitForKeypress() {
   });
 }
 
-function promptInteractiveChat({ currentMode, history, chatTurns = [] }) {
+function promptInteractiveChat({ currentMode, history, chatTurns = [], selectedProvider, selectedModel }) {
   return new Promise((resolve) => {
     let inputStr = '';
     let cursorPos = 0;
     let historyIdx = history.length;
     let scrollOffset = 0;
+    let mouseKeypressBlockedUntil = 0;
+    const scrollState = { maxScroll: 0, effectiveScroll: 0 };
 
     outputDevice.write('\x1b[2J\x1b[H');
 
     const render = () => {
-      outputDevice.write('\x1b[?25l\x1b[H' + renderHeroFrame({ currentInput: inputStr, cursorPos, currentMode, chatTurns, scrollOffset }));
+      const frame = renderHeroFrame({
+        currentInput: inputStr,
+        cursorPos,
+        currentMode,
+        chatTurns,
+        scrollOffset,
+        scrollState,
+        selectedProvider,
+        selectedModel,
+      });
+      scrollOffset = scrollState.effectiveScroll;
+      outputDevice.write('\x1b[?25l\x1b[H' + frame);
     };
 
     const onResize = () => {
@@ -930,15 +1386,38 @@ function promptInteractiveChat({ currentMode, history, chatTurns = [] }) {
 
     const cleanup = () => {
       inputDevice.removeListener('keypress', onKeypress);
+      inputDevice.removeListener('data', onMouseData);
       process.stdout.removeListener('resize', onResize);
-      outputDevice.write('\x1b[?25h');
+      outputDevice.write('\x1b[?1006l\x1b[?1000l\x1b[?25h');
+    };
+
+    const onMouseData = (data) => {
+      const sequence = data.toString();
+      if (sequence.includes('\x1b[<')) {
+        mouseKeypressBlockedUntil = Date.now() + 50;
+      }
+      const mouseEvents = sequence.matchAll(/\x1b\[<(\d+);\d+;\d+[Mm]/g);
+      let changed = false;
+
+      for (const event of mouseEvents) {
+        const button = Number(event[1]);
+        if ((button & 64) !== 64) continue;
+        const direction = (button & 1) === 0 ? 1 : -1;
+        scrollOffset = Math.max(0, Math.min(scrollState.maxScroll, scrollOffset + direction * 3));
+        changed = true;
+      }
+
+      if (changed) render();
     };
 
     const onKeypress = (str, key) => {
+      if (Date.now() <= mouseKeypressBlockedUntil || (str && /\x1b\[<\d+;\d+;\d+[Mm]/.test(str))) {
+        return;
+      }
+
       if (key?.ctrl && key?.name === 'c') {
         cleanup();
-        leaveAlternateScreen();
-        process.exit(0);
+        shutdownCli(0);
       }
 
       if (key?.name === 'return' || key?.name === 'enter') {
@@ -1094,8 +1573,110 @@ function promptInteractiveChat({ currentMode, history, chatTurns = [] }) {
     if (inputDevice.isTTY) inputDevice.setRawMode(true);
     inputDevice.resume();
     inputDevice.on('keypress', onKeypress);
+    inputDevice.prependListener('data', onMouseData);
+    outputDevice.write('\x1b[?1000h\x1b[?1006h');
     render();
   });
+}
+
+function constrainPromptForMode(prompt, mode) {
+  const constraints = {
+    custos: 'You are the general Custos chat assistant. Answer the user naturally and helpfully. Do not claim tools, files, or external actions were used unless the runtime provides a real result.',
+    code: 'You are in Code mode. Only answer requests about programming, software engineering, debugging, testing, developer tools, or the current codebase. If the request is unrelated, briefly say it is outside Code mode and ask the user to switch mode.',
+    research: 'You are in Research mode. Focus on evidence-oriented investigation, distinguish facts from inference, and state when sources or verification are missing. Decline unrelated execution work and suggest the appropriate mode.',
+    assistant: 'You are in Assistant mode. Focus on planning, coordination, drafting, and user-approved actions. Do not claim an external action happened without a real receipt.',
+  };
+  const constraint = constraints[mode] || constraints.assistant;
+  return `${constraint}\n\nUser request:\n${prompt}`;
+}
+
+async function executeModelTurn({ prompt, mode, selection, chatTurns }) {
+  if (!selection?.provider || !selection?.model) {
+    throw new Error('Hãy đăng nhập provider và chọn model trước khi chạy agent.');
+  }
+
+  let frame = 0;
+  let runId = null;
+  let interrupted = false;
+  const previewTurns = [...chatTurns, { query: prompt, mode, responseLines: [], meta: null }];
+  const render = () => {
+    outputDevice.write('\x1b[?25l\x1b[H' + renderHeroFrame({
+      currentMode: mode,
+      chatTurns: previewTurns,
+      selectedProvider: selection.provider,
+      selectedModel: selection.model,
+      activity: { frame, label: 'agent đang chạy' },
+    }));
+  };
+  const onExecutionKeypress = (_character, key) => {
+    if (key?.name !== 'escape' || interrupted) return;
+    interrupted = true;
+    if (runId) {
+      void daemonRequest('v1.workflow.cancel_run', { run_id: runId, reason: 'Interrupted from Custos CLI' });
+    }
+  };
+
+  inputDevice.on('keypress', onExecutionKeypress);
+  const animation = setInterval(() => {
+    frame += 1;
+    render();
+  }, 90);
+  render();
+
+  try {
+    const task = await daemonRequest('v1.tasks.create', {
+      title: prompt,
+      metadata: {
+        mode,
+        origin: 'custos-node-cli',
+        provider_account_id: selection.provider.id,
+        model_id: selection.model.id,
+      },
+    });
+    const session = await daemonRequest('v1.sessions.create', { mode: 'assisted' });
+    const handle = await daemonRequest('v1.workflow.start_run', {
+      background: true,
+      task_id: task.id,
+      actor: 'custos-cli-user',
+      preferred_mode: 'model',
+      workspace_root: process.cwd(),
+      session_id: session.id,
+      prompt: constrainPromptForMode(prompt, mode),
+      model: selection.model.id,
+    });
+    runId = handle.run_id;
+
+    if (interrupted) {
+      await daemonRequest('v1.workflow.cancel_run', { run_id: runId, reason: 'Interrupted from Custos CLI' });
+    }
+
+    let cursor = 0;
+    while (true) {
+      const replay = await daemonRequest('v1.workflow.live_run', {
+        session_id: session.id,
+        run_id: runId,
+        cursor,
+      });
+      cursor = replay.snapshot?.cursor || cursor;
+      const status = replay.snapshot?.status || 'running';
+      if (['completed', 'failed', 'cancelled', 'interrupted'].includes(status)) {
+        if (status !== 'completed') {
+          throw new Error(replay.snapshot?.error || `Agent run ${status}.`);
+        }
+        return {
+          text: replay.snapshot?.text || 'Agent hoàn tất nhưng không trả về nội dung.',
+          usage: replay.snapshot?.usage,
+          taskId: task.id,
+          runId,
+        };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  } finally {
+    clearInterval(animation);
+    inputDevice.removeListener('keypress', onExecutionKeypress);
+    outputDevice.write('\x1b[?25h');
+  }
 }
 
 export async function startRepl() {
@@ -1105,18 +1686,26 @@ export async function startRepl() {
   emitKeypressEvents(inputDevice);
   const history = [];
   const chatTurns = [];
+  let modelSelection = null;
 
   while (true) {
-    const res = await promptInteractiveChat({ currentMode, history, chatTurns });
+    const res = await promptInteractiveChat({
+      currentMode,
+      history,
+      chatTurns,
+      selectedProvider: modelSelection?.provider,
+      selectedModel: modelSelection?.model,
+    });
 
     if (res.type === 'tab') {
       try {
-        const chosen = await promptModeSelection();
-        if (chosen) {
-          currentMode = chosen;
-        }
+        const chosen = await promptModeOnly(currentMode, modelSelection);
+        currentMode = chosen.mode;
+        modelSelection = chosen.selection;
       } catch (err) {
-        if (err.name !== 'ExitPromptError') throw err;
+        if (err.name !== 'ExitPromptError') {
+          chatTurns.push({ query: 'Provider setup', mode: currentMode, responseLines: [err.message], meta: 'Custos · lỗi kết nối' });
+        }
       }
       continue;
     }
@@ -1126,11 +1715,30 @@ export async function startRepl() {
         const chosen = await promptSlashSelection();
         if (chosen) {
           if (chosen.type === 'submenu' && chosen.value === 'mode') {
-            currentMode = await promptModeSelection();
+            const result = await promptModeOnly(currentMode, modelSelection);
+            currentMode = result.mode;
+            modelSelection = result.selection;
           } else if (chosen.type === 'mode') {
             currentMode = chosen.value;
           } else if (chosen.type === 'action') {
             switch (chosen.value) {
+              case 'model':
+              case 'login':
+                modelSelection = await promptProviderModelSelection(modelSelection);
+                break;
+              case 'logout': {
+                const result = await promptProviderLogout(modelSelection);
+                modelSelection = result.selection;
+                if (result.provider) {
+                  chatTurns.push({
+                    query: '/logout',
+                    mode: currentMode,
+                    responseLines: [`Đã đăng xuất khỏi ${result.provider.name}.`],
+                    meta: 'Custos · provider disconnected',
+                  });
+                }
+                break;
+              }
               case 'vibe':
                 await runVibeWizard(currentMode !== 'custos' ? currentMode : null);
                 console.log(chalk.dim('\n  Nhấn phím bất kỳ để tiếp tục...'));
@@ -1194,14 +1802,19 @@ export async function startRepl() {
                 await waitForKeypress();
                 break;
               case 'exit':
-                console.log(chalk.dim('\n  Tạm biệt! Custos Runtime đang bảo vệ hệ thống của bạn.\n'));
-                leaveAlternateScreen();
-                return;
+                shutdownCli(0);
             }
           }
         }
       } catch (err) {
-        if (err.name !== 'ExitPromptError') throw err;
+        if (err.name !== 'ExitPromptError') {
+          chatTurns.push({
+            query: 'Provider setup',
+            mode: currentMode,
+            responseLines: [err.message],
+            meta: 'Custos local · backend chưa sẵn sàng',
+          });
+        }
       }
       continue;
     }
@@ -1216,19 +1829,42 @@ export async function startRepl() {
     const cleanCmd = lowerCmd.startsWith('/') ? lowerCmd.slice(1) : lowerCmd;
 
     if (cleanCmd === 'exit' || cleanCmd === 'quit' || cleanCmd === 'q') {
-      console.log(chalk.dim('\n  Tạm biệt! Custos Runtime đang bảo vệ hệ thống của bạn.\n'));
-      break;
+      shutdownCli(0);
     } else if (cleanCmd === 'clear' || cleanCmd === 'cls') {
       chatTurns.length = 0;
       continue;
     } else if (lowerCmd === '/' || lowerCmd === '/mode' || lowerCmd === 'mode' && !args[0]) {
       try {
-        const chosen = await promptModeSelection();
-        if (chosen) {
-          currentMode = chosen;
+        const chosen = await promptModeOnly(currentMode, modelSelection);
+        currentMode = chosen.mode;
+        modelSelection = chosen.selection;
+      } catch (err) {
+        if (err.name !== 'ExitPromptError') {
+          chatTurns.push({ query: '/mode', mode: currentMode, responseLines: [err.message], meta: 'Custos · lỗi kết nối' });
+        }
+      }
+      continue;
+    } else if (cleanCmd === 'model' || cleanCmd === 'login') {
+      try {
+        modelSelection = await promptProviderModelSelection(modelSelection);
+      } catch (err) {
+        chatTurns.push({ query: line, mode: currentMode, responseLines: [err.message], meta: 'Custos · lỗi kết nối' });
+      }
+      continue;
+    } else if (cleanCmd === 'logout') {
+      try {
+        const result = await promptProviderLogout(modelSelection);
+        modelSelection = result.selection;
+        if (result.provider) {
+          chatTurns.push({
+            query: line,
+            mode: currentMode,
+            responseLines: [`Đã đăng xuất khỏi ${result.provider.name}.`],
+            meta: 'Custos · provider disconnected',
+          });
         }
       } catch (err) {
-        if (err.name !== 'ExitPromptError') throw err;
+        chatTurns.push({ query: line, mode: currentMode, responseLines: [err.message], meta: 'Custos · lỗi đăng xuất' });
       }
       continue;
     } else if (
@@ -1297,40 +1933,36 @@ export async function startRepl() {
       console.log(chalk.dim('  Nhấn phím bất kỳ để tiếp tục...'));
       await waitForKeypress();
     } else {
-      if (currentMode !== 'custos') {
+      if (currentMode !== 'custos' || modelSelection) {
         const fullPrompt = line;
         const agentName = getAgentTheme(currentMode).name;
-        const lower = fullPrompt.toLowerCase().trim();
-        let responseLines;
-        if (lower === 'hi' || lower === 'hello' || lower === 'chào' || lower === 'hih' || lower === 'hey') {
-          responseLines = [
-            `Xin chào! Tôi là Custos ${agentName}.`,
-            'Tôi đã sẵn sàng hỗ trợ bạn phân tích, lập trình và điều phối nhiệm vụ an toàn.',
-          ];
-        } else {
-          responseLines = [
-            `Đã tiếp nhận yêu cầu: "${fullPrompt}".`,
-            'Đang xử lý trong Sandbox cô lập dưới cơ chế bảo vệ Epoch Lock Guard.',
-          ];
+        try {
+          if (!modelSelection) {
+            modelSelection = await promptProviderModelSelection();
+          }
+          if (!modelSelection) continue;
+          const result = await executeModelTurn({
+            prompt: fullPrompt,
+            mode: currentMode,
+            selection: modelSelection,
+            chatTurns,
+          });
+          const responseLines = result.text.split(/\r?\n/);
+          const totalTokens = result.usage?.total_tokens;
+          chatTurns.push({
+            query: fullPrompt,
+            mode: currentMode,
+            responseLines,
+            meta: `${agentName} · ${modelSelection.model.name || modelSelection.model.id} · ${modelSelection.provider.name}${totalTokens ? ` · ${totalTokens} tokens` : ''}`,
+          });
+        } catch (error) {
+          chatTurns.push({
+            query: fullPrompt,
+            mode: currentMode,
+            responseLines: [`Không thể chạy agent: ${error.message}`],
+            meta: `${agentName} · lỗi thực thi`,
+          });
         }
-        chatTurns.push({
-          query: fullPrompt,
-          mode: currentMode,
-          responseLines,
-          meta: `${agentName} · Claude Opus 4.5 · 0.4s · OpenCode Zen`
-        });
-
-        const newTask = {
-          id: `task-${Math.random().toString(36).substring(2, 6)}`,
-          title: fullPrompt,
-          mode: currentMode.charAt(0).toUpperCase() + currentMode.slice(1),
-          status: 'Completed',
-          risk: 'Medium',
-          spans: 5,
-          createdAt: 'Just now',
-        };
-        tasks.unshift(newTask);
-        saveTasks(tasks);
         continue;
       } else {
         const lower = line.toLowerCase().trim();
@@ -1342,15 +1974,15 @@ export async function startRepl() {
           ];
         } else {
           responseLines = [
-            'Custos Sovereign Agentic Runtime đang ở chế độ hội thoại.',
-            'Nhấn Tab để chọn agent hoặc \'/\' để mở danh mục lệnh.',
+            'Đây là chat nhẹ chạy cục bộ của Custos; chưa có model cloud nào được gọi.',
+            'Dùng /mode để chọn chuyên môn, /login để kết nối provider và /model để chọn model.',
           ];
         }
         chatTurns.push({
           query: line,
-          mode: 'code',
+          mode: 'custos',
           responseLines,
-          meta: 'Build · Claude Opus 4.5 · 0.4s · OpenCode Zen'
+          meta: 'Custos local · lightweight chat'
         });
         continue;
       }
@@ -1394,6 +2026,8 @@ export function printHelp() {
   }
 
   console.log(chalk.bold('\n  Hệ thống'));
+  console.log(`    ${chalk.cyan('login / model'.padEnd(20))} Kết nối provider và chọn model`);
+  console.log(`    ${chalk.cyan('logout'.padEnd(20))} Đăng xuất khỏi provider đã kết nối`);
   console.log(`    ${chalk.cyan('help'.padEnd(20))} Hiển thị hướng dẫn này`);
   console.log(`    ${chalk.cyan('clear'.padEnd(20))} Xóa màn hình tương tác`);
   console.log(`    ${chalk.cyan('exit'.padEnd(20))} Thoát chế độ tương tác`);
@@ -1468,7 +2102,3 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
-
-
-
-

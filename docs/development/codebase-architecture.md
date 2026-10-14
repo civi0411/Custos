@@ -79,6 +79,12 @@ Tài liệu này là bản đồ toàn cảnh chi tiết đến **từng file m�
 
 > **Provider OAuth implementation:** Antigravity/Gemini Cloud Code text transport, provider-specific PKCE and real Copilot device authorization are composed by daemon. OAuth identity/credentials are saved atomically with a redacted outbox event; desktop uses namespaced discovered models and fetched identity. No new source modules, schemas or dependencies.
 
+> **Interactive Node CLI convergence:** [`ui/cli/bin/custos-cli.js`](../../ui/cli/bin/custos-cli.js) is a thin profile-aware Local API client for provider OAuth status/authorization, account-scoped model discovery, Task creation and model-backed `start_run`. Provider secrets remain daemon-owned. Mode selection is independent from login/model selection; specialized submissions gate on an account/model and carry mode-specific constraints, while default chat remains an honestly labelled local lightweight path. Daemon discovery validates the profile port, checks workspace-local binaries before PATH and reports a recoverable diagnostic. The OpenCode-style bottom activity rail represents only the active request. The React CLI frontend remains a separate presentation surface.
+
+| CLI file | Lines | Architectural responsibility | Key exports |
+|---|---:|---|---|
+| [`ui/cli/bin/custos-cli.js`](../../ui/cli/bin/custos-cli.js) | 1892 | Interactive terminal presentation, validated profile HTTP discovery, independent mode/provider/model controls, recoverable backend diagnostics, mode-constrained run projection, and local lightweight chat. No provider transport or secret persistence. | `startRepl`, `promptSlashSelection`, `promptModeSelection` |
+
 ## 0. Quy Trình Đồng Bộ Kiến Trúc & Vận Hành Dành Cho AI Coding Agents
 
 > **Mục tiêu:** Đảm bảo tất cả AI Coding Agents (Cursor, Claude Code, Antigravity, Copilot, Windsurf) khi làm việc trên repository đều có **chung một mô hình tư duy kiến trúc (Shared Mental Model)**, không tự ý suy đoán, không tạo file rác và tuân thủ tuyệt đối quy trình đồng bộ tài liệu.
@@ -1048,7 +1054,7 @@ Custos/
 | [`ui/desktop/src/components/shell/AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) | 756 | Shared conversation/resource shell; memoized Markdown, change-only scroll edges and stable resource callbacks; empty lens has no selected conversation | `AppWorkspaceShell` |
 | [`ui/desktop/src/components/shell/WorkspaceSidebar.tsx`](../../ui/desktop/src/components/shell/WorkspaceSidebar.tsx) | 420 | Per-lens history, 3-dots session workbench mover, and project-wide session search | `WorkspaceSidebar` |
 | [`ui/desktop/src/components/modals/NewSessionModal.tsx`](../../ui/desktop/src/components/modals/NewSessionModal.tsx) | 101 | Defaults new Task pack to the visible workbench | `NewSessionModal` |
-| [`ui/desktop/src/context/AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx) | 1654 | Daemon session/journal projection; keeps all sessions, filters non-message events and reads durable lens membership | `AppProvider`, `useAppContext` |
+| [`ui/desktop/src/context/AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx) | 1602 | Daemon session/journal projection; keeps all sessions, filters non-message events and reads durable lens membership | `AppProvider`, `useAppContext` |
 
 Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../tools/repo_intelligent/README.md) (62 lines) describes its derived SQLite index and optional MCP export. The product-facing Repo Intelligence location is `custos-runtime/src/context/repo_intelligence/`; do not treat the Python utility as an agent, canonical memory or mandatory runtime dependency.
 
@@ -1085,15 +1091,7 @@ Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../
 
 | File | Lines | Responsibility | Exports |
 |---|---:|---|---|
-| [WorkflowDagWorkbenchPane.tsx](../../ui/desktop/src/components/views/WorkflowDagWorkbenchPane.tsx) | 687 | Session run/DAG projection with start/cancel/inspect controls; default stages are fixtures, not verification evidence (Owner: Vinh) | `WorkflowDagWorkbenchPane`, `WorkflowDagWorkbenchPaneProps`, `DagNode`, `DagNodeStatus` |
-| [`desktop/src/browser_fullscreen.js`](../../crates/custos-app/desktop/src/browser_fullscreen.js) | 70 | Phone-only document-start fullscreen containment, state/events and restoration (Owner: Vinh) | `Scoped fullscreen presentation` |
-| [useNativeBrowser.ts](../../ui/desktop/src/hooks/useNativeBrowser.ts) | 149 | Shared native Browser/Phone lifecycle, loading, visibility, bounds and zoom (Owner: Vinh) | `useNativeBrowser`, `NativeBrowserOptions` |
-| [appearance.ts](../../ui/desktop/src/lib/appearance.ts) | 30 | Validated device appearance persistence and DOM theme application (Owner: Vinh) | `AppearancePreferences`, `ThemePreference`, `readAppearance`, `applyAppearance`, `APPEARANCE_KEY` |
-| [native_browser.ts](../../ui/desktop/src/api/native_browser.ts) | 30 | Serialized per-tab IPC queue and shared URL normalizer, including create/close races (Owner: Vinh) | `browserCommand`, `BrowserState`, `normalizeBrowserUrl` |
-| [MobileSimulatorWorkbenchPane.tsx](../../ui/desktop/src/components/views/MobileSimulatorWorkbenchPane.tsx) | 126 | Lazy native phone web preview, fitted device viewport, orientation and power/Home lifecycle (Owner: Vinh) | `MobileSimulatorWorkbenchPane` |
-| [BrowserWorkbenchPane.tsx](../../ui/desktop/src/components/views/BrowserWorkbenchPane.tsx) | 75 | Lazy native Browser toolbar, skeleton, loading/errors, viewport and overlay-aware bounds (Owner: Vinh) | `BrowserWorkbenchPane`, `normalizeBrowserUrl` |
-| [OrcaTabbedContainer.tsx](../../ui/desktop/src/components/views/OrcaTabbedContainer.tsx) | 627 | Memoized shared resource catalog and lazy retained browser tabs (Owner: Vinh) | `OrcaTabbedContainer`, `ResourceContent` |
-| [AppContext.tsx](../../ui/desktop/src/context/AppContext.tsx) | 1654 | Provider hydration, session/run restoration, native chat and device appearance/theme state | `AppProvider`, `useAppContext` |
+| [AppContext.tsx](../../ui/desktop/src/context/AppContext.tsx) | 1602 | Provider hydration, session/run restoration and background model/native chat projection | `AppProvider`, `useAppContext` |
 | [AgentsWorkbenchPane.tsx](../../ui/desktop/src/components/workspaces/engineering/AgentsWorkbenchPane.tsx) | 454 | Session-bound native launch and live run inspector (Vinh) | `AgentsWorkbenchPane` |
 | [ModelSelector.tsx](../../ui/desktop/src/components/chat/ModelSelector.tsx) | 874 | Account-attributed model picker with explicit Copilot grouping and filters | `ModelSelector`, `getConnectedModelOptions`, `ModelOption` |
 | [CombosManager.tsx](../../ui/desktop/src/components/providers/CombosManager.tsx) | 531 | Combo targets from the same discovered account catalogs | `CombosManager` |
@@ -1160,7 +1158,7 @@ The manual-browser slice adds two production files and one test tool. It adds no
 3. **Decoupled Client Access:** `custos-cli` và `ui/` tuyệt đối không được truy cập trực tiếp file cơ sở dữ liệu SQLite; mọi thao tác phải thông qua `custos-sdk` gửi yêu cầu đến Daemon qua Unix Domain Socket.
 4. **Proof-Carrying Verification:** Không một Agent nào được phép tự đánh dấu hoàn thành tác vụ nếu thiếu bằng chứng đã được thẩm tra độc lập qua `CompletionGate` tại `crates/custos-core/src/kernel/completion.rs`.
 
-**Ollama availability projection:** Existing AppContext owns visibility-aware local probing and offline/recovery state; ModelSelector renders cached offline models as disabled with Offline beside the model name, without a separate local account status/retry row, and preserves the selected local destination. ProvidersView and SettingsModal display Online/Offline and a retry action through daemon IPC. No persistent schema or new module is introduced.
+**Ollama availability projection:** Existing AppContext owns visibility-aware local probing and offline/recovery state; it also probes the standard loopback endpoint during hydration and projects installed models as a transient **AI Local** account when no local provider is saved. The first discovered model becomes the default only when the saved selection is empty or stale. The transient UI account is not persisted or forwarded as a provider account ID. ModelSelector renders cached offline models as disabled with Offline beside the model name, without a separate local account status/retry row, and preserves the selected local destination. ProvidersView and SettingsModal display Online/Offline and a retry action through daemon IPC. No persistent schema or new module is introduced.
 
 **Provider usage path:** Existing provider request/response token fields feed task_runtime Run metadata. LocalApiDispatcher receives RunPort from the daemon composition root and exposes v1.providers.usage; probe.rs owns provider quota fetch/parse helpers. Existing UsageMonitor consumes per-run account projections and separate quota snapshots, without localStorage sample metrics.
 
