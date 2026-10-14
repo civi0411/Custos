@@ -7,6 +7,7 @@ pub mod action;
 pub mod annotation;
 pub mod approval;
 pub mod artifact;
+pub mod assistant;
 pub mod authority;
 pub mod automation;
 pub mod browser;
@@ -53,6 +54,7 @@ pub use artifact::{
     ArtifactHandoff, ArtifactKind, ArtifactLineageGraph, ArtifactRef, ArtifactSummary,
     HandoffConsent, LineageGraphEdge, LineageGraphNode,
 };
+pub use assistant::{AssistantDraft, OutboxActionItem, ResourceActionCapability};
 pub use authority::{
     ExecutionPermit, ExecutionReceipt, Grant, Permit, PermitId, PermitV1, Receipt, ReceiptStatus,
     RiskClass,

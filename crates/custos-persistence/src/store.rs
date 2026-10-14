@@ -1,8 +1,9 @@
 use crate::connection::DbConnection;
 use crate::repositories::{
-    ContinuationRepository, DecisionRepository, FleetAutomationRepository, OutboxRepository,
-    ProviderRepository, ReplanRepository, ResearchRepository, RunRepository, SessionRepository,
-    SpanRepository, TaskRepository, WorkflowRevisionRepository, WorkspaceRepository,
+    AssistantRepository, ContinuationRepository, DecisionRepository, FleetAutomationRepository,
+    OutboxRepository, ProviderRepository, ReplanRepository, ResearchRepository, RunRepository,
+    SessionRepository, SpanRepository, TaskRepository, WorkflowRevisionRepository,
+    WorkspaceRepository,
 };
 use async_trait::async_trait;
 use custos_core::contracts::storage::{
@@ -37,6 +38,7 @@ pub struct SqliteTaskStore {
     research_repo: ResearchRepository,
     provider_repo: ProviderRepository,
     fleet_automation_repo: FleetAutomationRepository,
+    assistant_repo: AssistantRepository,
 }
 
 impl SqliteTaskStore {
@@ -56,6 +58,7 @@ impl SqliteTaskStore {
         let research_repo = ResearchRepository::new(db.clone());
         let provider_repo = ProviderRepository::new(db.clone());
         let fleet_automation_repo = FleetAutomationRepository::new(db.clone());
+        let assistant_repo = AssistantRepository::new(db.clone());
         let store = Self {
             db,
             task_repo,
@@ -71,6 +74,7 @@ impl SqliteTaskStore {
             research_repo,
             provider_repo,
             fleet_automation_repo,
+            assistant_repo,
         };
         Ok(store)
     }
@@ -91,6 +95,7 @@ impl SqliteTaskStore {
         let research_repo = ResearchRepository::new(db.clone());
         let provider_repo = ProviderRepository::new(db.clone());
         let fleet_automation_repo = FleetAutomationRepository::new(db.clone());
+        let assistant_repo = AssistantRepository::new(db.clone());
         let store = Self {
             db,
             task_repo,
@@ -106,8 +111,8 @@ impl SqliteTaskStore {
             research_repo,
             provider_repo,
             fleet_automation_repo,
+            assistant_repo,
         };
-        store.seed_canonical_data_if_empty()?;
         Ok(store)
     }
 
@@ -117,6 +122,10 @@ impl SqliteTaskStore {
 
     pub fn outbox(&self) -> &OutboxRepository {
         &self.outbox_repo
+    }
+
+    pub fn assistant(&self) -> &AssistantRepository {
+        &self.assistant_repo
     }
 
     pub fn tasks(&self) -> &TaskRepository {
@@ -171,6 +180,62 @@ impl SqliteTaskStore {
         &self.fleet_automation_repo
     }
 
+    pub fn get_settings(&self) -> Result<std::collections::HashMap<String, String>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare("SELECT key, value FROM daemon_settings")
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut map = std::collections::HashMap::new();
+        for r in rows {
+            let (key, value) = r.map_err(|e| DomainError::Validation(e.to_string()))?;
+            map.insert(key, value);
+        }
+        Ok(map)
+    }
+
+    pub fn set_settings(
+        &self,
+        settings: &std::collections::HashMap<String, String>,
+    ) -> Result<(), DomainError> {
+        if settings.keys().any(|key| key.trim().is_empty() || key.len() > 128)
+            || settings.values().any(|value| value.len() > 65_536)
+        {
+            return Err(DomainError::Validation(
+                "Settings keys must be non-empty and <=128 bytes; values must be <=65536 bytes".into(),
+            ));
+        }
+        let mut conn = self.db.lock()?;
+        let tx = conn
+            .transaction()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        for (key, value) in settings {
+            tx.execute(
+                "INSERT INTO daemon_settings (key, value, updated_at) VALUES (?1, ?2, datetime('now'))
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
+                rusqlite::params![key, value],
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        }
+        tx.commit()
+            .map_err(|e| DomainError::Validation(e.to_string()))
+    }
+
+    pub fn set_setting(&self, key: &str, value: &str) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "INSERT INTO daemon_settings (key, value, updated_at) VALUES (?1, ?2, datetime('now'))
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')",
+            rusqlite::params![key, value],
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+        Ok(())
+    }
+
+    #[cfg(test)]
     pub fn seed_canonical_data_if_empty(&self) -> Result<(), DomainError> {
         // 1. Seed tasks if empty
         if self.task_repo.list_tasks()?.is_empty() {

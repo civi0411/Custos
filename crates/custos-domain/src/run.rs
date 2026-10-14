@@ -297,6 +297,8 @@ pub struct StartRunCommand {
     #[serde(default)]
     pub workspace_root: Option<String>,
     #[serde(default)]
+    pub workspace_id: Option<String>,
+    #[serde(default)]
     pub session_id: Option<String>,
     #[serde(default)]
     pub turn_id: Option<String>,
@@ -315,6 +317,7 @@ impl StartRunCommand {
             preferred_mode: None,
             harness_id: None,
             workspace_root: None,
+            workspace_id: None,
             session_id: None,
             turn_id: None,
             prompt: None,
@@ -339,6 +342,11 @@ impl StartRunCommand {
 
     pub fn with_workspace_root(mut self, root: impl Into<String>) -> Self {
         self.workspace_root = Some(root.into());
+        self
+    }
+
+    pub fn with_workspace_id(mut self, workspace_id: impl Into<String>) -> Self {
+        self.workspace_id = Some(workspace_id.into());
         self
     }
 

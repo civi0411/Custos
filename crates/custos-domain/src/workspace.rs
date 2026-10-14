@@ -101,6 +101,17 @@ impl WorkspaceStatus {
     }
 }
 
+impl std::fmt::Display for WorkspaceStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Initializing => write!(f, "initializing"),
+            Self::Ready => write!(f, "ready"),
+            Self::SetupFailed { reason } => write!(f, "setup_failed: {}", reason),
+            Self::Archived => write!(f, "archived"),
+        }
+    }
+}
+
 /// Lineage tracking parent relationships, base commits, and branch targeting
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct WorkspaceLineage {
@@ -142,6 +153,12 @@ pub struct ExecutionWorkspace {
     pub base_commit_hash: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dirty_manifest: Option<DirtyManifest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub running_agent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_branch: Option<String>,
     pub metadata: serde_json::Value,
     pub created_at: String,
     pub updated_at: String,
@@ -165,10 +182,24 @@ impl ExecutionWorkspace {
             owner_task_id: None,
             base_commit_hash: None,
             dirty_manifest: None,
+            running_agent_id: None,
+            agent_status: None,
+            active_branch: None,
             metadata: serde_json::json!({}),
             created_at: now.clone(),
             updated_at: now,
         }
+    }
+
+    pub fn with_running_agent(mut self, agent_id: impl Into<String>, status: impl Into<String>) -> Self {
+        self.running_agent_id = Some(agent_id.into());
+        self.agent_status = Some(status.into());
+        self
+    }
+
+    pub fn with_active_branch(mut self, branch: impl Into<String>) -> Self {
+        self.active_branch = Some(branch.into());
+        self
     }
 
     pub fn with_lineage(mut self, lineage: WorkspaceLineage) -> Self {

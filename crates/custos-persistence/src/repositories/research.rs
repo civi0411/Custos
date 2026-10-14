@@ -857,7 +857,7 @@ impl ResearchRepository {
             CellExecutionStatus::Error => "error",
         };
 
-        conn.execute(
+        let affected = conn.execute(
             "INSERT INTO notebook_cells (
                 id, session_id, cell_type, source, cell_index, execution_count, status, stdout, stderr, output_image, wall_ms, epoch, updated_at
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
@@ -872,7 +872,8 @@ impl ResearchRepository {
                 output_image = excluded.output_image,
                 wall_ms = excluded.wall_ms,
                 epoch = excluded.epoch,
-                updated_at = excluded.updated_at",
+                updated_at = excluded.updated_at
+            WHERE notebook_cells.session_id = excluded.session_id",
             params![
                 cell.id,
                 cell.session_id,
@@ -889,6 +890,11 @@ impl ResearchRepository {
                 cell.updated_at,
             ],
         ).map_err(|e| DomainError::Validation(e.to_string()))?;
+        if affected == 0 {
+            return Err(DomainError::Validation(
+                "Notebook cell belongs to a different session".into(),
+            ));
+        }
 
         Ok(())
     }
