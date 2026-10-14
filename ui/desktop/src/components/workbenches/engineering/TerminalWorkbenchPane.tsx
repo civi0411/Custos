@@ -163,13 +163,18 @@ export const TerminalWorkbenchPane: React.FC<TerminalWorkbenchPaneProps> = ({
     setInputCommand('');
   };
 
+  const nextSeqsRef = useRef(nextSeqs);
+  useEffect(() => {
+    nextSeqsRef.current = nextSeqs;
+  }, [nextSeqs]);
+
   // 6. Polling loop for active session output stream
   useEffect(() => {
     if (!activeSessionId) return;
     let isSubscribed = true;
 
     const poll = async () => {
-      const currentSeq = nextSeqs[activeSessionId] || 0;
+      const currentSeq = nextSeqsRef.current[activeSessionId] || 0;
       try {
         const chunk = await daemonClient.readTerminal(activeSessionId, currentSeq, 65536);
         if (!isSubscribed) return;
@@ -179,9 +184,11 @@ export const TerminalWorkbenchPane: React.FC<TerminalWorkbenchPaneProps> = ({
             ...prev,
             [activeSessionId]: (prev[activeSessionId] || '') + chunk.data,
           }));
+          const newSeq = chunk.nextSeq ?? chunk.next_seq ?? currentSeq;
+          nextSeqsRef.current = { ...nextSeqsRef.current, [activeSessionId]: newSeq };
           setNextSeqs((prev) => ({
             ...prev,
-            [activeSessionId]: chunk.nextSeq ?? chunk.next_seq,
+            [activeSessionId]: newSeq,
           }));
         }
 
@@ -200,12 +207,12 @@ export const TerminalWorkbenchPane: React.FC<TerminalWorkbenchPaneProps> = ({
     };
 
     poll();
-    const interval = setInterval(poll, 180);
+    const interval = setInterval(poll, 300);
     return () => {
       isSubscribed = false;
       clearInterval(interval);
     };
-  }, [activeSessionId, nextSeqs]);
+  }, [activeSessionId]);
 
   // 7. Auto-scroll output
   useEffect(() => {

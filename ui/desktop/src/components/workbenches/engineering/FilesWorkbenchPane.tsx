@@ -8,7 +8,6 @@ import {
   FileCode,
   FileText,
   RefreshCw,
-  Save,
   Search,
   AlertCircle,
   CheckCircle2,
@@ -22,8 +21,8 @@ import {
 } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
 import { JobActionButton } from '@/components/common';
+import { CompanionFileViewer } from '@/components/viewer';
 import { ExecutionWorkspace, WorkspaceFileEntry, WorkspaceFileContent } from '@/types/domain';
-import { formatKeyCombo } from '@/lib/utils';
 
 import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 
@@ -492,102 +491,66 @@ export const FilesWorkbenchPane: React.FC<FilesWorkbenchPaneProps> = ({
         {/* Right Editor / Viewer Pane */}
         <div className="flex-1 flex flex-col bg-[var(--color-canvas)]">
           {activeFilePath ? (
-            <>
-              {/* File Editor Header */}
-              <div className="flex items-center justify-between border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-4 py-2">
-                <div className="flex items-center gap-2">
-                  {getFileIcon(activeFilePath)}
-                  <span className="font-mono text-xs font-semibold text-[var(--color-editor-fg)]">
-                    {activeFilePath}
-                  </span>
-                  {isDirty && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-400" title="Unsaved changes" />
-                  )}
-                  {fileContent && (
-                    <span className="text-[10px] text-[var(--color-fg-subtle)]">
-                      ({fileContent.line_count} lines • {(fileContent.size_bytes / 1024).toFixed(1)} KB)
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <JobActionButton
-                    jobId="engineering__repo_explain"
-                    label="Explain"
-                    icon={BookOpen}
-                    getInputs={() => activeFilePath ? {
-                      scope: activeFilePath,
-                      query: `Explain symbols, functions, and architecture of ${activeFilePath}`,
-                    } : null}
-                    sessionId={sessionId}
-                    workspaceId={selectedWorkspaceId}
-                    sourceTabId="files"
-                    onNavigate={onOpenTab}
-                    notReadyTooltip="Open a file to explain"
-                    readyTooltip={`Explain ${activeFilePath}`}
-                    onShowToast={onShowToast}
-                    variant="toolbar"
-                  />
-                  <JobActionButton
-                    jobId="engineering__refactor"
-                    label="Refactor"
-                    icon={Sparkles}
-                    getInputs={() => activeFilePath ? {
-                      scope: activeFilePath,
-                      invariants: 'Preserve function signatures and behavioral parity',
-                    } : null}
-                    sessionId={sessionId}
-                    workspaceId={selectedWorkspaceId}
-                    sourceTabId="files"
-                    onNavigate={onOpenTab}
-                    notReadyTooltip="Open a file to refactor"
-                    readyTooltip={`Refactor ${activeFilePath} preserving behavioral invariants`}
-                    onShowToast={onShowToast}
-                    variant="toolbar"
-                  />
-                  <button
-                    onClick={handleSaveFile}
-                    disabled={savingFile || !isDirty}
-                    className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition ${
-                      isDirty
-                        ? 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-sm'
-                        : 'border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] text-[var(--color-fg-muted)] opacity-50 cursor-not-allowed'
-                    }`}
-                  >
-                    <Save className="h-3 w-3" />
-                    <span>{savingFile ? 'Saving...' : `Save ${formatKeyCombo({ ctrlOrCmd: true, key: 'S' })}`}</span>
-                  </button>
-                </div>
+            loadingFile ? (
+              <div className="flex flex-1 items-center justify-center text-xs text-[var(--color-fg-muted)]">
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                Loading {activeFilePath}...
               </div>
-
-              {/* Editor Content Body */}
-              <div className="flex-1 relative overflow-hidden flex flex-col">
-                {loadingFile ? (
-                  <div className="flex flex-1 items-center justify-center text-xs text-[var(--color-fg-muted)]">
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Loading {activeFilePath}...
+            ) : (
+              <CompanionFileViewer
+                path={activeFilePath}
+                content={editorText}
+                isBinary={fileContent?.is_binary}
+                sizeBytes={fileContent?.size_bytes}
+                lineCount={fileContent?.line_count}
+                isDirty={isDirty}
+                isReadOnly={fileContent?.is_binary}
+                onChangeText={(text) => {
+                  setEditorText(text);
+                  setIsDirty(true);
+                }}
+                onSave={handleSaveFile}
+                saving={savingFile}
+                extraHeaderActions={
+                  <div className="flex items-center gap-1.5">
+                    <JobActionButton
+                      jobId="engineering__repo_explain"
+                      label="Explain"
+                      icon={BookOpen}
+                      getInputs={() => activeFilePath ? {
+                        scope: activeFilePath,
+                        query: `Explain symbols, functions, and architecture of ${activeFilePath}`,
+                      } : null}
+                      sessionId={sessionId}
+                      workspaceId={selectedWorkspaceId}
+                      sourceTabId="files"
+                      onNavigate={onOpenTab}
+                      notReadyTooltip="Open a file to explain"
+                      readyTooltip={`Explain ${activeFilePath}`}
+                      onShowToast={onShowToast}
+                      variant="toolbar"
+                    />
+                    <JobActionButton
+                      jobId="engineering__refactor"
+                      label="Refactor"
+                      icon={Sparkles}
+                      getInputs={() => activeFilePath ? {
+                        scope: activeFilePath,
+                        invariants: 'Preserve function signatures and behavioral parity',
+                      } : null}
+                      sessionId={sessionId}
+                      workspaceId={selectedWorkspaceId}
+                      sourceTabId="files"
+                      onNavigate={onOpenTab}
+                      notReadyTooltip="Open a file to refactor"
+                      readyTooltip={`Refactor ${activeFilePath} preserving behavioral invariants`}
+                      onShowToast={onShowToast}
+                      variant="toolbar"
+                    />
                   </div>
-                ) : fileContent?.is_binary ? (
-                  <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
-                    <File className="h-10 w-10 text-[var(--color-fg-muted)] mb-3" />
-                    <h3 className="text-xs font-semibold">Binary File Detected</h3>
-                    <p className="mt-1 text-[11px] text-[var(--color-fg-muted)] max-w-sm">
-                      This file cannot be rendered as text in the editor.
-                    </p>
-                  </div>
-                ) : (
-                  <textarea
-                    value={editorText}
-                    onChange={(e) => {
-                      setEditorText(e.target.value);
-                      setIsDirty(true);
-                    }}
-                    spellCheck={false}
-                    className="flex-1 w-full resize-none bg-[var(--color-canvas)] p-4 font-mono text-xs leading-relaxed text-[var(--color-editor-fg)] focus:outline-none selection:bg-zinc-800"
-                  />
-                )}
-              </div>
-            </>
+                }
+              />
+            )
           ) : (
             <div className="flex flex-1 flex-col items-center justify-center p-8 text-center text-[var(--color-fg-muted)]">
               <FolderTree className="h-12 w-12 stroke-[1.2] opacity-40 mb-3" />

@@ -248,13 +248,18 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
     }
   };
 
+  const ptyNextSeqsRef = useRef(ptyNextSeqs);
+  useEffect(() => {
+    ptyNextSeqsRef.current = ptyNextSeqs;
+  }, [ptyNextSeqs]);
+
   // 5. Polling loop for active PTY session output stream
   useEffect(() => {
     if (!activePtyId || viewMode !== 'interactive') return;
     let isSubscribed = true;
 
     const poll = async () => {
-      const currentSeq = ptyNextSeqs[activePtyId] || 0;
+      const currentSeq = ptyNextSeqsRef.current[activePtyId] || 0;
       try {
         const chunk = await daemonClient.readTerminal(activePtyId, currentSeq, 65536);
         if (!isSubscribed) return;
@@ -264,9 +269,11 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
             ...prev,
             [activePtyId]: (prev[activePtyId] || '') + chunk.data,
           }));
+          const newSeq = chunk.nextSeq ?? chunk.next_seq ?? currentSeq;
+          ptyNextSeqsRef.current = { ...ptyNextSeqsRef.current, [activePtyId]: newSeq };
           setPtyNextSeqs((prev) => ({
             ...prev,
-            [activePtyId]: chunk.nextSeq ?? chunk.next_seq ?? currentSeq,
+            [activePtyId]: newSeq,
           }));
         }
 
@@ -285,12 +292,12 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
     };
 
     poll();
-    const interval = setInterval(poll, 160);
+    const interval = setInterval(poll, 300);
     return () => {
       isSubscribed = false;
       clearInterval(interval);
     };
-  }, [activePtyId, ptyNextSeqs, viewMode]);
+  }, [activePtyId, viewMode]);
 
   // Auto-scroll terminal output
   useEffect(() => {

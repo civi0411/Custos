@@ -286,10 +286,20 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
         let is_binary = bytes[..sample_len].contains(&0);
 
         if is_binary {
-            return Ok(WorkspaceFileContent::binary(
+            use base64::Engine;
+            let truncated = bytes.len() > limit;
+            let read_slice = if truncated {
+                &bytes[..limit]
+            } else {
+                &bytes[..]
+            };
+            let b64 = base64::engine::general_purpose::STANDARD.encode(read_slice);
+            return Ok(WorkspaceFileContent::binary_with_content(
                 workspace.id.clone(),
                 relative_path,
+                b64,
                 file_len,
+                truncated,
             ));
         }
 
@@ -731,6 +741,20 @@ mod tests {
             .entries
             .iter()
             .any(|e| e.path == "nested/dir/hello.txt"));
+
+        // 4. Test binary file read encodes base64
+        let binary_path = test_dir.join("sample.bin");
+        let sample_bytes = vec![0u8, 1, 2, 3, 255, 0, 42];
+        fs::write(&binary_path, &sample_bytes).await.expect("write binary");
+        let read_bin = coord
+            .read_file(&ws, "sample.bin", None)
+            .await
+            .expect("read binary");
+        assert!(read_bin.is_binary);
+        assert!(!read_bin.content.is_empty());
+        use base64::Engine;
+        let decoded = base64::engine::general_purpose::STANDARD.decode(&read_bin.content).expect("valid base64");
+        assert_eq!(decoded, sample_bytes);
 
         let _ = fs::remove_dir_all(&test_dir).await;
     }

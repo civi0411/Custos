@@ -1,7 +1,7 @@
 import { APPEARANCE_KEY, readAppearance, applyAppearance, type AppearancePreferences } from '@/lib/appearance';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   MainTab,
   ProjectData,
@@ -800,9 +800,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { providers: providerRecords, keys: fetchedKeys, accounts: liveAccounts };
   }, []);
 
+  const localAccountsRef = useRef(connectedAccounts);
+  useEffect(() => {
+    localAccountsRef.current = connectedAccounts;
+  }, [connectedAccounts]);
+
+  const localAccountsKey = useMemo(() => {
+    return connectedAccounts
+      .filter(a => a.providerId === 'local' && a.endpointUrl && (a.endpointUrl?.includes(':11434') || a.defaultModel?.startsWith('ollama/') || a.supportedModels.some(m => m.startsWith('ollama/'))))
+      .map(a => `${a.id}:${a.endpointUrl}`)
+      .join('|');
+  }, [connectedAccounts]);
+
   // Availability does not mutate saved configuration or switch the chosen model.
   useEffect(() => {
-    const accounts = connectedAccounts.filter(a => a.providerId === 'local' && a.endpointUrl && (a.endpointUrl?.includes(':11434') || a.defaultModel?.startsWith('ollama/') || a.supportedModels.some(m => m.startsWith('ollama/'))));
+    const accounts = localAccountsRef.current.filter(a => a.providerId === 'local' && a.endpointUrl && (a.endpointUrl?.includes(':11434') || a.defaultModel?.startsWith('ollama/') || a.supportedModels.some(m => m.startsWith('ollama/'))));
     if (!accounts.length) return;
     let cancelled = false;
     let probing = false;
@@ -831,7 +843,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     window.addEventListener('focus', onVisible);
     document.addEventListener('visibilitychange', onVisible);
     return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', onVisible); document.removeEventListener('visibilitychange', onVisible); };
-  }, [connectedAccounts]);
+  }, [localAccountsKey]);
 
   const handleSelectModel = useCallback((modelName: string) => {
     setSelectedModel(modelName);
@@ -891,7 +903,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           daemonClient.listSessions().catch(() => []),
         ]);
 
-        await refreshProviderState();
+        // Hydrate provider models in background without blocking task and session rendering
+        void refreshProviderState();
 
         const journals = await Promise.all(
           fetchedSessions.map(async (session) => {
