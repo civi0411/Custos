@@ -325,9 +325,9 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     try {
       const harnessId = activeSession.nativeHarnessId || 'claude-code';
       await daemonClient.steerHarness(harnessId, liveMessage.runId, trimmed);
-      onShowToast?.(`Steered agent: "${trimmed}"`);
+      onShowToast?.(`Guidance queued for next turn: "${trimmed}"`);
     } catch (err: any) {
-      onShowToast?.(`Failed to steer agent: ${err?.message || err}`);
+      onShowToast?.(`Live steering unsupported for headless CLI harness: ${err?.message || err}`);
     }
   };
 
@@ -788,14 +788,14 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                       aria-label={
                         liveMessage
                           ? inputText.trim()
-                            ? 'Steer running agent'
+                            ? 'Queue guidance for next turn'
                             : 'Stop response'
                           : 'Send message'
                       }
                       title={
                         liveMessage
                           ? inputText.trim()
-                            ? 'Steer running agent (send guidance mid-run)'
+                            ? 'Queue guidance for next turn (live steering unsupported for headless CLI)'
                             : 'Stop response'
                           : 'Send message'
                       }

@@ -590,6 +590,7 @@ export interface HarnessDescriptor {
   isAvailable?: boolean;
   launch_cmd?: string;
   launchCmd?: string;
+  maturity?: 'verified_native' | 'discovered_cli';
   profile: HarnessProfile;
 }
 
