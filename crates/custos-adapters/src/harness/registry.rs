@@ -7,7 +7,7 @@
 //! - Custos Governed Agent Runtime (`governed-agent-runtime`)
 
 use custos_core::contracts::harness::{
-    AgentRuntimePort, HarnessDescriptor, HarnessExecutionResult, ToolMediationLevel,
+    AgentRuntimePort, HarnessDescriptor, HarnessExecutionResult, HarnessMaturity, ToolMediationLevel,
 };
 use custos_domain::DomainError;
 use std::collections::HashMap;
@@ -19,6 +19,7 @@ pub struct HarnessEntry {
     pub description: String,
     pub binary_path: String,
     pub launch_cmd: String,
+    pub maturity: HarnessMaturity,
     pub harness: Arc<dyn AgentRuntimePort>,
 }
 
@@ -75,43 +76,47 @@ impl HarnessRegistry {
         let root = workspace_root.into();
         let mut registry = Self::new();
 
-        // 1. Dedicated first-party harnesses
+        // 1. Dedicated first-party harnesses (Verified Native with structured event conformance)
         let claude = Arc::new(super::claude_code::ClaudeCodeHarnessAdapter::new(
             root.clone(),
         ));
-        registry.register_with_launch_cmd(
+        registry.register_with_maturity(
             claude,
             "Claude Code",
             "Anthropic Claude Code sub-process native coding harness.",
             "claude",
             "claude",
+            HarnessMaturity::VerifiedNative,
         );
 
         let codex = Arc::new(super::codex::CodexHarnessAdapter::new(root.clone()));
-        registry.register_with_launch_cmd(
+        registry.register_with_maturity(
             codex,
             "OpenAI Codex",
             "OpenAI Codex / GPT execution loop native coding harness.",
             "codex",
             "codex",
+            HarnessMaturity::VerifiedNative,
         );
 
         let goose = Arc::new(super::goose::GooseHarnessAdapter::new(root.clone()));
-        registry.register_with_launch_cmd(
+        registry.register_with_maturity(
             goose,
             "Block Goose",
             "Block Goose autonomous developer CLI native coding harness.",
             "goose",
             "goose",
+            HarnessMaturity::VerifiedNative,
         );
 
         let opencode = Arc::new(super::opencode::OpenCodeHarnessAdapter::new(root.clone()));
-        registry.register_with_launch_cmd(
+        registry.register_with_maturity(
             opencode,
             "OpenCode",
             "OpenCode native server/CLI agent loop with provider-governed execution.",
             "opencode",
             "opencode",
+            HarnessMaturity::VerifiedNative,
         );
 
         // 2. Comprehensive catalog of all Orca-supported AI coding agents
@@ -421,10 +426,10 @@ impl HarnessRegistry {
         ];
 
         for agent in catalog_agents {
-            let mediation = if agent.bin == "internal" {
-                ToolMediationLevel::CustosMediated
+            let (mediation, maturity) = if agent.bin == "internal" {
+                (ToolMediationLevel::CustosMediated, HarnessMaturity::VerifiedNative)
             } else {
-                ToolMediationLevel::ProviderGoverned
+                (ToolMediationLevel::ProviderGoverned, HarnessMaturity::DiscoveredCli)
             };
             let adapter = Arc::new(super::generic_cli::GenericCliHarnessAdapter::new(
                 agent.id,
@@ -432,12 +437,13 @@ impl HarnessRegistry {
                 root.clone(),
                 mediation,
             ));
-            registry.register_with_launch_cmd(
+            registry.register_with_maturity(
                 adapter,
                 agent.name,
                 agent.desc,
                 agent.bin,
                 agent.launch_cmd,
+                maturity,
             );
         }
 
@@ -464,12 +470,32 @@ impl HarnessRegistry {
         binary_path: impl Into<String>,
         launch_cmd: impl Into<String>,
     ) {
+        self.register_with_maturity(
+            harness,
+            name,
+            description,
+            binary_path,
+            launch_cmd,
+            HarnessMaturity::DiscoveredCli,
+        );
+    }
+
+    pub fn register_with_maturity(
+        &mut self,
+        harness: Arc<dyn AgentRuntimePort>,
+        name: impl Into<String>,
+        description: impl Into<String>,
+        binary_path: impl Into<String>,
+        launch_cmd: impl Into<String>,
+        maturity: HarnessMaturity,
+    ) {
         let id = harness.harness_id().to_string();
         let entry = Arc::new(HarnessEntry {
             name: name.into(),
             description: description.into(),
             binary_path: binary_path.into(),
             launch_cmd: launch_cmd.into(),
+            maturity,
             harness,
         });
         if self.default_harness_id.is_none() {
@@ -513,6 +539,7 @@ impl HarnessRegistry {
                 binary_path: e.binary_path.clone(),
                 is_available,
                 launch_cmd: Some(e.launch_cmd.clone()),
+                maturity: e.maturity,
                 profile,
             }
         })

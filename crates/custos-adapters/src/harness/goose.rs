@@ -165,7 +165,12 @@ impl AgentRuntimePort for GooseHarnessAdapter {
                     self.binary_path.display()
                 )));
             }
-            String::new()
+            let prompt = format!("Execute task turn {}", worker_run.task_id);
+            let res = self.run_native(&prompt, &self.workspace_root).await?;
+            for intent in &res.observed_effects {
+                profile.validate_intent_assurance(intent)?;
+            }
+            return Ok(res.observed_effects);
         };
 
         let intents = self.normalize_output_to_intents(&worker_run.task_id, &raw_output);
@@ -183,6 +188,36 @@ impl AgentRuntimePort for GooseHarnessAdapter {
             let _ = tx.send(());
         }
         Ok(())
+    }
+
+    async fn run_native_observed(
+        &self,
+        instruction: &str,
+        cwd: &Path,
+        observer: std::sync::Arc<dyn custos_core::contracts::harness::RunObserver>,
+    ) -> Result<HarnessExecutionResult, DomainError> {
+        if self.mock_mode {
+            return self.run_native(instruction, cwd).await;
+        }
+        let run_id = observer.run_id().unwrap_or("goose-observed").to_string();
+        let (cancel_tx, mut cancel_rx) = tokio::sync::broadcast::channel(1);
+        {
+            let mut runs = self.active_runs.lock().await;
+            runs.insert(run_id.clone(), cancel_tx);
+        }
+        let mut command = tokio::process::Command::new(&self.binary_path);
+        command.current_dir(cwd).arg("run").arg("--text").arg(instruction);
+        let res = tokio::select! {
+            result = super::live::run_observed_process(command, observer, "goose", self.default_timeout) => result,
+            _ = cancel_rx.recv() => {
+                Err(DomainError::Validation("Goose run cancelled via adapter API".into()))
+            }
+        };
+        {
+            let mut runs = self.active_runs.lock().await;
+            runs.remove(&run_id);
+        }
+        res
     }
 
     async fn run_native(

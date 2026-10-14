@@ -145,6 +145,20 @@ pub struct HarnessExecutionResult {
     pub mediation_level: ToolMediationLevel,
 }
 
+/// Conformance and maturity level of a registered agent harness.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HarnessMaturity {
+    /// Dedicated native adapter with structured protocol parsing, live observer, and verified error recovery.
+    VerifiedNative,
+    /// Discovered CLI binary on host PATH; supports interactive PTY/TUI launch, but no structured event protocol.
+    DiscoveredCli,
+}
+
+fn default_maturity() -> HarnessMaturity {
+    HarnessMaturity::DiscoveredCli
+}
+
 /// Descriptive metadata and capability profile of a registered agent harness.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HarnessDescriptor {
@@ -155,6 +169,8 @@ pub struct HarnessDescriptor {
     pub is_available: bool,
     #[serde(default)]
     pub launch_cmd: Option<String>,
+    #[serde(default = "default_maturity")]
+    pub maturity: HarnessMaturity,
     pub profile: HarnessProfile,
 }
 
@@ -224,4 +240,7 @@ pub trait AgentRuntimePort: Send + Sync {
 pub trait RunObserver: Send + Sync {
     fn emit(&self, kind: &str, payload: serde_json::Value);
     fn is_cancelled(&self) -> bool;
+    fn run_id(&self) -> Option<&str> {
+        None
+    }
 }

@@ -17,6 +17,8 @@ import {
   X,
   Send,
   Power,
+  Sparkles,
+  AlertCircle,
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { daemonClient } from '@/api/daemon_client';
@@ -441,6 +443,28 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
     }
   };
 
+  const renderMaturityBadge = (maturity?: 'verified_native' | 'discovered_cli') => {
+    if (maturity === 'verified_native') {
+      return (
+        <span
+          className="inline-flex items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400"
+          title="Verified Native: Protocol conformance with structured tool events and live observer"
+        >
+          <Sparkles className="h-2.5 w-2.5" />
+          Verified Native
+        </span>
+      );
+    }
+    return (
+      <span
+        className="inline-flex items-center gap-1 rounded border border-zinc-600/40 bg-zinc-700/20 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400"
+        title="Discovered CLI: Standard host CLI executable; unmediated subprocess execution"
+      >
+        Discovered CLI
+      </span>
+    );
+  };
+
   // Filtered Harnesses
   const filteredHarnesses = useMemo(() => {
     let list = harnesses;
@@ -628,6 +652,7 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
+                      {renderMaturityBadge(harness.maturity)}
                       <div
                         className={`h-2 w-2 rounded-full ${
                           available ? 'bg-emerald-400 ring-2 ring-emerald-500/20' : 'bg-amber-400/80'
@@ -685,6 +710,7 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
                 <span className="font-mono text-[11px] rounded bg-[var(--color-surface-2)] px-2 py-0.5 text-[var(--color-fg-muted)]">
                   launch: <code>{selectedHarness.launch_cmd || selectedHarness.binary_path}</code>
                 </span>
+                {renderMaturityBadge(selectedHarness.maturity)}
                 {renderMediationBadge(selectedHarness.profile.tool_mediation)}
               </div>
             )}
@@ -896,8 +922,20 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
                         </div>
                       </div>
                     </div>
-                    {renderMediationBadge(selectedHarness.profile.tool_mediation)}
+                    <div className="flex items-center gap-2">
+                      {renderMaturityBadge(selectedHarness.maturity)}
+                      {renderMediationBadge(selectedHarness.profile.tool_mediation)}
+                    </div>
                   </div>
+
+                  {selectedHarness.maturity === 'discovered_cli' && (
+                    <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-2.5 text-xs text-amber-300">
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-400" />
+                      <div>
+                        <span className="font-semibold">Discovered CLI Harness:</span> This agent executes as a standard host CLI sub-process without protocol conformance for structured tool events or live mid-turn steering. Best experienced in <strong>Interactive PTY</strong> mode.
+                      </div>
+                    </div>
+                  )}
 
                   {/* Instruction Input & Autonomous Jobs */}
                   <div className="mt-4 space-y-4">

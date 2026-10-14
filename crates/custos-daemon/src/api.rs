@@ -4531,15 +4531,58 @@ impl LocalApiDispatcher {
                     Err(e) => return ApiResponse::error(req.id, format!("Invalid run_native parameters: {e}")),
                 };
 
+                // Require authoritative workspace binding to prevent arbitrary filesystem escapes
+                let coordinator = match self.workspace.as_ref() {
+                    Some(c) => c,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "WorkspaceCoordinator not configured on daemon",
+                        );
+                    }
+                };
+
                 let cwd_path = if let Some(ws_id) = &params.workspace_id {
                     match self.resolve_workspace_for_dispatch(&req.id, ws_id).await {
-                        Ok(ws) => std::path::PathBuf::from(ws.path),
+                        Ok(ws) => {
+                            let base = std::path::PathBuf::from(ws.path);
+                            if let Some(c) = &params.cwd {
+                                let requested = std::path::PathBuf::from(c);
+                                if requested.is_absolute() && !requested.starts_with(&base) {
+                                    return ApiResponse::error(
+                                        req.id,
+                                        format!("Security boundary violation: cwd '{c}' escapes registered workspace '{}'", base.display()),
+                                    );
+                                }
+                                requested
+                            } else {
+                                base
+                            }
+                        }
                         Err(resp) => return resp,
                     }
                 } else if let Some(c) = &params.cwd {
-                    std::path::PathBuf::from(c)
+                    let requested = std::path::PathBuf::from(c);
+                    // Check if requested cwd is within ANY registered workspace
+                    let registered_workspaces = coordinator.list_workspaces().await.unwrap_or_default();
+                    let canonical = requested.canonicalize().unwrap_or_else(|_| requested.clone());
+                    let is_within_registered = registered_workspaces.iter().any(|ws| {
+                        let ws_path = std::path::PathBuf::from(&ws.path);
+                        let ws_canonical = ws_path.canonicalize().unwrap_or(ws_path);
+                        canonical.starts_with(&ws_canonical)
+                    });
+                    if !is_within_registered {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Security boundary violation: raw harness execution requires cwd inside a registered workspace, '{c}' is outside registered boundaries"),
+                        );
+                    }
+                    requested
                 } else {
-                    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+                    return ApiResponse::error(
+                        req.id,
+                        "Missing workspace_id: raw harness execution must be bound to a registered workspace",
+                    );
                 };
 
                 match self.harnesses.run_native(&params.harness_id, &params.instruction, &cwd_path).await {

@@ -16,7 +16,7 @@ use custos_core::contracts::harness::{
     WorktreeOwnership,
 };
 use custos_domain::{
-    new_id, ActionIntent, Assurance, ContextPack, DomainError, RiskLevel, WorkerRun,
+    ActionIntent, ContextPack, DomainError, WorkerRun,
 };
 
 #[derive(Clone)]
@@ -117,7 +117,7 @@ impl AgentRuntimePort for GenericCliHarnessAdapter {
             tool_mediation: self.mediation_level,
             worktree_ownership: WorktreeOwnership::SharedLive,
             supports_cancel: true,
-            supports_steer: true,
+            supports_steer: false,
             cost_visibility: CostVisibility::Estimated,
         }
     }
@@ -128,21 +128,12 @@ impl AgentRuntimePort for GenericCliHarnessAdapter {
         _context_pack: &ContextPack,
     ) -> Result<Vec<ActionIntent>, DomainError> {
         let profile = self.profile();
-        let intent = ActionIntent::new(
-            new_id("intent"),
-            "agent_turn".to_string(),
-            self.id.clone(),
-            serde_json::json!({ "instruction": worker_run.task_id }),
-            RiskLevel::Medium,
-        )
-        .with_task_id(&worker_run.task_id)
-        .with_assurance(match self.mediation_level {
-            ToolMediationLevel::CustosMediated => Assurance::CustosMediated,
-            _ => Assurance::ProviderGoverned,
-        });
-
-        profile.validate_intent_assurance(&intent)?;
-        Ok(vec![intent])
+        let prompt = format!("Execute task turn {}", worker_run.task_id);
+        let res = self.run_native(&prompt, &self.workspace_root).await?;
+        for intent in &res.observed_effects {
+            profile.validate_intent_assurance(intent)?;
+        }
+        Ok(res.observed_effects)
     }
 
     async fn cancel_run(&self, run_id: &str) -> Result<(), DomainError> {
@@ -154,7 +145,30 @@ impl AgentRuntimePort for GenericCliHarnessAdapter {
     }
 
     async fn steer_run(&self, _run_id: &str, _guidance: &str) -> Result<(), DomainError> {
-        Ok(())
+        Err(DomainError::Validation(format!(
+            "CLI agent '{}' does not support live steering in headless mode",
+            self.id
+        )))
+    }
+
+    async fn run_native_observed(
+        &self,
+        instruction: &str,
+        cwd: &Path,
+        observer: std::sync::Arc<dyn custos_core::contracts::harness::RunObserver>,
+    ) -> Result<HarnessExecutionResult, DomainError> {
+        let run_id = observer.run_id().unwrap_or("cli-observed").to_string();
+        let (cancel_tx, _cancel_rx) = tokio::sync::broadcast::channel(1);
+        {
+            let mut active = self.active_runs.lock().await;
+            active.insert(run_id.clone(), cancel_tx);
+        }
+        let res = self.run_native(instruction, cwd).await;
+        {
+            let mut active = self.active_runs.lock().await;
+            active.remove(&run_id);
+        }
+        res
     }
 
     async fn run_native(
