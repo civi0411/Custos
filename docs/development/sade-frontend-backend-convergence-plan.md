@@ -4,6 +4,8 @@
 
 **Ảnh chụp hiện trạng:** checkout Custos `65132de` trên nhánh `vi`, đồng bộ từ `origin/dev` ngày 09-10-2026. Các mục trong §2 đã được kiểm lại với mã hiện hành; mô tả ở phần sau vốn viết từ checkout cũ là thiết kế đích hoặc ảnh chụp lịch sử khi chúng khác §2. Open Science source study ghi `04b64817c12e7fdbe0e052bfa1aeaf8802feecde`. OrCa checkout local đã mất `.git`; source study ghi SHA lúc audit là `3f6225deeb08a82448c5f0b0725073401629d462`, không thể tái xác minh từ bản local. [Nexus matching ledger](upstream-source-map.md#cross-source-nexus-audit-orca-and-open-science) phân biệt source hiện diện với đường đã được compose/kiểm chứng. Trước khi sao chép mã literal, lấy lại upstream revision và kiểm license/dependencies.
 
+**Audit bổ sung để duyệt:** §11 đối chiếu source tại Custos HEAD `07b3fbb` với OrCa local và tài liệu chính thức. Worktree Custos đang có nhiều thay đổi chưa commit; các kết luận về UI/workspace/daemon phải kiểm lại tại SHA chốt trước khi giao sửa code. §11 làm rõ packet F6 và Settings/Usage, không thay `Custos.md` hay tự tuyên bố thiết kế mới đã được phê duyệt. Nơi phát hiện §2 mô tả trạng thái cũ (ví dụ provider mặc định), dùng bằng chứng source hiện hành trong §11; không suy tính năng đã hoàn tất chỉ từ một file hoặc một pane.
+
 **Đường nhanh cần chứng minh:** `người dùng gửi một câu hỏi repo → daemon chọn executor thật → ContextPack chứa source đã kiểm scope → model/native harness trả output thật → session lưu answer và attempt/usage → Desktop đọc lại được sau restart`. Đây là mốc đầu tiên để gọi Custos dùng được như một SADE. Trong cùng campaign, đóng biên Local API và các đường thực thi vật lý đang mở để demo không đi trước quyền kiểm soát.
 
 ## 1. Kết luận cần chốt trước khi chia việc
@@ -263,3 +265,526 @@ flowchart BT
 ### 10.5 Nên refactor bao nhiêu?
 
 **Không “refactor lại hết”.** Giữ domain/core/runtime/packs/adapters/persistence/daemon và các contracts nào đang có test tốt. Refactor **năm seam gây lệch sản phẩm** theo thứ tự: (1) demo/live và false-success UI; (2) Local API + event/idempotency/auth; (3) một execution path thật và ModelPort/AgentRuntimePort tách bạch; (4) authority/verifier cho Research/Assistant/effects; (5) shared pane/session/Task projection. Sau mỗi seam có một user journey chạy được và regression gate. Chỉ tách crate mới khi edge phụ thuộc hoặc ownership test không thể giữ sạch trong crate hiện hữu.
+
+## 11. Campaign cụ thể: OrCa-class worker/worktree, usage, settings và desktop truth
+
+> **Tài liệu tham chiếu nghiên cứu gốc:** Mổ xẻ chi tiết cấp mã nguồn, phân tích kiến trúc OrCa đối chiếu Custos, xem tại [`docs/development/sade-orca-deep-research-lifecycle.md`](sade-orca-deep-research-lifecycle.md).
+
+Phần này là **kế hoạch triển khai để review**, không phải trạng thái đã xong. Mục tiêu là một vòng đời hoàn chỉnh: `admit → allocate → launch → observe/steer → verify/compare → integrate → retain/release/recover`. Không định nghĩa “đắp full OrCa” bằng số lượng file hay số pane. Coding được worktree-native khi cần; Research và Assistant dùng cùng Task/Run/worker spine nhưng resource và verifier riêng.
+
+### 11.1 Bằng chứng hiện trạng và quyết định không được vượt qua
+
+| Source hiện tại | Đã có | Khoảng trống / quyết định |
+|---|---|---|
+| [`workspace.rs`](../../crates/custos-adapters/src/workspace.rs), [`coordinator.rs`](../../crates/custos-runtime/src/workspace/coordinator.rs) | Adapter gọi `git worktree add`; coordinator ghi `Initializing`, `Ready` hoặc `SetupFailed`, có recovery/archive. | Chưa coi workspace này là worker placement duy nhất; tạo/setup/launch/cleanup cần một ownership receipt. Archive không được chuyển `Archived` nếu teardown thất bại mà còn residual resource chưa xử lý. |
+| [`lease.rs`](../../crates/custos-runtime/src/workflow/lease.rs), [`t4_worktree_integrator.rs`](../../crates/custos-runtime/src/oi/topologies/t4_worktree_integrator.rs) | Lease thư mục và kiểm write-set có test. | Lease không gọi Git; `merge_lease` copy file vào base, không phải merge branch, có partial-write window. Ngừng dùng tên “Git worktree” cho lease này; không nối T4 vào production trước khi thay integration path. |
+| [`graph_runtime.rs`](../../crates/custos-runtime/src/workflow/graph_runtime.rs), [`scheduler.rs`](../../crates/custos-runtime/src/workflow/scheduler.rs) | DAG node có thể chạy theo wave; scheduler khác quản lý recurrence. | Hai cơ chế không tự tạo durable agent fleet. Tách trong API/UX `DAG ready frontier` khỏi `recurring automation`; không suy một cái đã bảo đảm cái kia. |
+| [`dispatcher.rs`](../../crates/custos-runtime/src/workflow/dispatcher.rs), [claim migration](../../crates/custos-persistence/migrations/0027_dispatch_claims_and_fencing.sql) | SQLite có unique active claim `(task_id,node_id)`; runtime còn giữ index RAM và có kiểm active WorkerRun. | Runtime hiện chặn khi thấy **bất kỳ** active WorkerRun cùng Task, kể cả node khác; cần claim theo node/attempt với epoch và transaction read/write nhất quán. Không bật parallel chỉ vì index SQL tồn tại. |
+| [`task_runtime.rs`](../../crates/custos-runtime/src/workflow/task_runtime.rs) | Tạo Run/WorkerRun, gọi model/native harness, ghi một số launch/output/usage. | Nhánh native dùng `workspace_root` của command, không lấy path từ lease đã cấp; model/native có observability khác nhau. Phải bind worker, workspace, baseline, actual mode và assurance trước launch. |
+| [`WorktreeManagerPane.tsx`](../../ui/desktop/src/components/workspaces/engineering/WorktreeManagerPane.tsx) | Liệt kê workspaces và có thao tác Recover. | Nút “Merge” hiện gọi Recover rồi toast “merged”: **sai sự thật**. Đổi thành Recover hoặc disable Merge cho tới khi có integration API/receipt thật. Terminal/diff tab cũng phải gắn exact workspace ID. |
+| [`SubAgentsPane.tsx`](../../ui/desktop/src/app/settings/SubAgentsPane.tsx), [`CostQuotasPane.tsx`](../../ui/desktop/src/app/settings/CostQuotasPane.tsx) | Có hình thức cấu hình. | Công tắc, agent roster và quota chỉ là local React state; chưa phải daemon policy. Không được quảng bá là đã enforce. Settings hiện còn hai cấu trúc nav (`SettingsModal` và `SettingsSidebar`), cần một route/owner trước khi thêm mục. |
+| [usage migration](../../crates/custos-persistence/migrations/0004_usage.sql), [`task_runtime.rs`](../../crates/custos-runtime/src/workflow/task_runtime.rs) | Có usage ledger schema; model stream nhận usage event và lưu một phần trong Run metadata. | Chưa có một attempt ledger production thống nhất model/native/child, provenance billed/reported/estimated/unknown và dedupe fork/resume. [`gateway.rs`](../../crates/custos-runtime/src/gateway/gateway.rs) còn tạo số usage giả; kiểm composition rồi cô lập khỏi mọi UI production. |
+
+`custos-daemon/src/runtime.rs` tại HEAD này mặc định chọn `RouterModelProvider`, và chỉ chọn `FakeProvider` khi cấu hình `fake`; vì vậy câu §2 nói default FakeProvider là **ảnh chụp cũ**, không là kết luận hiện hành. Việc provider thật chạy end-to-end vẫn cần test theo account/model/source/usage cụ thể. Chưa kiểm toàn bộ hành vi runtime của các thay đổi chưa commit.
+
+#### Mổ xẻ 6 điểm đứt gãy và giả lập cấp mã nguồn (Bằng chứng kiểm tra trực tiếp):
+
+1. **Khóa task-wide tự chặn node song song trong `WorkflowDispatcher`:**
+   Tại [`crates/custos-runtime/src/workflow/dispatcher.rs:72-81`](../../crates/custos-runtime/src/workflow/dispatcher.rs#L72-L81), runtime kiểm tra `store.list_worker_runs_for_task(task_id)` và từ chối nếu có bất kỳ worker run nào `Active`. Dù Migration 0027 đã có unique index `(task_id, COALESCE(node_id, ''))`, logic code này tự bóp chết mọi DAG song song và Candidate race. Phải sửa thành chỉ chặn khi `node_id.is_none()` (whole-task claim).
+2. **Thảm họa `fs::copy` ghi đè trong `lease.rs`:**
+   Tại [`crates/custos-runtime/src/workflow/lease.rs:195`](../../crates/custos-runtime/src/workflow/lease.rs#L195), hàm `merge_lease` gọi `fs::copy(&src_file, &dst_file)` đè thẳng vào base workspace mà không qua Git diff hay 3-way merge. Nếu base file bị sửa trong lúc agent chạy, `fs::copy` sẽ xóa sạch code mới mà không báo conflict.
+3. **Bỏ qua đường dẫn worktree trong `task_runtime.rs`:**
+   Tại [`crates/custos-runtime/src/workflow/task_runtime.rs:500`](../../crates/custos-runtime/src/workflow/task_runtime.rs#L500), sau khi cấp lease ở dòng 416, lệnh gọi native harness lại truyền `cmd.workspace_root` (base repo), bỏ qua `lease.lease_path()`. Agent native ghi trực tiếp vào repo chính của người dùng.
+4. **Nút "Merge" gọi Recover trong `WorktreeManagerPane.tsx`:**
+   Tại [`ui/desktop/src/components/workspaces/engineering/WorktreeManagerPane.tsx:97`](../../ui/desktop/src/components/workspaces/engineering/WorktreeManagerPane.tsx#L97), nút "Merge into Base" gọi `recoverWorkspace` rồi thông báo "Worktree successfully merged". Đây là tuyên bố sai bản chất; recover metadata không phải là Git merge.
+5. **Settings mồ côi (Disconnected React State):**
+   Tại [`SubAgentsPane.tsx:21`](../../ui/desktop/src/app/settings/SubAgentsPane.tsx#L21) và [`CostQuotasPane.tsx:10`](../../ui/desktop/src/app/settings/CostQuotasPane.tsx#L10), công tắc subagents và hạn mức monthly token ceiling chỉ là biến `useState`, không kết nối hay được enforce bởi daemon backend.
+6. **Token và chi phí giả định trong `gateway.rs`:**
+   Tại [`crates/custos-runtime/src/gateway/gateway.rs:211-212`](../../crates/custos-runtime/src/gateway/gateway.rs#L211-L212), hệ thống gán `tokens_used = decision.reserved_token_budget.min(256)` và `cost_usd = ceiling * 0.5`. Số liệu mock này bị đẩy vào telemetry và cần bị cô lập khỏi UI production.
+
+### 11.2 Học đúng vòng đời OrCa, không sao chép vai trò của họ
+
+OrCa phân biệt `Run` namespace, `Task` có dependencies, `Dispatch` là **một attempt** của Task, worker session/terminal và mailbox/decision gates. Một worker start có placement `current|new-child|new-top-level`, ghi `starting`, tạo hoặc reuse worktree, chạy setup, đợi structured session/PTY agent sẵn sàng, bind đúng active assignee rồi phát receipt. Nếu prompt/launch có thể đã đến agent nhưng chưa có ack thì trạng thái là `unknown`, không thử lại mù. Tham khảo source [local worker start](../../../orca/src/main/runtime/rpc/methods/orchestration/worker/local-worker-start.ts), [worktree creation](../../../orca/src/main/runtime/rpc/methods/orchestration/worker/worker-worktree-creation.ts), [orchestration types](../../../orca/src/main/runtime/orchestration/types.ts) và [docs chính thức](https://www.onorca.dev/docs/cli/orchestration).
+
+Custos giữ TaskContract và criterion của mình; ánh xạ OrCa `Dispatch` thành attempt/placement của `WorkerRun`, **không nhập Task status enum hoặc SQLite schema của OrCa**. Một Task có thể có một direct worker; fleet là opt-in hoặc measured route. Năm topology cần phân biệt trong contract:
+
+| Topology | Placement | Join rule | UI |
+|---|---|---|---|
+| `single` | Một checkout/worktree có scope | Criterion-specific verifier | Một agent card, không fleet dashboard. |
+| `parallel_read` | Nhiều snapshot/read-only workers | Reconcile findings/source anchors | Gộp nguồn/phát hiện, không nút merge Git. |
+| `candidate_race` | Hai hoặc ba Git worktree từ **cùng exact baseline**; mỗi candidate một branch | So cùng test/rubric, chọn một candidate; không auto-merge “đa số” | Compare: diff, test, cost, unknown và chọn candidate. |
+| `disjoint_write` | Worktree riêng và write sets khác nhau | Interface/integration barrier + test trên base hợp nhất | Chỉ bật sau candidate race; UI có conflict và integration step. |
+| `sequential_review` | Worker sửa rồi reviewer chỉ đọc | Finding + test oracle đáng tin | Review card; reviewer `done` không tự pass Task. |
+
+Không mặc định ba agent; user pin model/harness vẫn là hard constraint. OI chỉ được đề xuất topology khi data/budget/permission cho phép. Product metric là cost **trên mọi attempted Task** chia số accepted Task, kèm acceptance rate, latency và human time; race ba model không đương nhiên rẻ hơn một model mạnh.
+
+```mermaid
+graph TD
+    subgraph Mode 1: Single Writer Worktree
+        T1[Task] --> DA1[DispatchAttempt]
+        DA1 --> WT1[Git Worktree Dedicated]
+        WT1 --> AG1[Single Writer Agent]
+        AG1 --> DIFF1[Git Diff Review]
+    end
+
+    subgraph Mode 2: Parallel Readers + Single Writer
+        T2[Task] --> DA2[DispatchAttempt]
+        DA2 --> RD1[Reader 1: AST / Symbols]
+        DA2 --> RD2[Reader 2: Tests / Deps]
+        RD1 --> SYNTH[Synthesizer Context]
+        RD2 --> SYNTH
+        SYNTH --> WT2[Git Worktree Dedicated]
+        WT2 --> AG2[Single Writer Agent]
+    end
+
+    subgraph Mode 3: Competitive Candidates (Thi Đấu)
+        T3[Task] --> BASE[Same Base SHA]
+        BASE --> WT_A[Worktree A: Branch cand-a]
+        BASE --> WT_B[Worktree B: Branch cand-b]
+        WT_A --> AG_A[Candidate A: Claude]
+        WT_B --> AG_B[Candidate B: Codex]
+        AG_A --> EV_A[Diff + Test Receipt A]
+        AG_B --> EV_B[Diff + Test Receipt B]
+        EV_A --> CMP[Compare & Select Gate]
+        EV_B --> CMP
+        CMP -->|Human Select A| MERGE[Fast-forward / Merge A]
+        CMP -->|Discard B| CLEAN[Retain / Teardown WT_B]
+    end
+
+    subgraph Mode 4: Cooperative Partitioned DAG (Phân Công)
+        T4[Task DAG] --> N1[Node 1: Scope /backend]
+        T4 --> N2[Node 2: Scope /frontend]
+        N1 --> WT_N1[Worktree 1]
+        N2 --> WT_N2[Worktree 2]
+        WT_N1 --> MB1[Mailbox / Steer]
+        WT_N2 --> MB2[Mailbox / Steer]
+        MB1 --> IG[Integration Gate: 3-Way Merge & Test Suite]
+        MB2 --> IG
+    end
+```
+
+#### Bảy cơ chế bắt buộc cho chế độ Thi đấu (Candidate Race):
+1. **Chốt cùng một baseline:** Bắt buộc mọi candidate phải xuất phát từ cùng một commit SHA (`base_commit_hash`).
+2. **Worktree vật lý riêng biệt:** Mỗi candidate một worktree và một branch (`custos/task-<id>/cand-a`, `custos/task-<id>/cand-b`).
+3. **Claim độc lập theo node:** Bảng `dispatch_claims` lưu bản ghi riêng cho từng candidate qua `node_id`, không tranh chấp task-wide lock.
+4. **Quan sát độc lập:** Mỗi candidate có dòng sự kiện (stream events), nhật ký và chi phí token/tiền riêng biệt.
+5. **Bằng chứng khách quan:** Thu thập Git diff hunks và kết quả kiểm thử thực tế (`test_receipts`: exit code, stdout/stderr, pass/fail).
+6. **UI Compare & Human Select:** Người dùng đặt hai phương án cạnh nhau để so sánh; nút "Chọn Candidate" KHÔNG tự động merge vào main.
+7. **Thu hồi bên thua có vết (Loser Cleanup):** Thao tác dọn dẹp worktree bên thua là lệnh độc lập có ghi vết, có bảo vệ dirty.
+
+### 11.3 Contract tối thiểu trước khi sửa code
+
+Không cần thêm crate hoặc một schema khổng lồ. Trên type/port hiện có, chốt các trường/transition cần thiết cho lát cắt đang xây:
+
+1. `PlacementRequest`: `task_id`, `run_id`, `node_id`, `attempt_id`, `host_id`, `repo_id?`, `workspace_id?`, `baseline` (HEAD + selected dirty manifest), `mode` (`existing|new_child|new_top_level`), expected write set, requested harness/model, timeout và setup policy. `repo_id` khác display name/path.
+2. `DispatchAttempt`: immutable command/request ID; `prepared|allocating|launching|ready|start_unknown|failed|running|completed|stopping|stop_unknown|stopped`; attempted/effective host, worktree, harness and surface; generation/epoch; stage error and residual resources. Chỉ append event/transition theo expected version; retry phải tham chiếu attempt trước.
+3. `ExecutionWorkspace`: owner Task/Run/attempt, canonical path, repo/host identity, base SHA, dirty manifest, branch/ref, lineage, setup receipt, retain/archive policy; external user worktree được đánh dấu không thuộc quyền xóa của Custos. Worktree ID không phải pane ID.
+4. `WorkerObservation`: structured session ID hoặc PTY process/terminal identity, heartbeat source/freshness, stream cursor, usage source, cancellation capability và `tool_mediation`. `worker_done` chỉ settle WorkerRun nếu đúng active attempt/generation; criterion pass do verifier riêng.
+5. `CandidateResult`: diff artifact/hash, base SHA, test receipts, reviewer findings, source freshness, known/estimated/unknown cost, continuation; trạng thái `ready_for_review` không có nghĩa `integrated`.
+6. `IntegrationAttempt`: selected candidate(s), target checkout/base precondition, patch/diff digest, approval/permit khi cần, apply/merge method, receipt, conflict/uncertain status và backout guidance. Tạo command này **sau** review; không gọi workspace recovery là integration.
+
+Mọi command đổi state phải có `command_id`, `expected_version`, actor và deadline. Những object/trường đã có thì mở rộng có migration nhỏ và fixture; không tạo bản sao `Run`/`Task` theo OrCa. Trước khi viết code mới, chốt contract này trong `Custos.md` phần Task/Execution/Authority, topic spec và physical catalog theo `AGENTS.md`.
+
+#### Phân định trách nhiệm 8 Crate cho Vòng đời Multi-Agent Worktree:
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                             custos-daemon                              │
+│         Composition Root, Local REST/RPC API cho Desktop & CLI         │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+       ┌────────────────────────────┼────────────────────────────┐
+       ▼                            ▼                            ▼
+┌──────────────┐             ┌──────────────┐             ┌──────────────┐
+│ custos-packs │             │custos-runtime│             │ custos-core  │
+│  Lenses spec │             │ Điều phối    │             │ Quyền hạn,   │
+│  (Engineering│             │ Topology,    │             │ Scope,       │
+│   Research,  │             │ DAG Wave,    │             │ Verification │
+│   Assistant) │             │ Worktree loop│             │ Gate         │
+└──────────────┘             └──────┬───────┘             └──────────────┘
+                                    │
+       ┌────────────────────────────┼────────────────────────────┐
+       ▼                            ▼                            ▼
+┌──────────────┐             ┌──────────────┐             ┌──────────────┐
+│custos-adapter│             │custos-persist│             │custos-domain │
+│ Git worktree,│             │ SQLite DB,   │             │ Structs ID,  │
+│ Process host,│             │ Claims, Runs,│             │ Invariants,  │
+│ Harnesses    │             │ Usage ledger │             │ WorkspaceKind│
+└──────────────┘             └──────────────┘             └──────────────┘
+                                    │
+                                    ▼
+                             ┌──────────────┐
+                             │custos-provide│
+                             │ Model stream,│
+                             │ Token usage  │
+                             └──────────────┘
+```
+
+1. **`custos-domain`:** Định nghĩa struct thuần túy (`Task`, `Run`, `WorkerRun`, `DispatchClaim`, `ExecutionWorkspace`, `AttributionRecord`). Invariant: `WorkspaceId != TaskId` (một Task có thể có nhiều Workspace/candidate).
+2. **`custos-core`:** Admission gate (kiểm tra write-set, ngân sách trần, quyền công cụ); Completion gate & Verification (kiểm tra exit code của test suite, manifest bằng chứng).
+3. **`custos-persistence`:** Quản lý SQLite. Migration và repository cho `dispatch_claims`, `launch_attempts`, `workspaces`, `usage_ledger`. Index `(task_id, COALESCE(node_id, ''))` hỗ trợ claim song song; xử lý `reconcile_runs_on_startup`.
+4. **`custos-runtime`:** Lõi điều phối: Chọn topology (Single, Race, DAG), biên dịch DAG, khởi chạy/dừng worker. Loại bỏ hoàn toàn `fs::copy` trong `lease.rs`; mọi sự cô lập Coding đi qua `WorkspaceCoordinator` và `ExecutionWorkspace`.
+5. **`custos-adapters`:** `LocalWorkspaceProvider` gọi `git worktree add/remove`, kiểm tra branch, inspect dirty files. Host native harnesses (Claude Code, Codex, Goose), truyền đúng `workspace.path` vào tiến trình thực thi.
+6. **`custos-provider`:** Kết nối LLM (Anthropic, OpenAI, Local Ollama). Chuẩn hóa stream event và đo đếm token thực tế (`input_tokens`, `output_tokens`, cache tokens).
+7. **`custos-packs`:** Đặc thù 3 lăng kính: Engineering (Git repo, worktree, test verifier, candidate comparison); Research (dataset, literature, hypothesis verifier); Copilot/Assistant (chat session, connectors, human approval barrier).
+8. **`custos-daemon`:** Composition Root duy nhất. Cung cấp API chuẩn cho Desktop UI; không để UI tự phán quyết "đã merge" hay "đã pass".
+
+### 11.4 Transaction và recovery cho một worker
+
+```mermaid
+sequenceDiagram
+    participant UI as Desktop
+    participant D as Daemon
+    participant DB as Persistence
+    participant W as Workspace adapter
+    participant A as Agent adapter
+    UI->>D: Start worker(command_id, expected_revision, placement)
+    D->>DB: Admit + reserve budget + claim node/epoch + prepared attempt
+    D->>W: Provision exact workspace/base
+    W-->>D: Workspace/setup receipt or unknown
+    D->>DB: Record placement/stage/residual resources
+    D->>A: Launch exact harness/session + prompt receipt
+    A-->>D: ready | refused | unknown
+    D->>DB: Settle attempt and emit event cursor
+    D-->>UI: Snapshot + events + next action
+```
+
+- **Trước external action:** persist claim/attempt; nếu crash, reconcile từ resource identity. Không giữ SQLite transaction trong lúc `git`/agent chạy.
+- **Sau tạo worktree, trước launch:** workspace còn lại có owner/attempt; restart thấy `allocating` và đối soát Git worktree list/path/ref, không tạo worktree thứ hai theo tên mới.
+- **Sau launch, trước ack:** `start_unknown`; query structured session/process/terminal identity; không tự resend prompt. Definitive refusal trước commit mới được fallback terminal/harness khác nếu policy cho phép.
+- **Worker mất liên lạc:** contact loss ≠ process death. Cancel/stop có attempt riêng và `stop_unknown`; stale generation không thể báo `done`, ack mail hay ghi usage thay worker mới.
+- **Sau worker output:** snapshot exact worktree/diff; test/criteria trên nguồn còn hợp lệ. Nếu base đổi, candidate thành stale và phải rebase/reverify, không copy file đè vào base.
+- **Archive/cleanup:** mặc định retain candidate cho tới khi user/integration owner quyết định. `dirty`, untracked, unmerged commits, user-owned/external worktree hoặc teardown lỗi → không xóa mù; trạng thái residual resource vẫn hiện. Branch deletion là hành động riêng, có xác nhận rõ.
+
+Các phép thử bắt buộc: hai daemon/worker cùng claim một node; hai node khác nhau cùng Task được chạy khi topology cho phép; kill process ở mỗi stage; request replay; late ready/late done sau retry; cancel race; setup hook fail; worktree path đã tồn tại; dirty main; symlink/path traversal; Git base drift; merge conflict; cleanup fail. Chỉ sau đó mở toggle delegated parallel.
+
+### 11.5 Usage và quota: một ledger, nhiều nguồn quan sát
+
+OrCa có scanner/rollup riêng cho Codex, Claude và OpenCode, thêm rate-limit/account views; transcript fork/resume có nguy cơ cộng đôi nên parser Claude giữ dedupe keys. Tham khảo [Claude usage types](../../../orca/src/main/claude-usage/types.ts), [Codex usage provider](../../../orca/src/main/codex-usage/codex-usage-provider.ts) và [docs](https://www.onorca.dev/docs/agents/usage-tracking). Custos không lấy các scanner này làm nguồn canonical thay cho attempt ledger của mình.
+
+`UsageRecord` tối thiểu gắn `attempt_id, worker_run_id, task_id, provider_account_id?, model_id?, source_kind, input/output/cache_read/cache_write tokens?, billed_amount?, estimated_amount?, currency, observed_at, completeness`. `source_kind`: `provider_billed|provider_reported|harness_reported|log_scanned|estimated|unknown`; lưu raw receipt reference và dedupe key. `unknown` không trở thành zero; `rate_limit_remaining` không là USD; `context_window_fill` không là billed usage; CPU/RAM thuộc device resource telemetry riêng. Child usage aggregate qua attempt IDs duy nhất. Price catalog có version/date và chỉ dùng cho estimate, không đổi số billed provider.
+
+Budget checks nằm tại **admission trước attempt** và trước retry/fallback/fan-out; reserve worst-case theo max calls/output/time trong profile, settle khi có usage. Với native harness không có tool/model interception, chỉ cam kết chặn khởi attempt mới và hiển thị coverage, không hứa hard cap hóa đơn khi harness tự gọi provider bên trong. UI tách `đã tính tiền`, `ước tính`, `chưa biết`, `còn ngân sách` và `rate limit của tài khoản`. Trạng thái này phải hiện đúng cả khi provider trả usage muộn hoặc stream bị cancel.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Unreserved
+    Unreserved --> Reserved: Pre-flight Check (reserve ceiling)
+    Reserved --> Rejected: Exceeds Monthly / Task Quota
+    Reserved --> Executing: Admitted to Run
+    Executing --> Settled: Stream Finished / Process Concluded
+    Settled --> [*]: Persist Exact AttributionRecord
+```
+
+#### Bốn chỉ số độc lập thay vì một badge "Usage" gộp:
+1. **Financial Cost ($):** Số tiền USD thực tế phát sinh (hoặc hiển thị `~$0.12 (est)` hoặc `Unknown`, tuyệt đối không hiện `$0.00` khi chạy harness native mà chưa đo được).
+2. **Context Window Saturation (%):** Tỷ lệ đầy của context window của lượt chat hiện tại (ví dụ: `45,000 / 200,000 tokens (22%)`).
+3. **Account Quota / Rate-limit:** Hạn mức số request/tokens còn lại của API key cá nhân (ví dụ: `TPM: 65% remaining`).
+4. **Host Machine Resources:** CPU (%) và RAM (MB) mà các tiến trình worker, worktree build đang chiếm dụng trên máy của người dùng.
+
+### 11.6 Settings: owner, scope, read-back, capability
+
+OrCa có Settings rộng vì nhiều runtime/provider/host capability, và `get/set/onChanged` để renderer thấy effective state. Custos không sao chép toàn bộ menu; chỉ trình bày các điều daemon hoặc host thật sự sở hữu. Bỏ sự phân mảnh giữa SettingsModal đang dùng và SettingsSidebar không được mount, rồi chuẩn hóa mỗi setting theo `key, scope, owner, default, effective_value, source, version, capability, validation, restart_required`.
+
+| Nhóm UI gọn | Nội dung thực sự cần | Owner/scope |
+|---|---|---|
+| Models & Agents | Accounts/models, harness capability/assurance, default cho direct, max parallel/depth khi đã supported | Daemon policy; account secret ở credential store; per-Task pin ưu tiên hơn default. |
+| Workspaces & Git | Repo roots, worktree location/base/setup/retention, dirty/cleanup behavior | Daemon/workspace adapter; per-repo. Không cho “auto delete dirty”. |
+| Cost & Usage | Attempt ledger, estimates, task/month budget, alerts, rate-limit riêng | Daemon ledger/policy; device UI chỉ chọn cách hiển thị. |
+| Permissions & Privacy | Read/write/egress scope, approval profile, connector consent, assurance disclosure | Core/daemon; không để một `Auto/Manual/Strict` UI-only cấp quyền. |
+| Connections | MCP/agent adapters, browser/SSH/remote với actual capability/status | Daemon/adapter; unavailable có reason/test. |
+| Appearance | Theme, density, typography, shortcut, pane restore | Desktop device preference; không mở Task/grant. |
+
+Settings write là typed daemon command với expected version, response effective value và event `SettingsChanged`; UI reload/read-back sau write, có rollback message khi lỗi. Agent roster phải lấy từ registered descriptors/capability matrix, không hardcode bốn “subagents” trong React. Nếu mục chỉ là kế hoạch, read-only `Planned` hoặc ẩn; không dùng toggle lưu local khiến user tin policy đã đổi. Cần test reload app, daemon restart, policy precedence, invalid value, missing capability và account switch.
+
+### 11.7 Desktop: OrCa-class interaction nhưng Task-centric cho ba lens
+
+OrCa có per-worktree tabs, agent board, attention, diff/review, native chat/terminal switch và trạng thái background create. Custos lấy **interaction grammar**: resource tab identity, mở đúng worker/worktree, progress không cướp focus, collapse/expand chi tiết, attention `Needs you`, candidate compare. Không đặt worktree làm root của Research/Assistant; không nhân ba transcript stores.
+
+| Bề mặt | Mặc định ít chữ | Khi mở chi tiết | Backend truth |
+|---|---|---|---|
+| Header chung | Lens icon, Task title, context/repo, model/harness, `Needs you` count | Contract, budget, assurance | Task/Run/attempt projection, không từ UI guess. |
+| Sidebar | Recent Task/session và context phù hợp lens | Coding repo→worktrees; Research corpus; Copilot không ép folder | Stable IDs/lineage; không group theo trùng display name hay gắn orphan vào root đầu tiên. |
+| Center | Chat + Task timeline + composer `Hỏi / Giao việc` | Worker tree, decisions, raw log, reasons | Event cursor + replay; close tab không stop run. |
+| Right canvas | Một resource đang liên quan | Coding diff/test/browser/terminal; Research source/claim/notebook; Copilot draft/outbox | Pane is view. Effect/Run cần command riêng. |
+| Compare | Ẩn khi single | Candidate branch, same-base diff/test/evidence/cost | CandidateResult, not `worker_done` alone. |
+| Attention | Chỉ khi cần hành động | Exact approval, unknown effect, conflict, stale source | Durable pending state; acknowledge ≠ approve. |
+
+Resource tab keys phải dùng `resource_kind + canonical resource_id + workspace_id? + task_id?`, không tên project. Chuyển Copilot↔Coding↔Research giữ nguyên session/Task nếu user chọn “open in”; prompt mới chỉ mang selected source/artifact refs + context receipt/redaction, không tự mang permit, credential hay hidden agent state. Layout restore không khởi lại browser action, notebook cell, mail send hoặc agent. Desktop chỉ hiển thị model/harness usage từ ledger, không tính giá bằng công thức hardcode.
+
+#### Khung trực quan UI Desktop 4 mức:
+```text
+┌─────────────────────────────────────────────────────────────────────────────────────────┐
+│ 1. TASK HEADER                                                                          │
+│ Task: #task-8821 "Refactor Auth Middleware" │ Branch Base: main (c4f21a) │ Budget: $1.20 │
+│ Mode: Competition (2 Candidates) │ Elapsed: 02:45 │ Status: Running │ [Stop All] [Need You] │
+├─────────────────────────────────────────────────────────────────────────────────────────┤
+│ 2. ACTIVITY (Worker Rows)                                                               │
+│ ▸ [Cand A] Claude Code │ branch: custos/cand-a │ $0.22 │ 4 files │ ✓ 12 tests pass │ [Log]│
+│ ▸ [Cand B] Codex CLI   │ branch: custos/cand-b │ $0.15 │ 3 files │ ✗ 2 tests fail  │ [Log]│
+├─────────────────────────────────────────────────────────────────────────────────────────┤
+│ 3. COMPARE VIEW (Xuất hiện khi có từ 2 candidates)                                      │
+│ ┌───────────────────────────────────────┐ ┌───────────────────────────────────────────┐ │
+│ │ Candidate A (Claude Code)             │ │ Candidate B (Codex CLI)                   │ │
+│ │ Diff: +142 / -38 lines (4 files)      │ │ Diff: +88 / -20 lines (3 files)           │ │
+│ │ Test: 12 passed, 0 failed             │ │ Test: 10 passed, 2 failed                 │ │
+│ │ Cost: $0.22 (Billed)                  │ │ Cost: $0.15 (Estimated)                   │ │
+│ │ [★ Select Candidate A as Winner]     │ │ [Select Candidate B]                      │ │
+│ └───────────────────────────────────────┘ └───────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────────────────────────────────────┤
+│ 4. REVIEW & INTEGRATION GATE (Sau khi chọn winner)                                      │
+│ Base Drift Check: Base 'main' has advanced 1 commit since start. [Rebase Candidate A]   │
+│ Target Branch: main │ Patch Verification: Passed │ Approval: Human Required             │
+│ [Apply & Merge to Base]   │   [Keep Worktree for Manual Review]   │   [Discard Loser B] │
+└─────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Phân biệt triệt để: Tab là View, không phải Run:
+- **Đóng Tab không kill Agent:** Tab trong Desktop chỉ là View. Đóng tab không dừng worker đang chạy dưới daemon.
+- **Archive Task không tự xóa Worktree:** Lưu trữ task không xóa worktree vật lý trên đĩa. Worktree chỉ xóa khi user bấm nút dọn dẹp riêng.
+- **Recover Workspace không phải là Merge Branch:** Recover chỉ khôi phục tiến trình và đồng bộ dirty manifest sau restart, tuyệt đối không tự merge.
+- **Đổi Workbench không làm mất Task hoặc Grant:** Chuyển lăng kính chỉ thay đổi góc nhìn công cụ, Task hiện hành vẫn chạy bền bỉ.
+
+### 11.8 Packets để nhóm thực hiện, mỗi packet có đầu ra kiểm được
+
+| Packet | File owner hiện có / thay đổi chính | Done khi nào |
+|---|---|---|
+| **T0 — Freeze & truth audit** | `Custos.md`, source map/catalog, daemon capabilities, SettingsModal, WorkspaceSidebar, WorktreeManagerPane | Ghi `present → compiled → composed → exercised → verified` theo path; sửa copy “merged” và UI-only quota/agent claims trước demo. Chốt chính xác dirty worktree/SHA; không đụng thay đổi đang dở của người khác. |
+| **T1 — Single-worktree vertical** | domain/core workspace contract; persistence workspace/attempt; runtime coordinator/task_runtime; Git/harness adapters; daemon StartRun; Coding UI | Một agent thật làm trên exact worktree đã persist; prompt/context/source, output/usage/diff/test mở lại sau restart; stop và recover không mất user data. |
+| **T2 — Durable dispatch** | persistence claim + launch attempt; runtime dispatcher/worker executor; daemon event cursor | Node claim + epoch atomic, duplicate/replay idempotent, `start_unknown`/`stop_unknown` có reconcile; hai node khác nhau không bị task-wide lock chặn sai. |
+| **T3 — Candidate race** | OI topology/workflow + Engineering pack verifier; Git adapter + candidate/integration record; UI Compare | Hai workers cùng base, worktree riêng, max cost/time; evidence từng candidate; user chọn winner; không có auto-merge/cleanup. |
+| **T4 — Integration** | core authority/base preconditions; runtime integrator; Git patch adapter; persistence effect/receipt; diff/review UI | Integration có exact target/base/diff, conflict/unknown outcome, trusted verifier; không `fs::copy` ghi từng file vào base như merge. |
+| **T5 — Usage & Settings** | provider/runtime usage; persistence ledger; daemon settings/capability API; desktop Settings và task cost | Usage aggregate không double-count, `known`/`estimated`/`unknown`; settings read-back qua restart; unsupported options không active. Bắt đầu instrumentation từ T1, packet này hoàn thiện reporting/controls. |
+| **T6 — Cross-pack continuity** | bridge bindings/handoff, packs Research/Assistant, shared pane registry | Research refs sang Coding giữ source/version/redaction; Coding summary sang Copilot không cấp quyền gửi; cùng Task và accepted criterion đúng. |
+| **T7 — Cooperative delegation/remote** | DAG compiler/worker mailbox, agent runtime adapters; optional SSH/A2A only after local conformance | Disjoint write integration và stale worker fencing qua restart; remote contact loss không giả stop; route OI chỉ bật sau paired quality/cost benchmark. |
+
+Mỗi packet phải kèm: command/API schema, migration/forward recovery, exact source/write/effect scope, failure matrix, component test, daemon integration test, desktop interaction test, capability/status copy và `codebase-architecture.md` delta. **T0→T1→T2→T3→T4** là critical path của multi-agent worktree; T5 bắt đầu instrumentation cùng T1; T6 không cần chờ T3 để làm handoff; T7 không nằm trong MVP direct/single-worker. Sau từng packet chạy build/typecheck/test đúng phạm vi và ít nhất một restart/e2e fixture trước khi nâng realization level.
+
+### 11.9 Demo và acceptance cuối của campaign
+
+Một demo không dùng mock: user chọn repo có dirty main → tạo Task sửa bug với criterion/base → chọn một native harness đã đăng ký → Custos tạo worktree riêng, stream output/usage và lưu Run → user dừng, mở lại app, tiếp tục đúng Task/worker → chọn chạy candidate thứ hai trên **cùng** base → so diff/test/evidence/cost → chọn một candidate → preview integration, xác nhận exact target → áp dụng hoặc báo conflict/unknown trung thực → giữ/xóa loser có dirty protection. Song song, một ResearchBrief có source refs được mở vào Coding mà không mang grant; một Assistant draft lấy approved summary nhưng không tự gửi.
+
+Nếu bất kỳ bước nào chỉ có toast, mock pane, self-reported `done`, hoặc số usage giả thì demo **chưa qua gate**. Trước khi public claim cost/performance, chạy paired baseline single pinned agent, report cả retries/candidate losers/Task thất bại và human time. Chỉ khi test này qua mới gọi Custos có OrCa-class fleet vận hành thật và lợi thế SADE ba miền được chứng minh bằng trải nghiệm.
+
+### 11.10 Đặc tả kỹ thuật chi tiết: Schemas, Migrations & Local API Payloads
+
+Nhằm bảo đảm gói T1–T4 thực thi không lệch contract, các cấu trúc dữ liệu và migration cần được quy chuẩn rõ:
+
+#### A. Cấu trúc Rust thuần túy cho 6 Contract cốt lõi (`custos-domain`)
+
+```rust
+/// Trạng thái vòng đời của một lượt khởi chạy worker (FSM hữu hạn)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DispatchStatus {
+    Prepared,        // Đã ghi nhận intent, kiểm tra budget admission
+    Allocating,      // Đang tạo Git worktree vật lý hoặc cấp phát thư mục
+    Launching,       // Đang spawn tiến trình harness / khởi tạo session
+    Ready,           // Agent đã báo hiệu sẵn sàng nhận prompt/task
+    StartUnknown,    // Đã bắn lệnh/prompt nhưng chưa có xác nhận từ agent (CRITICAL: không retry mù)
+    Running,         // Agent đang thực thi vòng lặp suy luận hoặc công cụ
+    Stopping,        // Đã gửi tín hiệu dừng (SIGTERM / cancel event)
+    StopUnknown,     // Đã gửi lệnh dừng nhưng chưa xác nhận tiến trình thoát
+    Stopped,         // Đã dừng an toàn, tài nguyên sẵn sàng thu hồi
+    Completed,       // Worker hoàn tất lượt chạy (kèm output hoặc files_modified)
+    Failed,          // Thất bại tại một stage cụ thể (kèm error receipt)
+}
+
+/// Yêu cầu đặt chỗ và cấp phát môi trường cho Worker
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlacementRequest {
+    pub task_id: String,
+    pub run_id: String,
+    pub node_id: Option<String>,
+    pub attempt_id: u32,
+    pub host_id: String,
+    pub repo_id: Option<String>,
+    pub workspace_id: Option<String>,
+    pub baseline_commit_sha: String,
+    pub selected_dirty_files: Vec<String>,
+    pub mode: PlacementMode, // Existing | NewChild | NewTopLevel
+    pub write_set_scope: Option<Vec<String>>,
+    pub requested_harness: String, // "claude" | "codex" | "opencode" | "model_loop"
+    pub model_id: Option<String>,
+    pub timeout_ms: u64,
+    pub setup_policy: SetupPolicy, // Run | Skip | Inherit
+}
+
+/// Tài nguyên dư thừa cần theo dõi để thu hồi an toàn (Residual Resources)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ResidualResource {
+    GitWorktree { path: String, branch: String },
+    ChildProcess { pid: u32, incarnation: String },
+    PtyTerminal { handle: String },
+    TemporaryFolder { path: String },
+}
+
+/// Bản ghi nỗ lực điều phối worker bền vững
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DispatchAttempt {
+    pub id: String,                    // "disp-xxxx"
+    pub worker_run_id: String,
+    pub task_id: String,
+    pub node_id: Option<String>,
+    pub epoch: u64,
+    pub status: DispatchStatus,
+    pub allocated_workspace_id: Option<String>,
+    pub effective_path: Option<String>,
+    pub failure_stage: Option<String>, // "worktree_alloc" | "setup_hook" | "agent_ready"
+    pub residual_resources: Vec<ResidualResource>,
+    pub prepared_at: DateTime<Utc>,
+    pub resolved_at: Option<DateTime<Utc>>,
+}
+
+/// Nguồn gốc số liệu sử dụng tài nguyên và chi phí
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UsageSourceKind {
+    ProviderBilled,     // Trả về từ provider API sau khi kết thúc lượt
+    HarnessReported,    // Báo cáo bởi CLI tool (Claude Code, Codex log)
+    LogScanned,         // Quét từ console/stderr output của tiến trình
+    Estimated,          // Ước tính từ model pricing catalog theo số token đo được
+    Unknown,            // Không có kênh đo lường (ví dụ native command tùy biến)
+}
+
+/// Bản ghi sổ cái chi phí và phân bổ tài nguyên
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AttributionRecord {
+    pub id: String,
+    pub task_id: String,
+    pub run_id: String,
+    pub worker_run_id: String,
+    pub attempt_id: String,
+    pub workspace_id: Option<String>,
+    pub provider_id: String,
+    pub model_id: String,
+    pub source_kind: UsageSourceKind,
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub cache_write_tokens: u64,
+    pub billed_amount_usd: Option<f64>,
+    pub estimated_amount_usd: Option<f64>,
+    pub raw_receipt_ref: Option<String>,
+    pub dedupe_key: String,
+    pub recorded_at: DateTime<Utc>,
+}
+
+/// Kết quả của một Candidate để phục vụ Compare View
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CandidateResult {
+    pub candidate_id: String,          // Thường là worker_run_id hoặc dispatch_id
+    pub task_id: String,
+    pub node_id: String,
+    pub agent_id: String,
+    pub model_id: Option<String>,
+    pub branch_name: String,
+    pub base_commit_sha: String,
+    pub head_commit_sha: Option<String>,
+    pub diff_stat: DiffStat,           // files_changed, insertions, deletions
+    pub diff_hunk_ref: Option<String>, // artifact storage ref
+    pub test_receipts: Vec<TestReceipt>,
+    pub cost_known_usd: Option<f64>,
+    pub cost_estimated_usd: Option<f64>,
+    pub is_stale_base: bool,           // true nếu base branch đã đi tiếp
+    pub ready_for_review: bool,
+}
+
+/// Nỗ lực tích hợp candidate đã chọn vào nhánh base
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntegrationAttempt {
+    pub command_id: String,
+    pub task_id: String,
+    pub selected_candidate_id: String,
+    pub target_branch: String,
+    pub base_precondition_sha: String,
+    pub patch_digest: String,
+    pub human_approved: bool,
+    pub status: IntegrationStatus,     // Pending | Applying | Succeeded | Conflict | StaleBaseRefused
+    pub conflict_files: Vec<String>,
+    pub resolved_commit_sha: Option<String>,
+    pub executed_at: Option<DateTime<Utc>>,
+}
+```
+
+#### B. SQLite Migrations bổ sung cho T1, T2 & T5
+
+```sql
+-- Migration 0028: Durable Dispatch Attempts & Worktree Ownership
+CREATE TABLE IF NOT EXISTS dispatch_attempts_v2 (
+    id TEXT PRIMARY KEY,
+    worker_run_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    node_id TEXT,
+    epoch INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    allocated_workspace_id TEXT,
+    effective_path TEXT,
+    failure_stage TEXT,
+    residual_resources_json TEXT NOT NULL DEFAULT '[]',
+    prepared_at TEXT NOT NULL,
+    resolved_at TEXT,
+    FOREIGN KEY(worker_run_id) REFERENCES worker_runs(id),
+    FOREIGN KEY(task_id) REFERENCES tasks(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dispatch_attempts_task_status
+    ON dispatch_attempts_v2(task_id, status);
+
+-- Migration 0029: Production Usage & Attribution Ledger
+CREATE TABLE IF NOT EXISTS attribution_records (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    worker_run_id TEXT NOT NULL,
+    attempt_id TEXT NOT NULL,
+    workspace_id TEXT,
+    provider_id TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    source_kind TEXT NOT NULL, -- 'provider_billed', 'harness_reported', 'log_scanned', 'estimated', 'unknown'
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+    billed_amount_usd REAL,
+    estimated_amount_usd REAL,
+    raw_receipt_ref TEXT,
+    dedupe_key TEXT NOT NULL UNIQUE,
+    recorded_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_attribution_task_worker
+    ON attribution_records(task_id, worker_run_id);
+```
+
+#### C. Local API REST Endpoints cho Desktop UI (`custos-daemon`)
+
+| Endpoint | Method | Input Payload | Output Payload | Ý nghĩa vận hành |
+|---|---|---|---|---|
+| `/api/v1/workers/dispatch` | `POST` | `PlacementRequest` | `DispatchAttempt` | Khởi chạy worker có ghi vết, cấp worktree và fencing epoch |
+| `/api/v1/workers/:id/cancel` | `POST` | `{ reason: string, force: bool }` | `{ status: "stopping" \| "stop_unknown" \| "stopped" }` | Hủy worker an toàn, không kill mù tiến trình |
+| `/api/v1/tasks/:id/candidates` | `GET` | N/A | `Vec<CandidateResult>` | Đọc danh sách candidates và diff/test cho Compare View |
+| `/api/v1/tasks/:id/integrate` | `POST` | `IntegrationAttempt` | `{ success: bool, receipt: string, conflict_files: string[] }` | Tích hợp candidate thắng vào base branch với kiểm tra drift |
+| `/api/v1/workspaces/:id/teardown`| `POST` | `{ preserve_dirty: bool }` | `{ removed: bool, residual_status: string }` | Thu hồi worktree của bên thua, chặn xóa khi có dirty unmerged |
+| `/api/v1/settings/:group` | `GET` | N/A | `{ effective_values: Value, capabilities: Value }` | Read-back settings có nguồn gốc từ daemon policy |
+| `/api/v1/settings/:group` | `POST` | `{ updates: Value, expected_version: u32 }` | `{ saved: bool, effective_values: Value }` | Lưu settings bền vững, từ chối khi lệch version |
+
+---
+
+### 11.11 Ma trận xử lý Crash, Recovery & Invariant Fencing Matrix
+
+Khi Daemon hoặc máy host bị sập nguồn/khởi động lại, quy trình `reconcile_runs_on_startup` phải tuân thủ nghiêm ngặt ma trận sau:
+
+| Trạng thái ghi nhận trước Crash | Thực trạng kiểm tra vật lý trên Host | Hành động Reconcile của Daemon | Trạng thái chuyển đổi |
+|---|---|---|---|
+| `Prepared` | Chưa có worktree hoặc process | Hủy attempt, giải phóng budget reservation | `Failed (canceled_on_recovery)` |
+| `Allocating` | Git worktree đã được tạo một phần trên đĩa | Chạy `git worktree prune`, dọn dẹp branch tạm nếu chưa có commit | `Failed (allocation_interrupted)` |
+| `Launching` / `StartUnknown` | Process PID không còn tồn tại trên OS | Ghi nhận tiến trình đã chết trước khi kết nối; không tự tiện spawn đúp | `Failed (launch_lost)` |
+| `Launching` / `StartUnknown` | Process PID vẫn còn chạy trên OS | Thăm dò socket/terminal: nếu nhận diện được phiên thì nối lại; nếu không, gửi SIGTERM | `StopUnknown` → `Stopped` |
+| `Running` | Process đã thoát, thư mục worktree còn uncommitted changes | Đọc dirty manifest, snapshot diff hunks hiện tại làm cứu hộ | `Failed (process_died_dirty)` |
+| `Running` | Process vẫn còn chạy bình thường | Gắn lại stream cursor, tiếp tục lắng nghe stdout/socket | `Running` (Re-attached) |
+| `Stopping` / `StopUnknown` | Process vẫn còn chiếm PID sau 5 giây | Gửi `SIGKILL` dứt điểm, giải phóng file lock | `Stopped` |
+| `Completed` | Worktree còn nguyên, chưa review | Giữ nguyên trạng thái để người dùng mở lại Desktop xem diff/test | `Completed` (Preserved) |
+
+**Nguyên tắc bất biến tối cao về dữ liệu (Data Safety Invariant):**
+Nếu một `ExecutionWorkspace` có cờ `is_dirty = true` hoặc có unpushed commits, daemon **tuyệt đối không tự động xóa thư mục vật lý** trong bất kỳ chu kỳ garbage collection nào. Bất kỳ thao tác xóa bỏ nào đối với dữ liệu bẩn đều bắt buộc phải có sự xác nhận chủ động từ người dùng qua Desktop UI.
