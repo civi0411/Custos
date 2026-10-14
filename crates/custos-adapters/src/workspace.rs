@@ -64,10 +64,9 @@ impl WorkspaceProvider for LocalWorkspaceProvider {
     }
 
     async fn provision(&self, workspace: &ExecutionWorkspace) -> Result<(), DomainError> {
-        workspace.validate_path_safety()?;
-
         match &workspace.kind {
             WorkspaceKind::Folder { .. } => {
+                workspace.validate_path_safety()?;
                 fs::create_dir_all(&workspace.path).await.map_err(|e| {
                     DomainError::Validation(format!(
                         "Failed to create workspace directory '{}': {}",
@@ -82,6 +81,25 @@ impl WorkspaceProvider for LocalWorkspaceProvider {
                 base_commit,
             } => {
                 let target_path = Path::new(&workspace.path);
+                let main_repo = Path::new(repo_path);
+                let is_base_repo = target_path == main_repo
+                    || target_path.canonicalize().ok() == main_repo.canonicalize().ok();
+
+                if is_base_repo {
+                    if workspace.path.trim().is_empty() || workspace.path == "/" {
+                        return Err(DomainError::Validation("Workspace path cannot be root".into()));
+                    }
+                    if !main_repo.exists() {
+                        return Err(DomainError::Validation(format!(
+                            "Base repository '{}' does not exist",
+                            repo_path
+                        )));
+                    }
+                    return Ok(());
+                }
+
+                workspace.validate_path_safety()?;
+
                 if target_path.exists() {
                     return Err(DomainError::Conflict(format!(
                         "Target worktree path '{}' already exists",
@@ -361,10 +379,9 @@ impl WorkspaceProvider for LocalWorkspaceProvider {
     }
 
     async fn teardown(&self, workspace: &ExecutionWorkspace) -> Result<(), DomainError> {
-        workspace.validate_path_safety()?;
-
         match &workspace.kind {
             WorkspaceKind::Folder { .. } => {
+                workspace.validate_path_safety()?;
                 let target = Path::new(&workspace.path);
                 if target.exists() {
                     // Refuse to delete shallow root directories
@@ -384,6 +401,18 @@ impl WorkspaceProvider for LocalWorkspaceProvider {
                 Ok(())
             }
             WorkspaceKind::Git { repo_path, .. } => {
+                let target_path = Path::new(&workspace.path);
+                let main_repo = Path::new(repo_path);
+                let is_base_repo = target_path == main_repo
+                    || target_path.canonicalize().ok() == main_repo.canonicalize().ok();
+
+                if is_base_repo {
+                    // Safety: Do not remove the user's primary repository working directory!
+                    return Ok(());
+                }
+
+                workspace.validate_path_safety()?;
+
                 // B0 Safety: Check dirty state before attempting worktree removal
                 let dirty = self.inspect_dirty(workspace).await?;
                 if dirty.is_dirty {
