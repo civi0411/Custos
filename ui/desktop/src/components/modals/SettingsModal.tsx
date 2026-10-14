@@ -19,14 +19,15 @@ import {
   Shield,
   SlidersHorizontal,
   X,
-  Layers,
-  BarChart3,
+  Bot,
+  Coins,
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { daemonClient } from '@/api/daemon_client';
 import { formatKeyCombo } from '@/lib/utils';
-import { CombosManager } from '@/components/providers/CombosManager';
-import { UsageMonitor } from '@/components/providers/UsageMonitor';
+import { SubAgentsPane } from '@/app/settings/SubAgentsPane';
+import { CostQuotasPane } from '@/app/settings/CostQuotasPane';
+import { DaemonPane } from '@/app/settings/DaemonPane';
 
 export interface SettingsModalProps {
   isOpen: boolean;
@@ -36,7 +37,18 @@ export interface SettingsModalProps {
   onShowToast: (msg: string) => void;
 }
 
-type SettingsTab = 'general' | 'appearance' | 'shortcuts' | 'providers' | 'runtime' | 'security' | 'storage' | 'about';
+type SettingsTab =
+  | 'general'
+  | 'subagents'
+  | 'quotas'
+  | 'daemon'
+  | 'appearance'
+  | 'shortcuts'
+  | 'providers'
+  | 'runtime'
+  | 'security'
+  | 'storage'
+  | 'about';
 
 const SettingRow: React.FC<{
   title: string;
@@ -73,13 +85,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     refreshModels,
   } = useAppContext();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
-  const [providersSubTab, setProvidersSubTab] = useState<'providers' | 'combos' | 'usage'>('providers');
   const [daemonOnline, setDaemonOnline] = useState<boolean | null>(null);
   const [checkingDaemon, setCheckingDaemon] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
-    const allowed: SettingsTab[] = ['general', 'appearance', 'shortcuts', 'providers', 'runtime', 'security', 'storage', 'about'];
+    const allowed: SettingsTab[] = ['general', 'subagents', 'quotas', 'daemon', 'appearance', 'shortcuts', 'providers', 'runtime', 'security', 'storage', 'about'];
     setActiveTab(allowed.includes(initialTab as SettingsTab) ? initialTab as SettingsTab : 'general');
     void checkDaemon();
   }, [isOpen, initialTab]);
@@ -134,9 +145,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const nav = [
     { id: 'general' as const, label: 'General', icon: SlidersHorizontal },
+    { id: 'providers' as const, label: 'Models & accounts', icon: KeyRound },
+    { id: 'subagents' as const, label: 'Agent runtimes', icon: Bot },
+    { id: 'quotas' as const, label: 'Usage & limits', icon: Coins },
+    { id: 'daemon' as const, label: 'Daemon status', icon: Server },
     { id: 'appearance' as const, label: 'Appearance', icon: Monitor },
     { id: 'shortcuts' as const, label: 'Shortcuts', icon: Keyboard },
-    { id: 'providers' as const, label: 'Providers', icon: KeyRound },
     { id: 'runtime' as const, label: 'Runtime', icon: Cpu },
     { id: 'security' as const, label: 'Security', icon: Shield },
     { id: 'storage' as const, label: 'Storage', icon: Database },
@@ -196,6 +210,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </SettingRow>
               </div>
             )}
+
+            {activeTab === 'subagents' && <SubAgentsPane />}
+            {activeTab === 'quotas' && <CostQuotasPane />}
+            {activeTab === 'daemon' && <DaemonPane />}
 
             {activeTab === 'appearance' && (
               <div className="space-y-3">
@@ -268,49 +286,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
             {activeTab === 'providers' && (
               <div className="space-y-4">
-                {/* OmniRoute Sub-navigation */}
-                <div className="flex border-b border-[var(--color-border-muted)] pb-2 gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setProvidersSubTab('providers')}
-                    className={`pb-1.5 px-3 font-medium transition border-b-2 flex items-center gap-1.5 cursor-pointer ${
-                      providersSubTab === 'providers'
-                        ? 'border-[var(--color-editor-fg)] text-[var(--color-editor-fg)] font-semibold'
-                        : 'border-transparent text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
-                    }`}
-                  >
-                    <Server className="h-3.5 w-3.5" />
-                    <span>Providers & Accounts</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setProvidersSubTab('combos')}
-                    className={`pb-1.5 px-3 font-medium transition border-b-2 flex items-center gap-1.5 cursor-pointer ${
-                      providersSubTab === 'combos'
-                        ? 'border-[var(--color-editor-fg)] text-[var(--color-editor-fg)] font-semibold'
-                        : 'border-transparent text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
-                    }`}
-                  >
-                    <Layers className="h-3.5 w-3.5 text-workbench-accent" />
-                    <span>Routing Combos</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setProvidersSubTab('usage')}
-                    className={`pb-1.5 px-3 font-medium transition border-b-2 flex items-center gap-1.5 cursor-pointer ${
-                      providersSubTab === 'usage'
-                        ? 'border-[var(--color-editor-fg)] text-[var(--color-editor-fg)] font-semibold'
-                        : 'border-transparent text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
-                    }`}
-                  >
-                    <BarChart3 className="h-3.5 w-3.5" />
-                    <span>Usage & Quotas</span>
-                  </button>
-                </div>
-
-                {providersSubTab === 'combos' && <CombosManager />}
-                {providersSubTab === 'usage' && <UsageMonitor />}
-                {providersSubTab === 'providers' && (
                   <div className="space-y-6">
                     <div className="flex items-start justify-between">
                       <div>
@@ -440,7 +415,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
                   </div>
-                )}
               </div>
             )}
 

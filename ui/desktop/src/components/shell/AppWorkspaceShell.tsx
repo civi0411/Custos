@@ -1,24 +1,17 @@
 import StopIcon from '~icons/lucide/square';
-import WorktreeIcon from '~icons/codicon/worktree';
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   Send,
-  FolderGit2,
-  Orbit,
   Plus,
-  BookOpen,
   FlaskConical,
   MessageSquare,
-  Sparkles,
-  Layers,
-  ShieldCheck,
-  Bot,
-  Activity
+  Compass
 } from 'lucide-react';
+import { AgentActionCard, AgentWorkingStatus } from '@/components/chat';
 import { Session } from '@/types';
-import { OrcaTabbedContainer, type ResourceTabsState, type OrcaTabId, type OrcaTab, getTabType } from '@/components/views/OrcaTabbedContainer';
-import { WorkspaceSidebar } from '@/components/shell/WorkspaceSidebar';
-import { AppHeader, type AppWorkspaceMode } from '@/components/shell/AppHeader';
+import { OrcaTabbedContainer, resolveResources, type ResourceTabsState, type OrcaTabId, type OrcaTab, getTabType } from '@/components/workbenches/OrcaTabbedContainer';
+import { WorkspaceSidebar, type SidebarTool } from '@/components/shell/WorkspaceSidebar';
+import { AppHeader, type ActiveWorkbench } from '@/components/shell/AppHeader';
 import { CommandPalette } from '@/components/shell/CommandPalette';
 import { AttentionBanner, type AttentionItem } from '@/components/shell/AttentionBanner';
 import { JobActivityDock } from '@/components/shell/JobActivityDock';
@@ -33,9 +26,10 @@ import rehypeKatex from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { remarkNormalizeChatMath } from '@/components/chat/markdownMath';
 import { HighlightedCodeBlock } from '@/components/chat/HighlightedCodeBlock';
-import { formatKeyCombo } from '@/lib/utils';
 import { SlashCommandMenu, SLASH_COMMANDS, type SlashCommandDef } from '@/components/chat/SlashCommandMenu';
 import { daemonClient } from '@/api/daemon_client';
+import type { CapabilityDescriptor, HarnessDescriptor } from '@/types/domain';
+import { TabQuickLaunchMenu } from '@/components/workbenches/TabQuickLaunchMenu';
 
 
 
@@ -66,8 +60,8 @@ const ConversationMarkdown = React.memo(function ConversationMarkdown({ text }: 
 });
 
 interface AppWorkspaceShellProps {
-  mode: AppWorkspaceMode;
-  onSwitchMode: (mode: AppWorkspaceMode) => void;
+  mode: ActiveWorkbench;
+  onSwitchMode: (mode: ActiveWorkbench) => void;
   currentProject: string;
   projectNames: string[];
   onSelectProject: (name: string) => void;
@@ -75,7 +69,7 @@ interface AppWorkspaceShellProps {
   allSessions: Session[];
   activeSessionId: string;
   onSelectSession: (id: string) => void;
-  onOpenFullChatIn?: (mode: AppWorkspaceMode) => void;
+  onOpenFullChatIn?: (mode: ActiveWorkbench) => void;
   onOpenSessionHere?: (id: string) => void;
   onNewSession: () => void;
   onSendMessage: (text: string) => void;
@@ -94,6 +88,12 @@ interface AppWorkspaceShellProps {
   onToggleWebTab: () => void;
   onToggleExpandWebTab: () => void;
   openResources: (expanded: boolean) => void;
+  workspaces?: import('@/types/domain').ExecutionWorkspace[];
+  activeWorkspaceId?: string;
+  setActiveWorkspaceId?: (id: string) => void;
+  onSelectWorkspace?: (id: string) => void;
+  activeWorkspace?: import('@/types/domain').ExecutionWorkspace | null;
+  refreshWorkspaces?: () => Promise<import('@/types/domain').ExecutionWorkspace[]>;
 }
 
 export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
@@ -124,14 +124,62 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   isWebTabExpanded,
   onToggleWebTab,
   onToggleExpandWebTab,
-  openResources: _openResources
+  openResources: _openResources,
+  workspaces: propWorkspaces,
+  activeWorkspaceId: propActiveWorkspaceId,
+  setActiveWorkspaceId: propSetActiveWorkspaceId,
+  onSelectWorkspace: propOnSelectWorkspace,
+  activeWorkspace: propActiveWorkspace,
+  refreshWorkspaces: propRefreshWorkspaces,
 }) => {
-  const { openSettings, selectedModel, handleSelectModel, handleStopRun } = useAppContext();
+  const {
+    openSettings,
+    selectedModel,
+    handleSelectModel,
+    handleStopRun,
+    workspaces: ctxWorkspaces,
+    activeWorkspaceId: ctxActiveWorkspaceId,
+    setActiveWorkspaceId: ctxSetActiveWorkspaceId,
+    activeWorkspace: ctxActiveWorkspace,
+    refreshWorkspaces: ctxRefreshWorkspaces,
+  } = useAppContext();
+
+  const workspaces = propWorkspaces ?? ctxWorkspaces;
+  const activeWorkspaceId = propActiveWorkspaceId ?? ctxActiveWorkspaceId;
+  const setActiveWorkspaceId = propOnSelectWorkspace ?? propSetActiveWorkspaceId ?? ctxSetActiveWorkspaceId;
+  const activeWorkspace = propActiveWorkspace ?? ctxActiveWorkspace;
+  const refreshWorkspaces = propRefreshWorkspaces ?? ctxRefreshWorkspaces;
   const [inputText, setInputText] = useState('');
   const [splitPercent, setSplitPercent] = useState<number>(() => {
-    return mode === 'chat' ? 50 : 42;
+    return mode === 'copilot' ? 50 : 42;
   });
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isResourcePickerOpen, setIsResourcePickerOpen] = useState(false);
+  const [pickerCapabilities, setPickerCapabilities] = useState<CapabilityDescriptor[]>([]);
+  const [pickerCapabilityState, setPickerCapabilityState] = useState<'loading' | 'ready' | 'failed'>('loading');
+
+  useEffect(() => {
+    if (!isResourcePickerOpen) return;
+    let mounted = true;
+    setPickerCapabilityState('loading');
+    daemonClient.listCapabilities()
+      .then((capabilities) => {
+        if (!mounted) return;
+        setPickerCapabilities(capabilities);
+        setPickerCapabilityState('ready');
+      })
+      .catch(() => { if (mounted) setPickerCapabilityState('failed'); });
+    return () => { mounted = false; };
+  }, [isResourcePickerOpen]);
+
+  useEffect(() => {
+    if (!isResourcePickerOpen) return;
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsResourcePickerOpen(false);
+    };
+    window.addEventListener('keydown', dismiss);
+    return () => window.removeEventListener('keydown', dismiss);
+  }, [isResourcePickerOpen]);
 
   // Populated only from daemon approval/effect events. Never fabricate authority requests.
   const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([]);
@@ -140,20 +188,22 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   const isDragging = useRef(false);
 
   // Active session lookup
-  const activeSession = sessions.find((s) => s.id === activeSessionId) || {
-    id: '',
-    nativeHarnessId: undefined as string | undefined,
-    title: 'No conversation',
-    time: '',
-    preview: '',
-    model: '',
-    fileName: '',
-    diffHunk: '',
-    diffLinesCount: '',
-    summary: '',
-    messages: [],
-    diffCode: [],
-  };
+  const activeSession =
+    sessions.find((s) => s.id === activeSessionId) ||
+    allSessions.find((s) => s.id === activeSessionId) || {
+      id: '',
+      nativeHarnessId: undefined as string | undefined,
+      title: 'No conversation',
+      time: '',
+      preview: '',
+      model: '',
+      fileName: '',
+      diffHunk: '',
+      diffLinesCount: '',
+      summary: '',
+      messages: [],
+      diffCode: [],
+    };
 
   const hasMessages = activeSession.messages && activeSession.messages.length > 0;
 
@@ -200,8 +250,9 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onShowToast]);
 
-  const liveMessage = activeSession.messages.find(message => message.runId && !['completed','failed','cancelled','interrupted'].includes(message.runStatus || ''));
+  const liveMessage = activeSession.messages.find(message => message.runId && !['completed', 'failed', 'cancelled', 'interrupted'].includes(message.runStatus || ''));
   const dialogueRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const followBottom = useRef(true);
 
   const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false });
@@ -238,7 +289,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     const entryId = dispatchJob({
       jobId: cmd.jobId,
       jobName: cmd.label,
-      sourceTabId: mode === 'code' ? 'changes' : mode === 'research' ? 'literature' : undefined,
+      sourceTabId: mode === 'engineering' ? 'changes' : mode === 'research' ? 'literature' : undefined,
     });
 
     // 2. Trigger daemon packs job directly (single accepted command path; avoid double-dispatch into chat LLM)
@@ -267,6 +318,19 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     }
   };
 
+  const handleSteer = async () => {
+    const trimmed = inputText.trim();
+    if (!trimmed || !liveMessage?.runId) return;
+    setInputText('');
+    try {
+      const harnessId = activeSession.nativeHarnessId || 'claude-code';
+      await daemonClient.steerHarness(harnessId, liveMessage.runId, trimmed);
+      onShowToast?.(`Steered agent: "${trimmed}"`);
+    } catch (err: any) {
+      onShowToast?.(`Failed to steer agent: ${err?.message || err}`);
+    }
+  };
+
   const handleSend = () => {
     const trimmed = inputText.trim();
     if (!trimmed || liveMessage) return;
@@ -287,35 +351,61 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      // If a slash menu might be selecting, let enter submit command if handled
+    if (e.key === 'Escape' && liveMessage?.runId) {
       e.preventDefault();
-      handleSend();
+      void handleStopRun(liveMessage.runId);
+      return;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (liveMessage) {
+        handleSteer();
+      } else {
+        handleSend();
+      }
     }
   };
 
-  const openTab = useCallback((id: OrcaTabId, title: string, url: string) => {
+  const openTab = useCallback((
+    id: OrcaTabId,
+    title: string,
+    url: string,
+    agentId?: string,
+    workspaceId?: string
+  ) => {
     if (!isWebTabOpen) {
       onToggleWebTab();
     }
     const activeTab = resourceTabs.tabs.find((t) => t.id === resourceTabs.activeTabId);
-    const newTabId = `${id}-${Date.now()}`;
-    const newTab: OrcaTab = { id: newTabId, type: id, title, url };
+    const newTabId = `${id}-${agentId ? `${agentId}-` : ''}${Date.now()}`;
+    const newTab: OrcaTab = { id: newTabId, type: id, title, url, agentId, workspaceId };
 
     if (activeTab && getTabType(activeTab) === 'tools') {
       resourceTabs.setTabs((prev) =>
         prev.map((t) => (t.id === activeTab.id ? newTab : t))
       );
     } else {
-      const existing = resourceTabs.tabs.find((t) => getTabType(t) === id);
-      if (existing) {
-        resourceTabs.setActiveTabId(existing.id);
-        return;
+      if (id !== 'agents' || !agentId) {
+        const existing = resourceTabs.tabs.find((t) => getTabType(t) === id && (!agentId || t.agentId === agentId));
+        if (existing) {
+          resourceTabs.setActiveTabId(existing.id);
+          return;
+        }
       }
       resourceTabs.setTabs((prev) => [...prev, newTab]);
     }
     resourceTabs.setActiveTabId(newTabId);
   }, [isWebTabOpen, onToggleWebTab, resourceTabs]);
+
+  const handleLaunchAgentTab = useCallback((harness: HarnessDescriptor) => {
+    const existingAgentTabs = resourceTabs.tabs.filter((t) => t.type === 'agents' || t.agentId);
+    const count = existingAgentTabs.length + 1;
+    const title = count > 1 ? `${harness.name} #${count}` : harness.name;
+    openTab('agents', title, `custos://agent/${harness.id}`, harness.id, activeWorkspaceId);
+    setIsResourcePickerOpen(false);
+    onShowToast?.(`Launched ${harness.name} in parallel tab`);
+  }, [openTab, resourceTabs.tabs, activeWorkspaceId, onShowToast]);
+
   const runningJobsByTab = useMemo(() => {
     const counts: Record<string, number> = {};
     jobs.forEach((j) => {
@@ -327,7 +417,27 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   }, [jobs]);
 
   const handleOpenTab = useCallback((id: OrcaTabId) => {
-    openTab(id, id.charAt(0).toUpperCase() + id.slice(1), `custos://resource/${id}`);
+    const titles: Partial<Record<OrcaTabId, string>> = {
+      files: 'Files & Changes',
+      activity: 'Activity',
+      worktrees: 'Worktree Manager',
+      terminal: 'Terminal',
+      browser: 'Browser Preview',
+      emulator: 'Phone Simulator',
+      literature: 'Sources',
+      findings: 'Findings',
+      lab: 'Lab',
+      knowledge: 'Methods',
+      artifacts: 'Artifacts',
+      synthesis: 'Handoff',
+      drafts: 'Drafts',
+      outbox: 'Outbox',
+      contacts: 'Contacts',
+      calendar: 'Calendar',
+      notes: 'Notes',
+    };
+    const title = titles[id] || id.charAt(0).toUpperCase() + id.slice(1);
+    openTab(id, title, `custos://resource/${id}`);
   }, [openTab]);
   const handleResourceAskAgent = useCallback((draft: string) => {
     setInputText(previous => previous ? `${previous}\n\n${draft}` : draft);
@@ -352,20 +462,29 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     if (!isWebTabOpen) {
       onToggleWebTab();
     }
-    const newTabInstanceId = `tools-${Date.now()}`;
-    const newTab: OrcaTab = {
-      id: newTabInstanceId,
-      type: 'tools',
-      title: 'New Tab',
-      url: 'custos://resources'
-    };
-    resourceTabs.setTabs((prev) => [...prev, newTab]);
-    resourceTabs.setActiveTabId(newTabInstanceId);
+    setIsResourcePickerOpen((previous) => !previous);
   };
+
+  const pickerResources = resolveResources(
+    pickerCapabilities,
+    pickerCapabilityState !== 'loading',
+    pickerCapabilityState === 'failed',
+    typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+  ).filter((resource) => {
+    // Shared across all workbenches (Browser Preview & Phone Simulator & Notes)
+    if (['browser', 'emulator', 'notes'].includes(resource.id)) return true;
+    if (mode === 'engineering') {
+      return ['files', 'activity', 'terminal', 'worktrees', 'agents'].includes(resource.id);
+    }
+    if (mode === 'research') {
+      return ['literature', 'findings', 'lab', 'knowledge', 'artifacts', 'synthesis'].includes(resource.id);
+    }
+    return ['drafts', 'outbox', 'contacts', 'calendar'].includes(resource.id);
+  });
 
   // Lens metadata & personality
   const lensMeta = {
-    chat: {
+    copilot: {
       title: 'Copilot Sessions',
       taskLabel: 'New Conversation',
       iconColor: 'workbench-accent',
@@ -377,7 +496,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       modelName: 'Custos mediated · executor visible per run',
       placeholder: 'Ask, plan, or continue the current task…'
     },
-    code: {
+    engineering: {
       title: 'Engineering Sessions',
       taskLabel: 'New Engineering Task',
       iconColor: 'workbench-accent',
@@ -403,77 +522,8 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     }
   }[mode];
 
-  // Dynamic Sidebar Tools per Mode
-  const sidebarTools = [
-    ...(mode === 'code'
-      ? [
-          {
-            icon: FolderGit2,
-            label: 'Workspace Explorer',
-            onClick: () => openTab('files', 'Files', 'custos://files')
-          },
-          {
-            icon: WorktreeIcon,
-            label: 'Worktrees',
-            onClick: () => openTab('worktrees', 'Worktrees', 'custos://worktrees')
-          },
-          {
-            icon: Orbit,
-            label: 'SADE Automations',
-            onClick: () => onShowToast?.('SADE Orbits & Automations')
-          }
-        ]
-      : []),
-    ...(mode === 'research'
-      ? [
-          {
-            icon: BookOpen,
-            label: 'Literature Corpus',
-            onClick: () => openTab('literature', 'Sources', 'custos://resource/literature')
-          },
-          {
-            icon: ShieldCheck,
-            label: 'Claims Matrix',
-            onClick: () => openTab('claims', 'Claims', 'custos://resource/claims')
-          },
-          {
-            icon: FlaskConical,
-            label: 'Research Methods',
-            onClick: () => openTab('knowledge', 'Methods', 'custos://resource/knowledge')
-          },
-          {
-            icon: Activity,
-            label: 'Runs Ledger',
-            onClick: () => openTab('runs', 'Runs', 'custos://resource/runs')
-          },
-          {
-            icon: Layers,
-            label: 'Synthesis & Handoff',
-            onClick: () => openTab('synthesis', 'Synthesis', 'custos://resource/synthesis')
-          }
-        ]
-      : []),
-    ...(mode === 'chat'
-      ? [
-          {
-            icon: Layers,
-            label: 'Delegate Subtask',
-            onClick: () => onShowToast?.('Delegation requires the daemon workflow API; no task was created.')
-          },
-          {
-            icon: Sparkles,
-            label: 'Skills Catalog',
-            onClick: () => onShowToast?.('Skills Catalog')
-          }
-        ]
-      : []),
-    {
-      icon: Bot,
-      label: 'Fleet Kanban',
-      onClick: () => openTab('kanban', 'Fleet Kanban', 'orca://kanban'),
-      rightElement: <span className="text-[10px] text-fg-muted font-mono">{formatKeyCombo({ ctrlOrCmd: true, alt: true, key: 'K' })}</span>
-    },
-  ];
+  // Sidebar Tools: Keep sidebar clean (resources accessed via '+' picker in workbenches)
+  const sidebarTools: SidebarTool[] = [];
 
   return (
     <div className="custos-workspace flex flex-col h-full w-full font-sans overflow-hidden select-none" data-workbench={mode}>
@@ -481,6 +531,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       <AppHeader
         mode={mode}
         workspaceTitle={activeSession.title}
+        activeWorkspace={activeWorkspace}
         onSwitchMode={onSwitchMode}
         isSidebarCollapsed={isSidebarCollapsed}
         onToggleSidebar={onToggleSidebar}
@@ -516,6 +567,8 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       <div className="flex-1 flex overflow-hidden min-h-0 relative">
         {/* Shared Sidebar */}
         <WorkspaceSidebar
+          activeWorkbench={mode}
+          onSwitchWorkbench={onSwitchMode}
           currentProject={currentProject}
           projectNames={projectNames}
           onSelectProject={onSelectProject}
@@ -541,6 +594,10 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           onOpenSettings={() => openSettings('general')}
           onSwitchMode={onSwitchMode}
           isSidebarCollapsed={isSidebarCollapsed}
+          workspaces={workspaces}
+          activeWorkspaceId={activeWorkspaceId}
+          onSelectWorkspace={setActiveWorkspaceId}
+          refreshWorkspaces={refreshWorkspaces}
         />
 
         {/* Central Workspace Canvas */}
@@ -552,90 +609,142 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
               width: isWebTabExpanded
                 ? '0%'
                 : isWebTabOpen
-                ? `${splitPercent}%`
-                : '100%',
+                  ? `${splitPercent}%`
+                  : '100%',
               display: isWebTabExpanded ? 'none' : 'flex'
             }}
           >
             {/* Dialogue Messages Canvas */}
             <div className="relative flex-1 min-h-0">
-            <div
-              ref={dialogueRef}
-              onScroll={event => {
-                const element = event.currentTarget;
-                followBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
-                updateScrollEdges();
-              }}
-              className="h-full overflow-y-auto px-6 py-6 space-y-6"
-            >
-              {!hasMessages ? (
-                <div className="h-full flex flex-col items-center justify-center text-center my-auto pb-12">
-                  <div className="w-14 h-14 rounded-xl bg-surface-1 border border-border-default flex items-center justify-center text-fg-muted mb-5">
-                    {mode === 'code' ? (
-                      <span className="font-mono text-2xl workbench-accent select-none">&#123;_&#125;</span>
-                    ) : mode === 'research' ? (
-                      <FlaskConical className="w-7 h-7 workbench-accent" />
-                    ) : (
-                      <MessageSquare className="w-7 h-7 workbench-accent" />
-                    )}
+              <div
+                ref={dialogueRef}
+                onScroll={event => {
+                  const element = event.currentTarget;
+                  followBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+                  updateScrollEdges();
+                }}
+                className="h-full overflow-y-auto px-6 py-6 space-y-6"
+              >
+                {!hasMessages ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center my-auto pb-12">
+                    <div className="w-14 h-14 rounded-xl bg-surface-1 border border-border-default flex items-center justify-center text-fg-muted mb-5">
+                      {mode === 'engineering' ? (
+                        <span className="font-mono text-2xl workbench-accent select-none">&#123;_&#125;</span>
+                      ) : mode === 'research' ? (
+                        <FlaskConical className="w-7 h-7 workbench-accent" />
+                      ) : (
+                        <MessageSquare className="w-7 h-7 workbench-accent" />
+                      )}
+                    </div>
+                    <div className="workbench-kicker mb-2">{lensMeta.badge} workbench</div>
+                    <h1 className="text-xl md:text-2xl font-semibold text-fg-editor tracking-[-0.02em] max-w-md">
+                      {currentProject === 'Custos Workspace' ? (
+                        mode === 'engineering' ? 'What should we build?' : mode === 'research' ? 'What should we investigate?' : 'How can Custos help?'
+                      ) : (
+                        <>
+                          {mode === 'engineering' ? 'What should we build in ' : mode === 'research' ? 'What should we investigate in ' : 'How can Custos help with '}
+                          <span className="underline decoration-[var(--color-border-emphasis)] underline-offset-4">{currentProject}</span>?
+                        </>
+                      )}
+                    </h1>
+                    <p className="text-[12px] text-fg-muted mt-2 max-w-sm">
+                      Each workbench keeps its own conversations. Open a full saved chat in another workbench when you want to continue there.
+                    </p>
                   </div>
-                  <div className="workbench-kicker mb-2">{lensMeta.badge} workbench</div>
-                  <h1 className="text-xl md:text-2xl font-semibold text-fg-editor tracking-[-0.02em] max-w-md">
-                    {mode === 'code'
-                      ? `What should we build in `
-                      : mode === 'research'
-                      ? `What hypothesis are we testing in `
-                      : `How can Custos assist with `}
-                    <span className="text-fg-editor underline decoration-[var(--color-border-emphasis)] underline-offset-4">{currentProject}</span>?
-                  </h1>
-                  <p className="text-[12px] text-fg-muted mt-2 max-w-sm">
-                    Each workbench keeps its own conversations. Open a full saved chat in another workbench when you want to continue there.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-6 max-w-2xl mx-auto w-full">
-                  {activeSession.messages.map((msg, i) => {
-                    const isUser = msg.role === 'user';
-                    return (
-                      <div
-                        key={msg.id || i}
-                        aria-label={isUser ? "User message" : "Agent message"}
-                        className={isUser ? "conversation-user-message space-y-2 mb-4" : "space-y-2.5 pb-6 border-b border-border-muted/40 last:border-b-0 min-w-0"}
-                      >
-                        {/* Message Content */}
-                        <div className="conversation-markdown text-[13px] leading-relaxed text-fg-editor space-y-3 min-w-0 break-words [overflow-wrap:anywhere]">
-                          <ConversationMarkdown text={msg.text} />
-                          {!msg.text && msg.runId && !['completed','failed','cancelled','interrupted'].includes(msg.runStatus || '') && <p role="status" className="text-xs text-fg-muted">{msg.runStatus === 'thinking' ? 'Thinking...' : 'Running...'}</p>}
-                          {msg.liveError && <p role="alert" className="mt-2 text-xs text-amber-400">{msg.liveError}</p>}
-                          {msg.activities?.map((activity, index) => <details key={`${msg.runId}-activity-${index}`} className="mt-2 rounded-lg border border-border-muted bg-surface-1 p-2 text-xs"><summary className="cursor-pointer text-fg-muted">{activity.kind === 'reasoning_summary' ? 'Reasoning summary' : activity.kind === 'tool_input' ? 'Tool input' : 'Tool output'}</summary><pre className="mt-2 whitespace-pre-wrap break-words max-h-60 overflow-auto text-[11px]">{JSON.stringify(activity.payload, null, 2)}</pre></details>)}
+                ) : (
+                  <div className="space-y-6 max-w-2xl mx-auto w-full">
+                    {activeSession.messages.map((msg, i) => {
+                      const isUser = msg.role === 'user';
+                      return (
+                        <div
+                          key={msg.id || i}
+                          aria-label={isUser ? "User message" : "Agent message"}
+                          className={isUser ? "conversation-user-message space-y-2 mb-4" : "space-y-2.5 pb-6 border-b border-border-muted/40 last:border-b-0 min-w-0"}
+                        >
+                          {/* Message Content */}
+                          <div className="conversation-markdown text-[13px] leading-relaxed text-fg-editor space-y-3 min-w-0 break-words [overflow-wrap:anywhere]">
+                            <ConversationMarkdown text={msg.text} />
+                            {!msg.text && msg.runId && !['completed', 'failed', 'cancelled', 'interrupted'].includes(msg.runStatus || '') && <p role="status" className="text-xs text-fg-muted">{msg.runStatus === 'thinking' ? 'Thinking...' : 'Running...'}</p>}
+                            {msg.liveError && <p role="alert" className="mt-2 text-xs text-amber-400">{msg.liveError}</p>}
+                            {msg.activities?.map((activity, index) => (
+                              <AgentActionCard
+                                key={`${msg.runId || i}-activity-${index}`}
+                                activity={activity}
+                                onOpenTab={handleOpenTab}
+                                onApproveAction={(actionId) =>
+                                  daemonClient.approveOutbox(actionId).then(() => onShowToast?.('Action approved')).catch(err => onShowToast?.(String(err)))
+                                }
+                                onRejectAction={(actionId) =>
+                                  onShowToast?.(`Action ${actionId} rejected`)
+                                }
+                                onHandoffToCoding={(claimId, statement) =>
+                                  daemonClient.handoffClaimToCoding(claimId, statement).then(() => onShowToast?.('Claim handed off to Coding')).catch(err => onShowToast?.(String(err)))
+                                }
+                                onSendAnswer={(answer) => {
+                                  if (liveMessage?.runId) {
+                                    const harnessId = activeSession.nativeHarnessId || 'claude-code';
+                                    daemonClient.steerHarness(harnessId, liveMessage.runId, answer)
+                                      .then(() => onShowToast?.('Answer delivered to agent'))
+                                      .catch(() => onSendMessage(answer));
+                                  } else {
+                                    onSendMessage(answer);
+                                  }
+                                }}
+                              />
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
-            <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-top ${scrollEdges.top ? 'is-visible' : ''}`} />
-            <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-bottom ${scrollEdges.bottom ? 'is-visible' : ''}`} />
-          </div>
+              <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-top ${scrollEdges.top ? 'is-visible' : ''}`} />
+              <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-bottom ${scrollEdges.bottom ? 'is-visible' : ''}`} />
+            </div>
 
             {/* DOCKED CHAT COMPOSER (Natural Flex Child) */}
             <div className="shrink-0 p-4 bg-canvas">
+              {liveMessage && (
+                <div className="max-w-2xl mx-auto mb-2.5">
+                  <AgentWorkingStatus
+                    status={liveMessage.runStatus}
+                    runId={liveMessage.runId}
+                    harnessName={
+                      mode === 'research'
+                        ? 'Research Copilot'
+                        : mode === 'copilot'
+                        ? 'Personal Copilot'
+                        : activeSession.nativeHarnessId
+                        ? `Coding Agent (${activeSession.nativeHarnessId})`
+                        : 'Coding Assistant'
+                    }
+                    currentActivity={liveMessage.activities?.[liveMessage.activities.length - 1]}
+                    onStop={() => liveMessage.runId && void handleStopRun(liveMessage.runId)}
+                    onFocusSteer={() => textareaRef.current?.focus()}
+                  />
+                </div>
+              )}
               <div className="workbench-composer max-w-2xl mx-auto p-3 transition group relative">
                 <SlashCommandMenu
                   query={inputText}
                   mode={mode}
                   isOpen={inputText.startsWith('/') && (!inputText.includes(' ') || inputText.length <= 15)}
                   onSelectCommand={handleSelectSlashCommand}
-                  onClose={() => {}}
+                  onClose={() => { }}
                 />
                 <textarea
+                  ref={textareaRef}
                   rows={2}
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder={lensMeta.placeholder}
+                  placeholder={
+                    liveMessage
+                      ? 'Agent is working… Type guidance here to steer agent in-flight (or press Stop/Esc)...'
+                      : lensMeta.placeholder
+                  }
                   className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-fg-editor placeholder-fg-subtle text-[13px] resize-none leading-relaxed"
                 />
 
@@ -644,7 +753,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                     <button
                       onClick={handleAddNewTab}
                       className="p-1 hover:text-fg-editor transition rounded"
-                      title="Choose a resource"
+                      title="Launch agent or open tab"
                     >
                       <Plus className="w-4 h-4" />
                     </button>
@@ -664,20 +773,48 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => liveMessage?.runId ? void handleStopRun(liveMessage.runId) : handleSend()}
+                      onClick={() => {
+                        if (liveMessage) {
+                          if (inputText.trim()) {
+                            handleSteer();
+                          } else if (liveMessage.runId) {
+                            void handleStopRun(liveMessage.runId);
+                          }
+                        } else {
+                          handleSend();
+                        }
+                      }}
                       disabled={!liveMessage && !inputText.trim()}
-                      aria-label={liveMessage ? 'Stop response' : 'Send message'}
-                      title={liveMessage ? 'Stop response' : 'Send message'}
+                      aria-label={
+                        liveMessage
+                          ? inputText.trim()
+                            ? 'Steer running agent'
+                            : 'Stop response'
+                          : 'Send message'
+                      }
+                      title={
+                        liveMessage
+                          ? inputText.trim()
+                            ? 'Steer running agent (send guidance mid-run)'
+                            : 'Stop response'
+                          : 'Send message'
+                      }
                       className={`p-1.5 rounded-lg transition ${
                         liveMessage
-                          ? 'bg-transparent workbench-accent hover:opacity-80'
+                          ? inputText.trim()
+                            ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
+                            : 'bg-transparent text-rose-400 hover:opacity-80'
                           : inputText.trim()
                           ? 'bg-transparent workbench-accent hover:opacity-80'
                           : 'text-fg-muted bg-transparent cursor-not-allowed opacity-60'
                       }`}
                     >
                       {liveMessage ? (
-                        <StopIcon className="w-4 h-4 fill-current" aria-hidden="true" />
+                        inputText.trim() ? (
+                          <Compass className="w-4 h-4 text-amber-400 animate-spin-slow" aria-hidden="true" />
+                        ) : (
+                          <StopIcon className="w-4 h-4 fill-current" aria-hidden="true" />
+                        )
                       ) : (
                         <Send className={`w-4 h-4 ${inputText.trim() ? 'fill-current' : ''}`} aria-hidden="true" />
                       )}
@@ -722,6 +859,22 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                 splitPercent={splitPercent}
                 onOpenTab={handleOpenTab}
                 onAskAgent={handleResourceAskAgent}
+                activeWorkspaceId={activeWorkspaceId}
+                onSelectWorkspace={setActiveWorkspaceId}
+                activeWorkspace={activeWorkspace}
+                workspaces={workspaces}
+              />
+              <TabQuickLaunchMenu
+                isOpen={isResourcePickerOpen}
+                onClose={() => setIsResourcePickerOpen(false)}
+                pickerResources={pickerResources}
+                onOpenResource={(resId) => {
+                  handleOpenTab(resId);
+                  setIsResourcePickerOpen(false);
+                }}
+                onLaunchAgent={handleLaunchAgentTab}
+                activeWorkspaceTitle={activeWorkspace?.name || activeWorkspace?.id}
+                mode={mode}
               />
             </div>
           )}

@@ -154,14 +154,6 @@ impl RouterModelProvider {
     /// Determines the provider service type from a given model identifier
     pub fn classify_provider(model: &str) -> &'static str {
         let m = model.trim().to_lowercase();
-        if m.starts_with("mock")
-            || m.starts_with("offline")
-            || m == "custos-mock"
-            || m == "custos-offline"
-            || m == "offline-sovereign"
-        {
-            return "mock";
-        }
         if m.starts_with("ollama/") {
             return "local";
         }
@@ -612,12 +604,6 @@ impl ModelProvider for RouterModelProvider {
             let response = super::antigravity::stream_codeassist(if service == "gemini-oauth" {"gemini"} else {"antigravity"}, &base, &token, req).await?;
             return Ok(stream_response(response,req.request_id.clone(),Wire::Google));
         }
-        if service == "mock" {
-            let response=self.generate(req).await?;
-            let (tx,rx)=tokio::sync::mpsc::channel(1);
-            let _=tx.send(custos_provider::ProviderEvent::completed(&req.request_id,Some(response.content),None)).await;
-            return Ok(rx);
-        }
         let local_base = if service == "local" { self.resolver.get_endpoint_url(account).await?.unwrap_or_else(||"http://localhost:11434".into()) } else {String::new()};
         if service == "local" && (model.starts_with("ollama/") || local_base.contains(":11434")) {
             let root=super::probe::ollama_root(&local_base)?;
@@ -898,21 +884,6 @@ impl ModelProvider for RouterModelProvider {
                 let model = requested_model.strip_prefix(&prefix).unwrap_or(requested_model);
                 self.execute_openai_compatible(&base_url, Some(&token), model, req, target_provider)
                     .await
-            }
-            "mock" => {
-                let content = format!(
-                    "Custos Sovereign (Offline Mode): Yêu cầu của bạn đã được tiếp nhận thành công ({} ký tự prompt). Hệ thống backend đang hoạt động ổn định ở chế độ Offline.",
-                    req.prompt.chars().count()
-                );
-                Ok(ModelResponse::text(
-                    content,
-                    if requested_model.is_empty() {
-                        "custos-offline".to_string()
-                    } else {
-                        requested_model.to_string()
-                    },
-                    42,
-                ))
             }
             _ => {
                 Err(DomainError::Validation(format!(

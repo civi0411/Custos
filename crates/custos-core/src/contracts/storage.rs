@@ -168,3 +168,16 @@ pub trait EffectLedgerPort: Send + Sync {
     ) -> Result<Option<custos_domain::EffectAttempt>, DomainError>;
     async fn reconcile_on_startup(&self) -> Result<usize, DomainError>;
 }
+
+/// Persistence Port for Assistant Communication & Document Drafts (RFC 003 §4).
+#[async_trait]
+pub trait AssistantDraftPort: Send + Sync {
+    async fn save_draft(&self, draft: &custos_domain::AssistantDraft) -> Result<(), DomainError>;
+    async fn get_draft(&self, id: &str) -> Result<Option<custos_domain::AssistantDraft>, DomainError>;
+    async fn list_drafts(
+        &self,
+        session_id: Option<&str>,
+        task_id: Option<&str>,
+    ) -> Result<Vec<custos_domain::AssistantDraft>, DomainError>;
+    async fn delete_draft(&self, id: &str) -> Result<bool, DomainError>;
+}

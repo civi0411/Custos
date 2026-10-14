@@ -1,141 +1,63 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LayoutDashboard, MessageSquareCode, KeyRound, GitFork, Activity, CheckCircle2, Cpu, Shield, ArrowUpRight, ArrowLeft } from 'lucide-react';
-import { useAppContext } from '../../context/AppContext';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { daemonClient } from '@/api/daemon_client';
+import { useAppContext } from '@/context/AppContext';
+import type { ProviderUsageReport } from '@/types/provider_types';
 
+/** A small operational summary. No inferred reliability, process ID, or simulated route metrics. */
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const { currentSessions, providers } = useAppContext();
+  const { currentSessions, connectedAccounts, openSettings } = useAppContext();
+  const [online, setOnline] = useState<boolean | null>(null);
+  const [report, setReport] = useState<ProviderUsageReport | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  return (
-    <div className="flex-1 flex flex-col h-full bg-canvas overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6 text-fg-editor font-sans">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-muted">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/studio')}
-            className="p-1.5 rounded-lg bg-surface-2 hover:bg-surface-3 border border-border-default text-fg-muted hover:text-fg-editor transition flex items-center gap-1.5 text-xs"
-          >
-            <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Studio</span>
-          </button>
-          <div className="h-4 w-[1px] bg-border-muted" />
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-surface-2 border border-border-default flex items-center justify-center workbench-accent">
-              <LayoutDashboard className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-base sm:text-lg font-semibold tracking-[-0.02em] text-fg-editor">Custos System Dashboard</h1>
-              <p className="text-xs text-fg-muted mt-0.5">Autonomous platform health, model throughput, and task execution status</p>
-            </div>
-          </div>
-        </div>
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const healthy = await daemonClient.checkHealth();
+      setOnline(healthy);
+      if (!healthy) { setReport(null); return; }
+      setReport(await daemonClient.getProviderUsage(false));
+    } catch (cause) {
+      setOnline(false);
+      setReport(null);
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally { setLoading(false); }
+  }, []);
 
-        <div className="flex items-center gap-2">
-          <div className="px-3 py-1.5 rounded-lg bg-surface-1 border border-border-default flex items-center gap-2 text-xs">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="text-fg-editor font-medium">Custos Daemon v0.1.0</span>
-            <span className="text-fg-subtle font-mono">PID 4120</span>
-          </div>
-        </div>
-      </div>
+  useEffect(() => { void refresh(); }, [refresh]);
 
-      {/* Metrics Row */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 bg-surface-1 border border-border-default rounded-xl shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-fg-subtle">Active Sessions</span>
-            <MessageSquareCode className="w-4 h-4 workbench-accent" />
-          </div>
-          <div className="text-2xl font-semibold font-mono text-fg-editor mt-2">{currentSessions.length}</div>
-          <span className="text-[11px] text-emerald-500 flex items-center gap-1 mt-1">
-            <CheckCircle2 className="w-3 h-3" /> Ready for reasoning
-          </span>
-        </div>
+  const knownTokens = report?.records.reduce((total, record) => total + (record.total_tokens ?? 0), 0);
+  const unknownAttempts = report?.records.filter((record) => record.total_tokens == null).length ?? 0;
 
-        <div className="p-4 bg-surface-1 border border-border-default rounded-xl shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-fg-subtle">Configured Providers</span>
-            <KeyRound className="w-4 h-4 workbench-accent" />
-          </div>
-          <div className="text-2xl font-semibold font-mono text-fg-editor mt-2">{providers.length}</div>
-          <span className="text-[11px] text-fg-muted mt-1 block">Anthropic, OpenAI, Local</span>
-        </div>
-
-        <div className="p-4 bg-surface-1 border border-border-default rounded-xl shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-fg-subtle">Tokens Processed</span>
-            <Cpu className="w-4 h-4 text-amber-500" />
-          </div>
-          <div className="text-2xl font-semibold font-mono text-fg-editor mt-2">148,200</div>
-          <span className="text-[11px] text-fg-muted mt-1 block">Today across all tasks</span>
-        </div>
-
-        <div className="p-4 bg-surface-1 border border-border-default rounded-xl shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-fg-subtle">Kernel Reliability</span>
-            <Shield className="w-4 h-4 text-emerald-500" />
-          </div>
-          <div className="text-2xl font-semibold font-mono text-emerald-500 mt-2">100.0%</div>
-          <span className="text-[11px] text-fg-muted mt-1 block">0 panics, zero unwrap</span>
-        </div>
-      </div>
-
-      {/* Quick Navigation Cards */}
-      <div>
-        <h2 className="text-xs font-semibold text-fg-subtle uppercase tracking-wider mb-3">Quick Navigation Routes</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div
-            onClick={() => navigate('/studio')}
-            className="p-4 bg-surface-1 hover:bg-surface-2 border border-border-default hover:border-border-emphasis rounded-xl cursor-pointer transition shadow-xs group"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <MessageSquareCode className="w-5 h-5 workbench-accent" />
-              <ArrowUpRight className="w-4 h-4 text-fg-subtle group-hover:text-fg-editor transition" />
-            </div>
-            <h3 className="text-sm font-semibold text-fg-editor">Studio Workspace</h3>
-            <p className="text-xs text-fg-muted mt-1">Interactive chat reasoning and side-by-side code diffing</p>
-          </div>
-
-          <div
-            onClick={() => navigate('/providers')}
-            className="p-4 bg-surface-1 hover:bg-surface-2 border border-border-default hover:border-border-emphasis rounded-xl cursor-pointer transition shadow-xs group"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <KeyRound className="w-5 h-5 workbench-accent" />
-              <ArrowUpRight className="w-4 h-4 text-fg-subtle group-hover:text-fg-editor transition" />
-            </div>
-            <h3 className="text-sm font-semibold text-fg-editor">API Keys & Providers</h3>
-            <p className="text-xs text-fg-muted mt-1">Configure LLM endpoints, credentials, and client tokens</p>
-          </div>
-
-          <div
-            onClick={() => navigate('/chains')}
-            className="p-4 bg-surface-1 hover:bg-surface-2 border border-border-default hover:border-border-emphasis rounded-xl cursor-pointer transition shadow-xs group"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <GitFork className="w-5 h-5 text-emerald-500" />
-              <ArrowUpRight className="w-4 h-4 text-fg-subtle group-hover:text-fg-editor transition" />
-            </div>
-            <h3 className="text-sm font-semibold text-fg-editor">OmniRoute Chains</h3>
-            <p className="text-xs text-fg-muted mt-1">Model failover pipelines and latency circuit breakers</p>
-          </div>
-
-          <div
-            onClick={() => navigate('/telemetry')}
-            className="p-4 bg-surface-1 hover:bg-surface-2 border border-border-default hover:border-border-emphasis rounded-xl cursor-pointer transition shadow-xs group"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <Activity className="w-5 h-5 workbench-accent" />
-              <ArrowUpRight className="w-4 h-4 text-fg-subtle group-hover:text-fg-editor transition" />
-            </div>
-            <h3 className="text-sm font-semibold text-fg-editor">Logs & Telemetry</h3>
-            <p className="text-xs text-fg-muted mt-1">Inspect real-time kernel spans, logs, and timing metrics</p>
-          </div>
-        </div>
+  return <main className="flex h-full flex-1 flex-col overflow-y-auto bg-canvas text-fg-editor">
+    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border-muted px-4">
+      <button type="button" onClick={() => navigate('/studio')} aria-label="Back to Studio" className="rounded p-1.5 text-fg-muted hover:bg-surface-2"><ArrowLeft className="h-4 w-4" /></button>
+      <h1 className="flex-1 text-sm font-medium">Custos status</h1>
+      <button type="button" onClick={() => void refresh()} disabled={loading} aria-label="Refresh status" className="rounded p-1.5 text-fg-muted hover:bg-surface-2 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></button>
+    </header>
+    <div className="mx-auto w-full max-w-3xl space-y-5 p-6">
+      {error && <p role="alert" className="text-xs text-rose-500">Could not load daemon usage: {error}</p>}
+      <dl className="grid gap-3 sm:grid-cols-2">
+        <div className="rounded-lg border border-border-default bg-surface-1 p-4"><dt className="text-xs text-fg-muted">Daemon</dt><dd className="mt-1 text-sm font-medium">{online === null ? 'Checking…' : online ? 'Connected' : 'Unavailable'}</dd></div>
+        <div className="rounded-lg border border-border-default bg-surface-1 p-4"><dt className="text-xs text-fg-muted">Loaded sessions</dt><dd className="mt-1 text-sm font-medium">{currentSessions.length}</dd></div>
+        <div className="rounded-lg border border-border-default bg-surface-1 p-4"><dt className="text-xs text-fg-muted">Configured accounts</dt><dd className="mt-1 text-sm font-medium">{connectedAccounts.length}</dd></div>
+        <div className="rounded-lg border border-border-default bg-surface-1 p-4"><dt className="text-xs text-fg-muted">Recorded model attempts</dt><dd className="mt-1 text-sm font-medium">{report ? report.records.length : 'Unavailable'}</dd></div>
+      </dl>
+      <section className="text-xs leading-5 text-fg-muted">
+        {report ? `Known token total: ${knownTokens?.toLocaleString() ?? 0}. Attempts with unknown usage: ${unknownAttempts}.` : 'Usage appears only when the daemon returns attempt records.'}
+        {' '}This screen does not estimate uptime, reliability or active routing policy.
+      </section>
+      <div className="flex gap-2">
+        <button type="button" onClick={() => openSettings('providers')} className="rounded border border-border-default px-3 py-1.5 text-xs hover:bg-surface-2">Models & accounts</button>
+        <button type="button" onClick={() => openSettings('quotas')} className="rounded border border-border-default px-3 py-1.5 text-xs hover:bg-surface-2">Usage</button>
       </div>
     </div>
-  );
+  </main>;
 };
 
 export default DashboardPage;

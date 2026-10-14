@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
-import type { OrcaTabId } from '@/components/views/OrcaTabbedContainer';
+import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 
 export interface JobEntry {
   id: string;            // UUID generated at dispatch time

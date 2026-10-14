@@ -22,7 +22,7 @@ pub const DEFAULT_MAX_FILE_BYTES: usize = 2 * 1024 * 1024;
 /// Hard ceiling maximum file bytes (10 MB)
 pub const HARD_MAX_FILE_BYTES: usize = 10 * 1024 * 1024;
 /// Maximum entries to return in a file tree before truncation
-pub const MAX_TREE_ENTRIES: usize = 2000;
+pub const MAX_TREE_ENTRIES: usize = 5000;
 
 /// Standard directory names to ignore during tree traversal
 const IGNORED_DIRS: &[&str] = &[
@@ -145,9 +145,10 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
         let ignored_set: HashSet<&str> = IGNORED_DIRS.iter().copied().collect();
 
         // Breadth-first traversal with bounded capacity
-        let mut queue: Vec<(PathBuf, usize)> = vec![(start_dir.clone(), 0)];
+        let mut queue: std::collections::VecDeque<(PathBuf, usize)> = std::collections::VecDeque::new();
+        queue.push_back((start_dir.clone(), 0));
 
-        while let Some((curr_dir, depth)) = queue.pop() {
+        while let Some((curr_dir, depth)) = queue.pop_front() {
             if entries.len() >= MAX_TREE_ENTRIES {
                 truncated = true;
                 break;
@@ -206,7 +207,7 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
 
                 if is_dir {
                     total_dirs += 1;
-                    if depth < depth_limit {
+                    if depth + 1 < depth_limit {
                         dir_children.push((path, depth + 1));
                     }
                 } else {
@@ -221,9 +222,9 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
                 }
             }
 
-            // Push subdirectories
+            // Push subdirectories for breadth-first expansion
             for child in dir_children {
-                queue.push(child);
+                queue.push_back(child);
             }
         }
 

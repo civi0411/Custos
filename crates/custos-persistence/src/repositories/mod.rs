@@ -1,3 +1,4 @@
+pub mod assistant;
 pub mod continuation;
 pub mod decision;
 pub mod fleet_automation;
@@ -13,6 +14,7 @@ pub mod task;
 pub mod workflow_revision;
 pub mod workspace;
 
+pub use assistant::*;
 pub use continuation::*;
 pub use decision::*;
 pub use fleet_automation::*;

@@ -34,6 +34,7 @@ pub struct TaskRuntime {
     session_store: Option<Arc<dyn SessionStore>>,
     dispatcher: Arc<super::dispatcher::WorkflowDispatcher>,
     lease_manager: Option<Arc<super::lease::WorkspaceLeaseManager>>,
+    workspace_coordinator: Option<Arc<crate::workspace::WorkspaceCoordinator>>,
     active_runs: Arc<RwLock<HashMap<String, Run>>>,
     active_workers: Arc<RwLock<HashMap<String, WorkerRun>>>,
 }
@@ -54,6 +55,7 @@ impl TaskRuntime {
             session_store: None,
             dispatcher: Arc::new(super::dispatcher::WorkflowDispatcher::new()),
             lease_manager: None,
+            workspace_coordinator: None,
             active_runs: Arc::new(RwLock::new(HashMap::new())),
             active_workers: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -74,6 +76,7 @@ impl TaskRuntime {
             session_store: None,
             dispatcher: Arc::new(super::dispatcher::WorkflowDispatcher::new()),
             lease_manager: None,
+            workspace_coordinator: None,
             active_runs: Arc::new(RwLock::new(HashMap::new())),
             active_workers: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -173,6 +176,18 @@ impl TaskRuntime {
 
     pub fn lease_manager(&self) -> Option<&Arc<super::lease::WorkspaceLeaseManager>> {
         self.lease_manager.as_ref()
+    }
+
+    pub fn with_workspace_coordinator(
+        mut self,
+        workspace_coordinator: Arc<crate::workspace::WorkspaceCoordinator>,
+    ) -> Self {
+        self.workspace_coordinator = Some(workspace_coordinator);
+        self
+    }
+
+    pub fn workspace_coordinator(&self) -> Option<&Arc<crate::workspace::WorkspaceCoordinator>> {
+        self.workspace_coordinator.as_ref()
     }
 
     pub fn kernel(&self) -> Option<&Arc<dyn KernelPort>> {
@@ -427,6 +442,13 @@ impl TaskRuntime {
             }
         }
 
+        if let Some(ref ws_id) = cmd.workspace_id {
+            run.metadata["workspace_id"] = serde_json::json!(ws_id);
+        }
+        if let Some(ref ws_root) = cmd.workspace_root {
+            run.metadata["workspace_root"] = serde_json::json!(ws_root);
+        }
+
         let token = match self.live.register(&run, &cmd) {
             Ok(token)=>token,
             Err(error)=>{
@@ -493,11 +515,50 @@ impl TaskRuntime {
                     serde_json::json!(profile.tool_mediation.to_string());
                 wrun.continuation_packet_ref = Some(format!("launch:{}", launch.id));
 
-                let intents = if let (Some(workspace_root), Some(prompt_text)) =
-                    (cmd.workspace_root.as_deref(), cmd.prompt.as_deref())
-                {
+                // Resolve execution workspace & effective directory
+                let (effective_dir, maybe_resolved_ws_id) = if let Some(ref ws_coord) = self.workspace_coordinator {
+                    if let Some(ref ws_id_str) = cmd.workspace_id {
+                        let ws_id = custos_domain::WorkspaceId::new(ws_id_str);
+                        if let Ok(Some(ws)) = ws_coord.get_workspace(&ws_id).await {
+                            (std::path::PathBuf::from(ws.path), Some(ws_id))
+                        } else if let Some(ref root) = cmd.workspace_root {
+                            (std::path::PathBuf::from(root), Some(ws_id))
+                        } else {
+                            (std::path::PathBuf::from("."), Some(ws_id))
+                        }
+                    } else if let Some(ref root) = cmd.workspace_root {
+                        let matched = if let Ok(list) = ws_coord.list_workspaces().await {
+                            list.into_iter().find(|w| w.path == *root).map(|w| w.id)
+                        } else {
+                            None
+                        };
+                        (std::path::PathBuf::from(root), matched)
+                    } else {
+                        (std::path::PathBuf::from("."), None)
+                    }
+                } else if let Some(ref root) = cmd.workspace_root {
+                    (std::path::PathBuf::from(root), None)
+                } else {
+                    (std::path::PathBuf::from("."), None)
+                };
+
+                if let Some(ref ws_id) = maybe_resolved_ws_id {
+                    run.metadata["workspace_id"] = serde_json::json!(ws_id.to_string());
+                }
+                run.metadata["effective_workspace_path"] = serde_json::json!(effective_dir.display().to_string());
+
+                // Capture baseline commit before execution if workspace coordinator is available
+                if let (Some(ref ws_coord), Some(ref ws_id)) = (&self.workspace_coordinator, &maybe_resolved_ws_id) {
+                    if let Ok(dirty) = ws_coord.inspect_dirty(ws_id).await {
+                        if let Some(head) = dirty.head_commit {
+                            run.metadata["base_commit_hash"] = serde_json::json!(head);
+                        }
+                    }
+                }
+
+                let intents = if let Some(prompt_text) = cmd.prompt.as_deref() {
                     let native_result = harness
-                        .run_native_observed(prompt_text, std::path::Path::new(workspace_root), observer.clone())
+                        .run_native_observed(prompt_text, &effective_dir, observer.clone())
                         .await;
                     let execution = match native_result {
                         Ok(result) => {
@@ -532,6 +593,27 @@ impl TaskRuntime {
                     };
                     run.metadata["output"] = serde_json::json!(combined_output);
                     turn_output = Some(combined_output);
+
+                    // Post-execution: Capture Git dirty status and unified diff if workspace is managed
+                    if let (Some(ref ws_coord), Some(ref ws_id)) = (&self.workspace_coordinator, &maybe_resolved_ws_id) {
+                        if let Ok(dirty) = ws_coord.inspect_dirty(ws_id).await {
+                            run.metadata["dirty_manifest"] = serde_json::to_value(&dirty).unwrap_or_default();
+                            run.metadata["diff_stat"] = serde_json::json!({
+                                "is_dirty": dirty.is_dirty,
+                                "modified_count": dirty.modified_files.len(),
+                                "untracked_count": dirty.untracked_files.len(),
+                                "deleted_count": dirty.deleted_files.len(),
+                                "modified_files": dirty.modified_files,
+                                "untracked_files": dirty.untracked_files,
+                                "deleted_files": dirty.deleted_files,
+                            });
+                        }
+                        if let Ok(diff_patch) = ws_coord.diff(ws_id).await {
+                            if !diff_patch.is_empty() {
+                                run.metadata["diff_patch"] = serde_json::json!(diff_patch);
+                            }
+                        }
+                    }
 
                     execution.observed_effects
                 } else {

@@ -2,6 +2,29 @@ export type WorkspacePaneType = 'chat' | 'engineering' | 'research' | 'assistant
 export type WorkbenchLens = 'copilot' | 'coding' | 'research';
 export type MainTab = 'studio' | 'providers' | 'chains' | 'telemetry' | 'cache' | 'dashboard' | 'docs' | 'settings';
 
+export type WorkflowKind = 'session' | 'task' | 'hybrid';
+export type WorkflowStatus = 'idle' | 'running' | 'active' | 'blocked' | 'done' | 'failed' | 'draft';
+
+export interface WorkflowCard {
+  id: string;
+  title: string;
+  preview?: string;
+  pack?: string;
+  workbench?: 'copilot' | 'engineering' | 'research';
+  kind: WorkflowKind;
+  status: WorkflowStatus;
+  hasChat: boolean;
+  hasTask: boolean;
+  taskId?: string;
+  parentId?: string; // for sub-agent children
+  subAgents?: WorkflowCard[];
+  costTokens?: number; // cumulative token usage
+  needsAttention?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  session?: Session;
+}
+
 export interface ChatMessage {
   recordedAt?: string;
   runId?: string;
@@ -28,6 +51,7 @@ export interface Session {
   id: string;
   openedLenses?: Array<'chat' | 'code' | 'research'>;
   taskId?: string;
+  taskTitle?: string;
   source?: 'daemon';
   taskStatus?: string;
   sessionId?: string;

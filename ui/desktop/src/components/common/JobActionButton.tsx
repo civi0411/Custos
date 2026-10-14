@@ -4,7 +4,7 @@ import { useWorkbenchJob } from '@/hooks/useWorkbenchJob';
 import { Tooltip } from './Tooltip';
 import { RunPacksJobResult } from '@/types/domain';
 
-import type { OrcaTabId } from '@/components/views/OrcaTabbedContainer';
+import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 
 export interface JobActionButtonProps {
   jobId: string;

@@ -41,29 +41,38 @@ pub use crate::custos_local_api::{
     METHOD_TERMINAL_TERMINATE, METHOD_TERMINAL_WRITE, METHOD_WORKFLOW_CANCEL_RUN,
     METHOD_WORKFLOW_START_RUN, METHOD_WORKSPACES_ARCHIVE, METHOD_WORKSPACES_CREATE,
     METHOD_WORKSPACES_GET, METHOD_WORKSPACES_INSPECT_DIRTY, METHOD_WORKSPACES_LIST,
-    METHOD_WORKSPACES_RECOVER, METHOD_WORKSPACE_DIFF, METHOD_WORKSPACE_FILES_READ,
+    METHOD_WORKSPACES_RECOVER, METHOD_WORKSPACES_DETECT, METHOD_WORKSPACES_PICK_FOLDER,
+    METHOD_WORKSPACES_CANDIDATES_SPAWN, METHOD_WORKSPACES_CANDIDATES_COMPARE,
+    METHOD_WORKSPACES_INTEGRATE, METHOD_SETTINGS_GET, METHOD_SETTINGS_SET,
+    METHOD_WORKSPACE_DIFF, METHOD_WORKSPACE_FILES_READ,
     METHOD_WORKSPACE_FILES_TREE, METHOD_WORKSPACE_FILES_WRITE, METHOD_WORKSPACE_FILE_DIFF,
     METHOD_WORKSPACE_GIT_DISCARD, METHOD_WORKSPACE_GIT_STAGE, METHOD_WORKSPACE_GIT_UNSTAGE,
     JobOperationalStatus, PacksJobCatalogItem, METHOD_PACKS_JOBS_GET, METHOD_PACKS_JOBS_LIST,
     METHOD_PACKS_JOBS_RUN, METHOD_PACKS_MANIFESTS_LIST, METHOD_PACKS_ROLES_LIST,
+    METHOD_ASSISTANT_DRAFTS_DELETE, METHOD_ASSISTANT_DRAFTS_GET, METHOD_ASSISTANT_DRAFTS_LIST,
+    METHOD_ASSISTANT_DRAFTS_SAVE, METHOD_ASSISTANT_OUTBOX_CREATE, METHOD_ASSISTANT_OUTBOX_APPROVE, METHOD_ASSISTANT_OUTBOX_DISPATCH,
+    METHOD_ASSISTANT_OUTBOX_LIST, METHOD_RESOURCES_CAPABILITIES, METHOD_WORKSPACES_AGENT_STEER,
 };
 use custos_adapters::harness::HarnessRegistry;
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
+use custos_core::contracts::storage::OutboxPort;
 use custos_core::contracts::terminal::TerminalPort;
 use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::contracts::workspace_files::WorkspaceFilesPort;
 use custos_core::{AdvanceTask, CancelTask, CreateTask, TaskService};
 use custos_domain::{
-    new_id, validate_browser_url, ArtifactLineageNode, BrowserConsoleEntry, BrowserNetworkRequest,
-    BrowserPageSnapshot, BrowserSession, BrowserTab, BrowserTabStatus, CapabilityDescriptor,
-    CapabilityGroup, ClaimGroundingLevel, ClaimHandoffSummary, CreateHeadlessJobParams,
-    ExecuteCellParams, FleetExecReceipt, HandoffToCodingParams, HandoffToCodingResult,
-    HeadlessAutomationJob, HeadlessJobStatus, NoteRecord, NotebookCell, PassageAnchor, Recipe,
-    RecipeHandoffSummary, RecordReviewParams, RegisterHostParams, RemoteHostNode, RemoteHostStatus,
-    ResearchClaim, ResearchExperimentRun, ResearchSynthesisProposal, ReviewStatus, ReviewerRecord,
+    new_id, validate_browser_url, ArtifactLineageNode, AssistantDraft, BrowserConsoleEntry,
+    BrowserNetworkRequest, BrowserPageSnapshot, BrowserSession, BrowserTab, BrowserTabStatus,
+    CapabilityDescriptor, CapabilityGroup, CellExecutionStatus, ClaimGroundingLevel, ClaimHandoffSummary,
+    CreateHeadlessJobParams, ExecuteCellParams, FleetExecReceipt, HandoffToCodingParams,
+    HandoffToCodingResult, HeadlessAutomationJob, HeadlessJobStatus, NoteRecord, NotebookCell,
+    OutboxActionItem, PassageAnchor, Recipe, RecipeHandoffSummary, RecordReviewParams,
+    RegisterHostParams, RemoteHostNode, RemoteHostStatus, ResearchClaim, ResearchExperimentRun,
+    ResearchSynthesisProposal, ResourceActionCapability, ReviewStatus, ReviewerRecord,
     SaveSynthesisProposalParams, SessionId, SessionMode, SourceRecord, SshAuthMethod, TaskContract,
     TaskStatus,
 };
+use custos_persistence::repositories::{AssistantRepository, OutboxRepository};
 use custos_persistence::{FleetAutomationRepository, ProviderRepository, ResearchRepository};
 use custos_runtime::session::SessionManager;
 use custos_runtime::workspace::{
@@ -185,6 +194,9 @@ pub struct LocalApiDispatcher {
     model_catalog: custos_adapters::providers::catalog::ModelCatalogService,
     oauth_callback_server: Option<Arc<crate::oauth_callback_server::OAuthCallbackServer>>,
     pack_registry: Arc<custos_packs::DomainPackRegistry>,
+    assistant: Option<Arc<AssistantRepository>>,
+    outbox: Option<Arc<OutboxRepository>>,
+    sqlite_store: Option<Arc<custos_persistence::SqliteTaskStore>>,
 }
 
 impl LocalApiDispatcher {
@@ -211,7 +223,15 @@ impl LocalApiDispatcher {
             model_catalog: custos_adapters::providers::catalog::ModelCatalogService::new(),
             oauth_callback_server: None,
             pack_registry: Arc::new(custos_packs::create_default_pack_registry()),
+            assistant: None,
+            outbox: None,
+            sqlite_store: None,
         }
+    }
+
+    pub fn with_sqlite_store(mut self, store: Arc<custos_persistence::SqliteTaskStore>) -> Self {
+        self.sqlite_store = Some(store);
+        self
     }
 
     pub fn with_python_kernel(mut self, python_kernel: Arc<PythonKernelCoordinator>) -> Self {
@@ -251,6 +271,16 @@ impl LocalApiDispatcher {
 
     pub fn with_research(mut self, research: Arc<ResearchRepository>) -> Self {
         self.research = Some(research);
+        self
+    }
+
+    pub fn with_assistant(mut self, assistant: Arc<AssistantRepository>) -> Self {
+        self.assistant = Some(assistant);
+        self
+    }
+
+    pub fn with_outbox(mut self, outbox: Arc<OutboxRepository>) -> Self {
+        self.outbox = Some(outbox);
         self
     }
 
@@ -484,30 +514,48 @@ impl LocalApiDispatcher {
                 )
             },
             // Terminal PTY (Native PTY stream scoped to execution workspace)
-            CapabilityDescriptor::available(
-                "compute.pty",
-                "Terminal",
-                CapabilityGroup::Compute,
-                "Bounded PTY streams scoped to an execution workspace.",
-                Some("terminal"),
-                vec!["spawn", "write", "resize", "read", "terminate", "list", "get"],
-            ),
-            CapabilityDescriptor::available(
-                "code.files",
-                "Files",
-                CapabilityGroup::Code,
-                "Repository tree, file buffers, and source anchor inspection.",
-                Some("files"),
-                vec!["tree", "read", "write"],
-            ),
-            CapabilityDescriptor::available(
-                "code.changes",
-                "Changes",
-                CapabilityGroup::Code,
-                "Diff review, patch proposal, annotations, and Git stage decisions.",
-                Some("changes"),
-                vec!["diff", "file_diff", "stage", "unstage", "discard"],
-            ),
+            if self.workspace.is_some() {
+                CapabilityDescriptor::available(
+                    "compute.pty",
+                    "Terminal",
+                    CapabilityGroup::Compute,
+                    "Bounded PTY streams scoped to an execution workspace.",
+                    Some("terminal"),
+                    vec!["spawn", "write", "resize", "read", "terminate", "list", "get"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "compute.pty", "Terminal", CapabilityGroup::Compute,
+                    "Bounded PTY streams scoped to an execution workspace.", Some("terminal"),
+                    "WorkspaceCoordinator is not configured on this daemon instance.",
+                )
+            },
+            if self.workspace.is_some() {
+                CapabilityDescriptor::available(
+                    "code.files", "Files", CapabilityGroup::Code,
+                    "Repository tree, file buffers, and source anchor inspection.", Some("files"),
+                    vec!["tree", "read", "write"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "code.files", "Files", CapabilityGroup::Code,
+                    "Repository tree, file buffers, and source anchor inspection.", Some("files"),
+                    "WorkspaceCoordinator is not configured on this daemon instance.",
+                )
+            },
+            if self.workspace.is_some() {
+                CapabilityDescriptor::available(
+                    "code.changes", "Changes", CapabilityGroup::Code,
+                    "Diff review and Git stage decisions in an execution workspace.", Some("changes"),
+                    vec!["diff", "file_diff", "stage", "unstage", "discard"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "code.changes", "Changes", CapabilityGroup::Code,
+                    "Diff review and Git stage decisions in an execution workspace.", Some("changes"),
+                    "WorkspaceCoordinator is not configured on this daemon instance.",
+                )
+            },
             if self.python_kernel.is_some() {
                 CapabilityDescriptor::available(
                     "compute.notebook",
@@ -546,14 +594,77 @@ impl LocalApiDispatcher {
                     "ResearchRepository is not configured on this daemon instance.",
                 )
             },
-            CapabilityDescriptor::available(
-                "coordination.kanban",
-                "Agents",
-                CapabilityGroup::Coordination,
-                "Worker runs, native coding harnesses (Claude Code, Codex, Goose), and agent loop dispatch.",
-                Some("kanban"),
-                vec!["list_harnesses", "get_harness", "run_native", "dispatch", "cancel", "steer"],
-            ),
+            if self.workflow.is_some() && self.usage_runs.is_some() {
+                CapabilityDescriptor::available(
+                    "coordination.kanban", "Activity", CapabilityGroup::Coordination,
+                    "Persisted Task runs and live run events.", Some("kanban"),
+                    vec!["runs.list", "runs.watch", "runs.cancel"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "coordination.kanban", "Activity", CapabilityGroup::Coordination,
+                    "Persisted Task runs and live run events.", Some("kanban"),
+                    "Workflow and persisted run projection are required.",
+                )
+            },
+            if self.harnesses.list().iter().any(|harness| harness.is_available) {
+                CapabilityDescriptor::available(
+                    "coding.agents",
+                    "Coding Agents",
+                    CapabilityGroup::Code,
+                    "Start a registered native coding harness in a selected execution workspace.",
+                    Some("agents"),
+                    vec!["list_harnesses", "start_run", "cancel_run"],
+                )
+            } else {
+                CapabilityDescriptor::degraded(
+                    "coding.agents",
+                    "Coding Agents",
+                    CapabilityGroup::Code,
+                    "Inspect registered native coding harnesses.",
+                    Some("agents"),
+                    "No registered coding harness binary is available on this machine.",
+                    vec!["list_harnesses"],
+                )
+            },
+            if self.assistant.is_some() {
+                CapabilityDescriptor::available(
+                    "assistant.drafts",
+                    "Drafts",
+                    CapabilityGroup::Personal,
+                    "Durable communication drafts stored by the daemon.",
+                    Some("drafts"),
+                    vec!["list", "get", "save", "delete"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "assistant.drafts",
+                    "Drafts",
+                    CapabilityGroup::Personal,
+                    "Durable communication drafts stored by the daemon.",
+                    Some("drafts"),
+                    "AssistantRepository is not configured on this daemon instance.",
+                )
+            },
+            if self.outbox.is_some() {
+                CapabilityDescriptor::available(
+                    "assistant.outbox",
+                    "Outbox",
+                    CapabilityGroup::Personal,
+                    "Inspect, approve, and dispatch recorded external action items and receipts.",
+                    Some("outbox"),
+                    vec!["list", "create", "approve", "dispatch"],
+                )
+            } else {
+                CapabilityDescriptor::unavailable(
+                    "assistant.outbox",
+                    "Outbox",
+                    CapabilityGroup::Personal,
+                    "Inspect recorded external effect attempts and receipts.",
+                    Some("outbox"),
+                    "OutboxRepository is not configured on this daemon instance.",
+                )
+            },
             if self.research.is_some() {
                 CapabilityDescriptor::available(
                     "synthesis.handoff",
@@ -574,15 +685,26 @@ impl LocalApiDispatcher {
                 )
             },
             if self.fleet_automation.is_some() {
-                CapabilityDescriptor::degraded(
-                    "browser.tabs",
-                    "Browser",
-                    CapabilityGroup::Browser,
-                    "Persisted browser session and tab intents.",
-                    Some("browser"),
-                    "Browser execution adapter is not connected; navigation and snapshots are refused.",
-                    vec!["sessions.list", "sessions.create", "tabs.list", "tabs.create", "tabs.close"],
-                )
+                if browser_execution_adapter_connected() {
+                    CapabilityDescriptor::available(
+                        "browser.tabs",
+                        "Browser",
+                        CapabilityGroup::Browser,
+                        "Governed headless browser automation via agent-browser.",
+                        Some("browser"),
+                        vec!["sessions.list", "sessions.create", "tabs.list", "tabs.create", "tabs.navigate", "tabs.click", "tabs.fill", "tabs.snapshot", "tabs.screenshot", "tabs.close"],
+                    )
+                } else {
+                    CapabilityDescriptor::degraded(
+                        "browser.tabs",
+                        "Browser",
+                        CapabilityGroup::Browser,
+                        "Persisted browser session and tab intents.",
+                        Some("browser"),
+                        "Browser execution adapter is not connected; navigation and snapshots are refused.",
+                        vec!["sessions.list", "sessions.create", "tabs.list", "tabs.create", "tabs.close"],
+                    )
+                }
             } else {
                 CapabilityDescriptor::unavailable(
                     "browser.tabs",
@@ -625,14 +747,13 @@ impl LocalApiDispatcher {
                 )
             },
             if self.fleet_automation.is_some() {
-                CapabilityDescriptor::degraded(
+                CapabilityDescriptor::available(
                     "automation.headless",
                     "Automation",
                     CapabilityGroup::Coordination,
-                    "Persisted headless job definitions.",
+                    "Persisted headless automation jobs with execution dispatch.",
                     Some("automation"),
-                    "Automation executor and standing-grant checks are not connected; job execution is refused.",
-                    vec!["jobs.list", "jobs.create"],
+                    vec!["jobs.list", "jobs.create", "jobs.run"],
                 )
             } else {
                 CapabilityDescriptor::unavailable(
@@ -715,14 +836,21 @@ impl LocalApiDispatcher {
                 ApiResponse::success(req.id, serde_json::json!({ "status": "ok" }))
             }
             "v1.tasks.create" => {
-                let params: CreateTaskRequest = match serde_json::from_value(req.params) {
+                let params: CreateTaskRequest = match serde_json::from_value(req.params.clone()) {
                     Ok(p) => p,
                     Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
                 };
 
+                let mut meta = params.metadata.unwrap_or_else(|| serde_json::json!({}));
+                if let Some(sid) = req.params.get("session_id").and_then(|v| v.as_str()) {
+                    if meta.get("session_id").is_none() {
+                        meta["session_id"] = serde_json::json!(sid);
+                    }
+                }
+
                 let cmd = CreateTask {
                     title: params.title,
-                    metadata: params.metadata,
+                    metadata: Some(meta),
                     contract: params.contract,
                 };
 
@@ -855,12 +983,27 @@ impl LocalApiDispatcher {
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
-            "v1.tasks.list" => match self.task_service.list_tasks().await {
-                Ok(tasks) => match serde_json::to_value(&tasks) {
-                    Ok(val) => ApiResponse::success(req.id, val),
+            "v1.tasks.list" => {
+                let session_id_opt = req.params.get("session_id").and_then(|v| v.as_str());
+                match self.task_service.list_tasks().await {
+                    Ok(tasks) => {
+                        let filtered: Vec<_> = if let Some(sid) = session_id_opt {
+                            tasks
+                                .into_iter()
+                                .filter(|t| {
+                                    t.metadata.get("session_id").and_then(|v| v.as_str()) == Some(sid)
+                                })
+                                .collect()
+                        } else {
+                            tasks
+                        };
+                        match serde_json::to_value(&filtered) {
+                            Ok(val) => ApiResponse::success(req.id, val),
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
-                },
-                Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
             },
             "v1.tasks.spans" => {
                 let task_id = match req.params.get("task_id").and_then(|v| v.as_str()) {
@@ -1106,6 +1249,68 @@ impl LocalApiDispatcher {
                 }
                 ApiResponse::success(req.id,serde_json::json!(runs))
             }
+            "v1.sessions.metrics" | "v1.session.metrics" => {
+                let session_opt = req.params.get("session_id").and_then(|v| v.as_str());
+                let Some(store) = &self.usage_runs else {
+                    return ApiResponse::error(req.id, "Run store unavailable");
+                };
+                let tasks = match self.task_service.list_tasks().await {
+                    Ok(tasks) => tasks,
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                let mut tokens_in: u64 = 0;
+                let mut tokens_out: u64 = 0;
+                let mut total_tokens: u64 = 0;
+                let mut active_runs: u64 = 0;
+                let pending_approvals: u64 = 0;
+
+                for task in tasks {
+                    let task_runs = match store.list_runs_for_task(&task.id).await {
+                        Ok(runs) => runs,
+                        Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                    };
+                    for run in task_runs {
+                        let matches_session = match session_opt {
+                            Some(s) if !s.is_empty() => {
+                                run.metadata.get("session_id").and_then(|v| v.as_str()) == Some(s)
+                            }
+                            _ => true,
+                        };
+                        if !matches_session {
+                            continue;
+                        }
+
+                        if !run.status.is_terminal() {
+                            active_runs += 1;
+                        }
+
+                        if let Some(usage) = run.metadata.get("usage") {
+                            let in_tk = usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                            let out_tk = usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0);
+                            let tot_tk = usage.get("total_tokens").and_then(|v| v.as_u64()).unwrap_or(in_tk + out_tk);
+                            tokens_in += in_tk;
+                            tokens_out += out_tk;
+                            total_tokens += tot_tk;
+                        }
+                    }
+                }
+
+                let estimated_cost_usd = (tokens_in as f64 * 0.000003) + (tokens_out as f64 * 0.000015);
+                let rounded_cost = (estimated_cost_usd * 10000.0).round() / 10000.0;
+
+                ApiResponse::success(
+                    req.id,
+                    serde_json::json!({
+                        "session_id": session_opt,
+                        "tokens_in": tokens_in,
+                        "tokens_out": tokens_out,
+                        "total_tokens": total_tokens,
+                        "estimated_cost_usd": rounded_cost,
+                        "active_runs": active_runs,
+                        "pending_approvals": pending_approvals
+                    }),
+                )
+            }
             "v1.workflow.live_run" => {
                 let session = req.params.get("session_id").and_then(|v|v.as_str()).unwrap_or("");
                 let run = req.params.get("run_id").and_then(|v|v.as_str()).unwrap_or("");
@@ -1178,6 +1383,9 @@ impl LocalApiDispatcher {
                 }
                 if let Some(root) = resolved_workspace_root {
                     cmd = cmd.with_workspace_root(root);
+                }
+                if let Some(ref ws_id) = params.workspace_id {
+                    cmd = cmd.with_workspace_id(ws_id.clone());
                 }
                 if let Some(ref session_id) = params.session_id {
                     cmd = cmd.with_session_id(session_id.clone());
@@ -1412,6 +1620,482 @@ impl LocalApiDispatcher {
                             Err(e) => ApiResponse::error(req.id, e.to_string()),
                         }
                     }
+                }
+            }
+            METHOD_WORKSPACES_DETECT => {
+                let raw_path = match req.params.get("path").and_then(|v| v.as_str()) {
+                    Some(p) => p.trim(),
+                    None => return ApiResponse::error(req.id, "Missing 'path' parameter"),
+                };
+                let expanded_path = if raw_path.starts_with("~/") {
+                    if let Some(home) = dirs::home_dir() {
+                        home.join(&raw_path[2..])
+                    } else {
+                        std::path::PathBuf::from(raw_path)
+                    }
+                } else if raw_path == "~" {
+                    dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from(raw_path))
+                } else {
+                    std::path::PathBuf::from(raw_path)
+                };
+
+                let canonical_path = match expanded_path.canonicalize() {
+                    Ok(p) => p,
+                    Err(e) => {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Directory '{}' does not exist or cannot be accessed: {}", raw_path, e),
+                        );
+                    }
+                };
+
+                if !canonical_path.is_dir() {
+                    return ApiResponse::error(
+                        req.id,
+                        format!("Path '{}' is not a directory", raw_path),
+                    );
+                }
+
+                // 1. Probe Git
+                let toplevel_res = tokio::process::Command::new("git")
+                    .current_dir(&canonical_path)
+                    .args(["rev-parse", "--is-inside-work-tree", "--show-toplevel"])
+                    .output()
+                    .await;
+
+                let mut is_git = false;
+                let mut root_path = canonical_path.to_string_lossy().to_string();
+                let mut branch: Option<String> = None;
+                let mut is_dirty = false;
+                let mut dirty_count = 0;
+                let mut remote_url: Option<String> = None;
+                let mut is_worktree = false;
+
+                if let Ok(out) = toplevel_res {
+                    if out.status.success() {
+                        let stdout = String::from_utf8_lossy(&out.stdout);
+                        let lines: Vec<&str> = stdout.lines().collect();
+                        if let Some(first) = lines.first() {
+                            if *first == "true" {
+                                is_git = true;
+                                if let Some(tl) = lines.get(1) {
+                                    root_path = tl.trim().to_string();
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if is_git {
+                    // Get current branch
+                    if let Ok(b_out) = tokio::process::Command::new("git")
+                        .current_dir(&root_path)
+                        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+                        .output()
+                        .await
+                    {
+                        if b_out.status.success() {
+                            let b_str = String::from_utf8_lossy(&b_out.stdout).trim().to_string();
+                            if !b_str.is_empty() {
+                                branch = Some(b_str);
+                            }
+                        }
+                    }
+
+                    // Check dirty status
+                    if let Ok(s_out) = tokio::process::Command::new("git")
+                        .current_dir(&root_path)
+                        .args(["status", "--porcelain=v1"])
+                        .output()
+                        .await
+                    {
+                        if s_out.status.success() {
+                            let changes = String::from_utf8_lossy(&s_out.stdout);
+                            dirty_count = changes.lines().filter(|l| !l.trim().is_empty()).count();
+                            is_dirty = dirty_count > 0;
+                        }
+                    }
+
+                    // Get remote URL
+                    if let Ok(r_out) = tokio::process::Command::new("git")
+                        .current_dir(&root_path)
+                        .args(["remote", "get-url", "origin"])
+                        .output()
+                        .await
+                    {
+                        if r_out.status.success() {
+                            let r_str = String::from_utf8_lossy(&r_out.stdout).trim().to_string();
+                            if !r_str.is_empty() {
+                                remote_url = Some(r_str);
+                            }
+                        }
+                    }
+
+                    // Check if linked worktree
+                    let dir_out = tokio::process::Command::new("git")
+                        .current_dir(&root_path)
+                        .args(["rev-parse", "--git-dir", "--git-common-dir"])
+                        .output()
+                        .await;
+                    if let Ok(d_out) = dir_out {
+                        if d_out.status.success() {
+                            let out_str = String::from_utf8_lossy(&d_out.stdout);
+                            let d_lines: Vec<&str> = out_str.lines().collect();
+                            if d_lines.len() >= 2 && d_lines[0] != d_lines[1] {
+                                is_worktree = true;
+                            }
+                        }
+                    }
+                }
+
+                // 2. Detect Project Type
+                let root_p = std::path::Path::new(&root_path);
+                let project_type = if root_p.join("Cargo.toml").exists() {
+                    "Rust"
+                } else if root_p.join("package.json").exists() {
+                    "TypeScript / Node"
+                } else if root_p.join("pyproject.toml").exists() || root_p.join("requirements.txt").exists() {
+                    "Python"
+                } else if root_p.join("go.mod").exists() {
+                    "Go"
+                } else if root_p.join("pom.xml").exists() || root_p.join("build.gradle").exists() {
+                    "Java"
+                } else if is_git {
+                    "Git Repository"
+                } else {
+                    "Folder"
+                };
+
+                let name = root_p
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "Workspace".to_string());
+
+                let result = serde_json::json!({
+                    "path": canonical_path.to_string_lossy(),
+                    "root_path": root_path,
+                    "name": name,
+                    "is_git": is_git,
+                    "branch": branch,
+                    "is_dirty": is_dirty,
+                    "dirty_count": dirty_count,
+                    "remote_url": remote_url,
+                    "project_type": project_type,
+                    "is_worktree": is_worktree
+                });
+
+                ApiResponse::success(req.id, result)
+            }
+            METHOD_WORKSPACES_PICK_FOLDER => {
+                #[cfg(target_os = "macos")]
+                {
+                    let script = "POSIX path of (choose folder with prompt \"Select Project or Repository Folder\")";
+                    let out = tokio::process::Command::new("osascript")
+                        .arg("-e")
+                        .arg(script)
+                        .output()
+                        .await;
+
+                    match out {
+                        Ok(o) if o.status.success() => {
+                            let p = String::from_utf8_lossy(&o.stdout).trim().to_string();
+                            ApiResponse::success(req.id, serde_json::json!({ "path": p }))
+                        }
+                        _ => ApiResponse::success(req.id, serde_json::json!({ "path": null })),
+                    }
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    ApiResponse::success(req.id, serde_json::json!({ "path": null }))
+                }
+            }
+            METHOD_WORKSPACES_CANDIDATES_SPAWN => {
+                let coordinator = match self.workspace.as_ref() {
+                    Some(c) => c,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "WorkspaceCoordinator not configured on daemon",
+                        )
+                    }
+                };
+
+                let task_id = match req.params.get("task_id").and_then(|v| v.as_str()) {
+                    Some(id)
+                        if !id.trim().is_empty()
+                            && id.trim().len() <= 128
+                            && id.trim().chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-')) =>
+                    {
+                        id.trim().to_string()
+                    }
+                    _ => return ApiResponse::error(req.id, "Missing 'task_id' parameter"),
+                };
+
+                match self.task_service.get_task(&task_id).await {
+                    Ok(Some(_)) => {}
+                    Ok(None) => return ApiResponse::error(req.id, format!("Task '{task_id}' not found")),
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                }
+
+                let count = req.params.get("count").and_then(|v| v.as_u64()).unwrap_or(2) as usize;
+                let count = count.clamp(1, 8);
+
+                let base_repo_path = if let Some(base_ws_id) = req.params.get("base_workspace_id").and_then(|v| v.as_str()) {
+                    match coordinator.get_workspace(&custos_domain::WorkspaceId::new(base_ws_id)).await {
+                        Ok(Some(ws)) => ws.path,
+                        _ => return ApiResponse::error(req.id, format!("Base workspace '{base_ws_id}' not found")),
+                    }
+                } else if let Some(repo_path) = req.params.get("repo_path").and_then(|v| v.as_str()) {
+                    repo_path.to_string()
+                } else {
+                    return ApiResponse::error(req.id, "Either 'base_workspace_id' or 'repo_path' must be provided");
+                };
+
+                let base_commit_hash = if let Some(h) = req.params.get("base_commit_hash").and_then(|v| v.as_str()) {
+                    Some(h.to_string())
+                } else {
+                    let mut cmd = tokio::process::Command::new("git");
+                    cmd.current_dir(&base_repo_path).arg("rev-parse").arg("HEAD");
+                    cmd.output().await.ok().filter(|o| o.status.success()).map(|o| {
+                        String::from_utf8_lossy(&o.stdout).trim().to_string()
+                    })
+                };
+
+                let mut spawned_workspaces = Vec::new();
+                for i in 1..=count {
+                    let branch = format!("custos/candidate/{task_id}/{i}");
+                    let candidate_path = std::path::Path::new(&base_repo_path)
+                        .join(".custos/worktrees")
+                        .join(&task_id)
+                        .join(format!("candidate-{}", i))
+                        .to_string_lossy()
+                        .to_string();
+
+                    let metadata = serde_json::json!({
+                        "candidate_index": i,
+                        "task_id": task_id,
+                        "branch": branch,
+                        "base_commit_hash": base_commit_hash
+                    });
+
+                    let create_req = CreateWorkspaceRequest {
+                        name: format!("candidate-{}-{}", task_id, i),
+                        kind: custos_domain::WorkspaceKind::Git {
+                            repo_path: base_repo_path.clone(),
+                            branch: branch.clone(),
+                            base_commit: base_commit_hash.clone(),
+                        },
+                        path: candidate_path,
+                        lineage: Some(custos_domain::WorkspaceLineage {
+                            parent_workspace_id: req.params.get("base_workspace_id").and_then(|v| v.as_str()).map(custos_domain::WorkspaceId::new),
+                            base_commit: base_commit_hash.clone(),
+                            target_branch: Some(branch.clone()),
+                            head_commit: None,
+                        }),
+                        owner_task_id: Some(task_id.clone()),
+                        metadata: Some(metadata),
+                        setup_script: req.params.get("setup_script").and_then(|v| v.as_str()).map(str::to_string),
+                    };
+
+                    match coordinator.create_workspace(create_req).await {
+                        Ok(ws) => spawned_workspaces.push(ws),
+                        Err(e) => return ApiResponse::error(req.id, format!("Failed to create candidate #{i}: {e}")),
+                    }
+                }
+
+                match serde_json::to_value(&spawned_workspaces) {
+                    Ok(val) => ApiResponse::success(req.id, serde_json::json!({
+                        "task_id": task_id,
+                        "base_repo_path": base_repo_path,
+                        "base_commit_hash": base_commit_hash,
+                        "candidates": val
+                    })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKSPACES_CANDIDATES_COMPARE => {
+                let coordinator = match self.workspace.as_ref() {
+                    Some(c) => c,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "WorkspaceCoordinator not configured on daemon",
+                        )
+                    }
+                };
+
+                let target_workspaces: Vec<custos_domain::ExecutionWorkspace> = if let Some(ws_ids) = req.params.get("workspace_ids").and_then(|v| v.as_array()) {
+                    let mut list = Vec::new();
+                    for val in ws_ids {
+                        if let Some(id_str) = val.as_str() {
+                            if let Ok(Some(ws)) = coordinator.get_workspace(&custos_domain::WorkspaceId::new(id_str)).await {
+                                list.push(ws);
+                            }
+                        }
+                    }
+                    list
+                } else if let Some(task_id) = req.params.get("task_id").and_then(|v| v.as_str()) {
+                    let all = coordinator.list_workspaces().await.unwrap_or_default();
+                    all.into_iter().filter(|w| w.owner_task_id.as_deref() == Some(task_id)).collect()
+                } else {
+                    return ApiResponse::error(req.id, "Either 'workspace_ids' or 'task_id' must be provided");
+                };
+
+                let mut candidate_comparisons = Vec::new();
+                for ws in target_workspaces {
+                    let dirty = coordinator.inspect_dirty(&ws.id).await.unwrap_or_default();
+                    let diff_text = coordinator.diff(&ws.id).await.unwrap_or_default();
+
+                    let branch = match &ws.kind {
+                        custos_domain::WorkspaceKind::Git { branch, .. } => branch.clone(),
+                        _ => "main".to_string(),
+                    };
+
+                    candidate_comparisons.push(serde_json::json!({
+                        "workspace_id": ws.id.to_string(),
+                        "name": ws.name,
+                        "path": ws.path,
+                        "branch": branch,
+                        "base_commit_hash": ws.base_commit_hash,
+                        "is_dirty": dirty.is_dirty,
+                        "modified_count": dirty.modified_files.len(),
+                        "untracked_count": dirty.untracked_files.len(),
+                        "deleted_count": dirty.deleted_files.len(),
+                        "modified_files": dirty.modified_files,
+                        "untracked_files": dirty.untracked_files,
+                        "deleted_files": dirty.deleted_files,
+                        "diff": diff_text,
+                        "status": ws.status.to_string(),
+                    }));
+                }
+
+                ApiResponse::success(req.id, serde_json::json!({
+                    "count": candidate_comparisons.len(),
+                    "candidates": candidate_comparisons,
+                }))
+            }
+            METHOD_WORKSPACES_INTEGRATE => {
+                let coordinator = match self.workspace.as_ref() {
+                    Some(c) => c,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "WorkspaceCoordinator not configured on daemon",
+                        )
+                    }
+                };
+
+                let winner_id = match req.params.get("winner_workspace_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => custos_domain::WorkspaceId::new(id),
+                    _ => return ApiResponse::error(req.id, "Missing 'winner_workspace_id' parameter"),
+                };
+
+                let winner_ws = match coordinator.get_workspace(&winner_id).await {
+                    Ok(Some(ws)) => ws,
+                    _ => return ApiResponse::error(req.id, format!("Winner workspace '{winner_id}' not found")),
+                };
+
+                let (repo_path, winner_branch) = match &winner_ws.kind {
+                    custos_domain::WorkspaceKind::Git { repo_path, branch, .. } => (repo_path.clone(), branch.clone()),
+                    _ => return ApiResponse::error(req.id, "Winner workspace must be a Git workspace"),
+                };
+
+                let target_branch = req.params.get("target_branch").and_then(|v| v.as_str()).unwrap_or("main");
+
+                // Stale-Base Drift Check
+                let mut rev_cmd = tokio::process::Command::new("git");
+                rev_cmd.current_dir(&repo_path).arg("rev-parse").arg(target_branch);
+                let current_target_head = rev_cmd.output().await.ok().filter(|o| o.status.success()).map(|o| {
+                    String::from_utf8_lossy(&o.stdout).trim().to_string()
+                });
+
+                let is_stale_base = if let (Some(ref current_head), Some(ref base_commit)) = (&current_target_head, &winner_ws.base_commit_hash) {
+                    current_head != base_commit
+                } else {
+                    false
+                };
+
+                // Merge winner branch into target repository
+                let mut merge_cmd = tokio::process::Command::new("git");
+                merge_cmd.current_dir(&repo_path)
+                    .arg("merge")
+                    .arg("--no-ff")
+                    .arg("-m")
+                    .arg(format!("Merge winner candidate {} ({})", winner_ws.name, winner_branch))
+                    .arg(&winner_branch);
+
+                let merge_output = merge_cmd.output().await;
+                let (merge_success, merge_detail) = match merge_output {
+                    Ok(out) => {
+                        let text = String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
+                        (out.status.success(), text.trim().to_string())
+                    }
+                    Err(e) => (false, format!("Failed to spawn git merge: {e}")),
+                };
+
+                // Safe Loser Teardown with Dirty Protection
+                let force_loser = req.params.get("force_loser_cleanup").and_then(|v| v.as_bool()).unwrap_or(false);
+                let mut loser_cleanup_results = Vec::new();
+
+                if let Some(loser_ids) = req.params.get("loser_workspace_ids").and_then(|v| v.as_array()) {
+                    for loser_val in loser_ids {
+                        if let Some(lid_str) = loser_val.as_str() {
+                            let lid = custos_domain::WorkspaceId::new(lid_str);
+                            let teardown_res = coordinator.archive_workspace_with_force(&lid, true, force_loser).await;
+                            loser_cleanup_results.push(serde_json::json!({
+                                "workspace_id": lid_str,
+                                "success": teardown_res.is_ok(),
+                                "error": teardown_res.err().map(|e| e.to_string()),
+                            }));
+                        }
+                    }
+                }
+
+                ApiResponse::success(req.id, serde_json::json!({
+                    "winner_workspace_id": winner_id.to_string(),
+                    "winner_branch": winner_branch,
+                    "target_branch": target_branch,
+                    "is_stale_base": is_stale_base,
+                    "current_target_head": current_target_head,
+                    "winner_base_commit": winner_ws.base_commit_hash,
+                    "merge_success": merge_success,
+                    "merge_detail": merge_detail,
+                    "loser_cleanup": loser_cleanup_results,
+                }))
+            }
+            METHOD_SETTINGS_GET => {
+                let store = match self.sqlite_store.as_ref() {
+                    Some(s) => s,
+                    None => return ApiResponse::error(req.id, "SqliteTaskStore not configured on daemon"),
+                };
+                match store.get_settings() {
+                    Ok(settings) => ApiResponse::success(req.id, serde_json::to_value(&settings).unwrap_or_default()),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_SETTINGS_SET => {
+                let store = match self.sqlite_store.as_ref() {
+                    Some(s) => s,
+                    None => return ApiResponse::error(req.id, "SqliteTaskStore not configured on daemon"),
+                };
+                if let Some(map) = req.params.as_object() {
+                    let mut updates = std::collections::HashMap::with_capacity(map.len());
+                    for (k, v) in map {
+                        let val_str = match v {
+                            serde_json::Value::String(s) => s.clone(),
+                            other => other.to_string(),
+                        };
+                        updates.insert(k.clone(), val_str);
+                    }
+                    if let Err(e) = store.set_settings(&updates) {
+                        return ApiResponse::error(req.id, e.to_string());
+                    }
+                    match store.get_settings() {
+                        Ok(settings) => ApiResponse::success(req.id, serde_json::to_value(&settings).unwrap_or_default()),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    }
+                } else {
+                    ApiResponse::error(req.id, "Invalid params: expected JSON object of key-value settings")
                 }
             }
             METHOD_RESEARCH_SOURCES_LIST => {
@@ -2064,18 +2748,53 @@ impl LocalApiDispatcher {
                 }
             }
             METHOD_NOTEBOOK_CELLS_SAVE => {
-                let _session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
+                let session_id = match req.params.get("session_id").and_then(|v| v.as_str()) {
                     Some(s) if !s.trim().is_empty() => s,
                     _ => return ApiResponse::error(req.id, "Missing or empty session_id parameter"),
                 };
-                let cells: Vec<NotebookCell> = match req.params.get("cells").and_then(|v| serde_json::from_value(v.clone()).ok()) {
+                let mut cells: Vec<NotebookCell> = match req.params.get("cells").and_then(|v| serde_json::from_value(v.clone()).ok()) {
                     Some(c) => c,
                     None => return ApiResponse::error(req.id, "Missing or invalid cells parameter"),
                 };
+                if cells.iter().any(|cell| cell.session_id != session_id) {
+                    return ApiResponse::error(req.id, "Notebook cell session_id must match the requested session_id");
+                }
                 let research = match self.research.as_ref() {
                     Some(r) => r,
                     None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
                 };
+                let stored = match research.list_notebook_cells(session_id) {
+                    Ok(cells) => cells,
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                for cell in &mut cells {
+                    if let Some(previous) = stored.iter().find(|saved| saved.id == cell.id) {
+                        if previous.source == cell.source {
+                            cell.execution_count = previous.execution_count;
+                            cell.status = previous.status;
+                            cell.stdout = previous.stdout.clone();
+                            cell.stderr = previous.stderr.clone();
+                            cell.output_image = previous.output_image.clone();
+                            cell.wall_ms = previous.wall_ms;
+                        } else {
+                            cell.execution_count = None;
+                            cell.status = CellExecutionStatus::Idle;
+                            cell.stdout = None;
+                            cell.stderr = None;
+                            cell.output_image = None;
+                            cell.wall_ms = None;
+                        }
+                        cell.epoch = previous.epoch;
+                    } else {
+                        cell.execution_count = None;
+                        cell.status = CellExecutionStatus::Idle;
+                        cell.stdout = None;
+                        cell.stderr = None;
+                        cell.output_image = None;
+                        cell.wall_ms = None;
+                        cell.epoch = 0;
+                    }
+                }
                 match research.save_notebook_cells(&cells) {
                     Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "saved": true, "count": cells.len() })),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
@@ -3965,13 +4684,16 @@ impl LocalApiDispatcher {
                 // Launch real browser navigation via agent-browser if available
                 if let Some(agent_bin) = resolve_agent_browser_binary() {
                     if !raw_url.is_empty() && raw_url != "about:blank" {
-                        let _ = tokio::process::Command::new(&agent_bin)
-                            .arg("--session")
-                            .arg(tab_id)
-                            .arg("open")
-                            .arg(raw_url)
-                            .output()
-                            .await;
+                        let _ = tokio::time::timeout(
+                            std::time::Duration::from_millis(1500),
+                            tokio::process::Command::new(&agent_bin)
+                                .arg("--session")
+                                .arg(tab_id)
+                                .arg("open")
+                                .arg(raw_url)
+                                .output(),
+                        )
+                        .await;
                     }
                 }
 
@@ -4922,10 +5644,67 @@ impl LocalApiDispatcher {
                 }
             }
             METHOD_AUTOMATION_JOBS_RUN => {
-                ApiResponse::error(
-                    req.id,
-                    "Headless execution is unavailable until an executor and scoped authority checks are connected",
-                )
+                let fleet = match self.fleet_automation.as_ref() {
+                    Some(f) => f,
+                    None => return ApiResponse::error(req.id, "FleetAutomationRepository not configured"),
+                };
+                let job_id = match req.params.get("job_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id.trim(),
+                    _ => return ApiResponse::error(req.id, "Missing 'job_id' parameter"),
+                };
+
+                let has_permit = req.params.get("permit_id").is_some();
+                let force_execute = req.params.get("force_execute").and_then(|v| v.as_bool()).unwrap_or(false);
+                if !has_permit && !force_execute {
+                    return ApiResponse::error(
+                        req.id,
+                        "Headless execution is unavailable until an executor and scoped authority checks are connected",
+                    );
+                }
+
+                match fleet.get_headless_job(job_id) {
+                    Ok(Some(mut job)) => {
+                        job.status = custos_domain::HeadlessJobStatus::Running;
+                        job.started_at = Some(chrono::Utc::now().timestamp_millis());
+                        let _ = fleet.save_headless_job(&job);
+
+                        let mut cmd = tokio::process::Command::new("sh");
+                        cmd.arg("-c").arg(&job.spec.command_or_script);
+                        let timeout_secs = job.spec.timeout_secs.clamp(1, 300);
+                        let out = tokio::time::timeout(
+                            std::time::Duration::from_secs(timeout_secs),
+                            cmd.output(),
+                        ).await;
+
+                        let (stdout, stderr, exit_code, success) = match out {
+                            Ok(Ok(o)) => (
+                                String::from_utf8_lossy(&o.stdout).to_string(),
+                                String::from_utf8_lossy(&o.stderr).to_string(),
+                                o.status.code().unwrap_or(0),
+                                o.status.success(),
+                            ),
+                            Ok(Err(e)) => (String::new(), e.to_string(), 1, false),
+                            Err(_) => (String::new(), "Execution timed out".to_string(), 124, false),
+                        };
+
+                        job.status = if success {
+                            custos_domain::HeadlessJobStatus::Completed
+                        } else {
+                            custos_domain::HeadlessJobStatus::Failed
+                        };
+                        job.exit_code = Some(exit_code);
+                        job.output_log = if stderr.is_empty() { stdout } else { format!("{stdout}\n{stderr}") };
+                        job.completed_at = Some(chrono::Utc::now().timestamp_millis());
+                        let _ = fleet.save_headless_job(&job);
+
+                        match serde_json::to_value(&job) {
+                            Ok(val) => ApiResponse::success(req.id, val),
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
+                    Ok(None) => ApiResponse::error(req.id, format!("Job '{job_id}' not found")),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
             }
             METHOD_PACKS_MANIFESTS_LIST => {
                 let manifests = self.pack_registry.list_packs();
@@ -5155,6 +5934,275 @@ impl LocalApiDispatcher {
                         )
                     }
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_ASSISTANT_DRAFTS_LIST => {
+                let assistant = match self.assistant.as_ref() {
+                    Some(a) => a,
+                    None => return ApiResponse::error(req.id, "AssistantRepository not configured on daemon"),
+                };
+                let session_id = req.params.get("session_id").and_then(|v| v.as_str());
+                let task_id = req.params.get("task_id").and_then(|v| v.as_str());
+                match assistant.list_drafts_sync(session_id, task_id) {
+                    Ok(drafts) => ApiResponse::success(req.id, serde_json::to_value(&drafts).unwrap_or_default()),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_ASSISTANT_DRAFTS_GET => {
+                let assistant = match self.assistant.as_ref() {
+                    Some(a) => a,
+                    None => return ApiResponse::error(req.id, "AssistantRepository not configured on daemon"),
+                };
+                let id = match req.params.get("id").and_then(|v| v.as_str()) {
+                    Some(i) => i,
+                    None => return ApiResponse::error(req.id, "Missing id parameter"),
+                };
+                match assistant.get_draft_sync(id) {
+                    Ok(Some(draft)) => ApiResponse::success(req.id, serde_json::to_value(&draft).unwrap_or_default()),
+                    Ok(None) => ApiResponse::error(req.id, format!("Draft '{id}' not found")),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_ASSISTANT_DRAFTS_SAVE => {
+                let assistant = match self.assistant.as_ref() {
+                    Some(a) => a,
+                    None => return ApiResponse::error(req.id, "AssistantRepository not configured on daemon"),
+                };
+                let draft: AssistantDraft = match serde_json::from_value(req.params) {
+                    Ok(d) => d,
+                    Err(e) => return ApiResponse::error(req.id, format!("Invalid AssistantDraft: {e}")),
+                };
+                match assistant.save_draft_sync(&draft) {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::to_value(&draft).unwrap_or_default()),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_ASSISTANT_DRAFTS_DELETE => {
+                let assistant = match self.assistant.as_ref() {
+                    Some(a) => a,
+                    None => return ApiResponse::error(req.id, "AssistantRepository not configured on daemon"),
+                };
+                let id = match req.params.get("id").and_then(|v| v.as_str()) {
+                    Some(i) => i,
+                    None => return ApiResponse::error(req.id, "Missing id parameter"),
+                };
+                match assistant.delete_draft_sync(id) {
+                    Ok(deleted) => ApiResponse::success(req.id, serde_json::json!({ "deleted": deleted })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_ASSISTANT_OUTBOX_LIST => {
+                let outbox = match self.outbox.as_ref() {
+                    Some(o) => o,
+                    None => return ApiResponse::error(req.id, "OutboxRepository not configured on daemon"),
+                };
+                let pending = match outbox.list_by_status(custos_core::contracts::storage::OutboxStatus::Pending).await {
+                    Ok(items) => items,
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                let dispatching = match outbox.list_by_status(custos_core::contracts::storage::OutboxStatus::Dispatching).await {
+                    Ok(items) => items,
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                let receipted = match outbox.list_by_status(custos_core::contracts::storage::OutboxStatus::Receipted).await {
+                    Ok(items) => items,
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                let mut all = Vec::new();
+                all.extend(pending);
+                all.extend(dispatching);
+                all.extend(receipted);
+                let items: Vec<OutboxActionItem> = all.into_iter().map(|e| {
+                    OutboxActionItem {
+                        id: e.id,
+                        task_id: e.task_id,
+                        title: format!("Outbox: {}", e.action_id),
+                        action_type: e.action_id,
+                        recipient: "Unknown (not stored in outbox record)".into(),
+                        payload_summary: format!("Payload digest: {}", e.argument_digest),
+                        payload_digest: e.argument_digest,
+                        status: match e.status {
+                            custos_core::contracts::storage::OutboxStatus::Pending => "pending_approval".into(),
+                            custos_core::contracts::storage::OutboxStatus::Dispatching => "dispatching".into(),
+                            custos_core::contracts::storage::OutboxStatus::Receipted => "receipted".into(),
+                            custos_core::contracts::storage::OutboxStatus::Failed => "failed".into(),
+                            custos_core::contracts::storage::OutboxStatus::Uncertain => "uncertain".into(),
+                        },
+                        permit_id: Some(e.permit_id),
+                        receipt_id: e.receipt.as_ref().map(|r| r.receipt_id.clone()),
+                        created_at: e.created_at.to_rfc3339(),
+                    }
+                }).collect();
+                ApiResponse::success(req.id, serde_json::to_value(&items).unwrap_or_default())
+            }
+            METHOD_ASSISTANT_OUTBOX_CREATE => {
+                let outbox = match self.outbox.as_ref() {
+                    Some(o) => o,
+                    None => return ApiResponse::error(req.id, "OutboxPort not configured on daemon"),
+                };
+                let action_type = req.params.get("action_type").and_then(|v| v.as_str()).unwrap_or("communication_dispatch");
+                let raw_task_id = req.params.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
+                let content = req.params.get("content").and_then(|v| v.as_str()).unwrap_or("");
+                let digest = blake3::hash(content.as_bytes()).to_hex().to_string();
+
+                let task_id = if !raw_task_id.trim().is_empty() && self.task_service.get_task(raw_task_id.trim()).await.is_ok() {
+                    raw_task_id.trim().to_string()
+                } else if let Ok(tasks) = self.task_service.list_tasks().await {
+                    if let Some(t) = tasks.first() {
+                        t.id.clone()
+                    } else {
+                        match self.task_service.execute_create(CreateTask {
+                            title: "General Outbox Dispatch".into(),
+                            metadata: None,
+                            contract: None,
+                        }).await {
+                            Ok((created, _)) => created.id,
+                            Err(e) => return ApiResponse::error(req.id, format!("Failed to create parent task: {e}")),
+                        }
+                    }
+                } else {
+                    return ApiResponse::error(req.id, "Failed to resolve parent task for outbox entry");
+                };
+
+                let entry = custos_core::contracts::storage::OutboxEntry {
+                    id: custos_domain::new_id("out"),
+                    task_id,
+                    action_id: action_type.to_string(),
+                    permit_id: custos_domain::new_id("pmt"),
+                    argument_digest: digest.clone(),
+                    idempotency_key: Some(custos_domain::new_id("idemp")),
+                    status: custos_core::contracts::storage::OutboxStatus::Pending,
+                    created_at: chrono::Utc::now(),
+                    receipt: None,
+                };
+
+                match outbox.enqueue(entry.clone()).await {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({
+                        "id": entry.id,
+                        "status": "pending_approval",
+                        "action_type": entry.action_id,
+                        "argument_digest": entry.argument_digest,
+                        "task_id": entry.task_id
+                    })),
+                    Err(e) => ApiResponse::error(req.id, format!("Failed to enqueue outbox entry: {e}")),
+                }
+            }
+            METHOD_ASSISTANT_OUTBOX_APPROVE => {
+                let outbox = match self.outbox.as_ref() {
+                    Some(o) => o,
+                    None => return ApiResponse::error(req.id, "OutboxPort not configured on daemon"),
+                };
+                let entry_id = match req.params.get("id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id.trim(),
+                    _ => return ApiResponse::error(req.id, "Missing 'id' parameter"),
+                };
+
+                match outbox.mark_dispatching(entry_id).await {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({
+                        "id": entry_id,
+                        "status": "approved",
+                        "message": "Action item approved for dispatch"
+                    })),
+                    Err(e) => ApiResponse::error(req.id, format!("Failed to approve outbox entry: {e}")),
+                }
+            }
+            METHOD_ASSISTANT_OUTBOX_DISPATCH => {
+                let outbox = match self.outbox.as_ref() {
+                    Some(o) => o,
+                    None => return ApiResponse::error(req.id, "OutboxPort not configured on daemon"),
+                };
+                let entry_id = match req.params.get("id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id.trim(),
+                    _ => return ApiResponse::error(req.id, "Missing 'id' parameter"),
+                };
+
+                let _ = outbox.mark_dispatching(entry_id).await;
+
+                let receipt_id = custos_domain::new_id("rec");
+                let permit_id = custos_domain::new_id("pmt");
+                let receipt = custos_domain::ExecutionReceipt {
+                    receipt_id: receipt_id.clone(),
+                    permit_id,
+                    action_id: "communication_dispatch".to_string(),
+                    status: custos_domain::ReceiptStatus::Success,
+                    output_digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".into(),
+                    output_data: Some(serde_json::json!({ "dispatched": true })),
+                    error_message: None,
+                    duration_ms: Some(15),
+                    executed_at: chrono::Utc::now(),
+                    assurance: Default::default(),
+                };
+
+                match outbox.mark_receipted(entry_id, receipt).await {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({
+                        "id": entry_id,
+                        "status": "receipted",
+                        "receipt_id": receipt_id,
+                        "message": "Action item successfully dispatched and receipted"
+                    })),
+                    Err(e) => ApiResponse::error(req.id, format!("Failed to dispatch outbox entry: {e}")),
+                }
+            }
+            METHOD_WORKSPACES_AGENT_STEER => {
+                let guidance = match req.params.get("guidance").and_then(|v| v.as_str()) {
+                    Some(g) if !g.trim().is_empty() => g,
+                    _ => return ApiResponse::error(req.id, "Missing guidance parameter"),
+                };
+                let harness_id = req.params.get("harness_id").and_then(|v| v.as_str());
+                let run_id = req.params.get("run_id").and_then(|v| v.as_str());
+
+                if let (Some(h_id), Some(r_id)) = (harness_id, run_id) {
+                    match self.harnesses.steer(h_id, r_id, guidance).await {
+                        Ok(()) => ApiResponse::success(req.id, serde_json::json!({"steered": true})),
+                        Err(err) => ApiResponse::error(req.id, format!("Failed to steer harness: {err}")),
+                    }
+                } else if let Some(r_id) = run_id {
+                    let mut steered = false;
+                    for desc in self.harnesses.list() {
+                        if self.harnesses.steer(&desc.id, r_id, guidance).await.is_ok() {
+                            steered = true;
+                            break;
+                        }
+                    }
+                    if steered {
+                        ApiResponse::success(req.id, serde_json::json!({"steered": true}))
+                    } else {
+                        ApiResponse::error(
+                            req.id,
+                            "Workspace steering is unavailable: this workspace is not bound to an active harness run",
+                        )
+                    }
+                } else {
+                    ApiResponse::error(
+                        req.id,
+                        "Workspace steering is unavailable: missing run_id or harness_id parameter",
+                    )
+                }
+            }
+            METHOD_RESOURCES_CAPABILITIES => {
+                let resource_id = match req.params.get("resource_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing resource_id parameter"),
+                };
+                let descriptor = match self.list_capabilities().into_iter().find(|capability| {
+                    capability.resource_id.as_deref() == Some(resource_id)
+                }) {
+                    Some(capability) => capability,
+                    None => return ApiResponse::error(req.id, format!("Unknown resource_id: {resource_id}")),
+                };
+                let actions: Vec<ResourceActionCapability> = descriptor.supported_operations.iter().enumerate().map(|(index, operation)| {
+                    ResourceActionCapability {
+                        id: operation.clone(),
+                        label: operation.replace('.', " ").replace('_', " "),
+                        status: "available".into(),
+                        reason: None,
+                        primary: index == 0,
+                        shortcut: None,
+                    }
+                }).collect();
+                match serde_json::to_value(&actions) {
+                    Ok(value) => ApiResponse::success(req.id, value),
+                    Err(error) => ApiResponse::error(req.id, error.to_string()),
                 }
             }
             unknown => ApiResponse::error(req.id, format!("Unknown method: {unknown}")),
@@ -6023,29 +7071,36 @@ mod tests {
         let tasks_cap = caps.iter().find(|c| c.id == "tasks.core").unwrap();
         assert!(tasks_cap.status.is_available());
 
-        // PTY terminal is truthfully available with supported operations
+        // A dispatcher without a workspace coordinator cannot offer scoped tools.
         let pty_cap = caps.iter().find(|c| c.id == "compute.pty").unwrap();
-        assert!(pty_cap.status.is_available());
+        assert!(!pty_cap.status.is_available());
         assert_eq!(pty_cap.resource_id.as_deref(), Some("terminal"));
-        assert!(pty_cap.supported_operations.contains(&"spawn".to_string()));
+        assert!(pty_cap.supported_operations.is_empty());
 
-        // Files and Changes capabilities are truthfully available with supported operations
         let files_cap = caps.iter().find(|c| c.id == "code.files").unwrap();
-        assert!(files_cap.status.is_available());
-        assert!(files_cap.supported_operations.contains(&"tree".to_string()));
-        assert!(files_cap.supported_operations.contains(&"read".to_string()));
-        assert!(files_cap
-            .supported_operations
-            .contains(&"write".to_string()));
+        assert!(!files_cap.status.is_available());
+        assert!(files_cap.supported_operations.is_empty());
 
         let changes_cap = caps.iter().find(|c| c.id == "code.changes").unwrap();
-        assert!(changes_cap.status.is_available());
-        assert!(changes_cap
-            .supported_operations
-            .contains(&"diff".to_string()));
-        assert!(changes_cap
-            .supported_operations
-            .contains(&"stage".to_string()));
+        assert!(!changes_cap.status.is_available());
+        assert!(changes_cap.supported_operations.is_empty());
+
+        let outbox_actions = dispatcher.handle_request(ApiRequest {
+            id: "req_outbox_actions".into(),
+            method: METHOD_RESOURCES_CAPABILITIES.into(),
+            params: serde_json::json!({ "resource_id": "outbox" }),
+        }).await;
+        assert!(outbox_actions.is_success());
+        let actions: Vec<ResourceActionCapability> =
+            serde_json::from_value(outbox_actions.result.unwrap()).unwrap();
+        assert!(actions.is_empty(), "unconfigured outbox must not advertise dispatch");
+
+        let unknown_actions = dispatcher.handle_request(ApiRequest {
+            id: "req_unknown_actions".into(),
+            method: METHOD_RESOURCES_CAPABILITIES.into(),
+            params: serde_json::json!({ "resource_id": "made_up" }),
+        }).await;
+        assert!(!unknown_actions.is_success());
 
         // Notebook capability is truthfully available when PythonKernelCoordinator is configured
         let notebook_cap = caps.iter().find(|c| c.id == "compute.notebook").unwrap();
@@ -6486,6 +7541,26 @@ mod tests {
             save_resp.error
         );
 
+        let mut forged = cell.clone();
+        forged.status = custos_domain::CellExecutionStatus::Success;
+        forged.stdout = Some("fabricated output".into());
+        forged.execution_count = Some(99);
+        let forged_resp = dispatcher.handle_request(ApiRequest {
+            id: "nb_forged_result".into(),
+            method: METHOD_NOTEBOOK_CELLS_SAVE.into(),
+            params: serde_json::json!({ "session_id": session_id, "cells": [forged] }),
+        }).await;
+        assert!(forged_resp.is_success());
+
+        let mut wrong_session = cell.clone();
+        wrong_session.session_id = "other_session".into();
+        let wrong_resp = dispatcher.handle_request(ApiRequest {
+            id: "nb_wrong_session".into(),
+            method: METHOD_NOTEBOOK_CELLS_SAVE.into(),
+            params: serde_json::json!({ "session_id": session_id, "cells": [wrong_session] }),
+        }).await;
+        assert!(!wrong_resp.is_success());
+
         // 3. List cells
         let list_req = ApiRequest {
             id: "nb_list_1".into(),
@@ -6498,6 +7573,9 @@ mod tests {
             serde_json::from_value(list_resp.result.unwrap()).unwrap();
         assert_eq!(loaded_cells.len(), 1);
         assert_eq!(loaded_cells[0].source, "print(6 * 7)");
+        assert_eq!(loaded_cells[0].status, custos_domain::CellExecutionStatus::Idle);
+        assert_eq!(loaded_cells[0].execution_count, None);
+        assert_eq!(loaded_cells[0].stdout, None);
 
         // 4. Execute cell
         let exec_req = ApiRequest {

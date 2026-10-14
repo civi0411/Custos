@@ -233,9 +233,102 @@ export interface ExecutionWorkspace {
   baseCommitHash?: string | null;
   dirty_manifest?: DirtyManifest | null;
   dirtyManifest?: DirtyManifest | null;
+  running_agent_id?: string | null;
+  runningAgentId?: string | null;
+  agent_status?: string | null;
+  agentStatus?: string | null;
+  active_branch?: string | null;
+  activeBranch?: string | null;
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
+}
+
+export interface WorkspaceDetectionResult {
+  path: string;
+  root_path: string;
+  name: string;
+  is_git: boolean;
+  branch?: string | null;
+  is_dirty: boolean;
+  dirty_count: number;
+  remote_url?: string | null;
+  project_type: string;
+  is_worktree: boolean;
+}
+
+export interface WorkspaceNode {
+  id: string;
+  name: string;
+  path: string;
+  kind: 'folder' | 'git' | 'ssh';
+  isActive: boolean;
+  branch?: string;
+  isDirty?: boolean;
+  dirtyCount?: number;
+  worktrees?: WorkspaceNode[]; // child worktrees
+}
+
+export interface AssistantDraft {
+  id: string;
+  task_id?: string | null;
+  taskId?: string | null;
+  session_id?: string | null;
+  sessionId?: string | null;
+  title: string;
+  kind: string; // 'email' | 'document' | 'schedule' | 'note'
+  content: string;
+  recipient?: string | null;
+  status: string; // 'draft' | 'approved' | 'archived'
+  payload_lock?: string | null;
+  payloadLock?: string | null;
+  created_at: string;
+  createdAt?: string;
+  updated_at: string;
+  updatedAt?: string;
+}
+
+export interface OutboxActionItem {
+  id: string;
+  task_id: string;
+  taskId?: string;
+  title: string;
+  action_type: string;
+  actionType?: string;
+  recipient: string;
+  payload_summary: string;
+  payloadSummary?: string;
+  payload_digest: string;
+  payloadDigest?: string;
+  status: string; // 'pending_approval' | 'approved' | 'dispatching' | 'receipted' | 'failed' | 'uncertain'
+  permit_id?: string | null;
+  permitId?: string | null;
+  receipt_id?: string | null;
+  receiptId?: string | null;
+  created_at: string;
+  createdAt?: string;
+}
+
+export interface ExecutionReceipt {
+  receipt_id: string;
+  permit_id: string;
+  action_id: string;
+  status: string;
+  output_digest?: string | null;
+  output_data?: Record<string, any> | null;
+  error_message?: string | null;
+  duration_ms: number;
+  executed_at: string;
+  assurance: string;
+}
+
+export interface ResourceActionCapability {
+  id: string;
+  label: string;
+  status: 'available' | 'degraded' | 'unavailable';
+  reason?: string | null;
+  primary: boolean;
+  shortcut?: string | null;
 }
 
 export interface CreateWorkspaceParams {
@@ -495,6 +588,8 @@ export interface HarnessDescriptor {
   binaryPath?: string;
   is_available: boolean;
   isAvailable?: boolean;
+  launch_cmd?: string;
+  launchCmd?: string;
   profile: HarnessProfile;
 }
 

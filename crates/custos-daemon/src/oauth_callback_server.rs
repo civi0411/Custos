@@ -76,7 +76,18 @@ impl OAuthCallbackServer {
     pub fn new(store: Arc<SqliteTaskStore>) -> Self {
         let repo=Arc::new(store.providers().clone());
         #[cfg(test)] let credentials=crate::credential_tests::fake_credentials(repo);
-        #[cfg(not(test))] let credentials=Arc::new(crate::credentials::ProviderCredentials::new(repo,Arc::new(custos_adapters::providers::credential_vault::KeyringCredentialVault)));
+        #[cfg(not(test))]
+        let credentials = {
+            let vault: Arc<dyn custos_core::contracts::credentials::CredentialVault> =
+                if std::env::var("CUSTOS_VAULT_BACKEND").as_deref() == Ok("keyring") {
+                    Arc::new(custos_adapters::providers::credential_vault::KeyringCredentialVault)
+                } else {
+                    Arc::new(custos_adapters::providers::credential_vault::FileCredentialVault::new(
+                        custos_adapters::providers::credential_vault::FileCredentialVault::default_dir(),
+                    ))
+                };
+            Arc::new(crate::credentials::ProviderCredentials::new(repo, vault))
+        };
         Self::with_credentials(credentials)
     }
     pub fn with_credentials(credentials: Arc<crate::credentials::ProviderCredentials>) -> Self {

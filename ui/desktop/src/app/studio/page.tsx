@@ -1,18 +1,24 @@
 import { useState, useEffect, useRef, type SetStateAction } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
-import { type AppWorkspaceMode, AppWorkspaceShell } from '@/components/shell';
-import { type OrcaTab, type ResourceTabsState } from '@/components/views/OrcaTabbedContainer';
+import { type ActiveWorkbench, AppWorkspaceShell } from '@/components/shell';
+import { type OrcaTab, type ResourceTabsState } from '@/components/workbenches/OrcaTabbedContainer';
 import type { Session } from '@/types';
 import { daemonClient } from '@/api/daemon_client';
 
 const MODE_STORAGE_KEY = 'custos.workspace.mode.v2';
 const LAST_SESSION_KEY = 'custos.workspace.last_session_by_lens.v1';
 
-function homeMode(session: Session): AppWorkspaceMode {
+function homeMode(session: Session): ActiveWorkbench {
+  if (!session.taskId && session.openedLenses?.length) {
+    const home = session.openedLenses[0];
+    if (home === 'research') return 'research';
+    if (home === 'code') return 'engineering';
+    return 'copilot';
+  }
   if (session.pack === 'research') return 'research';
-  if (session.pack === 'engineering' || session.pack === 'coding') return 'code';
-  return 'chat';
+  if (session.pack === 'engineering' || session.pack === 'coding') return 'engineering';
+  return 'copilot';
 }
 
 export function StudioPage() {
@@ -23,6 +29,11 @@ export function StudioPage() {
     currentSessions,
     activeSessionId,
     setActiveSessionId,
+    workspaces,
+    activeWorkspaceId,
+    setActiveWorkspaceId,
+    activeWorkspace,
+    refreshWorkspaces,
     setIsNewSessionOpen,
     handleSendMessage,
     handleClearHistory,
@@ -32,6 +43,8 @@ export function StudioPage() {
     handleCopyDiff,
     showToast,
     openSettings,
+    activeWorkbench: mode,
+    setActiveWorkbench: setMode,
   } = useAppContext();
 
   const { sessionId } = useParams<{ sessionId?: string }>();
@@ -44,37 +57,40 @@ export function StudioPage() {
     } catch { return {}; }
   });
 
-  // Each lens remembers its own conversation; the canonical journal still belongs to the daemon session.
-  const [mode, setMode] = useState<AppWorkspaceMode>(() => {
-    try {
-      const saved = localStorage.getItem(MODE_STORAGE_KEY);
-      if (saved === 'chat' || saved === 'code' || saved === 'research') return saved;
-    } catch { }
-    return 'code'; // Default to Code mode as showcased in screenshot 2
-  });
-
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isWebTabOpen, setIsWebTabOpen] = useState(false);
+  const [isWebTabOpen, setIsWebTabOpen] = useState(true);
   const [isWebTabExpanded, setIsWebTabExpanded] = useState(false);
   const [tabStates, setTabStates] = useState<Record<string, { tabs: OrcaTab[]; activeTabId: string }>>({});
   const tabScope = `${currentProject}:${activeSessionId || 'no-session'}:${mode}`;
 
-  const getDefaultTabForMode = (m: AppWorkspaceMode): { tabs: OrcaTab[]; activeTabId: string } => {
-    if (m === 'code') {
+  const getDefaultTabForMode = (m: ActiveWorkbench): { tabs: OrcaTab[]; activeTabId: string } => {
+    if (m === 'engineering') {
       return {
-        tabs: [{ id: 'files', type: 'files', title: 'Files', url: 'custos://resource/files' }],
+        tabs: [
+          { id: 'files', type: 'files', title: 'Files & Changes', url: 'custos://resource/files' },
+          { id: 'activity', type: 'activity', title: 'Activity', url: 'custos://resource/activity' },
+        ],
         activeTabId: 'files',
       };
     }
     if (m === 'research') {
       return {
-        tabs: [{ id: 'literature', type: 'literature', title: 'Sources', url: 'custos://resource/literature' }],
+        tabs: [
+          { id: 'literature', type: 'literature', title: 'Sources', url: 'custos://resource/literature' },
+          { id: 'findings', type: 'findings', title: 'Findings', url: 'custos://resource/findings' },
+          { id: 'lab', type: 'lab', title: 'Lab', url: 'custos://resource/lab' },
+        ],
         activeTabId: 'literature',
       };
     }
+    // Copilot: Drafts, Outbox, Notes
     return {
-      tabs: [{ id: 'notes', type: 'notes', title: 'Notes', url: 'custos://resource/notes' }],
-      activeTabId: 'notes',
+      tabs: [
+        { id: 'drafts', type: 'drafts', title: 'Drafts', url: 'custos://resource/drafts' },
+        { id: 'outbox', type: 'outbox', title: 'Outbox', url: 'custos://resource/outbox' },
+        { id: 'notes', type: 'notes', title: 'Notes', url: 'custos://resource/notes' },
+      ],
+      activeTabId: 'drafts',
     };
   };
 
@@ -108,8 +124,8 @@ export function StudioPage() {
     try { localStorage.setItem(LAST_SESSION_KEY, JSON.stringify(lastSessionByLens)); } catch { }
   }, [lastSessionByLens]);
 
-  const sessionsForMode = (targetMode: AppWorkspaceMode) => currentSessions.filter((session) =>
-    homeMode(session) === targetMode || session.openedLenses?.includes(targetMode) || sessionLenses[session.id]?.includes(targetMode)
+  const sessionsForMode = (targetMode: ActiveWorkbench) => currentSessions.filter((session) =>
+    homeMode(session) === targetMode || session.openedLenses?.includes(targetMode as any) || sessionLenses[session.id]?.includes(targetMode)
   );
 
   const selectSession = (id: string) => {
@@ -117,21 +133,37 @@ export function StudioPage() {
     setLastSessionByLens((previous) => ({ ...previous, [`${currentProject}:${mode}`]: id }));
   };
 
-  const switchMode = (targetMode: AppWorkspaceMode) => {
+  const switchMode = (targetMode: ActiveWorkbench) => {
     const candidates = sessionsForMode(targetMode);
     const remembered = lastSessionByLens[`${currentProject}:${targetMode}`];
     setMode(targetMode);
-    setActiveSessionId(candidates.some((session) => session.id === remembered)
-      ? remembered
-      : candidates[0]?.id || '');
+
+    let nextSessionId = '';
+    if (candidates.some((session) => session.id === remembered)) {
+      nextSessionId = remembered;
+    } else if (candidates.length > 0) {
+      nextSessionId = candidates[0].id;
+    }
+
+    setActiveSessionId(nextSessionId);
+    if (nextSessionId) {
+      setLastSessionByLens((previous) => ({ ...previous, [`${currentProject}:${targetMode}`]: nextSessionId }));
+    }
+
+    // Copilot starts in spacious Chat mode (right pane closed); Engineering & Research open right pane
+    if (targetMode === 'copilot') {
+      setIsWebTabOpen(false);
+    } else {
+      setIsWebTabOpen(true);
+    }
   };
 
-  const openFullChatIn = async (targetMode: AppWorkspaceMode, sourceId = activeSessionId) => {
+  const openFullChatIn = async (targetMode: ActiveWorkbench, sourceId = activeSessionId) => {
     const source = currentSessions.find((session) => session.id === sourceId);
     if (!source) return;
     try {
       await daemonClient.openSessionInLens(source.sessionId || source.id,
-        targetMode === 'chat' ? 'assistant' : targetMode === 'code' ? 'coding' : 'research');
+        targetMode === 'copilot' ? 'assistant' : targetMode === 'engineering' ? 'coding' : 'research');
     } catch (error) {
       showToast(`Could not save workbench opening: ${String(error)}`);
       return;
@@ -150,7 +182,7 @@ export function StudioPage() {
     if (sessionId && routeSessionId.current !== sessionId && currentSessions.some((item) => item.id === sessionId)) {
       routeSessionId.current = sessionId;
       const routed = currentSessions.find((item) => item.id === sessionId);
-      if (routed && homeMode(routed) !== mode && !routed.openedLenses?.includes(mode) && !sessionLenses[routed.id]?.includes(mode)) {
+      if (routed && homeMode(routed) !== mode && !routed.openedLenses?.includes(mode as any) && !sessionLenses[routed.id]?.includes(mode)) {
         setMode(homeMode(routed));
       }
       setActiveSessionId(sessionId);
@@ -165,10 +197,11 @@ export function StudioPage() {
       if (target) setActiveSessionId(target.id);
       return;
     }
-    if (!currentSessions.some((session) => session.id === activeSessionId)) return;
-    if (visible.some((session) => session.id === activeSessionId)) return;
-    const active = currentSessions.find((session) => session.id === activeSessionId);
-    if (active) setMode(homeMode(active));
+    if (!visible.some((session) => session.id === activeSessionId)) {
+      const remembered = lastSessionByLens[`${currentProject}:${mode}`];
+      const target = visible.find((session) => session.id === remembered) || visible[0];
+      setActiveSessionId(target ? target.id : '');
+    }
   }, [activeSessionId, currentSessions, currentProject, mode, sessionLenses, lastSessionByLens]);
 
   // Global Keyboard Shortcuts
@@ -177,10 +210,10 @@ export function StudioPage() {
       if (!(e.metaKey || e.ctrlKey)) return;
       if (e.key === '1') {
         e.preventDefault();
-        switchMode('chat');
+        switchMode('copilot');
       } else if (e.key === '2') {
         e.preventDefault();
-        switchMode('code');
+        switchMode('engineering');
       } else if (e.key === '3') {
         e.preventDefault();
         switchMode('research');
@@ -197,6 +230,9 @@ export function StudioPage() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [showToast, currentProject, currentSessions, sessionLenses, lastSessionByLens]);
 
+  const activeModeSessions = sessionsForMode(mode);
+  const displaySessions = activeModeSessions;
+
   return (
     <div className="h-full w-full bg-canvas overflow-hidden select-none">
       <AppWorkspaceShell
@@ -212,7 +248,12 @@ export function StudioPage() {
           const remembered = lastSessionByLens[`${p}:${mode}`];
           setActiveSessionId(available.find((session) => session.id === remembered)?.id || available[0]?.id || '');
         }}
-        sessions={sessionsForMode(mode)}
+        activeWorkspaceId={activeWorkspaceId}
+        onSelectWorkspace={setActiveWorkspaceId}
+        activeWorkspace={activeWorkspace}
+        workspaces={workspaces}
+        refreshWorkspaces={refreshWorkspaces}
+        sessions={displaySessions}
         allSessions={currentSessions}
         activeSessionId={activeSessionId}
         onSelectSession={selectSession}
@@ -220,11 +261,17 @@ export function StudioPage() {
         onOpenSessionHere={(id) => void openFullChatIn(mode, id)}
         onNewSession={() => setIsNewSessionOpen(true)}
         onSendMessage={(message) => {
-          if (!activeSessionId || !sessionsForMode(mode).some((session) => session.id === activeSessionId)) {
-            showToast('Create or select a conversation in this workbench first.');
+          if (!activeSessionId) {
+            showToast('Select or create a conversation first.');
             return;
           }
-          void handleSendMessage(message, mode === 'code' ? 'coding' : mode === 'chat' ? 'assistant' : 'research');
+          if (activeSessionId) {
+            setSessionLenses((previous) => ({
+              ...previous,
+              [activeSessionId]: Array.from(new Set([...(previous[activeSessionId] || []), mode])),
+            }));
+          }
+          void handleSendMessage(message, mode === 'engineering' ? 'coding' : mode === 'copilot' ? 'assistant' : 'research');
         }}
         onClearHistory={handleClearHistory}
         onDeleteConversation={handleDeleteConversation}

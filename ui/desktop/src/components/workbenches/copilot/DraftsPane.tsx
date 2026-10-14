@@ -1,0 +1,323 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  FileText,
+  Lock,
+  CheckCircle2,
+  Trash2,
+  Copy,
+  Plus,
+  MoreVertical,
+  Edit3,
+} from 'lucide-react';
+import { daemonClient } from '@/api/daemon_client';
+import type { AssistantDraft } from '@/types/domain';
+import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
+
+export interface DraftsPaneProps {
+  sessionId?: string;
+  onShowToast?: (msg: string) => void;
+  onOpenTab?: (id: OrcaTabId) => void;
+}
+
+export const DraftsPane: React.FC<DraftsPaneProps> = ({
+  sessionId,
+  onShowToast,
+}) => {
+  const [drafts, setDrafts] = useState<AssistantDraft[]>([]);
+  const [selectedDraftId, setSelectedDraftId] = useState<string | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState<string>('');
+  const [editingTitle, setEditingTitle] = useState<string>('');
+  const [saving, setSaving] = useState<boolean>(false);
+  const [showSecondaryMenu, setShowSecondaryMenu] = useState<boolean>(false);
+
+  const loadDrafts = useCallback(async () => {
+    try {
+      setLoading(true);
+      setLoadError(null);
+      const list = await daemonClient.listDrafts(sessionId);
+      setDrafts(list);
+      if (list.length > 0 && !selectedDraftId) {
+        setSelectedDraftId(list[0].id);
+        setEditingTitle(list[0].title);
+        setEditingContent(list[0].content);
+      }
+    } catch (err: any) {
+      setLoadError(err?.message || String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId, selectedDraftId]);
+
+  useEffect(() => {
+    loadDrafts();
+  }, [loadDrafts]);
+
+  const activeDraft = drafts.find((d) => d.id === selectedDraftId) || drafts[0];
+
+  useEffect(() => {
+    if (activeDraft) {
+      setEditingTitle(activeDraft.title);
+      setEditingContent(activeDraft.content);
+    }
+  }, [activeDraft]);
+
+  const isLocked = Boolean(activeDraft?.payload_lock);
+
+  // Approval marks this draft and enqueues a durable outbox item for human-governed dispatch.
+  const handlePrimaryAction = async () => {
+    if (!activeDraft) return;
+    setSaving(true);
+    try {
+      const updated = await daemonClient.saveDraft({
+        ...activeDraft,
+        title: editingTitle,
+        content: editingContent,
+        status: 'approved',
+        payload_lock: 'locked',
+      });
+      setDrafts((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+
+      try {
+        await daemonClient.createOutbox({
+          action_type: activeDraft.kind === 'email' ? 'email_dispatch' : 'document_dispatch',
+          task_id: sessionId || 'copilot',
+          content: `${editingTitle}\n\n${editingContent}`,
+        });
+        onShowToast?.(`Draft "${updated.title}" approved and enqueued into Outbox for dispatch.`);
+      } catch {
+        onShowToast?.(`Draft "${updated.title}" approved and locked.`);
+      }
+    } catch (err: any) {
+      onShowToast?.(`Approval failed: ${err?.message || err}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (!activeDraft) return;
+    setShowSecondaryMenu(false);
+    setSaving(true);
+    try {
+      const updated = await daemonClient.saveDraft({
+        ...activeDraft,
+        title: editingTitle,
+        content: editingContent,
+      });
+      setDrafts((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+      onShowToast?.('Draft saved.');
+    } catch (err: any) {
+      onShowToast?.(`Save failed: ${err?.message || err}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCreateDraft = async () => {
+    setShowSecondaryMenu(false);
+    try {
+      const created = await daemonClient.saveDraft({
+        title: 'New Communication Draft',
+        content: 'Hi Team,\n\nHere is the update regarding our latest progress...',
+        kind: 'email',
+        session_id: sessionId,
+      });
+      setDrafts((prev) => [created, ...prev]);
+      setSelectedDraftId(created.id);
+      onShowToast?.('Created new draft.');
+    } catch (err: any) {
+      onShowToast?.(`Create failed: ${err?.message || err}`);
+    }
+  };
+
+  const handleDeleteDraft = async () => {
+    if (!activeDraft) return;
+    setShowSecondaryMenu(false);
+    if (!confirm(`Delete draft "${activeDraft.title}"?`)) return;
+    try {
+      await daemonClient.deleteDraft(activeDraft.id);
+      setDrafts((prev) => prev.filter((d) => d.id !== activeDraft.id));
+      setSelectedDraftId(null);
+      onShowToast?.('Draft deleted.');
+    } catch (err: any) {
+      onShowToast?.(`Delete failed: ${err?.message || err}`);
+    }
+  };
+
+  const handleCopyContent = () => {
+    setShowSecondaryMenu(false);
+    if (editingContent) {
+      navigator.clipboard.writeText(editingContent);
+      onShowToast?.('Copied draft content to clipboard.');
+    }
+  };
+
+  return (
+    <div className="flex h-full flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
+      {/* Header */}
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-3 bg-[var(--color-surface-1)]/50">
+        <div className="flex items-center gap-2">
+          <FileText className="h-4 w-4 text-[var(--color-fg-muted)] shrink-0" />
+          <span className="text-xs font-semibold">Drafts</span>
+          <span className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-fg-subtle)]">
+            {drafts.length} items
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {/* Local draft review; outbound action is a separate governed flow. */}
+          <button
+            type="button"
+            disabled={!activeDraft || saving}
+            onClick={handlePrimaryAction}
+            className="flex items-center gap-1.5 rounded bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span>Review & lock</span>
+          </button>
+
+          {/* Secondary Actions in ··· Menu */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowSecondaryMenu(!showSecondaryMenu)}
+              className="flex h-7 w-7 items-center justify-center rounded border border-[var(--color-border-subtle)] hover:bg-[var(--color-surface-2)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] transition"
+              title="More actions"
+            >
+              <MoreVertical className="h-3.5 w-3.5" />
+            </button>
+
+            {showSecondaryMenu && (
+              <div
+                className="absolute right-0 top-8 z-50 w-44 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-1)] py-1 shadow-lg text-xs"
+                onMouseLeave={() => setShowSecondaryMenu(false)}
+              >
+                <button
+                  type="button"
+                  onClick={handleCreateDraft}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-emerald-400 hover:bg-[var(--color-surface-2)]"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>New Draft</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveDraft}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-editor-fg)]"
+                >
+                  <Edit3 className="h-3.5 w-3.5" />
+                  <span>Save Draft</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyContent}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-editor-fg)]"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  <span>Copy Content</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteDraft}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-rose-400 hover:bg-[var(--color-surface-2)]"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Delete Draft</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex flex-1 min-h-0">
+        {/* Left Column: Drafts List */}
+        <div className="w-64 shrink-0 border-r border-[var(--color-border-subtle)] overflow-y-auto p-2 space-y-1.5 bg-[var(--color-surface-1)]/20">
+          {loadError && <div role="alert" className="p-3 text-xs text-rose-400">Could not load drafts: {loadError}</div>}
+          {drafts.length === 0 && !loading && !loadError && (
+            <div className="p-4 text-center text-xs text-[var(--color-fg-subtle)]">
+              No drafts yet. Create one from the menu above.
+            </div>
+          )}
+
+          {drafts.map((draft) => {
+            const isSelected = draft.id === selectedDraftId;
+            return (
+              <button
+                key={draft.id}
+                type="button"
+                onClick={() => setSelectedDraftId(draft.id)}
+                className={`w-full text-left rounded-lg p-2.5 transition text-xs border ${
+                  isSelected
+                    ? 'border-emerald-500/40 bg-[var(--color-surface-2)] shadow-xs'
+                    : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] hover:border-[var(--color-border-default)]'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <span className="font-semibold text-xs truncate text-[var(--color-editor-fg)]">
+                    {draft.title}
+                  </span>
+                  {draft.payload_lock ? (
+                    <Lock className="h-3 w-3 text-purple-400 shrink-0" />
+                  ) : null}
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-[var(--color-fg-subtle)]">
+                  <span className="uppercase">{draft.kind}</span>
+                  <span
+                    className={`rounded px-1.5 py-0.2 font-semibold ${
+                      draft.status === 'approved'
+                        ? 'bg-emerald-500/10 text-emerald-400'
+                        : 'bg-zinc-500/10 text-[var(--color-fg-muted)]'
+                    }`}
+                  >
+                    {draft.status}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Right Column: Draft Editor */}
+        <div className="flex-1 overflow-y-auto p-4 flex flex-col space-y-3">
+          {activeDraft ? (
+            <>
+              {/* Title Input */}
+              <input
+                type="text"
+                value={editingTitle}
+                disabled={isLocked}
+                onChange={(e) => setEditingTitle(e.target.value)}
+                className="w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] px-3 py-1.5 text-sm font-semibold text-[var(--color-editor-fg)] focus:outline-none focus:border-emerald-500"
+                placeholder="Draft Title"
+              />
+
+              {/* Content Textarea */}
+              <textarea
+                value={editingContent}
+                disabled={isLocked}
+                onChange={(e) => setEditingContent(e.target.value)}
+                className="flex-1 resize-none rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-3 text-xs leading-relaxed text-[var(--color-editor-fg)] focus:outline-none focus:border-emerald-500"
+                placeholder="Draft content..."
+              />
+
+              {isLocked && (
+                <div className="flex items-center gap-2 rounded bg-purple-500/5 border border-purple-500/20 px-3 py-1.5 text-xs text-purple-300">
+                  <Lock className="h-3.5 w-3.5 shrink-0" />
+                  <span>Payload is locked and verified. Duplicate or create new draft to edit.</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs text-[var(--color-fg-subtle)]">
+              Select or create a draft to start reviewing.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

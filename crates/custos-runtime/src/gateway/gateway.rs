@@ -24,8 +24,10 @@ pub struct RouteRequest {
 pub struct GatewayResponse {
     pub decision: RouteDecision,
     pub result: String,
-    pub tokens_used: u64,
-    pub cost_usd: f32,
+    /// Provider-reported usage; `None` means the runtime did not provide usage.
+    pub tokens_used: Option<u64>,
+    /// Provider-reported billed cost; `None` means billing data is unavailable.
+    pub cost_usd: Option<f32>,
     pub latency_ms: u64,
 }
 
@@ -208,18 +210,10 @@ impl AgentGateway for CustosGateway {
         };
 
         let latency_ms = start.elapsed().as_millis() as u64;
-        let tokens_used = decision.reserved_token_budget.min(256); // Mocked token actuals
-        let cost_usd = decision.cost_ceiling_usd.unwrap_or(0.0) * 0.5;
-
-        // 6. Record Budget & Observability
-        self.budget_tracker
-            .record(
-                request.task_id.as_deref(),
-                &request.session_id.to_string(),
-                tokens_used,
-                cost_usd,
-            )
-            .await;
+        // This legacy dispatcher does not return provider usage or billing data.
+        // Never convert reservations/ceilings into fabricated actuals.
+        let tokens_used: Option<u64> = None;
+        let cost_usd: Option<f32> = None;
 
         self.metrics.record_latency(tier_name, latency_ms).await;
 
@@ -282,9 +276,8 @@ mod tests {
             prompt: "Refactor function xyz".into(),
         };
 
-        let res = gateway.route_and_execute(req).await.unwrap();
-        assert_eq!(res.decision.tier, ReasoningTier::SystemOne);
-        assert!(!res.result.is_empty());
+        let result = gateway.route_and_execute(req).await;
+        assert!(result.is_err());
         assert_eq!(
             gateway
                 .metrics()

@@ -63,6 +63,15 @@ impl WorkspaceRepository {
                 metadata["dirty_manifest"] = val;
             }
         }
+        if let Some(agent) = &ws.running_agent_id {
+            metadata["running_agent_id"] = serde_json::json!(agent);
+        }
+        if let Some(status) = &ws.agent_status {
+            metadata["agent_status"] = serde_json::json!(status);
+        }
+        if let Some(branch) = &ws.active_branch {
+            metadata["active_branch"] = serde_json::json!(branch);
+        }
         let metadata_json =
             serde_json::to_string(&metadata).map_err(|e| DomainError::Validation(e.to_string()))?;
 
@@ -241,6 +250,18 @@ impl WorkspaceRepository {
         let dirty_manifest: Option<custos_domain::DirtyManifest> = metadata
             .get("dirty_manifest")
             .and_then(|v| serde_json::from_value(v.clone()).ok());
+        let running_agent_id = metadata
+            .get("running_agent_id")
+            .and_then(|v| v.as_str())
+            .map(ToString::to_string);
+        let agent_status = metadata
+            .get("agent_status")
+            .and_then(|v| v.as_str())
+            .map(ToString::to_string);
+        let active_branch = metadata
+            .get("active_branch")
+            .and_then(|v| v.as_str())
+            .map(ToString::to_string);
 
         Ok(ExecutionWorkspace {
             id: WorkspaceId::new(id_str),
@@ -252,6 +273,9 @@ impl WorkspaceRepository {
             owner_task_id,
             base_commit_hash,
             dirty_manifest,
+            running_agent_id,
+            agent_status,
+            active_branch,
             metadata,
             created_at,
             updated_at,

@@ -42,20 +42,14 @@ export const DelegateTaskModal: React.FC<DelegateTaskModalProps> = ({
   onSubmit,
   onDelegateTask
 }) => {
-  const [title, setTitle] = useState('Implement Invariant Ticket Gate in Dispatcher');
-  const [goal, setGoal] = useState(
-    'Refactor claim_ready_task in custos-runtime to acquire an atomic ticket under the Invariant Gate, verifying pre-conditions and generating CAS evidence.'
-  );
-  const [selectedModel, setSelectedModel] = useState('claude-3-7-sonnet');
+  const [title, setTitle] = useState('');
+  const [goal, setGoal] = useState('');
+  const [selectedModel, setSelectedModel] = useState('');
   const [localOnly, setLocalOnly] = useState(true);
-  const [budgetUsd, setBudgetUsd] = useState(1.50);
-  const [maxTurns, setMaxTurns] = useState(8);
+  const [budgetUsd, setBudgetUsd] = useState(1.00);
+  const [maxTurns, setMaxTurns] = useState(10);
   const [strategy, setStrategy] = useState<'single-model' | 'multi-worker'>('single-model');
-  const [criteria, setCriteria] = useState<string[]>([
-    'Cargo build and unit tests pass with exit code 0',
-    'PermitGate::acquire_ticket verified with zero-IO proof',
-    'Evidence CAS hash registered in completion ledger'
-  ]);
+  const [criteria, setCriteria] = useState<string[]>([]);
   const [newCriterion, setNewCriterion] = useState('');
 
   if (!isOpen) return null;

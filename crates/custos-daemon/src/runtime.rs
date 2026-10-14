@@ -1,6 +1,6 @@
 use crate::api::LocalApiDispatcher;
 use custos_adapters::harness::{ClaudeCodeHarnessAdapter, HarnessRegistry};
-use custos_adapters::providers::{CredentialResolver, FakeProvider, RouterModelProvider};
+use custos_adapters::providers::{CredentialResolver, RouterModelProvider};
 use custos_adapters::sandbox::SovereignDeveloperAdapter;
 use custos_bridge::BridgeService;
 use custos_core::contracts::harness::AgentRuntimePort;
@@ -56,16 +56,10 @@ impl CustosRuntime {
         });
         let router_provider = Arc::new(RouterModelProvider::new(credential_resolver));
 
-        let provider_name = std::env::var("CUSTOS_PROVIDER").unwrap_or_default();
-        let model: Arc<dyn ModelPort> = match provider_name.to_lowercase().as_str() {
-            "fake" => Arc::new(FakeProvider::new("fake")),
-            // All configured model API connections currently converge through
-            // the router compatibility path. Do not select the fail-closed
-            // Claude/local wrapper types as production implementations merely
-            // because their Rust modules exist. Native coding agents use the
-            // AgentRuntimePort harness registry below, not ModelPort.
-            _ => router_provider.clone(),
-        };
+        // Production inference always goes through the configured provider router.
+        // Deterministic fake providers remain test fixtures and cannot be enabled
+        // by an environment variable in a user daemon.
+        let model: Arc<dyn ModelPort> = router_provider.clone();
 
         Self::bootstrap_with_store_and_model(store, model, credentials)
     }
@@ -84,7 +78,17 @@ impl CustosRuntime {
         #[cfg(test)]
         { crate::credential_tests::fake_credentials(repo) }
         #[cfg(not(test))]
-        { Arc::new(crate::credentials::ProviderCredentials::new(repo, Arc::new(custos_adapters::providers::credential_vault::KeyringCredentialVault))) }
+        {
+            let vault: Arc<dyn custos_core::contracts::credentials::CredentialVault> =
+                if std::env::var("CUSTOS_VAULT_BACKEND").as_deref() == Ok("keyring") {
+                    Arc::new(custos_adapters::providers::credential_vault::KeyringCredentialVault)
+                } else {
+                    Arc::new(custos_adapters::providers::credential_vault::FileCredentialVault::new(
+                        custos_adapters::providers::credential_vault::FileCredentialVault::default_dir(),
+                    ))
+                };
+            Arc::new(crate::credentials::ProviderCredentials::new(repo, vault))
+        }
     }
 
     fn bootstrap_with_store_and_model(
@@ -97,7 +101,6 @@ impl CustosRuntime {
         // Crash Recovery Reconcile (Gate 3): transition any InFlight effects to Uncertain on startup
         store.outbox().reconcile_on_startup()?;
         store.reconcile_runs_on_startup()?;
-        store.seed_canonical_data_if_empty()?;
         let task_service = Arc::new(TaskService::new(store.clone()));
         let session_manager = Arc::new(SessionManager::with_store(store.clone()));
         let bridge_service = Arc::new(BridgeService::new(
@@ -171,6 +174,13 @@ impl CustosRuntime {
             .get("claude-code")
             .unwrap_or_else(|| Arc::new(ClaudeCodeHarnessAdapter::new(workspace_root)));
 
+        let workspace_provider =
+            Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new());
+        let workspace_coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
+            store.clone(),
+            workspace_provider,
+        ));
+
         let workflow = Arc::new(
             TaskRuntime::new()
                 .with_kernel(kernel.clone())
@@ -181,16 +191,10 @@ impl CustosRuntime {
                 .with_effect_ledger(store.clone())
                 .with_run_store(store.clone())
                 .with_session_store(store.clone())
-            .with_journal_manager(session_manager.clone())
-                .with_lease_manager(lease_manager.clone()),
+                .with_journal_manager(session_manager.clone())
+                .with_lease_manager(lease_manager.clone())
+                .with_workspace_coordinator(workspace_coordinator.clone()),
         );
-
-        let workspace_provider =
-            Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new());
-        let workspace_coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
-            store.clone(),
-            workspace_provider,
-        ));
         let terminal_coordinator = Arc::new(custos_runtime::TerminalCoordinator::new());
         let python_coordinator = Arc::new(custos_runtime::PythonKernelCoordinator::new());
 
@@ -208,6 +212,7 @@ impl CustosRuntime {
             )
             .with_workflow(workflow.clone())
             .with_usage_runs(store.clone())
+            .with_sqlite_store(store.clone())
             .with_workspace(workspace_coordinator.clone())
             .with_terminal(terminal_coordinator.clone())
             .with_python_kernel(python_coordinator.clone())
@@ -217,7 +222,9 @@ impl CustosRuntime {
             .with_fleet_automation(Arc::new(store.fleet_automation().clone()))
             .with_oauth_callback_server(oauth_callback_server)
             .with_harnesses(harnesses.clone())
-            .with_packs(pack_registry.clone()),
+            .with_packs(pack_registry.clone())
+            .with_assistant(Arc::new(store.assistant().clone()))
+            .with_outbox(Arc::new(store.outbox().clone())),
         );
 
         Ok(Self {

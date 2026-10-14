@@ -419,6 +419,11 @@ impl RunRepository {
             params![now],
         );
 
+        let _ = conn.execute(
+            "UPDATE launch_attempts SET status = 'unknown', detail = 'Daemon restart during in-flight execution; recovered fail-closed', resolved_at = ?1 WHERE status IN ('prepared')",
+            params![now],
+        );
+
         Ok(updated_wruns + updated_runs)
     }
 

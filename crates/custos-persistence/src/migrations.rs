@@ -97,5 +97,7 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
 
     conn.execute_batch(include_str!("../migrations/0028_secure_provider_credentials.sql"))?;
     conn.execute_batch(include_str!("../migrations/0029_provider_account_routing.sql"))?;
+    conn.execute_batch(include_str!("../migrations/0030_assistant_drafts.sql"))?;
+    conn.execute_batch(include_str!("../migrations/0031_daemon_settings.sql"))?;
     Ok(())
 }

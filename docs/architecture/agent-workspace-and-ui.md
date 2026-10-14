@@ -65,6 +65,22 @@ Desktop/headless integration theo [superplan §21](../development/workspace-rest
 
 Desktop dùng một shell, không làm ba ứng dụng UI rời:
 
+**Vị trí file UI:** `components/shell` giữ khung và điều hướng; `components/workspaces/OrcaTabbedContainer.tsx` giữ danh mục resource và chọn pane; ba thư mục `workspaces/engineering`, `workspaces/research`, `workspaces/copilot` giữ màn hình theo lens; `workspaces/shared` giữ Browser/preview/fleet/notes dùng chung; `components/common` chỉ giữ control tái sử dụng. Không tạo thêm lớp re-export `views` song song. Một pane cũ tồn tại trong repo không có nghĩa đã nối vào catalog hoặc backend. Notebook Research chỉ hiển thị cell/result được lưu từ session thật; sửa source làm kết quả trước đó hết hiệu lực.
+
+Điều hướng gọn: nút lens chỉ biểu tượng, có `aria-label`, trạng thái chọn và shortcut/tooltip; thanh tài nguyên chỉ hiển thị tab đang dùng. Nút `+` mở danh sách tài nguyên nổi theo lens, không sinh tab `New Tab` hoặc chuyển nội dung đang xem. Mỗi mục lấy trạng thái capability từ daemon/native host, ghi rõ khi không khả dụng; chọn mục mới mới mở tab. Các run có thể song song ở các workspace ID khác nhau, nhưng tab và inspector phải giữ identity của từng run, không suy ra thành công chỉ từ UI.
+
+Settings chỉ có một nơi hiển thị Usage. `Models & accounts` cấu hình tài khoản và route account đã có backend; `Agent runtimes` chỉ liệt kê harness cài trên máy, không phải model provider hay subagent được cấp quyền; `Usage & limits` đọc attempt/quota, không cho chỉnh trần ngân sách chưa được enforce. Màn hình Dashboard/Chains lịch sử không được ghi cứng PID, token, reliability hay mô phỏng failover như đang chạy.
+
+Settings modal là nguồn điều hướng duy nhất; sidebar settings cũ không được mount sẽ bỏ. Route `/settings` và `/chains` chuyển về modal tại Studio để giữ nguyên session; `Routing Combos` còn là preset thiết kế chưa ảnh hưởng thực thi và phải ghi nhãn như vậy.
+
+Trong Settings vận hành, không hiển thị Routing Combos như một tab song song với tài khoản cho tới khi daemon dùng preset ấy trong route thật. Tài khoản/provider và priority/round-robin vẫn chỉnh qua API hiện có.
+
+Capability của một pane tổng hợp phải lấy giao của các operation liên quan, không chỉ lấy một resource ID gần tên. Lab có thể mở sổ run khi ResearchRepository sẵn sàng nhưng không bật chạy cell nếu PythonKernelCoordinator không được daemon công bố. Files/Changes/Terminal cần workspace đã được daemon cấu hình; Activity cần workflow và run projection. Nhãn `available` của một struct UI không phải quyền thực thi.
+
+API action catalog phải được suy từ capability registry cùng request, không duy trì bảng nút “available” cứng riêng. Nếu không có descriptor hoặc operation không được backend quảng bá, UI không hiện nút tác động; Outbox read-only không có Approve/Dispatch.
+
+Trong Research, lỗi tải proposals/claims/recipes/workspaces là lỗi hiển thị chứ không được thay bằng `[]`. Artifact thiếu bytes vẫn có metadata/version/annotation, nhưng inspector phải nói preview không có; không tự tạo đoạn code `# Artifact…` để giả làm nội dung phiên bản.
+
 - **Navigation rail:** Workspace, Tasks, Sources/Artifacts, Automations, Connections, Settings. Người dùng ẩn/ghim mục ít dùng; không bắt đọc Authority/Audit trước khi chat.
 - **Workspace sidebar:** tài nguyên, Task gần đây và runs liên quan; lọc theo project/corpus/account nhưng không lộ tài nguyên ngoài scope.
 - **Main canvas:** panes tách/ghép được, mỗi pane giữ resource/run/task reference rõ ràng. Pane không bao giờ đổi Task âm thầm khi người dùng đổi sidebar.
@@ -143,6 +159,8 @@ Coding lens không tạo một “Codex session” riêng khỏi Custos Task. He
 Native Agents pane submits a Task-backed `StartRun`, never an unscoped filesystem path. The selected workspace is resolved by daemon from `workspace_id`; the chosen harness is resolved by runtime from the composed registry and persisted with its launch attempt. Provider-governed native completion means only that the harness process returned successfully. It does not pass the Task criterion, verify the patch, or upgrade tool mediation. Steering is shown only when a real active run/session identifier is available; a placeholder such as `active_run` is not a protocol value.
 
 Resource discovery is fail-closed and capability-driven. `resource_id` is a stable UI projection key, while capability `id` identifies the backend contract; they are not interchangeable with pane IDs, Task IDs or Run IDs. Before the capability registry resolves, every operational resource is unavailable. A degraded resource may render its durable metadata surface, but controls are enabled only when their exact operation name appears in `supported_operations`. Missing descriptors never inherit optimistic operations from the client catalog. Browser and Fleet therefore remain useful inventories while navigation, AX actions, probes and execution stay disabled until governed adapters are composed.
+
+The Coding worktree card passes its selected `workspace_id` into Files, Terminal or Coding Agents. Each pane resolves that ID against daemon workspaces before showing data or starting a run; changing the Terminal workspace clears the previous terminal session immediately. The capability catalog publishes Coding Agents only at the operations supported by the registered harnesses, Drafts only when the Assistant repository is composed, and Outbox as a read-only degraded surface until approval and dispatch connectors exist. Contacts and Calendar currently store device-local lists and must identify them as local; they do not imply synced contacts, a live calendar connector or permission to send.
 
 Agent controls follow the same rule at harness scope. A discovered OpenCode/Codex/Claude binary may be offered for a bounded native run, but Resume, Steer, Cancel-confirmed and exact usage remain hidden unless the tested harness profile advertises them. A local map entry is not an external session, and removing it is not cancellation. An empty result from an unimplemented event transport is an error rather than a completed agent turn.
 
@@ -429,6 +447,10 @@ Current Local API deletion scope is intentionally narrow: `v1.sessions.delete` r
 
 Lịch sử từng workbench là filter `membership OR home_lens`, thêm Task/project/updated_at để điều hướng; global search tìm toàn bộ session mà actor được phép đọc. Một session có thể hiện ở hai sidebar, nhưng chỉ một `session_id`. Khi người dùng chọn Task khác trong cùng chat, turn mới bind Task mới; các turn cũ giữ nguyên binding. Trường hợp imported Codex/Claude transcript cần lưu origin/harness cùng độ tin cậy của timestamp/tool receipt, không giả nó là journal native đầy đủ.
 
+Desktop dùng từ `Workspace` cho repo/thư mục/worktree hoặc execution scope, `Workbench` cho Copilot/Coding/Research lens, `Task` cho công việc có contract và `Session` cho hội thoại. Nút `+ New` ở cùng vị trí trong cả ba lens mở lựa chọn Chat session hoặc Task; chỉ Task tạo TaskContract. Tạo chat rỗng phải gắn home lens bằng journal event bền vững. Đổi lens mặc định khôi phục session đã thuộc lens đích hoặc để trống, không tự mở session của lens nguồn. Mở chéo bằng `OpenLens` là thao tác riêng của người dùng. Resource canvas có đường retry khi daemon/API lỗi.
+
+Task chưa có Session không được vật hóa thành session giả; danh sách Task độc lập phải dùng `task_id` đúng kiểu. Bucket hội thoại mặc định không xuất hiện như repo trong Workspace tree. Claim validation không thông báo đã verified khi verifier chưa kết nối; khóa draft không tạo Outbox action; notebook save phải giữ toàn bộ cell snapshot.
+
 ### 12.5. Lệnh chuyển và state machine
 
 `OpenLens(session_id, target_lens, command_id)` là presentation command: sau ack, có thể persist membership/layout riêng nhưng không tạo message, Task revision hay model attempt. `PreviewContinuation` là read-only, chụp `source_checkpoint`, refs được chọn, source/Task versions và policy của destination. Preview là **estimate**, không phải permit. `CommitContinuation` là command có actor, `command_id`, `expected_source_checkpoint`, `expected_task_revision`, `target_lens`, `destination_task_kind` (`same` hoặc `child`), selected refs, transfer policy và privacy/egress consent; server tự kiểm lại mọi điều kiện đã preview. Không nhận raw path/recipient/model pin từ client như authority.
@@ -518,7 +540,7 @@ Migration không xoá/sửa `sessions.attached_to` ngay: thêm binding table can
 2. **Same-session lens:** Research → Coding → Copilot giữ `session_id`, cursor, selected Task và mở lại source/notebook refs; không phát sinh model call hoặc approval do đổi lens.
 3. **Linked chat:** 100 turns gốc vẫn xem được theo quyền; preview chọn 5 turns + 2 claims; receipt ghi đúng input/omissions; double-click/retry cùng `command_id` chỉ tạo một session đích; crash sau commit không mất link hoặc auto-dispatch.
 4. **Boundaries:** child Task không kế thừa grant; local-only chặn cloud context; secret trong paper/chat không tới provider; user sửa recipient/payload làm approval cũ vô hiệu; native harness không được gắn nhãn resumed khi chỉ có prompt mới.
-5. **Research:** paper đổi version làm claim phụ thuộc stale; OCR sai bảng để `unknown`; negative experiment vẫn lưu cost/outputs; notebook auto-rerun không lặp network write; code/figure mở đúng run/env; `Open in Coding` chỉ chuyển selected artifacts.
+5. **Research:** paper đổi version làm claim phụ thuộc stale; OCR sai bảng để `unknown`; negative experiment vẫn lưu cost/outputs; notebook auto-rerun không lặp network write; code/figure mở đúng run/env; `Open in Coding` chỉ chuyển selected artifacts. Notebook trống không tự lưu code mẫu; thêm cell là thao tác tường minh của người dùng.
 6. **Quality/UX:** so cùng task/model với manual copy/paste và chat-only: handoff recall, unsupported claims, user correction time, billed + unknown cost, p95 time-to-first-useful-output, accessibility/focus và viewport hẹp. Build xanh chưa chứng minh các gate này.
 
 ### 12.10. Hợp đồng tương tác phải giữ khi ghép desktop

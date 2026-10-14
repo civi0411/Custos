@@ -41,6 +41,13 @@ pub const METHOD_WORKSPACES_LIST: &str = "v1.workspaces.list";
 pub const METHOD_WORKSPACES_ARCHIVE: &str = "v1.workspaces.archive";
 pub const METHOD_WORKSPACES_INSPECT_DIRTY: &str = "v1.workspaces.inspect_dirty";
 pub const METHOD_WORKSPACES_RECOVER: &str = "v1.workspaces.recover";
+pub const METHOD_WORKSPACES_DETECT: &str = "v1.workspaces.detect";
+pub const METHOD_WORKSPACES_PICK_FOLDER: &str = "v1.workspaces.pick_folder";
+pub const METHOD_WORKSPACES_CANDIDATES_SPAWN: &str = "v1.workspaces.candidates.spawn";
+pub const METHOD_WORKSPACES_CANDIDATES_COMPARE: &str = "v1.workspaces.candidates.compare";
+pub const METHOD_WORKSPACES_INTEGRATE: &str = "v1.workspaces.integrate";
+pub const METHOD_SETTINGS_GET: &str = "v1.settings.get";
+pub const METHOD_SETTINGS_SET: &str = "v1.settings.set";
 
 pub const METHOD_WORKSPACE_FILES_TREE: &str = "v1.workspace.files.tree";
 pub const METHOD_WORKSPACE_FILES_READ: &str = "v1.workspace.files.read";
@@ -152,6 +159,18 @@ pub const METHOD_PACKS_JOBS_LIST: &str = "v1.packs.jobs.list";
 pub const METHOD_PACKS_JOBS_GET: &str = "v1.packs.jobs.get";
 pub const METHOD_PACKS_ROLES_LIST: &str = "v1.packs.roles.list";
 pub const METHOD_PACKS_JOBS_RUN: &str = "v1.packs.jobs.run";
+
+pub const METHOD_ASSISTANT_DRAFTS_LIST: &str = "v1.assistant.drafts.list";
+pub const METHOD_ASSISTANT_DRAFTS_GET: &str = "v1.assistant.drafts.get";
+pub const METHOD_ASSISTANT_DRAFTS_SAVE: &str = "v1.assistant.drafts.save";
+pub const METHOD_ASSISTANT_DRAFTS_DELETE: &str = "v1.assistant.drafts.delete";
+pub const METHOD_ASSISTANT_OUTBOX_LIST: &str = "v1.assistant.outbox.list";
+pub const METHOD_ASSISTANT_OUTBOX_CREATE: &str = "v1.assistant.outbox.create";
+pub const METHOD_ASSISTANT_OUTBOX_APPROVE: &str = "v1.assistant.outbox.approve";
+pub const METHOD_ASSISTANT_OUTBOX_DISPATCH: &str = "v1.assistant.outbox.dispatch";
+
+pub const METHOD_WORKSPACES_AGENT_STEER: &str = "v1.workspaces.agent_steer";
+pub const METHOD_RESOURCES_CAPABILITIES: &str = "v1.resources.capabilities";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

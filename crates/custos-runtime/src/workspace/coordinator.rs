@@ -166,8 +166,29 @@ impl WorkspaceCoordinator {
         self.repository.list_workspaces().await
     }
 
+    /// Updates or saves an existing workspace record.
+    pub async fn update_workspace(&self, ws: &ExecutionWorkspace) -> Result<(), DomainError> {
+        self.repository.save_workspace(ws).await
+    }
+
     /// Inspects the dirty status and uncommitted changes of a workspace.
     pub async fn inspect_dirty(&self, id: &WorkspaceId) -> Result<DirtyManifest, DomainError> {
+        let mut ws = self
+            .repository
+            .get_workspace(id)
+            .await?
+            .ok_or_else(|| DomainError::NotFound {
+                kind: "ExecutionWorkspace".into(),
+                id: id.to_string(),
+            })?;
+        let dirty = self.provider.inspect_dirty(&ws).await?;
+        ws = ws.with_dirty_manifest(dirty.clone());
+        let _ = self.repository.save_workspace(&ws).await;
+        Ok(dirty)
+    }
+
+    /// Generates unified diff relative to the recorded base commit or HEAD.
+    pub async fn diff(&self, id: &WorkspaceId) -> Result<String, DomainError> {
         let ws = self
             .repository
             .get_workspace(id)
@@ -176,7 +197,7 @@ impl WorkspaceCoordinator {
                 kind: "ExecutionWorkspace".into(),
                 id: id.to_string(),
             })?;
-        self.provider.inspect_dirty(&ws).await
+        self.provider.diff(&ws).await
     }
 
     /// Recovers a workspace by verifying its host environment and reconciling status.

@@ -153,6 +153,8 @@ pub struct HarnessDescriptor {
     pub description: String,
     pub binary_path: String,
     pub is_available: bool,
+    #[serde(default)]
+    pub launch_cmd: Option<String>,
     pub profile: HarnessProfile,
 }
 
