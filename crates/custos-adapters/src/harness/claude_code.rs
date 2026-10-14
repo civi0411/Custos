@@ -350,7 +350,7 @@ impl AgentRuntimePort for ClaudeCodeHarnessAdapter {
             tool_mediation: ToolMediationLevel::ProviderGoverned,
             worktree_ownership: WorktreeOwnership::SharedLive,
             supports_cancel: true,
-            supports_steer: true,
+            supports_steer: false,
             cost_visibility: CostVisibility::Estimated,
         }
     }
@@ -436,9 +436,20 @@ impl AgentRuntimePort for ClaudeCodeHarnessAdapter {
 
     async fn run_native_observed(&self, instruction: &str, cwd: &Path, observer: std::sync::Arc<dyn custos_core::contracts::harness::RunObserver>) -> Result<HarnessExecutionResult, DomainError> {
         if self.mock_mode { return self.run_native(instruction,cwd).await; }
-        let mut command=tokio::process::Command::new(&self.binary_path);
+        let run_id = observer.run_id().unwrap_or("claude-code-observed").to_string();
+        let (cancel_tx, _cancel_rx) = tokio::sync::broadcast::channel(1);
+        {
+            let mut active = self.active_runs.lock().await;
+            active.insert(run_id.clone(), cancel_tx);
+        }
+        let mut command = tokio::process::Command::new(&self.binary_path);
         command.current_dir(cwd).arg("--print").arg(instruction).args(["--output-format","stream-json","--verbose","--include-partial-messages"]);
-        super::live::run_observed_process(command,observer,"claude-code",self.default_timeout).await
+        let res = super::live::run_observed_process(command, observer, "claude-code", self.default_timeout).await;
+        {
+            let mut active = self.active_runs.lock().await;
+            active.remove(&run_id);
+        }
+        res
     }
 
     async fn run_native(

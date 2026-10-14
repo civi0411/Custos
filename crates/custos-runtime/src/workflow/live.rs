@@ -252,6 +252,9 @@ impl RunObserver for LiveObserver {
     fn is_cancelled(&self) -> bool {
         self.token.is_cancelled()
     }
+    fn run_id(&self) -> Option<&str> {
+        Some(&self.run)
+    }
 }
 
 fn sanitize_activity(value: serde_json::Value) -> serde_json::Value {
