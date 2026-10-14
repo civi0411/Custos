@@ -127,6 +127,24 @@ impl WorkspaceFileContent {
             line_count: 0,
         }
     }
+
+    pub fn binary_with_content(
+        workspace_id: WorkspaceId,
+        path: impl Into<String>,
+        content: impl Into<String>,
+        size_bytes: usize,
+        truncated: bool,
+    ) -> Self {
+        Self {
+            workspace_id,
+            path: path.into(),
+            content: content.into(),
+            is_binary: true,
+            size_bytes,
+            truncated,
+            line_count: 0,
+        }
+    }
 }
 
 /// Parameters for writing or modifying a file inside an execution workspace.

@@ -258,9 +258,12 @@ export class DaemonClient {
       try {
         return await invoke<T>('custos_request', { method, params });
       } catch (err: any) {
-        // A rejected credential operation is an application error, not a request
-        // to repeat a save/exchange through a second transport.
-        if (method.startsWith('v1.providers.') || method.startsWith('v1.oauth.') || (method === 'v1.models.probe' && params.api_key)) throw err;
+        // Application errors (credentials, oauth, model probe) should not be repeated over HTTP.
+        if (
+          method.startsWith('v1.providers.') ||
+          method.startsWith('v1.oauth.') ||
+          method === 'v1.models.probe'
+        ) throw err;
         console.warn(`[DaemonClient] Tauri invoke failed on ${method}, falling back to HTTP:`, err);
         return this.requestHttp<T>(method, params);
       }
@@ -271,24 +274,31 @@ export class DaemonClient {
 
   private async requestHttp<T>(method: string, params: Record<string, any> = {}): Promise<T> {
     const baseUrl = await this.resolveHttpEndpoint();
-    const res = await fetch(`${baseUrl}/api/request`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        id: `web_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-        method,
-        params,
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(`${baseUrl}/api/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          id: `web_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          method,
+          params,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+      }
+      const data = await res.json();
+      this.daemonOnline = true;
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      return data.result as T;
+    } finally {
+      clearTimeout(timeout);
     }
-    const data = await res.json();
-    this.daemonOnline = true;
-    if (data.error) {
-      throw new Error(data.error);
-    }
-    return data.result as T;
   }
 
   // ---------------------------------------------------------
@@ -721,12 +731,16 @@ export class DaemonClient {
     apiKey?: string,
     providerId?: string
   ): Promise<{ models: ProbedModel[]; count: number; base_url: string }> {
-    return this.request<{ models: ProbedModel[]; count: number; base_url: string }>('v1.models.probe', {
+    const probePromise = this.request<{ models: ProbedModel[]; count: number; base_url: string }>('v1.models.probe', {
       base_url: baseUrl,
       provider_type: providerType,
       api_key: apiKey,
       provider_id: providerId,
     });
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Model probe timed out')), 4000)
+    );
+    return Promise.race([probePromise, timeoutPromise]);
   }
 
   async getModelCatalog(providerType?: string, providerId?: string): Promise<ModelCatalogResult> {
