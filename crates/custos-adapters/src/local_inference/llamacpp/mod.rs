@@ -11,7 +11,7 @@ use llama_cpp_2::llama_backend::LlamaBackend;
 use llama_cpp_2::model::params::LlamaModelParams;
 use llama_cpp_2::model::{ChatTemplateResult, LlamaChatTemplate, LlamaModel};
 use llama_cpp_2::openai::OpenAIChatTemplateParams;
-use llama_cpp_2::{list_llama_ggml_backend_devices, LlamaBackendDeviceType, LogOptions};
+use llama_cpp_2::{list_llama_ggml_backend_devices, LlamaBackendDeviceType};
 
 use self::inference_emulated_tools::{
     build_emulator_tool_description, generate_with_emulated_tools, load_tiny_model_prompt,
@@ -366,7 +366,7 @@ impl LlamaCppBackend {
             }
         };
 
-        llama_cpp_2::send_logs_to_tracing(LogOptions::default());
+        // llama_cpp_2::send_logs_to_tracing(LogOptions::default());
         log_inference_backend_devices();
 
         Ok(Self { backend })
