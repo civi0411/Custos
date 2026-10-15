@@ -6,6 +6,13 @@ pub mod huggingface_auth;
 pub mod paths;
 pub mod prompt_template;
 pub mod provider_utils;
+pub mod metal_probe;
+pub mod gguf_inspector;
+pub mod folder_scanner;
+pub mod adapter;
+pub use adapter::NativeLocalModelAdapter;
+pub mod sidecar;
+pub use sidecar::{get_loaded_sidecar_instance, get_sidecar_port, is_sidecar_healthy, start_sidecar, stop_sidecar};
 
 pub mod backend;
 #[cfg(feature = "hf-hub")]
@@ -57,6 +64,7 @@ enum ModelSlotState {
     Loaded {
         model: Box<dyn BackendLoadedModel>,
         resolved: Box<ResolvedModelPaths>,
+        loaded_at: i64,
     },
 }
 
@@ -215,8 +223,15 @@ pub async fn loaded_model_ids() -> Result<HashSet<String>, ProviderError> {
 }
 
 pub async fn evict_model(model_name: &str) -> Result<bool, ProviderError> {
+    let mut evicted = false;
+    if let Ok(stopped) = sidecar::stop_sidecar().await {
+        if stopped {
+            evicted = true;
+        }
+    }
+
     let Some(runtime) = current_runtime() else {
-        return Ok(false);
+        return Ok(evicted);
     };
     let slots = {
         let map = runtime.models.lock().expect("model cache lock poisoned");
@@ -226,7 +241,6 @@ pub async fn evict_model(model_name: &str) -> Result<bool, ProviderError> {
             .collect::<Vec<_>>()
     };
 
-    let mut evicted = false;
     for slot in slots {
         let mut state = slot.state.lock().await;
         if matches!(*state, ModelSlotState::Loaded { .. }) {
@@ -236,6 +250,181 @@ pub async fn evict_model(model_name: &str) -> Result<bool, ProviderError> {
         }
     }
     Ok(evicted)
+}
+
+pub async fn list_loaded_instances() -> Result<Vec<custos_domain::LoadedModelInstance>, ProviderError> {
+    let mut instances = Vec::new();
+    if let Some(sidecar_inst) = sidecar::get_loaded_sidecar_instance().await {
+        instances.push(sidecar_inst);
+    }
+
+    let Some(runtime) = current_runtime() else {
+        return Ok(instances);
+    };
+    let slots = {
+        let map = runtime.models.lock().expect("model cache lock poisoned");
+        map.iter()
+            .map(|(key, slot)| (key.model_id.clone(), key.backend_id, slot.clone()))
+            .collect::<Vec<_>>()
+    };
+
+    for (model_id, backend_id, slot) in slots {
+        if let Ok(state) = slot.state.try_lock() {
+            if let ModelSlotState::Loaded { resolved, loaded_at, .. } = &*state {
+                let instance_id = format!("inst_{}", &custos_domain::digest(model_id.as_bytes())[..12]);
+                instances.push(custos_domain::LoadedModelInstance {
+                    instance_id,
+                    model_name: resolved.model_path.file_name().and_then(|n| n.to_str()).unwrap_or(&model_id).to_string(),
+                    model_path: resolved.model_path.to_string_lossy().to_string(),
+                    backend_id: backend_id.to_string(),
+                    context_limit: resolved.context_limit as u64,
+                    memory_used_bytes: 0,
+                    loaded_at: *loaded_at,
+                });
+            }
+        }
+    }
+    Ok(instances)
+}
+
+pub async fn preload_model(
+    model_name: &str,
+    context_size: Option<usize>,
+    gpu_layers: Option<u32>,
+) -> Result<custos_domain::LoadedModelInstance, ProviderError> {
+    let runtime = InferenceRuntime::get_or_init()
+        .map_err(|e| ProviderError::ExecutionError(e.to_string()))?;
+
+    let clean_model = model_name.strip_prefix("native:").unwrap_or(model_name);
+    let mut resolved = resolve_model_path(clean_model)
+        .await
+        .map_err(|e| ProviderError::ExecutionError(e.to_string()))?
+        .ok_or_else(|| ProviderError::ExecutionError(format!("Model path not found: {clean_model}")))?;
+
+    if let Some(ctx) = context_size {
+        resolved.context_limit = ctx;
+        resolved.settings.context_size = Some(ctx as u32);
+    }
+    if let Some(layers) = gpu_layers {
+        resolved.settings.n_gpu_layers = Some(layers);
+    }
+
+    let backend = runtime.backend_for_model(&resolved)?;
+    let cache_key = ModelCacheKey::new(
+        backend.id(),
+        clean_model.to_string(),
+        resolved.settings.chat_template.clone(),
+    );
+    let model_slot = runtime.get_or_create_model_slot(cache_key.clone());
+
+    let cold_load_guard = runtime.cold_load_lock.lock().await;
+    let mut state = model_slot.state.lock().await;
+    if let ModelSlotState::Loaded { resolved: loaded_resolved, loaded_at, .. } = &*state {
+        let instance_id = format!("inst_{}", &custos_domain::digest(clean_model.as_bytes())[..12]);
+        return Ok(custos_domain::LoadedModelInstance {
+            instance_id,
+            model_name: resolved.model_path.file_name().and_then(|n| n.to_str()).unwrap_or(clean_model).to_string(),
+            model_path: resolved.model_path.to_string_lossy().to_string(),
+            backend_id: backend.id().to_string(),
+            context_limit: loaded_resolved.context_limit as u64,
+            memory_used_bytes: 0,
+            loaded_at: *loaded_at,
+        });
+    }
+
+    *state = ModelSlotState::Loading;
+    drop(state);
+
+    let other_slots = runtime.other_model_slots(&cache_key);
+    for slot in other_slots {
+        let mut other = slot.state.lock().await;
+        if matches!(*other, ModelSlotState::Loaded { .. }) {
+            tracing::info!("Evicting previous model to free memory for {clean_model}");
+            *other = ModelSlotState::Empty;
+        }
+    }
+
+    let model_id_clone = clean_model.to_string();
+    let resolved_clone = resolved.clone();
+    let settings_clone = resolved.settings.clone();
+    let backend_clone = backend.clone();
+
+    let loaded = match tokio::task::spawn_blocking(move || {
+        backend_clone.load_model(&model_id_clone, &resolved_clone, &settings_clone)
+    }).await {
+        Ok(Ok(loaded)) => loaded,
+        Ok(Err(err)) => {
+            if sidecar::find_llama_server_binary().is_some() {
+                tracing::info!(
+                    model = %clean_model,
+                    "In-process load failed ({err}), falling back to modern llama-server sidecar..."
+                );
+                let ctx_size = resolved.context_limit.clamp(2048, 8192);
+                let layers = gpu_layers.unwrap_or(99);
+                match sidecar::start_sidecar(&resolved.model_path, ctx_size, layers).await {
+                    Ok(instance) => {
+                        let mut state = model_slot.state.lock().await;
+                        *state = ModelSlotState::Empty;
+                        drop(cold_load_guard);
+                        return Ok(instance);
+                    }
+                    Err(sidecar_err) => {
+                        let mut state = model_slot.state.lock().await;
+                        *state = ModelSlotState::Empty;
+                        model_slot.notify.notify_waiters();
+                        return Err(ProviderError::ExecutionError(format!(
+                            "In-process load failed ({err}) and sidecar fallback failed: {sidecar_err}"
+                        )));
+                    }
+                }
+            }
+            let mut state = model_slot.state.lock().await;
+            *state = ModelSlotState::Empty;
+            model_slot.notify.notify_waiters();
+            return Err(err);
+        }
+        Err(err) => {
+            if sidecar::find_llama_server_binary().is_some() {
+                tracing::info!(
+                    model = %clean_model,
+                    "In-process task spawn failed ({err}), falling back to modern llama-server sidecar..."
+                );
+                let ctx_size = resolved.context_limit.clamp(2048, 8192);
+                let layers = gpu_layers.unwrap_or(99);
+                if let Ok(instance) = sidecar::start_sidecar(&resolved.model_path, ctx_size, layers).await {
+                    let mut state = model_slot.state.lock().await;
+                    *state = ModelSlotState::Empty;
+                    drop(cold_load_guard);
+                    return Ok(instance);
+                }
+            }
+            let mut state = model_slot.state.lock().await;
+            *state = ModelSlotState::Empty;
+            model_slot.notify.notify_waiters();
+            return Err(ProviderError::ExecutionError(err.to_string()));
+        }
+    };
+
+    let mut state = model_slot.state.lock().await;
+    let loaded_at = chrono::Utc::now().timestamp_millis();
+    *state = ModelSlotState::Loaded {
+        model: loaded,
+        resolved: Box::new(resolved.clone()),
+        loaded_at,
+    };
+    model_slot.notify.notify_waiters();
+    drop(cold_load_guard);
+
+    let instance_id = format!("inst_{}", &custos_domain::digest(clean_model.as_bytes())[..12]);
+    Ok(custos_domain::LoadedModelInstance {
+        instance_id,
+        model_name: resolved.model_path.file_name().and_then(|n| n.to_str()).unwrap_or(clean_model).to_string(),
+        model_path: resolved.model_path.to_string_lossy().to_string(),
+        backend_id: backend.id().to_string(),
+        context_limit: resolved.context_limit as u64,
+        memory_used_bytes: 0,
+        loaded_at,
+    })
 }
 
 const PROVIDER_NAME: &str = "local";
@@ -277,11 +466,12 @@ fn is_mlx_model_directory(path: &Path) -> Result<bool> {
 }
 
 fn explicit_model_path(model_id: &str) -> Result<Option<ExplicitModelPath>> {
-    if model_id.is_empty() {
+    let clean_id = model_id.strip_prefix("native:").unwrap_or(model_id);
+    if clean_id.is_empty() {
         return Ok(None);
     }
 
-    let path = PathBuf::from(model_id);
+    let path = PathBuf::from(clean_id);
     if !path.exists() {
         return Ok(None);
     }
@@ -706,12 +896,20 @@ pub struct LocalInferenceProvider {
 }
 
 impl LocalInferenceProvider {
-    pub async fn from_env() -> Result<Self> {
-        let runtime = InferenceRuntime::get_or_init()?;
-        Ok(Self {
+    pub fn new(runtime: Arc<InferenceRuntime>) -> Self {
+        Self {
             runtime,
             name: PROVIDER_NAME.to_string(),
-        })
+        }
+    }
+
+    pub fn runtime(&self) -> Arc<InferenceRuntime> {
+        self.runtime.clone()
+    }
+
+    pub async fn from_env() -> Result<Self> {
+        let runtime = InferenceRuntime::get_or_init()?;
+        Ok(Self::new(runtime))
     }
 }
 
@@ -846,6 +1044,28 @@ impl Provider for LocalInferenceProvider {
         let mut log = start_log(model_config, &log_payload)?;
 
         tokio::spawn(async move {
+            // 1. Check if model is already running in active sidecar
+            if sidecar::is_sidecar_healthy().await {
+                if let Some(active) = sidecar::get_loaded_sidecar_instance().await {
+                    let clean_req = model_name.strip_prefix("native:").unwrap_or(&model_name);
+                    if active.model_name == clean_req || active.model_path.contains(clean_req) {
+                        tracing::info!(model = %model_name, "Routing local inference directly to active sidecar engine");
+                        if let Err(e) = sidecar::stream_sidecar_chat(
+                            &active.model_name,
+                            &system,
+                            &messages,
+                            temperature,
+                            max_tokens,
+                            tx.clone(),
+                        ).await {
+                            let _ = log.error(&e);
+                            let _ = tx.send(Err(e)).await;
+                        }
+                        return;
+                    }
+                }
+            }
+
             let mut model_load_ms = None;
 
             // Ensure model is loaded — unload any other models first to free memory.
@@ -902,17 +1122,55 @@ impl Provider for LocalInferenceProvider {
                         let settings_for_load = settings.clone();
                         let backend_for_load = backend.clone();
                         let load_started = std::time::Instant::now();
+
+                        let model_id_arg = model_id.clone();
+                        let resolved_arg = resolved_for_load.clone();
+                        let settings_arg = settings_for_load.clone();
+                        let backend_arg = backend_for_load.clone();
+
                         let loaded = match tokio::task::spawn_blocking(move || {
-                            backend_for_load.load_model(
-                                &model_id,
-                                &resolved_for_load,
-                                &settings_for_load,
+                            backend_arg.load_model(
+                                &model_id_arg,
+                                &resolved_arg,
+                                &settings_arg,
                             )
                         })
                         .await
                         {
                             Ok(Ok(loaded)) => loaded,
                             Ok(Err(err)) => {
+                                // Fallback to modern llama-server sidecar if in-process fails
+                                if sidecar::find_llama_server_binary().is_some() {
+                                    tracing::info!(
+                                        model = %model_id,
+                                        "In-process load failed ({err}), falling back to modern llama-server sidecar..."
+                                    );
+                                    let ctx_size = resolved_for_load.context_limit.clamp(2048, 8192);
+                                    let layers = 99;
+                                    match sidecar::start_sidecar(&resolved_for_load.model_path, ctx_size, layers).await {
+                                        Ok(instance) => {
+                                            let mut state = model_slot.state.lock().await;
+                                            *state = ModelSlotState::Empty;
+                                            drop(cold_load_guard);
+                                            if let Err(e) = sidecar::stream_sidecar_chat(
+                                                &instance.model_name,
+                                                &system,
+                                                &messages,
+                                                temperature,
+                                                max_tokens,
+                                                tx.clone(),
+                                            ).await {
+                                                let _ = log.error(&e);
+                                                let _ = tx.send(Err(e)).await;
+                                            }
+                                            return;
+                                        }
+                                        Err(sidecar_err) => {
+                                            tracing::error!("Sidecar fallback also failed: {sidecar_err}");
+                                        }
+                                    }
+                                }
+
                                 let mut state = model_slot.state.lock().await;
                                 *state = ModelSlotState::Empty;
                                 model_slot.notify.notify_waiters();
@@ -953,6 +1211,7 @@ impl Provider for LocalInferenceProvider {
                         *state = ModelSlotState::Loaded {
                             model: loaded,
                             resolved: Box::new(resolved_model.clone()),
+                            loaded_at: chrono::Utc::now().timestamp_millis(),
                         };
                         model_slot.notify.notify_waiters();
                         drop(cold_load_guard);
@@ -1033,6 +1292,45 @@ impl Provider for LocalInferenceProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn real_chat_gguf_loads_and_generates_when_fixture_is_configured() {
+        let Ok(model_path) = std::env::var("CUSTOS_TEST_CHAT_GGUF") else {
+            eprintln!("skipping native generation fixture: set CUSTOS_TEST_CHAT_GGUF");
+            return;
+        };
+        assert!(
+            std::path::Path::new(&model_path).is_file(),
+            "CUSTOS_TEST_CHAT_GGUF must point to a real chat GGUF file"
+        );
+
+        let loaded = preload_model(&model_path, Some(2048), Some(0))
+            .await
+            .expect("GGUF weights must load through the Custos backend");
+        assert_eq!(loaded.model_path, model_path);
+
+        let provider = LocalInferenceProvider::from_env()
+            .await
+            .expect("native inference runtime must initialize");
+        let mut config = ModelConfig::new(&model_path);
+        config.max_tokens = Some(16);
+        let (answer, _) = provider
+            .complete(
+                &config,
+                "Answer briefly.",
+                &[Message::user().with_text("Say hello")],
+                &[],
+            )
+            .await
+            .expect("loaded GGUF must generate a chat response");
+        assert!(
+            !extract_text_content(&answer).trim().is_empty(),
+            "chat model generated no text"
+        );
+        evict_model(&model_path)
+            .await
+            .expect("test model must unload cleanly");
+    }
 
     #[test]
     fn converts_marker_in_string_content_to_media_marker_part() {

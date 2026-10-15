@@ -138,6 +138,7 @@ pub struct RouterModelProvider {
     resolver: Arc<dyn CredentialResolver>,
     http_client: reqwest::Client,
     codex_endpoint: String,
+    native_local: Option<Arc<dyn custos_provider::ModelPort>>,
 }
 
 impl RouterModelProvider {
@@ -191,7 +192,13 @@ impl RouterModelProvider {
                 .timeout(std::time::Duration::from_secs(120))
                 .build()
                 .unwrap_or_default(),
+            native_local: None,
         }
+    }
+
+    pub fn with_native_local(mut self, native_local: Arc<dyn custos_provider::ModelPort>) -> Self {
+        self.native_local = Some(native_local);
+        self
     }
 
     pub fn with_env_fallback() -> Self {
@@ -201,7 +208,10 @@ impl RouterModelProvider {
     /// Determines the provider service type from a given model identifier
     pub fn classify_provider(model: &str) -> &'static str {
         let m = model.trim().to_lowercase();
-        if m.starts_with("ollama/") {
+        if m.starts_with("native:") {
+            return "native-local";
+        }
+        if m.starts_with("ollama/") || m.starts_with("local/") || m.starts_with("local:") {
             return "local";
         }
         if m.starts_with("copilot/") {
@@ -622,13 +632,22 @@ impl ModelProvider for RouterModelProvider {
     async fn stream(&self, req: &ProviderRequest) -> Result<tokio::sync::mpsc::Receiver<custos_provider::ProviderEvent>, DomainError> {
         use super::streaming::{Wire, stream_response_observed};
         let mut routed = req.clone();
-        if routed.provider_account_id.is_none() {
-            let service = Self::classify_provider(&routed.model);
+        let service = Self::classify_provider(&routed.model);
+        if service == "native-local" {
+            routed.provider_account_id = None;
+        } else if routed.provider_account_id.is_none() {
             routed.provider_account_id = self.resolver.select_account(if service == "gemini-oauth" { "gemini" } else { service }, &routed.model).await?;
         }
         let req = &routed;
         if let Some(account) = &req.provider_account_id { self.resolver.validate_model(account, &req.model, req.reasoning_effort.as_deref()).await?; }
         let model = req.model.trim();
+        let service = Self::classify_provider(model);
+        if service == "native-local" {
+            let local = self.native_local.as_ref().ok_or_else(|| {
+                DomainError::Validation("Native local inference runtime is not configured".to_string())
+            })?;
+            return local.stream(req).await;
+        }
         let service_override = match req.provider_account_id.as_deref() { Some(account) => self.resolver.service_for_account(account).await?, None => None };
         let service = if model.starts_with("gemini-oauth/") { "gemini-oauth" } else { service_override.as_deref().unwrap_or_else(|| Self::classify_provider(model)) };
         let account = req.provider_account_id.as_deref().unwrap_or(if service == "gemini-oauth" { "gemini" } else { service });
@@ -684,7 +703,10 @@ impl ModelProvider for RouterModelProvider {
                 "openai" => (custom.unwrap_or_else(||"https://api.openai.com/v1".into()),if matches!(model,""|"default"|"openai") {"gpt-4o".into()} else {model.into()},token),
                 "gemini" => (custom.unwrap_or_else(||"https://generativelanguage.googleapis.com/v1beta/openai".into()),model.into(),token),
                 "deepseek" => (custom.unwrap_or_else(||"https://api.deepseek.com/v1".into()),model.into(),token),
-                "local" => (local_base,model.into(),token),
+                "local" => {
+                    let clean = model.strip_prefix("local/").or_else(|| model.strip_prefix("local:")).unwrap_or(model);
+                    (local_base, clean.into(), token)
+                }
                 _ => return Err(DomainError::Validation("Unsupported streaming provider".into())),
             };
             let mut payload=serde_json::json!({"model":model,"messages":[{"role":"user","content":req.prompt}],"stream":true,"stream_options":{"include_usage":true}});
@@ -705,8 +727,10 @@ impl ModelProvider for RouterModelProvider {
 
     async fn generate(&self, req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
         let mut routed = req.clone();
-        if routed.provider_account_id.is_none() {
-            let service = Self::classify_provider(&routed.model);
+        let service = Self::classify_provider(&routed.model);
+        if service == "native-local" {
+            routed.provider_account_id = None;
+        } else if routed.provider_account_id.is_none() {
             routed.provider_account_id = self.resolver.select_account(if service == "gemini-oauth" { "gemini" } else { service }, &routed.model).await?;
         }
         let req = &routed;
@@ -720,6 +744,12 @@ impl ModelProvider for RouterModelProvider {
         }
 
         match target_provider {
+            "native-local" => {
+                let local = self.native_local.as_ref().ok_or_else(|| {
+                    DomainError::Validation("Native local inference runtime is not configured".to_string())
+                })?;
+                local.generate(req).await
+            }
             "copilot" => {
                 let github = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or("copilot")).await?.ok_or_else(|| DomainError::Validation("Connect GitHub Copilot first".into()))?;
                 let token = super::oauth_pkce::copilot_session_token(&github).await?;
@@ -889,10 +919,14 @@ impl ModelProvider for RouterModelProvider {
                 } else {
                     self.resolve_token_with_fallback("local").await?
                 };
+                let clean_model = requested_model
+                    .strip_prefix("local/")
+                    .or_else(|| requested_model.strip_prefix("local:"))
+                    .unwrap_or(requested_model);
                 self.execute_openai_compatible(
                     &base_url,
                     token.as_deref(),
-                    requested_model,
+                    clean_model,
                     req,
                     "Local Inference",
                 )
@@ -937,6 +971,120 @@ impl ModelProvider for RouterModelProvider {
                 )))
             }
         }
+    }
+
+    async fn execute_turn(
+        &self,
+        req: custos_provider::turn::ModelTurnRequest,
+    ) -> Result<tokio::sync::mpsc::Receiver<custos_provider::turn::ModelTurnEvent>, DomainError> {
+        let service = Self::classify_provider(&req.requested_model);
+        if service == "native-local" {
+            let local = self.native_local.as_ref().ok_or_else(|| {
+                DomainError::Validation("Native local inference runtime is not configured".to_string())
+            })?;
+            return local.execute_turn(req).await;
+        }
+
+        let (tx, rx) = tokio::sync::mpsc::channel(16);
+        let attempt_id = req.attempt_id;
+        let provider_id = self.provider_id().to_string();
+        let requested_model = req.requested_model.clone();
+
+        let flat_prompt = req
+            .structured_messages
+            .iter()
+            .map(|m| {
+                m.content
+                    .iter()
+                    .filter_map(|c| match c {
+                        custos_provider::conversation::message::MessageContentBlock::Text(t) => {
+                            Some(t.text.clone())
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        let legacy_req = custos_provider::request::ProviderRequest::new(
+            req.attempt_id.to_string(),
+            req.task_id.to_string(),
+            1,
+            flat_prompt,
+            req.requested_model.clone(),
+        );
+
+        let resp_res = self.generate(&legacy_req).await;
+        tokio::spawn(async move {
+            match resp_res {
+                Ok(resp) => {
+                    let _ = tx
+                        .send(custos_provider::turn::ModelTurnEvent {
+                            attempt_id,
+                            sequence: 1,
+                            actual_provider: Some(provider_id.clone()),
+                            actual_model: Some(requested_model),
+                            actual_transport: Some("router_bridge".to_string()),
+                            delta: custos_provider::turn::TurnDelta::Text { text: resp.content },
+                            usage_certainty: Some("estimated".to_string()),
+                            provider_response_id: None,
+                        })
+                        .await;
+                    let _ = tx
+                        .send(custos_provider::turn::ModelTurnEvent {
+                            attempt_id,
+                            sequence: 2,
+                            actual_provider: Some(provider_id),
+                            actual_model: None,
+                            actual_transport: None,
+                            delta: custos_provider::turn::TurnDelta::Usage {
+                                input_tokens: resp.input_tokens.unwrap_or(0) as u64,
+                                output_tokens: resp.output_tokens.unwrap_or(resp.tokens_used) as u64,
+                                cache_read_tokens: None,
+                                cache_write_tokens: None,
+                            },
+                            usage_certainty: Some("estimated".to_string()),
+                            provider_response_id: None,
+                        })
+                        .await;
+                    let _ = tx
+                        .send(custos_provider::turn::ModelTurnEvent {
+                            attempt_id,
+                            sequence: 3,
+                            actual_provider: None,
+                            actual_model: None,
+                            actual_transport: None,
+                            delta: custos_provider::turn::TurnDelta::Completed {
+                                finish_reason: Some("stop".to_string()),
+                            },
+                            usage_certainty: None,
+                            provider_response_id: None,
+                        })
+                        .await;
+                }
+                Err(err) => {
+                    let _ = tx
+                        .send(custos_provider::turn::ModelTurnEvent {
+                            attempt_id,
+                            sequence: 1,
+                            actual_provider: Some(provider_id),
+                            actual_model: Some(requested_model),
+                            actual_transport: None,
+                            delta: custos_provider::turn::TurnDelta::Failed {
+                                error_class: "router_error".to_string(),
+                                message: err.to_string(),
+                            },
+                            usage_certainty: None,
+                            provider_response_id: None,
+                        })
+                        .await;
+                }
+            }
+        });
+
+        Ok(rx)
     }
 }
 
@@ -1031,6 +1179,9 @@ mod tests {
             "ollama/claude-local",
             "ollama/gemini",
             "ollama/custom:tag",
+            "local/qwen2.5-coder-7b.gguf",
+            "local:mistral-7b-instruct",
+            "local/llama-3.1-8b-instruct-q4_k_m.gguf",
         ] {
             assert_eq!(RouterModelProvider::classify_provider(model), "local");
         }
@@ -1391,6 +1542,7 @@ mod tests {
 
     #[test]
     fn test_classify_provider() {
+        assert_eq!(RouterModelProvider::classify_provider("native:/models/coder.gguf"), "native-local");
         assert_eq!(RouterModelProvider::classify_provider("gpt-4o"), "openai");
         assert_eq!(
             RouterModelProvider::classify_provider("gpt-4o-mini"),
@@ -1450,6 +1602,34 @@ mod tests {
             RouterModelProvider::classify_provider("together/deepseek-r1"),
             "together"
         );
+    }
+
+    struct RejectingNativeAccountResolver;
+
+    #[async_trait]
+    impl CredentialResolver for RejectingNativeAccountResolver {
+        async fn select_account(&self, _service: &str, _model: &str) -> Result<Option<String>, DomainError> {
+            Err(DomainError::Validation("Account lookup must not run for native models".into()))
+        }
+
+        async fn get_token(&self, _provider_id: &str) -> Result<Option<String>, DomainError> {
+            Ok(None)
+        }
+
+        async fn get_endpoint_url(&self, _provider_id: &str) -> Result<Option<String>, DomainError> {
+            Ok(None)
+        }
+    }
+
+    #[tokio::test]
+    async fn native_model_skips_external_account_lookup() {
+        let router = RouterModelProvider::new(Arc::new(RejectingNativeAccountResolver));
+        let mut request = ProviderRequest::simple("hello");
+        request.model = "native:/models/coder.gguf".into();
+        let generate_error = router.generate(&request).await.err().expect("native backend is absent");
+        let stream_error = router.stream(&request).await.err().expect("native backend is absent");
+        assert!(generate_error.to_string().contains("Native local inference runtime is not configured"));
+        assert!(stream_error.to_string().contains("Native local inference runtime is not configured"));
     }
 
     #[test]
