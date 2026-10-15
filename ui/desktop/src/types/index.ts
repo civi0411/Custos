@@ -46,6 +46,8 @@ export interface DiffLine {
 }
 
 export interface Session {
+  modelAccountId?: string;
+  reasoningEffort?: string;
   nativeHarnessId?: string;
   workspaceId?: string;
   id: string;

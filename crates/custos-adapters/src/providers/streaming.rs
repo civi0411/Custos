@@ -311,6 +311,7 @@ impl Decoder {
     }
 }
 
+#[cfg(test)]
 pub fn stream_response(
     response: reqwest::Response,
     id: String,
@@ -319,12 +320,42 @@ pub fn stream_response(
     stream_response_with_idle_timeout(response, id, wire, Duration::from_secs(45))
 }
 
+#[cfg(test)]
 fn stream_response_with_idle_timeout(
-    mut response: reqwest::Response,
+    response: reqwest::Response,
     id: String,
     wire: Wire,
     idle: Duration,
 ) -> mpsc::Receiver<ProviderEvent> {
+    stream_response_observed_inner(response, id, wire, idle, None)
+}
+
+pub fn stream_response_observed(response: reqwest::Response, req: custos_provider::ProviderRequest, wire: Wire, resolver: std::sync::Arc<dyn super::router::CredentialResolver>) -> mpsc::Receiver<ProviderEvent> {
+    stream_response_observed_inner(response, req.request_id.clone(), wire, Duration::from_secs(45), Some((resolver, req)))
+}
+
+type ResponseObserver = (std::sync::Arc<dyn super::router::CredentialResolver>, custos_provider::ProviderRequest);
+
+async fn observe_frame(observer: &Option<ResponseObserver>, frame: &str) -> Result<(), DomainError> {
+    let Some((resolver, req)) = observer else { return Ok(()); };
+    let Some(account) = req.provider_account_id.as_deref() else { return Ok(()); };
+    if let Ok(value) = serde_json::from_str::<Value>(frame) {
+        let error = value.get("error").or_else(|| value.pointer("/response/error"));
+        if let Some(error) = error.filter(|error| !error.is_null()) {
+            let code = error.get("code").filter(|value| value.is_string()).or_else(|| error.get("type")).and_then(Value::as_str).unwrap_or("");
+            let status = match code {
+                "insufficient_quota" | "usage_limit_reached" | "quota_exhausted" | "rate_limit_exceeded" => 429,
+                "model_not_found" | "model_not_supported" | "model_access_denied" => 404,
+                "authentication_error" | "invalid_api_key" => 401,
+                _ => error.get("code").and_then(Value::as_u64).and_then(|value| u16::try_from(value).ok()).unwrap_or(200),
+            };
+            resolver.observe_response(account, &req.model, status, &serde_json::json!({"error":error}).to_string(), None).await?;
+        }
+    }
+    Ok(())
+}
+
+fn stream_response_observed_inner(mut response: reqwest::Response, id: String, wire: Wire, idle: Duration, observer: Option<ResponseObserver>) -> mpsc::Receiver<ProviderEvent> {
     let (tx, rx) = mpsc::channel(64);
     tokio::spawn(async move {
         let result=async {
@@ -340,6 +371,7 @@ fn stream_response_with_idle_timeout(
                     bytes.extend_from_slice(&chunk);
                 }
                 let value:Value=serde_json::from_slice(&bytes).map_err(|_|DomainError::Validation("Malformed provider response".into()))?;
+                observe_frame(&observer, &value.to_string()).await?;
                 let completion=unary_completion(&id,wire,&value)?;
                 let _=tx.send(completion).await;
                 return Ok(());
@@ -362,6 +394,7 @@ fn stream_response_with_idle_timeout(
                     else { if let Some(part)=line.strip_prefix("data:") { if !data.is_empty() {data.push('\n');} data.push_str(part.trim_start()); } None };
                     if data.len()>1024*1024 { return Err(DomainError::Validation("Provider frame exceeded limit".into())); }
                     if let Some(frame)=frame {
+                        observe_frame(&observer, &frame).await?;
                         for event in decoder.decode(&id,wire,&frame)? { if tx.send(event).await.is_err() { return Ok(()); } }
                         if decoder.completed && (!matches!(wire,Wire::OpenAi) || frame.trim()=="[DONE]") {
                             let _=tx.send(decoder.completion(&id)).await;
@@ -370,7 +403,7 @@ fn stream_response_with_idle_timeout(
                     }
                 }
                 if eof {
-                    if !data.is_empty() { for event in decoder.decode(&id,wire,&data)? { if tx.send(event).await.is_err() {return Ok(());} } }
+                    if !data.is_empty() { observe_frame(&observer, &data).await?; for event in decoder.decode(&id,wire,&data)? { if tx.send(event).await.is_err() {return Ok(());} } }
                     if !decoder.completed { return Err(DomainError::Validation("Provider stream ended without completion".into())); }
                     let _=tx.send(decoder.completion(&id)).await;
                     return Ok(());
@@ -378,6 +411,11 @@ fn stream_response_with_idle_timeout(
             }
         }.await;
         if let Err(error) = result {
+            if error.to_string().contains("disconnected") || error.to_string().contains("timed out") {
+                if let Some((resolver, req)) = &observer { if let Some(account) = &req.provider_account_id {
+                    if let Err(failure) = resolver.observe_response(account, &req.model, 0, "", None).await { tracing::debug!(%failure, "Stream availability projection failed"); }
+                } }
+            }
             let _ = tx.send(ProviderEvent::failed(&id, error.to_string())).await;
         }
     });

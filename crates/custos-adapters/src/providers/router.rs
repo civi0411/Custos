@@ -13,6 +13,9 @@ use tracing::{debug, error, info};
 #[async_trait]
 pub trait CredentialResolver: Send + Sync {
     async fn select_account(&self, _service: &str, _model: &str) -> Result<Option<String>, DomainError> { Ok(None) }
+    async fn service_for_account(&self, _account: &str) -> Result<Option<String>, DomainError> { Ok(None) }
+    async fn validate_model(&self, _account: &str, _model: &str, _effort: Option<&str>) -> Result<(), DomainError> { Ok(()) }
+    async fn observe_response(&self, _account: &str, _model: &str, _status: u16, _body: &str, _retry_at: Option<i64>) -> Result<(), DomainError> { Ok(()) }
     /// Return access token or API key for a given provider
     async fn get_token(&self, provider_id: &str) -> Result<Option<String>, DomainError>;
     async fn uses_oauth(&self, _provider_id: &str) -> Result<bool, DomainError> {
@@ -58,6 +61,8 @@ struct OpenAiChatRequest {
     temperature: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -136,6 +141,48 @@ pub struct RouterModelProvider {
 }
 
 impl RouterModelProvider {
+    async fn checked_response(&self, result: Result<reqwest::Response, reqwest::Error>, req: &ProviderRequest) -> Result<reqwest::Response, DomainError> {
+        let account = req.provider_account_id.as_deref();
+        let mut response = match result {
+            Ok(response) => response,
+            Err(_) => {
+                if let Some(account) = account { self.resolver.observe_response(account, &req.model, 0, "", None).await?; }
+                let label = if req.model.starts_with("ollama/") { "Ollama" } else { "Provider" };
+                return Err(DomainError::Validation(format!("{label} connection failed; refresh models to reconnect")));
+            }
+        };
+        if response.status().is_success() { return Ok(response); }
+        let status = response.status().as_u16();
+        let retry_at = response.headers().get("retry-after").and_then(|v| v.to_str().ok()).and_then(|value| {
+            value.parse::<i64>().ok().map(|seconds| chrono::Utc::now().timestamp_millis().saturating_add(seconds.max(0).saturating_mul(1000)))
+                .or_else(|| chrono::DateTime::parse_from_rfc2822(value).ok().map(|date| date.timestamp_millis()))
+        });
+        let mut body = Vec::new();
+        while body.len() < 16_384 {
+            match response.chunk().await { Ok(Some(chunk)) => { let remaining = 16_384 - body.len(); body.extend_from_slice(&chunk[..chunk.len().min(remaining)]); }, _ => break }
+        }
+        let body = String::from_utf8_lossy(&body);
+        if let Some(account) = account { self.resolver.observe_response(account, &req.model, status, &body, retry_at).await?; }
+        tracing::debug!(task_id = %req.task_id, run_id = %req.request_id, status, "Provider request rejected");
+        Err(DomainError::Validation(format!("Provider request rejected (HTTP {status}); refresh models or inspect account limits")))
+    }
+
+    async fn observe_adapter_error<T>(&self, result: Result<T, DomainError>, req: &ProviderRequest) -> Result<T, DomainError> {
+        if let (Err(error), Some(account)) = (&result, req.provider_account_id.as_deref()) {
+            let message = error.to_string();
+            let status = message.split("returned ").nth(1).and_then(|part| part.split_whitespace().next()).and_then(|part| part.trim_end_matches(':').parse::<u16>().ok())
+                .or_else(|| message.contains("connection failed").then_some(0));
+            if let Some(status) = status { self.resolver.observe_response(account, &req.model, status, &message, None).await?; }
+        }
+        result
+    }
+
+    fn responses_payload(req: &ProviderRequest, model: &str) -> serde_json::Value {
+        let mut payload = serde_json::json!({"model":model,"input":[{"role":"user","content":[{"type":"input_text","text":req.prompt}]}],"instructions":"You are a helpful assistant.","store":false,"stream":true});
+        if let Some(effort) = &req.reasoning_effort { payload["reasoning"] = serde_json::json!({"effort":effort}); }
+        payload
+    }
+
     pub fn new(resolver: Arc<dyn CredentialResolver>) -> Self {
         Self {
             resolver,
@@ -263,6 +310,7 @@ impl RouterModelProvider {
             }],
             temperature: req.temperature,
             max_tokens: req.max_tokens,
+            reasoning_effort: req.reasoning_effort.clone(),
         };
 
         info!(
@@ -285,9 +333,7 @@ impl RouterModelProvider {
                 .header("Editor-Plugin-Version", "copilot-chat/0.35.0")
                 .header("Copilot-Integration-Id", "vscode-chat");
         }
-        let resp = req_builder.send().await.map_err(|e| {
-            DomainError::Validation(format!("{provider_label} transport error: {e}"))
-        })?;
+        let resp = self.checked_response(req_builder.send().await, req).await?;
 
         let status = resp.status();
         if !status.is_success() {
@@ -354,7 +400,8 @@ impl RouterModelProvider {
         info!(task_id = %req.task_id, request_id = %req.request_id, model, "Dispatching Ollama chat");
         let response = self.http_client.post(format!("{root}/api/chat")).json(&serde_json::json!({
             "model": model, "messages": [{"role": "user", "content": req.prompt}], "stream": false, "options": options
-        })).send().await.map_err(|e| DomainError::Validation(format!("Ollama connection failed; ensure Ollama is running: {e}")))?;
+        }));
+        let response = self.checked_response(response.send().await, req).await?;
         let status = response.status();
         let body = response
             .text()
@@ -399,7 +446,10 @@ impl RouterModelProvider {
         model: &str,
         req: &ProviderRequest,
     ) -> Result<ModelResponse, DomainError> {
-        let endpoint = self.codex_endpoint.as_str();
+        self.execute_responses(token, model, req, &self.codex_endpoint, true).await
+    }
+
+    async fn execute_responses(&self, token: &str, model: &str, req: &ProviderRequest, endpoint: &str, codex: bool) -> Result<ModelResponse, DomainError> {
 
         // Map generic/openai model names to Codex flagship model
         let target_model = if model.is_empty()
@@ -413,44 +463,30 @@ impl RouterModelProvider {
             model
         };
 
-        let payload = serde_json::json!({
-            "model": target_model,
-            "input": [
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": req.prompt}]
-                }
-            ],
-            "instructions": "You are a helpful assistant.",
-            "store": false,
-            "stream": true
-        });
+        let payload = Self::responses_payload(req, target_model);
 
         info!(
             model = %target_model,
             endpoint = %endpoint,
             prompt_len = req.prompt.len(),
-            "Dispatching live ChatGPT Codex response via subscription quota"
+            codex_subscription = codex,
+            "Dispatching live Responses request"
         );
 
         let mut req_builder = self
             .http_client
             .post(endpoint)
             .bearer_auth(token)
-            .header("User-Agent", "codex-cli/0.144.0")
-            .header("Originator", "codex_cli_rs")
             .header("Accept", "text/event-stream")
             .header("Content-Type", "application/json")
             .json(&payload);
 
-        if let Some(account_id) = crate::providers::oauth_pkce::extract_chatgpt_account_id(token) {
+        if codex { req_builder = req_builder.header("User-Agent", super::probe::codex_user_agent()).header("Originator", "codex_cli_rs"); }
+        if let Some(account_id) = codex.then(|| crate::providers::oauth_pkce::extract_chatgpt_account_id(token)).flatten() {
             req_builder = req_builder.header("ChatGPT-Account-ID", account_id);
         }
 
-        let resp = req_builder
-            .send()
-            .await
-            .map_err(|e| DomainError::Validation(format!("ChatGPT Codex transport error: {e}")))?;
+        let resp = self.checked_response(req_builder.send().await, req).await?;
 
         let status = resp.status();
         if !status.is_success() {
@@ -543,10 +579,7 @@ impl RouterModelProvider {
         } else {
             builder.header("x-api-key", token)
         };
-        let resp = builder
-            .send()
-            .await
-            .map_err(|e| DomainError::Validation(format!("Anthropic transport error: {e}")))?;
+        let resp = self.checked_response(builder.send().await, req).await?;
 
         let status = resp.status();
         if !status.is_success() {
@@ -587,22 +620,24 @@ impl ModelProvider for RouterModelProvider {
     }
 
     async fn stream(&self, req: &ProviderRequest) -> Result<tokio::sync::mpsc::Receiver<custos_provider::ProviderEvent>, DomainError> {
-        use super::streaming::{Wire, stream_response};
+        use super::streaming::{Wire, stream_response_observed};
         let mut routed = req.clone();
         if routed.provider_account_id.is_none() {
             let service = Self::classify_provider(&routed.model);
             routed.provider_account_id = self.resolver.select_account(if service == "gemini-oauth" { "gemini" } else { service }, &routed.model).await?;
         }
         let req = &routed;
+        if let Some(account) = &req.provider_account_id { self.resolver.validate_model(account, &req.model, req.reasoning_effort.as_deref()).await?; }
         let model = req.model.trim();
-        let service = Self::classify_provider(model);
+        let service_override = match req.provider_account_id.as_deref() { Some(account) => self.resolver.service_for_account(account).await?, None => None };
+        let service = if model.starts_with("gemini-oauth/") { "gemini-oauth" } else { service_override.as_deref().unwrap_or_else(|| Self::classify_provider(model)) };
         let account = req.provider_account_id.as_deref().unwrap_or(if service == "gemini-oauth" { "gemini" } else { service });
         if req.provider_account_id.is_some() { self.resolver.validate_account(account, if service == "gemini-oauth" { "gemini" } else { service }).await?; }
         if matches!(service, "antigravity" | "gemini-oauth") {
             let token = self.resolver.get_token(account).await?.ok_or_else(||DomainError::Validation("Connect Google OAuth first".into()))?;
             let base = self.resolver.get_endpoint_url(account).await?.unwrap_or_else(||"https://cloudcode-pa.googleapis.com".into());
-            let response = super::antigravity::stream_codeassist(if service == "gemini-oauth" {"gemini"} else {"antigravity"}, &base, &token, req).await?;
-            return Ok(stream_response(response,req.request_id.clone(),Wire::Google));
+            let response = self.observe_adapter_error(super::antigravity::stream_codeassist(if service == "gemini-oauth" {"gemini"} else {"antigravity"}, &base, &token, req).await, req).await?;
+            return Ok(stream_response_observed(response,req.clone(),Wire::Google,self.resolver.clone()));
         }
         let local_base = if service == "local" { self.resolver.get_endpoint_url(account).await?.unwrap_or_else(||"http://localhost:11434".into()) } else {String::new()};
         if service == "local" && (model.starts_with("ollama/") || local_base.contains(":11434")) {
@@ -612,9 +647,10 @@ impl ModelProvider for RouterModelProvider {
             let mut options=serde_json::Map::new();
             if let Some(v)=req.temperature { options.insert("temperature".into(),serde_json::json!(v)); }
             if let Some(v)=req.max_tokens { options.insert("num_predict".into(),serde_json::json!(v)); }
-            let response=self.http_client.post(format!("{root}/api/chat")).json(&serde_json::json!({"model":model,"messages":[{"role":"user","content":req.prompt}],"stream":true,"options":options})).send().await.map_err(|error|DomainError::Validation(format!("Ollama connection failed: {error}")))?;
+            let request=self.http_client.post(format!("{root}/api/chat")).json(&serde_json::json!({"model":model,"messages":[{"role":"user","content":req.prompt}],"stream":true,"options":options}));
+            let response=self.checked_response(request.send().await, req).await?;
             if !response.status().is_success() { return Err(DomainError::Validation(format!("Ollama chat returned {}",response.status()))); }
-            return Ok(stream_response(response,req.request_id.clone(),Wire::Ollama));
+            return Ok(stream_response_observed(response,req.clone(),Wire::Ollama,self.resolver.clone()));
         }
         let oauth=service=="openai" && self.resolver.uses_oauth(account).await?;
         let token=if req.provider_account_id.is_some() || oauth || service=="copilot" { self.resolver.get_token(account).await? } else { self.resolve_token_with_fallback(account).await? };
@@ -627,8 +663,12 @@ impl ModelProvider for RouterModelProvider {
         if service=="openai" && oauth {
             wire=Wire::Codex;
             let model=if matches!(model,""|"default"|"openai"|"codex"|"openai-codex") {"gpt-5.6-sol"} else {model};
-            request=self.http_client.post(&self.codex_endpoint).bearer_auth(token.as_deref().unwrap_or("")).header("User-Agent","codex-cli/0.144.0").header("Originator","codex_cli_rs").header("Accept","text/event-stream").json(&serde_json::json!({"model":model,"input":[{"role":"user","content":[{"type":"input_text","text":req.prompt}]}],"instructions":"You are a helpful assistant.","store":false,"stream":true}));
+            request=self.http_client.post(&self.codex_endpoint).bearer_auth(token.as_deref().unwrap_or("")).header("User-Agent",super::probe::codex_user_agent()).header("Originator","codex_cli_rs").header("Accept","text/event-stream").json(&Self::responses_payload(req, model));
             if let Some(id)=super::oauth_pkce::extract_chatgpt_account_id(token.as_deref().unwrap_or("")) { request=request.header("ChatGPT-Account-ID",id); }
+        } else if service=="openai" && custos_provider::formats::openai::is_openai_responses_model(model) {
+            wire=Wire::Codex;
+            let base=custom.unwrap_or_else(|| "https://api.openai.com/v1".into());
+            request=self.http_client.post(format!("{}/responses",base.trim_end_matches('/'))).bearer_auth(token.as_deref().unwrap_or("")).json(&Self::responses_payload(req,model));
         } else if service=="anthropic" {
             wire=Wire::Claude;
             let base=custom.unwrap_or_else(||"https://api.anthropic.com/v1".into());
@@ -648,6 +688,7 @@ impl ModelProvider for RouterModelProvider {
                 _ => return Err(DomainError::Validation("Unsupported streaming provider".into())),
             };
             let mut payload=serde_json::json!({"model":model,"messages":[{"role":"user","content":req.prompt}],"stream":true,"stream_options":{"include_usage":true}});
+            if let Some(effort)=&req.reasoning_effort {payload["reasoning_effort"]=serde_json::json!(effort);}
             if let Some(v)=req.temperature {payload["temperature"]=serde_json::json!(v);}
             if let Some(v)=req.max_tokens {payload["max_tokens"]=serde_json::json!(v);}
             request=self.http_client.post(format!("{}/chat/completions",base.trim_end_matches('/'))).json(&payload);
@@ -657,9 +698,9 @@ impl ModelProvider for RouterModelProvider {
             request=request.header("User-Agent","GitHubCopilotChat/0.35.0").header("Editor-Version","vscode/1.107.0").header("Editor-Plugin-Version","copilot-chat/0.35.0").header("Copilot-Integration-Id","vscode-chat");
         }
         tracing::debug!(task_id = %req.task_id, request_id = %req.request_id, service, "Starting provider stream");
-        let response=request.send().await.map_err(|e|DomainError::Validation(format!("Provider stream connection failed: {e}")))?;
+        let response=self.checked_response(request.send().await, req).await?;
         if !response.status().is_success() { return Err(DomainError::Validation(format!("Provider stream returned {}",response.status()))); }
-        Ok(stream_response(response,req.request_id.clone(),wire))
+        Ok(stream_response_observed(response,req.clone(),wire,self.resolver.clone()))
     }
 
     async fn generate(&self, req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
@@ -671,7 +712,8 @@ impl ModelProvider for RouterModelProvider {
         let req = &routed;
         let requested_model = req.model.trim();
         debug!(task_id = %req.task_id, request_id = %req.request_id, model = %requested_model, "Routing model request");
-        let target_provider = Self::classify_provider(requested_model);
+        let service_override = match req.provider_account_id.as_deref() { Some(account) => self.resolver.service_for_account(account).await?, None => None };
+        let target_provider = if requested_model.starts_with("gemini-oauth/") { "gemini-oauth" } else { service_override.as_deref().unwrap_or_else(|| Self::classify_provider(requested_model)) };
         if let Some(account) = &req.provider_account_id {
             let service = if target_provider == "gemini-oauth" { "gemini" } else { target_provider };
             self.resolver.validate_account(account, service).await?;
@@ -686,12 +728,12 @@ impl ModelProvider for RouterModelProvider {
             }
             "gemini-oauth" => {
                 let token = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or("gemini")).await?.ok_or_else(|| DomainError::Validation("Connect Gemini OAuth first".into()))?;
-                super::antigravity::generate_codeassist_content("gemini", "https://cloudcode-pa.googleapis.com", &token, req).await
+                self.observe_adapter_error(super::antigravity::generate_codeassist_content("gemini", "https://cloudcode-pa.googleapis.com", &token, req).await, req).await
             }
             "antigravity" => {
                 let token = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or("antigravity")).await?.ok_or_else(|| DomainError::Validation("Connect Antigravity with OAuth first".into()))?;
                 let base = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("antigravity")).await?.unwrap_or_else(|| "https://cloudcode-pa.googleapis.com".into());
-                super::antigravity::generate_content(&base, &token, req).await
+                self.observe_adapter_error(super::antigravity::generate_content(&base, &token, req).await, req).await
             }
             "openai" => {
                 let oauth = self
@@ -735,6 +777,9 @@ impl ModelProvider for RouterModelProvider {
                 } else {
                     requested_model
                 };
+                if custos_provider::formats::openai::is_openai_responses_model(model) {
+                    return self.execute_responses(&token, model, req, &format!("{}/responses",base_url.trim_end_matches('/')), false).await;
+                }
                 self.execute_openai_compatible(&base_url, Some(&token), model, req, "OpenAI")
                     .await
             }
@@ -1425,6 +1470,69 @@ mod tests {
         let stream = "event: ping\ndata: {}\n\n";
         let err = parse_codex_sse_stream(stream);
         assert!(err.is_err());
+    }
+
+
+    #[tokio::test]
+    async fn conversation_effort_reaches_codex_and_api_responses_without_aliasing() {
+        use wiremock::{Mock,MockServer,ResponseTemplate};
+        use wiremock::matchers::{method,path,body_partial_json,header};
+        for oauth in [true, false] {
+            let server=MockServer::start().await;
+            let endpoint=if oauth {"/codex/responses"} else {"/responses"};
+            for effort in ["xhigh","max","ultra"] {
+                let body="data: {\"type\":\"response.output_text.delta\",\"delta\":\"answer\"}\n\ndata: {\"type\":\"response.completed\",\"response\":{\"model\":\"gpt-6.1-sol\",\"usage\":{\"input_tokens\":1,\"output_tokens\":2,\"total_tokens\":3}}}\n\n";
+                let mut mock=Mock::given(method("POST")).and(path(endpoint)).and(body_partial_json(serde_json::json!({"model":"gpt-6.1-sol","reasoning":{"effort":effort}})));
+                if oauth {mock=mock.and(header("user-agent",super::super::probe::codex_user_agent()));}
+                mock.respond_with(ResponseTemplate::new(200).set_body_string(body).insert_header("content-type","text/event-stream")).expect(2).mount(&server).await;
+            }
+            let mut provider=RouterModelProvider::new(Arc::new(TestCredentialResolver{oauth,endpoint:server.uri(),fail:false}));
+            provider.codex_endpoint=format!("{}/codex/responses",server.uri());
+            for effort in ["xhigh","max","ultra"] {
+                let mut request=ProviderRequest::simple("hello"); request.model="gpt-6.1-sol".into(); request.reasoning_effort=Some(effort.into()); request.provider_account_id=Some("account-A".into());
+                assert_eq!(provider.generate(&request).await.unwrap().content,"answer");
+                let mut receiver=provider.stream(&request).await.unwrap();
+                let mut completed=false;
+                while let Some(event)=receiver.recv().await {if event.event_type==custos_provider::ProviderEventType::Completed {completed=true;} assert_ne!(event.event_type,custos_provider::ProviderEventType::Failed);}
+                assert!(completed);
+            }
+            assert_eq!(server.received_requests().await.unwrap().len(),6);
+        }
+        let payload=RouterModelProvider::responses_payload(&ProviderRequest::simple("legacy"),"gpt-6-sol");
+        assert!(payload.get("reasoning").is_none());
+    }
+
+
+    struct ObservingResolver { endpoint: String, state: super::super::catalog::ModelAvailability }
+    #[async_trait]
+    impl CredentialResolver for ObservingResolver {
+        async fn get_token(&self, _: &str) -> Result<Option<String>,DomainError> { Ok(Some("fixture".into())) }
+        async fn get_endpoint_url(&self, _: &str) -> Result<Option<String>,DomainError> { Ok(Some(self.endpoint.clone())) }
+        async fn service_for_account(&self, _: &str) -> Result<Option<String>,DomainError> { Ok(Some("openai".into())) }
+        async fn validate_model(&self, account:&str, model:&str, _:Option<&str>) -> Result<(),DomainError> { self.state.check(account,model) }
+        async fn observe_response(&self, account:&str, model:&str, status:u16, body:&str, retry_at:Option<i64>) -> Result<(),DomainError> { self.state.observe(account,model,status,body,retry_at) }
+    }
+    #[tokio::test]
+    async fn rejected_http_and_stream_frames_update_only_the_selected_account() {
+        use wiremock::{Mock,MockServer,ResponseTemplate};
+        use wiremock::matchers::{method,path};
+        let server=MockServer::start().await;
+        Mock::given(method("POST")).and(path("/chat/completions")).respond_with(ResponseTemplate::new(429).set_body_json(serde_json::json!({"error":{"code":"insufficient_quota"}}))).expect(1).mount(&server).await;
+        let state=super::super::catalog::ModelAvailability::default();
+        let provider=RouterModelProvider::new(Arc::new(ObservingResolver{endpoint:server.uri(),state:state.clone()}));
+        let mut request=ProviderRequest::simple("hello"); request.model="account-specific-alias".into(); request.provider_account_id=Some("A".into());
+        assert!(provider.generate(&request).await.is_err());
+        assert!(state.check("A",&request.model).is_err());
+        assert!(state.check("B",&request.model).is_ok());
+        assert!(provider.stream(&request).await.is_err());
+        state.refresh("A").unwrap(); assert!(state.check("A",&request.model).is_err());
+        state.quota_recovered("A").unwrap();
+        server.reset().await;
+        Mock::given(method("POST")).and(path("/chat/completions")).respond_with(ResponseTemplate::new(200).set_body_string("data: {\"error\":{\"code\":\"model_not_found\",\"message\":\"unavailable\"}}\n\n").insert_header("content-type","text/event-stream")).expect(1).mount(&server).await;
+        let mut receiver=provider.stream(&request).await.unwrap();
+        assert_eq!(receiver.recv().await.unwrap().event_type,custos_provider::ProviderEventType::Failed);
+        assert!(state.check("A",&request.model).is_err());
+        assert!(state.check("B",&request.model).is_ok());
     }
 
     struct MockEmptyResolver;

@@ -306,6 +306,10 @@ pub struct StartRunCommand {
     pub prompt: Option<String>,
     #[serde(default)]
     pub model: Option<String>,
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
+    #[serde(default)]
+    pub provider_account_id: Option<String>,
 }
 
 impl StartRunCommand {
@@ -322,6 +326,8 @@ impl StartRunCommand {
             turn_id: None,
             prompt: None,
             model: None,
+            reasoning_effort: None,
+            provider_account_id: None,
         }
     }
 

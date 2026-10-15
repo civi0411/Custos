@@ -99,5 +99,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!("../migrations/0029_provider_account_routing.sql"))?;
     conn.execute_batch(include_str!("../migrations/0030_assistant_drafts.sql"))?;
     conn.execute_batch(include_str!("../migrations/0031_daemon_settings.sql"))?;
+    let catalog_columns = conn
+        .prepare("PRAGMA table_info(provider_model_catalog)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    if !catalog_columns.iter().any(|column| column == "capabilities_json") {
+        conn.execute_batch(include_str!("../migrations/0032_provider_model_capabilities.sql"))?;
+    }
     Ok(())
 }

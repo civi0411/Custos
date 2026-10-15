@@ -398,6 +398,8 @@ impl TaskRuntime {
         run.metadata["provider_account_id"] = provider_account_id;
         run.metadata["background"] = serde_json::json!(background);
         run.metadata["requested_model"] = serde_json::json!(cmd.model);
+        run.metadata["reasoning_effort"] = serde_json::json!(cmd.reasoning_effort);
+        if let Some(account) = &cmd.provider_account_id { run.metadata["provider_account_id"] = serde_json::json!(account); }
         run.metadata["session_id"] = serde_json::json!(cmd.session_id);
         run.metadata["turn_id"] = serde_json::json!(cmd.turn_id.clone().unwrap_or_else(||new_id("turn")));
         run.metadata["requested_mode"] = serde_json::json!(requested_mode);
@@ -788,6 +790,7 @@ impl TaskRuntime {
                         prompt_text,
                         target_model,
                     );
+                    req.reasoning_effort = run.metadata.get("reasoning_effort").and_then(|v| v.as_str()).map(str::to_string);
                     req.provider_account_id = run.metadata.get("provider_account_id").and_then(|v| v.as_str()).map(str::to_string);
                     let mut receiver = model.stream(&req).await?;
                     let mut content = String::new();
@@ -1521,6 +1524,7 @@ mod tests {
         fn provider_id(&self) -> &str { "test" }
         async fn generate(&self, req: &ProviderRequest) -> Result<custos_provider::ModelResponse,DomainError> {
             assert_eq!(req.provider_account_id.as_deref(),Some("account-A"));
+            assert_eq!(req.reasoning_effort.as_deref(),Some("ultra"));
             Ok(custos_provider::ModelResponse::text("answer","ollama/test",10).with_usage(Some(7),Some(3),Some(10)))
         }
     }
@@ -1533,13 +1537,17 @@ mod tests {
         task.metadata=serde_json::json!({"provider_account_id":"account-A"});
         store.save_task(&task).await.unwrap();
         let runtime=TaskRuntime::new().with_kernel(Arc::new(TrustedKernel::new(store.clone()))).with_model(Arc::new(MeasuredAccountModel)).with_run_store(store.clone());
-        let handle=runtime.start_run(StartRunCommand::new(&task.id,"actor").with_preferred_mode("model").with_model("ollama/test").with_prompt("hello")).await.unwrap();
+        let mut command=StartRunCommand::new(&task.id,"actor").with_preferred_mode("model").with_model("ollama/test").with_prompt("hello");
+        command.reasoning_effort=Some("ultra".into());
+        command.provider_account_id=Some("account-A".into());
+        let handle=runtime.start_run(command).await.unwrap();
         drop(runtime);
         let run=store.get_run(&handle.run_id).await.unwrap().unwrap();
         assert_eq!(run.metadata["provider_account_id"],"account-A");
         assert_eq!(run.metadata["usage"]["total_tokens"],10);
         assert_eq!(run.metadata["usage"]["input_tokens"],7);
         assert_eq!(run.metadata["requested_model"],"ollama/test");
+        assert_eq!(run.metadata["reasoning_effort"],"ultra");
     }
 
     struct TestFailingModel;

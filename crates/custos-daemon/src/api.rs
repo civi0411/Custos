@@ -191,6 +191,7 @@ pub struct LocalApiDispatcher {
     harnesses: Arc<HarnessRegistry>,
     python_kernel: Option<Arc<PythonKernelCoordinator>>,
     fleet_automation: Option<Arc<FleetAutomationRepository>>,
+    model_availability: custos_adapters::providers::catalog::ModelAvailability,
     model_catalog: custos_adapters::providers::catalog::ModelCatalogService,
     oauth_callback_server: Option<Arc<crate::oauth_callback_server::OAuthCallbackServer>>,
     pack_registry: Arc<custos_packs::DomainPackRegistry>,
@@ -220,6 +221,7 @@ impl LocalApiDispatcher {
             harnesses: Arc::new(HarnessRegistry::new()),
             python_kernel: Some(Arc::new(PythonKernelCoordinator::new())),
             fleet_automation: None,
+            model_availability: Default::default(),
             model_catalog: custos_adapters::providers::catalog::ModelCatalogService::new(),
             oauth_callback_server: None,
             pack_registry: Arc::new(custos_packs::create_default_pack_registry()),
@@ -227,6 +229,11 @@ impl LocalApiDispatcher {
             outbox: None,
             sqlite_store: None,
         }
+    }
+
+    pub fn with_model_availability(mut self, availability: custos_adapters::providers::catalog::ModelAvailability) -> Self {
+        self.model_availability = availability;
+        self
     }
 
     pub fn with_sqlite_store(mut self, store: Arc<custos_persistence::SqliteTaskStore>) -> Self {
@@ -1396,6 +1403,9 @@ impl LocalApiDispatcher {
                 if let Some(ref m) = params.model {
                     cmd = cmd.with_model(m.clone());
                 }
+
+                cmd.reasoning_effort = params.reasoning_effort;
+                cmd.provider_account_id = params.provider_account_id;
 
                 let prompt = if let Some(p) = params.prompt {
                     Some(p)
@@ -3351,7 +3361,7 @@ impl LocalApiDispatcher {
                 let result = match req.method.as_str() {
                     "v1.providers.route" => {
                         let model = req.params.get("model").and_then(|v|v.as_str()).unwrap_or("");
-                        crate::runtime::reserve_provider_account(repo,service,model).map(|account|serde_json::json!({"account_id":account}))
+                        crate::runtime::reserve_available_provider_account(repo,service,model,req.params.get("reasoning_effort").and_then(|v|v.as_str()),&self.model_availability).map(|account|serde_json::json!({"account_id":account}))
                     },
                     "v1.providers.routing.save" => {
                         let enabled = match req.params.get("round_robin").and_then(|v|v.as_bool()) { Some(v)=>v,None=>return ApiResponse::error(req.id,"Missing round_robin mode") };
@@ -3561,11 +3571,23 @@ impl LocalApiDispatcher {
                     .await
                 };
                 match probe {
-                    Ok(models) => {
+                    Ok(mut models) => {
+                        models.retain(|model| custos_adapters::providers::probe::conversation_model_is_visible(&model.id, model.name.as_deref()));
+                        let mut unavailable_models = std::collections::HashMap::new();
+                        if !matches!(provider_type, "openai" | "codex" | "anthropic" | "gemini" | "antigravity" | "copilot" | "deepseek" | "local" | "ollama" | "groq" | "openrouter" | "together" | "cerebras" | "perplexity" | "mistral") { models.clear(); }
+                        if !matches!(provider_type, "openai" | "codex" | "copilot") {
+                            for model in &mut models {
+                                if provider_type == "antigravity" && custos_adapters::providers::antigravity::supports_tiered_reasoning(&model.id) { continue; }
+                                model.efforts.clear(); model.default_effort = None;
+                            }
+                        }
                         if let (Some(repo), Some(pid)) = (self.providers.as_ref(), provider_id.as_deref()) {
                             let catalog_result = self.model_catalog.merge_probed_models(provider_type, models.clone());
-                            let cache_key = format!("verified-probe:{}:{}:{}:{}", pid, base_url.trim().trim_end_matches('/'), if oauth { "oauth" } else { "api_key" }, token_record.as_ref().map(|t| t.created_at).unwrap_or(0));
+                            let cache_key = custos_adapters::providers::probe::verified_catalog_key(pid, &base_url, oauth, token_record.as_ref().map(|t| t.created_at).unwrap_or(0), provider_type);
                             if let Err(e) = repo.save_catalog_models(&cache_key, &catalog_result.models) { return ApiResponse::error(req.id, e.to_string()); }
+                            if let Err(e) = self.model_availability.refresh(&cache_key) { return ApiResponse::error(req.id, e.to_string()); }
+                            unavailable_models = match self.model_availability.snapshot(&cache_key) { Ok(value) => value, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
+                            models.retain(|model| !unavailable_models.contains_key("*") && !unavailable_models.contains_key(&model.id));
                         }
                         match serde_json::to_value(&models) {
                             Ok(val) => ApiResponse::success(
@@ -3573,6 +3595,7 @@ impl LocalApiDispatcher {
                                 serde_json::json!({
                                     "models": val,
                                     "count": models.len(),
+                                    "unavailable_models": unavailable_models,
                                     "base_url": base_url,
                                 }),
                             ),
@@ -3607,32 +3630,21 @@ impl LocalApiDispatcher {
                         .filter(|s| !s.trim().is_empty())
                         .or_else(|| default_model_probe_base_url(service))
                         .unwrap_or("");
-                    let token = match self.read_provider_token(pid).await {
-                        Ok(token) => token,
-                        Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                    let cache_key = if record.is_some() {
+                        match crate::runtime::provider_catalog_scope(repo, pid) { Ok(scope) => scope, Err(error) => return ApiResponse::error(req.id, error.to_string()) }
+                    } else {
+                        custos_adapters::providers::probe::verified_catalog_key(pid, endpoint, false, 0, service)
                     };
-                    let oauth = token.as_ref().is_some_and(|tok| {
-                        tok.refresh_token.is_some()
-                            || tok
-                                .scope
-                                .as_deref()
-                                .is_some_and(|s| !s.trim().is_empty())
-                    });
-                    let cache_key = format!(
-                        "verified-probe:{}:{}:{}:{}",
-                        pid,
-                        endpoint.trim().trim_end_matches('/'),
-                        if oauth { "oauth" } else { "api_key" },
-                        token.as_ref().map(|t| t.created_at).unwrap_or(0)
-                    );
                     let fetched_at = match repo.catalog_fetched_at(&cache_key) {
                         Ok(timestamp) => timestamp,
                         Err(e) => return ApiResponse::error(req.id, e.to_string()),
                     };
                     return match repo.list_catalog_models(Some(&cache_key)) {
                         Ok(mut cached) => {
+                            let unavailable = match self.model_availability.snapshot(&cache_key) { Ok(value) => value, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
+                            cached.retain(|model| custos_adapters::providers::probe::conversation_model_is_visible(&model.id, Some(&model.label)) && !unavailable.contains_key("*") && !unavailable.contains_key(&model.id));
                             for model in &mut cached { model.provider_type = service.to_string(); }
-                            ApiResponse::success(req.id, serde_json::json!({ "origin": "cached", "models": cached, "fetched_at": fetched_at }))
+                            ApiResponse::success(req.id, serde_json::json!({ "origin": "cached", "models": cached, "fetched_at": fetched_at, "unavailable_models": unavailable }))
                         },
                         Err(e) => ApiResponse::error(req.id, e.to_string()),
                     };
@@ -3674,7 +3686,11 @@ impl LocalApiDispatcher {
                                             match refreshed { Ok(value) => { if let Err(e)=self.refresh_provider_token(&token, &value).await { return ApiResponse::error(req.id,e.to_string()); } token=value; }, Err(_) => { snapshot["status"]=serde_json::json!("unavailable"); snapshot["error"]=serde_json::json!("Reconnect account to refresh quota"); quotas.push(snapshot); continue; } }
                                         }
                                         match custos_adapters::providers::probe::probe_account_quota(&provider.service_type,&token.access_token).await {
-                                            Ok(value) => { snapshot["status"]=value["status"].clone(); snapshot["windows"]=value["windows"].clone(); snapshot["source"]=value["source"].clone(); },
+                                            Ok(value) => {
+                                                if value["status"] == "available" && value["windows"].as_array().is_some_and(|windows| !windows.is_empty() && windows.iter().all(|window| window["used_percent"].as_f64().is_some_and(|used| (0.0..100.0).contains(&used)))) {
+                                                    if let Ok(scope) = crate::runtime::provider_catalog_scope(repo, &provider.id) { if let Err(error) = self.model_availability.quota_recovered(&scope) { tracing::debug!(%error, "Quota recovery projection failed"); } }
+                                                }
+                                                snapshot["status"]=value["status"].clone(); snapshot["windows"]=value["windows"].clone(); snapshot["source"]=value["source"].clone(); },
                                             Err(e) => { snapshot["status"]=serde_json::json!("unavailable"); snapshot["error"]=serde_json::json!(e.to_string()); }
                                         }
                                     },
@@ -8691,5 +8707,39 @@ mod tests {
         assert_eq!(launch_val.get("session_id").unwrap().as_str(), Some("test_emu_session"));
         assert_eq!(launch_val.get("width").unwrap().as_u64(), Some(393));
         assert_eq!(launch_val.get("height").unwrap().as_u64(), Some(852));
+    }
+}
+
+#[cfg(test)]
+mod conversation_effort_api_tests {
+    use super::*;
+    struct EffortModel;
+    #[async_trait::async_trait]
+    impl custos_provider::ModelPort for EffortModel {
+        fn provider_id(&self) -> &str { "fixture" }
+        async fn generate(&self, request:&custos_provider::ProviderRequest) -> Result<custos_provider::ModelResponse,DomainError> {
+            assert_eq!(request.reasoning_effort.as_deref(),Some("ultra"));
+            assert_eq!(request.provider_account_id.as_deref(),Some("account-A"));
+            assert_eq!(request.model,"gpt-6.1-sol");
+            Ok(custos_provider::ModelResponse::text("answer","gpt-6.1-sol",3))
+        }
+    }
+    #[tokio::test]
+    async fn background_start_api_preserves_effort_through_persisted_run_and_provider_request() {
+        use custos_core::contracts::storage::RunPort;
+        let dir=tempfile::tempdir().unwrap();let db=dir.path().join("reasoning-api.db");
+        let runtime=crate::runtime::CustosRuntime::bootstrap_with_model(db.to_str().unwrap(),Arc::new(EffortModel)).unwrap();
+        let request=|method:&str,params| ApiRequest{id:"fixture".into(),method:method.into(),params};
+        let task=runtime.local_api.handle_request(request("v1.tasks.create",serde_json::json!({"title":"Reasoning fixture"}))).await.result.unwrap();
+        let session=runtime.local_api.handle_request(request("v1.sessions.create",serde_json::json!({"mode":"assisted"}))).await.result.unwrap();
+        let response=runtime.local_api.handle_request(request("v1.workflow.start_run",serde_json::json!({"background":true,"task_id":task["id"],"session_id":session["id"],"turn_id":"turn-fixture","preferred_mode":"model","prompt":"hello","model":"gpt-6.1-sol","provider_account_id":"account-A","reasoning_effort":"ultra"}))).await;
+        assert!(response.is_success(),"{:?}",response.error);
+        let handle: custos_domain::RunHandle=serde_json::from_value(response.result.unwrap()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5),async {
+            loop { let run=runtime.store.get_run(&handle.run_id).await.unwrap().unwrap();
+                if run.status.is_terminal() { assert_eq!(run.status,custos_domain::RunStatus::Completed);assert_eq!(run.metadata["reasoning_effort"],"ultra");assert_eq!(run.metadata["provider_account_id"],"account-A");break; }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        }).await.unwrap();
     }
 }

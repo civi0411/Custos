@@ -107,6 +107,7 @@ impl AgentRuntimePort for GovernedAgentRuntime {
             prompt: prompt_content,
             model: self.provider.provider_id().to_string(),
             provider_account_id: None,
+            reasoning_effort: None,
             temperature: Some(0.2),
             max_tokens: Some(4096),
             tools: if self.available_tools.is_empty() {

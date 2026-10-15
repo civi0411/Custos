@@ -348,13 +348,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               <ProviderBrandIcon provider={account.providerId} size={16} />
                               <span className="truncate">{account.accountName}</span>
                               <span className="text-[9px] px-1.5 py-0.2 rounded font-mono border bg-surface-2 text-fg-editor border-border-default">
-                                {account.providerId === 'local' ? 'Local' : account.authType === 'oauth' ? 'OAuth 2.0' : 'API Key'}
+                                {account.providerId === 'local' ? 'Local' : account.authType === 'oauth' ? 'OAuth' : 'API Key'}
                               </span>
-                              {account.oauthTier && (
-                                <span className="text-[9px] px-1.5 py-0.2 rounded font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/20">
-                                  {account.oauthTier}
-                                </span>
-                              )}
                             </div>
                             <div className="mt-1 font-mono text-[10px] text-[var(--color-fg-muted)] flex flex-wrap items-center gap-1.5">
                               {account.providerId == 'local' && <span>{account.providerName} · {account.defaultModel}</span>}
@@ -371,7 +366,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               style={{ backgroundColor: account.badgeColor || '#10b981' }}
                               title={account.providerId === 'local' ? (account.status === 'active' ? 'Online' : 'Offline') : account.statusLabel || account.status}
                             />
-                            {account.providerId === 'local' && account.status !== 'active' && <button type="button" onClick={() => void refreshModels()} className="provider-oauth-action rounded px-2 py-1 text-[10px]">Retry</button>}
+                            <button type="button" onClick={() => void refreshModels()} className="provider-oauth-action rounded px-2 py-1 text-[10px]">Refresh models</button>
                             <button
                               type="button"
                               onClick={() => {
@@ -384,6 +379,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               Disconnect
                             </button>
                           </div>
+                          {account.catalogError && <p className="max-w-xs text-[10px] text-fg-subtle" role="status">{account.catalogError}</p>}
                         </div>
                       ))}
                             </motion.div>}

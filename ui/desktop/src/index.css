@@ -1661,7 +1661,7 @@ input[type="checkbox"]:disabled {
 
 .conversation-scroll-blur-top {
   top: 0;
-  background: linear-gradient(to bottom, var(--bg-canvas), transparent);
+  background: transparent;
   mask-image: linear-gradient(to bottom, black, transparent);
   -webkit-mask-image: linear-gradient(to bottom, black, transparent);
 }
