@@ -1,7 +1,7 @@
 use crate::connection::DbConnection;
 use custos_domain::{
-    ClientApiKeyRecord, DomainError, ModelCatalogOption, ModelPricing, OAuthTokenRecord,
-    ProviderConfig,
+    ClientApiKeyRecord, DomainError, LocalModelDescriptor, LocalModelFolder, ModelCatalogOption,
+    ModelCompatibility, ModelPricing, OAuthTokenRecord, ProviderConfig,
 };
 use rusqlite::params;
 
@@ -643,6 +643,231 @@ impl ProviderRepository {
         }
         Ok(list)
     }
+
+    // ── Local Model Folders & Model Cache ─────────────────────────────────────
+
+    pub fn save_local_folder(&self, folder: &LocalModelFolder) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "INSERT INTO local_model_folders(id, folder_path, label, is_active, auto_scan, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(id) DO UPDATE SET
+                folder_path = excluded.folder_path,
+                label = excluded.label,
+                is_active = excluded.is_active,
+                auto_scan = excluded.auto_scan,
+                updated_at = excluded.updated_at",
+            params![
+                folder.id,
+                folder.folder_path,
+                folder.label,
+                folder.is_active as i32,
+                folder.auto_scan as i32,
+                folder.created_at,
+                folder.updated_at,
+            ],
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+        Ok(())
+    }
+
+    pub fn list_local_folders(&self) -> Result<Vec<LocalModelFolder>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, folder_path, label, is_active, auto_scan, created_at, updated_at
+                 FROM local_model_folders ORDER BY created_at ASC",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(LocalModelFolder {
+                    id: row.get(0)?,
+                    folder_path: row.get(1)?,
+                    label: row.get(2)?,
+                    is_active: row.get::<_, i32>(3)? != 0,
+                    auto_scan: row.get::<_, i32>(4)? != 0,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                })
+            })
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut list = Vec::new();
+        for r in rows {
+            list.push(r.map_err(|e| DomainError::Validation(e.to_string()))?);
+        }
+        Ok(list)
+    }
+
+    pub fn get_local_folder(&self, id: &str) -> Result<Option<LocalModelFolder>, DomainError> {
+        use rusqlite::OptionalExtension;
+        let conn = self.db.lock()?;
+        conn.query_row(
+            "SELECT id, folder_path, label, is_active, auto_scan, created_at, updated_at
+             FROM local_model_folders WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(LocalModelFolder {
+                    id: row.get(0)?,
+                    folder_path: row.get(1)?,
+                    label: row.get(2)?,
+                    is_active: row.get::<_, i32>(3)? != 0,
+                    auto_scan: row.get::<_, i32>(4)? != 0,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|e| DomainError::Validation(e.to_string()))
+    }
+
+    pub fn delete_local_folder(&self, id: &str) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        conn.execute("DELETE FROM local_model_folders WHERE id = ?1", params![id])
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        conn.execute("DELETE FROM local_model_cache WHERE folder_id = ?1", params![id])
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        Ok(())
+    }
+
+    pub fn upsert_cached_model(&self, model: &LocalModelDescriptor) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        let compat_str = match model.compatibility {
+            ModelCompatibility::Green => "green",
+            ModelCompatibility::Yellow => "yellow",
+            ModelCompatibility::Red => "red",
+        };
+        conn.execute(
+            "INSERT INTO local_model_cache(
+                file_path, folder_id, file_name, file_size_bytes, file_mtime,
+                architecture, model_name, context_length, quantization, chat_template,
+                total_memory_required, compatibility, scanned_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            ON CONFLICT(file_path) DO UPDATE SET
+                folder_id = excluded.folder_id,
+                file_name = excluded.file_name,
+                file_size_bytes = excluded.file_size_bytes,
+                file_mtime = excluded.file_mtime,
+                architecture = excluded.architecture,
+                model_name = excluded.model_name,
+                context_length = excluded.context_length,
+                quantization = excluded.quantization,
+                chat_template = excluded.chat_template,
+                total_memory_required = excluded.total_memory_required,
+                compatibility = excluded.compatibility,
+                scanned_at = excluded.scanned_at",
+            params![
+                model.file_path,
+                model.folder_id,
+                model.file_name,
+                model.file_size_bytes as i64,
+                model.file_mtime,
+                model.architecture,
+                model.model_name,
+                model.context_length as i64,
+                model.quantization,
+                model.chat_template,
+                model.total_memory_required as i64,
+                compat_str,
+                model.scanned_at,
+            ],
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+        Ok(())
+    }
+
+    pub fn list_cached_models(&self, folder_id: Option<&str>) -> Result<Vec<LocalModelDescriptor>, DomainError> {
+        let conn = self.db.lock()?;
+        let query = if folder_id.is_some() {
+            "SELECT file_path, folder_id, file_name, file_size_bytes, file_mtime,
+                    architecture, model_name, context_length, quantization, chat_template,
+                    total_memory_required, compatibility, scanned_at
+             FROM local_model_cache WHERE folder_id = ?1 ORDER BY model_name ASC"
+        } else {
+            "SELECT file_path, folder_id, file_name, file_size_bytes, file_mtime,
+                    architecture, model_name, context_length, quantization, chat_template,
+                    total_memory_required, compatibility, scanned_at
+             FROM local_model_cache ORDER BY model_name ASC"
+        };
+
+        let mut stmt = conn.prepare(query).map_err(|e| DomainError::Validation(e.to_string()))?;
+        let mapper = |row: &rusqlite::Row| {
+            let compat_str: String = row.get(11)?;
+            let compatibility = match compat_str.as_str() {
+                "yellow" => ModelCompatibility::Yellow,
+                "red" => ModelCompatibility::Red,
+                _ => ModelCompatibility::Green,
+            };
+            Ok(LocalModelDescriptor {
+                file_path: row.get(0)?,
+                folder_id: row.get(1)?,
+                file_name: row.get(2)?,
+                file_size_bytes: row.get::<_, i64>(3)? as u64,
+                file_mtime: row.get(4)?,
+                architecture: row.get(5)?,
+                model_name: row.get(6)?,
+                context_length: row.get::<_, i64>(7)? as u64,
+                quantization: row.get(8)?,
+                chat_template: row.get(9)?,
+                total_memory_required: row.get::<_, i64>(10)? as u64,
+                compatibility,
+                scanned_at: row.get(12)?,
+            })
+        };
+
+        let rows = if let Some(fid) = folder_id {
+            stmt.query_map(params![fid], mapper)
+        } else {
+            stmt.query_map([], mapper)
+        }
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut list = Vec::new();
+        for r in rows {
+            list.push(r.map_err(|e| DomainError::Validation(e.to_string()))?);
+        }
+        Ok(list)
+    }
+
+    pub fn get_cached_model_by_path(&self, file_path: &str) -> Result<Option<LocalModelDescriptor>, DomainError> {
+        use rusqlite::OptionalExtension;
+        let conn = self.db.lock()?;
+        conn.query_row(
+            "SELECT file_path, folder_id, file_name, file_size_bytes, file_mtime,
+                    architecture, model_name, context_length, quantization, chat_template,
+                    total_memory_required, compatibility, scanned_at
+             FROM local_model_cache WHERE file_path = ?1",
+            params![file_path],
+            |row| {
+                let compat_str: String = row.get(11)?;
+                let compatibility = match compat_str.as_str() {
+                    "yellow" => ModelCompatibility::Yellow,
+                    "red" => ModelCompatibility::Red,
+                    _ => ModelCompatibility::Green,
+                };
+                Ok(LocalModelDescriptor {
+                    file_path: row.get(0)?,
+                    folder_id: row.get(1)?,
+                    file_name: row.get(2)?,
+                    file_size_bytes: row.get::<_, i64>(3)? as u64,
+                    file_mtime: row.get(4)?,
+                    architecture: row.get(5)?,
+                    model_name: row.get(6)?,
+                    context_length: row.get::<_, i64>(7)? as u64,
+                    quantization: row.get(8)?,
+                    chat_template: row.get(9)?,
+                    total_memory_required: row.get::<_, i64>(10)? as u64,
+                    compatibility,
+                    scanned_at: row.get(12)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|e| DomainError::Validation(e.to_string()))
+    }
 }
 
 #[cfg(test)]
@@ -772,6 +997,54 @@ mod catalog_snapshot_tests {
         let conn=repo.db.lock().unwrap();
         let count:i64=conn.query_row("SELECT COUNT(*) FROM outbox_messages WHERE topic='provider.account.selected'",[],|r|r.get(0)).unwrap();
         assert_eq!(count,3);
+    }
+
+    #[test]
+    fn local_model_folders_and_cache_crud() {
+        let store = crate::SqliteTaskStore::new_in_memory().unwrap();
+        let repo = store.providers();
+        let folder = LocalModelFolder {
+            id: "fld-1".into(),
+            folder_path: "/tmp/models".into(),
+            label: Some("Test Folder".into()),
+            is_active: true,
+            auto_scan: true,
+            created_at: 100,
+            updated_at: 100,
+        };
+        repo.save_local_folder(&folder).unwrap();
+        let list = repo.list_local_folders().unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, "fld-1");
+        assert_eq!(list[0].folder_path, "/tmp/models");
+
+        let model = LocalModelDescriptor {
+            file_path: "/tmp/models/qwen2.5-7b.gguf".into(),
+            folder_id: "fld-1".into(),
+            file_name: "qwen2.5-7b.gguf".into(),
+            file_size_bytes: 4_500_000_000,
+            file_mtime: 200,
+            architecture: "qwen2".into(),
+            model_name: "Qwen2.5-7B-Instruct".into(),
+            context_length: 32768,
+            quantization: "Q4_K_M".into(),
+            chat_template: Some("<chat_template>".into()),
+            total_memory_required: 5_200_000_000,
+            compatibility: ModelCompatibility::Green,
+            scanned_at: 300,
+        };
+        repo.upsert_cached_model(&model).unwrap();
+        let cached = repo.list_cached_models(None).unwrap();
+        assert_eq!(cached.len(), 1);
+        assert_eq!(cached[0].model_name, "Qwen2.5-7B-Instruct");
+        assert_eq!(cached[0].compatibility, ModelCompatibility::Green);
+
+        let by_path = repo.get_cached_model_by_path("/tmp/models/qwen2.5-7b.gguf").unwrap().unwrap();
+        assert_eq!(by_path.file_size_bytes, 4_500_000_000);
+
+        repo.delete_local_folder("fld-1").unwrap();
+        assert!(repo.list_local_folders().unwrap().is_empty());
+        assert!(repo.list_cached_models(None).unwrap().is_empty());
     }
 
 }
