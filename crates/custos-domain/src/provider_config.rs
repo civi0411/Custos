@@ -51,7 +51,7 @@ impl OAuthTokenRecord {
 }
 
 /// Probed Model discovered live from an endpoint (e.g., Ollama /api/tags, OpenAI /v1/models, Anthropic /models).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProbedModel {
     pub id: String,
     #[serde(default)]
@@ -60,6 +60,10 @@ pub struct ProbedModel {
     pub context_window: Option<u64>,
     #[serde(default)]
     pub owned_by: Option<String>,
+    #[serde(default)]
+    pub default_effort: Option<String>,
+    #[serde(default)]
+    pub efforts: Vec<String>,
     #[serde(default)]
     pub description: Option<String>,
 }

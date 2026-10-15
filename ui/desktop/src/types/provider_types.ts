@@ -33,6 +33,7 @@ export interface ConnectedAccount {
   catalogModels?: import('./domain').ModelCatalogOption[];
   catalogSource?: 'live' | 'cached' | 'unavailable';
   catalogError?: string;
+  unavailableModels?: Record<string, { reason: string; kind: string; retry_at?: number | null }>;
   catalogFetchedAt?: number;
   contextWindow?: number;
   fastMode?: boolean;

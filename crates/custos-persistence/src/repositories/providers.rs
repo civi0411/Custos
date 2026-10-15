@@ -249,11 +249,12 @@ impl ProviderRepository {
                 .as_ref()
                 .and_then(|p| serde_json::to_string(p).ok());
             let fetched_at = chrono::Utc::now().timestamp_millis();
+            let capabilities_json = serde_json::to_string(&serde_json::json!({"efforts":m.efforts,"is_default":m.is_default})).map_err(|e|DomainError::Validation(e.to_string()))?;
 
             tx.execute(
                 "INSERT INTO provider_model_catalog (id, provider_id, model_id, label, description, context_window,
-                                                    default_effort, supports_fast_mode, pricing_json, fetched_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                                                    default_effort, supports_fast_mode, pricing_json, fetched_at, capabilities_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                  ON CONFLICT(id) DO UPDATE SET
                     label = excluded.label,
                     description = excluded.description,
@@ -261,7 +262,8 @@ impl ProviderRepository {
                     default_effort = excluded.default_effort,
                     supports_fast_mode = excluded.supports_fast_mode,
                     pricing_json = excluded.pricing_json,
-                    fetched_at = excluded.fetched_at",
+                    fetched_at = excluded.fetched_at,
+                    capabilities_json = excluded.capabilities_json",
                 params![
                     row_id,
                     provider_id,
@@ -273,6 +275,7 @@ impl ProviderRepository {
                     fast_mode_int,
                     pricing_json,
                     fetched_at,
+                    capabilities_json,
                 ],
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -296,11 +299,11 @@ impl ProviderRepository {
         let conn = self.db.lock()?;
         let query = if provider_id.is_some() {
             "SELECT model_id, label, description, provider_id, context_window, default_effort,
-                    supports_fast_mode, pricing_json
+                    supports_fast_mode, pricing_json, capabilities_json
              FROM provider_model_catalog WHERE provider_id = ?1 ORDER BY label ASC"
         } else {
             "SELECT model_id, label, description, provider_id, context_window, default_effort,
-                    supports_fast_mode, pricing_json
+                    supports_fast_mode, pricing_json, capabilities_json
              FROM provider_model_catalog ORDER BY label ASC"
         };
 
@@ -314,7 +317,7 @@ impl ProviderRepository {
             let description: Option<String> = row.get(2)?;
             let p_type: String = row.get(3)?;
             let context_window: Option<i64> = row.get(4)?;
-            let default_effort: Option<String> = row.get(5)?;
+            let mut default_effort: Option<String> = row.get(5)?;
             let supports_fast_mode: i64 = row.get(6)?;
             let pricing_json: Option<String> = row.get(7)?;
 
@@ -322,18 +325,18 @@ impl ProviderRepository {
                 .as_deref()
                 .and_then(|j| serde_json::from_str(j).ok());
 
-            let efforts = if default_effort.is_some() {
-                vec!["low".to_string(), "medium".to_string(), "high".to_string()]
-            } else {
-                Vec::new()
-            };
+            let capabilities_json: String = row.get(8)?;
+            let capabilities: serde_json::Value = serde_json::from_str(&capabilities_json).map_err(|error|rusqlite::Error::FromSqlConversionFailure(8,rusqlite::types::Type::Text,Box::new(error)))?;
+            let efforts: Vec<String> = serde_json::from_value(capabilities.get("efforts").cloned().unwrap_or_else(||serde_json::json!([]))).map_err(|error|rusqlite::Error::FromSqlConversionFailure(8,rusqlite::types::Type::Text,Box::new(error)))?;
+            if default_effort.as_ref().is_some_and(|default| !efforts.contains(default)) { default_effort = None; }
+            let is_default = capabilities.get("is_default").and_then(|value|value.as_bool()).unwrap_or(false);
 
             Ok(ModelCatalogOption {
                 id: model_id,
                 label,
                 description,
                 provider_type: p_type,
-                is_default: false,
+                is_default,
                 default_effort,
                 efforts,
                 supports_fast_mode: supports_fast_mode != 0,
@@ -771,4 +774,33 @@ mod catalog_snapshot_tests {
         assert_eq!(count,3);
     }
 
+}
+
+#[cfg(test)]
+mod catalog_capability_tests {
+    use super::*;
+    #[test]
+    fn exact_capabilities_survive_restart_and_empty_refresh() {
+        let dir=tempfile::tempdir().unwrap();let path=dir.path().join("catalog-capabilities.db");
+        let model=ModelCatalogOption{id:"gpt-6.1-sol".into(),label:"GPT-6.1 Sol".into(),provider_type:"openai".into(),description:None,is_default:true,default_effort:Some("low".into()),efforts:vec!["low".into(),"xhigh".into(),"max".into(),"ultra".into()],supports_fast_mode:false,context_window:Some(272000),pricing:None};
+        {
+            let store=crate::SqliteTaskStore::new(path.to_str().unwrap()).unwrap();
+            store.providers().save_catalog_models("account-scope",&[model.clone()]).unwrap();
+        }
+        let store=crate::SqliteTaskStore::new(path.to_str().unwrap()).unwrap();
+        let saved=store.providers().list_catalog_models(Some("account-scope")).unwrap();
+        assert_eq!(saved[0].efforts,model.efforts);assert_eq!(saved[0].default_effort,model.default_effort);assert!(saved[0].is_default);
+        store.providers().save_catalog_models("account-scope",&[]).unwrap();
+        assert!(store.providers().list_catalog_models(Some("account-scope")).unwrap().is_empty());
+    }
+    #[test]
+    fn legacy_catalog_migration_is_idempotent_and_does_not_invent_efforts() {
+        let conn=rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(include_str!("../../migrations/0025_provider_model_catalog.sql")).unwrap();
+        conn.execute("INSERT INTO provider_model_catalog(id,provider_id,model_id,label,default_effort,fetched_at) VALUES('legacy','A','old','Old','medium',1)",[]).unwrap();
+        crate::migrations::run_migrations(&conn).unwrap();
+        crate::migrations::run_migrations(&conn).unwrap();
+        let metadata:String=conn.query_row("SELECT capabilities_json FROM provider_model_catalog WHERE id='legacy'",[],|row|row.get(0)).unwrap();
+        assert_eq!(metadata,"{}");
+    }
 }

@@ -656,8 +656,8 @@ export class DaemonClient {
     return this.request('v1.providers.routing.save', { service_type: service, round_robin: roundRobin, account_order: accountOrder });
   }
 
-  async reserveProviderAccount(service: string, model: string): Promise<{ account_id: string | null }> {
-    return this.request('v1.providers.route', { service_type: service, model });
+  async reserveProviderAccount(service: string, model: string, reasoningEffort?: string): Promise<{ account_id: string | null }> {
+    return this.request('v1.providers.route', { service_type: service, model, reasoning_effort: reasoningEffort });
   }
 
   async listProviders(): Promise<any[]> {
@@ -737,10 +737,15 @@ export class DaemonClient {
       api_key: apiKey,
       provider_id: providerId,
     });
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Model probe timed out')), 4000)
-    );
-    return Promise.race([probePromise, timeoutPromise]);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('Model probe timed out')), 30000);
+    });
+    try {
+      return await Promise.race([probePromise, timeoutPromise]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async getModelCatalog(providerType?: string, providerId?: string): Promise<ModelCatalogResult> {

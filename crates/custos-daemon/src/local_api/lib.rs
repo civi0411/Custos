@@ -426,6 +426,10 @@ pub struct StartRunRequest {
     pub prompt: Option<String>,
     #[serde(default)]
     pub model: Option<String>,
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
+    #[serde(default)]
+    pub provider_account_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

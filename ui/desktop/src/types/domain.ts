@@ -152,6 +152,8 @@ export interface CreateTaskParams {
 }
 
 export interface StartRunParams {
+  reasoning_effort?: string;
+  provider_account_id?: string;
   background?: boolean;
   task_id: string;
   actor?: string;
@@ -1101,6 +1103,8 @@ export interface CreateHeadlessJobParams {
 }
 
 export interface ProbedModel {
+  default_effort?: string;
+  efforts?: string[];
   id: string;
   name?: string;
   context_window?: number;
@@ -1130,6 +1134,7 @@ export interface ModelCatalogOption {
 }
 
 export interface ModelCatalogResult {
+  unavailable_models?: Record<string, { reason: string; kind: string; retry_at?: number | null }>;
   origin: string;
   models: ModelCatalogOption[];
   fetched_at: number;

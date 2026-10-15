@@ -135,6 +135,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   const {
     openSettings,
     selectedModel,
+    selectedModelAvailable,
     handleSelectModel,
     handleStopRun,
     workspaces: ctxWorkspaces,
@@ -251,6 +252,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   }, [onShowToast]);
 
   const liveMessage = activeSession.messages.find(message => message.runId && !['completed', 'failed', 'cancelled', 'interrupted'].includes(message.runStatus || ''));
+  const isPackCommand = SLASH_COMMANDS.some(command => command.command.toLowerCase() === inputText.trim().split(/\s+/)[0].toLowerCase());
   const dialogueRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const followBottom = useRef(true);
@@ -346,6 +348,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       }
     }
 
+    if (!activeSession.nativeHarnessId && !selectedModelAvailable) { onShowToast?.('Select an available model/account and reasoning effort'); return; }
     onSendMessage(inputText);
     setInputText('');
   };
@@ -784,7 +787,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                           handleSend();
                         }
                       }}
-                      disabled={!liveMessage && !inputText.trim()}
+                      disabled={!liveMessage && (!inputText.trim() || (!activeSession.nativeHarnessId && !selectedModelAvailable && !isPackCommand))}
                       aria-label={
                         liveMessage
                           ? inputText.trim()
@@ -797,6 +800,8 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                           ? inputText.trim()
                             ? 'Queue guidance for next turn (live steering unsupported for headless CLI)'
                             : 'Stop response'
+                          : !activeSession.nativeHarnessId && !selectedModelAvailable
+                          ? 'Select an available model/account and reasoning effort'
                           : 'Send message'
                       }
                       className={`p-1.5 rounded-lg transition ${

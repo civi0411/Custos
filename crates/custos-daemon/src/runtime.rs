@@ -51,7 +51,9 @@ impl CustosRuntime {
 
         // Multi-provider router: dynamically dispatches to OpenAI, Anthropic, Gemini, DeepSeek, or Ollama/local
         let credentials = Self::credential_service(&store);
+        let availability = custos_adapters::providers::catalog::ModelAvailability::default();
         let credential_resolver = Arc::new(DaemonCredentialResolver {
+            availability: availability.clone(),
             store: store.clone(), credentials: credentials.clone(),
         });
         let router_provider = Arc::new(RouterModelProvider::new(credential_resolver));
@@ -61,7 +63,7 @@ impl CustosRuntime {
         // by an environment variable in a user daemon.
         let model: Arc<dyn ModelPort> = router_provider.clone();
 
-        Self::bootstrap_with_store_and_model(store, model, credentials)
+        Self::bootstrap_with_store_and_model(store, model, credentials, availability)
     }
 
     pub fn bootstrap_with_model(
@@ -70,7 +72,7 @@ impl CustosRuntime {
     ) -> Result<Self, DomainError> {
         let store = Arc::new(SqliteTaskStore::new(database_path)?);
         let credentials = Self::credential_service(&store);
-        Self::bootstrap_with_store_and_model(store, model, credentials)
+        Self::bootstrap_with_store_and_model(store, model, credentials, Default::default())
     }
 
     fn credential_service(store: &Arc<SqliteTaskStore>) -> Arc<crate::credentials::ProviderCredentials> {
@@ -95,6 +97,7 @@ impl CustosRuntime {
         store: Arc<SqliteTaskStore>,
         model: Arc<dyn ModelPort>,
         credentials: Arc<crate::credentials::ProviderCredentials>,
+        availability: custos_adapters::providers::catalog::ModelAvailability,
     ) -> Result<Self, DomainError> {
         let startup_credentials = credentials.clone();
         tokio::spawn(async move { if startup_credentials.initialize().await.is_err() { tracing::warn!("Provider secure storage needs attention; affected accounts remain blocked"); } });
@@ -217,6 +220,7 @@ impl CustosRuntime {
             .with_terminal(terminal_coordinator.clone())
             .with_python_kernel(python_coordinator.clone())
             .with_research(Arc::new(store.research().clone()))
+            .with_model_availability(availability)
             .with_providers(Arc::new(store.providers().clone()))
             .with_credentials(credentials.clone())
             .with_fleet_automation(Arc::new(store.fleet_automation().clone()))
@@ -249,7 +253,12 @@ impl CustosRuntime {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn reserve_provider_account(repo: &custos_persistence::ProviderRepository, service: &str, model: &str) -> Result<Option<String>, DomainError> {
+    reserve_available_provider_account(repo, service, model, None, &Default::default())
+}
+
+pub(crate) fn reserve_available_provider_account(repo: &custos_persistence::ProviderRepository, service: &str, model: &str, effort: Option<&str>, availability: &custos_adapters::providers::catalog::ModelAvailability) -> Result<Option<String>, DomainError> {
     let providers = repo.list_providers()?;
     let mut eligible = Vec::new();
     let mut stored = false;
@@ -262,8 +271,9 @@ pub(crate) fn reserve_provider_account(repo: &custos_persistence::ProviderReposi
         let endpoint = account.endpoint_url.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or(match service {
             "openai" => "https://api.openai.com/v1", "anthropic" => "https://api.anthropic.com/v1", "gemini" => "https://generativelanguage.googleapis.com", "copilot" => "https://api.githubcopilot.com", "antigravity" => "https://cloudcode-pa.googleapis.com", "deepseek" => "https://api.deepseek.com/v1", "local" => "http://localhost:11434", _ => "",
         });
-        let key = format!("verified-probe:{}:{}:{}:{}",account.id,endpoint.trim().trim_end_matches('/'),if oauth {"oauth"} else {"api_key"},metadata.as_ref().map(|m| m.created_at).unwrap_or(0));
-        if repo.list_catalog_models(Some(&key))?.iter().any(|m|m.id.eq_ignore_ascii_case(model)) {
+        let key = custos_adapters::providers::probe::verified_catalog_key(&account.id, endpoint, oauth, metadata.as_ref().map(|m| m.created_at).unwrap_or(0), service);
+        if availability.check(&key, model).is_err() { continue; }
+        if repo.list_catalog_models(Some(&key))?.iter().any(|m|m.id == model && custos_adapters::providers::probe::conversation_model_is_visible(&m.id, Some(&m.label)) && effort.is_none_or(|value| m.efforts.iter().any(|supported| supported == value))) {
             eligible.push(account.id.clone());
         }
     }
@@ -274,6 +284,7 @@ pub(crate) fn reserve_provider_account(repo: &custos_persistence::ProviderReposi
 }
 
 struct DaemonCredentialResolver {
+    availability: custos_adapters::providers::catalog::ModelAvailability,
     store: Arc<SqliteTaskStore>,
     credentials: Arc<crate::credentials::ProviderCredentials>,
 }
@@ -281,10 +292,11 @@ struct DaemonCredentialResolver {
 #[async_trait::async_trait]
 impl CredentialResolver for DaemonCredentialResolver {
     async fn select_account(&self, service: &str, model: &str) -> Result<Option<String>, DomainError> {
-        reserve_provider_account(&self.store.providers(), service, model)
+        reserve_available_provider_account(&self.store.providers(), service, model, None, &self.availability)
     }
     async fn validate_account(&self, account_id: &str, service: &str) -> Result<(), DomainError> {
         let record = self.store.providers().get_provider(account_id)?.ok_or_else(|| DomainError::Validation("Selected provider account no longer exists".into()))?;
+        if !matches!(record.status.as_str(), "active" | "configured" | "primary" | "standby") { return Err(DomainError::Validation("Selected provider account is inactive".into())); }
         if record.service_type != service {
             return Err(DomainError::Validation("Selected account does not belong to the requested model provider".into()));
         }
@@ -292,6 +304,30 @@ impl CredentialResolver for DaemonCredentialResolver {
             return Err(DomainError::Validation("secure_storage_missing: Reconnect this provider account".into()));
         }
         Ok(())
+    }
+    async fn service_for_account(&self, account: &str) -> Result<Option<String>, DomainError> {
+        let service = self.store.providers().get_provider(account)?.map(|record| record.service_type);
+        Ok(service)
+    }
+    async fn validate_model(&self, account: &str, model: &str, effort: Option<&str>) -> Result<(), DomainError> {
+        let scope = provider_catalog_scope(self.store.providers(), account)?;
+        self.availability.check(&scope, model)?;
+        let models = self.store.providers().list_catalog_models(Some(&scope))?;
+        let selected = models.iter().find(|entry| entry.id == model)
+            .ok_or_else(|| DomainError::Validation("Selected account no longer advertises this model; refresh models".into()))?;
+        if !custos_adapters::providers::probe::conversation_model_is_visible(&selected.id, Some(&selected.label)) {
+            return Err(DomainError::Validation("This model is hidden from the conversation catalog; select another model".into()));
+        }
+        if let Some(effort) = effort {
+            if !selected.efforts.iter().any(|value| value == effort) {
+                return Err(DomainError::Validation("Reasoning effort is not supported by this account/model".into()));
+            }
+        }
+        Ok(())
+    }
+    async fn observe_response(&self, account: &str, model: &str, status: u16, body: &str, retry_at: Option<i64>) -> Result<(), DomainError> {
+        let scope = provider_catalog_scope(self.store.providers(), account)?;
+        self.availability.observe(&scope, model, status, body, retry_at)
     }
     async fn uses_oauth(&self, provider_id: &str) -> Result<bool, DomainError> {
         Ok(self
@@ -374,6 +410,7 @@ mod credential_tests {
     async fn credential_metadata_controls_authentication_not_token_prefix() {
         let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
         let resolver = DaemonCredentialResolver {
+            availability: Default::default(),
             store: store.clone(), credentials: CustosRuntime::credential_service(&store),
         };
         resolver.credentials.save_oauth_token(&token(true)).await.unwrap();
@@ -393,6 +430,7 @@ mod credential_tests {
     async fn expired_oauth_without_refresh_fails_closed() {
         let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
         let resolver = DaemonCredentialResolver {
+            availability: Default::default(),
             store: store.clone(), credentials: CustosRuntime::credential_service(&store),
         };
         let mut expired = token(false);
@@ -456,10 +494,62 @@ mod credential_tests {
         for _ in 0..20 { let repo=(*repo).clone();handles.push(tokio::task::spawn_blocking(move||reserve_provider_account(&repo,"copilot","copilot/claude-test").unwrap().unwrap())); }
         let mut a=0; for handle in handles { if handle.await.unwrap()=="A" {a+=1;} } assert_eq!(a,10);
         vault.fail_read.store(true,std::sync::atomic::Ordering::SeqCst);
-        let resolver=DaemonCredentialResolver{store,credentials:service};
+        let resolver=DaemonCredentialResolver{store,credentials:service,availability:Default::default()};
         let selected=resolver.select_account("copilot","copilot/claude-test").await.unwrap().unwrap();
         assert!(resolver.get_token(&selected).await.is_err());
         assert!(resolver.validate_account(&selected,"anthropic").await.is_err());
     }
 
+    #[tokio::test]
+    async fn reasoning_admission_uses_the_selected_account_catalog_and_scope() {
+        let store=Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+        let credentials=Arc::new(crate::credentials::ProviderCredentials::new(Arc::new(store.providers().clone()),Arc::new(crate::credential_tests::FakeVault::default())));
+        let availability=custos_adapters::providers::catalog::ModelAvailability::default();
+        let resolver=DaemonCredentialResolver{store:store.clone(),credentials:credentials.clone(),availability:availability.clone()};
+        for account in ["A","B"] {
+            let config=custos_domain::ProviderConfig{id:account.into(),name:account.into(),service_type:"openai".into(),api_key_masked:"none".into(),status:"active".into(),endpoint_url:Some("https://api.openai.com/v1".into()),default_model:None,context_window:None,fast_mode:None,created_at:0,updated_at:0};
+            credentials.save_provider(&config,Some("fixture-key")).await.unwrap();
+            let scope=provider_catalog_scope(store.providers(),account).unwrap();
+            let model=custos_domain::ModelCatalogOption{id:"gpt-6.1-sol".into(),label:"GPT-6.1 Sol".into(),provider_type:"openai".into(),description:None,is_default:true,default_effort:Some("low".into()),efforts:if account=="A" {vec!["low".into(),"xhigh".into(),"max".into(),"ultra".into()]} else {vec!["low".into()]},supports_fast_mode:false,context_window:None,pricing:None};
+            store.providers().save_catalog_models(&scope,&[model]).unwrap();
+        }
+        store.providers().save_routing_policy("openai", false, &["B".into(), "A".into()]).unwrap();
+        assert_eq!(reserve_available_provider_account(store.providers(), "openai", "gpt-6.1-sol", Some("low"), &availability).unwrap().as_deref(), Some("B"));
+        assert_eq!(reserve_available_provider_account(store.providers(), "openai", "gpt-6.1-sol", Some("ultra"), &availability).unwrap().as_deref(), Some("A"));
+        let b_scope = provider_catalog_scope(store.providers(), "B").unwrap();
+        availability.observe(&b_scope, "gpt-6.1-sol", 403, r#"{"error":{"code":"model_not_found"}}"#, None).unwrap();
+        assert_eq!(reserve_available_provider_account(store.providers(), "openai", "gpt-6.1-sol", Some("low"), &availability).unwrap().as_deref(), Some("A"));
+        availability.refresh(&b_scope).unwrap();
+        assert!(resolver.validate_model("A","gpt-6.1-sol",Some("ultra")).await.is_ok());
+        assert!(resolver.validate_model("B","gpt-6.1-sol",Some("ultra")).await.is_err());
+        assert!(resolver.validate_model("B","gpt-6.1-sol",None).await.is_ok());
+        assert!(resolver.validate_model("A","missing",None).await.is_err());
+        resolver.observe_response("A","gpt-6.1-sol",429,r#"{"error":{"code":"insufficient_quota"}}"#,None).await.unwrap();
+        assert!(resolver.validate_model("A","gpt-6.1-sol",Some("low")).await.is_err());
+        assert!(resolver.validate_model("B","gpt-6.1-sol",Some("low")).await.is_ok());
+        assert!(reserve_available_provider_account(store.providers(), "openai", "gpt-6.1-sol", Some("ultra"), &availability).is_err());
+        assert_eq!(reserve_available_provider_account(store.providers(), "openai", "gpt-6.1-sol", Some("low"), &availability).unwrap().as_deref(), Some("B"));
+        availability.observe(&b_scope, "gpt-6.1-sol", 429, r#"{"error":{"code":"insufficient_quota"}}"#, None).unwrap();
+        assert!(reserve_available_provider_account(store.providers(), "openai", "gpt-6.1-sol", Some("low"), &availability).is_err());
+        availability.quota_recovered(&b_scope).unwrap();
+        let scope=provider_catalog_scope(store.providers(),"A").unwrap();
+        availability.refresh(&scope).unwrap();
+        assert!(resolver.validate_model("A","gpt-6.1-sol",None).await.is_err());
+        availability.quota_recovered(&scope).unwrap();
+        assert!(resolver.validate_model("A","gpt-6.1-sol",None).await.is_ok());
+        let mut record=store.providers().get_provider("A").unwrap().unwrap();record.endpoint_url=Some("https://different.invalid/v1".into());store.providers().save_provider(&record).unwrap();
+        assert!(resolver.validate_model("A","gpt-6.1-sol",None).await.is_err());
+    }
+
+}
+
+/// Recompute identity from current provider/credential metadata, never from model family.
+pub(crate) fn provider_catalog_scope(repo: &custos_persistence::ProviderRepository, account: &str) -> Result<String, DomainError> {
+    let record = repo.get_provider(account)?.ok_or_else(|| DomainError::Validation("Selected provider account no longer exists".into()))?;
+    let metadata = repo.credential_metadata(account)?;
+    let oauth = metadata.as_ref().is_some_and(|m| m.has_refresh_token || m.scope.as_deref().is_some_and(|s| !s.is_empty()));
+    let endpoint = record.endpoint_url.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or(match record.service_type.as_str() {
+        "openai" => "https://api.openai.com/v1", "anthropic" => "https://api.anthropic.com/v1", "gemini" => "https://generativelanguage.googleapis.com", "copilot" => "https://api.githubcopilot.com", "antigravity" => "https://cloudcode-pa.googleapis.com", "deepseek" => "https://api.deepseek.com/v1", "local" => "http://localhost:11434", _ => "",
+    });
+    Ok(custos_adapters::providers::probe::verified_catalog_key(account, endpoint, oauth, metadata.as_ref().map(|m| m.created_at).unwrap_or(0), &record.service_type))
 }

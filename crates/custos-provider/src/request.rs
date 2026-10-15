@@ -14,6 +14,8 @@ pub struct ProviderRequest {
     pub model: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub provider_account_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -32,6 +34,7 @@ impl ProviderRequest {
             prompt: prompt.into(),
             model: "default".to_string(),
             provider_account_id: None,
+            reasoning_effort: None,
             temperature: Some(0.7),
             max_tokens: Some(4096),
             tools: None,
@@ -53,6 +56,7 @@ impl ProviderRequest {
             prompt: prompt.into(),
             model: model.into(),
             provider_account_id: None,
+            reasoning_effort: None,
             temperature: Some(0.7),
             max_tokens: Some(4096),
             tools: None,
@@ -115,5 +119,17 @@ mod usage_tests {
         assert_eq!(ModelResponse::text("", "test",0).with_usage(Some(0),Some(0),None).total_tokens,Some(0));
         let request: ProviderRequest = serde_json::from_value(serde_json::json!({"request_id":"req","task_id":"task","span_num":1,"prompt":"hello","model":"test"})).unwrap();
         assert_eq!(request.provider_account_id,None);
+    }
+}
+
+#[cfg(test)]
+mod reasoning_compatibility_tests {
+    use super::*;
+    #[test]
+    fn legacy_requests_omit_effort_and_exact_levels_round_trip() {
+        let request:ProviderRequest=serde_json::from_value(serde_json::json!({"request_id":"r","task_id":"t","span_num":1,"prompt":"hello","model":"gpt-6-sol"})).unwrap();
+        assert_eq!(request.reasoning_effort,None);
+        assert!(serde_json::to_value(&request).unwrap().get("reasoning_effort").is_none());
+        for level in ["xhigh","max","ultra"] { let mut selected=request.clone();selected.reasoning_effort=Some(level.into());let value=serde_json::to_value(selected).unwrap();assert_eq!(value["reasoning_effort"],level); }
     }
 }

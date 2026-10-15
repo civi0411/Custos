@@ -103,7 +103,10 @@ interface AppContextType {
 
   // Selected Model
   selectedModel: string;
-  handleSelectModel: (model: string) => void;
+  selectedModelAvailable: boolean;
+  selectedModelAccountId: string;
+  selectedReasoningEffort: string;
+  handleSelectModel: (model: string, effort?: string, accountId?: string) => void;
 
   // Actions
   startNativeConversation: (instruction: string, harness: string, workspace: string) => Promise<{ run: import('../types/domain').RunHandle; sessionId: string }>;
@@ -584,6 +587,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return localStorage.getItem('custos_selected_model') || '';
   });
 
+  const [selectedModelAccountId, setSelectedModelAccountId] = useState(() => localStorage.getItem('custos_selected_model_account') || '');
+  const [selectedReasoningEffort, setSelectedReasoningEffort] = useState(() => localStorage.getItem('custos_selected_reasoning_effort') || '');
+
+  const selectedModelAvailable = (() => {
+    return connectedAccounts.some(account => account.status === 'active' && account.supportedModels.includes(selectedModel) &&
+      (!selectedReasoningEffort || account.catalogModels?.some(model => model.id === selectedModel && model.efforts.includes(selectedReasoningEffort))));
+  })();
+
+  const refreshCatalogAvailability = useCallback(async () => {
+    const updates = await Promise.all(localAccountsRef.current.filter(account => !isTransientAiLocalAccount(account)).map(async account => {
+      try { return { id: account.id, endpoint: account.endpointUrl, catalog: await daemonClient.getModelCatalog(account.providerId, account.id) }; } catch { return null; }
+    }));
+    setConnectedAccounts(previous => previous.map(account => {
+      const update = updates.find(value => value?.id === account.id && value.endpoint === account.endpointUrl);
+      if (!update) return account;
+      return { ...account, supportedModels: update.catalog.models.map(model => model.id), catalogModels: update.catalog.models,
+        unavailableModels: update.catalog.unavailable_models, catalogError: Object.values(update.catalog.unavailable_models || {}).map(value => value.reason).join('; ') || (account.status !== 'active' ? account.catalogError : undefined) };
+    }));
+  }, []);
+
   const refreshProviderState = useCallback(async () => {
     const [fetchedProviders, fetchedKeys] = await Promise.all([
       daemonClient.listProviders().catch(() => []),
@@ -645,6 +668,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         let catalogSource: 'live' | 'cached' | 'unavailable' = 'unavailable';
         let catalogError: string | undefined = credentialError;
         let catalogFetchedAt: number | undefined;
+        let unavailableModels: ConnectedAccount['unavailableModels'];
         if (connected && endpointUrl) {
           try {
             const probed = await daemonClient.probeModels(
@@ -661,12 +685,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               description: model.description,
               provider_type: provider.service_type || serviceId,
               is_default: index === 0,
-              default_effort: undefined,
-              efforts: [],
+              default_effort: model.default_effort,
+              efforts: model.efforts || [],
               supports_fast_mode: false,
               context_window: model.context_window || provider.context_window,
               pricing: undefined,
             }));
+            const verified = await daemonClient.getModelCatalog(provider.service_type || serviceId, provider.id);
+            catalogModels = verified.models;
+            unavailableModels = verified.unavailable_models;
+            catalogError = Object.values(unavailableModels || {}).map(value => value.reason).join('; ') || undefined;
           } catch (err) {
             catalogError = err instanceof Error ? err.message : String(err);
           }
@@ -699,7 +727,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           catalogModels.find((model) => model.id === defaultModel)?.context_window ||
           provider.context_window ||
           catalogModels[0]?.context_window;
-        const available = connected && !(serviceId === 'local' && catalogSource !== 'live');
+        const available = connected && catalogSource === 'live';
         const authType = tokenLooksOauth(tokenMeta) || provider.api_key_masked === 'oauth'
           ? 'oauth'
           : 'api_key';
@@ -720,7 +748,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           badgeColor: available ? '#10b981' : '#6b7280',
           defaultModel,
           supportedModels,
-          catalogModels, catalogSource, catalogError, catalogFetchedAt,
+          catalogModels, catalogSource, catalogError, catalogFetchedAt, unavailableModels,
           contextWindow,
           fastMode: provider.fast_mode,
           latencyMs: 0,
@@ -776,9 +804,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     setConnectedAccounts(liveAccounts);
 
-    const liveModelIds = new Set(
-      liveAccounts.flatMap((account) => account.supportedModels).map((model) => model.toLowerCase())
-    );
     const fallbackModel =
       liveAccounts.find((account) => account.status === 'active' && account.defaultModel)?.defaultModel ||
       liveAccounts.flatMap((account) => account.supportedModels)[0] ||
@@ -786,13 +811,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setSelectedModel((previous) => {
       const current = previous || localStorage.getItem('custos_selected_model') || '';
-      if (current && liveModelIds.has(current.toLowerCase())) {
+      if (current) {
         return current;
       }
-      const hasActiveLocal = liveAccounts.some(
-        (account) => account.providerId === 'local' && account.status === 'active'
-      );
-      if (current.startsWith('ollama/') && !hasActiveLocal) return current;
+
       localStorage.setItem('custos_selected_model', fallbackModel);
       return fallbackModel;
     });
@@ -845,10 +867,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener('focus', onVisible); document.removeEventListener('visibilitychange', onVisible); };
   }, [localAccountsKey]);
 
-  const handleSelectModel = useCallback((modelName: string) => {
+  const handleSelectModel = useCallback((modelName: string, effort?: string, accountId?: string) => {
+    setSelectedModelAccountId(accountId || '');
+    setSelectedReasoningEffort(effort || '');
     setSelectedModel(modelName);
-    localStorage.setItem('custos_selected_model', modelName);
+    try {
+      localStorage.setItem('custos_selected_model_account', accountId || '');
+      localStorage.setItem('custos_selected_reasoning_effort', effort || '');
+      localStorage.setItem('custos_selected_model', modelName);
+    } catch { /* Keep in-memory selection available without device storage. */ }
     if (activeSessionId) {
+      try { localStorage.setItem(`custos.conversation_model.${activeSessionId}`, JSON.stringify({ model: modelName, accountId, effort })); } catch { /* Device storage is optional. */ }
       setProjectData((prev) => {
         const list = prev[currentProject] || [];
         const updatedList = list.map((s) => {
@@ -856,6 +885,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return {
               ...s,
               model: modelName,
+              modelAccountId: accountId,
+              reasoningEffort: effort,
             };
           }
           return s;
@@ -868,23 +899,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [activeSessionId, currentProject, showToast]);
 
-  // Synchronize activeSession model only when it still belongs to a live account catalog.
   useEffect(() => {
-    const sessionModel = activeSession?.model || '';
-    const sessionModelIsLive = connectedAccounts.some((account) =>
-      account.status === 'active' &&
-      account.supportedModels.some((model) => model.toLowerCase() === sessionModel.toLowerCase())
-    );
-    if (
-      sessionModel &&
-      sessionModelIsLive &&
-      sessionModel !== 'Model not reported' &&
-      sessionModel !== 'No model selected' &&
-      sessionModel !== selectedModel
-    ) {
-      setSelectedModel(sessionModel);
-    }
-  }, [activeSessionId, activeSession?.model, connectedAccounts, selectedModel]);
+    if (!activeSession?.model || activeSession.nativeHarnessId) return;
+    setSelectedModel(activeSession.model);
+    setSelectedModelAccountId(activeSession.modelAccountId || '');
+    setSelectedReasoningEffort(activeSession.reasoningEffort || '');
+  }, [activeSessionId, activeSession?.model, activeSession?.modelAccountId, activeSession?.reasoningEffort]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => { if (!document.hidden) void refreshCatalogAvailability(); }, 5000);
+    return () => window.clearInterval(timer);
+  }, [refreshCatalogAvailability]);
 
   // Hydrate state from Custos Daemon on Mount
   useEffect(() => {
@@ -927,6 +952,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const t = fetchedTasks.find((task) => task.id === attachedTaskId);
             const taskId = t?.id;
             const sessionId = domainSession.id;
+            let selection: { model?: string; accountId?: string; effort?: string } = {};
+            try { const saved = JSON.parse(localStorage.getItem(`custos.conversation_model.${sessionId}`) || '{}'); if (saved && typeof saved.model === 'string') selection = { model: saved.model, accountId: typeof saved.accountId === 'string' ? saved.accountId : undefined, effort: typeof saved.effort === 'string' ? saved.effort : undefined }; } catch { /* Ignore invalid device preferences. */ }
             const rawJournal = journalBySession.get(domainSession.id) || domainSession.journal || [];
             const journalList: any[] = Array.isArray(rawJournal)
               ? rawJournal
@@ -954,7 +981,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               title: t?.title || domainSession.title || domainSession.current_goal || `Conversation ${sessionId.slice(0, 8)}`,
               time: 'Live',
               preview: t ? `Status: ${t.status} | Contract: ${t.contract?.pack_id || 'general'}` : 'Unbound conversation',
-              model: t?.metadata?.kind === 'native_coding_agent' ? t.metadata.harness_id : (t?.contract as any)?.model || selectedModel || '',
+              model: t?.metadata?.kind === 'native_coding_agent' ? t.metadata.harness_id : selection.model ?? (t?.contract as any)?.model ?? selectedModel ?? '',
+              modelAccountId: selection.accountId || selectedModelAccountId,
+              reasoningEffort: selection.effort || selectedReasoningEffort,
               fileName: '',
               diffHunk: '',
               diffLinesCount: '',
@@ -1126,7 +1155,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     controller.signal.addEventListener('abort', cancelPending, { once: true });
     void daemonClient.watchRun(session, run, snapshot => {
       latest = snapshot;
-      if (['completed', 'failed', 'cancelled', 'interrupted'].includes(snapshot.status)) { cancelPending(); flush(true); }
+      if (['completed', 'failed', 'cancelled', 'interrupted'].includes(snapshot.status)) { cancelPending(); flush(true); if (snapshot.status === 'failed') void refreshCatalogAvailability(); }
       else schedule();
     }, controller.signal).finally(() => {
       cancelPending();
@@ -1155,6 +1184,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!activeSession) return;
     if (activeSession.messages.some(message => message.runId && !['completed','failed','cancelled','interrupted'].includes(message.runStatus || ''))) { showToast('Stop or wait for the current run before sending another prompt.'); return; }
     if (pendingTurns.current.has(activeSession.id)) return;
+    if (!activeSession.nativeHarnessId && !selectedModelAvailable) { showToast('Select an available model/account and reasoning effort before sending.'); return; }
     pendingTurns.current.add(activeSession.id);
     const userMsg = {
       role: 'user' as const,
@@ -1242,17 +1272,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      let routedAccountId: string;
-      try {
-        const modelAccount = connectedAccounts.find(a => a.status === 'active' && a.supportedModels.includes(chosenModel));
-        if (!modelAccount) throw new Error('No connected account supports this model');
-        const route = await daemonClient.reserveProviderAccount(modelAccount.providerId, chosenModel);
-        if (!route.account_id) throw new Error('No eligible account is available');
-        routedAccountId = route.account_id;
-      } catch (error: any) {
-        appendAssistantMessage({ role: 'assistant', author: 'Custos Engine', badge: 'Account Unavailable', text: error?.message || String(error) });
-        return;
-      }
+      const candidates = connectedAccounts.filter(account => account.status === 'active' && account.supportedModels.includes(chosenModel) &&
+        (!selectedReasoningEffort || account.catalogModels?.some(model => model.id === chosenModel && model.efforts.includes(selectedReasoningEffort))));
+      if (!candidates.length) { showToast('Selected model is unavailable. Refresh models or choose another model.'); return; }
+      const transientAccount = candidates.find(isTransientAiLocalAccount);
+      const reservation = transientAccount ? undefined : await daemonClient.reserveProviderAccount(candidates[0].providerId, chosenModel, selectedReasoningEffort || undefined);
+      const modelAccount = transientAccount || candidates.find(account => account.id === reservation?.account_id);
+      if (!modelAccount) { showToast('No available account supports this model and reasoning effort. Refresh models.'); return; }
+      const routedAccountId = isTransientAiLocalAccount(modelAccount) ? undefined : modelAccount.id;
+      const metadata = modelAccount.catalogModels?.find(model => model.id === chosenModel);
+      const effort = selectedReasoningEffort || metadata?.default_effort;
+      if (effort && !metadata?.efforts.includes(effort)) { showToast('Reasoning effort is no longer available. Select the model again.'); return; }
 
       if (chosenModel.startsWith('ollama/')) {
         const account = connectedAccounts.find(a => a.id === routedAccountId && a.status === 'active');
@@ -1275,9 +1305,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      const selectedAccount = connectedAccounts.find(
-        (account) => account.status === 'active' && account.supportedModels.includes(chosenModel)
-      );
+      const selectedAccount = modelAccount;
       const hasActiveAccount = Boolean(selectedAccount);
       if (!hasActiveAccount) {
         appendAssistantMessage({
@@ -1387,6 +1415,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         session_id: targetSessionId,
         prompt: text,
         model: chosenModel,
+        provider_account_id: routedAccountId,
+        reasoning_effort: effort,
       });
 
       const runId = run.run_id;
@@ -1394,6 +1424,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setProjectData(previous => ({ ...previous, [currentProject]: (previous[currentProject] || []).map(chat => chat.id !== activeSession.id ? chat : { ...chat, messages: chat.messages.map((message,index) => index === chat.messages.length - 1 ? { ...message, id: `live-${runId}`, runId, runStatus: 'queued' } : message) }) }));
       if (targetSessionId) followLiveRun(currentProject, activeSession.id, targetSessionId, runId, chosenModel);
     } catch (err: any) {
+      void refreshCatalogAvailability();
       if ((selectedModel || activeSession.model || '').startsWith('ollama/') && String(err?.message || err).includes('Ollama connection failed')) {
         setConnectedAccounts(previous => previous.map(a => a.providerId === 'local' ? { ...a, status: 'offline', statusLabel: 'Ollama offline', badgeColor: '#6b7280', catalogSource: 'cached', catalogError: 'Ollama stopped during the request. Start Ollama and resend your prompt.' } : a));
       }
@@ -1532,6 +1563,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         time: 'Just now',
         preview: `${pack} task · ${createdTask.status}`,
         model: selectedModel || '',
+        modelAccountId: selectedModelAccountId,
+        reasoningEffort: selectedReasoningEffort,
         fileName: '',
         diffHunk: '',
         diffLinesCount: '',
@@ -1573,6 +1606,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         time: 'Just now',
         preview: 'Unbound conversation',
         model: selectedModel || '',
+        modelAccountId: selectedModelAccountId,
+        reasoningEffort: selectedReasoningEffort,
         fileName: '',
         diffHunk: '',
         diffLinesCount: '',
@@ -1894,6 +1929,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toastMessage,
         showToast,
         selectedModel,
+        selectedModelAvailable,
+        selectedModelAccountId,
+        selectedReasoningEffort,
         handleSelectModel,
         handleSendMessage,
         handleStopRun,

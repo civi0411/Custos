@@ -257,6 +257,24 @@ pub async fn discover_project(
     Err(DomainError::Validation("Antigravity IDE backend did not assign a managed project after onboarding; retry the request later. No CLI installation is required".into()))
 }
 
+/// Verified Antigravity transport capability, applied only to discovered IDs.
+pub fn supports_tiered_reasoning(id: &str) -> bool {
+    id.strip_prefix("antigravity/").unwrap_or(id) == "gemini-3.8-flash-tiered"
+}
+
+fn codeassist_payload(service: &str, project: &str, req: &ModelRequest) -> Result<serde_json::Value, DomainError> {
+    let model = req.model.strip_prefix(if service == "gemini" { "gemini-oauth/" } else { "antigravity/" })
+        .ok_or_else(|| DomainError::Validation("Select a discovered Google model".into()))?;
+    let mut generation = serde_json::json!({"temperature":req.temperature,"maxOutputTokens":req.max_tokens});
+    if let Some(effort) = req.reasoning_effort.as_deref() {
+        if service != "antigravity" || !supports_tiered_reasoning(&req.model) || !matches!(effort, "low" | "medium" | "high") {
+            return Err(DomainError::Validation("Reasoning effort is not supported by this Google transport/model".into()));
+        }
+        generation["thinkingConfig"] = serde_json::json!({"thinkingLevel":effort});
+    }
+    Ok(serde_json::json!({"project":project,"model":model,"userAgent":"antigravity","requestType":"agent","requestId":req.request_id,"request":{"contents":[{"role":"user","parts":[{"text":req.prompt}]}],"generationConfig":generation}}))
+}
+
 pub async fn probe_models(
     base: &str,
     token: &str,
@@ -300,7 +318,7 @@ pub async fn probe_codeassist_models(
     };
     Ok(models
         .into_iter()
-        .filter(|(_, model)| model.get("isInternal").and_then(|v| v.as_bool()) != Some(true))
+        .filter(|(_, model)| super::probe::model_is_selectable(model))
         .map(|(id, model)| custos_domain::ProbedModel {
             id: format!(
                 "{}/{id}",
@@ -317,6 +335,8 @@ pub async fn probe_codeassist_models(
             context_window: model.get("maxInputTokens").and_then(|v| v.as_u64()),
             owned_by: Some(service.into()),
             description: None,
+            efforts: if service == "antigravity" && supports_tiered_reasoning(&id) { vec!["low".into(), "medium".into(), "high".into()] } else { vec![] },
+            default_effort: if service == "antigravity" && supports_tiered_reasoning(&id) { Some("medium".into()) } else { None },
         })
         .collect())
 }
@@ -324,11 +344,11 @@ pub async fn probe_codeassist_models(
 pub async fn stream_codeassist(service: &str, base: &str, token: &str, req: &ModelRequest) -> Result<reqwest::Response, DomainError> {
     tracing::debug!(task_id=%req.task_id,request_id=%req.request_id,"Starting Google stream");
     if req.tools.as_ref().is_some_and(|tools|!tools.is_empty()) {return Err(DomainError::Validation("Google flat streaming does not support tool schemas".into()));}
+    let mut body=codeassist_payload(service,"",req)?;
     let project=discover_project(service,base,token).await?;
-    let model=req.model.strip_prefix(if service=="gemini" {"gemini-oauth/"} else {"antigravity/"}).ok_or_else(||DomainError::Validation("Select a discovered Google model".into()))?;
+    body["project"]=serde_json::json!(project);
     let client=reqwest::Client::builder().timeout(std::time::Duration::from_secs(120)).build().map_err(|e|DomainError::Validation(e.to_string()))?;
     let fallback=if service=="antigravity" && base.trim_end_matches('/')=="https://cloudcode-pa.googleapis.com" {Some("https://daily-cloudcode-pa.googleapis.com")} else {None};
-    let body=serde_json::json!({"project":project,"model":model,"userAgent":"antigravity","requestType":"agent","requestId":req.request_id,"request":{"contents":[{"role":"user","parts":[{"text":req.prompt}]}],"generationConfig":{"temperature":req.temperature,"maxOutputTokens":req.max_tokens}}});
     for (attempt,endpoint) in std::iter::once(base).chain(fallback).enumerate() {
         let response=client.post(format!("{}/v1internal:streamGenerateContent?alt=sse",endpoint.trim_end_matches('/'))).bearer_auth(token).header("User-Agent",if service=="antigravity" {"antigravity/1.18.3 windows/amd64"} else {"google-api-nodejs-client/9.15.1"}).header("X-Goog-Api-Client","google-cloud-sdk vscode_cloudshelleditor/0.1").json(&body).send().await.map_err(|_|DomainError::Validation("Google stream connection failed".into()))?;
         let status=response.status();
@@ -338,7 +358,9 @@ pub async fn stream_codeassist(service: &str, base: &str, token: &str, req: &Mod
         let details=error.as_ref().and_then(|v|v.pointer("/error/details")).and_then(|v|v.as_array());
         let quota_limited=details.is_some_and(|values|values.iter().any(|v|v["@type"].as_str().is_some_and(|s|s.ends_with("QuotaFailure")||s.ends_with("RetryInfo")) || v["reason"].as_str().is_some_and(|s|s.contains("QUOTA")||s.contains("RATE_LIMIT"))));
         if attempt==0 && fallback.is_some() && status==reqwest::StatusCode::TOO_MANY_REQUESTS && error.as_ref().and_then(|v|v.pointer("/error/status")).and_then(|v|v.as_str())==Some("RESOURCE_EXHAUSTED") && !quota_limited && !retry_after {continue;}
-        return Err(DomainError::Validation(format!("Google streaming returned {status}")));
+        let code=error.as_ref().and_then(|value|value.pointer("/error/status")).and_then(|value|value.as_str()).unwrap_or("");
+        let message=error.as_ref().and_then(|value|value.pointer("/error/message")).and_then(|value|value.as_str()).unwrap_or("").replace(token,"[redacted]").chars().take(500).collect::<String>();
+        return Err(DomainError::Validation(format!("Google streaming returned {status}: {code} {message}")));
     }
     Err(DomainError::Validation("Google streaming runtime unavailable".into()))
 }
@@ -363,16 +385,10 @@ pub async fn generate_codeassist_content(
             "Antigravity tool calls are not supported by this conversation transport".into(),
         ));
     }
+    let mut body = codeassist_payload(service, "", req)?;
     let project = discover_project(service, base, token).await?;
-    let model = req
-        .model
-        .strip_prefix(if service == "gemini" {
-            "gemini-oauth/"
-        } else {
-            "antigravity/"
-        })
-        .ok_or_else(|| DomainError::Validation("Antigravity requires a discovered model".into()))?;
-    let value = cloud_call(service, base, token, "generateContent", serde_json::json!({"project":project,"model":model,"userAgent":"antigravity","requestType":"agent","requestId":req.request_id,"request":{"contents":[{"role":"user","parts":[{"text":req.prompt}]}],"generationConfig":{"temperature":req.temperature,"maxOutputTokens":req.max_tokens}}})).await?;
+    body["project"] = serde_json::json!(project);
+    let value = cloud_call(service, base, token, "generateContent", body).await?;
     let response = value.get("response").unwrap_or(&value);
     let parts = response
         .pointer("/candidates/0/content/parts")
@@ -417,6 +433,48 @@ mod tests {
             .mount(server)
             .await;
     }
+    #[tokio::test]
+    async fn tiered_catalog_and_both_transports_preserve_exact_effort_and_id() {
+        let server = MockServer::start().await;
+        Mock::given(path("/v1internal:fetchAvailableModels"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"models":{"gemini-3.8-flash-tiered":{},"gemini-other":{}}})))
+            .mount(&server).await;
+        let models = probe_models(&server.uri(), "oauth-token").await.unwrap();
+        let model = models.iter().find(|model| model.id == "antigravity/gemini-3.8-flash-tiered").unwrap();
+        assert_eq!(model.efforts, vec!["low", "medium", "high"]);
+        assert_eq!(model.default_effort.as_deref(), Some("medium"));
+        assert!(models.iter().find(|model| model.id == "antigravity/gemini-other").unwrap().efforts.is_empty());
+        project(&server).await;
+        for effort in ["low", "medium", "high"] {
+            for streaming in [false, true] {
+                let path_suffix = if streaming { "streamGenerateContent" } else { "generateContent" };
+                Mock::given(path(format!("/v1internal:{path_suffix}")))
+                    .and(wiremock::matchers::body_partial_json(serde_json::json!({"model":"gemini-3.8-flash-tiered","request":{"generationConfig":{"thinkingConfig":{"thinkingLevel":effort}}}})))
+                    .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"response":{"candidates":[{"content":{"parts":[{"text":"fixture answer"}]}}]}})))
+                    .expect(1).mount(&server).await;
+                let mut request = ModelRequest::simple("Fixture prompt");
+                request.model = model.id.clone();
+                request.reasoning_effort = Some(effort.into());
+                if streaming { assert!(stream_codeassist("antigravity", &server.uri(), "oauth-token", &request).await.unwrap().status().is_success()); }
+                else { assert_eq!(generate_content(&server.uri(), "oauth-token", &request).await.unwrap().content, "fixture answer"); }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn unsupported_effort_fails_before_project_or_inference_requests() {
+        let server = MockServer::start().await;
+        let mut request = ModelRequest::simple("Fixture prompt");
+        for (model, effort) in [("antigravity/gemini-3.8-flash-tiered", "ultra"), ("antigravity/claude-sonnet-4-6", "low")] {
+            request.model = model.into(); request.reasoning_effort = Some(effort.into());
+            assert!(stream_codeassist("antigravity", &server.uri(), "fixture-token", &request).await.is_err());
+            assert!(generate_content(&server.uri(), "fixture-token", &request).await.is_err());
+        }
+        assert!(server.received_requests().await.unwrap().is_empty());
+        request.model = "antigravity/gemini-3.8-flash-tiered".into(); request.reasoning_effort = None;
+        assert!(codeassist_payload("antigravity", "project", &request).unwrap().pointer("/request/generationConfig/thinkingConfig").is_none());
+    }
+
     #[tokio::test]
     async fn bootstrap_metadata_and_error_detail_match_provider_contract() {
         let server = MockServer::start().await;
