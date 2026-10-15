@@ -114,3 +114,115 @@ pub struct ModelCatalogResult {
     pub models: Vec<ModelCatalogOption>,
     pub fetched_at: i64,
 }
+
+/// User-configured folder path for scanning local GGUF models.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LocalModelFolder {
+    pub id: String,
+    pub folder_path: String,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default = "default_true")]
+    pub is_active: bool,
+    #[serde(default = "default_true")]
+    pub auto_scan: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// Compatibility status of a model against local machine VRAM and RAM.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ModelCompatibility {
+    Green,  // Fits 100% in Metal VRAM (Fast GPU inference)
+    Yellow, // Fits partially in VRAM / RAM offload
+    Red,    // Exceeds total usable memory (OOM risk)
+}
+
+impl Default for ModelCompatibility {
+    fn default() -> Self {
+        Self::Green
+    }
+}
+
+/// Metadata and performance descriptor for a discovered local GGUF model.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalModelDescriptor {
+    pub file_path: String,
+    pub folder_id: String,
+    pub file_name: String,
+    pub file_size_bytes: u64,
+    pub file_mtime: i64,
+    pub architecture: String,
+    pub model_name: String,
+    pub context_length: u64,
+    pub quantization: String,
+    #[serde(default)]
+    pub chat_template: Option<String>,
+    pub total_memory_required: u64,
+    pub compatibility: ModelCompatibility,
+    pub scanned_at: i64,
+}
+
+/// Hardware resource profile (Apple Silicon Metal VRAM & System RAM).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LocalHardwareProfile {
+    pub total_ram_bytes: u64,
+    pub metal_vram_limit_bytes: u64,
+    pub free_ram_bytes: u64,
+    pub is_apple_silicon: bool,
+    pub chip_name: String,
+}
+
+/// Preflight check request for a local model artifact.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LocalModelPreflightRequest {
+    pub model_path: String,
+    #[serde(default)]
+    pub requested_context: Option<u64>,
+}
+
+/// Preflight check result evaluating memory, architecture, and backend compatibility.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LocalModelPreflightResponse {
+    pub model_path: String,
+    pub can_load: bool,
+    pub architecture: String,
+    pub quantization: String,
+    pub file_size_bytes: u64,
+    pub context_limit: u64,
+    pub estimated_memory_bytes: u64,
+    pub free_ram_bytes: u64,
+    pub metal_vram_limit_bytes: u64,
+    pub compatibility: ModelCompatibility,
+    pub recommended_gpu_layers: u32,
+    #[serde(default)]
+    pub issues: Vec<String>,
+}
+
+/// Request to load a local model into active RAM / Metal VRAM.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LocalModelLoadRequest {
+    pub model_path: String,
+    #[serde(default)]
+    pub context_size: Option<u64>,
+    #[serde(default)]
+    pub gpu_layers: Option<u32>,
+}
+
+/// Active in-memory loaded model instance.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LoadedModelInstance {
+    pub instance_id: String,
+    pub model_name: String,
+    pub model_path: String,
+    pub backend_id: String, // "llamacpp" | "mlx"
+    pub context_limit: u64,
+    /// Measured resident memory, or zero when the backend cannot report it.
+    pub memory_used_bytes: u64,
+    pub loaded_at: i64,
+}

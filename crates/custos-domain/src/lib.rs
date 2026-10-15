@@ -107,8 +107,10 @@ pub use notebook::{
 };
 pub use packet::ContinuationPacket as PacketContinuation;
 pub use provider_config::{
-    ClientApiKeyRecord, ModelCatalogOption, ModelCatalogResult, ModelPricing, OAuthTokenRecord,
-    ProbedModel, ProviderConfig,
+    ClientApiKeyRecord, LoadedModelInstance, LocalHardwareProfile, LocalModelDescriptor,
+    LocalModelFolder, LocalModelLoadRequest, LocalModelPreflightRequest,
+    LocalModelPreflightResponse, ModelCatalogOption, ModelCatalogResult, ModelCompatibility,
+    ModelPricing, OAuthTokenRecord, ProbedModel, ProviderConfig,
 };
 pub use recipe::{EnvironmentSpec, Recipe, RecipeInput};
 pub use remote_fleet::{
