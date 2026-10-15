@@ -7,7 +7,25 @@ export function cn(...inputs: ClassValue[]): string {
 
 export function isMacOS(): boolean {
   if (typeof navigator === 'undefined') return false;
-  return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent || navigator.platform || '');
+  return /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent || navigator.platform || '');
+}
+
+export function isWindows(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Win/i.test(navigator.userAgent || navigator.platform || '');
+}
+
+export function isLinux(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Linux/i.test(navigator.userAgent || navigator.platform || '') && !/Android/i.test(navigator.userAgent || '');
+}
+
+export type PlatformOS = 'macos' | 'windows' | 'linux';
+
+export function getPlatformOS(): PlatformOS {
+  if (isMacOS()) return 'macos';
+  if (isWindows()) return 'windows';
+  return 'linux';
 }
 
 export interface KeyCombo {

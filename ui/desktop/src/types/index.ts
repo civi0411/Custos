@@ -53,6 +53,7 @@ export interface Session {
   id: string;
   openedLenses?: Array<'chat' | 'code' | 'research'>;
   taskId?: string;
+  task_id?: string;
   taskTitle?: string;
   source?: 'daemon';
   taskStatus?: string;
@@ -60,6 +61,7 @@ export interface Session {
   pack?: string;
   title: string;
   time: string;
+  created_at?: string;
   preview: string;
   model: string;
   fileName: string;

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Scaling, GitBranch, AlertTriangle } from 'lucide-react';
+import { Scaling, AlertTriangle } from 'lucide-react';
 import { Tooltip } from '../common/Tooltip';
 import { formatKeyCombo } from '@/lib/utils';
 import { daemonClient } from '@/api/daemon_client';
@@ -37,12 +37,12 @@ function formatTokens(count: number): string {
 }
 
 export const StatusBar: React.FC<StatusBarProps> = ({
-  activeSessionTitle,
+  activeSessionTitle: _activeSessionTitle,
   activeSessionId,
   activeModel,
-  activeWorkbench = 'engineering',
-  activeBranch,
-  isDirty,
+  activeWorkbench: _activeWorkbench = 'engineering',
+  activeBranch: _activeBranch,
+  isDirty: _isDirty,
   uiScale,
   onSetUiScale,
   onStepUiScale
@@ -90,27 +90,9 @@ export const StatusBar: React.FC<StatusBarProps> = ({
 
   const presets = [70, 80, 90, 100, 110, 120, 130, 140, 150, 160];
 
-  const modeBadge = {
-    engineering: {
-      label: '◈ Engineering',
-      className: 'text-fg-editor bg-surface-2 border-border-default'
-    },
-    research: {
-      label: '⬡ Research',
-      className: 'text-fg-editor bg-surface-2 border-border-default'
-    },
-    copilot: {
-      label: '◇ Copilot',
-      className: 'text-fg-editor bg-surface-2 border-border-default'
-    }
-  }[activeWorkbench] || {
-    label: '◈ Engineering',
-    className: 'text-fg-editor bg-surface-2 border-border-default'
-  };
-
   return (
     <footer className="h-6 bg-surface-1 border-t border-border-default px-3 flex items-center justify-between text-[11px] font-mono text-fg-muted shrink-0 z-30 select-none">
-      {/* Left: Connection, Session Title, Mode Badge, Branch */}
+      {/* Left: Connection, Engine Status */}
       <div className="flex items-center gap-2.5 truncate">
         {/* Daemon Connection Indicator */}
         <Tooltip
@@ -135,36 +117,13 @@ export const StatusBar: React.FC<StatusBarProps> = ({
           </div>
         </Tooltip>
 
-        {/* Active Session Title */}
-        <span className="text-fg-editor font-medium truncate max-w-[140px] sm:max-w-[200px]" title={activeSessionTitle}>
-          {activeSessionTitle}
+        {/* Engine Status */}
+        <span className="text-fg-editor font-medium flex items-center gap-1.5">
+          <span>{daemonOnline === true ? 'Custos Engine' : 'Daemon Offline'}</span>
+          <span className="text-[10px] text-fg-subtle">
+            {daemonOnline === true ? '127.0.0.1:3000' : 'Disconnected'}
+          </span>
         </span>
-
-        <span className="text-border-default">|</span>
-
-        {/* Mode Pill Badge */}
-        <span
-          className={`inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold border ${modeBadge.className}`}
-        >
-          {modeBadge.label}
-        </span>
-
-        {/* Git Branch / Worktree Info */}
-        {activeBranch && (
-          <>
-            <span className="text-border-default hidden md:inline">|</span>
-            <div className="hidden md:flex items-center gap-1 text-fg-editor">
-              <GitBranch className="w-3 h-3 text-fg-subtle" />
-              <span className="font-mono text-[10px] truncate max-w-[120px]">{activeBranch}</span>
-              {isDirty && (
-                <span
-                  className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"
-                  title="Uncommitted changes in worktree"
-                />
-              )}
-            </div>
-          </>
-        )}
       </div>
 
       {/* Right: Live Metrics (Tokens, Cost, Runs, Approvals) + Scale */}

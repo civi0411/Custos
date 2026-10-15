@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -7,7 +7,6 @@ import {
   Loader2,
   ExternalLink,
   MessageSquarePlus,
-  Crosshair,
   Terminal,
   Lock,
   AlertCircle,
@@ -52,26 +51,8 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
   const [address, setAddress] = useState(url === 'about:blank' ? '' : url);
   const [preset, setPreset] = useState(0);
   const [zoom, setZoom] = useState(100);
-  const [isInspectorActive, setIsInspectorActive] = useState(false);
   const [isDevDrawerOpen, setIsDevDrawerOpen] = useState(false);
-  const [devTab, setDevTab] = useState<'console' | 'network'>('console');
-  const [agentDriving, setAgentDriving] = useState(false);
-  const [inspectedElement, setInspectedElement] = useState<{
-    selector: string;
-    tag: string;
-    text: string;
-    rect?: { width: number; height: number };
-  } | null>(null);
-
-  const [consoleLogs, setConsoleLogs] = useState<ConsoleLogItem[]>([
-    {
-      id: 'log-1',
-      type: 'info',
-      message: 'Native WebKit engine initialized',
-      timestamp: new Date().toLocaleTimeString(),
-      source: 'webkit://core'
-    }
-  ]);
+  const [consoleLogs, setConsoleLogs] = useState<ConsoleLogItem[]>([]);
 
   const viewport = useRef<HTMLDivElement>(null);
   const browser = useNativeBrowser({
@@ -84,32 +65,29 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
     onUrlChange: (current) => {
       setAddress(current === 'about:blank' ? '' : current);
       onUrlChange(current);
-      if (current.includes(':5173') || current.includes(':3000')) {
-        setConsoleLogs((prev) => [
-          ...prev,
-          {
-            id: `log-${Date.now()}`,
-            type: 'log',
-            message: `[Vite HMR] Connected to ${current}`,
-            timestamp: new Date().toLocaleTimeString(),
-            source: 'vite:client'
-          }
-        ]);
-      }
     },
   });
 
   const { native, ready, loading, error, command: act, setError } = browser;
+
+  // React to external URL navigation changes (e.g. from File Viewer / Presentation launcher)
+  useEffect(() => {
+    if (url && url !== 'about:blank' && url !== address) {
+      setAddress(url);
+      if (ready) {
+        void act('navigate', { url });
+      }
+    }
+  }, [url, ready, address, act]);
 
   const navigate = (customTarget?: string) => {
     const raw = typeof customTarget === 'string' ? customTarget : address;
     const target = normalizeBrowserUrl(raw);
     try {
       const parsed = new URL(target);
-      if (!['http:', 'https:'].includes(parsed.protocol) && target !== 'about:blank') {
-        throw new Error('Only HTTP, HTTPS and about:blank are supported');
+      if (!['http:', 'https:', 'blob:', 'file:', 'data:'].includes(parsed.protocol) && target !== 'about:blank') {
+        throw new Error('Only HTTP, HTTPS, blob, file, data and about:blank are supported');
       }
-      setInspectedElement(null);
       setAddress(target === 'about:blank' ? '' : target);
       void act('navigate', { url: target });
     } catch (reason) {
@@ -127,43 +105,6 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
     }
   };
 
-  const handleToggleInspector = () => {
-    const nextState = !isInspectorActive;
-    setIsInspectorActive(nextState);
-    if (nextState) {
-      // Simulate grabbing element from DOM tree
-      setInspectedElement({
-        selector: 'button.btn-primary[data-action="checkout"]',
-        tag: 'BUTTON',
-        text: 'Proceed to Payment ($49.00)',
-        rect: { width: 220, height: 42 }
-      });
-    } else {
-      setInspectedElement(null);
-    }
-  };
-
-  const handleSendElementToAgent = () => {
-    if (!inspectedElement) return;
-    const context = [
-      `[Browser Inspector Context]`,
-      `Target URL: ${browser.currentUrl}`,
-      `Element Selector: ${inspectedElement.selector}`,
-      `Tag: <${inspectedElement.tag.toLowerCase()}>`,
-      `Text Content: "${inspectedElement.text}"`,
-      inspectedElement.rect ? `Rendered Size: ${inspectedElement.rect.width}x${inspectedElement.rect.height}px` : '',
-      `Action: Please inspect or modify this element/component.`
-    ].filter(Boolean).join('\n');
-
-    onAskAgent?.(context);
-    setIsInspectorActive(false);
-    setInspectedElement(null);
-  };
-
-  const handleTakeBackControl = () => {
-    setAgentDriving(false);
-  };
-
   const errorCount = consoleLogs.filter((l) => l.type === 'error').length;
   const selected = PRESETS[preset];
   const isHttps = address.startsWith('https://');
@@ -173,22 +114,6 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
 
   return (
     <div className="h-full flex flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)] text-xs overflow-hidden">
-      {/* 1. Co-browsing Agent Take-Back Banner (Orca Parity) */}
-      {agentDriving && (
-        <div className="bg-amber-500/15 border-b border-amber-500/30 px-3 py-1.5 flex items-center justify-between text-[11px] text-amber-300 shrink-0 animate-pulse">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
-            <span className="font-medium">Agent is currently driving this browser session via agent-browser</span>
-          </div>
-          <button
-            onClick={handleTakeBackControl}
-            className="px-2.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 text-[10px] font-semibold transition"
-          >
-            Take Back Control
-          </button>
-        </div>
-      )}
-
       {/* 2. Top Chrome Navigation Bar */}
       <form
         className="h-10 shrink-0 flex items-center gap-1.5 border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-2"
@@ -255,17 +180,6 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
         {/* Developer & Agent Action Cluster */}
         <div className="h-4 w-px bg-[var(--color-border-muted)] mx-0.5" />
 
-        {/* Element Grabber (Crosshair) */}
-        <button
-          type="button"
-          className={`${buttonClass} ${isInspectorActive ? 'bg-[var(--color-accent)] text-white shadow-xs' : ''}`}
-          aria-label="Pick Element (Crosshair)"
-          title="Pick Element to Inspect / Grab for Agent"
-          onClick={handleToggleInspector}
-        >
-          <Crosshair size={14} />
-        </button>
-
         {/* Send to Chat Context */}
         <button
           type="button"
@@ -284,7 +198,7 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
           className={`${buttonClass} relative ${isDevDrawerOpen ? 'bg-[var(--color-surface-2)] text-[var(--color-accent)]' : ''}`}
           aria-label="Toggle Developer Console"
           onClick={() => setIsDevDrawerOpen((prev) => !prev)}
-          title="Toggle Developer Console"
+          title="Show Custos browser navigation errors"
         >
           <Terminal size={14} />
           {errorCount > 0 && (
@@ -402,40 +316,6 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
         {loading && <div className="h-full bg-[var(--color-accent)] animate-pulse" />}
       </div>
 
-      {/* 4. Element Grabber Highlight Card (Orca Parity) */}
-      {inspectedElement && (
-        <div className="bg-[var(--color-surface-1)] border-b border-[var(--color-accent)]/40 p-2.5 flex items-center justify-between gap-3 shadow-md">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="p-1 rounded bg-[var(--color-accent)]/20 text-[var(--color-accent)]">
-              <Crosshair size={13} />
-            </span>
-            <div className="min-w-0">
-              <div className="font-mono text-[11px] font-semibold text-[var(--color-editor-fg)] truncate">
-                {inspectedElement.selector}
-              </div>
-              <div className="text-[10px] text-[var(--color-fg-muted)] truncate">
-                Content: "{inspectedElement.text}"
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handleSendElementToAgent}
-              className="px-2.5 py-1 rounded bg-[var(--color-accent)] hover:opacity-90 text-white font-medium text-[11px] flex items-center gap-1.5 shadow-xs transition"
-            >
-              <MessageSquarePlus size={12} />
-              <span>Send to Agent</span>
-            </button>
-            <button
-              onClick={() => setInspectedElement(null)}
-              className="px-2 py-1 rounded hover:bg-[var(--color-surface-2)] text-[var(--color-fg-muted)] text-[11px]"
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 5. Main Webview Canvas */}
       <div className="relative min-h-0 flex-1 overflow-auto flex justify-center bg-[var(--color-canvas-inset)]">
         <div
@@ -448,9 +328,22 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
         />
 
         {!native ? (
-          <div className="absolute inset-0 flex items-center justify-center p-6 text-[var(--color-fg-muted)]">
-            Open Custos desktop to use the native Browser.
-          </div>
+          address && address !== 'about:blank' ? (
+            <iframe
+              src={address}
+              title="Browser Preview"
+              className="w-full h-full border-0 bg-white"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+            />
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-[var(--color-fg-muted)] gap-2">
+              <Globe className="h-8 w-8 text-[var(--color-accent)] opacity-60" />
+              <p className="text-sm font-medium text-[var(--color-editor-fg)]">Web Mode Preview</p>
+              <p className="text-xs text-[var(--color-fg-subtle)] text-center max-w-sm">
+                Enter a URL above to preview, or use the Custos desktop app for a native browser view. Page inspection is not connected.
+              </p>
+            </div>
+          )
         ) : error ? (
           <div role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 bg-[var(--color-canvas)]">
             <AlertCircle size={24} className="text-rose-400" />
@@ -466,7 +359,7 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
             </div>
             <h2 className="text-lg font-semibold text-[var(--color-editor-fg)]">Desktop Web Browser</h2>
             <p className="mt-1 text-xs text-[var(--color-fg-muted)] max-w-md leading-relaxed">
-              Native WebKit engine with AI co-browsing, element grabber, and live dev console.
+              Native browser preview. Share the current URL with chat; page inspection and network capture are not connected.
             </p>
 
             {/* Quick search / URL input */}
@@ -558,29 +451,15 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
         ) : null}
       </div>
 
-      {/* 6. Developer Tools Console Drawer (Orca Parity) */}
+      {/* Custos navigation errors only; this is not a page DevTools feed. */}
       {isDevDrawerOpen && (
         <div className="h-44 shrink-0 flex flex-col border-t border-[var(--color-border-default)] bg-[var(--color-surface-0)]">
           <div className="h-7 shrink-0 flex items-center justify-between px-3 border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)]">
             <div className="flex items-center gap-3">
-              <button
-                onClick={() => setDevTab('console')}
-                className={`font-semibold text-[11px] flex items-center gap-1.5 ${
-                  devTab === 'console' ? 'text-[var(--color-editor-fg)] border-b-2 border-[var(--color-accent)]' : 'text-[var(--color-fg-muted)]'
-                }`}
-              >
+              <div className="font-semibold text-[11px] flex items-center gap-1.5 text-[var(--color-editor-fg)]">
                 <Terminal size={11} />
-                <span>Console ({consoleLogs.length})</span>
-              </button>
-              <button
-                onClick={() => setDevTab('network')}
-                className={`font-semibold text-[11px] flex items-center gap-1.5 ${
-                  devTab === 'network' ? 'text-[var(--color-editor-fg)] border-b-2 border-[var(--color-accent)]' : 'text-[var(--color-fg-muted)]'
-                }`}
-              >
-                <Globe size={11} />
-                <span>Network</span>
-              </button>
+                <span>Browser navigation errors ({consoleLogs.length})</span>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -593,7 +472,7 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
               <button
                 onClick={() => setIsDevDrawerOpen(false)}
                 className="p-1 hover:bg-[var(--color-surface-2)] text-[var(--color-fg-muted)] rounded"
-                title="Close DevTools Drawer"
+                title="Close browser error log"
               >
                 <ChevronDown size={13} />
               </button>
@@ -601,9 +480,8 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
           </div>
 
           <div className="flex-1 overflow-auto p-2 font-mono text-[11px] space-y-1">
-            {devTab === 'console' ? (
-              consoleLogs.length === 0 ? (
-                <div className="text-[var(--color-fg-subtle)] p-4 text-center">No console output recorded.</div>
+            {consoleLogs.length === 0 ? (
+                <div className="text-[var(--color-fg-subtle)] p-4 text-center">No Custos navigation errors recorded. Page console and network capture are not available.</div>
               ) : (
                 consoleLogs.map((log) => (
                   <div
@@ -624,23 +502,7 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
                     {log.source && <span className="text-[9px] text-[var(--color-fg-subtle)] shrink-0">{log.source}</span>}
                   </div>
                 ))
-              )
-            ) : (
-              <div className="space-y-1.5">
-                <div className="grid grid-cols-4 text-[10px] text-[var(--color-fg-muted)] border-b border-[var(--color-border-muted)] pb-1 px-1">
-                  <span>Name / URL</span>
-                  <span>Status</span>
-                  <span>Type</span>
-                  <span>Latency</span>
-                </div>
-                <div className="grid grid-cols-4 text-[11px] px-1 text-[var(--color-editor-fg)]">
-                  <span className="truncate">{browser.currentUrl || 'about:blank'}</span>
-                  <span className="text-emerald-400 font-semibold">200 OK</span>
-                  <span className="text-[var(--color-fg-muted)]">document</span>
-                  <span className="text-[var(--color-fg-muted)]">12ms</span>
-                </div>
-              </div>
-            )}
+              )}
           </div>
         </div>
       )}

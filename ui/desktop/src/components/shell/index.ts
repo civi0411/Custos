@@ -7,3 +7,6 @@ export * from './AppWorkspaceShell';
 export * from './CommandPalette';
 export * from './AttentionBanner';
 export * from './WorkspaceTree';
+export * from './ActivityRail';
+export * from './UserProfileMenu';
+export * from './AppTopBar';

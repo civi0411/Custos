@@ -167,20 +167,11 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
 
     setIntegratingId(winnerWsId);
     try {
-      const loserIds = workspaces.filter((w) => w.id !== winnerWsId).map((w) => w.id);
-
-      onShowToast?.(`Integrating winner ${winner?.name || winnerWsId.slice(0, 8)} via Gate 4...`);
+      onShowToast?.(`Integrating ${winner.name || winnerWsId.slice(0, 8)}...`);
       const res = await daemonClient.integrateCandidate({
         winner_workspace_id: winnerWsId,
-        loser_workspace_ids: loserIds,
-        force_loser_cleanup: false,
+        target_branch: winner.lineage?.target_branch || undefined,
       });
-
-      if (res.is_stale_base) {
-        onShowToast?.(
-          `Stale-Base Notice: Target HEAD moved beyond base commit (${res.winner_base_commit?.slice(0, 7) || 'unknown'}). Merging...`
-        );
-      }
 
       if (res.merge_success) {
         onShowToast?.(

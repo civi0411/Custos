@@ -28,6 +28,7 @@ import { formatKeyCombo } from '@/lib/utils';
 import { SubAgentsPane } from '@/app/settings/SubAgentsPane';
 import { CostQuotasPane } from '@/app/settings/CostQuotasPane';
 import { DaemonPane } from '@/app/settings/DaemonPane';
+import { LocalRuntimePane } from '@/app/settings/LocalRuntimePane';
 
 export interface SettingsModalProps {
   isOpen: boolean;
@@ -84,14 +85,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     handleRevokeClientKey,
     refreshModels,
   } = useAppContext();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('providers');
+  const [providerSubTab, setProviderSubTab] = useState<'cloud' | 'local'>('cloud');
   const [daemonOnline, setDaemonOnline] = useState<boolean | null>(null);
   const [checkingDaemon, setCheckingDaemon] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
-    const allowed: SettingsTab[] = ['general', 'subagents', 'quotas', 'daemon', 'appearance', 'shortcuts', 'providers', 'runtime', 'security', 'storage', 'about'];
-    setActiveTab(allowed.includes(initialTab as SettingsTab) ? initialTab as SettingsTab : 'general');
+    if (initialTab === 'runtime') {
+      setActiveTab('providers');
+      setProviderSubTab('local');
+    } else if (initialTab === 'providers') {
+      setActiveTab('providers');
+      setProviderSubTab('cloud');
+    } else {
+      const allowed: SettingsTab[] = ['general', 'subagents', 'quotas', 'daemon', 'appearance', 'shortcuts', 'providers', 'security', 'storage', 'about'];
+      setActiveTab(allowed.includes(initialTab as SettingsTab) ? initialTab as SettingsTab : 'general');
+    }
     void checkDaemon();
   }, [isOpen, initialTab]);
 
@@ -143,18 +153,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setCheckingDaemon(false);
   };
 
-  const nav = [
-    { id: 'general' as const, label: 'General', icon: SlidersHorizontal },
-    { id: 'providers' as const, label: 'Models & accounts', icon: KeyRound },
-    { id: 'subagents' as const, label: 'Agent runtimes', icon: Bot },
-    { id: 'quotas' as const, label: 'Usage & limits', icon: Coins },
-    { id: 'daemon' as const, label: 'Daemon status', icon: Server },
-    { id: 'appearance' as const, label: 'Appearance', icon: Monitor },
-    { id: 'shortcuts' as const, label: 'Shortcuts', icon: Keyboard },
-    { id: 'runtime' as const, label: 'Runtime', icon: Cpu },
-    { id: 'security' as const, label: 'Security', icon: Shield },
-    { id: 'storage' as const, label: 'Storage', icon: Database },
-    { id: 'about' as const, label: 'About', icon: Info },
+  const navSections = [
+    {
+      category: 'AI & Inference',
+      items: [
+        { id: 'providers' as const, label: 'Models & Providers', icon: KeyRound },
+        { id: 'subagents' as const, label: 'Subagent Workers', icon: Bot },
+        { id: 'quotas' as const, label: 'Usage & Cost Limits', icon: Coins },
+      ],
+    },
+    {
+      category: 'Preferences',
+      items: [
+        { id: 'general' as const, label: 'General', icon: SlidersHorizontal },
+        { id: 'appearance' as const, label: 'Appearance', icon: Monitor },
+        { id: 'shortcuts' as const, label: 'Keyboard Shortcuts', icon: Keyboard },
+      ],
+    },
+    {
+      category: 'System & Platform',
+      items: [
+        { id: 'daemon' as const, label: 'Daemon Status', icon: Server },
+        { id: 'security' as const, label: 'Security & Sandbox', icon: Shield },
+        { id: 'storage' as const, label: 'Storage & Artifacts', icon: Database },
+        { id: 'about' as const, label: 'About Custos', icon: Info },
+      ],
+    },
   ];
 
   return (
@@ -171,21 +195,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </header>
 
         <div className="flex min-h-0 flex-1">
-          <nav className="w-48 shrink-0 border-r border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3">
-            {nav.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setActiveTab(id)}
-                className={`mb-0.5 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs ${
-                  activeTab === id
-                    ? 'bg-[var(--color-surface-2)] text-[var(--color-editor-fg)]'
-                    : 'text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-editor-fg)]'
-                }`}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {label}
-              </button>
+          <nav className="w-52 shrink-0 border-r border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3 space-y-4 overflow-y-auto">
+            {navSections.map((section) => (
+              <div key={section.category} className="space-y-1">
+                <div className="px-2.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fg-subtle)] font-mono">
+                  {section.category}
+                </div>
+                {section.items.map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setActiveTab(id)}
+                    className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs transition cursor-pointer ${
+                      activeTab === id
+                        ? 'bg-[var(--color-surface-2)] text-[var(--color-editor-fg)] font-medium shadow-xs'
+                        : 'text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)]/60 hover:text-[var(--color-editor-fg)]'
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{label}</span>
+                  </button>
+                ))}
+              </div>
             ))}
           </nav>
 
@@ -285,18 +316,59 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             )}
 
             {activeTab === 'providers' && (
-              <div className="space-y-4">
-                  <div className="space-y-6">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h2 className="text-sm font-semibold">Configured AI Providers & Accounts</h2>
-                        <p className="mt-1 text-[11px] text-[var(--color-fg-muted)]">OmniRoute / 9Router architecture: Multi-account credentials and live model routes.</p>
-                      </div>
-                      <button type="button" onClick={() => setIsAddProviderOpen(true)} className="flex items-center gap-1.5 rounded-md bg-[var(--color-editor-fg)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-canvas)] cursor-pointer">
-                        <Plus className="h-3.5 w-3.5" /> Connect Provider
-                      </button>
-                    </div>
+              <div className="space-y-5">
+                {/* Header with Title and Connect Button */}
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-[var(--color-editor-fg)]">AI Models & Providers</h2>
+                    <p className="mt-1 text-[11px] text-[var(--color-fg-muted)]">
+                      Manage cloud provider accounts and native local models on your Mac.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddProviderOpen(true)}
+                    className="flex items-center gap-1.5 rounded-md bg-[var(--color-editor-fg)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-canvas)] hover:opacity-90 transition cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Connect Model or Provider
+                  </button>
+                </div>
 
+                {/* Subtab Segment Switcher */}
+                <div className="flex items-center gap-1 border-b border-[var(--color-border-muted)] pb-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setProviderSubTab('cloud')}
+                    className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
+                      providerSubTab === 'cloud'
+                        ? 'bg-[var(--color-surface-2)] text-[var(--color-editor-fg)] font-semibold shadow-xs'
+                        : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+                    }`}
+                  >
+                    <KeyRound className="h-3.5 w-3.5" />
+                    <span>Cloud Accounts & API Keys</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProviderSubTab('local')}
+                    className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
+                      providerSubTab === 'local'
+                        ? 'bg-[var(--color-surface-2)] text-[var(--color-editor-fg)] font-semibold shadow-xs'
+                        : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+                    }`}
+                  >
+                    <Cpu className="h-3.5 w-3.5 text-teal-400" />
+                    <span>Local Models (Apple Silicon)</span>
+                  </button>
+                </div>
+
+                {providerSubTab === 'local' ? (
+                  <LocalRuntimePane
+                    onNavigateToProviders={() => setProviderSubTab('cloud')}
+                    onShowToast={_onShowToast}
+                  />
+                ) : (
+                  <div className="space-y-6">
                     {/* Section 2: Connected Accounts (OAuth & Multi-key) */}
                     <div className="space-y-2 pt-2">
                       <div className="text-[11px] font-semibold uppercase font-mono tracking-wider text-[var(--color-fg-subtle)] flex items-center justify-between">
@@ -366,7 +438,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               style={{ backgroundColor: account.badgeColor || '#10b981' }}
                               title={account.providerId === 'local' ? (account.status === 'active' ? 'Online' : 'Offline') : account.statusLabel || account.status}
                             />
-                            <button type="button" onClick={() => void refreshModels()} className="provider-oauth-action rounded px-2 py-1 text-[10px]">Refresh models</button>
+                            {account.providerId === 'local' && account.status !== 'active' ? (
+                              <button type="button" onClick={() => void refreshModels()} className="rounded border border-border-default bg-surface-2 hover:bg-surface-3 px-2 py-1 text-[10px] text-fg-editor transition cursor-pointer">Retry</button>
+                            ) : (
+                              <button type="button" onClick={() => void refreshModels()} className="provider-oauth-action rounded px-2 py-1 text-[10px]">Refresh models</button>
+                            )}
                             <button
                               type="button"
                               onClick={() => {
@@ -411,18 +487,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     </div>
                   </div>
-              </div>
-            )}
-
-            {activeTab === 'runtime' && (
-              <div className="space-y-3">
-                <h2 className="mb-5 text-sm font-semibold">Runtime and compute</h2>
-                <SettingRow title="Model execution" description="Provider/model selection belongs to a versioned route plan and attempt, not a global fake default.">
-                  <span className="text-[10px] text-[var(--color-fg-subtle)]">Daemon policy</span>
-                </SettingRow>
-                <SettingRow title="Research kernels" description="Local, SSH, Slurm and managed compute need explicit capability profiles and approval before launch.">
-                  <span className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">Not connected</span>
-                </SettingRow>
+                )}
               </div>
             )}
 

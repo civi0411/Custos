@@ -31,6 +31,7 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
   const isEngineering = mode === 'engineering';
   const [harnesses, setHarnesses] = useState<HarnessDescriptor[]>([]);
   const [loading, setLoading] = useState(false);
+  const [harnessError, setHarnessError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -38,6 +39,7 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
     if (!isOpen || !isEngineering) return;
     let mounted = true;
     setLoading(true);
+    setHarnessError(null);
 
     daemonClient
       .listHarnesses()
@@ -47,6 +49,7 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
       })
       .catch((err) => {
         console.warn('Failed to probe coding agent harnesses:', err);
+        if (mounted) setHarnessError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -204,7 +207,8 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
                   </button>
                 ))}
 
-                {installedHarnesses.length === 0 && !loading && (
+                {harnessError && <p role="alert" className="px-2 py-2 text-xs text-rose-400">Could not detect coding agents: {harnessError}</p>}
+                {installedHarnesses.length === 0 && !loading && !harnessError && (
                   <div className="px-3 py-2 text-xs text-fg-muted italic">
                     No installed coding agents found on PATH.
                   </div>

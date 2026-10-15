@@ -4,14 +4,14 @@ import {
   SlidersHorizontal,
   Search,
   ChevronDown,
-  Settings,
   Trash2,
+  MessageSquare,
+  ListTodo,
 } from 'lucide-react';
 import { Session, WorkflowCard } from '@/types';
 import { sessionToWorkflowCard } from '@/lib/workflow';
-import { formatKeyCombo } from '@/lib/utils';
 import { daemonClient } from '@/api/daemon_client';
-import type { ExecutionWorkspace, WorkspaceNode } from '@/types/domain';
+import type { ExecutionWorkspace, Task, WorkspaceNode } from '@/types/domain';
 import { WorkspaceTree } from './WorkspaceTree';
 
 export interface SidebarTool {
@@ -30,6 +30,12 @@ export interface WorkspaceSidebarProps {
   allSessions: Session[];
   activeSessionId: string;
   onSelectSession: (id: string) => void;
+  tasks: Task[];
+  selectedTaskId: string | null;
+  onSelectTask: (id: string) => void;
+  onClearTask: () => void;
+  listMode: 'chats' | 'tasks';
+  onChangeListMode: (mode: 'chats' | 'tasks') => void;
   onOpenFullChatIn?: (mode: 'copilot' | 'engineering' | 'research' | any, sessionId?: string) => void;
   onOpenSessionHere?: (id: string) => void;
   onDeleteSession?: (id: string) => void | Promise<void>;
@@ -44,6 +50,7 @@ export interface WorkspaceSidebarProps {
   newTaskIcon: React.ElementType;
   newTaskIconColor?: string;
   onNewSession: () => void;
+  onRequestCreateTask?: () => void;
 
   // Nav Tools (optional)
   tools?: SidebarTool[];
@@ -53,9 +60,9 @@ export interface WorkspaceSidebarProps {
   emptySessionsMessage: string;
   projectActiveColor?: string;
 
-  // Footer Avatar
-  avatarColor: string;
-  avatarText: string;
+  // Footer Avatar (optional/deprecated - canonical entry is ActivityRail)
+  avatarColor?: string;
+  avatarText?: string;
   avatarTextColor?: string;
 
   // Callbacks
@@ -77,6 +84,12 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   allSessions,
   activeSessionId,
   onSelectSession,
+  tasks,
+  selectedTaskId,
+  onSelectTask,
+  onClearTask,
+  listMode,
+  onChangeListMode,
   onOpenFullChatIn: _onOpenFullChatIn,
   onOpenSessionHere,
   onDeleteSession,
@@ -87,15 +100,16 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   newTaskIcon: NewTaskIcon,
   newTaskIconColor = 'text-fg-muted',
   onNewSession,
+  onRequestCreateTask,
   tools: _tools = [],
   sessionsTitle,
   emptySessionsMessage,
   projectActiveColor: _projectActiveColor = 'bg-accent',
-  avatarColor,
-  avatarText,
-  avatarTextColor = 'text-fg-on-emphasis',
+  avatarColor: _avatarColor,
+  avatarText: _avatarText,
+  avatarTextColor: _avatarTextColor = 'text-fg-on-emphasis',
   onShowToast,
-  onOpenSettings,
+  onOpenSettings: _onOpenSettings,
   isSidebarCollapsed,
   workspaces: propWorkspaces,
   activeWorkspaceId: propActiveWorkspaceId,
@@ -103,7 +117,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   refreshWorkspaces: propRefreshWorkspaces,
 }) => {
   const {
-    openSettings,
     handleOpenFolderDirect,
     activeDetection,
     workspaces: ctxWorkspaces,
@@ -116,6 +129,23 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   const activeWorkspaceId = propActiveWorkspaceId ?? ctxActiveWorkspaceId;
   const onSelectWorkspace = propOnSelectWorkspace ?? ctxSetActiveWorkspaceId;
   const refreshWorkspaces = propRefreshWorkspaces ?? ctxRefreshWorkspaces;
+
+  const [isNewMenuOpen, setIsNewMenuOpen] = useState(false);
+  const newMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (newMenuRef.current && !newMenuRef.current.contains(e.target as Node)) {
+        setIsNewMenuOpen(false);
+      }
+    };
+    if (isNewMenuOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [isNewMenuOpen]);
 
   useEffect(() => {
     if (workspaces.length === 0) {
@@ -151,7 +181,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           name: ws.name || ws.path.split('/').pop() || ws.id,
           path: ws.path,
           kind: isGit ? 'git' : ws.kind?.type === 'remote_ssh' ? 'ssh' : 'folder',
-          isActive: ws.id === activeWorkspaceId || ws.name === currentProject,
+          isActive: ws.id === activeWorkspaceId,
           branch: ws.active_branch || undefined,
           isDirty: ws.dirty_manifest?.is_dirty,
           dirtyCount: ws.dirty_manifest?.modified_files?.length,
@@ -184,7 +214,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           name: ws.name || ws.path.split('/').pop() || ws.id,
           path: ws.path,
           kind: 'git',
-          isActive: ws.id === activeWorkspaceId || ws.name === currentProject,
+          isActive: ws.id === activeWorkspaceId,
           branch: ws.active_branch || ws.name,
           isDirty: ws.dirty_manifest?.is_dirty,
           dirtyCount: ws.dirty_manifest?.modified_files?.length,
@@ -240,13 +270,12 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   }, [workspaces, activeWorkspaceId, currentProject, projectNames, activeDetection]);
 
   const handleSelectWorkspaceNode = (id: string) => {
-    onSelectWorkspace?.(id);
-    const found =
-      workspaceNodes.find((n) => n.id === id) ||
-      workspaceNodes.flatMap((n) => n.worktrees || []).find((w) => w.id === id);
-    if (found) {
-      onSelectProject(found.name);
+    if (workspaces.some((workspace) => workspace.id === id)) {
+      onSelectWorkspace?.(id);
+      return;
     }
+    const projectNode = workspaceNodes.find((node) => node.id === id && id.startsWith('proj-'));
+    if (projectNode) onSelectProject(projectNode.name);
   };
 
   const handleAddWorktree = async (parentId: string, branch: string) => {
@@ -260,7 +289,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           : parent.path;
 
       const sanitizedBranch = branch.replace(/[\/\\]/g, '-');
-      const targetPath = `${repoPath.replace(/\/+$/, '')}/.worktrees/${sanitizedBranch}`;
+      const targetPath = `${repoPath.replace(/[\\/]+$/, '')}.worktrees/${sanitizedBranch}`;
 
       const created = await daemonClient.createWorkspace({
         name: branch,
@@ -292,29 +321,11 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     }
   };
 
-  const handleOpenSettings = () => {
-    setIsProfileDropdownOpen(false);
-    if (onOpenSettings) {
-      onOpenSettings();
-    } else {
-      openSettings('general');
-    }
-  };
-
-  const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
-  const [daemonOnline, setDaemonOnline] = useState<boolean | null>(null);
-  useEffect(() => {
-    if (!isProfileDropdownOpen) return;
-    let mounted = true;
-    setDaemonOnline(null);
-    daemonClient.checkHealth()
-      .then((online) => { if (mounted) setDaemonOnline(online); })
-      .catch(() => { if (mounted) setDaemonOnline(false); });
-    return () => { mounted = false; };
-  }, [isProfileDropdownOpen]);
   const [showAllSessions, setShowAllSessions] = useState(false);
   const [sessionQuery, setSessionQuery] = useState('');
-  const profileRef = useRef<HTMLDivElement>(null);
+  const changeListMode = (next: 'chats' | 'tasks') => {
+    onChangeListMode(next);
+  };
 
   // StudioPage supplies the canonical lens membership projection. Do not
   // filter by the Task's original pack: a session may be opened in two lenses.
@@ -328,17 +339,20 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     );
   }, [allSessions, visibleSessions, sessionQuery]);
 
-  const derivedSessionsTitle = useMemo(() => {
-    if (sessionsTitle) return sessionsTitle;
-    if (activeWorkbench === 'engineering') return 'Coding Workflows';
-    if (activeWorkbench === 'research') return 'Research Studies';
-    return 'Conversations';
-  }, [sessionsTitle, activeWorkbench]);
-
   // Convert sessions to unified WorkflowCards
   const workflowCards = useMemo(() => {
-    return visibleSessions.map((s) => sessionToWorkflowCard(s));
-  }, [visibleSessions]);
+    const tasksById = Object.fromEntries(tasks.map((task) => [task.id, task]));
+    return visibleSessions.map((s) => sessionToWorkflowCard(s, { tasksById }));
+  }, [visibleSessions, tasks]);
+
+  const visibleTasks = useMemo(() => tasks.filter((task) => {
+    if (task.metadata?.kind === 'conversation_chat_turn') return false;
+    const pack = String(task.contract?.pack_id || task.metadata?.pack_id || '').toLowerCase();
+    if (!pack) return true;
+    if (activeWorkbench === 'copilot') return pack === 'assistant' || pack === 'copilot';
+    if (activeWorkbench === 'engineering') return pack === 'engineering' || pack === 'coding';
+    return pack === 'research';
+  }), [tasks, activeWorkbench]);
 
   // Group by status (Active / Needs Input / Recent)
   const runningCards = useMemo(() => {
@@ -361,27 +375,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     );
   }, [workflowCards, runningCards, attentionCards]);
 
-  // Close popovers on outside click
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (profileRef.current && !profileRef.current.contains(target)) {
-        setIsProfileDropdownOpen(false);
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsProfileDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleOutsideClick);
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleOutsideClick);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, []);
-
   if (isSidebarCollapsed) return null;
 
   const renderCard = (card: WorkflowCard) => {
@@ -403,8 +396,8 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         onClick={() => onSelectSession(card.id)}
         className={`group flex items-center justify-between px-2.5 py-1.5 rounded-md cursor-pointer transition text-xs ${
           isActive
-            ? 'bg-surface-2 text-fg-editor font-medium border border-border-default'
-            : 'text-fg-muted hover:text-fg-editor hover:bg-surface-2/60 border border-transparent'
+            ? 'bg-white/12 text-white font-medium border border-white/10 shadow-xs'
+            : 'text-white/60 hover:text-white hover:bg-white/6 border border-transparent'
         }`}
         title={card.title}
       >
@@ -443,18 +436,90 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   };
 
   return (
-    <aside className="w-64 bg-surface-1 border-r border-border-default flex flex-col shrink-0 z-20 relative select-none">
+    <aside className="w-64 bg-[#212124] border-r border-white/10 flex flex-col shrink-0 z-20 relative select-none">
       <div className="flex flex-col min-h-0 flex-1 p-3">
-        <button
-          type="button"
-          onClick={onNewSession}
-          className="mb-3 flex w-full items-center justify-center gap-2 rounded-lg border border-border-muted/80 bg-surface-2 px-3 py-2 text-[12.5px] font-medium text-fg-editor transition hover:bg-surface-3"
-          aria-label="Create a chat session or task"
-        >
-          <NewTaskIcon className={`h-4 w-4 ${newTaskIconColor}`} />
-          <span>New</span>
-        </button>
-        {/* ─── Workspaces Tree (Only in Engineering, or in Research when projects/corpus attached) ─── */}
+        {/* Action button with dropdown for New Chat vs New Task */}
+        <div className="relative mb-3 flex w-full items-stretch rounded-lg border border-white/10 bg-white/5 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => {
+              if (listMode === 'tasks') {
+                onRequestCreateTask?.();
+              } else {
+                changeListMode('chats');
+                onClearTask();
+                onNewSession();
+              }
+            }}
+            className="flex flex-1 items-center justify-center gap-2 rounded-l-lg py-2 px-3 text-[12.5px] font-medium text-fg-editor transition hover:bg-surface-3"
+            aria-label={listMode === 'tasks' ? 'Create a new task' : 'Create a new chat'}
+          >
+            {listMode === 'tasks' ? (
+              <>
+                <ListTodo className="h-4 w-4 text-workbench-accent" />
+                <span>New Task</span>
+              </>
+            ) : (
+              <>
+                <NewTaskIcon className={`h-4 w-4 ${newTaskIconColor}`} />
+                <span>New Chat</span>
+              </>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsNewMenuOpen(!isNewMenuOpen);
+            }}
+            className="flex items-center justify-center border-l border-border-muted/60 px-2 rounded-r-lg text-fg-muted hover:text-fg-editor hover:bg-surface-3 transition"
+            title="Create options"
+            aria-expanded={isNewMenuOpen}
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+          </button>
+
+          {isNewMenuOpen && (
+            <div
+              ref={newMenuRef}
+              className="absolute left-0 top-full mt-1.5 w-full rounded-xl border border-border-default bg-surface-1 p-1.5 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setIsNewMenuOpen(false);
+                  changeListMode('chats');
+                  onClearTask();
+                  onNewSession();
+                }}
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-fg-editor hover:bg-surface-2 transition text-left"
+              >
+                <MessageSquare className="h-4 w-4 text-sky-400 shrink-0" />
+                <div>
+                  <div className="font-medium">New Conversation</div>
+                  <div className="text-[10px] text-fg-muted">Start an interactive chat session</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsNewMenuOpen(false);
+                  onRequestCreateTask?.();
+                }}
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs text-fg-editor hover:bg-surface-2 transition text-left"
+              >
+                <ListTodo className="h-4 w-4 text-emerald-400 shrink-0" />
+                <div>
+                  <div className="font-medium">New Task</div>
+                  <div className="text-[10px] text-fg-muted">Create formal task with criteria & worktree</div>
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
+        {/* ─── Workspaces Tree (Only in Engineering lens) ─── */}
         {activeWorkbench === 'engineering' && (
           <WorkspaceTree
             nodes={workspaceNodes}
@@ -466,32 +531,50 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             activeDetection={activeDetection}
           />
         )}
-        {activeWorkbench === 'research' && workspaceNodes.length > 0 && (
-          <WorkspaceTree
-            nodes={workspaceNodes}
-            activeId={activeWorkspaceId}
-            onSelectNode={handleSelectWorkspaceNode}
-            onAddFolder={handleOpenFolderDirect}
-            onAddWorktree={handleAddWorktree}
-            onRemoveNode={handleRemoveWorkspaceNode}
-            activeDetection={activeDetection}
-          />
-        )}
 
-        {/* Section: Workflows Header */}
-        <div className="flex items-center justify-between px-3 py-1 text-[11px] font-medium text-fg-subtle mb-1">
-          <span>{derivedSessionsTitle}</span>
-          <button
-            onClick={() => setShowAllSessions((shown) => !shown)}
-            className="p-1 hover:text-fg-editor transition rounded text-fg-muted"
-            title="Search workflows across project"
-            aria-label="Search workflows across project"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
-          </button>
+        {/* Chats and Tasks are separate canonical navigation projections. */}
+        <div className="flex items-center justify-between px-3 py-1.5 text-[11px] font-medium text-[var(--color-fg-subtle)] mb-1">
+          <div className="flex items-center rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-2)]/80 p-0.5" role="tablist" aria-label="History type">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={listMode === 'chats'}
+              onClick={() => { changeListMode('chats'); onClearTask(); }}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 transition ${
+                listMode === 'chats'
+                  ? 'bg-[var(--color-surface-1)] text-[var(--color-editor-fg)] shadow-xs font-semibold'
+                  : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+              }`}
+            >
+              <MessageSquare className="h-3 w-3" /> Chats
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={listMode === 'tasks'}
+              onClick={() => changeListMode('tasks')}
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 transition ${
+                listMode === 'tasks'
+                  ? 'bg-[var(--color-surface-1)] text-[var(--color-editor-fg)] shadow-xs font-semibold'
+                  : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+              }`}
+            >
+              <ListTodo className="h-3 w-3" /> Tasks
+            </button>
+          </div>
+          {listMode === 'chats' && (
+            <button
+              onClick={() => setShowAllSessions((shown) => !shown)}
+              className="p-1 hover:text-[var(--color-editor-fg)] transition rounded-md text-[var(--color-fg-subtle)] hover:bg-[var(--color-surface-2)]"
+              title="Search chats across project"
+              aria-label={`Search ${sessionsTitle || 'chats'} across project`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
-        {showAllSessions && (
+        {showAllSessions && listMode === 'chats' && (
           <div className="mx-1 mb-2 rounded-lg border border-border-default bg-surface-2 p-2">
             <label className="flex items-center gap-1.5 text-fg-muted">
               <Search className="h-3.5 w-3.5 shrink-0" />
@@ -527,9 +610,26 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           </div>
         )}
 
-        {/* Unified Workflows List Grouped: Active / Needs Input / Recent */}
+        {/* Session history and Task records are never conflated. */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden space-y-2 pr-1 no-scrollbar min-h-0 text-[12.5px]">
-          {workflowCards.length === 0 ? (
+          {listMode === 'tasks' ? (
+            visibleTasks.length === 0 ? (
+              <div className="px-3 py-4 text-center text-fg-subtle text-[12px]">No tasks in this workbench.</div>
+            ) : (
+              <div className="space-y-0.5">
+                {visibleTasks.map((task) => {
+                  const isActive = task.id === selectedTaskId;
+                  const status = String(task.status).toLowerCase();
+                  return (
+                    <button key={task.id} type="button" onClick={() => onSelectTask(task.id)} className={`flex w-full items-center justify-between gap-2 rounded-md border px-2.5 py-2 text-left text-xs transition ${isActive ? 'border-border-default bg-surface-2 text-fg-editor' : 'border-transparent text-fg-muted hover:bg-surface-2/60 hover:text-fg-editor'}`} title={task.title}>
+                      <span className="min-w-0 truncate">{task.title}</span>
+                      <span className="shrink-0 text-[9px] uppercase tracking-wide text-fg-subtle">{status}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )
+          ) : workflowCards.length === 0 ? (
             <div className="px-3 py-4 text-center text-fg-subtle text-[12px]">
               {emptySessionsMessage}
             </div>
@@ -572,77 +672,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         </div>
       </div>
 
-      {/* Bottom Profile & Settings Footer */}
-      <div className="p-2.5 border-t border-border-default flex items-center justify-between relative shrink-0">
-        <div ref={profileRef} className="relative">
-          <div
-            onClick={() => setIsProfileDropdownOpen(!isProfileDropdownOpen)}
-            className="flex items-center gap-2 cursor-pointer hover:opacity-85 transition p-1 rounded-md hover:bg-surface-2"
-          >
-            <div
-              className={`w-6 h-6 rounded-full ${avatarColor} ${avatarTextColor} font-bold text-[10px] flex items-center justify-center shrink-0`}
-            >
-              {avatarText}
-            </div>
-            <div className="flex items-center gap-1 min-w-0">
-              <span className="text-[12.5px] font-medium text-fg-editor truncate max-w-[120px]">Custos</span>
-              <ChevronDown
-                className={`w-3 h-3 text-fg-subtle transition-transform ${isProfileDropdownOpen ? 'rotate-180' : ''
-                  }`}
-              />
-            </div>
-          </div>
-
-          {/* Profile Popover Menu */}
-          {isProfileDropdownOpen && (
-            <div className="absolute left-0 bottom-full mb-2 w-64 rounded-xl bg-surface-1 border border-border-default shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-100">
-              {/* User Header */}
-              <div className="p-2 border-b border-border-muted mb-1.5">
-                <div className="flex items-center gap-2.5">
-                  <div
-                    className={`w-8 h-8 rounded-full ${avatarColor} ${avatarTextColor} font-bold text-xs flex items-center justify-center shrink-0`}
-                  >
-                    {avatarText}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold text-fg-editor truncate">Custos</div>
-                    <div className="text-[11px] text-fg-muted truncate">Local workspace</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Links */}
-              <div className="space-y-0.5 text-xs">
-                <button
-                  onClick={handleOpenSettings}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
-                >
-                  <Settings className="w-3.5 h-3.5 text-fg-muted" />
-                  <span>Preferences & Settings {formatKeyCombo({ ctrlOrCmd: true, key: ',' })}</span>
-                </button>
-              </div>
-
-              {/* Footer status */}
-              <div className="mt-2 pt-2 border-t border-border-muted px-2.5 py-1 flex items-center justify-between text-[10.5px] text-fg-muted">
-                <span>Custos daemon</span>
-                <span className={`flex items-center gap-1 font-mono ${daemonOnline === true ? 'text-emerald-400' : daemonOnline === false ? 'text-rose-400' : 'text-fg-muted'}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${daemonOnline === true ? 'bg-emerald-400' : daemonOnline === false ? 'bg-rose-400' : 'bg-fg-muted'}`} />
-                  {daemonOnline === null ? 'checking' : daemonOnline ? 'online' : 'offline'}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Direct Settings Trigger */}
-        <button
-          onClick={handleOpenSettings}
-          className="p-1.5 rounded-md text-fg-muted hover:text-fg-editor hover:bg-surface-2 transition"
-          title={`Preferences & Settings (${formatKeyCombo({ ctrlOrCmd: true, key: ',' })})`}
-        >
-          <Settings className="w-3.5 h-3.5" />
-        </button>
-      </div>
     </aside>
   );
 };

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { daemonClient } from '@/api/daemon_client';
+import { CompanionFileViewer } from '@/components/viewer';
 import type {
   ExecutionWorkspace,
   WorkspaceFileEntry,
@@ -37,7 +38,7 @@ export interface FilesChangesPaneProps {
   activeWorkspaceId?: string;
   onSelectWorkspace?: (id: string) => void;
   onShowToast?: (msg: string) => void;
-  onOpenTab?: (id: OrcaTabId) => void;
+  onOpenTab?: (id: OrcaTabId, customUrl?: string, customTitle?: string) => void;
 }
 
 function getFileIcon(name: string) {
@@ -628,76 +629,75 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
           {/* Right Column: Code & Diff Viewer */}
           <div className="flex-1 flex flex-col min-w-0 bg-[var(--color-canvas)]">
             {selectedPath ? (
-              <>
-                {/* File Header */}
-                <div className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-3 text-xs bg-[var(--color-surface-1)]/30 font-mono">
-                  <div className="flex items-center gap-2 truncate text-[11px] text-[var(--color-fg-muted)]">
-                    {getFileIcon(selectedPath)}
-                    <span className="text-[var(--color-editor-fg)] font-medium truncate">{selectedPath}</span>
-                    {currentDiffEntry && (
-                      <span className="text-[10px] text-amber-400 font-semibold">
-                        {currentDiffEntry.is_staged ? '• Staged' : '• Modified'}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    {currentDiffEntry && (
-                      <>
-                        <button
-                          type="button"
-                          disabled={!!actionInProgress}
-                          onClick={handlePrimaryAction}
-                          className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition disabled:opacity-50 ${
-                            currentDiffEntry.is_staged
-                              ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-200'
-                              : 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                          }`}
-                        >
-                          {currentDiffEntry.is_staged ? (
-                            <>
-                              <Minus className="h-2.5 w-2.5" />
-                              <span>Unstage</span>
-                            </>
-                          ) : (
-                            <>
-                              <Plus className="h-2.5 w-2.5" />
-                              <span>Stage</span>
-                            </>
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!!actionInProgress}
-                          onClick={handleDiscardCurrent}
-                          className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-rose-400 hover:bg-rose-500/10 transition"
-                          title="Discard changes"
-                        >
-                          <Trash2 className="h-2.5 w-2.5" />
-                          <span>Discard</span>
-                        </button>
-                      </>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={handleCopyPath}
-                      className="p-1 rounded text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"
-                      title="Copy path"
-                    >
-                      {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-                    </button>
-                  </div>
+              loadingContent ? (
+                <div className="flex h-full items-center justify-center text-xs text-[var(--color-fg-subtle)]">
+                  Loading...
                 </div>
-
-                {/* Viewer Body */}
-                <div className="flex-1 overflow-auto p-3 font-mono text-xs">
-                  {loadingContent ? (
-                    <div className="flex h-full items-center justify-center text-xs text-[var(--color-fg-subtle)]">
-                      Loading...
+              ) : fileDiff ? (
+                <>
+                  {/* File Header */}
+                  <div className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-3 text-xs bg-[var(--color-surface-1)]/30 font-mono">
+                    <div className="flex items-center gap-2 truncate text-[11px] text-[var(--color-fg-muted)]">
+                      {getFileIcon(selectedPath)}
+                      <span className="text-[var(--color-editor-fg)] font-medium truncate">{selectedPath}</span>
+                      {currentDiffEntry && (
+                        <span className="text-[10px] text-amber-400 font-semibold">
+                          {currentDiffEntry.is_staged ? '• Staged' : '• Modified'}
+                        </span>
+                      )}
                     </div>
-                  ) : fileDiff ? (
-                    /* Diff Viewer */
+
+                    <div className="flex items-center gap-1.5">
+                      {currentDiffEntry && (
+                        <>
+                          <button
+                            type="button"
+                            disabled={!!actionInProgress}
+                            onClick={handlePrimaryAction}
+                            className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition disabled:opacity-50 ${
+                              currentDiffEntry.is_staged
+                                ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-200'
+                                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                            }`}
+                          >
+                            {currentDiffEntry.is_staged ? (
+                              <>
+                                <Minus className="h-2.5 w-2.5" />
+                                <span>Unstage</span>
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="h-2.5 w-2.5" />
+                                <span>Stage</span>
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!!actionInProgress}
+                            onClick={handleDiscardCurrent}
+                            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-rose-400 hover:bg-rose-500/10 transition"
+                            title="Discard changes"
+                          >
+                            <Trash2 className="h-2.5 w-2.5" />
+                            <span>Discard</span>
+                          </button>
+                        </>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={handleCopyPath}
+                        className="p-1 rounded text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"
+                        title="Copy path"
+                      >
+                        {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Diff Viewer */}
+                  <div className="flex-1 overflow-auto p-3 font-mono text-xs">
                     <div className="space-y-0.5">
                       {fileDiff.diff ? (
                         fileDiff.diff.split('\n').map((line: string, idx: number) => {
@@ -734,25 +734,45 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
                         <div className="text-[var(--color-fg-subtle)]">No diff changes detected in file.</div>
                       )}
                     </div>
-                  ) : fileContent ? (
-                    /* Plain File Content */
-                    <div className="space-y-0.5">
-                      {fileContent.content.split('\n').map((line: string, idx: number) => (
-                        <div key={idx} className="flex px-2 py-0.5 whitespace-pre text-[var(--color-fg-default)]">
-                          <span className="w-8 shrink-0 select-none text-[10px] text-[var(--color-fg-subtle)] text-right pr-2">
-                            {idx + 1}
-                          </span>
-                          <span>{line}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-xs text-[var(--color-fg-subtle)]">
-                      File content is binary or unavailable.
-                    </div>
-                  )}
+                  </div>
+                </>
+              ) : fileContent ? (
+                <CompanionFileViewer
+                  path={selectedPath}
+                  content={fileContent.content}
+                  isBinary={fileContent.is_binary}
+                  sizeBytes={fileContent.size_bytes}
+                  lineCount={fileContent.line_count}
+                  isReadOnly={true}
+                  onOpenInBrowser={(url) => {
+                    const fileName = selectedPath.split('/').pop() || 'Web Preview';
+                    _onOpenTab?.('browser', url, `${fileName} - Browser`);
+                    onShowToast?.(`Opened ${fileName} in Browser Workbench`);
+                  }}
+                  extraHeaderActions={
+                    currentDiffEntry ? (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={!!actionInProgress}
+                          onClick={handlePrimaryAction}
+                          className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition disabled:opacity-50 ${
+                            currentDiffEntry.is_staged
+                              ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-200'
+                              : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                          }`}
+                        >
+                          {currentDiffEntry.is_staged ? 'Unstage' : 'Stage'}
+                        </button>
+                      </div>
+                    ) : undefined
+                  }
+                />
+              ) : (
+                <div className="flex h-full items-center justify-center text-xs text-[var(--color-fg-subtle)]">
+                  File content is binary or unavailable.
                 </div>
-              </>
+              )
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-xs text-[var(--color-fg-subtle)] space-y-2">
                 <FileDiff className="w-6 h-6 text-[var(--color-fg-subtle)]/40" />

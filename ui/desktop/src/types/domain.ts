@@ -95,6 +95,7 @@ export interface Session {
   attached_to?: string;
   promoted_to?: string;
   task_id?: string;
+  taskId?: string;
   mode: SessionMode;
   created_at: string;
   title?: string;
@@ -241,6 +242,7 @@ export interface ExecutionWorkspace {
   agentStatus?: string | null;
   active_branch?: string | null;
   activeBranch?: string | null;
+  branch?: string | null;
   metadata: Record<string, any>;
   created_at: string;
   updated_at: string;
@@ -1152,6 +1154,68 @@ export interface ProviderConfigRecord {
   fast_mode?: boolean;
   created_at: number;
   updated_at: number;
+}
+
+export type ModelCompatibility = 'green' | 'yellow' | 'red';
+
+export interface LocalModelFolder {
+  id: string;
+  folder_path: string;
+  label?: string;
+  is_active: boolean;
+  auto_scan: boolean;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface LocalModelDescriptor {
+  file_path: string;
+  folder_id: string;
+  file_name: string;
+  file_size_bytes: number;
+  file_mtime: number;
+  architecture: string;
+  model_name: string;
+  context_length: number;
+  quantization: string;
+  chat_template?: string;
+  total_memory_required: number;
+  compatibility: ModelCompatibility;
+  scanned_at: number;
+}
+
+export interface LocalHardwareProfile {
+  total_ram_bytes: number;
+  metal_vram_limit_bytes: number;
+  free_ram_bytes: number;
+  is_apple_silicon: boolean;
+  chip_name: string;
+}
+
+export interface LocalModelPreflightResponse {
+  model_path: string;
+  can_load: boolean;
+  architecture: string;
+  quantization: string;
+  file_size_bytes: number;
+  context_limit: number;
+  estimated_memory_bytes: number;
+  free_ram_bytes: number;
+  metal_vram_limit_bytes: number;
+  compatibility: ModelCompatibility;
+  recommended_gpu_layers: number;
+  issues: string[];
+}
+
+export interface LoadedModelInstance {
+  instance_id: string;
+  model_name: string;
+  model_path: string;
+  backend_id: string;
+  context_limit: number;
+  /** Measured resident memory in bytes; zero means unavailable, not zero use. */
+  memory_used_bytes: number;
+  loaded_at: number;
 }
 
 export interface OAuthAuthorizeResult {

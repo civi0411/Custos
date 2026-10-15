@@ -1,17 +1,19 @@
 import StopIcon from '~icons/lucide/square';
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Send,
   Plus,
   FlaskConical,
   MessageSquare,
-  Compass
+  Compass,
+  ListTodo,
+  ExternalLink,
 } from 'lucide-react';
 import { AgentActionCard, AgentWorkingStatus } from '@/components/chat';
 import { Session } from '@/types';
 import { OrcaTabbedContainer, resolveResources, type ResourceTabsState, type OrcaTabId, type OrcaTab, getTabType } from '@/components/workbenches/OrcaTabbedContainer';
 import { WorkspaceSidebar, type SidebarTool } from '@/components/shell/WorkspaceSidebar';
-import { AppHeader, type ActiveWorkbench } from '@/components/shell/AppHeader';
+import { type ActiveWorkbench } from '@/components/shell/AppHeader';
 import { CommandPalette } from '@/components/shell/CommandPalette';
 import { AttentionBanner, type AttentionItem } from '@/components/shell/AttentionBanner';
 import { JobActivityDock } from '@/components/shell/JobActivityDock';
@@ -19,6 +21,8 @@ import { useJobRegistry } from '@/hooks/useJobRegistry';
 import { ModelSelector } from '@/components/chat/ModelSelector';
 
 import { useAppContext } from '@/context/AppContext';
+import { TasksPane } from '@/components/tasks/TasksPane';
+import { CreateTaskModal } from '@/components/tasks/CreateTaskModal';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -69,6 +73,12 @@ interface AppWorkspaceShellProps {
   allSessions: Session[];
   activeSessionId: string;
   onSelectSession: (id: string) => void;
+  tasks: import('@/types/domain').Task[];
+  selectedTaskId: string | null;
+  onSelectTask: (id: string) => void;
+  onClearTask: () => void;
+  sidebarView: 'chats' | 'tasks';
+  onChangeSidebarView: (view: 'chats' | 'tasks') => void;
   onOpenFullChatIn?: (mode: ActiveWorkbench) => void;
   onOpenSessionHere?: (id: string) => void;
   onNewSession: () => void;
@@ -106,6 +116,12 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   allSessions,
   activeSessionId,
   onSelectSession,
+  tasks,
+  selectedTaskId,
+  onSelectTask,
+  onClearTask,
+  sidebarView,
+  onChangeSidebarView,
   onOpenFullChatIn,
   onOpenSessionHere,
   onNewSession,
@@ -118,7 +134,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   onShowToast,
   onOpenSettings: _onOpenSettings,
   isSidebarCollapsed,
-  onToggleSidebar,
+  onToggleSidebar: _onToggleSidebar,
   resourceTabs,
   isWebTabOpen,
   isWebTabExpanded,
@@ -143,6 +159,19 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     setActiveWorkspaceId: ctxSetActiveWorkspaceId,
     activeWorkspace: ctxActiveWorkspace,
     refreshWorkspaces: ctxRefreshWorkspaces,
+    createTask,
+    advanceTask,
+    completeTask,
+    cancelTask,
+    refreshTasks,
+    setProjectData,
+    isResourcePickerOpen,
+    setIsResourcePickerOpen,
+    splitPercent,
+    setSplitPercent,
+    setColumn2Width,
+    savedWorkError,
+    retrySavedWork,
   } = useAppContext();
 
   const workspaces = propWorkspaces ?? ctxWorkspaces;
@@ -151,11 +180,15 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   const activeWorkspace = propActiveWorkspace ?? ctxActiveWorkspace;
   const refreshWorkspaces = propRefreshWorkspaces ?? ctxRefreshWorkspaces;
   const [inputText, setInputText] = useState('');
-  const [splitPercent, setSplitPercent] = useState<number>(() => {
-    return mode === 'copilot' ? 50 : 42;
-  });
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-  const [isResourcePickerOpen, setIsResourcePickerOpen] = useState(false);
+  const [isGlobalCreateTaskOpen, setIsGlobalCreateTaskOpen] = useState(false);
+  const [createTaskPrefill, setCreateTaskPrefill] = useState<{
+    title?: string;
+    description?: string;
+    workspaceId?: string;
+    sessionId?: string;
+    packId?: 'code' | 'research' | 'copilot';
+  }>({});
   const [pickerCapabilities, setPickerCapabilities] = useState<CapabilityDescriptor[]>([]);
   const [pickerCapabilityState, setPickerCapabilityState] = useState<'loading' | 'ready' | 'failed'>('loading');
 
@@ -206,9 +239,11 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       diffCode: [],
     };
 
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
+
   const hasMessages = activeSession.messages && activeSession.messages.length > 0;
 
-  // Split-pane dragging logic
+  // Split-pane dragging logic synchronized with TopBar
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDragging.current || !containerRef.current) return;
@@ -216,6 +251,8 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       const newPercent = ((e.clientX - rect.left) / rect.width) * 100;
       if (newPercent >= 20 && newPercent <= 75) {
         setSplitPercent(newPercent);
+        const col2 = Math.round(rect.right - e.clientX);
+        setColumn2Width(col2);
       }
     };
 
@@ -229,7 +266,26 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, []);
+  }, [setSplitPercent, setColumn2Width]);
+
+  // Keep column2Width synchronized on resize / splitPercent change
+  useEffect(() => {
+    if (!containerRef.current || !isWebTabOpen || isWebTabExpanded) {
+      setColumn2Width(null);
+      return;
+    }
+    const updateCol2 = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        const calculated = Math.round(rect.width * (1 - splitPercent / 100));
+        setColumn2Width(calculated);
+      }
+    };
+    updateCol2();
+    const observer = new ResizeObserver(updateCol2);
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, [isWebTabOpen, isWebTabExpanded, splitPercent, setColumn2Width]);
 
   // Global Keyboard Shortcuts (Cmd+K for Jump Palette, Cmd+Opt+K for Kanban)
   useEffect(() => {
@@ -282,10 +338,21 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     updateScrollEdges();
   }, [activeSession.messages]);
 
-  const { jobs, dispatchJob, updateJob } = useJobRegistry();
+  const { dispatchJob, updateJob } = useJobRegistry();
 
   const executeSlashCommand = (cmd: SlashCommandDef, args: string) => {
     setInputText('');
+
+    if (cmd.command === '/task') {
+      setCreateTaskPrefill({
+        title: args.trim(),
+        workspaceId: activeSession.workspaceId || activeWorkspaceId,
+        sessionId: activeSession.id,
+        packId: mode === 'engineering' ? 'code' : mode === 'research' ? 'research' : 'copilot',
+      });
+      setIsGlobalCreateTaskOpen(true);
+      return;
+    }
 
     // 1. Dispatch in JobRegistry so active tabs & sidebar show running status immediately
     const entryId = dispatchJob({
@@ -391,6 +458,11 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       if (id !== 'agents' || !agentId) {
         const existing = resourceTabs.tabs.find((t) => getTabType(t) === id && (!agentId || t.agentId === agentId));
         if (existing) {
+          if ((id === 'browser' || id === 'emulator') && url && !url.startsWith('custos:')) {
+            resourceTabs.setTabs((prev) =>
+              prev.map((t) => (t.id === existing.id ? { ...t, url, title: title || t.title } : t))
+            );
+          }
           resourceTabs.setActiveTabId(existing.id);
           return;
         }
@@ -399,6 +471,19 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     }
     resourceTabs.setActiveTabId(newTabId);
   }, [isWebTabOpen, onToggleWebTab, resourceTabs]);
+
+  const handleOpenTab = useCallback((id: OrcaTabId) => {
+    const existing = resourceTabs.tabs.find((t) => getTabType(t) === id);
+    if (existing) {
+      if (!isWebTabOpen) {
+        onToggleWebTab();
+      }
+      resourceTabs.setActiveTabId(existing.id);
+    } else {
+      openTab(id, id.charAt(0).toUpperCase() + id.slice(1), `custos://resource/${id}`);
+    }
+  }, [resourceTabs, isWebTabOpen, onToggleWebTab, openTab]);
+
 
   const handleLaunchAgentTab = useCallback((harness: HarnessDescriptor) => {
     const existingAgentTabs = resourceTabs.tabs.filter((t) => t.type === 'agents' || t.agentId);
@@ -409,57 +494,9 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     onShowToast?.(`Launched ${harness.name} in parallel tab`);
   }, [openTab, resourceTabs.tabs, activeWorkspaceId, onShowToast]);
 
-  const runningJobsByTab = useMemo(() => {
-    const counts: Record<string, number> = {};
-    jobs.forEach((j) => {
-      if ((j.status === 'running' || j.status === 'queued') && j.sourceTabId) {
-        counts[j.sourceTabId] = (counts[j.sourceTabId] || 0) + 1;
-      }
-    });
-    return counts;
-  }, [jobs]);
-
-  const handleOpenTab = useCallback((id: OrcaTabId) => {
-    const titles: Partial<Record<OrcaTabId, string>> = {
-      files: 'Files & Changes',
-      activity: 'Activity',
-      worktrees: 'Worktree Manager',
-      terminal: 'Terminal',
-      browser: 'Browser Preview',
-      emulator: 'Phone Simulator',
-      literature: 'Sources',
-      findings: 'Findings',
-      lab: 'Lab',
-      knowledge: 'Methods',
-      artifacts: 'Artifacts',
-      synthesis: 'Handoff',
-      drafts: 'Drafts',
-      outbox: 'Outbox',
-      contacts: 'Contacts',
-      calendar: 'Calendar',
-      notes: 'Notes',
-    };
-    const title = titles[id] || id.charAt(0).toUpperCase() + id.slice(1);
-    openTab(id, title, `custos://resource/${id}`);
-  }, [openTab]);
   const handleResourceAskAgent = useCallback((draft: string) => {
     setInputText(previous => previous ? `${previous}\n\n${draft}` : draft);
   }, []);
-
-  const handleCloseTab = (e: React.MouseEvent, tabId: string) => {
-    e.stopPropagation();
-    if (resourceTabs.tabs.length <= 1) {
-      onToggleWebTab();
-      return;
-    }
-    const nextTabs = resourceTabs.tabs.filter((t) => t.id !== tabId);
-    resourceTabs.setTabs(nextTabs);
-    if (resourceTabs.activeTabId === tabId) {
-      const closedIndex = resourceTabs.tabs.findIndex((t) => t.id === tabId);
-      const nextActive = nextTabs[Math.max(0, closedIndex - 1)] || nextTabs[0];
-      resourceTabs.setActiveTabId(nextActive.id);
-    }
-  };
 
   const handleAddNewTab = () => {
     if (!isWebTabOpen) {
@@ -530,41 +567,17 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
 
   return (
     <div className="custos-workspace flex flex-col h-full w-full font-sans overflow-hidden select-none" data-workbench={mode}>
-      {/* ── 1. UNIFIED APP HEADER WITH ORCA CONTROLS ── */}
-      <AppHeader
-        mode={mode}
-        workspaceTitle={activeSession.title}
-        activeWorkspace={activeWorkspace}
-        onSwitchMode={onSwitchMode}
-        isSidebarCollapsed={isSidebarCollapsed}
-        onToggleSidebar={onToggleSidebar}
-        onShowToast={onShowToast}
-        splitPercent={splitPercent}
-        isWebTabOpen={isWebTabOpen}
-        isWebTabExpanded={isWebTabExpanded}
-        onToggleWebTab={onToggleWebTab}
-        onToggleExpandWebTab={onToggleExpandWebTab}
-        resourceTabs={resourceTabs}
-        onCloseTab={handleCloseTab}
-        onAddNewTab={handleAddNewTab}
-        lensBadge={lensMeta.badge}
-        lensIconColor={lensMeta.iconColor}
-        onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-        attentionCount={attentionItems.length}
-        onOpenAttention={() => {
-          if (attentionItems.length > 0) {
-            onShowToast?.(`Active attention request: ${attentionItems[0].title}`);
-          }
-        }}
-        onOpenKanban={() => openTab('kanban', 'Fleet Kanban', 'orca://kanban')}
-        runningJobsByTab={runningJobsByTab}
-      />
-
-      {/* ── 2. SUPERVISORY ATTENTION STRIP (OrCa Attention + SADE Authority Gate) ── */}
+      {/* ── 1. SUPERVISORY ATTENTION STRIP (OrCa Attention + SADE Authority Gate) ── */}
       <AttentionBanner
         items={attentionItems}
         onDismiss={(id) => setAttentionItems((prev) => prev.filter((i) => i.id !== id))}
       />
+      {savedWorkError && (
+        <div role="alert" className="flex items-center justify-between gap-3 border-b border-rose-500/30 bg-rose-500/10 px-4 py-2 text-xs text-rose-300">
+          <span>{savedWorkError}</span>
+          <button type="button" onClick={retrySavedWork} className="shrink-0 rounded border border-rose-500/30 px-2 py-1 hover:bg-rose-500/10">Retry</button>
+        </div>
+      )}
 
       {/* ── 3. ADAPTIVE WORKSPACE BODY ── */}
       <div className="flex-1 flex overflow-hidden min-h-0 relative">
@@ -579,6 +592,12 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           allSessions={allSessions}
           activeSessionId={activeSessionId}
           onSelectSession={onSelectSession}
+          tasks={tasks}
+          selectedTaskId={selectedTaskId}
+          onSelectTask={onSelectTask}
+          onClearTask={onClearTask}
+          listMode={sidebarView}
+          onChangeListMode={onChangeSidebarView}
           onOpenFullChatIn={onOpenFullChatIn}
           onOpenSessionHere={onOpenSessionHere}
           onDeleteSession={onDeleteConversation}
@@ -586,6 +605,13 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           newTaskIcon={Plus}
           newTaskIconColor={lensMeta.iconColor}
           onNewSession={onNewSession}
+          onRequestCreateTask={() => {
+            setCreateTaskPrefill({
+              workspaceId: activeWorkspaceId,
+              packId: mode === 'engineering' ? 'code' : mode === 'research' ? 'research' : 'copilot',
+            });
+            setIsGlobalCreateTaskOpen(true);
+          }}
           tools={sidebarTools}
           sessionsTitle={lensMeta.title}
           emptySessionsMessage="No sessions yet"
@@ -619,16 +645,96 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           >
             {/* Dialogue Messages Canvas */}
             <div className="relative flex-1 min-h-0">
-              <div
-                ref={dialogueRef}
-                onScroll={event => {
-                  const element = event.currentTarget;
-                  followBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
-                  updateScrollEdges();
-                }}
-                className="h-full overflow-y-auto px-6 py-6 space-y-6"
-              >
-                {!hasMessages ? (
+              {sidebarView === 'tasks' || selectedTaskId ? (
+                <TasksPane
+                  tasks={tasks}
+                  sessions={allSessions}
+                  workspaces={workspaces}
+                  selectedTaskId={selectedTaskId}
+                  onSelectTask={(id) => {
+                    if (id) {
+                      onSelectTask(id);
+                    } else {
+                      onClearTask();
+                    }
+                  }}
+                  onOpenSession={(sessionId) => {
+                    onChangeSidebarView('chats');
+                    onSelectSession(sessionId);
+                    onClearTask();
+                  }}
+                  onNewSessionForTask={(_taskId) => {
+                    onChangeSidebarView('chats');
+                    onNewSession();
+                    onClearTask();
+                  }}
+                  onCreateTask={createTask}
+                  onAdvanceStatus={async (taskId, status) => {
+                    await advanceTask(taskId, status);
+                  }}
+                  onCompleteTask={async (taskId, summary) => {
+                    await completeTask(taskId, summary);
+                  }}
+                  onCancelTask={async (taskId, reason) => {
+                    await cancelTask(taskId, reason);
+                  }}
+                  onRefreshTasks={refreshTasks}
+                />
+              ) : (
+                <div className="flex flex-col h-full overflow-hidden">
+                  {/* Conversation Task Anchor Bar */}
+                  {activeSession.taskId ? (
+                    <div className="flex h-9 items-center gap-2 px-4 border-b border-white/10 bg-surface-1/40 text-xs shrink-0">
+                      <ListTodo className="w-3.5 h-3.5 text-workbench-accent shrink-0" />
+                      <span className="text-fg-muted">Bound Task:</span>
+                      <span className="font-medium text-fg-editor truncate">{selectedTask?.title || (activeSession.taskId.length > 20 ? `${activeSession.taskId.slice(0, 16)}…` : activeSession.taskId)}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onSelectTask(activeSession.taskId!);
+                          onChangeSidebarView('tasks');
+                        }}
+                        className="ml-auto flex items-center gap-1 text-[11px] text-workbench-accent hover:underline shrink-0"
+                      >
+                        <span>View Task</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : hasMessages ? (
+                    <div className="flex h-9 items-center justify-between px-4 border-b border-white/10 bg-surface-1/20 text-xs shrink-0">
+                      <span className="text-[11px] text-fg-muted">Independent chat</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const firstUserMsg = activeSession.messages.find((m) => m.role === 'user')?.text || '';
+                          setCreateTaskPrefill({
+                            title: activeSession.title,
+                            description: firstUserMsg || activeSession.preview || '',
+                            workspaceId: activeSession.workspaceId || activeWorkspaceId,
+                            sessionId: activeSession.id,
+                            packId: mode === 'engineering' ? 'code' : mode === 'research' ? 'research' : 'copilot',
+                          });
+                          setIsGlobalCreateTaskOpen(true);
+                        }}
+                        className="flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium text-fg-muted hover:text-workbench-accent hover:bg-surface-2 transition"
+                        title="Promote this conversation to a formal Task with criteria"
+                      >
+                        <ListTodo className="w-3 h-3" />
+                        <span>Turn into Task</span>
+                      </button>
+                    </div>
+                  ) : null}
+
+                  <div
+                    ref={dialogueRef}
+                    onScroll={event => {
+                      const element = event.currentTarget;
+                      followBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+                      updateScrollEdges();
+                    }}
+                    className="flex-1 overflow-y-auto px-6 py-6 space-y-6"
+                  >
+                  {!hasMessages ? (
                   <div className="h-full flex flex-col items-center justify-center text-center my-auto pb-12">
                     <div className="w-14 h-14 rounded-xl bg-surface-1 border border-border-default flex items-center justify-center text-fg-muted mb-5">
                       {mode === 'engineering' ? (
@@ -702,13 +808,20 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   </div>
                 )}
               </div>
+              </div>
+              )}
 
-              <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-top ${scrollEdges.top ? 'is-visible' : ''}`} />
-              <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-bottom ${scrollEdges.bottom ? 'is-visible' : ''}`} />
+              {sidebarView !== 'tasks' && !selectedTaskId && (
+                <>
+                  <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-top ${scrollEdges.top ? 'is-visible' : ''}`} />
+                  <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-bottom ${scrollEdges.bottom ? 'is-visible' : ''}`} />
+                </>
+              )}
             </div>
 
             {/* DOCKED CHAT COMPOSER (Natural Flex Child) */}
-            <div className="shrink-0 p-4 bg-canvas">
+            {sidebarView !== 'tasks' && !selectedTaskId && (
+              <div className="shrink-0 p-4 bg-canvas">
               {liveMessage && (
                 <div className="max-w-2xl mx-auto mb-2.5">
                   <AgentWorkingStatus
@@ -828,12 +941,13 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                 </div>
               </div>
             </div>
+          )}
           </div>
 
           {/* DRAG HANDLE SPLITTER */}
           {isWebTabOpen && !isWebTabExpanded && (
             <div
-              className="w-px bg-[var(--color-border-muted)] hover:bg-[var(--workbench-accent)] cursor-col-resize shrink-0 z-30 transition-colors"
+              className="w-px bg-white/10 hover:bg-workbench-accent cursor-col-resize shrink-0 z-30 transition-colors"
               onMouseDown={() => {
                 isDragging.current = true;
               }}
@@ -850,9 +964,10 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                 width: isWebTabExpanded ? '100%' : `${100 - splitPercent}%`
               }}
             >
-              <OrcaTabbedContainer
-                resourceTabs={resourceTabs}
-                isPaneOpen={Boolean(isWebTabOpen)}
+              <div className="flex-1 min-h-0 overflow-hidden relative">
+                <OrcaTabbedContainer
+                  resourceTabs={resourceTabs}
+                  isPaneOpen={Boolean(isWebTabOpen)}
                 session={activeSession}
                 onAcceptAndRun={onAcceptAndRun}
                 onRejectDiff={onRejectDiff}
@@ -869,6 +984,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                 activeWorkspace={activeWorkspace}
                 workspaces={workspaces}
               />
+              </div>
               <TabQuickLaunchMenu
                 isOpen={isResourcePickerOpen}
                 onClose={() => setIsResourcePickerOpen(false)}
@@ -907,6 +1023,39 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
         onOpenSettings={() => openSettings('general')}
         onOpenWorktrees={() => openTab('worktrees', 'Worktrees', 'custos://worktrees')}
         currentMode={mode}
+      />
+
+      {/* Global Create Task Modal */}
+      <CreateTaskModal
+        isOpen={isGlobalCreateTaskOpen}
+        onClose={() => setIsGlobalCreateTaskOpen(false)}
+        onSubmit={async (params) => {
+          const created = await createTask(params);
+          if (createTaskPrefill.sessionId) {
+            setProjectData((prev) => {
+              const next = { ...prev };
+              for (const p of Object.keys(next)) {
+                next[p] = next[p].map((s) =>
+                  s.id === createTaskPrefill.sessionId
+                    ? { ...s, taskId: created.id, task_id: created.id }
+                    : s
+                );
+              }
+              return next;
+            });
+            onShowToast?.(`Task "${created.title}" created from conversation`);
+          }
+          onSelectTask(created.id);
+          onChangeSidebarView('tasks');
+          setIsGlobalCreateTaskOpen(false);
+        }}
+        workspaces={workspaces}
+        currentWorkspaceId={createTaskPrefill.workspaceId || activeWorkspaceId}
+        initialTitle={createTaskPrefill.title}
+        initialDescription={createTaskPrefill.description}
+        initialWorkspaceId={createTaskPrefill.workspaceId || activeWorkspaceId}
+        initialSessionId={createTaskPrefill.sessionId}
+        initialPackId={createTaskPrefill.packId}
       />
 
     </div>

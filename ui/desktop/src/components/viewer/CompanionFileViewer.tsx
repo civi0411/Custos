@@ -10,6 +10,7 @@ import {
   Save,
 } from 'lucide-react';
 import { MarkdownViewer } from './MarkdownViewer';
+import { PdfViewer } from './PdfViewer';
 import { TabularDataViewer } from './TabularDataViewer';
 import { StructuredDataViewer } from './StructuredDataViewer';
 import { VisualMediaViewer } from './VisualMediaViewer';
@@ -30,11 +31,13 @@ export interface CompanionFileViewerProps {
   onSave?: () => void;
   saving?: boolean;
   extraHeaderActions?: React.ReactNode;
+  onOpenInBrowser?: (urlOrPath: string) => void;
   className?: string;
 }
 
 export type DetectedFileType =
   | 'markdown'
+  | 'pdf'
   | 'csv'
   | 'tsv'
   | 'json'
@@ -51,6 +54,9 @@ export function detectFileType(path: string, isBinary?: boolean): { type: Detect
   const ext = path.split('.').pop()?.toLowerCase() || '';
 
   if (isBinary) {
+    if (ext === 'pdf') {
+      return { type: 'pdf', label: 'PDF Document', icon: FileText };
+    }
     if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'ico', 'bmp'].includes(ext)) {
       return { type: 'image', label: ext.toUpperCase() + ' Image', icon: ImageIcon };
     }
@@ -58,6 +64,8 @@ export function detectFileType(path: string, isBinary?: boolean): { type: Detect
   }
 
   switch (ext) {
+    case 'pdf':
+      return { type: 'pdf', label: 'PDF Document', icon: FileText };
     case 'md':
     case 'markdown':
     case 'mdx':
@@ -96,25 +104,20 @@ export function detectFileType(path: string, isBinary?: boolean): { type: Detect
     case 'jsx':
       return { type: 'code', label: 'JavaScript', icon: FileCode };
     case 'py':
-      return { type: 'code', label: 'Python Script', icon: FileCode };
+      return { type: 'code', label: 'Python Source', icon: FileCode };
     case 'go':
       return { type: 'code', label: 'Go Source', icon: FileCode };
-    case 'c':
-    case 'cpp':
-    case 'h':
-    case 'hpp':
-      return { type: 'code', label: 'C / C++', icon: FileCode };
+    case 'css':
+    case 'scss':
+      return { type: 'code', label: 'CSS Styles', icon: FileCode };
+    case 'sql':
+      return { type: 'code', label: 'SQL Query', icon: FileCode };
     case 'sh':
     case 'bash':
     case 'zsh':
       return { type: 'code', label: 'Shell Script', icon: FileCode };
-    case 'sql':
-      return { type: 'code', label: 'SQL Query', icon: FileCode };
-    case 'css':
-    case 'scss':
-      return { type: 'code', label: 'Stylesheet', icon: FileCode };
     default:
-      return { type: 'plain', label: ext ? ext.toUpperCase() : 'Plain Text', icon: FileText };
+      return { type: 'plain', label: ext ? `${ext.toUpperCase()} File` : 'Text File', icon: FileText };
   }
 }
 
@@ -130,6 +133,7 @@ export const CompanionFileViewer: React.FC<CompanionFileViewerProps> = ({
   onSave,
   saving = false,
   extraHeaderActions,
+  onOpenInBrowser,
   className = '',
 }) => {
   const { type, label, icon: TypeIcon } = useMemo(() => detectFileType(path, isBinary), [path, isBinary]);
@@ -162,7 +166,7 @@ export const CompanionFileViewer: React.FC<CompanionFileViewerProps> = ({
         <div className="flex items-center gap-2 shrink-0">
           {extraHeaderActions}
 
-          {onSave && !isReadOnly && (
+          {onSave && !isReadOnly && type !== 'pdf' && type !== 'binary' && (
             <button
               type="button"
               onClick={onSave}
@@ -182,7 +186,14 @@ export const CompanionFileViewer: React.FC<CompanionFileViewerProps> = ({
 
       {/* Viewer Body Router */}
       <div className="flex-1 overflow-hidden relative">
-        {type === 'markdown' ? (
+        {type === 'pdf' ? (
+          <PdfViewer
+            path={path}
+            content={content}
+            sizeBytes={sizeBytes}
+            onOpenInBrowser={onOpenInBrowser}
+          />
+        ) : type === 'markdown' ? (
           <MarkdownViewer
             content={content}
             isReadOnly={isReadOnly}
@@ -206,7 +217,6 @@ export const CompanionFileViewer: React.FC<CompanionFileViewerProps> = ({
           <VisualMediaViewer
             path={path}
             content={content}
-            isBinary={isBinary}
             sizeBytes={sizeBytes}
             isReadOnly={isReadOnly}
             onChangeText={onChangeText}
@@ -217,6 +227,7 @@ export const CompanionFileViewer: React.FC<CompanionFileViewerProps> = ({
             content={content}
             isReadOnly={isReadOnly}
             onChangeText={onChangeText}
+            onOpenInBrowser={onOpenInBrowser}
           />
         ) : type === 'binary' ? (
           <HexInspector

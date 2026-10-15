@@ -1,14 +1,21 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
-import { StatusBar, Toast } from '@/components/shell';
-import { SettingsModal, NewSessionModal, AddProviderModal, OpenProjectModal } from '@/components/modals';
+import { StatusBar, Toast, ActivityRail, AppTopBar } from '@/components/shell';
+import {
+  SettingsModal,
+  NewSessionModal,
+  AddProviderModal,
+  OpenProjectModal,
+  PluginsModal,
+  SkillsModal,
+  HelpModal,
+  GitHubAuthModal,
+} from '@/components/modals';
 
 /**
  * RootLayout
- * Unified application shell for Custos Sovereign Workspace.
- * Studio renders its own single unified sovereign titlebar and adaptive workspace shell.
- * Eliminates redundant dual-shell architecture (legacy OrCa header & sidebar rail).
+ * Unified sovereign application shell with fixed left Activity Rail, adaptive workspace, and sovereign titlebar.
  */
 export const RootLayout: React.FC = () => {
   const {
@@ -23,6 +30,14 @@ export const RootLayout: React.FC = () => {
     handleProjectOpened,
     isAddProviderOpen,
     setIsAddProviderOpen,
+    isPluginsOpen,
+    setIsPluginsOpen,
+    isSkillsOpen,
+    setIsSkillsOpen,
+    isHelpOpen,
+    setIsHelpOpen,
+    isGitHubAuthOpen,
+    setIsGitHubAuthOpen,
     uiScale,
     handleSetUiScale,
     handleStepUiScale,
@@ -34,30 +49,42 @@ export const RootLayout: React.FC = () => {
     activeDetection,
     handleCreateNewSession,
     handleCreateChatSession,
-    handleSaveProvider
+    handleSaveProvider,
   } = useAppContext();
 
   return (
-    <div className="bg-canvas text-editor-fg font-sans antialiased app-viewport overflow-hidden flex flex-col select-none">
-      {/* Dynamic Route Content (Studio Sovereign Workspace or Clean Standalone Views) */}
-      <div className="flex-1 flex overflow-hidden min-w-0 relative bg-canvas">
-        <Outlet />
+    <div className="bg-[#212124] text-editor-fg font-sans antialiased app-viewport overflow-hidden flex flex-col select-none">
+      {/* ── 1. Sovereign Fixed Top Bar Across Top ── */}
+      <AppTopBar />
+
+      {/* ── 2. Body: Left Activity Rail + Inner Workspace Island ── */}
+      <div className="flex-1 flex flex-row overflow-hidden min-h-0 w-full relative">
+        {/* Fixed Left Activity Rail (Matching #212124 background) */}
+        <ActivityRail />
+
+        {/* Inner Workspace Container (Flat, seamless, sovereign layout) */}
+        <main className="flex-1 flex flex-col overflow-hidden min-w-0 min-h-0 relative bg-[#121214]">
+          {/* Dynamic Route Content */}
+          <div className="flex-1 flex flex-col overflow-hidden min-w-0 min-h-0 relative bg-transparent">
+            <Outlet />
+          </div>
+
+          {/* Bottom Status Bar */}
+          <StatusBar
+            activeSessionTitle={activeSession?.title || 'Custos Sovereign Workspace'}
+            activeSessionId={activeSession?.id || activeSessionId}
+            activeModel={activeSession?.model || selectedModel || 'No model selected'}
+            activeWorkbench={activeWorkbench}
+            activeBranch={activeDetection?.branch}
+            isDirty={activeDetection?.is_dirty}
+            uiScale={uiScale}
+            onSetUiScale={handleSetUiScale}
+            onStepUiScale={handleStepUiScale}
+          />
+        </main>
       </div>
 
-      {/* Bottom Status Bar */}
-      <StatusBar
-        activeSessionTitle={activeSession?.title || 'Custos Sovereign Workspace'}
-        activeSessionId={activeSession?.id || activeSessionId}
-        activeModel={activeSession?.model || selectedModel || 'No model selected'}
-        activeWorkbench={activeWorkbench}
-        activeBranch={activeDetection?.branch}
-        isDirty={activeDetection?.is_dirty}
-        uiScale={uiScale}
-        onSetUiScale={handleSetUiScale}
-        onStepUiScale={handleStepUiScale}
-      />
-
-      {/* Global Modals (Preserves session context without full-page navigation) */}
+      {/* ── Global Modals (Preserves session context without full-page navigation) ── */}
       <SettingsModal
         isOpen={isSettingsOpen}
         initialTab={settingsTab}
@@ -84,6 +111,26 @@ export const RootLayout: React.FC = () => {
         isOpen={isAddProviderOpen}
         onClose={() => setIsAddProviderOpen(false)}
         onSaveProvider={handleSaveProvider}
+      />
+
+      <PluginsModal
+        isOpen={isPluginsOpen}
+        onClose={() => setIsPluginsOpen(false)}
+      />
+
+      <SkillsModal
+        isOpen={isSkillsOpen}
+        onClose={() => setIsSkillsOpen(false)}
+      />
+
+      <HelpModal
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+      />
+
+      <GitHubAuthModal
+        isOpen={isGitHubAuthOpen}
+        onClose={() => setIsGitHubAuthOpen(false)}
       />
 
       {/* Floating System Toast */}
