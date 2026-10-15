@@ -429,9 +429,15 @@ impl TaskRuntime {
 
         let _ = self.dispatcher.mark_dispatched(&claim.id, &wrun.id).await;
 
-        // 6. Allocate isolated workspace lease if lease manager is configured
-        let lease = if let Some(ref lm) = self.lease_manager {
+        // Native agents must run in the registered workspace selected by the user.
+        // A second implicit lease would be based on the daemon's own cwd and could
+        // be removed before the user has reviewed the agent's changes.
+        let lease = if actual_mode != "native" {
+            if let Some(ref lm) = self.lease_manager {
             lm.acquire_lease(&cmd.task_id, &wrun.id).ok()
+            } else {
+                None
+            }
         } else {
             None
         };
@@ -519,29 +525,25 @@ impl TaskRuntime {
 
                 // Resolve execution workspace & effective directory
                 let (base_workspace_dir, maybe_resolved_ws_id) = if let Some(ref ws_coord) = self.workspace_coordinator {
-                    if let Some(ref ws_id_str) = cmd.workspace_id {
-                        let ws_id = custos_domain::WorkspaceId::new(ws_id_str);
-                        if let Ok(Some(ws)) = ws_coord.get_workspace(&ws_id).await {
-                            (std::path::PathBuf::from(ws.path), Some(ws_id))
-                        } else if let Some(ref root) = cmd.workspace_root {
-                            (std::path::PathBuf::from(root), Some(ws_id))
-                        } else {
-                            (std::path::PathBuf::from("."), Some(ws_id))
-                        }
-                    } else if let Some(ref root) = cmd.workspace_root {
-                        let matched = if let Ok(list) = ws_coord.list_workspaces().await {
-                            list.into_iter().find(|w| w.path == *root).map(|w| w.id)
-                        } else {
-                            None
-                        };
-                        (std::path::PathBuf::from(root), matched)
-                    } else {
-                        (std::path::PathBuf::from("."), None)
+                    let ws_id_str = cmd.workspace_id.as_deref().ok_or_else(|| {
+                        DomainError::Validation("Native run requires a registered workspace_id".into())
+                    })?;
+                    let ws_id = custos_domain::WorkspaceId::new(ws_id_str);
+                    let ws = ws_coord.get_workspace(&ws_id).await?.ok_or_else(|| {
+                        DomainError::Validation(format!("Native workspace '{ws_id_str}' no longer exists"))
+                    })?;
+                    if !ws.is_ready() {
+                        return Err(DomainError::Validation(format!(
+                            "Native workspace '{ws_id_str}' is not ready for execution"
+                        )));
                     }
+                    (std::path::PathBuf::from(ws.path), Some(ws_id))
                 } else if let Some(ref root) = cmd.workspace_root {
                     (std::path::PathBuf::from(root), None)
                 } else {
-                    (std::path::PathBuf::from("."), None)
+                    return Err(DomainError::Validation(
+                        "Native run has no execution workspace".into(),
+                    ));
                 };
 
                 let (effective_dir, isolation_level) = if let Some(ref l) = lease {

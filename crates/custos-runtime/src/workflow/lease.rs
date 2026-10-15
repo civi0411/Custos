@@ -36,18 +36,38 @@ impl WorkspaceLease {
 
     /// Releases and marks the lease inactive.
     pub fn release(&mut self) -> Result<(), DomainError> {
-        self.active = false;
+        let expected_parent = self.base_path.join(".custos").join("worktrees");
+        if !self.lease_path.starts_with(&expected_parent) || self.lease_path == expected_parent {
+            return Err(DomainError::Validation(format!(
+                "Refusing to release lease outside managed worktree directory: {:?}",
+                self.lease_path
+            )));
+        }
         if self.lease_path.exists() {
-            // Safety: Only delete within .custos/worktrees directory to prevent arbitrary directory removal
-            let expected_parent = self.base_path.join(".custos").join("worktrees");
-            if self.lease_path.starts_with(&expected_parent) && self.lease_path != expected_parent {
-                let _ = std::process::Command::new("git")
+            if self.lease_path.join(".git").exists() {
+                let output = std::process::Command::new("git")
                     .current_dir(&self.base_path)
-                    .args(["worktree", "remove", "--force", &self.lease_path.to_string_lossy()])
-                    .output();
-                let _ = fs::remove_dir_all(&self.lease_path);
+                    .args(["worktree", "remove", &self.lease_path.to_string_lossy()])
+                    .output()
+                    .map_err(|e| DomainError::Validation(format!("Git worktree cleanup failed: {e}")))?;
+                if !output.status.success() {
+                    return Err(DomainError::Validation(format!(
+                        "Worktree was kept for review: {}",
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    )));
+                }
+            } else {
+                // Non-Git leases can only be removed when empty. Never erase files
+                // merely because a worker stopped or cancellation was requested.
+                fs::remove_dir(&self.lease_path).map_err(|e| {
+                    DomainError::Validation(format!(
+                        "Non-empty lease was kept for review at {:?}: {e}",
+                        self.lease_path
+                    ))
+                })?;
             }
         }
+        self.active = false;
         Ok(())
     }
 
@@ -118,11 +138,16 @@ impl WorkspaceLeaseManager {
                 .current_dir(&self.base_dir)
                 .args(["worktree", "add", "--detach", &lease_path.to_string_lossy(), "HEAD"])
                 .output();
-            if let Ok(out) = output {
-                if out.status.success() {
-                    worktree_created = true;
-                }
+            let out = output.map_err(|e| {
+                DomainError::Validation(format!("Failed to start Git worktree provisioning: {e}"))
+            })?;
+            if !out.status.success() {
+                return Err(DomainError::Validation(format!(
+                    "Git worktree provisioning failed: {}",
+                    String::from_utf8_lossy(&out.stderr).trim()
+                )));
             }
+            worktree_created = true;
         }
 
         if !worktree_created {
@@ -239,8 +264,9 @@ impl WorkspaceLeaseManager {
         let mut lock = self.active_leases.lock().map_err(|e| {
             DomainError::Validation(format!("WorkspaceLeaseManager poisoned: {}", e))
         })?;
-        if let Some(mut lease) = lock.remove(lease_id) {
+        if let Some(lease) = lock.get_mut(lease_id) {
             lease.release()?;
+            lock.remove(lease_id);
         }
         Ok(())
     }
@@ -284,9 +310,11 @@ mod tests {
         let err = manager.merge_lease(&lease_a, Some("src/**"));
         assert!(err.is_err(), "Must reject write outside permitted prefix");
 
-        // Release lease
-        manager.release_lease(&lease_a.lease_id).unwrap();
-        assert!(!lease_a.lease_path.exists());
+        // A completed worker must not erase files that still require review.
+        let release = manager.release_lease(&lease_a.lease_id);
+        assert!(release.is_err());
+        assert!(lease_a.lease_path.exists());
+        assert!(manager.get_lease(&lease_a.lease_id).is_some());
     }
 
     #[test]
@@ -313,5 +341,37 @@ mod tests {
             err_traversal_prefix.is_err(),
             "Must reject traversal in prefix"
         );
+    }
+
+    #[test]
+    fn dirty_git_worktree_survives_release() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let init = std::process::Command::new("git")
+            .current_dir(temp_dir.path())
+            .args(["init", "-q"])
+            .status()
+            .unwrap();
+        assert!(init.success());
+        fs::write(temp_dir.path().join("README.md"), "baseline").unwrap();
+        for args in [
+            vec!["add", "README.md"],
+            vec!["-c", "user.name=Custos Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "baseline"],
+        ] {
+            assert!(std::process::Command::new("git")
+                .current_dir(temp_dir.path())
+                .args(args)
+                .status()
+                .unwrap()
+                .success());
+        }
+
+        let manager = WorkspaceLeaseManager::new(temp_dir.path());
+        let lease = manager.acquire_lease("task", "worker").unwrap();
+        let new_file = lease.lease_path.join("untracked.txt");
+        fs::write(&new_file, "keep this result").unwrap();
+
+        assert!(manager.release_lease(&lease.lease_id).is_err());
+        assert_eq!(fs::read_to_string(&new_file).unwrap(), "keep this result");
+        assert!(manager.get_lease(&lease.lease_id).is_some());
     }
 }

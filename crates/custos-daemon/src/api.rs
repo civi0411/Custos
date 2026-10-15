@@ -1799,7 +1799,11 @@ impl LocalApiDispatcher {
             METHOD_WORKSPACES_PICK_FOLDER => {
                 #[cfg(target_os = "macos")]
                 {
-                    let script = "POSIX path of (choose folder with prompt \"Select Project or Repository Folder\")";
+                    let script = if req.params.get("purpose").and_then(|v| v.as_str()) == Some("model") {
+                        "POSIX path of (choose folder with prompt \"Select Folder Containing GGUF Models\")"
+                    } else {
+                        "POSIX path of (choose folder with prompt \"Select Project or Repository Folder\")"
+                    };
                     let out = tokio::process::Command::new("osascript")
                         .arg("-e")
                         .arg(script)
@@ -1852,7 +1856,7 @@ impl LocalApiDispatcher {
 
                 let base_repo_path = if let Some(base_ws_id) = req.params.get("base_workspace_id").and_then(|v| v.as_str()) {
                     match coordinator.get_workspace(&custos_domain::WorkspaceId::new(base_ws_id)).await {
-                        Ok(Some(ws)) => ws.path,
+                        Ok(Some(ws)) if ws.is_ready() => ws.path,
                         _ => return ApiResponse::error(req.id, format!("Base workspace '{base_ws_id}' not found")),
                     }
                 } else if let Some(repo_path) = req.params.get("repo_path").and_then(|v| v.as_str()) {
@@ -1860,6 +1864,29 @@ impl LocalApiDispatcher {
                 } else {
                     return ApiResponse::error(req.id, "Either 'base_workspace_id' or 'repo_path' must be provided");
                 };
+
+                let base_branch = tokio::process::Command::new("git")
+                    .current_dir(&base_repo_path)
+                    .args(["branch", "--show-current"])
+                    .output()
+                    .await;
+                let base_branch = match base_branch {
+                    Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
+                    _ => return ApiResponse::error(req.id, "Candidate creation requires a Git checkout"),
+                };
+                if base_branch.is_empty() {
+                    return ApiResponse::error(req.id, "Candidate creation requires a named base branch");
+                }
+                let base_status = tokio::process::Command::new("git")
+                    .current_dir(&base_repo_path)
+                    .args(["status", "--porcelain", "--untracked-files=all"])
+                    .output()
+                    .await;
+                match base_status {
+                    Ok(out) if out.status.success() && out.stdout.is_empty() => {}
+                    Ok(out) if out.status.success() => return ApiResponse::error(req.id, "Candidate creation requires a clean base checkout; uncommitted files would not be copied"),
+                    _ => return ApiResponse::error(req.id, "Could not inspect candidate base checkout"),
+                }
 
                 let base_commit_hash = if let Some(h) = req.params.get("base_commit_hash").and_then(|v| v.as_str()) {
                     Some(h.to_string())
@@ -1872,10 +1899,15 @@ impl LocalApiDispatcher {
                 };
 
                 let mut spawned_workspaces = Vec::new();
+                let base_path = std::path::Path::new(&base_repo_path);
+                let (Some(parent), Some(repo_name)) = (base_path.parent(), base_path.file_name()) else {
+                    return ApiResponse::error(req.id, "Candidate base must have a named parent directory");
+                };
                 for i in 1..=count {
                     let branch = format!("custos/candidate/{task_id}/{i}");
-                    let candidate_path = std::path::Path::new(&base_repo_path)
-                        .join(".custos/worktrees")
+                    let candidate_path = parent
+                        .join(".custos-worktrees")
+                        .join(repo_name)
                         .join(&task_id)
                         .join(format!("candidate-{}", i))
                         .to_string_lossy()
@@ -1899,7 +1931,7 @@ impl LocalApiDispatcher {
                         lineage: Some(custos_domain::WorkspaceLineage {
                             parent_workspace_id: req.params.get("base_workspace_id").and_then(|v| v.as_str()).map(custos_domain::WorkspaceId::new),
                             base_commit: base_commit_hash.clone(),
-                            target_branch: Some(branch.clone()),
+                            target_branch: Some(base_branch.clone()),
                             head_commit: None,
                         }),
                         owner_task_id: Some(task_id.clone()),
@@ -2010,7 +2042,57 @@ impl LocalApiDispatcher {
                     _ => return ApiResponse::error(req.id, "Winner workspace must be a Git workspace"),
                 };
 
-                let target_branch = req.params.get("target_branch").and_then(|v| v.as_str()).unwrap_or("main");
+                let target_branch = req.params.get("target_branch").and_then(|v| v.as_str())
+                    .or(winner_ws.lineage.target_branch.as_deref());
+                let Some(target_branch) = target_branch else {
+                    return ApiResponse::error(req.id, "Candidate has no recorded target branch");
+                };
+
+                if !winner_ws.is_ready() {
+                    return ApiResponse::error(req.id, "Winner workspace is not ready for integration");
+                }
+
+                // `git merge` modifies the branch currently checked out in repo_path,
+                // not the branch named by target_branch. Refuse a mismatched checkout.
+                let checked_out = tokio::process::Command::new("git")
+                    .current_dir(&repo_path)
+                    .args(["branch", "--show-current"])
+                    .output()
+                    .await;
+                let checked_out = match checked_out {
+                    Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).trim().to_string(),
+                    _ => return ApiResponse::error(req.id, "Could not verify the checked-out target branch"),
+                };
+                if checked_out != target_branch {
+                    return ApiResponse::error(req.id, format!(
+                        "Target checkout is on '{checked_out}', not '{target_branch}'; integration was not started"
+                    ));
+                }
+
+                for (label, path) in [("target", repo_path.as_str()), ("winner", winner_ws.path.as_str())] {
+                    let status = tokio::process::Command::new("git")
+                        .current_dir(path)
+                        .args(["status", "--porcelain", "--untracked-files=all"])
+                        .output()
+                        .await;
+                    match status {
+                        Ok(out) if out.status.success() && out.stdout.is_empty() => {}
+                        Ok(out) if out.status.success() => return ApiResponse::error(req.id, format!(
+                            "The {label} workspace has uncommitted or untracked changes; review them before integration"
+                        )),
+                        _ => return ApiResponse::error(req.id, format!("Could not inspect the {label} workspace")),
+                    }
+                }
+
+                let winner_checkout = tokio::process::Command::new("git")
+                    .current_dir(&winner_ws.path)
+                    .args(["branch", "--show-current"])
+                    .output()
+                    .await;
+                match winner_checkout {
+                    Ok(out) if out.status.success() && String::from_utf8_lossy(&out.stdout).trim() == winner_branch => {}
+                    _ => return ApiResponse::error(req.id, "Winner workspace no longer checks out its recorded branch"),
+                }
 
                 // Stale-Base Drift Check
                 let mut rev_cmd = tokio::process::Command::new("git");
@@ -2019,11 +2101,15 @@ impl LocalApiDispatcher {
                     String::from_utf8_lossy(&o.stdout).trim().to_string()
                 });
 
-                let is_stale_base = if let (Some(ref current_head), Some(ref base_commit)) = (&current_target_head, &winner_ws.base_commit_hash) {
-                    current_head != base_commit
-                } else {
-                    false
+                let (Some(ref current_head), Some(ref base_commit)) = (&current_target_head, &winner_ws.base_commit_hash) else {
+                    return ApiResponse::error(req.id, "Cannot verify candidate base against target HEAD");
                 };
+                let is_stale_base = current_head != base_commit;
+                if is_stale_base {
+                    return ApiResponse::error(req.id, format!(
+                        "Candidate base {base_commit} is stale relative to target {current_head}; integration was not started"
+                    ));
+                }
 
                 // Merge winner branch into target repository
                 let mut merge_cmd = tokio::process::Command::new("git");
@@ -2043,23 +2129,9 @@ impl LocalApiDispatcher {
                     Err(e) => (false, format!("Failed to spawn git merge: {e}")),
                 };
 
-                // Safe Loser Teardown with Dirty Protection
-                let force_loser = req.params.get("force_loser_cleanup").and_then(|v| v.as_bool()).unwrap_or(false);
-                let mut loser_cleanup_results = Vec::new();
-
-                if let Some(loser_ids) = req.params.get("loser_workspace_ids").and_then(|v| v.as_array()) {
-                    for loser_val in loser_ids {
-                        if let Some(lid_str) = loser_val.as_str() {
-                            let lid = custos_domain::WorkspaceId::new(lid_str);
-                            let teardown_res = coordinator.archive_workspace_with_force(&lid, true, force_loser).await;
-                            loser_cleanup_results.push(serde_json::json!({
-                                "workspace_id": lid_str,
-                                "success": teardown_res.is_ok(),
-                                "error": teardown_res.err().map(|e| e.to_string()),
-                            }));
-                        }
-                    }
-                }
+                // Integration never implies permission to delete other workspaces.
+                // Candidate cleanup is a separate, explicit archive operation.
+                let loser_cleanup_results: Vec<serde_json::Value> = Vec::new();
 
                 ApiResponse::success(req.id, serde_json::json!({
                     "winner_workspace_id": winner_id.to_string(),
@@ -3650,8 +3722,243 @@ impl LocalApiDispatcher {
                     };
                 }
                 let catalog = self.model_catalog.get_catalog(provider_type);
+                // Scanned files are inventory, not composed inference routes.
+                // Exposing them as `local/<file_name>` sends them to the HTTP/Ollama adapter.
                 match serde_json::to_value(&catalog) {
                     Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.local_models.folders.list" => {
+                let repo = match self.providers.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                let folders = match repo.list_local_folders() {
+                    Ok(f) => f,
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                match serde_json::to_value(&folders) {
+                    Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.local_models.folders.add" => {
+                let repo = match self.providers.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                let folder_path = match req.params.get("folder_path").and_then(|v| v.as_str()) {
+                    Some(p) if !p.trim().is_empty() => p.trim(),
+                    _ => return ApiResponse::error(req.id, "Missing folder_path parameter"),
+                };
+                let path = std::path::Path::new(folder_path);
+                if !path.exists() || !path.is_dir() {
+                    return ApiResponse::error(req.id, format!("Path does not exist or is not a directory: {}", folder_path));
+                }
+                let label = req.params.get("label").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let now = chrono::Utc::now().timestamp_millis();
+                let folder = custos_domain::LocalModelFolder {
+                    id: custos_domain::new_id("fld"),
+                    folder_path: folder_path.to_string(),
+                    label,
+                    is_active: true,
+                    auto_scan: true,
+                    created_at: now,
+                    updated_at: now,
+                };
+                if let Err(e) = repo.save_local_folder(&folder) {
+                    return ApiResponse::error(req.id, e.to_string());
+                }
+                let hardware = custos_adapters::local_inference::metal_probe::probe_local_hardware();
+                let discovered = custos_adapters::local_inference::folder_scanner::scan_folder_for_models(&folder, &hardware);
+                for m in &discovered {
+                    if let Err(error) = repo.upsert_cached_model(m) {
+                        return ApiResponse::error(req.id, format!("Cannot save discovered local model: {error}"));
+                    }
+                }
+                ApiResponse::success(req.id, serde_json::json!({
+                    "folder": folder,
+                    "models_discovered": discovered.len(),
+                    "models": discovered
+                }))
+            }
+            "v1.local_models.folders.remove" => {
+                let repo = match self.providers.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                let id = match req.params.get("id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id.trim(),
+                    _ => return ApiResponse::error(req.id, "Missing id parameter"),
+                };
+                match repo.delete_local_folder(id) {
+                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "deleted": true, "id": id })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.local_models.scan" => {
+                let repo = match self.providers.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                let folder_id = req.params.get("folder_id").and_then(|v| v.as_str());
+                let folders = match repo.list_local_folders() {
+                    Ok(f) => f,
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                let hardware = custos_adapters::local_inference::metal_probe::probe_local_hardware();
+                let mut total_discovered = Vec::new();
+                for f in &folders {
+                    if let Some(fid) = folder_id {
+                        if f.id != fid { continue; }
+                    }
+                    if !f.is_active { continue; }
+                    let found = custos_adapters::local_inference::folder_scanner::scan_folder_for_models(f, &hardware);
+                    for m in &found {
+                        if let Err(error) = repo.upsert_cached_model(m) {
+                            return ApiResponse::error(req.id, format!("Cannot save discovered local model: {error}"));
+                        }
+                    }
+                    total_discovered.extend(found);
+                }
+                ApiResponse::success(req.id, serde_json::json!({
+                    "scanned_folders": folders.len(),
+                    "models_count": total_discovered.len(),
+                    "models": total_discovered,
+                    "hardware": hardware,
+                    "scanned_at": chrono::Utc::now().timestamp_millis()
+                }))
+            }
+            "v1.local_models.list" => {
+                let repo = match self.providers.as_ref() {
+                    Some(r) => r,
+                    None => return ApiResponse::error(req.id, "ProviderRepository not configured"),
+                };
+                let folder_id = req.params.get("folder_id").and_then(|v| v.as_str());
+                match repo.list_cached_models(folder_id) {
+                    Ok(mut models) => {
+                        models.retain(|model| std::path::Path::new(&model.file_path).is_file());
+                        ApiResponse::success(req.id, serde_json::json!({ "models": models }))
+                    }
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.local_models.hardware" => {
+                let hardware = custos_adapters::local_inference::metal_probe::probe_local_hardware();
+                match serde_json::to_value(&hardware) {
+                    Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.local_models.preflight" => {
+                let model_path = match req.params.get("model_path").and_then(|v| v.as_str()) {
+                    Some(p) if !p.trim().is_empty() => p.trim(),
+                    _ => return ApiResponse::error(req.id, "Missing model_path parameter"),
+                };
+                let path = std::path::Path::new(model_path);
+                if !path.exists() || !path.is_file() {
+                    return ApiResponse::error(req.id, format!("Model file does not exist: {}", model_path));
+                }
+                let hardware = custos_adapters::local_inference::metal_probe::probe_local_hardware();
+                let descriptor = match custos_adapters::local_inference::gguf_inspector::inspect_gguf_file(path, "preflight", &hardware) {
+                    Ok(d) => d,
+                    Err(e) => return ApiResponse::error(req.id, format!("Failed to parse GGUF file: {}", e)),
+                };
+                let requested_context = req.params.get("requested_context").and_then(|v| v.as_u64()).unwrap_or(8192).min(descriptor.context_length);
+                let can_load = descriptor.file_size_bytes < hardware.total_ram_bytes;
+                let mut issues = Vec::new();
+                if !can_load {
+                    issues.push(format!(
+                        "GGUF file size ({} bytes) is at least the detected physical RAM ({} bytes); loading is blocked by the current preflight policy",
+                        descriptor.file_size_bytes, hardware.total_ram_bytes
+                    ));
+                }
+                if descriptor.compatibility == custos_domain::ModelCompatibility::Red {
+                    issues.push("Model memory requirements with large context may exceed memory. Offloading or reduced context recommended.".to_string());
+                } else if descriptor.compatibility == custos_domain::ModelCompatibility::Yellow {
+                    issues.push("Model may require partial CPU offloading and run with reduced speed".to_string());
+                }
+                let response = custos_domain::LocalModelPreflightResponse {
+                    model_path: model_path.to_string(),
+                    can_load,
+                    architecture: descriptor.architecture,
+                    quantization: descriptor.quantization,
+                    file_size_bytes: descriptor.file_size_bytes,
+                    context_limit: requested_context,
+                    estimated_memory_bytes: descriptor.total_memory_required,
+                    free_ram_bytes: hardware.free_ram_bytes,
+                    metal_vram_limit_bytes: hardware.metal_vram_limit_bytes,
+                    compatibility: descriptor.compatibility,
+                    recommended_gpu_layers: if hardware.is_apple_silicon { 99 } else { 0 },
+                    issues,
+                };
+                match serde_json::to_value(&response) {
+                    Ok(val) => ApiResponse::success(req.id, val),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            "v1.local_models.load" => {
+                let model_path = match req.params.get("model_path").and_then(|v| v.as_str()) {
+                    Some(p) if !p.trim().is_empty() => p.trim(),
+                    _ => return ApiResponse::error(req.id, "Missing model_path parameter"),
+                };
+                let context_size = req.params.get("context_size").and_then(|v| v.as_u64()).map(|c| c as usize).or(Some(8192));
+                let gpu_layers = req.params.get("gpu_layers").and_then(|v| v.as_u64()).map(|g| g as u32).or_else(|| {
+                    let hardware = custos_adapters::local_inference::metal_probe::probe_local_hardware();
+                    Some(if hardware.is_apple_silicon { 99 } else { 0 })
+                });
+                match custos_adapters::local_inference::preload_model(model_path, context_size, gpu_layers).await {
+                    Ok(instance) => {
+                        if instance.backend_id == "llama-server-sidecar" {
+                            if let Some(repo) = &self.providers {
+                                let port = custos_adapters::local_inference::sidecar::get_sidecar_port();
+                                let sidecar_provider = custos_domain::ProviderConfig {
+                                    id: "p_local_sidecar".to_string(),
+                                    name: format!("Native Metal ({})", instance.model_name),
+                                    service_type: "local".to_string(),
+                                    endpoint_url: Some(format!("http://127.0.0.1:{port}/v1")),
+                                    api_key_masked: "none".to_string(),
+                                    default_model: Some(instance.model_name.clone()),
+                                    status: "active".to_string(),
+                                    created_at: chrono::Utc::now().timestamp_millis(),
+                                    updated_at: chrono::Utc::now().timestamp_millis(),
+                                    context_window: Some(instance.context_limit),
+                                    fast_mode: Some(false),
+                                };
+                                let _ = repo.save_provider(&sidecar_provider);
+                            }
+                        }
+                        match serde_json::to_value(&instance) {
+                            Ok(val) => ApiResponse::success(req.id, val),
+                            Err(e) => ApiResponse::error(req.id, e.to_string()),
+                        }
+                    }
+                    Err(e) => ApiResponse::error(req.id, format!("Failed to load local model: {e}")),
+                }
+            }
+            "v1.local_models.unload" => {
+                let model_identifier = match req.params.get("model_path")
+                    .or_else(|| req.params.get("instance_id"))
+                    .or_else(|| req.params.get("model_name"))
+                    .and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id.trim(),
+                    _ => return ApiResponse::error(req.id, "Missing model_path or instance_id parameter"),
+                };
+                let clean_model = model_identifier.strip_prefix("native:").unwrap_or(model_identifier);
+                match custos_adapters::local_inference::evict_model(clean_model).await {
+                    Ok(evicted) => {
+                        if let Some(repo) = &self.providers {
+                            let _ = repo.delete_provider("p_local_sidecar");
+                        }
+                        ApiResponse::success(req.id, serde_json::json!({ "evicted": evicted, "model": clean_model }))
+                    }
+                    Err(e) => ApiResponse::error(req.id, format!("Failed to unload model: {}", e)),
+                }
+            }
+            "v1.local_models.instances" => {
+                match custos_adapters::local_inference::list_loaded_instances().await {
+                    Ok(instances) => ApiResponse::success(req.id, serde_json::json!({ "instances": instances })),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
