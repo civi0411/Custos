@@ -191,6 +191,21 @@ In OrCa upstream, the **Browser** (`src/main/browser`) and **Mobile Emulator** (
 3. **Custos Architecture Mapping:**
    - In Custos, these are projected in `ui/desktop` as `BrowserWorkbenchPane` and `MobileSimulatorWorkbenchPane` under Engineering and Shared resources, governed by `custos-adapters/src/platform/` (CDP and `simctl`/`adb` bridges).
 
+## Native GGUF loader references
+
+The local checkouts examined for the native-load path are `llama.cpp` at
+`a0e6dc7`, `ollama` at `d10d106`, and `jan` at `2ff2c4f`. These are source
+references, not code imported into Custos or proof that a given GGUF runs.
+
+| Source behavior | Custos owner | Required gate |
+|---|---|---|
+| `llama.cpp` parses GGUF tensors and executes inference | `custos-adapters/local_inference/llamacpp` | Pin the version actually bundled by `llama-cpp-sys-2`, then load and generate with a real fixture. A separate clone does not upgrade the Rust binary. |
+| Ollama's `llama/compat` rewrites some published GGUF metadata/tensors at load time | Adapter compatibility investigation only | Identify the exact model format and failing tensor before selectively porting any translation; audit license, upstream version, memory mapping and tests. Do not copy the whole patch layer. |
+| Jan's synchronous load endpoint and engine smoke tests report load failure and require a nonempty chat completion | Existing daemon `v1.local_models.load` and local inference tests | Keep load synchronous and preserve its actual error. Add a real-file generation fixture before calling a model usable; scanning and memory preflight are estimates only. |
+
+The desktop native model inventory and selector do not auto-probe LM Studio.
+User-configured model servers continue through the separate provider route.
+
 ## What must not be copied
 
 - Do not copy OrCa's Electron process ownership, SQLite schema, global stores or mock/demo data into Custos canonical state.

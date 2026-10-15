@@ -77,6 +77,56 @@ the strongest source for actual cost. None of these sources replaces the others.
 
 ## 5. Convergence sequence
 
+### Local AI source and runtime contract
+
+Local AI has two current setup modes and one future source: (1) registered user
+folders containing native GGUF artifacts (MLX directories only when the feature
+and backend are available), (2) running Ollama, LM Studio or other local model
+API servers, and (3) an optional Custos-managed download library. An HTTP
+endpoint is a connection, not a file artifact; a loopback address is not proof
+of offline inference. A model file discovered on disk is not an agent or a
+loaded model instance.
+
+`custos-domain/provider_config.rs` owns pure folder, artifact and hardware
+values; `custos-provider` owns structured model-attempt semantics;
+`custos-adapters/local_inference` owns native inspection, load and generation;
+`custos-adapters/providers` owns application API connections; `custos-runtime`
+applies routing constraints; `custos-persistence` owns registered sources and
+rebuildable artifact inventory; `custos-daemon` alone composes the selected
+implementation and exposes Local API commands; Desktop is an IPC client.
+Neither `custos-packs` nor an agent harness owns local model lifecycle.
+
+Existing `v1.local_models.folders.list/add/remove`, `scan`, `list` and `hardware`
+are discovery operations, not load confirmation. The target Local API adds
+preflight, load, unload and live status with idempotent command IDs and bounded
+progress events; session model selection is a separate command. Preflight
+rechecks source identity and completeness, backend support and hardware
+uncertainty. A single desktop “Use model” action may invoke these operations
+sequentially. File inventory survives restart; loaded-instance state does not.
+Unregistering a folder never deletes weights. Failed or interrupted loads never
+select a model silently or fall back to cloud.
+The existing local folder picker accepts a model-folder purpose for a desktop
+dialog label; the user still explicitly registers the selected directory.
+
+The scanner finds `.gguf` files with at least one model tensor; tokenizer-only
+fixtures must not be offered as runnable models. The daemon now composes the native
+`LocalInferenceProvider` through the structured model port, with IDs of the form
+`native:<absolute-file-path>`; `ollama/` and `local/` remain HTTP routes. A
+discovered file is selectable for an explicit load attempt but is not labeled
+resident until that attempt succeeds. Native turns bypass external provider
+account reservation without bypassing the model runtime. A legacy
+`local/<file_name>` selection requires unambiguous source resolution before
+migration. Native capabilities (tools, image, reasoning, cancellation) require
+per-backend conformance, not inference from GGUF metadata. Hardware estimates
+must be labeled as such; file size is not resident RAM and unknown is not
+“100% Metal”. Loader errors retain their actual cause, including for MTP files.
+Native folder and model-selection screens do not automatically probe LM Studio;
+HTTP model servers remain separate optional provider connections.
+The opt-in `CUSTOS_TEST_CHAT_GGUF` fixture exercises the same native load and
+provider generation path with a real chat GGUF; without the environment
+variable, the test explicitly skips. A passing metadata-only test or a skipped
+real-file test is not evidence that a particular published model works.
+
 1. Keep the daemon on one compatibility model route and prevent placeholder
    providers from being selected as production implementations.
 2. Expand conformance fixtures for text, tools, multimodal input, reasoning,

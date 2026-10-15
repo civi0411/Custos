@@ -56,7 +56,23 @@ impl CustosRuntime {
             availability: availability.clone(),
             store: store.clone(), credentials: credentials.clone(),
         });
-        let router_provider = Arc::new(RouterModelProvider::new(credential_resolver));
+
+        let local_adapter = match custos_adapters::local_inference::InferenceRuntime::get_or_init() {
+            Ok(runtime) => {
+                let local_provider = Arc::new(custos_adapters::local_inference::LocalInferenceProvider::new(runtime));
+                Some(Arc::new(custos_adapters::local_inference::NativeLocalModelAdapter::new(local_provider)) as Arc<dyn ModelPort>)
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "Local inference engine not available on this platform");
+                None
+            }
+        };
+
+        let mut router = RouterModelProvider::new(credential_resolver);
+        if let Some(adapter) = local_adapter {
+            router = router.with_native_local(adapter);
+        }
+        let router_provider = Arc::new(router);
 
         // Production inference always goes through the configured provider router.
         // Deterministic fake providers remain test fixtures and cannot be enabled
@@ -195,7 +211,6 @@ impl CustosRuntime {
                 .with_run_store(store.clone())
                 .with_session_store(store.clone())
                 .with_journal_manager(session_manager.clone())
-                .with_lease_manager(lease_manager.clone())
                 .with_workspace_coordinator(workspace_coordinator.clone()),
         );
         let terminal_coordinator = Arc::new(custos_runtime::TerminalCoordinator::new());

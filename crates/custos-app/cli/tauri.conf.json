@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.custos.cli",
   "build": {
-    "beforeDevCommand": "npm --prefix ../../../ui/desktop run dev",
+    "beforeDevCommand": "npm --prefix ../../ui/desktop run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm --prefix ../../../ui/desktop run build",
+    "beforeBuildCommand": "npm --prefix ../../ui/desktop run build",
     "frontendDist": "../../../ui/desktop/dist"
   },
   "app": {
@@ -16,7 +16,9 @@
         "width": 1360,
         "height": 860,
         "minWidth": 960,
-        "minHeight": 640
+        "minHeight": 640,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {

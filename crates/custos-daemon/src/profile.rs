@@ -213,7 +213,7 @@ pub fn ensure_daemon_client(
         .build()
         .map_err(|e| e.to_string())?;
 
-    while start.elapsed() < std::time::Duration::from_secs(3) {
+    while start.elapsed() < std::time::Duration::from_secs(10) {
         if let Ok(client) = LocalApiClient::from_profile(profile) {
             if rt.block_on(client.ping()).is_ok() {
                 return Ok(std::sync::Arc::new(client));

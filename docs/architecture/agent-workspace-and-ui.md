@@ -31,7 +31,7 @@ Hợp đồng chi tiết về executor picker, Custos worker so với native har
 
 Workspace có nhiều Task; Task liên kết nhiều session; một session có thể chứa nhiều Task. Một Task có thể có nhiều candidate runs hoặc nhiều bước xuyên pack. Quan hệ này phải được map từ IDs hiện có; tên trong bảng là vocabulary thiết kế, không yêu cầu sinh thêm schema nếu contract hiện hữu đã đủ.
 
-**Bất biến UX quan trọng nhất:** đổi workbench không được đổi chủ thể công việc. `task_id`, revision, selected source/artifact references, decisions, criteria, budget và pending effects vẫn giữ nguyên; chỉ pane tree, công cụ nổi bật và context recipe thay đổi. Nếu mục tiêu thật sự tách nhánh, user tạo child Task/fork tường minh. Nếu chỉ hỏi ngoài lề, side conversation giữ liên kết tới Task nhưng không làm nhiễu goal chính.
+**Bất biến UX quan trọng nhất:** mở cùng công việc trong workbench khác giữ `task_id`, revision, source/artifact references, decisions, criteria, budget và pending effects. Bấm icon workbench thông thường khôi phục view gần nhất của lens đích, có thể là một session/Task khác; thao tác đó không sửa binding của công việc vừa rời đi. Hai hành động này có contract riêng ở §4.5. Nếu mục tiêu tách nhánh, user tạo linked conversation hoặc child Task tường minh.
 
 **Session theo từng lens:** Copilot, Coding và Research có danh sách chat và lựa chọn gần nhất riêng. Bấm icon lens khôi phục chat cuối của lens đích; nếu chưa có thì là trạng thái `No conversation`, không tự đem chat từ lens vừa rời đi. `Open full chat in…` gắn cùng session vào danh sách đích và hiển thị mọi turn còn được giữ trong canonical journal. `Continue as linked chat` tạo session mới có lineage và bản hiển thị timeline nguồn; model-visible context vẫn phải qua compiler, privacy và budget với receipt. Không gọi lịch sử hiển thị đầy đủ là inference context đầy đủ. Khi tiếp tục từ Research sang Coding, notebook code/dataset/figure là nguồn và artifact để kiểm, không phải patch repo được áp dụng tự động.
 
@@ -81,29 +81,27 @@ API action catalog phải được suy từ capability registry cùng request, k
 
 Trong Research, lỗi tải proposals/claims/recipes/workspaces là lỗi hiển thị chứ không được thay bằng `[]`. Artifact thiếu bytes vẫn có metadata/version/annotation, nhưng inspector phải nói preview không có; không tự tạo đoạn code `# Artifact…` để giả làm nội dung phiên bản.
 
-- **Navigation rail:** Workspace, Tasks, Sources/Artifacts, Automations, Connections, Settings. Người dùng ẩn/ghim mục ít dùng; không bắt đọc Authority/Audit trước khi chat.
-- **Workspace sidebar:** tài nguyên, Task gần đây và runs liên quan; lọc theo project/corpus/account nhưng không lộ tài nguyên ngoài scope.
+- **Workbench switcher:** giữ một bộ ba icon Copilot/Coding/Research trên header hiện hữu. Một sidebar bên trái là điều hướng chính; xem §4.5 cho nội dung và hành vi. Connections/Settings mở từ footer/menu; Sources, Automations và fleet mở thành resource khi cần.
+- **Workspace sidebar:** Project scope, contextual workspace/corpus selector và một danh sách chính ở chế độ Conversations hoặc Tasks. Chỉ render nhóm attention/pinned khi có dữ liệu; runs nằm trong Task hoặc workspace liên quan.
 - **Main canvas:** panes tách/ghép được, mỗi pane giữ resource/run/task reference rõ ràng. Pane không bao giờ đổi Task âm thầm khi người dùng đổi sidebar.
 - **Task strip:** mục tiêu, mode, model/harness thực dùng, đang làm gì, ngân sách và trạng thái. Pin model phải nhìn thấy.
 - **Inspector:** criteria/evidence, route reason, approval, uncertainty, costs; mở theo ngữ cảnh. Detail mặc định thu gọn, pending effect không bị giấu.
 
-Ba **workbench lens** là cấp điều hướng chính: **Copilot**, **Coding**, **Research**. Bên trong mỗi lens có preset bố cục: **Focus** (chat + artifact), **Build** (agent + repo/diff/test), **Study** (source + notes/claims), **Assist** (draft/calendar + conversation), **Compare** (candidates + shared criteria). Đổi lens hoặc preset không đổi mode, quyền, model hoặc Task.
+Ba **workbench lens** là cấp điều hướng chính: **Copilot**, **Coding**, **Research**. Bố cục thích nghi theo resource đang mở: chat rộng, chat cạnh code/source, hoặc compare khi đã có candidates. Preset bổ sung chỉ xuất hiện khi người dùng cần đổi layout. Đổi lens khôi phục lựa chọn của lens đích; quyền, model, graph và contract của các công việc đã tồn tại giữ nguyên.
 
 Giao diện hẹp chỉ có một pane tại một thời điểm, navigation bằng tabs và inspector dạng drawer. Keyboard navigation, focus restoration, screen-reader labels, trạng thái bằng chữ cùng màu, phím hủy và copy citation/diff cần có ngay. CLI cung cấp cùng command/status semantics, không cần tái tạo mọi pane desktop.
 
 ### 4.1. Shared shell của cả ba workbench
 
-```text
-┌ Rail ┬ Workspace/Task list ┬──────────────── Task workspace ────────────────┬ Inspector ┐
-│      │                     │ Task strip: goal · state · executor · budget  │           │
-│ Home │ Recent conversations├ Copilot │ Coding │ Research ───────────────────┤ Criteria  │
-│ Work │ Active Tasks        │                                                  │ Sources   │
-│ Lib  │ Needs attention     │ Flexible pane canvas + persistent conversation   │ Evidence  │
-│ Auto │ Artifacts           │                                                  │ Effects   │
-└──────┴─────────────────────┴──────────────────────────────────────────────────┴───────────┘
+```mermaid
+flowchart TD
+    H["Header: one three-icon workbench switcher"] --> S["One sidebar: scope, New, search, primary list"]
+    H --> C["Canvas: conversation and opened resources"]
+    S --> C
+    C --> I["Contextual details: Task, evidence, activity"]
 ```
 
-- **Task strip là neo liên tục:** luôn hiện Task hiện hành, goal ngắn, state, source baseline, executor thực, spend/reservation và attention. Với chat chưa formalize, strip hiện `No active Task` cùng action tạo Task; không giả một Task ẩn.
+- **Task anchor:** hiện một hàng gọn khi session có Task đã bind hoặc attention cần xử lý. Click mở criteria, execution, cost và authority details. Chat thường hiện execution target/model trong composer; chi tiết `No Task` có thể nằm trong context menu, không chiếm một dashboard strip thường trực.
 - **Conversation là pane bền vững, không phải toàn workspace:** có thể ghim trái/phải, thu nhỏ thành dock hoặc mở toàn canvas. Composer gửi vào session hiện hành và hiển thị Task anchor của lượt kế tiếp.
 - **Workbench switcher đổi lens:** Coding ưu tiên repo/diff/test/terminal; Research ưu tiên corpus/source/claim/experiment; Copilot ưu tiên conversation/draft/calendar/automations. Các pane khác vẫn mở được khi cần.
 - **Inspector là control plane theo ngữ cảnh:** tab `Task`, `Context`, `Evidence`, `Activity`, `Permissions`. Pending approval, uncertain effect và conflict không được ẩn chỉ vì inspector đang đóng; chúng tạo attention item ở Task strip.
@@ -138,15 +136,109 @@ Transcript gốc vẫn ở session; workbench mới nhìn thấy summary có ngu
 
 | Lựa chọn | Dùng khi | Điều giữ | Điều tạo mới |
 |---|---|---|---|
-| **Open lens** | Cùng goal, chỉ cần công cụ khác | Cùng Task/session binding, criteria, sources, artifacts, budget | Presentation state và ContextPack theo lens |
+| **Open this conversation in…** | Cùng goal, chỉ cần công cụ khác | Cùng Task/session binding, criteria, sources, artifacts, budget | Lens membership/presentation state; ContextPack được compile khi thực hiện lượt mới |
 | **Add pack step** | Cùng outcome nhưng cần Research → Coding hoặc Coding → Assistant | Cùng parent Task và shared lineage | Workflow node/obligation, pack artifact và run mới |
 | **Fork child Task** | Goal/acceptance hoặc lifecycle đã tách | Selected source/artifact/decision refs có provenance | Task/revision/budget/authority riêng; liên kết parent-child |
 
-UI không dùng từ mơ hồ `Switch mode` cho cả ba hành vi. Menu chuyển workbench phải nói rõ `Open Coding view`, `Add implementation step`, hoặc `Fork as coding task`. Default là **Open lens** khi chỉ thay bố cục; mọi mutation của Task cần preview diff contract ngắn.
+Menu trên conversation phân biệt `Open in Coding`, `Add implementation step` và `Fork as coding task`. Bấm icon lens trên header là điều hướng tới view đã nhớ của lens đích theo §4.5; không dùng nó thay command chuyển conversation. Mọi mutation của Task cần preview diff contract ngắn.
 
 ### 4.4. Một chat có nhiều công việc
 
 Mỗi turn có thể hiện Task chip nhỏ; composer có `Working on: <Task>` và cho chọn `No Task`. Chuyển active Task chỉ định tuyến lượt tiếp theo, không sửa provenance turn cũ và không cấp quyền. Khi matcher tìm thấy nhiều Task tương tự, UI cho 1–3 lựa chọn; không auto-attach theo recency. User có thể chọn turn/artifact để `Attach`, `Move`, `Copy reference` hoặc `Fork`, còn merge Task là operation riêng có conflict preview.
+
+### 4.5. Điều hướng tối thiểu và tính nhất quán khi đổi ngữ cảnh
+
+**Quyết định thiết kế:** giữ header hiện có với ba icon workbench, một sidebar có thể thu gọn và canvas chứa conversation/resources. Mỗi quyết định chọn Project, session, Task, workspace và resource có identity riêng. Thiết kế này thay thế đề xuất thêm navigation rail thường trực và các danh sách đồng thời cho mọi loại đối tượng ở §4/§11. Đây là target dựa trên trace source; các bước dưới chưa được chứng minh bằng chạy ứng dụng hoặc usability study.
+
+**Bằng chứng OrCa:** [`set-active-worktree.ts`](../../../orca/src/renderer/src/store/slices/worktrees/session/set-active-worktree.ts) reconcile các tab rồi cập nhật workspace/host, selected tab/file/browser và explorer view trong cùng state update; focus không được ghi thành smart-sort activity. [`active-worktree-surface.ts`](../../../orca/src/renderer/src/store/slices/worktrees/session/active-worktree-surface.ts) chọn lại surface đã nhớ. [`tab-types.ts`](../../../orca/src/shared/tab-types.ts) tách tab instance, backing entity, worktree và tab group. Đây là cơ sở để Custos khôi phục một ngữ cảnh làm việc có identity đầy đủ. OrCa activation còn có terminal preparation/generation/wake behavior; Custos chỉ khôi phục presentation hoặc attach runtime đã xác minh, còn spawn/continue phải có command lifecycle riêng.
+
+**Bằng chứng Custos hiện tại:** [`StudioPage`](../../ui/desktop/src/app/studio/page.tsx) nhớ session theo Project/lens nhưng keys tab layout theo chuỗi tên Project/session/lens; selected workspace nằm riêng trong [`AppContext`](../../ui/desktop/src/context/AppContext.tsx). [`WorkspaceSidebar`](../../ui/desktop/src/components/shell/WorkspaceSidebar.tsx) nhận diện worktree theo path/parent, nhưng selection hiện đổi `workspace_id` mà không suy Project từ tên worktree; candidate path được đặt cạnh repo. Native send dùng `activeSession.workspaceId`, trong khi Files/header đọc selected workspace; model chat-turn hiện chưa truyền workspace trong `startRun`, nên execution binding vẫn cần hoàn tất. `sessionToWorkflowCard` nhận Task projection thật và sidebar có Chats/Tasks riêng; Task overview không tạo Session/Run khi mở.
+
+**Nội dung sidebar:**
+
+| Vị trí | Nội dung | Khi xuất hiện |
+|---|---|---|
+| Header | Bộ ba icon Copilot/Coding/Research hiện hữu, collapse button | Luôn có một vị trí chuyển lens |
+| Đầu sidebar | Project scope bằng tên rõ; picker có Personal và search | Không render Project thành thư mục giả hoặc dùng tên làm ID |
+| Hàng hành động | New conversation; menu cạnh nó có New task; search dùng command palette chung | Chat thường vào composer trực tiếp; yêu cầu Task dùng intake theo nhu cầu |
+| Context selector | Coding: repo/worktree/host; Research: study/corpus hoặc experiment folder; Copilot: scope cá nhân/project | Một hàng gọn; popover mở cây khi cần đổi, không giữ nguyên cây workspace toàn cục trong cả ba lens |
+| Danh sách chính | Conversations mặc định; lựa chọn Tasks trong cùng list header/menu | Một chế độ tại một thời điểm; Tasks dựa trên Task IDs, có cả Task không có conversation |
+| Attention | Một mục Needs you mở queue dùng chung | Chỉ khi backend có attention; current-item preview xuất hiện ở canvas khi đang xử lý |
+| Footer | Account/Settings/Connections | Không thêm các nhóm tính năng thường trực khác |
+
+Pinned và Recent dùng chung danh sách chính; chỉ tạo section khi có hàng. Workspace picker Coding có repo → main/linked worktrees, search và trạng thái active/running. Khi user cần giám sát nhiều worktrees, action `Manage workspaces` mở Worktree Manager hiện hữu trong canvas; không thêm permanent sidebar thứ hai. Full file tree ở Files, sources ledger ở Sources, experiment runs ở Lab, drafts/outbox ở resources Copilot; sidebar chỉ giữ ngữ cảnh và việc cần quay lại. Bộ lọc worktree là view của danh sách, không là owner của history; luôn có đường `All conversations` trong Project để tìm các chat chưa bind workspace.
+
+**Khác biệt của ba lens:** Coding nhớ checkout và file/diff/terminal; Research nhớ study/source/version và notebook/artifact; Copilot bắt đầu bằng chat rộng, mở draft/calendar/notes theo intent. Không tự mở ba tab mẫu khi tạo conversation. Pane của view đã dùng được khôi phục; first-use chỉ mở resource khi user chọn hoặc khi một kết quả thật cần được trình bày. Mỗi lens dùng chung typography, surfaces và spacing; icon, tên lens tại header/empty state và resource đặc trưng cung cấp nhận diện, màu nhấn chỉ bổ trợ. Switcher giữ icon-only với accessible name, tooltip khi focus/hover, selected/focus states; tên lens không lặp thành nhiều badge trên màn hình.
+
+**Transition contract:**
+
+| Thao tác | Hiệu ứng điều hướng | Contract cần giữ |
+|---|---|---|
+| Bấm icon lens | Lưu view hiện tại, restore view gần nhất của Project/lens đích | Không di chuyển session hiện tại sang lens khác; không sửa Task binding |
+| Open this conversation in… | Mở cùng session ID trong lens đích sau membership ack | Giữ task/resource refs; chưa tự thêm pack obligation hoặc chạy agent |
+| Chọn Project | Restore view của Project đó; nếu chưa có thì empty state | Không fallback vào một session/worktree ngoài Project |
+| Chọn workspace trong picker | Restore resource view của workspace và conversation đã bind gần nhất nếu có | Nếu chưa có conversation tương thích, hiện empty composer; không retarget conversation cũ |
+| Chọn conversation | Restore lens/view của lựa chọn, Task anchor và execution workspace đã bind | Nếu binding thiếu hoặc resource bị mất, giữ transcript; picker yêu cầu chọn trước hành động cần execution |
+| Chọn Task | Mở Task overview/run liên quan; conversation được chọn nếu có binding rõ | Task không có session vẫn hiển thị; không tạo session hay resume run chỉ vì mở |
+| Đổi execution target cho conversation hiện tại | Thao tác riêng từ context chip; kiểm source/binding và phản hồi backend | Native session phụ thuộc cwd cần continuation mới khi harness không hỗ trợ move; lịch sử turn cũ giữ target cũ |
+| Mở Files/Terminal/source/candidate | Mở đúng resource/run/workspace ID; preview resource khác được ghi nhãn | Pane đang preview không thay execution target của composer |
+| Đóng pane/sidebar | Lưu presentation state và giải phóng preview theo resource lifecycle | Stop run, archive workspace và xóa lịch sử là các thao tác có tên riêng |
+
+**Danh tính view:** chọn Project là phạm vi điều hướng; execution target thực đến từ Task/Run/session binding. Navigation reducer/facade áp dụng một selection gồm `project_ref`, `lens`, `session_id?`, `task_id?`, `workspace_id?` và focused resource cùng nhau, dựa trên existing IDs. Đây là state UI đích, chưa yêu cầu type Rust hoặc protocol mới. Cache last view theo Project ID/lens; lưu workspace layout và tab refs theo workspace ID/lens, conversation scroll/draft theo session ID. Resource tab có instance ID và backing reference gồm đúng workspace/run/source/artifact/version khi có; dedup theo reference, không chỉ theo tool type. Hai terminal khác nhau hoặc hai diff ở hai worktrees không được resolve thành cùng tab.
+
+Workspace binding chưa có trên backend thì hiển thị `Unbound` hoặc chọn target cho lần chạy mới; frontend không suy grant hoặc persistent relationship từ tên, path substring hoặc lựa chọn gần nhất. Pending text draft và resource selection không mất khi đổi view. Shell có thể cho preview worktree B cạnh chat bound A; composer giữ target A và pane ghi rõ B. Native agent session không được tiếp tục trên B bằng cách chỉ sửa một React field.
+
+**Attention và completion:** queue dựa trên Task/Run/effect/approval IDs, độc lập session list. Reading/unread chỉ biểu thị đã xem; badge đang chạy dựa trên Run, Task accepted dựa trên outcome. Các Task nội bộ `conversation_chat_turn` thuộc execution detail của conversation; chúng không tự thành một project Task mới trong danh sách mục tiêu của user. Chọn Tasks là một projection có tiêu chí rõ, không đổi trạng thái hay xóa internal records. `Opened agent panel` và `Agent started` phải là hai phản hồi khác nhau.
+
+**Trình tự triển khai tại các file hiện có:**
+
+1. `AppContext`/`StudioPage`: facade selection theo IDs, giữ bound target của conversation, xử lý missing/cross-workspace selection; dừng dùng Project name để route execution/history.
+2. `WorkspaceSidebar`/`WorkspaceTree`: Conversations/Tasks projection thật, compact context picker và một search chung; source/Task projection lỗi có retry, không tạo folder giả.
+3. `StudioPage`/`AppWorkspaceShell`/`OrcaTabbedContainer`: resource refs và layout restore đúng workspace/lens; default first-use chat; resource picker giữ tab hiện tại tới khi chọn.
+4. `AppHeader`/composer và execution facade: label/prompt target lấy cùng binding; available native/model paths trình bày capability thật; selection không khởi chạy agent.
+5. Nối backend bindings còn thiếu qua domain/core/persistence/runtime/daemon hiện hữu, cập nhật DTO/fixtures theo packet; sau đó mới polish spacing và màu. Không có crate hay store transcript mới được chỉ định bởi kế hoạch này.
+
+**Các journey phải kiểm:** A/B là hai worktrees cùng repo, cùng tên ở hai host, session không có workspace, Task không có session, hai conversations cùng Task, Research → Coding cùng session, đổi lens về view cũ, workspace bị archive trong lúc run còn sống, đóng pane khi run tiếp tục, stop đúng run sau khi chuyển view và reconnect giữ bound target. Kiểm cả state transition lẫn request `task_id/session_id/workspace_id/run_id`, không chỉ screenshot. Usability pass riêng cần chứng minh người dùng chỉ đúng execution target và tìm lại công việc mà không phải đọc toàn bộ mô hình nội bộ.
+
+### 4.6. Orca-inspired Tasks UI Suite: Cấu trúc thành phần và luồng điều hành công việc chuẩn
+
+Học hỏi từ cấu trúc UI của Orca ([`TaskPage.tsx`](../../../orca/src/renderer/src/components/task-page/TaskPage.tsx), [`SourceBar.tsx`](../../../orca/src/renderer/src/components/task-page/SourceBar.tsx), [`ListChrome.tsx`](../../../orca/src/renderer/src/components/task-page/ListChrome.tsx), và [`AgentKanbanBoard.tsx`](../../../orca/src/renderer/src/components/dashboard-popout/AgentKanbanBoard.tsx)), Custos xây dựng thành phần quản lý Tasks toàn diện tại `ui/desktop/src/components/tasks/`, kết nối trực tiếp với JSON-RPC daemon không dùng mock:
+
+```mermaid
+flowchart TD
+    Sidebar["Sidebar: Chats | Tasks"] --> Pane["TasksPane Container"]
+    Pane --> Toolbar["TaskToolbar: Search, Pack tabs, Status filter, Board/List toggle, New Task CTA"]
+    Pane --> Views{"View Mode"}
+    Views -->|Board View| Kanban["TaskKanbanBoard (4 Status Buckets)"]
+    Views -->|List View| Table["TaskListView (High-Density Sortable Table)"]
+    Views -->|Task Selected| Detail["TaskDetailView: Spec, Criteria, Worktree, Sessions, Status Lifecycle"]
+    Toolbar -->|Click + New Task| Modal["CreateTaskModal: Spec & Dynamic Acceptance Criteria Builder"]
+    Detail -->|Start / Open Conversation| ChatJump["Switch to Chats view & bind task_id"]
+```
+
+1. **Triết lý Task chuẩn từ Orca**:
+   - Tách rời rành mạch giữa **Task** (mục tiêu cấp cao, có hợp đồng nghiệm thu, gắn với workspace/worktree cụ thể) và **Conversation / Chat Turn** (trao đổi hội thoại chi tiết).
+   - Tự động lọc bỏ các turn nội bộ (`kind === 'turn_task'` hoặc `conversation_chat_turn`) khỏi bảng Tasks của người dùng, giữ cho danh mục công việc luôn sạch sẽ và tập trung vào mục tiêu lớn.
+2. **4 Cột Trạng thái chuẩn (Kanban Buckets)**:
+   - `Draft / Backlog`: Nhiệm vụ vừa tạo hoặc đang chờ kích hoạt.
+   - `In Progress / Working`: Nhiệm vụ đang có agent thực thi (hiển thị live pulse radar indicator).
+   - `Needs Review / Attention`: Nhiệm vụ bị chặn (blocked) hoặc đang chờ người dùng phê duyệt/nghiệm thu.
+   - `Completed / Done`: Nhiệm vụ đã hoàn thành đạt đủ bằng chứng kiểm chứng.
+3. **Chuyển đổi Dual-View (Board ↔ List)**:
+   - Cho phép người dùng chuyển đổi linh hoạt giữa giao diện thẻ trực quan và bảng danh sách mật độ cao.
+   - Lưu trạng thái hiển thị vào `localStorage` (`custos.tasks_view_mode`), tích hợp thanh công cụ tìm kiếm, bộ lọc domain pack (`Engineering`, `Research`, `Assistant`) và trạng thái vòng đời.
+4. **Acceptance Criteria Tracking**:
+   - Theo dõi tiến độ nghiệm thu rõ ràng (`N/M criteria met`).
+   - Phân biệt minh bạch giữa tiêu chí bắt buộc (Mandatory/Required) và tiêu chí khuyến nghị (Optional).
+5. **Execution Workspace / Worktree Binding**:
+   - Gắn trực tiếp Task với worktree hoặc repo cụ thể, hiển thị branch đang checkout và base commit hash.
+6. **Task-to-Conversation Continuity**:
+   - Cho phép mở nhanh các phiên chat đã gắn với Task, hoặc tạo ngay phiên chat mới mang thuộc tính `task_id`.
+   - Khi chuyển sang hội thoại, UI tự động điều hướng sang `Chats` view và ẩn `TasksPane` mà không gây mất dấu Task đang thực thi.
+7. **Modal Tạo Task với Dynamic Criteria Builder**:
+   - Hỗ trợ nhập Title, Domain Pack, Markdown Specification, chọn Worktree gắn kết, và thêm/bớt động các tiêu chí nghiệm thu kèm cờ bắt buộc.
+8. **Đảm bảo Hexagonal Architecture & Zero Mock Data**:
+   - Mọi thao tác đều gọi trực tiếp daemon JSON-RPC (`v1.tasks.create`, `v1.tasks.get`, `v1.tasks.list`, `v1.tasks.advance`, `v1.tasks.complete`, `v1.tasks.cancel`), tuân thủ quy tắc verification proof trước khi hoàn thành task (`v1.tasks.complete`).
 
 ## 5. Coding workspace
 
@@ -241,7 +333,7 @@ Every command needs command ID/actor/expected version where state-sensitive; eve
 
 ### 9.1. Presentation state và deep link
 
-`WorkbenchViewState` là projection phía client, có version và có thể rebuild; nó không nằm trong TaskContract và không quyết định quyền. Tối thiểu gồm `workspace_id`, `task_id?`, `active_session_id?`, `lens`, pane tree, focused pane, resource references, inspector tab và local sizing. Persist theo user/device/window; khi resource thiếu hoặc source revision stale, mở placeholder có nguyên nhân thay vì bỏ pane âm thầm.
+`WorkbenchViewState` là projection phía client, có version và có thể rebuild; nó không nằm trong TaskContract và không quyết định quyền. Tối thiểu gồm `project_ref?`, `workspace_id?`, `task_id?`, `active_session_id?`, `lens`, pane tree, focused pane, resource references, inspector tab và local sizing. Workspace có thể vắng mặt ở personal chat và một số research/assistant flow. Persist theo user/device/window và identity của workspace/session theo §4.5; khi resource thiếu hoặc source revision stale, mở placeholder có nguyên nhân thay vì bỏ pane âm thầm.
 
 Deep link đích dùng IDs ổn định, ví dụ `workspace/<id>/task/<id>?lens=research&resource=<source-ref>`. Link không nhúng secret/permit và khi mở phải recheck actor/scope. Restore layout chỉ mount view; không resume run, retry effect, tạo terminal hoặc khởi động notebook cho tới command tường minh.
 
@@ -333,7 +425,7 @@ Không cần thay Tauri, viết lại React, hay mở thêm một desktop produc
 
 | Vùng | Khi chưa có Task | Khi đang làm Task | Khi cần human |
 |---|---|---|---|
-| Header/Task strip | `No active Task`, provider/egress thực và action tạo/attach | Goal, revision, pack obligations, source baseline, actual executor/assurance theo action, spend known/estimated/unknown | Attention count và trạng thái pending/uncertain luôn thấy được, kể cả inspector đóng |
+| Header/Task anchor | Tên conversation/lens; model và context chip ở composer, có action tạo/attach Task | Goal/state gọn khi có Task; revision, obligations, assurance và cost mở trong detail | Attention item hiện rõ và mở đúng effect/approval dù inspector đóng |
 | Sidebar | Recent conversations và workspace resources, không đổ toàn bộ demo vào live | Task liên quan, sessions bind, runs và nguồn; filter theo ID/pack thật | Approval/conflict/stale/disconnected đứng đầu danh sách |
 | Canvas | Copilot chat chiếm chiều rộng hữu ích; không có vùng rỗng vô cớ | Coding: chat + file/diff/test/terminal; Research: chat + source/claims/experiment; Copilot: chat + draft/calendar/outbox | Giữ selection/pane, mở preview exact effect hoặc evidence liên quan |
 | Inspector | Thu gọn; không giả `Verified` | Context, criteria, evidence, activity, permission, cost trên cùng Task | Tự mở đúng tab nhưng không tự approve, retry hay gửi effect |
@@ -342,7 +434,9 @@ Open lens chỉ đổi view và được phép tức thì. `Add Research/Coding/
 
 **Wide window:** khi không có pane phải, conversation dùng toàn vùng sau sidebar với max readable text width ở giữa, không giữ một cột chat cố định 45%. Khi mở pane, splitter cho hai vùng có min-width; dưới ngưỡng desktop hẹp chỉ một vùng chính cùng tab/drawer để tránh text/code bị ép dưới chiều rộng đọc được. Tab `New tab` không được mang tên một resource đã tồn tại, còn pane rỗng phải cho thấy chọn file/source/diff hoặc đóng pane. Pane layout có thể lưu local theo user/window, nhưng restore không mở process/agent hay đánh thức effect.
 
-**Tab tài nguyên do Studio shell sở hữu theo từng lens/workbench:** thứ tự, tab được chọn và thao tác đóng/mở nằm trên ba lens độc lập (mỗi lens duy trì tab strip riêng biệt: Coding mở Files, Research mở Sources, Copilot mở Notes). Nút `+` mở New Tab nhiều lần như trình duyệt (mỗi tab có instance ID riêng), cho phép mở đồng thời nhiều terminal, files hoặc công cụ. Trang New Tab chỉ hiển thị danh mục hỗ trợ thuộc đúng workbench hiện tại (Coding: Engineering & Shared; Research: Research & Shared; Copilot: Assistant & Shared), kèm category pills và search lọc nhanh, không hiển thị tràn lan toàn bộ công cụ khác workbench. Đóng pane không để tab strip mồ côi trên header. Research có Literature, Claims, Experiments và Synthesis; mỗi tab hiện trạng thái chưa kết nối cho tới khi API cung cấp nguồn, claim hoặc run có version. Provenance của artifact nghiên cứu cần nối tới nguồn, code, environment và run khi có dữ liệu; đây là điều học từ [Claude Science](https://www.anthropic.com/news/claude-science-ai-workbench), không phải claim Custos đã có scientific backend.
+**Tab tài nguyên do Studio shell sở hữu:** layout được nhớ theo workspace/lens, conversation draft/scroll theo session; first-use bắt đầu bằng conversation và chưa tự tạo resource tabs. `+` mở picker nổi của workbench hiện tại, giữ nội dung đang xem tới khi chọn resource; chọn rồi mới tạo tab instance hoặc reveal backing resource đã mở. Có thể mở hai terminal/files/diffs khi resource identities khác nhau theo §4.5. Coding ưu tiên Files/Changes/Terminal, Research ưu tiên Sources/Claims/Experiments/Synthesis, Copilot ưu tiên Notes/Drafts/Calendar khi cần. Đóng pane không để tab strip mồ côi. Mỗi resource hiện unavailable hoặc missing-data có nguyên nhân khi chưa được API hỗ trợ. Provenance của artifact nghiên cứu nối source, code, environment và run khi có dữ liệu; đây là hướng học từ [Claude Science](https://www.anthropic.com/news/claude-science-ai-workbench), không phải claim Custos đã có scientific backend.
+
+**Failure/display contract:** A successful empty list is distinct from a failed read. Keep previously known data on transient read errors and show a persistent Retry path for saved-work hydration; never turn daemon failures into `[]`. A chat dispatch failure attaches to the submitted turn with the truthful persisted/not-persisted state; it is not an assistant answer and must not also create a duplicate toast. Run activities are a timeline, not a workflow DAG or verification result. Browser's local navigation errors are not a page console or network trace; absent native inspection capabilities must not produce synthetic selectors, status codes or timing.
 
 ### 11.3. Chi tiết bắt buộc theo lens
 
@@ -448,6 +542,8 @@ Current Local API deletion scope is intentionally narrow: `v1.sessions.delete` r
 Lịch sử từng workbench là filter `membership OR home_lens`, thêm Task/project/updated_at để điều hướng; global search tìm toàn bộ session mà actor được phép đọc. Một session có thể hiện ở hai sidebar, nhưng chỉ một `session_id`. Khi người dùng chọn Task khác trong cùng chat, turn mới bind Task mới; các turn cũ giữ nguyên binding. Trường hợp imported Codex/Claude transcript cần lưu origin/harness cùng độ tin cậy của timestamp/tool receipt, không giả nó là journal native đầy đủ.
 
 Desktop dùng từ `Workspace` cho repo/thư mục/worktree hoặc execution scope, `Workbench` cho Copilot/Coding/Research lens, `Task` cho công việc có contract và `Session` cho hội thoại. Nút `+ New` ở cùng vị trí trong cả ba lens mở lựa chọn Chat session hoặc Task; chỉ Task tạo TaskContract. Tạo chat rỗng phải gắn home lens bằng journal event bền vững. Đổi lens mặc định khôi phục session đã thuộc lens đích hoặc để trống, không tự mở session của lens nguồn. Mở chéo bằng `OpenLens` là thao tác riêng của người dùng. Resource canvas có đường retry khi daemon/API lỗi.
+
+Sidebar chọn một trong hai projection ngang hàng `Chats` hoặc `Tasks`, không trộn Task thành hàng Session. `Chats` điều hướng session/journal của lens hiện tại; `Tasks` lấy Task thật từ daemon, lọc chat-turn nội bộ (`metadata.kind = conversation_chat_turn`) và lọc theo pack/lens. Chọn Task mở overview có status/contract và những Session có binding rõ; nếu không có Session, overview vẫn dùng được và không sinh Session/Run ngầm. Mở một conversation liên quan là thao tác riêng, trả người dùng về Chats. `+ New` giữ cùng vị trí ở mọi lens; modal phân biệt Chat với Task (Task hiện tạo contract cùng Session gắn Task theo API hiện có). Project và ExecutionWorkspace là lựa chọn độc lập: chọn worktree chỉ đổi workspace ID, không gọi `onSelectProject` theo tên nhánh/worktree. Candidate worktree nằm cạnh repo (`<repo>.worktrees/<branch>`), không nằm trong cây repo.
 
 Task chưa có Session không được vật hóa thành session giả; danh sách Task độc lập phải dùng `task_id` đúng kiểu. Bucket hội thoại mặc định không xuất hiện như repo trong Workspace tree. Claim validation không thông báo đã verified khi verifier chưa kết nối; khóa draft không tạo Outbox action; notebook save phải giữ toàn bộ cell snapshot.
 
@@ -661,6 +757,26 @@ Appearance preferences extend the existing custos.appearance.preferences device-
 AppContext coalesces live snapshots and progressively reveals incoming text at bounded intervals, catching up quickly to burst delivery. Existing text from an initial replay renders immediately. Terminal states, watcher completion, hidden pages and app/system reduced motion flush complete text immediately. Timers are cancelled with the live watcher. The projection never changes canonical provider output or event cursors.
 
 Live response scheduling uses requestAnimationFrame only for the visible active conversation, with a 40 ms publication interval (25 updates per second). Inactive runs coalesce snapshots on a 200 ms timer without reveal animation. View/visibility changes cancel pending frames and synchronize the latest text; terminal states flush immediately. Frame/timer callbacks are disposed with the watcher.
+
+### Fixed Left Activity Rail & User Profile Menu (Orca Parity)
+
+Custos Desktop features an Orca-inspired fixed vertical Activity Rail spanning the far-left edge of the entire application window:
+- **Geometry & Alignment**: `w-14` (56px) width, matte surface `bg-[#131315]`, subtle border-r `border-border-default/40`.
+- **macOS Titlebar Overlay Integration**: Under `titleBarStyle: "Overlay"`, macOS native traffic lights (red, yellow, green) are anchored at `(x: 13, y: 14)`. The Activity Rail handles this with an integrated top drag region `pt-10` (`data-tauri-drag-region`) to ensure traffic lights breathe smoothly above navigation icons, while Windows and Linux use standard top padding with native window controls positioned at the top-right of `AppHeader`.
+- **Top Navigation Group**:
+  1. **Home (`Home`)**: Direct routing to Sovereign Studio (`/studio`) and active workbench chat (`⌘1`).
+  2. **Agent Dashboard (`LayoutDashboard`)**: Direct routing to Agent Fleet Dashboard (`/dashboard`) (`⌘2`).
+  3. **Providers (`Cpu`)**: Model catalog and local/cloud provider connectivity (`/providers`) (`⌘3`).
+  4. **Plugins (`Blocks`)**: Modular extensions and Model Context Protocol (MCP) tool host dialog.
+  5. **Skills (`Sparkles`)**: Domain-specific local reasoning skill catalog and parameter inspector.
+  6. **Tasks (`ListTodo`)**: Fast entrypoint to task Kanban board and recent work items.
+- **Bottom Section & User Profile Menu**:
+  - **System Synchronized Indicator**: Blue circular pill with `Download` icon indicating local daemon status and update checks.
+  - **User Profile Avatar**: Circular avatar with initials ("TV", Trần Vĩ) with a pink/rose gradient. Clicking toggles the floating `UserProfileMenu` popover matching Orca's canonical design:
+    - User Identity card: Name ("Trần Vĩ") and Tier ("Plus").
+    - **Settings**: Triggers sovereign Settings dialog with shortcut `⌘,`.
+    - **Help (`?`)**: Opens Help, keyboard shortcuts cheatsheet, daemon IPC status (`127.0.0.1:58653`), and architecture documentation.
+    - **Log out**: Clean session sign-out and disconnect action.
 
 Conversation model-picker presentation keeps its header and rounded footer inside one height-bounded flex surface; only the model list scrolls, while reasoning submenus remain outside the surface bounds. Effort selection invalidates the memoized model projection immediately, including when the routed model ID is unchanged, and retains the existing device-local preference. The conversation retains the upper scroll-blur overlay when content is scrolled, using a transparent masked backdrop blur without a canvas-colored gradient band; the bottom indicator and follow-bottom behavior remain intact. No runtime or provider contract changes.
 
