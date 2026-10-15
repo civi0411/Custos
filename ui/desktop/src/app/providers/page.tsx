@@ -1,28 +1,21 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
-import { ProvidersView } from '@/components/providers/ProvidersView';
 
-/** Keep the dedicated route on the same daemon-backed provider surface as Settings. */
+/**
+ * ProvidersPage (Legacy route: `/providers`)
+ * Redirects seamlessly to `/studio` and opens the unified in-place SettingsModal on the 'providers' tab.
+ * Eliminates the duplicate standalone ProvidersView page and consolidates all provider/model management.
+ */
 export const ProvidersPage: React.FC = () => {
-  const {
-    providers,
-    clientKeys,
-    setIsAddProviderOpen,
-    handleGenerateClientKey,
-    handleRevokeClientKey,
-    handleTestConnection,
-    handleDeleteProvider,
-  } = useAppContext();
+  const { openSettings } = useAppContext();
 
-  return <ProvidersView
-    providers={providers}
-    clientKeys={clientKeys}
-    onOpenAddProviderModal={() => setIsAddProviderOpen(true)}
-    onGenerateClientKey={() => { void handleGenerateClientKey(); }}
-    onRevokeClientKey={(id) => { void handleRevokeClientKey(id); }}
-    onTestConnection={(id) => { void handleTestConnection(id); }}
-    onDeleteProvider={(id) => { void handleDeleteProvider(id); }}
-  />;
+  useEffect(() => {
+    openSettings('providers');
+  }, [openSettings]);
+
+  return <Navigate to="/studio" replace />;
 };
 
 export default ProvidersPage;
+

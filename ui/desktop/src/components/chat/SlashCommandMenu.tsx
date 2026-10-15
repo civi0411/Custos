@@ -12,6 +12,7 @@ import {
   FlaskConical,
   Table,
   Inbox,
+  ListTodo,
 } from 'lucide-react';
 
 export type WorkspaceLens = 'coding' | 'research' | 'assistant';
@@ -74,6 +75,20 @@ export const LENS_THEME_CONFIG: Record<
 };
 
 export const SLASH_COMMANDS: SlashCommandDef[] = [
+  // Task Creation Action
+  {
+    command: '/task',
+    label: 'New Task',
+    description: 'Create a formal task with criteria, specification, and worktree binding',
+    jobId: 'core__create_task',
+    lens: 'coding',
+    icon: ListTodo,
+    hasArgs: true,
+    argPlaceholder: '<task title>',
+    getInputs: (args) => ({
+      title: args.trim() || 'New Task',
+    }),
+  },
   // Coding / Engineering Actions
   {
     command: '/review',

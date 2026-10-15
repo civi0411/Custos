@@ -16,6 +16,9 @@ import {
   Server,
   Smartphone,
   ArrowRight,
+  ArrowRightLeft,
+  Columns2,
+  X,
   Send,
   Users,
   Calendar,
@@ -110,6 +113,12 @@ export interface ResourceTabsState {
   activeTabId: string;
   setTabs: React.Dispatch<React.SetStateAction<OrcaTab[]>>;
   setActiveTabId: React.Dispatch<React.SetStateAction<string>>;
+  splitTabId?: string | null;
+  setSplitTabId?: React.Dispatch<React.SetStateAction<string | null>>;
+  splitRatio?: number;
+  setSplitRatio?: React.Dispatch<React.SetStateAction<number>>;
+  toggleSplitTab?: (tabId: string) => void;
+  closeSplitTab?: () => void;
 }
 
 interface OrcaTabbedContainerProps {
@@ -126,7 +135,7 @@ interface OrcaTabbedContainerProps {
   onAskAgent?: (draft: string) => void;
   onHandoffToCoding?: (claims: unknown[]) => void;
   splitPercent?: number;
-  onOpenTab?: (id: OrcaTabId) => void;
+  onOpenTab?: (id: OrcaTabId, customUrl?: string, customTitle?: string) => void;
   activeWorkspaceId?: string;
   onSelectWorkspace?: (id: string) => void;
   activeWorkspace?: import('@/types/domain').ExecutionWorkspace | null;
@@ -318,7 +327,7 @@ export function resolveResources(
   capabilities: CapabilityDescriptor[],
   loaded: boolean,
   failed: boolean,
-  _nativeHost?: boolean
+  nativeHost = false
 ): ResourceDefinition[] {
   const aliases: Partial<Record<OrcaTabId, string>> = {
     activity: 'kanban',
@@ -330,7 +339,8 @@ export function resolveResources(
     if (def.id === 'browser' || def.id === 'emulator') {
       return {
         ...def,
-        status: 'available',
+        status: nativeHost ? 'available' : 'unavailable',
+        reason: nativeHost ? undefined : 'Native browser preview requires the Custos desktop host.',
         supportedOperations: [],
       };
     }
@@ -478,8 +488,6 @@ const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
   );
 
   const activeTab = resourceTabs.tabs.find((t) => t.id === resourceTabs.activeTabId);
-  const activeType: OrcaTabId = activeTab ? getTabType(activeTab) : (resourceTabs.activeTabId.split('-')[0] as OrcaTabId);
-  const activeResource = resources.find((resource) => resource.id === activeType);
 
   const openResource = (resource: ResourceDefinition) => {
     const newTabId = `${resource.id}-${Date.now()}`;
@@ -519,214 +527,389 @@ const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
     );
   }, [resources, mode]);
 
-  // New Tab Surface Picker
-  if (activeType === 'tools') {
+  const renderTab = (tab: OrcaTab | undefined) => {
+    if (!tab) return null;
+    const tabType = getTabType(tab);
+    const tabResource = resources.find((resource) => resource.id === tabType);
+
+    if (tabType === 'tools') {
+      return (
+        <div className="h-full overflow-y-auto bg-[var(--color-canvas)] p-4 text-[var(--color-editor-fg)]">
+          <div className="mx-auto max-w-md">
+            <h2 className="mb-3 text-xs font-semibold">Resources</h2>
+            <div className="space-y-1">
+              {visibleResources.map((resource) => {
+                const Icon = resource.icon;
+                return (
+                  <button
+                    key={resource.id}
+                    type="button"
+                    onClick={() => openResource(resource)}
+                    className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left hover:bg-[var(--color-surface-2)]"
+                    title={resource.reason || resource.description}
+                  >
+                    <Icon className="h-4 w-4 shrink-0 text-[var(--color-fg-muted)]" />
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium">{resource.title}</span>
+                    {resource.status !== 'available' && (
+                      <span className="text-[10px] text-[var(--color-fg-muted)]">
+                        {resource.status === 'degraded' ? 'Limited' : 'Unavailable'}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (tabResource?.status === 'unavailable') {
+      return <UnavailableResource resource={tabResource} onRetry={() => setCapabilityAttempt((attempt) => attempt + 1)} />;
+    }
+
+    const frameTabResource = (content: React.ReactNode) => (
+      <div className="flex h-full min-h-0 flex-col bg-[var(--color-canvas)]">
+        {tabResource?.reason && tabResource.status === 'degraded' && (
+          <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/5 px-3 py-1.5 text-[10px] text-amber-600 dark:text-amber-300">
+            {tabResource.reason}
+          </div>
+        )}
+        <div className="min-h-0 flex-1">{content}</div>
+      </div>
+    );
+
+    // Coding Mappings
+    if (tabType === 'files' || tabType === 'changes') {
+      return frameTabResource(
+        <FilesChangesPane
+          sessionId={session?.id}
+          initialWorkspaceId={tab.workspaceId || activeWorkspaceId || initialFilesWorkspaceId}
+          activeWorkspaceId={activeWorkspaceId}
+          onSelectWorkspace={onSelectWorkspace}
+          onShowToast={onShowToast}
+          onOpenTab={onOpenTab}
+        />
+      );
+    }
+
+    if (tabType === 'activity' || tabType === 'kanban' || tabType === 'evidence' || tabType === 'dag') {
+      return frameTabResource(
+        <ActivityPane
+          sessionId={session?.id}
+          onShowToast={onShowToast}
+          onAskAgent={onAskAgent}
+          onOpenTab={onOpenTab}
+        />
+      );
+    }
+
+    if (tabType === 'worktrees') {
+      return frameTabResource(
+        <WorktreeManagerPane
+          activeWorkspaceId={activeWorkspaceId}
+          onSelectWorkspace={onSelectWorkspace}
+          onShowToast={onShowToast}
+          onOpenWorkspaceResource={(resource, workspaceId) => {
+            onSelectWorkspace?.(workspaceId);
+            if (resource === 'agents') setInitialAgentWorkspaceId(workspaceId);
+            if (resource === 'files') setInitialFilesWorkspaceId(workspaceId);
+            if (resource === 'terminal') setInitialTerminalWorkspaceId(workspaceId);
+            onOpenTab?.(resource);
+          }}
+        />
+      );
+    }
+
+    if (tabType === 'agents') {
+      return frameTabResource(
+        <AgentsWorkbenchPane
+          key={tab.id}
+          tabId={tab.id}
+          initialHarnessId={tab.agentId}
+          sessionId={session?.id}
+          initialWorkspaceId={tab.workspaceId || activeWorkspaceId || initialAgentWorkspaceId}
+          activeWorkspaceId={activeWorkspaceId}
+          onSelectWorkspace={onSelectWorkspace}
+          onShowToast={onShowToast}
+          onOpenTab={onOpenTab}
+        />
+      );
+    }
+
+    if (tabType === 'terminal') {
+      return frameTabResource(
+        <TerminalWorkbenchPane
+          initialWorkspaceId={tab.workspaceId || activeWorkspaceId || initialTerminalWorkspaceId}
+          activeWorkspaceId={activeWorkspaceId}
+          onSelectWorkspace={onSelectWorkspace}
+        />
+      );
+    }
+
+    if (tabType === 'fleet') {
+      return frameTabResource(
+        <RemoteFleetWorkbenchPane
+          onShowToast={onShowToast}
+          supportedOperations={tabResource?.supportedOperations ?? []}
+          capabilityReason={tabResource?.reason}
+        />
+      );
+    }
+
+    // Research Mappings
+    if (tabType === 'literature') {
+      return frameTabResource(
+        <LiteraturePane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />
+      );
+    }
+
+    if (tabType === 'findings' || tabType === 'claims') {
+      return frameTabResource(
+        <FindingsPane
+          sessionId={session?.id}
+          onHandoffToCoding={(claims) => onHandoffToCoding?.(claims)}
+          onShowToast={onShowToast}
+          onOpenTab={onOpenTab}
+        />
+      );
+    }
+
+    if (tabType === 'lab' || tabType === 'experiments' || tabType === 'runs') {
+      return frameTabResource(
+        <LabPane
+          sessionId={session?.id}
+          onAskAgent={onAskAgent}
+          onShowToast={onShowToast}
+          onOpenTab={onOpenTab}
+        />
+      );
+    }
+
+    if (tabType === 'knowledge') {
+      return frameTabResource(<ResearchMethodsPane />);
+    }
+
+    if (tabType === 'synthesis') {
+      return frameTabResource(<ResearchSynthesisPane onShowToast={onShowToast} />);
+    }
+
+    if (tabType === 'artifacts') {
+      return frameTabResource(
+        <ArtifactsWorkbenchPane onShowToast={onShowToast} onAskAgent={onAskAgent} />
+      );
+    }
+
+    // Copilot Mappings
+    if (tabType === 'drafts') {
+      return frameTabResource(
+        <DraftsPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />
+      );
+    }
+
+    if (tabType === 'outbox') {
+      return frameTabResource(
+        <OutboxPane onShowToast={onShowToast} />
+      );
+    }
+
+    if (tabType === 'contacts') {
+      return frameTabResource(
+        <ContactsCalendarPane type="contacts" onShowToast={onShowToast} onOpenTab={onOpenTab} />
+      );
+    }
+
+    if (tabType === 'calendar') {
+      return frameTabResource(
+        <ContactsCalendarPane type="calendar" onShowToast={onShowToast} onOpenTab={onOpenTab} />
+      );
+    }
+
+    if (tabType === 'notes') {
+      return frameTabResource(
+        <NotesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} onAskAgent={onAskAgent} />
+      );
+    }
+
+    // Shared Browser & Emulator
+    if (tabType === 'browser') {
+      return (
+        <React.Suspense
+          fallback={
+            <div role="status" aria-label="Loading browser" className="h-full p-8 bg-canvas space-y-5 motion-safe:animate-pulse">
+              <div className="h-7 w-2/3 bg-surface-2 rounded" />
+              <div className="h-32 bg-surface-1 rounded" />
+            </div>
+          }
+        >
+          <BrowserWorkbenchPane
+            tabId={tab.id}
+            active={true}
+            url={tab.url.startsWith('custos:') ? 'about:blank' : tab.url}
+            onUrlChange={(url) =>
+              resourceTabs.setTabs((previous) =>
+                previous.map((item) => (item.id === tab.id && item.url !== url ? { ...item, url } : item))
+              )
+            }
+            onAskAgent={onAskAgent}
+          />
+        </React.Suspense>
+      );
+    }
+
+    if (tabType === 'emulator') {
+      return (
+        <React.Suspense
+          fallback={
+            <div role="status" aria-label="Loading emulator" className="h-full p-8 bg-canvas space-y-5 motion-safe:animate-pulse">
+              <div className="h-7 w-2/3 bg-surface-2 rounded" />
+              <div className="h-32 bg-surface-1 rounded" />
+            </div>
+          }
+        >
+          <MobileSimulatorWorkbenchPane
+            tabId={tab.id}
+            active={true}
+            url={tab.url.startsWith('custos:') ? 'about:blank' : tab.url}
+            onUrlChange={(url) =>
+              resourceTabs.setTabs((previous) =>
+                previous.map((item) => (item.id === tab.id && item.url !== url ? { ...item, url } : item))
+              )
+            }
+            onAskAgent={onAskAgent}
+          />
+        </React.Suspense>
+      );
+    }
+
+    return tabResource
+      ? <UnavailableResource resource={tabResource} />
+      : <UnavailableResource resource={{ id: 'tools', title: 'Unknown resource', description: 'The selected resource is not supported by this client.', icon: Wrench, group: 'Shared', status: 'unavailable', reason: 'The selected resource is not supported by this client.' }} />;
+  };
+
+  const isSplitActive = Boolean(
+    resourceTabs.splitTabId &&
+    resourceTabs.splitTabId !== resourceTabs.activeTabId &&
+    resourceTabs.tabs.some((t) => t.id === resourceTabs.splitTabId)
+  );
+
+  const splitTab = isSplitActive
+    ? resourceTabs.tabs.find((t) => t.id === resourceTabs.splitTabId)
+    : undefined;
+
+  const splitRatio = resourceTabs.splitRatio ?? 50;
+  const setSplitRatio = resourceTabs.setSplitRatio;
+  const splitContainerRef = React.useRef<HTMLDivElement>(null);
+  const isDraggingSplit = React.useRef(false);
+
+  React.useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingSplit.current || !splitContainerRef.current || !setSplitRatio) return;
+      const rect = splitContainerRef.current.getBoundingClientRect();
+      const newRatio = ((e.clientX - rect.left) / rect.width) * 100;
+      if (newRatio >= 20 && newRatio <= 80) {
+        setSplitRatio(Math.round(newRatio));
+      }
+    };
+    const handleMouseUp = () => {
+      isDraggingSplit.current = false;
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [setSplitRatio]);
+
+  if (isSplitActive && splitTab) {
     return (
-      <div className="h-full overflow-y-auto bg-[var(--color-canvas)] p-4 text-[var(--color-editor-fg)]">
-        <div className="mx-auto max-w-md">
-          <h2 className="mb-3 text-xs font-semibold">Resources</h2>
-          <div className="space-y-1">
-            {visibleResources.map((resource) => {
-              const Icon = resource.icon;
-              return (
-                <button
-                  key={resource.id}
-                  type="button"
-                  onClick={() => openResource(resource)}
-                  className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left hover:bg-[var(--color-surface-2)]"
-                  title={resource.reason || resource.description}
-                >
-                  <Icon className="h-4 w-4 shrink-0 text-[var(--color-fg-muted)]" />
-                  <span className="min-w-0 flex-1 truncate text-xs font-medium">{resource.title}</span>
-                  {resource.status !== 'available' && <span className="text-[10px] text-[var(--color-fg-muted)]">{resource.status === 'degraded' ? 'Limited' : 'Unavailable'}</span>}
-                </button>
-              );
-            })}
+      <div ref={splitContainerRef} className="flex h-full w-full min-h-0 min-w-0 flex-row overflow-hidden relative">
+        {/* Left Pane (Primary Active Tab) */}
+        <div
+          className="h-full min-h-0 min-w-0 overflow-hidden flex flex-col"
+          style={{ width: `${splitRatio}%` }}
+        >
+          {renderTab(activeTab)}
+        </div>
+
+        {/* Draggable Inner Splitter */}
+        <div
+          className="w-1.5 h-full bg-white/5 hover:bg-workbench-accent cursor-col-resize shrink-0 z-30 transition-colors flex items-center justify-center group select-none relative"
+          onMouseDown={() => {
+            isDraggingSplit.current = true;
+          }}
+          onDoubleClick={() => setSplitRatio?.(50)}
+          title="Kéo để chỉnh tỷ lệ song song (Nhấn đúp về 50/50)"
+        >
+          <div className="w-0.5 h-8 rounded-full bg-white/20 group-hover:bg-white transition-colors" />
+        </div>
+
+        {/* Right Pane (Secondary Split Tab) */}
+        <div
+          className="h-full min-h-0 min-w-0 overflow-hidden flex flex-col border-l border-white/10"
+          style={{ width: `${100 - splitRatio}%` }}
+        >
+          {/* Sub-Header for Parallel Split Pane */}
+          <div className="h-7 px-2.5 bg-[#18181b] border-b border-white/10 flex items-center justify-between shrink-0 select-none">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="px-1 py-0.2 rounded text-[8.5px] font-mono bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/30">
+                2
+              </span>
+              <span className="text-[11px] font-medium text-white/90 truncate">
+                {splitTab.title}
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const currentActive = resourceTabs.activeTabId;
+                  resourceTabs.setActiveTabId(splitTab.id);
+                  resourceTabs.setSplitTabId?.(currentActive);
+                }}
+                className="p-1 rounded text-white/40 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                title="Đổi vị trí 2 tab (Swap panes)"
+              >
+                <ArrowRightLeft className="size-3" />
+              </button>
+              <button
+                type="button"
+                onClick={() => resourceTabs.closeSplitTab?.()}
+                className="p-1 rounded text-white/40 hover:text-white hover:bg-white/10 transition cursor-pointer"
+                title="Đóng chế độ song song (Close split view)"
+              >
+                <X className="size-3" />
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {renderTab(splitTab)}
           </div>
         </div>
       </div>
     );
   }
 
-  if (activeResource?.status === 'unavailable') {
-    return <UnavailableResource resource={activeResource} onRetry={() => setCapabilityAttempt((attempt) => attempt + 1)} />;
-  }
-
-  const frameResource = (content: React.ReactNode) => (
-    <div className="flex h-full min-h-0 flex-col bg-[var(--color-canvas)]">
-      {activeResource?.reason && activeResource.status === 'degraded' && (
-        <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/5 px-3 py-1.5 text-[10px] text-amber-600 dark:text-amber-300">
-          {activeResource.reason}
-        </div>
-      )}
-      <div className="min-h-0 flex-1">{content}</div>
-    </div>
-  );
-
-  // Coding Mappings
-  if (activeType === 'files' || activeType === 'changes') {
-    return frameResource(
-      <FilesChangesPane
-        sessionId={session?.id}
-        initialWorkspaceId={activeWorkspaceId || initialFilesWorkspaceId}
-        activeWorkspaceId={activeWorkspaceId}
-        onSelectWorkspace={onSelectWorkspace}
-        onShowToast={onShowToast}
-        onOpenTab={onOpenTab}
-      />
-    );
-  }
-
-  if (activeType === 'activity' || activeType === 'kanban' || activeType === 'evidence' || activeType === 'dag') {
-    return frameResource(
-      <ActivityPane
-        sessionId={session?.id}
-        onShowToast={onShowToast}
-        onAskAgent={onAskAgent}
-        onOpenTab={onOpenTab}
-      />
-    );
-  }
-
-  if (activeType === 'worktrees') {
-    return frameResource(
-      <WorktreeManagerPane
-        activeWorkspaceId={activeWorkspaceId}
-        onSelectWorkspace={onSelectWorkspace}
-        onShowToast={onShowToast}
-        onOpenWorkspaceResource={(resource, workspaceId) => {
-          onSelectWorkspace?.(workspaceId);
-          if (resource === 'agents') setInitialAgentWorkspaceId(workspaceId);
-          if (resource === 'files') setInitialFilesWorkspaceId(workspaceId);
-          if (resource === 'terminal') setInitialTerminalWorkspaceId(workspaceId);
-          onOpenTab?.(resource);
-        }}
-      />
-    );
-  }
-
-  if (activeType === 'agents') {
-    return frameResource(
-      <AgentsWorkbenchPane
-        key={activeTab?.id}
-        tabId={activeTab?.id}
-        initialHarnessId={activeTab?.agentId}
-        sessionId={session?.id}
-        initialWorkspaceId={activeTab?.workspaceId || activeWorkspaceId || initialAgentWorkspaceId}
-        activeWorkspaceId={activeWorkspaceId}
-        onSelectWorkspace={onSelectWorkspace}
-        onShowToast={onShowToast}
-        onOpenTab={onOpenTab}
-      />
-    );
-  }
-
-  if (activeType === 'terminal') {
-    return frameResource(
-      <TerminalWorkbenchPane
-        initialWorkspaceId={activeWorkspaceId || initialTerminalWorkspaceId}
-        activeWorkspaceId={activeWorkspaceId}
-        onSelectWorkspace={onSelectWorkspace}
-      />
-    );
-  }
-
-  if (activeType === 'fleet') {
-    return frameResource(
-      <RemoteFleetWorkbenchPane
-        onShowToast={onShowToast}
-        supportedOperations={activeResource?.supportedOperations ?? []}
-        capabilityReason={activeResource?.reason}
-      />
-    );
-  }
-
-  // Research Mappings
-  if (activeType === 'literature') {
-    return frameResource(
-      <LiteraturePane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />
-    );
-  }
-
-  if (activeType === 'findings' || activeType === 'claims') {
-    return frameResource(
-      <FindingsPane
-        sessionId={session?.id}
-        onHandoffToCoding={(claims) => onHandoffToCoding?.(claims)}
-        onShowToast={onShowToast}
-        onOpenTab={onOpenTab}
-      />
-    );
-  }
-
-  if (activeType === 'lab' || activeType === 'experiments' || activeType === 'runs') {
-    return frameResource(
-      <LabPane
-        sessionId={session?.id}
-        onAskAgent={onAskAgent}
-        onShowToast={onShowToast}
-        onOpenTab={onOpenTab}
-      />
-    );
-  }
-
-  if (activeType === 'knowledge') {
-    return frameResource(<ResearchMethodsPane />);
-  }
-
-  if (activeType === 'synthesis') {
-    return frameResource(<ResearchSynthesisPane onShowToast={onShowToast} />);
-  }
-
-  if (activeType === 'artifacts') {
-    return frameResource(
-      <ArtifactsWorkbenchPane onShowToast={onShowToast} onAskAgent={onAskAgent} />
-    );
-  }
-
-  // Copilot Mappings
-  if (activeType === 'drafts') {
-    return frameResource(
-      <DraftsPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />
-    );
-  }
-
-  if (activeType === 'outbox') {
-    return frameResource(
-      <OutboxPane onShowToast={onShowToast} />
-    );
-  }
-
-  if (activeType === 'contacts') {
-    return frameResource(
-      <ContactsCalendarPane type="contacts" onShowToast={onShowToast} onOpenTab={onOpenTab} />
-    );
-  }
-
-  if (activeType === 'calendar') {
-    return frameResource(
-      <ContactsCalendarPane type="calendar" onShowToast={onShowToast} onOpenTab={onOpenTab} />
-    );
-  }
-
-  if (activeType === 'notes') {
-    return frameResource(
-      <NotesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} onAskAgent={onAskAgent} />
-    );
-  }
-
-  return activeResource
-    ? <UnavailableResource resource={activeResource} />
-    : <UnavailableResource resource={{ id: 'tools', title: 'Unknown resource', description: 'The selected resource is not supported by this client.', icon: Wrench, group: 'Shared', status: 'unavailable', reason: 'The selected resource is not supported by this client.' }} />;
+  // Single tab view
+  return renderTab(activeTab);
 };
 
 // Retain only browser tabs that have actually been visited. Hidden native
 // webviews preserve page state; removing a tab or panel runs their cleanup.
 export const OrcaTabbedContainer = React.memo(function OrcaTabbedContainer(props: OrcaTabbedContainerProps) {
   const { resourceTabs } = props;
+  const isSplitActive = Boolean(
+    resourceTabs.splitTabId &&
+    resourceTabs.splitTabId !== resourceTabs.activeTabId &&
+    resourceTabs.tabs.some((t) => t.id === resourceTabs.splitTabId)
+  );
   const activeTab = resourceTabs.tabs.find((tab) => tab.id === resourceTabs.activeTabId);
-  const browserActive = !!activeTab && ['browser', 'emulator'].includes(getTabType(activeTab));
+  const browserActive = !isSplitActive && !!activeTab && ['browser', 'emulator'].includes(getTabType(activeTab));
   const [visited, setVisited] = React.useState<Set<string>>(() => new Set());
+  const [isDragOverSplit, setIsDragOverSplit] = React.useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     setVisited((previous) => {
@@ -737,12 +920,67 @@ export const OrcaTabbedContainer = React.memo(function OrcaTabbedContainer(props
     });
   }, [resourceTabs.tabs, browserActive, activeTab]);
 
+  const handleDragOver = (e: React.DragEvent) => {
+    const hasTab = e.dataTransfer.types.includes('application/custos-tab-id') || e.dataTransfer.types.includes('text/plain');
+    if (!hasTab) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const relX = e.clientX - rect.left;
+    if (relX > rect.width * 0.3) {
+      setIsDragOverSplit(true);
+    } else {
+      setIsDragOverSplit(false);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!containerRef.current || !containerRef.current.contains(e.relatedTarget as Node)) {
+      setIsDragOverSplit(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    setIsDragOverSplit(false);
+    const droppedTabId = e.dataTransfer.getData('application/custos-tab-id') || e.dataTransfer.getData('text/plain');
+    if (!droppedTabId) return;
+    if (droppedTabId !== resourceTabs.activeTabId) {
+      resourceTabs.setSplitTabId?.(droppedTabId);
+      props.onShowToast?.(`Đã mở song song tab "${resourceTabs.tabs.find((t) => t.id === droppedTabId)?.title || droppedTabId}"`);
+    } else if (resourceTabs.tabs.length > 1) {
+      const otherTab = resourceTabs.tabs.find((t) => t.id !== droppedTabId);
+      if (otherTab) {
+        resourceTabs.setSplitTabId?.(droppedTabId);
+        resourceTabs.setActiveTabId(otherTab.id);
+        props.onShowToast?.(`Đã mở song song tab "${droppedTabId}"`);
+      }
+    }
+  };
+
   return (
-    <div className="relative h-full min-h-0">
+    <div
+      ref={containerRef}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className="relative h-full min-h-0"
+    >
+      {/* Drop Zone Indicator for Split View */}
+      {isDragOverSplit && (
+        <div className="absolute inset-y-1 right-1 w-[48%] z-50 pointer-events-none flex flex-col items-center justify-center bg-blue-600/15 backdrop-blur-xs border-2 border-dashed border-blue-400 rounded-xl m-1 transition-all duration-200">
+          <div className="flex flex-col items-center gap-2 p-4 rounded-xl bg-[#1c1c20]/95 border border-white/20 shadow-2xl text-center">
+            <Columns2 className="size-8 text-blue-400 animate-pulse" />
+            <span className="text-xs font-semibold text-white">Thả vào đây để xem song song</span>
+            <span className="text-[10px] text-white/60">Chia đôi màn hình với tab đang mở (Split View)</span>
+          </div>
+        </div>
+      )}
+
       <div className="h-full" style={{ display: browserActive ? 'none' : 'block' }}>
         <ResourceContent {...props} />
       </div>
-      {resourceTabs.tabs
+      {!isSplitActive && resourceTabs.tabs
         .filter((tab) => ['browser', 'emulator'].includes(getTabType(tab)) && (visited.has(tab.id) || tab.id === resourceTabs.activeTabId))
         .map((tab) => (
           <div key={tab.id} className="h-full" style={{ display: tab.id === resourceTabs.activeTabId ? 'block' : 'none' }}>

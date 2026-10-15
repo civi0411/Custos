@@ -19,9 +19,13 @@ import {
   OAuthTokenRecord,
   ProviderConfigRecord,
   Task,
-  SessionJournalEntry,
+  TaskStatus,
+  CreateTaskParams,
   WorkspaceDetectionResult,
 } from '../types/domain';
+import type { OrcaTab, ResourceTabsState } from '@/components/workbenches/OrcaTabbedContainer';
+
+export type ActiveWorkbench = 'copilot' | 'engineering' | 'research';
 
 interface AppContextType {
   // Projects & Sessions
@@ -34,6 +38,11 @@ interface AppContextType {
   activeSession: Session | null;
   currentSessions: Session[];
   tasks: Task[];
+  refreshTasks: () => Promise<Task[]>;
+  createTask: (params: CreateTaskParams) => Promise<Task>;
+  advanceTask: (taskId: string, status: TaskStatus) => Promise<Task>;
+  completeTask: (taskId: string, summary?: string) => Promise<Task>;
+  cancelTask: (taskId: string, reason?: string) => Promise<Task>;
   // Workspaces & Physical Execution Context (SSOT matching Left and Right)
   workspaces: ExecutionWorkspace[];
   activeWorkspaceId: string;
@@ -86,6 +95,59 @@ interface AppContextType {
   refreshWorkspaceDetection: () => Promise<void>;
   isAddProviderOpen: boolean;
   setIsAddProviderOpen: (open: boolean) => void;
+  isPluginsOpen: boolean;
+  setIsPluginsOpen: (open: boolean) => void;
+  openPlugins: () => void;
+  isSkillsOpen: boolean;
+  setIsSkillsOpen: (open: boolean) => void;
+  openSkills: () => void;
+  isHelpOpen: boolean;
+  setIsHelpOpen: (open: boolean) => void;
+  openHelp: () => void;
+  isGitHubAuthOpen: boolean;
+  setIsGitHubAuthOpen: (open: boolean) => void;
+  openGitHubAuth: () => void;
+  handleGitHubLogin: (account: { username: string; token?: string; name?: string; avatar_url?: string }) => Promise<boolean>;
+  handleGitHubLogout: () => void;
+  userProfile: {
+    name: string;
+    initials: string;
+    tier: string;
+    githubUsername?: string;
+    avatarUrl?: string;
+    isAuthenticated?: boolean;
+  };
+  setUserProfile: React.Dispatch<React.SetStateAction<{
+    name: string;
+    initials: string;
+    tier: string;
+    githubUsername?: string;
+    avatarUrl?: string;
+    isAuthenticated?: boolean;
+  }>>;
+  isSidebarCollapsed: boolean;
+  setIsSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
+  toggleSidebar: () => void;
+  isWebTabOpen: boolean;
+  setIsWebTabOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  toggleWebTab: () => void;
+  isWebTabExpanded: boolean;
+  setIsWebTabExpanded: React.Dispatch<React.SetStateAction<boolean>>;
+  toggleExpandWebTab: () => void;
+  isResourcePickerOpen: boolean;
+  setIsResourcePickerOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  resourceTabs: ResourceTabsState;
+  handleCloseResourceTab: (e: React.MouseEvent, tabId: string) => void;
+  splitPercent: number;
+  setSplitPercent: React.Dispatch<React.SetStateAction<number>>;
+  splitTabId: string | null;
+  setSplitTabId: React.Dispatch<React.SetStateAction<string | null>>;
+  splitRatio: number;
+  setSplitRatio: React.Dispatch<React.SetStateAction<number>>;
+  toggleSplitTab: (tabId: string) => void;
+  closeSplitTab: () => void;
+  column2Width: number | null;
+  setColumn2Width: React.Dispatch<React.SetStateAction<number | null>>;
 
   // Device-local appearance
   appearance: AppearancePreferences;
@@ -100,6 +162,8 @@ interface AppContextType {
   // Toast
   toastMessage: string | null;
   showToast: (msg: string) => void;
+  savedWorkError: string | null;
+  retrySavedWork: () => void;
 
   // Selected Model
   selectedModel: string;
@@ -265,6 +329,35 @@ const AI_LOCAL_ENDPOINT = 'http://localhost:11434';
 const isTransientAiLocalAccount = (account?: ConnectedAccount): boolean =>
   account?.id === AI_LOCAL_ACCOUNT_ID;
 
+export const getDefaultTabForMode = (m: ActiveWorkbench): { tabs: OrcaTab[]; activeTabId: string } => {
+  if (m === 'engineering') {
+    return {
+      tabs: [
+        { id: 'files', type: 'files', title: 'Files & Changes', url: 'custos://resource/files' },
+        { id: 'activity', type: 'activity', title: 'Activity', url: 'custos://resource/activity' },
+      ],
+      activeTabId: 'files',
+    };
+  }
+  if (m === 'research') {
+    return {
+      tabs: [
+        { id: 'literature', type: 'literature', title: 'Sources', url: 'custos://resource/literature' },
+        { id: 'findings', type: 'findings', title: 'Findings', url: 'custos://resource/findings' },
+        { id: 'lab', type: 'lab', title: 'Lab', url: 'custos://resource/lab' },
+      ],
+      activeTabId: 'literature',
+    };
+  }
+  return {
+    tabs: [
+      { id: 'drafts', type: 'drafts', title: 'Drafts', url: 'custos://resource/drafts' },
+      { id: 'outbox', type: 'outbox', title: 'Outbox', url: 'custos://resource/outbox' },
+      { id: 'notes', type: 'notes', title: 'Notes', url: 'custos://resource/notes' },
+    ],
+    activeTabId: 'drafts',
+  };
+};
 
 const AppContext = createContext<AppContextType | null>(null);
 
@@ -331,6 +424,72 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const activeWorkspace = React.useMemo(() => {
     return workspaces.find((w) => w.id === activeWorkspaceId) || null;
   }, [workspaces, activeWorkspaceId]);
+
+  // Toast state
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [savedWorkError, setSavedWorkError] = useState<string | null>(null);
+  const [savedWorkAttempt, setSavedWorkAttempt] = useState(0);
+  const retrySavedWork = useCallback(() => setSavedWorkAttempt((attempt) => attempt + 1), []);
+  const toastTimeoutRef = useRef<number | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToastMessage(msg);
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+    }, 2500);
+  }, []);
+
+  const refreshTasks = useCallback(async () => {
+    const fetchedTasks = await daemonClient.listTasks();
+    setTasks(fetchedTasks);
+    return fetchedTasks;
+  }, []);
+
+  const refreshAfterTaskMutation = useCallback(async (successMessage: string) => {
+    try {
+      await refreshTasks();
+      showToast(successMessage);
+    } catch (error) {
+      showToast(`${successMessage}, but the Task list could not refresh: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }, [refreshTasks, showToast]);
+
+  const handleCreateTask = useCallback(
+    async (params: CreateTaskParams) => {
+      const created = await daemonClient.createTask(params);
+      await refreshAfterTaskMutation(`Task "${created.title}" created`);
+      return created;
+    },
+    [refreshAfterTaskMutation]
+  );
+
+  const handleAdvanceTask = useCallback(
+    async (taskId: string, status: TaskStatus) => {
+      const advanced = await daemonClient.advanceTask(taskId, status);
+      await refreshAfterTaskMutation('Task status updated');
+      return advanced;
+    },
+    [refreshAfterTaskMutation]
+  );
+
+  const handleCompleteTask = useCallback(
+    async (taskId: string, summary?: string) => {
+      const completed = await daemonClient.completeTask(taskId, summary);
+      await refreshAfterTaskMutation('Task marked as complete');
+      return completed;
+    },
+    [refreshAfterTaskMutation]
+  );
+
+  const handleCancelTask = useCallback(
+    async (taskId: string, reason?: string) => {
+      const cancelled = await daemonClient.cancelTask(taskId, reason);
+      await refreshAfterTaskMutation('Task cancelled');
+      return cancelled;
+    },
+    [refreshAfterTaskMutation]
+  );
 
   useEffect(() => {
     void refreshWorkspaces();
@@ -447,6 +606,229 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isNewSessionOpen, setIsNewSessionOpen] = useState<boolean>(false);
   const [isOpenProjectOpen, setIsOpenProjectOpen] = useState<boolean>(false);
   const [isAddProviderOpen, setIsAddProviderOpen] = useState<boolean>(false);
+  const [isPluginsOpen, setIsPluginsOpen] = useState<boolean>(false);
+  const [isSkillsOpen, setIsSkillsOpen] = useState<boolean>(false);
+  const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
+
+  const openPlugins = useCallback(() => setIsPluginsOpen(true), []);
+  const openSkills = useCallback(() => setIsSkillsOpen(true), []);
+  const openHelp = useCallback(() => setIsHelpOpen(true), []);
+
+  const [isGitHubAuthOpen, setIsGitHubAuthOpen] = useState<boolean>(false);
+  const openGitHubAuth = useCallback(() => setIsGitHubAuthOpen(true), []);
+
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const toggleSidebar = useCallback(() => setIsSidebarCollapsed((prev) => !prev), []);
+
+  const [isWebTabOpen, setIsWebTabOpen] = useState<boolean>(true);
+  const toggleWebTab = useCallback(() => setIsWebTabOpen((prev) => !prev), []);
+
+  const [isWebTabExpanded, setIsWebTabExpanded] = useState<boolean>(false);
+  const toggleExpandWebTab = useCallback(() => setIsWebTabExpanded((prev) => !prev), []);
+  const [isResourcePickerOpen, setIsResourcePickerOpen] = useState<boolean>(false);
+
+  const [tabStates, setTabStates] = useState<Record<string, { tabs: OrcaTab[]; activeTabId: string }>>({});
+  const tabScope = `${currentProject}:${activeSessionId || 'no-session'}:${activeWorkbench}`;
+
+  const currentTabState = useMemo(() => {
+    return tabStates[tabScope] ?? getDefaultTabForMode(activeWorkbench);
+  }, [tabStates, tabScope, activeWorkbench]);
+
+  const setTabs = useCallback((update: React.SetStateAction<OrcaTab[]>) => {
+    setTabStates((previous) => {
+      const current = previous[tabScope] ?? getDefaultTabForMode(activeWorkbench);
+      const tabs = typeof update === 'function' ? update(current.tabs) : update;
+      return { ...previous, [tabScope]: { ...current, tabs } };
+    });
+  }, [tabScope, activeWorkbench]);
+
+  const setActiveTabId = useCallback((update: React.SetStateAction<string>) => {
+    setTabStates((previous) => {
+      const current = previous[tabScope] ?? getDefaultTabForMode(activeWorkbench);
+      const activeTabId = typeof update === 'function' ? update(current.activeTabId) : update;
+      return { ...previous, [tabScope]: { ...current, activeTabId } };
+    });
+  }, [tabScope, activeWorkbench]);
+
+  const [splitPercent, setSplitPercent] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('custos_split_pct');
+      if (saved) {
+        const val = parseFloat(saved);
+        if (!isNaN(val) && val >= 20 && val <= 80) return val;
+      }
+    } catch {}
+    return 42;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('custos_split_pct', splitPercent.toString());
+    } catch {}
+  }, [splitPercent]);
+
+  const [splitTabId, setSplitTabId] = useState<string | null>(null);
+  const [splitRatio, setSplitRatio] = useState<number>(50);
+  const [column2Width, setColumn2Width] = useState<number | null>(null);
+
+  const toggleSplitTab = useCallback((tabId: string) => {
+    setSplitTabId((prev) => {
+      if (prev === tabId) return null;
+      if (tabId === currentTabState.activeTabId) {
+        if (prev) return null;
+        const other = currentTabState.tabs.find((t) => t.id !== tabId);
+        return other ? other.id : null;
+      }
+      return tabId;
+    });
+  }, [currentTabState.activeTabId, currentTabState.tabs]);
+
+  const closeSplitTab = useCallback(() => {
+    setSplitTabId(null);
+  }, []);
+
+  const resourceTabs: ResourceTabsState = useMemo(() => ({
+    ...currentTabState,
+    setTabs,
+    setActiveTabId,
+    splitTabId,
+    setSplitTabId,
+    splitRatio,
+    setSplitRatio,
+    toggleSplitTab,
+    closeSplitTab,
+  }), [currentTabState, setTabs, setActiveTabId, splitTabId, splitRatio, toggleSplitTab, closeSplitTab]);
+
+  const handleCloseResourceTab = useCallback((e: React.MouseEvent, tabId: string) => {
+    e.stopPropagation();
+    if (splitTabId === tabId) {
+      setSplitTabId(null);
+    }
+    if (resourceTabs.tabs.length <= 1) {
+      setIsWebTabOpen(false);
+      return;
+    }
+    const nextTabs = resourceTabs.tabs.filter((t) => t.id !== tabId);
+    resourceTabs.setTabs(nextTabs);
+    if (resourceTabs.activeTabId === tabId) {
+      const closedIndex = resourceTabs.tabs.findIndex((t) => t.id === tabId);
+      const nextActive = nextTabs[Math.max(0, closedIndex - 1)];
+      resourceTabs.setActiveTabId(nextActive.id);
+    }
+  }, [resourceTabs, splitTabId]);
+
+  const [userProfile, setUserProfile] = useState<{
+    name: string;
+    initials: string;
+    tier: string;
+    githubUsername?: string;
+    avatarUrl?: string;
+    isAuthenticated?: boolean;
+  }>(() => {
+    try {
+      const saved = localStorage.getItem('custos_user_profile');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch {}
+    return {
+      name: 'Trần Vĩ',
+      initials: 'TV',
+      tier: 'Plus',
+      githubUsername: 'tranchivi',
+      avatarUrl: 'https://github.com/tranchivi.png',
+      isAuthenticated: true,
+    };
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('custos_user_profile', JSON.stringify(userProfile));
+    } catch {}
+  }, [userProfile]);
+
+  const handleGitHubLogin = useCallback(
+    async (account: { username: string; token?: string; name?: string; avatar_url?: string }) => {
+      try {
+        let finalName = account.name || account.username;
+        let finalAvatar = account.avatar_url;
+
+        if (account.token && !finalAvatar) {
+          try {
+            const res = await fetch('https://api.github.com/user', {
+              headers: {
+                Authorization: `Bearer ${account.token}`,
+                Accept: 'application/vnd.github.v3+json',
+              },
+            });
+            if (res.ok) {
+              const data = await res.json();
+              finalName = data.name || data.login || finalName;
+              finalAvatar = data.avatar_url;
+            }
+          } catch {}
+        } else if (!finalAvatar) {
+          try {
+            const res = await fetch(`https://api.github.com/users/${encodeURIComponent(account.username)}`);
+            if (res.ok) {
+              const data = await res.json();
+              finalName = data.name || data.login || finalName;
+              finalAvatar = data.avatar_url;
+            }
+          } catch {}
+        }
+
+        const initials =
+          finalName
+            .split(' ')
+            .map((p: string) => p[0])
+            .join('')
+            .slice(0, 2)
+            .toUpperCase() || account.username.slice(0, 2).toUpperCase();
+
+        const updated = {
+          name: finalName,
+          initials,
+          tier: 'GitHub Pro',
+          githubUsername: account.username,
+          avatarUrl: finalAvatar || `https://github.com/${encodeURIComponent(account.username)}.png`,
+          isAuthenticated: true,
+        };
+
+        setUserProfile(updated);
+        try {
+          localStorage.setItem('custos_user_profile', JSON.stringify(updated));
+          if (account.token) {
+            localStorage.setItem('custos_github_token', account.token);
+          }
+        } catch {}
+        showToast(`Connected to GitHub as @${account.username}`);
+        return true;
+      } catch (err: any) {
+        showToast(`GitHub login failed: ${err?.message || err}`);
+        return false;
+      }
+    },
+    [showToast]
+  );
+
+  const handleGitHubLogout = useCallback(() => {
+    const guestProfile = {
+      name: 'Guest User',
+      initials: 'GU',
+      tier: 'Free',
+      githubUsername: undefined,
+      avatarUrl: undefined,
+      isAuthenticated: false,
+    };
+    setUserProfile(guestProfile);
+    try {
+      localStorage.setItem('custos_user_profile', JSON.stringify(guestProfile));
+      localStorage.removeItem('custos_github_token');
+    } catch {}
+    showToast('Signed out of GitHub');
+  }, [showToast]);
 
   // Sync projects with daemon ExecutionWorkspaces on mount
   useEffect(() => {
@@ -533,18 +915,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return Math.min(160, Math.max(70, Math.round((Number.isFinite(value) ? value : 100) / 10) * 10));
   });
 
-  // Toast state
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const toastTimeoutRef = useRef<number | null>(null);
-
-  const showToast = useCallback((msg: string) => {
-    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    setToastMessage(msg);
-    toastTimeoutRef.current = window.setTimeout(() => {
-      setToastMessage(null);
-    }, 2500);
-  }, []);
-
   const zoomQueue = useRef<Promise<void>>(Promise.resolve());
   const applyUiScale = useCallback((scaleVal: number) => {
     const rounded = Math.round((Number.isFinite(scaleVal) ? scaleVal : 100) / 10) * 10;
@@ -591,6 +961,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedReasoningEffort, setSelectedReasoningEffort] = useState(() => localStorage.getItem('custos_selected_reasoning_effort') || '');
 
   const selectedModelAvailable = (() => {
+    if (!selectedModel) return false;
+    if (selectedModel.startsWith('native:')) return true;
     return connectedAccounts.some(account => account.status === 'active' && account.supportedModels.includes(selectedModel) &&
       (!selectedReasoningEffort || account.catalogModels?.some(model => model.id === selectedModel && model.efforts.includes(selectedReasoningEffort))));
   })();
@@ -609,8 +981,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refreshProviderState = useCallback(async () => {
     const [fetchedProviders, fetchedKeys] = await Promise.all([
-      daemonClient.listProviders().catch(() => []),
-      daemonClient.listClientKeys().catch(() => []),
+      daemonClient.listProviders(),
+      daemonClient.listClientKeys(),
     ]);
 
     let providerRecords = fetchedProviders as ProviderConfigRecord[];
@@ -917,28 +1289,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     async function hydrateFromDaemon() {
       try {
+        setSavedWorkError(null);
         const isOnline = await daemonClient.checkHealth();
         if (!isOnline) {
-          showToast('Custos daemon is offline. No simulated data was loaded.');
+          setSavedWorkError('Custos daemon is offline. Saved work could not be loaded.');
           return;
         }
 
         const [fetchedTasks, fetchedSessions] = await Promise.all([
-          daemonClient.listTasks().catch(() => []),
-          daemonClient.listSessions().catch(() => []),
+          daemonClient.listTasks(),
+          daemonClient.listSessions(),
         ]);
 
         // Hydrate provider models in background without blocking task and session rendering
-        void refreshProviderState();
+        void refreshProviderState().catch((error) => {
+          showToast(`Could not load provider settings: ${error instanceof Error ? error.message : String(error)}`);
+        });
 
         const journals = await Promise.all(
-          fetchedSessions.map(async (session) => {
-            try {
-              return [session.id, await daemonClient.getSessionJournal(session.id)] as const;
-            } catch {
-              return [session.id, [] as SessionJournalEntry[]] as const;
-            }
-          })
+          fetchedSessions.map(async (session) =>
+            [session.id, await daemonClient.getSessionJournal(session.id)] as const
+          )
         );
         const journalBySession = new Map(journals);
 
@@ -1022,7 +1393,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }));
 
           for (const chat of projectedSessions) {
-            const runs = await daemonClient.listSessionRuns(chat.sessionId || chat.id).catch(() => []);
+            let runs;
+            try {
+              runs = await daemonClient.listSessionRuns(chat.sessionId || chat.id);
+            } catch (error) {
+              showToast(`Could not load run status: ${error instanceof Error ? error.message : String(error)}`);
+              continue;
+            }
             for (const run of runs) {
               if (run.journal_occurred_at) {
                 setProjectData(previous => ({...previous, 'Custos Workspace': (previous['Custos Workspace'] || []).map(item => item.id !== chat.id ? item : {...item, messages: item.messages.map(message => message.recordedAt === run.journal_occurred_at ? {...message, runId: run.run_id, runStatus: run.status, badge: run.status, author: run.model || message.author} : message)})}));
@@ -1034,14 +1411,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setCurrentProject('Custos Workspace');
           setActiveSessionId((previous) => allProjected.some((session) => session.id === previous)
             ? previous : (allProjected[0]?.id || ''));
+        } else {
+          setProjectData((previous) => ({ ...previous, 'Custos Workspace': [] }));
+          setActiveSessionId('');
         }
       } catch (err) {
         console.warn('[DaemonClient] Could not load data from daemon:', err);
+        setSavedWorkError(`Could not load saved work: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
     hydrateFromDaemon();
-  }, []);
+  }, [savedWorkAttempt]);
 
   // Global Keyboard Shortcuts
   useEffect(() => {
@@ -1186,7 +1567,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (pendingTurns.current.has(activeSession.id)) return;
     if (!activeSession.nativeHarnessId && !selectedModelAvailable) { showToast('Select an available model/account and reasoning effort before sending.'); return; }
     pendingTurns.current.add(activeSession.id);
+    let userJournalPersisted = false;
+    let dispatchAttempted = false;
     const userMsg = {
+      id: `pending-${crypto.randomUUID()}`,
       role: 'user' as const,
       author: 'You',
       text,
@@ -1210,7 +1594,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     });
 
-    const appendAssistantMessage = (assistantMsg: {
+    const reportTurnFailure = (failure: {
       role: 'assistant';
       author: string;
       badge?: string;
@@ -1223,7 +1607,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (s.id === activeSession.id) {
             return {
               ...s,
-              messages: [...s.messages, assistantMsg],
+              messages: s.messages.map((message) => message.id === userMsg.id
+                ? { ...message, badge: dispatchAttempted ? 'Run status unknown' : userJournalPersisted ? 'Saved, not run' : 'Not sent', liveError: failure.text }
+                : message),
             };
           }
           return s;
@@ -1238,9 +1624,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       if (activeSession.nativeHarnessId && activeSession.workspaceId && activeSession.sessionId) {
         const harness = activeSession.nativeHarnessId;
-        const task = await daemonClient.createTask({ title: text.slice(0, 120), metadata: { kind: 'native_coding_agent', pack_id: 'engineering', harness_id: harness, workspace_id: activeSession.workspaceId, conversation_session_id: activeSession.sessionId } });
+        const taskId = activeSession.taskId;
+        if (!taskId) {
+          throw new Error('This coding conversation is not bound to a Task. Reopen it from Tasks before continuing.');
+        }
         await daemonClient.appendSessionMessage(activeSession.sessionId, 'user', text);
-        const run = await daemonClient.startRun({ background: true, task_id: task.id, session_id: activeSession.sessionId, turn_id: `turn_${crypto.randomUUID()}`, preferred_mode: 'native', harness_id: harness, workspace_id: activeSession.workspaceId, prompt: text });
+        userJournalPersisted = true;
+        dispatchAttempted = true;
+        const run = await daemonClient.startRun({ background: true, task_id: taskId, session_id: activeSession.sessionId, turn_id: `turn_${crypto.randomUUID()}`, preferred_mode: 'native', harness_id: harness, workspace_id: activeSession.workspaceId, prompt: text });
         setProjectData(previous => ({ ...previous, [currentProject]: (previous[currentProject] || []).map(chat => chat.id !== activeSession.id ? chat : { ...chat, messages: [...chat.messages, { id: `live-${run.run_id}`, role: 'assistant' as const, author: harness, runId: run.run_id, runStatus: 'queued', badge: 'queued', text: '' }] }) }));
         followLiveRun(currentProject, activeSession.id, activeSession.sessionId, run.run_id, harness);
         return;
@@ -1249,73 +1640,88 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const selectedCombo = combos.find((combo) => combo.id.toLowerCase() === chosenModel.toLowerCase());
 
       if (!chosenModel) {
-        appendAssistantMessage({
+        reportTurnFailure({
           role: 'assistant',
           author: 'Custos Engine',
           badge: 'AI Local Unavailable',
           stepName: 'AI Local',
           text: 'No local model is available yet. Start Ollama and install at least one model, then use Retry models. You can chat without signing in as soon as AI Local discovers it.',
         });
-        showToast('Start Ollama or connect a provider');
         return;
       }
 
       if (selectedCombo) {
-        appendAssistantMessage({
+        reportTurnFailure({
           role: 'assistant',
           author: 'Custos Engine',
           badge: 'Concrete Model Required',
           stepName: 'Model Gateway',
           text: 'Routing combos are not dispatched as a single model turn yet. Select one concrete live model from a connected account.',
         });
-        showToast('Select a concrete model, not a combo');
         return;
       }
 
-      const candidates = connectedAccounts.filter(account => account.status === 'active' && account.supportedModels.includes(chosenModel) &&
-        (!selectedReasoningEffort || account.catalogModels?.some(model => model.id === chosenModel && model.efforts.includes(selectedReasoningEffort))));
-      if (!candidates.length) { showToast('Selected model is unavailable. Refresh models or choose another model.'); return; }
-      const transientAccount = candidates.find(isTransientAiLocalAccount);
-      const reservation = transientAccount ? undefined : await daemonClient.reserveProviderAccount(candidates[0].providerId, chosenModel, selectedReasoningEffort || undefined);
-      const modelAccount = transientAccount || candidates.find(account => account.id === reservation?.account_id);
-      if (!modelAccount) { showToast('No available account supports this model and reasoning effort. Refresh models.'); return; }
-      const routedAccountId = isTransientAiLocalAccount(modelAccount) ? undefined : modelAccount.id;
-      const metadata = modelAccount.catalogModels?.find(model => model.id === chosenModel);
-      const effort = selectedReasoningEffort || metadata?.default_effort;
-      if (effort && !metadata?.efforts.includes(effort)) { showToast('Reasoning effort is no longer available. Select the model again.'); return; }
+      const isNativeModel = chosenModel.startsWith('native:');
+      let routedAccountId: string | undefined;
+      let modelAccount: ConnectedAccount | undefined;
+      let effort: string | undefined;
+
+      if (isNativeModel) {
+        const modelPath = chosenModel.slice('native:'.length);
+        try {
+          if (!modelPath) throw new Error('The selected local model has no file path');
+          const loaded = await daemonClient.listLoadedInstances();
+          if (!loaded.instances.some(instance => instance.model_path === modelPath)) {
+            await daemonClient.loadLocalModel(modelPath);
+          }
+        } catch (error: any) {
+          reportTurnFailure({ role: 'assistant', author: 'Custos Engine', badge: 'Local Model Unavailable', text: error?.message || String(error) });
+          return;
+        }
+      } else {
+        const candidates = connectedAccounts.filter(account => account.status === 'active' && account.supportedModels.includes(chosenModel) &&
+          (!selectedReasoningEffort || account.catalogModels?.some(model => model.id === chosenModel && model.efforts.includes(selectedReasoningEffort))));
+        if (!candidates.length) { showToast('Selected model is unavailable. Refresh models or choose another model.'); return; }
+        const transientAccount = candidates.find(isTransientAiLocalAccount);
+        const reservation = transientAccount ? undefined : await daemonClient.reserveProviderAccount(candidates[0].providerId, chosenModel, selectedReasoningEffort || undefined);
+        modelAccount = transientAccount || candidates.find(account => account.id === reservation?.account_id);
+        if (!modelAccount) { showToast('No available account supports this model and reasoning effort. Refresh models.'); return; }
+        routedAccountId = isTransientAiLocalAccount(modelAccount) ? undefined : modelAccount.id;
+        const metadata = modelAccount.catalogModels?.find(model => model.id === chosenModel);
+        effort = selectedReasoningEffort || metadata?.default_effort;
+        if (effort && !metadata?.efforts.includes(effort)) { showToast('Reasoning effort is no longer available. Select the model again.'); return; }
+      }
 
       if (chosenModel.startsWith('ollama/')) {
         const account = connectedAccounts.find(a => a.id === routedAccountId && a.status === 'active');
         if (!account) {
-          appendAssistantMessage({ role: 'assistant', author: 'Custos Engine', badge: 'Ollama Unavailable', stepName: 'Model Gateway', text: 'Ollama is offline or the selected model is no longer installed. Start Ollama and use Retry models. Your prompt will not be sent to another provider.' });
-          showToast('Ollama unavailable — start Ollama and retry');
+          reportTurnFailure({ role: 'assistant', author: 'Custos Engine', badge: 'Ollama Unavailable', stepName: 'Model Gateway', text: 'Ollama is offline or the selected model is no longer installed. Start Ollama and use Retry models. Your prompt will not be sent to another provider.' });
           return;
         }
         // Recheck before dispatch to catch shutdowns between periodic probes.
         try {
           const probe = await daemonClient.probeModels(account.endpointUrl || 'http://localhost:11434', 'ollama');
           if (!probe.models.some(model => model.id === chosenModel)) {
-            appendAssistantMessage({ role: 'assistant', author: 'Custos Engine', badge: 'Model Removed', text: 'The selected Ollama model is no longer installed. Refresh models and choose an installed model.' });
+            reportTurnFailure({ role: 'assistant', author: 'Custos Engine', badge: 'Model Removed', text: 'The selected Ollama model is no longer installed. Refresh models and choose an installed model.' });
             return;
           }
         } catch {
           setConnectedAccounts(previous => previous.map(a => a.id === account.id ? { ...a, status: 'offline', statusLabel: 'Ollama offline', badgeColor: '#6b7280', catalogSource: 'cached', catalogError: 'Ollama is unavailable. Start Ollama and retry models.' } : a));
-          appendAssistantMessage({ role: 'assistant', author: 'Custos Engine', badge: 'Ollama Offline', text: 'Cannot connect to Ollama. Start Ollama and retry models, then resend your prompt. No other provider was used.' });
+          reportTurnFailure({ role: 'assistant', author: 'Custos Engine', badge: 'Ollama Offline', text: 'Cannot connect to Ollama. Start Ollama and retry models, then resend your prompt. No other provider was used.' });
           return;
         }
       }
 
       const selectedAccount = modelAccount;
       const hasActiveAccount = Boolean(selectedAccount);
-      if (!hasActiveAccount) {
-        appendAssistantMessage({
+      if (!isNativeModel && !hasActiveAccount) {
+        reportTurnFailure({
           role: 'assistant',
           author: 'Custos Engine',
           badge: 'Model Not Connected',
           stepName: 'Model Gateway',
           text: `Model "${chosenModel}" cannot be dispatched because no active provider accounts are connected. Please connect a provider in Settings > Providers first.`,
         });
-        showToast('No active provider connected');
         return;
       }
 
@@ -1330,24 +1736,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           text: `⚠️ Chưa có LLM nào được cấu hình hiện tại (No LLMs currently available).\n\n${llmStatus.message || 'Hệ thống đang hoạt động ở chế độ Sovereign & Offline Kernel. Vui lòng thêm API Key (Anthropic Claude, OpenAI Codex, Google Gemini...) hoặc chọn Local Model trong Cài đặt > Providers để kích hoạt AI reasoning.'}`,
         };
 
-        setProjectData((prev) => {
-          const list = prev[currentProject] || [];
-          const updatedList = list.map((s) => {
-            if (s.id === activeSession.id) {
-              return {
-                ...s,
-                messages: [...s.messages, noLlmMsg],
-              };
-            }
-            return s;
-          });
-          return {
-            ...prev,
-            [currentProject]: updatedList,
-          };
-        });
-
-        showToast('Chưa có LLM nào được cấu hình hiện tại');
+        reportTurnFailure(noLlmMsg);
         return;
       }
 
@@ -1377,7 +1766,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             conversation_session_id: targetSessionId || activeSession.id,
             source_task_id: activeSession.taskId || activeSession.id,
             model: chosenModel,
-            ...(!isTransientAiLocalAccount(selectedAccount)
+            ...(!isNativeModel && !isTransientAiLocalAccount(selectedAccount)
               ? { provider_account_id: selectedAccount?.id }
               : {}),
           },
@@ -1389,7 +1778,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (!runTaskId) {
-        appendAssistantMessage({
+        reportTurnFailure({
           role: 'assistant',
           author: 'Custos Kernel',
           badge: 'Task Required',
@@ -1404,9 +1793,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // Append message to backend session journal
       if (targetSessionId) {
         await daemonClient.appendSessionMessage(targetSessionId, 'user', text);
+        userJournalPersisted = true;
       }
 
       // Register a cancellable background run before consuming its live projection.
+      dispatchAttempted = true;
       const run = await daemonClient.startRun({
         background: true,
         turn_id: `turn_${crypto.randomUUID()}`,
@@ -1420,37 +1811,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       const runId = run.run_id;
-      appendAssistantMessage({ role: 'assistant', author: chosenModel, badge: 'queued', stepName: `Run #${runId.slice(0, 8)}`, text: '' });
-      setProjectData(previous => ({ ...previous, [currentProject]: (previous[currentProject] || []).map(chat => chat.id !== activeSession.id ? chat : { ...chat, messages: chat.messages.map((message,index) => index === chat.messages.length - 1 ? { ...message, id: `live-${runId}`, runId, runStatus: 'queued' } : message) }) }));
+      setProjectData(previous => ({ ...previous, [currentProject]: (previous[currentProject] || []).map(chat => chat.id !== activeSession.id ? chat : { ...chat, messages: [
+        ...chat.messages.map(message => message.id === userMsg.id ? { ...message, badge: undefined, liveError: undefined } : message),
+        { id: `live-${runId}`, role: 'assistant' as const, author: chosenModel, badge: 'queued', stepName: `Run #${runId.slice(0, 8)}`, text: '', runId, runStatus: 'queued' },
+      ] }) }));
       if (targetSessionId) followLiveRun(currentProject, activeSession.id, targetSessionId, runId, chosenModel);
     } catch (err: any) {
       void refreshCatalogAvailability();
       if ((selectedModel || activeSession.model || '').startsWith('ollama/') && String(err?.message || err).includes('Ollama connection failed')) {
         setConnectedAccounts(previous => previous.map(a => a.providerId === 'local' ? { ...a, status: 'offline', statusLabel: 'Ollama offline', badgeColor: '#6b7280', catalogSource: 'cached', catalogError: 'Ollama stopped during the request. Start Ollama and resend your prompt.' } : a));
       }
-      const errMsg = {
-        role: 'assistant' as const,
-        author: 'Custos Kernel',
-        badge: 'Gate Fenced',
-        text: `Execution notice: ${err?.message || err}`,
-      };
-
-      setProjectData((prev) => {
-        const list = prev[currentProject] || [];
-        const updatedList = list.map((s) => {
-          if (s.id === activeSession.id) {
-            return {
-              ...s,
-              messages: [...s.messages, errMsg],
-            };
-          }
-          return s;
-        });
-        return {
-          ...prev,
-          [currentProject]: updatedList,
-        };
-      });
+      reportTurnFailure({ role: 'assistant', author: 'Custos', text: `${dispatchAttempted ? 'Could not confirm run start; check Activity before retrying' : 'Could not prepare the run'}: ${err?.message || err}` });
     } finally { pendingTurns.current.delete(activeSession.id); }
   };
 
@@ -1522,14 +1893,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const handleRejectDiff = () => {
-    showToast('No patch was changed. Rejection is not connected to the daemon yet.');
+    showToast('Reject diff is unavailable until a daemon-backed patch proposal is selected.');
   };
 
-  const handleCopyDiff = () => {
+  const handleCopyDiff = async () => {
     if (!activeSession) return;
     const diffText = activeSession.diffCode.map((d) => d.text).join('\n');
-    navigator.clipboard.writeText(diffText);
-    showToast('Code diff copied to clipboard');
+    if (!diffText) { showToast('No diff is available to copy.'); return; }
+    try {
+      await navigator.clipboard.writeText(diffText);
+      showToast('Code diff copied to clipboard');
+    } catch (error) {
+      showToast(`Could not copy diff: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   const handleCreateNewSession = async (title: string, pack: 'engineering' | 'research' | 'assistant') => {
@@ -1877,6 +2253,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeSession,
         currentSessions,
         tasks,
+        refreshTasks,
+        createTask: handleCreateTask,
+        advanceTask: handleAdvanceTask,
+        completeTask: handleCompleteTask,
+        cancelTask: handleCancelTask,
         workspaces,
         activeWorkspaceId,
         setActiveWorkspaceId,
@@ -1920,6 +2301,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         refreshWorkspaceDetection,
         isAddProviderOpen,
         setIsAddProviderOpen,
+        isPluginsOpen,
+        setIsPluginsOpen,
+        openPlugins,
+        isSkillsOpen,
+        setIsSkillsOpen,
+        openSkills,
+        isHelpOpen,
+        setIsHelpOpen,
+        openHelp,
+        isGitHubAuthOpen,
+        setIsGitHubAuthOpen,
+        openGitHubAuth,
+        handleGitHubLogin,
+        handleGitHubLogout,
+        userProfile,
+        setUserProfile,
+        isSidebarCollapsed,
+        setIsSidebarCollapsed,
+        toggleSidebar,
+        isWebTabOpen,
+        setIsWebTabOpen,
+        toggleWebTab,
+        isWebTabExpanded,
+        setIsWebTabExpanded,
+        toggleExpandWebTab,
+        isResourcePickerOpen,
+        setIsResourcePickerOpen,
+        resourceTabs,
+        handleCloseResourceTab,
+        splitPercent,
+        setSplitPercent,
+        splitTabId,
+        setSplitTabId,
+        splitRatio,
+        setSplitRatio,
+        toggleSplitTab,
+        closeSplitTab,
+        column2Width,
+        setColumn2Width,
         appearance,
         resolvedTheme,
         updateAppearance,
@@ -1928,6 +2348,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         handleStepUiScale,
         toastMessage,
         showToast,
+        savedWorkError,
+        retrySavedWork,
         selectedModel,
         selectedModelAvailable,
         selectedModelAccountId,

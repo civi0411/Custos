@@ -14,11 +14,13 @@ import {
   UserCheck,
   Copy,
   Check,
+  FolderPlus,
 } from 'lucide-react';
 import { ProviderBrandIcon } from '@/components/common/AgentIcons';
 import { CustomSelect, CustomSelectOption } from '../common/CustomSelect';
 import { daemonClient } from '@/api/daemon_client';
 import { ProbedModel, ModelCatalogOption, ProviderServiceId } from '@/types';
+import type { LocalHardwareProfile } from '@/types/domain';
 import { useAppContext } from '@/context/AppContext';
 
 interface AddProviderModalProps {
@@ -60,12 +62,6 @@ const providerOptions: CustomSelectOption[] = [
     sublabel: 'DeepSeek V3, R1 Reasoner',
     icon: <ProviderBrandIcon provider="deepseek" size={16} />,
   },
-  {
-    value: 'local',
-    label: 'Local Inference (Ollama / vLLM)',
-    sublabel: 'Ollama, LM Studio, llama.cpp',
-    icon: <Server className="w-4 h-4 text-emerald-400" />,
-  },
 ];
 
 const effortOptions: CustomSelectOption[] = [
@@ -79,17 +75,30 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   onClose,
   onSaveProvider,
 }) => {
-  const { handleConnectOAuth } = useAppContext();
+  const { handleConnectOAuth, showToast } = useAppContext();
 
-  // Auth Mode: API Key or OAuth
+  // Auth Mode: API Key, OAuth SSO, or Local AI
   const [authMode, setAuthMode] = useState<'api_key' | 'oauth' | 'local'>('api_key');
+  const [localSubTab, setLocalSubTab] = useState<'native' | 'server'>('native');
 
   // API Key Form State
   const [providerService, setProviderService] = useState('anthropic');
   const [accountName, setAccountName] = useState('');
   const [apiKey, setApiKey] = useState('');
-  const closeAndClearSecret = () => { setApiKey(''); setCallbackInput(''); setAuthUrlResult(null); onClose(); };
-  useEffect(() => { if (!isOpen) { setApiKey(''); setAccountName(''); } }, [isOpen]);
+  const closeAndClearSecret = () => {
+    setApiKey('');
+    setLocalApiKey('');
+    setCallbackInput('');
+    setAuthUrlResult(null);
+    onClose();
+  };
+  useEffect(() => {
+    if (!isOpen) {
+      setApiKey('');
+      setLocalApiKey('');
+      setAccountName('');
+    }
+  }, [isOpen]);
   const [endpointUrl, setEndpointUrl] = useState('');
   const [selectedModel, setSelectedModel] = useState('');
   const [availableModels, setAvailableModels] = useState<CustomSelectOption[]>([]);
@@ -97,47 +106,157 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   const [rawProbed, setRawProbed] = useState<ProbedModel[]>([]);
   const [isProbing, setIsProbing] = useState(false);
   const [probeStatus, setProbeStatus] = useState<{ type: 'idle' | 'success' | 'error'; message?: string }>({ type: 'idle' });
+
+  // Local Inference Server State
+  type LocalPreset = 'ollama' | 'lm_studio' | 'vllm' | 'custom';
+  const [localPreset, setLocalPreset] = useState<LocalPreset>('ollama');
   const [localUrl, setLocalUrl] = useState('http://localhost:11434');
+  const [localAccountName, setLocalAccountName] = useState('Ollama Local');
+  const [localApiKey, setLocalApiKey] = useState('');
   const [localModels, setLocalModels] = useState<ProbedModel[]>([]);
   const [localModel, setLocalModel] = useState('');
   const [localError, setLocalError] = useState('');
   const [localConnected, setLocalConnected] = useState(false);
   const [localBusy, setLocalBusy] = useState(false);
   const localGeneration = useRef(0);
+
+  // Native GGUF Registration State
+  const [nativeFolderPath, setNativeFolderPath] = useState('');
+  const [nativeFolderLabel, setNativeFolderLabel] = useState('');
+  const [isRegisteringFolder, setIsRegisteringFolder] = useState(false);
+  const [nativeError, setNativeError] = useState<string | null>(null);
+  const [nativeHw, setNativeHw] = useState<LocalHardwareProfile | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      daemonClient.getLocalHardware().then(setNativeHw).catch(() => {});
+    }
+  }, [isOpen]);
+
+  const handleRegisterNativeFolder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nativeFolderPath.trim()) {
+      setNativeError('Please specify a directory path containing .gguf models.');
+      return;
+    }
+    setNativeError(null);
+    setIsRegisteringFolder(true);
+    try {
+      await daemonClient.addLocalFolder(
+        nativeFolderPath.trim(),
+        nativeFolderLabel.trim() || undefined
+      );
+      await daemonClient.scanLocalModels();
+      showToast('Local GGUF models registered and scanned.');
+      onClose();
+    } catch (err: any) {
+      setNativeError(err.message || 'Failed to register model directory');
+    } finally {
+      setIsRegisteringFolder(false);
+    }
+  };
+
+  const handleSelectPreset = (preset: LocalPreset) => {
+    setLocalPreset(preset);
+    localGeneration.current++;
+    setLocalConnected(false);
+    setLocalModels([]);
+    setLocalModel('');
+    setLocalError('');
+    switch (preset) {
+      case 'ollama':
+        setLocalUrl('http://localhost:11434');
+        setLocalAccountName('Ollama Local');
+        break;
+      case 'lm_studio':
+        setLocalUrl('http://localhost:1234/v1');
+        setLocalAccountName('LM Studio Local');
+        break;
+      case 'vllm':
+        setLocalUrl('http://localhost:8000/v1');
+        setLocalAccountName('vLLM Local');
+        break;
+      case 'custom':
+        setLocalAccountName('Local Server');
+        break;
+    }
+  };
+
   const connectLocal = async () => {
     const generation = ++localGeneration.current;
-    setLocalBusy(true); setLocalError(''); setLocalConnected(false);
+    setLocalBusy(true);
+    setLocalError('');
+    setLocalConnected(false);
     try {
-      const result = await daemonClient.probeModels(localUrl.trim(), 'ollama');
+      const probeType = localPreset === 'ollama' || localUrl.includes(':11434') ? 'ollama' : 'local';
+      const result = await daemonClient.probeModels(
+        localUrl.trim(),
+        probeType,
+        localApiKey.trim() || undefined
+      );
       if (generation !== localGeneration.current) return;
       const models = result?.models || [];
       setLocalModels(models);
-      setLocalModel(models.some(m => m.id === localModel) ? localModel : models[0]?.id || '');
+      setLocalModel(models.some((m) => m.id === localModel) ? localModel : models[0]?.id || '');
       setLocalConnected(true);
-      if (!models.length) setLocalError('No installed models. Run ollama pull <model>, then refresh.');
-      else if (localModel && !models.some(m => m.id === localModel)) setLocalError('The previously selected model was removed. Select an installed model.');
+      if (!models.length) {
+        setLocalError(
+          localPreset === 'ollama'
+            ? 'No installed models detected. Run `ollama pull <model>` in terminal, then scan again.'
+            : 'Server responded, but no models were discovered. Verify that at least one model is active.'
+        );
+      } else if (localModel && !models.some((m) => m.id === localModel)) {
+        setLocalError('The previously selected model was not found on this server.');
+      }
     } catch (err: any) {
       if (generation !== localGeneration.current) return;
-      setLocalModels([]); setLocalModel('');
-      setLocalError(`Check the URL and ensure Ollama is running: ${err?.message || err}`);
-    } finally { if (generation === localGeneration.current) setLocalBusy(false); }
+      setLocalModels([]);
+      setLocalModel('');
+      setLocalError(
+        `Connection failed: ${err?.message || err}. Verify ${
+          localPreset === 'ollama' ? 'Ollama is running (`ollama serve`)' : 'the local model server is started'
+        } at ${localUrl.trim()}.`
+      );
+    } finally {
+      if (generation === localGeneration.current) setLocalBusy(false);
+    }
   };
+
   const saveLocal = async (event: React.FormEvent) => {
     event.preventDefault();
-    const model = localModels.find(m => m.id === localModel);
+    const model = localModels.find((m) => m.id === localModel);
     if (!localConnected || !model || localBusy) return;
-    setLocalBusy(true); setLocalError('');
+    setLocalBusy(true);
+    setLocalError('');
     try {
-      await onSaveProvider({ service: 'local', apiKey: '', endpointUrl: localUrl.trim(), model: model.id, contextWindow: model.context_window || undefined });
+      await onSaveProvider({
+        service: 'local',
+        accountName: localAccountName.trim() || `${localPreset.toUpperCase()} Local`,
+        apiKey: localApiKey.trim(),
+        endpointUrl: localUrl.trim(),
+        model: model.id,
+        contextWindow: model.context_window || undefined,
+        fastMode: true,
+      });
       onClose();
-    } catch (err: any) { setLocalError(`Save failed: ${err?.message || err}`); }
-    finally { setLocalBusy(false); }
+    } catch (err: any) {
+      setLocalError(`Save failed: ${err?.message || err}`);
+    } finally {
+      setLocalBusy(false);
+    }
   };
   const [fastMode, setFastMode] = useState(true);
   const [reasoningEffort, setReasoningEffort] = useState('medium');
 
   useEffect(() => {
-    if (!isOpen) { localGeneration.current++; setLocalConnected(false); setLocalModels([]); setLocalModel(''); setLocalError(''); setLocalBusy(false); }
+    if (!isOpen) {
+      localGeneration.current++;
+      setLocalConnected(false);
+      setLocalModels([]);
+      setLocalModel('');
+      setLocalError('');
+      setLocalBusy(false);
+    }
   }, [isOpen]);
 
   // OAuth Form State
@@ -345,9 +464,9 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   if (!isOpen) return null;
 
   const handleProbeEndpoint = async () => {
-    const targetUrl = endpointUrl.trim() || (providerService === 'local' ? 'http://localhost:11434' : '');
+    const targetUrl = endpointUrl.trim();
     if (!targetUrl) {
-      setProbeStatus({ type: 'error', message: 'Vui lòng nhập Endpoint URL để quét (vd: http://localhost:11434).' });
+      setProbeStatus({ type: 'error', message: 'Vui lòng nhập Endpoint URL để quét (ví dụ: custom gateway).' });
       return;
     }
 
@@ -384,7 +503,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
 
   const handleSubmitApiKey = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!apiKey.trim() && providerService !== 'local') {
+    if (!apiKey.trim()) {
       alert('Vui lòng nhập API Key cho cloud provider.');
       return;
     }
@@ -394,30 +513,34 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
     const contextWindow = probedMatch?.context_window || catalogMatch?.context_window || 128000;
 
     try {
-    await onSaveProvider({
-      accountName: accountName.trim() || undefined,
-      service: providerService,
-      apiKey: apiKey.trim(),
-      endpointUrl: endpointUrl.trim() || undefined,
-      model: selectedModel || undefined,
-      contextWindow,
-      fastMode,
-    });
+      await onSaveProvider({
+        accountName: accountName.trim() || undefined,
+        service: providerService,
+        apiKey: apiKey.trim(),
+        endpointUrl: endpointUrl.trim() || undefined,
+        model: selectedModel || undefined,
+        contextWindow,
+        fastMode,
+      });
 
-    setApiKey('');
-    onClose();
-    } catch (err: any) { setProbeStatus({ type: 'error', message: `Save failed: ${err?.message || err}` }); }
+      setApiKey('');
+      onClose();
+    } catch (err: any) {
+      setProbeStatus({ type: 'error', message: `Save failed: ${err?.message || err}` });
+    }
   };
 
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-3 select-none">
-      <div className="w-full max-w-xl bg-surface-1 border border-border-default rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+      <div className={`w-full ${authMode === 'local' ? 'max-w-3xl' : 'max-w-xl'} bg-surface-1 border border-border-default rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden transition-all duration-150`}>
         {/* Header */}
         <div className="h-12 border-b border-border-muted px-5 flex items-center justify-between shrink-0 bg-surface-1 rounded-t-2xl">
           <div className="flex items-center gap-2">
             <Key className="w-4 h-4 text-workbench-accent" />
-            <span className="text-sm font-semibold text-fg-editor">Connect Provider or Account</span>
+            <span className="text-sm font-semibold text-fg-editor">
+              {authMode === 'local' ? 'Add Local Models' : 'Connect Provider or Account'}
+            </span>
           </div>
           <button
             onClick={closeAndClearSecret}
@@ -427,7 +550,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
           </button>
         </div>
 
-        {/* Tab Switcher: API Key vs OAuth */}
+        {/* Tab Switcher: Cloud API vs OAuth vs Local */}
         <div className="flex border-b border-border-muted bg-surface-2/40 px-5 pt-2 gap-2 text-xs shrink-0">
           <button
             type="button"
@@ -439,7 +562,7 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
             }`}
           >
             <Key className="w-3.5 h-3.5" />
-            <span>API Key & Custom Endpoint</span>
+            <span>Cloud API Key</span>
           </button>
           <button
             type="button"
@@ -451,30 +574,380 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
             }`}
           >
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>OAuth 2.0 / SSO Connect</span>
+            <span>OAuth Sign-In</span>
           </button>
-          <button type="button" onClick={() => setAuthMode('local')} className={`pb-2.5 px-3 font-medium border-b-2 flex items-center gap-1.5 ${authMode === 'local' ? 'border-workbench-accent text-fg-editor' : 'border-transparent text-fg-muted'}`}><Server className="w-3.5 h-3.5" />Local</button>
+          <button
+            type="button"
+            onClick={() => setAuthMode('local')}
+            className={`pb-2.5 px-3 font-medium transition border-b-2 flex items-center gap-1.5 cursor-pointer ${
+              authMode === 'local'
+                ? 'border-workbench-accent text-fg-editor'
+                : 'border-transparent text-fg-muted hover:text-fg-editor'
+            }`}
+          >
+            <Cpu className="w-3.5 h-3.5 text-teal-400" />
+            <span>Local Models (on Mac)</span>
+          </button>
         </div>
 
-        {/* TAB 1: API KEY */}
+        {/* TAB: LOCAL AI (NATIVE GGUF & LOCAL SERVERS) */}
         {authMode === 'local' ? (
-          <form onSubmit={saveLocal} className="flex flex-col min-h-0">
-            <div className="p-5 space-y-4 text-xs overflow-y-auto">
-              <p className="text-fg-editor font-semibold flex gap-2"><ProviderBrandIcon provider="ollama" size={16} />Ollama local models</p>
-              <label className="block space-y-2 text-fg-editor"><span>Endpoint Base URL</span>
-                <input type="url" required value={localUrl} disabled={localBusy} onChange={e => { setLocalUrl(e.target.value); localGeneration.current++; setLocalConnected(false); setLocalModels([]); setLocalModel(''); setLocalError(''); }} className="w-full bg-surface-0 border border-border-default rounded-lg px-3 py-2 text-fg-editor" />
-              </label>
-              <button type="button" onClick={connectLocal} disabled={localBusy || !localUrl.trim()} className="provider-oauth-action rounded-lg px-3 py-2 flex gap-2 items-center disabled:opacity-50"><RefreshCw className={`w-4 h-4 ${localBusy ? 'animate-spin' : ''}`} />{localBusy ? 'Connecting...' : 'Connect / Refresh models'}</button>
-              {localError && <p role="alert" className="text-red-400 break-words">{localError}</p>}
-              {localConnected && localModels.length > 0 && <p role="status" className="text-emerald-400">Connected · {localModels.length} installed models</p>}
-              <label className="block text-fg-editor">Model</label>
-              <CustomSelect value={localModel} onChange={setLocalModel} options={localModels.map(m => ({ value: m.id, label: m.name || m.id, sublabel: m.context_window ? `${m.context_window} tokens` : 'Context unknown' }))} headerTitle="Installed Ollama models" />
+          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            {/* Sub-tab Switcher: Model Files vs Ollama */}
+            <div className="flex items-center justify-between px-5 py-2.5 bg-surface-2/30 border-b border-border-muted shrink-0">
+              <div className="flex items-center gap-1.5 p-0.5 bg-surface-0 rounded-lg border border-border-default/60">
+                <button
+                  type="button"
+                  onClick={() => setLocalSubTab('native')}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                    localSubTab === 'native'
+                      ? 'bg-surface-2 text-teal-300 shadow-xs'
+                      : 'text-fg-muted hover:text-fg-editor'
+                  }`}
+                >
+                  <Cpu className="w-3.5 h-3.5 text-teal-400" />
+                  <span>Model Files (.gguf)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocalSubTab('server')}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
+                    localSubTab === 'server'
+                      ? 'bg-surface-2 text-workbench-accent shadow-xs'
+                      : 'text-fg-muted hover:text-fg-editor'
+                  }`}
+                >
+                  <Server className="w-3.5 h-3.5 text-workbench-accent" />
+                  <span>Ollama / Local Service</span>
+                </button>
+              </div>
+              <div className="text-[11px] text-fg-subtle hidden sm:block">
+                {localSubTab === 'native' ? 'Runs in Custos; no model server required' : 'Connects to localhost HTTP service'}
+              </div>
             </div>
-            <div className="border-t border-border-muted p-4 flex justify-end gap-2">
-              <button type="button" onClick={closeAndClearSecret} disabled={localBusy} className="text-fg-editor px-3 py-2">Cancel</button>
-              <button type="submit" disabled={localBusy || !localConnected || !localModels.some(m => m.id === localModel)} className="btn-primary rounded-lg px-3 py-2 disabled:opacity-50">{localBusy ? 'Please wait...' : 'Save & Activate Provider'}</button>
-            </div>
-          </form>
+
+            {localSubTab === 'native' ? (
+              <form onSubmit={handleRegisterNativeFolder} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <div className="p-5 space-y-4 text-xs overflow-y-auto min-h-0 flex-1">
+                  {/* Hardware Readiness Badge */}
+                  <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-surface-1)] p-3.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Cpu className="h-4 w-4 text-teal-400" />
+                        <span className="font-semibold text-xs text-[var(--color-editor-fg)]">
+                          Native Apple Silicon Metal Engine
+                        </span>
+                      </div>
+                      <span className="rounded-full bg-teal-500/10 border border-teal-500/30 px-2 py-0.5 text-[10px] font-medium text-teal-400">
+                        {nativeHw?.is_apple_silicon ? 'Hardware Ready' : 'CPU Fallback'}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-[var(--color-fg-muted)]">
+                      <div>
+                        Processor: <span className="font-mono text-[var(--color-editor-fg)]">{nativeHw?.chip_name || 'Apple M2 Pro'}</span>
+                      </div>
+                      <div>
+                        Unified RAM: <span className="font-mono text-cyan-400">{nativeHw?.total_ram_bytes ? `${(nativeHw.total_ram_bytes / (1024**3)).toFixed(1)} GB` : '32.0 GB'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Directory Input */}
+                  <div className="space-y-1.5">
+                    <label className="font-medium text-[var(--color-editor-fg)] flex items-center justify-between">
+                      <span>Model Directory on Disk</span>
+                      <span className="text-[10px] text-[var(--color-fg-subtle)]">Scans for .gguf files recursively</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={nativeFolderPath}
+                        onChange={(e) => setNativeFolderPath(e.target.value)}
+                        placeholder="/Users/mac/models or ~/.custos/models"
+                        className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-0)] px-3 py-2 text-xs text-[var(--color-editor-fg)] font-mono placeholder:text-[var(--color-fg-subtle)] focus:border-workbench-accent focus:outline-hidden"
+                      />
+                    </div>
+                    {/* Quick suggestion pills */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-[10px] text-[var(--color-fg-subtle)]">Common paths:</span>
+                      <button
+                        type="button"
+                        onClick={() => setNativeFolderPath('~/.custos/models')}
+                        className="rounded border border-[var(--color-border-muted)] px-2 py-0.5 text-[10px] text-[var(--color-fg-muted)] hover:border-[var(--color-border-default)] hover:text-[var(--color-editor-fg)] font-mono transition"
+                      >
+                        ~/.custos/models
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNativeFolderPath('~/models')}
+                        className="rounded border border-[var(--color-border-muted)] px-2 py-0.5 text-[10px] text-[var(--color-fg-muted)] hover:border-[var(--color-border-default)] hover:text-[var(--color-editor-fg)] font-mono transition"
+                      >
+                        ~/models
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Label Input */}
+                  <div className="space-y-1.5">
+                    <label className="font-medium text-[var(--color-editor-fg)] flex items-center justify-between">
+                      <span>Folder Label / Category (Optional)</span>
+                      <span className="text-[10px] text-[var(--color-fg-subtle)]">How this group appears in model selector</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={nativeFolderLabel}
+                      onChange={(e) => setNativeFolderLabel(e.target.value)}
+                      placeholder="e.g. Local GGUF LLMs"
+                      className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-0)] px-3 py-2 text-xs text-[var(--color-editor-fg)] placeholder:text-[var(--color-fg-subtle)] focus:border-workbench-accent focus:outline-hidden"
+                    />
+                  </div>
+
+                  {nativeError && (
+                    <div className="flex items-center gap-2 rounded-md bg-rose-500/10 border border-rose-500/20 p-2.5 text-xs text-rose-400">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{nativeError}</span>
+                    </div>
+                  )}
+
+                  {/* Direct Hardware Inference Callout */}
+                  <div className="rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-1)]/60 p-3 text-[11px] text-[var(--color-fg-muted)] space-y-1">
+                    <div className="font-semibold text-[var(--color-editor-fg)]">Direct On-Device Inference</div>
+                    <p>
+                      Custos loads .gguf models directly into Apple Silicon Unified RAM using Metal GPU acceleration, running completely offline with no external apps required.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Modal Action Footer */}
+                <div className="flex items-center justify-between border-t border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-4">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="rounded-md px-3 py-1.5 text-xs text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-editor-fg)] transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isRegisteringFolder || !nativeFolderPath.trim()}
+                    className="flex items-center gap-1.5 rounded-md bg-[var(--color-editor-fg)] px-4 py-1.5 text-xs font-semibold text-[var(--color-canvas)] hover:opacity-90 transition disabled:opacity-50 cursor-pointer"
+                  >
+                    {isRegisteringFolder ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Registering & Scanning...</span>
+                      </>
+                    ) : (
+                      <>
+                        <FolderPlus className="w-3.5 h-3.5" />
+                        <span>Add & Scan GGUF Models</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            ) : (
+          <form onSubmit={saveLocal} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <div className="p-5 space-y-4 text-xs overflow-y-auto min-h-0 flex-1">
+              {/* Presets Header */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-medium text-fg-editor">Local Ollama or HTTP Endpoint</label>
+                  <span className="text-[10px] text-fg-subtle">Runs in background</span>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectPreset('ollama')}
+                    className={`px-3 py-2 rounded-lg border text-left transition flex-1 flex items-center justify-between cursor-pointer ${
+                      localPreset === 'ollama'
+                        ? 'border-workbench-accent bg-workbench-accent/10 text-fg-editor'
+                        : 'border-border-default bg-surface-0 hover:bg-surface-2 text-fg-muted'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 font-semibold text-xs text-fg-editor">
+                      <ProviderBrandIcon provider="ollama" size={16} />
+                      <span>Ollama Service (Default)</span>
+                    </div>
+                    <span className="text-[10px] text-fg-subtle font-mono">http://localhost:11434</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectPreset('custom')}
+                    className={`px-3 py-2 rounded-lg border text-left transition flex items-center gap-1.5 cursor-pointer ${
+                      localPreset === 'custom'
+                        ? 'border-workbench-accent bg-workbench-accent/10 text-fg-editor'
+                        : 'border-border-default bg-surface-0 hover:bg-surface-2 text-fg-muted'
+                    }`}
+                  >
+                    <Server className="w-3.5 h-3.5" />
+                    <span>Custom URL</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Endpoint URL + Probe */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-medium text-fg-editor">Endpoint Base URL</label>
+                  <span className="text-[10px] text-fg-subtle">
+                    {localPreset === 'ollama' ? 'Standard Ollama REST endpoint' : 'OpenAI-compatible /v1 endpoint'}
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    required
+                    value={localUrl}
+                    disabled={localBusy}
+                    onChange={(e) => {
+                      setLocalUrl(e.target.value);
+                      localGeneration.current++;
+                      setLocalConnected(false);
+                      setLocalModels([]);
+                      setLocalModel('');
+                      setLocalError('');
+                    }}
+                    placeholder={
+                      localPreset === 'ollama' ? 'http://localhost:11434' : 'http://localhost:1234/v1'
+                    }
+                    className="flex-1 bg-surface-0 border border-border-default focus:border-border-emphasis rounded-lg px-3 py-2 text-fg-editor placeholder-fg-subtle focus:outline-none font-mono text-xs transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={connectLocal}
+                    disabled={localBusy || !localUrl.trim()}
+                    className="px-3.5 py-2 rounded-lg bg-surface-2 hover:bg-surface-3 border border-border-default hover:border-border-emphasis text-fg-editor font-medium flex items-center gap-1.5 transition text-xs shrink-0 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${localBusy ? 'animate-spin' : ''}`} />
+                    <span>{localBusy ? 'Scanning...' : 'Scan & Discover Models'}</span>
+                  </button>
+                </div>
+
+                {/* Status Messages */}
+                {localError && (
+                  <div className="flex items-start gap-2 text-[11px] text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <span className="break-words leading-relaxed">{localError}</span>
+                  </div>
+                )}
+                {localConnected && localModels.length > 0 && (
+                  <div className="flex items-center gap-2 text-[11px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 rounded-lg">
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                    <span>Connected successfully · {localModels.length} models discovered on {localUrl}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Optional API Key / Bearer Token */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-medium text-fg-editor">
+                    API Key / Bearer Token <span className="text-fg-subtle font-normal">(Optional)</span>
+                  </label>
+                  <span className="text-[10px] text-fg-subtle font-mono">For secured local servers</span>
+                </div>
+                <input
+                  type="password"
+                  value={localApiKey}
+                  onChange={(e) => setLocalApiKey(e.target.value)}
+                  placeholder="none (leave blank unless your local proxy requires authentication)"
+                  className="w-full bg-surface-0 border border-border-default focus:border-border-emphasis rounded-lg px-3 py-2 text-fg-editor placeholder-fg-subtle focus:outline-none font-mono text-xs transition"
+                />
+              </div>
+
+              {/* Account Label */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="font-medium text-fg-editor">Account Display Name</label>
+                  <span className="text-[10px] text-fg-subtle">How this server appears in Custos</span>
+                </div>
+                <input
+                  type="text"
+                  value={localAccountName}
+                  onChange={(e) => setLocalAccountName(e.target.value)}
+                  placeholder="e.g. Ollama Workstation, LM Studio Local"
+                  className="w-full bg-surface-0 border border-border-default focus:border-border-emphasis rounded-lg px-3 py-2 text-fg-editor placeholder-fg-subtle focus:outline-none text-xs transition"
+                />
+              </div>
+
+              {/* Discovered Model Selection */}
+              {localModels.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="font-medium text-fg-editor">Active Model</label>
+                    <span className="text-[10px] text-emerald-400 font-mono">
+                      {localModels.find((m) => m.id === localModel)?.context_window
+                        ? `${Math.round((localModels.find((m) => m.id === localModel)?.context_window || 0) / 1000)}k context`
+                        : 'Ready'}
+                    </span>
+                  </div>
+                  <CustomSelect
+                    value={localModel}
+                    onChange={setLocalModel}
+                    options={localModels.map((m) => ({
+                      value: m.id,
+                      label: m.name || m.id,
+                      sublabel: m.context_window ? `${Math.round(m.context_window / 1000)}k tokens context window` : 'Context window unknown',
+                      icon: <Cpu className="w-3.5 h-3.5 text-emerald-400" />,
+                    }))}
+                    headerTitle="Discovered Local Models"
+                    headerBadge={`${localModels.length} Available`}
+                  />
+                </div>
+              )}
+
+                  {/* Switch to Native GGUF Bridge Card */}
+                  <div className="rounded-xl border border-border-default/80 bg-surface-2/30 p-3.5 flex items-start gap-3">
+                    <div className="p-2 rounded-lg bg-teal-500/10 text-teal-400 shrink-0 mt-0.5">
+                      <Cpu className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-semibold text-fg-editor">
+                        Have GGUF model files on disk?
+                      </div>
+                      <p className="text-[11px] text-fg-muted mt-0.5 leading-relaxed">
+                        You can load and execute GGUF files directly into Apple Silicon Metal GPU without running Ollama or external servers.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setLocalSubTab('native')}
+                        className="mt-2 text-xs font-medium text-teal-400 hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>Switch to Native GGUF Runtime →</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="border-t border-border-muted p-4 flex justify-end gap-2 bg-surface-1 rounded-b-2xl shrink-0">
+                  <button
+                    type="button"
+                    onClick={closeAndClearSecret}
+                    disabled={localBusy}
+                    className="px-4 py-2 rounded-lg hover:bg-surface-2 text-fg-muted hover:text-fg-editor transition text-xs font-medium cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={localBusy || !localConnected || !localModels.some((m) => m.id === localModel)}
+                    className="btn-primary rounded-lg px-4 py-2 text-xs font-medium transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  >
+                    {localBusy ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Connecting...</span>
+                      </>
+                    ) : (
+                      <span>Save & Activate Provider</span>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         ) : authMode === 'api_key' ? (
           <form onSubmit={handleSubmitApiKey} className="flex flex-col flex-1 min-h-0 overflow-hidden">
             <div className="p-5 space-y-4 text-xs overflow-y-auto min-h-0 flex-1">
@@ -495,35 +968,31 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
               {/* API Key Secret */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="font-medium text-fg-editor">
-                    {providerService === 'local' ? 'API Key / Bearer Token (Optional)' : 'API Key Secret'}
-                  </label>
+                  <label className="font-medium text-fg-editor">API Key Secret</label>
                   <span className="text-[10px] text-fg-subtle font-mono">Fail-closed & Masked</span>
                 </div>
                 <input
                   type="password"
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  placeholder={providerService === 'local' ? 'none (or token if reverse proxy auth)' : 'sk-ant-... / sk-proj-...'}
+                  placeholder="sk-ant-... / sk-proj-..."
                   className="w-full bg-surface-0 border border-border-default focus:border-border-emphasis rounded-lg px-3 py-2 text-fg-editor placeholder-fg-subtle focus:outline-none font-mono text-xs transition"
-                  autoFocus={providerService !== 'local'}
+                  autoFocus
                 />
               </div>
 
-              {/* Custom / Local Endpoint URL */}
+              {/* Custom Endpoint URL */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="font-medium text-fg-editor">Endpoint Base URL</label>
-                  <span className="text-[10px] text-fg-subtle">
-                    {providerService === 'local' ? 'Ollama / vLLM / LM Studio' : 'Custom Gateway (Optional)'}
-                  </span>
+                  <span className="text-[10px] text-fg-subtle">Custom Gateway (Optional)</span>
                 </div>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={endpointUrl}
                     onChange={(e) => setEndpointUrl(e.target.value)}
-                    placeholder={providerService === 'local' ? 'http://localhost:11434' : 'Default cloud endpoint'}
+                    placeholder="Default cloud endpoint"
                     className="flex-1 bg-surface-0 border border-border-default focus:border-border-emphasis rounded-lg px-3 py-2 text-fg-editor placeholder-fg-subtle focus:outline-none font-mono text-xs transition"
                   />
                   <button

@@ -67,7 +67,6 @@ export const ActivityPane: React.FC<ActivityPaneProps> = ({ sessionId, onShowToa
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setError(message);
-      onShowToast?.(`Stop failed: ${message}`);
     } finally { setStopping(false); }
   };
 

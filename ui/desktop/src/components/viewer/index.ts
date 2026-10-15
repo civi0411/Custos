@@ -1,5 +1,6 @@
 export * from './CompanionFileViewer';
 export * from './MarkdownViewer';
+export * from './PdfViewer';
 export * from './TabularDataViewer';
 export * from './StructuredDataViewer';
 export * from './VisualMediaViewer';

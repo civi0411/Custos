@@ -1,13 +1,13 @@
-import { useState, useEffect, useRef, type SetStateAction } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { type ActiveWorkbench, AppWorkspaceShell } from '@/components/shell';
-import { type OrcaTab, type ResourceTabsState } from '@/components/workbenches/OrcaTabbedContainer';
 import type { Session } from '@/types';
 import { daemonClient } from '@/api/daemon_client';
 
 const MODE_STORAGE_KEY = 'custos.workspace.mode.v2';
 const LAST_SESSION_KEY = 'custos.workspace.last_session_by_lens.v1';
+const SIDEBAR_VIEW_KEY = 'custos.sidebar.list_mode_by_lens.v1';
 
 function homeMode(session: Session): ActiveWorkbench {
   if (!session.taskId && session.openedLenses?.length) {
@@ -27,6 +27,7 @@ export function StudioPage() {
     projectData,
     setCurrentProject,
     currentSessions,
+    tasks,
     activeSessionId,
     setActiveSessionId,
     workspaces,
@@ -45,6 +46,13 @@ export function StudioPage() {
     openSettings,
     activeWorkbench: mode,
     setActiveWorkbench: setMode,
+    isSidebarCollapsed,
+    setIsSidebarCollapsed,
+    isWebTabOpen,
+    setIsWebTabOpen,
+    resourceTabs,
+    isWebTabExpanded,
+    setIsWebTabExpanded,
   } = useAppContext();
 
   const { sessionId } = useParams<{ sessionId?: string }>();
@@ -57,59 +65,27 @@ export function StudioPage() {
     } catch { return {}; }
   });
 
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isWebTabOpen, setIsWebTabOpen] = useState(true);
-  const [isWebTabExpanded, setIsWebTabExpanded] = useState(false);
-  const [tabStates, setTabStates] = useState<Record<string, { tabs: OrcaTab[]; activeTabId: string }>>({});
-  const tabScope = `${currentProject}:${activeSessionId || 'no-session'}:${mode}`;
-
-  const getDefaultTabForMode = (m: ActiveWorkbench): { tabs: OrcaTab[]; activeTabId: string } => {
-    if (m === 'engineering') {
-      return {
-        tabs: [
-          { id: 'files', type: 'files', title: 'Files & Changes', url: 'custos://resource/files' },
-          { id: 'activity', type: 'activity', title: 'Activity', url: 'custos://resource/activity' },
-        ],
-        activeTabId: 'files',
-      };
-    }
-    if (m === 'research') {
-      return {
-        tabs: [
-          { id: 'literature', type: 'literature', title: 'Sources', url: 'custos://resource/literature' },
-          { id: 'findings', type: 'findings', title: 'Findings', url: 'custos://resource/findings' },
-          { id: 'lab', type: 'lab', title: 'Lab', url: 'custos://resource/lab' },
-        ],
-        activeTabId: 'literature',
-      };
-    }
-    // Copilot: Drafts, Outbox, Notes
-    return {
-      tabs: [
-        { id: 'drafts', type: 'drafts', title: 'Drafts', url: 'custos://resource/drafts' },
-        { id: 'outbox', type: 'outbox', title: 'Outbox', url: 'custos://resource/outbox' },
-        { id: 'notes', type: 'notes', title: 'Notes', url: 'custos://resource/notes' },
-      ],
-      activeTabId: 'drafts',
-    };
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
+  const [sidebarViewByLens, setSidebarViewByLens] = useState<Record<string, 'chats' | 'tasks'>>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SIDEBAR_VIEW_KEY) || '{}');
+      if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return {};
+      return Object.fromEntries(['copilot', 'engineering', 'research'].map((lens) => [
+        lens,
+        saved[lens] === 'tasks' ? 'tasks' : 'chats',
+      ]));
+    } catch { return {}; }
+  });
+  const sidebarView = sidebarViewByLens[mode] || 'chats';
+  const setSidebarView = (lens: ActiveWorkbench, view: 'chats' | 'tasks') => {
+    const next = { ...sidebarViewByLens, [lens]: view };
+    setSidebarViewByLens(next);
+    try { localStorage.setItem(SIDEBAR_VIEW_KEY, JSON.stringify(next)); } catch { }
   };
-
-  const currentTabState = tabStates[tabScope] ?? getDefaultTabForMode(mode);
-  const setTabs = (update: SetStateAction<OrcaTab[]>) => setTabStates((previous) => {
-    const current = previous[tabScope] ?? currentTabState;
-    const tabs = typeof update === 'function' ? update(current.tabs) : update;
-    return { ...previous, [tabScope]: { ...current, tabs } };
-  });
-  const setActiveTabId = (update: SetStateAction<string>) => setTabStates((previous) => {
-    const current = previous[tabScope] ?? currentTabState;
-    const activeTabId = typeof update === 'function' ? update(current.activeTabId) : update;
-    return { ...previous, [tabScope]: { ...current, activeTabId } };
-  });
-  const resourceTabs: ResourceTabsState = { ...currentTabState, setTabs, setActiveTabId };
   const openResources = (expanded: boolean) => {
     const newTabId = `tools-${Date.now()}`;
-    setTabs((previous) => [...previous, { id: newTabId, type: 'tools', title: 'New Tab', url: 'custos://resources' }]);
-    setActiveTabId(newTabId);
+    resourceTabs.setTabs((previous) => [...previous, { id: newTabId, type: 'tools', title: 'New Tab', url: 'custos://resources' }]);
+    resourceTabs.setActiveTabId(newTabId);
     setIsWebTabExpanded(expanded);
     setIsWebTabOpen(true);
   };
@@ -129,11 +105,14 @@ export function StudioPage() {
   );
 
   const selectSession = (id: string) => {
+    setActiveTaskId(null);
+    setSidebarView(mode, 'chats');
     setActiveSessionId(id);
     setLastSessionByLens((previous) => ({ ...previous, [`${currentProject}:${mode}`]: id }));
   };
 
   const switchMode = (targetMode: ActiveWorkbench) => {
+    setActiveTaskId(null);
     const candidates = sessionsForMode(targetMode);
     const remembered = lastSessionByLens[`${currentProject}:${targetMode}`];
     setMode(targetMode);
@@ -173,6 +152,8 @@ export function StudioPage() {
       [source.id]: Array.from(new Set([...(previous[source.id] || []), targetMode])),
     }));
     setLastSessionByLens((previous) => ({ ...previous, [`${currentProject}:${targetMode}`]: source.id }));
+    setActiveTaskId(null);
+    setSidebarView(targetMode, 'chats');
     setActiveSessionId(source.id);
     setMode(targetMode);
   };
@@ -241,6 +222,7 @@ export function StudioPage() {
         currentProject={currentProject}
         projectNames={Object.keys(projectData)}
         onSelectProject={(p) => {
+          setActiveTaskId(null);
           setCurrentProject(p);
           const available = (projectData[p] || []).filter((session) =>
             homeMode(session) === mode || sessionLenses[session.id]?.includes(mode)
@@ -257,9 +239,15 @@ export function StudioPage() {
         allSessions={currentSessions}
         activeSessionId={activeSessionId}
         onSelectSession={selectSession}
+        selectedTaskId={activeTaskId}
+        onSelectTask={(id) => { setSidebarView(mode, 'tasks'); setActiveTaskId(id); }}
+        onClearTask={() => setActiveTaskId(null)}
+        sidebarView={sidebarView}
+        onChangeSidebarView={(view) => setSidebarView(mode, view)}
+        tasks={tasks}
         onOpenFullChatIn={openFullChatIn}
         onOpenSessionHere={(id) => void openFullChatIn(mode, id)}
-        onNewSession={() => setIsNewSessionOpen(true)}
+        onNewSession={() => { setSidebarView(mode, 'chats'); setActiveTaskId(null); setIsNewSessionOpen(true); }}
         onSendMessage={(message) => {
           if (!activeSessionId) {
             showToast('Select or create a conversation first.');

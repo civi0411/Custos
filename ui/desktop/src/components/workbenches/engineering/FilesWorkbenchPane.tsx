@@ -29,7 +29,7 @@ import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 export interface FilesWorkbenchPaneProps {
   sessionId?: string;
   onShowToast?: (msg: string) => void;
-  onOpenTab?: (id: OrcaTabId) => void;
+  onOpenTab?: (id: OrcaTabId, customUrl?: string, customTitle?: string) => void;
 }
 
 function getFileIcon(name: string) {
@@ -549,6 +549,11 @@ export const FilesWorkbenchPane: React.FC<FilesWorkbenchPaneProps> = ({
                     />
                   </div>
                 }
+                onOpenInBrowser={(url) => {
+                  const fileName = activeFilePath ? activeFilePath.split('/').pop() : 'Web Preview';
+                  onOpenTab?.('browser', url, `${fileName} - Browser`);
+                  onShowToast?.(`Opened ${fileName} in Browser Workbench`);
+                }}
               />
             )
           ) : (

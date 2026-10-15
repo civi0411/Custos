@@ -156,7 +156,7 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
                       />
                     </div>
 
-                    {account.providerId === 'local' && <div className="flex items-center justify-between text-xs"><span className={account.status === 'active' ? 'text-emerald-400' : 'text-fg-muted'}>{account.status === 'active' ? 'Online' : 'Offline'}</span>{account.status !== 'active' && <button type="button" onClick={() => void refreshModels()} className="provider-oauth-action px-2 py-1 rounded">Retry</button>}</div>}
+                    {account.providerId === 'local' && <div className="flex items-center justify-between text-xs"><span className={account.status === 'active' ? 'text-emerald-400' : 'text-fg-muted'}>{account.status === 'active' ? 'Online' : 'Offline'}</span>{account.status !== 'active' && <button type="button" onClick={() => void refreshModels()} className="rounded border border-border-default bg-surface-2 hover:bg-surface-3 px-2 py-1 text-[10px] text-fg-editor transition cursor-pointer">Retry</button>}</div>}
 
                     <div className="flex items-center justify-between pt-2 border-t border-border-muted/50 text-[11px] font-mono text-fg-subtle">
                       <span>Default: {account.defaultModel}</span>

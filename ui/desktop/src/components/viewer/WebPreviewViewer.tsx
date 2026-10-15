@@ -1,11 +1,22 @@
-import React, { useState } from 'react';
-import { Globe, Code, RotateCw, Monitor, Tablet, Smartphone, Copy, Check } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import {
+  Globe,
+  Code,
+  RotateCw,
+  Monitor,
+  Tablet,
+  Smartphone,
+  Copy,
+  Check,
+  ExternalLink,
+} from 'lucide-react';
 
 interface WebPreviewViewerProps {
   content: string;
   path: string;
   isReadOnly?: boolean;
   onChangeText?: (text: string) => void;
+  onOpenInBrowser?: (url: string) => void;
   className?: string;
 }
 
@@ -14,12 +25,31 @@ export const WebPreviewViewer: React.FC<WebPreviewViewerProps> = ({
   path,
   isReadOnly = true,
   onChangeText,
+  onOpenInBrowser,
   className = '',
 }) => {
   const [viewMode, setViewMode] = useState<'preview' | 'code'>('preview');
   const [deviceWidth, setDeviceWidth] = useState<'100%' | '768px' | '375px'>('100%');
   const [iframeKey, setIframeKey] = useState<number>(0);
   const [copied, setCopied] = useState(false);
+
+  // Generate Blob URL for browser workbench handoff or external window
+  const htmlBlobUrl = useMemo(() => {
+    try {
+      const blob = new Blob([content], { type: 'text/html' });
+      return URL.createObjectURL(blob);
+    } catch {
+      return null;
+    }
+  }, [content]);
+
+  useEffect(() => {
+    return () => {
+      if (htmlBlobUrl) {
+        URL.revokeObjectURL(htmlBlobUrl);
+      }
+    };
+  }, [htmlBlobUrl]);
 
   const handleRefresh = () => {
     setIframeKey((k) => k + 1);
@@ -29,6 +59,20 @@ export const WebPreviewViewer: React.FC<WebPreviewViewerProps> = ({
     navigator.clipboard.writeText(content);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleOpenInBrowserWorkbench = () => {
+    if (htmlBlobUrl && onOpenInBrowser) {
+      onOpenInBrowser(htmlBlobUrl);
+    } else if (htmlBlobUrl) {
+      window.open(htmlBlobUrl, '_blank');
+    }
+  };
+
+  const handleOpenExternal = () => {
+    if (htmlBlobUrl) {
+      window.open(htmlBlobUrl, '_blank');
+    }
   };
 
   return (
@@ -110,15 +154,38 @@ export const WebPreviewViewer: React.FC<WebPreviewViewerProps> = ({
         {/* Action Buttons */}
         <div className="flex items-center gap-1.5">
           {viewMode === 'preview' && (
-            <button
-              type="button"
-              onClick={handleRefresh}
-              className="p-1 rounded text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"
-              title="Reload preview"
-            >
-              <RotateCw className="h-3.5 w-3.5" />
-            </button>
+            <>
+              {/* Open in Custos Browser Workbench */}
+              <button
+                type="button"
+                onClick={handleOpenInBrowserWorkbench}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-[var(--color-surface-2)] border border-[var(--color-border-subtle)] hover:bg-[var(--color-surface-3)] text-xs text-sky-400 font-medium transition"
+                title="Open in Browser Workbench tab"
+              >
+                <Globe className="h-3.5 w-3.5" />
+                <span>Open in Browser</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleOpenExternal}
+                className="p-1 rounded text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"
+                title="Open in external browser window"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleRefresh}
+                className="p-1 rounded text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"
+                title="Reload preview"
+              >
+                <RotateCw className="h-3.5 w-3.5" />
+              </button>
+            </>
           )}
+
           <button
             type="button"
             onClick={handleCopy}

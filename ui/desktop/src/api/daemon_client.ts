@@ -55,6 +55,11 @@ import {
   ModelPricing,
   ModelCatalogResult,
   ProviderConfigRecord,
+  LocalModelFolder,
+  LocalModelDescriptor,
+  LocalHardwareProfile,
+  LocalModelPreflightResponse,
+  LoadedModelInstance,
   OAuthAuthorizeResult,
   OAuthConnectionMetadata,
   OAuthStatusResult,
@@ -484,8 +489,8 @@ export class DaemonClient {
     return this.request<WorkspaceDetectionResult>('v1.workspaces.detect', { path });
   }
 
-  async pickFolder(): Promise<string | null> {
-    const res = await this.request<{ path: string | null }>('v1.workspaces.pick_folder', {});
+  async pickFolder(purpose?: 'model'): Promise<string | null> {
+    const res = await this.request<{ path: string | null }>('v1.workspaces.pick_folder', purpose ? { purpose } : {});
     return res?.path ?? null;
   }
 
@@ -776,6 +781,88 @@ export class DaemonClient {
       model_id: modelId,
       ...(tokens || {}),
     });
+  }
+
+  // ── Local AI Model & Folder Detection Methods ─────────────────────────────
+
+  async listLocalFolders(): Promise<LocalModelFolder[]> {
+    return this.request<LocalModelFolder[]>('v1.local_models.folders.list', {});
+  }
+
+  async addLocalFolder(
+    folderPath: string,
+    label?: string
+  ): Promise<{
+    folder: LocalModelFolder;
+    models_discovered: number;
+    models: LocalModelDescriptor[];
+  }> {
+    return this.request('v1.local_models.folders.add', {
+      folder_path: folderPath,
+      label,
+    });
+  }
+
+  async removeLocalFolder(id: string): Promise<{ deleted: boolean; id: string }> {
+    return this.request('v1.local_models.folders.remove', { id });
+  }
+
+  async scanLocalModels(
+    folderId?: string
+  ): Promise<{
+    scanned_folders: number;
+    models_count: number;
+    models: LocalModelDescriptor[];
+    hardware: LocalHardwareProfile;
+    scanned_at: number;
+  }> {
+    return this.request('v1.local_models.scan', {
+      folder_id: folderId,
+    });
+  }
+
+  async listLocalModels(folderId?: string): Promise<{ models: LocalModelDescriptor[] }> {
+    return this.request('v1.local_models.list', {
+      folder_id: folderId,
+    });
+  }
+
+  async getLocalHardware(): Promise<LocalHardwareProfile> {
+    return this.request<LocalHardwareProfile>('v1.local_models.hardware', {});
+  }
+
+  async preflightLocalModel(
+    modelPath: string,
+    requestedContext?: number
+  ): Promise<LocalModelPreflightResponse> {
+    return this.request<LocalModelPreflightResponse>('v1.local_models.preflight', {
+      model_path: modelPath,
+      requested_context: requestedContext,
+    });
+  }
+
+  async loadLocalModel(
+    modelPath: string,
+    contextSize?: number,
+    gpuLayers?: number
+  ): Promise<LoadedModelInstance> {
+    return this.request<LoadedModelInstance>('v1.local_models.load', {
+      model_path: modelPath,
+      context_size: contextSize,
+      gpu_layers: gpuLayers,
+    });
+  }
+
+  async unloadLocalModel(
+    modelPathOrId: string
+  ): Promise<{ evicted: boolean; model: string }> {
+    return this.request<{ evicted: boolean; model: string }>('v1.local_models.unload', {
+      model_path: modelPathOrId,
+    });
+  }
+
+  async listLoadedInstances(): Promise<{ instances: LoadedModelInstance[] }> {
+    return this.request<{ instances: LoadedModelInstance[] }>('v1.local_models.instances', {});
   }
 
   async listClientKeys(): Promise<any[]> {

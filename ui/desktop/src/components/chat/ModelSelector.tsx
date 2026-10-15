@@ -19,6 +19,8 @@ import {
   DeepSeekIcon
 } from '@/components/common/AgentIcons';
 import { useAppContext } from '@/context/AppContext';
+import { daemonClient } from '@/api/daemon_client';
+import type { LoadedModelInstance, LocalModelDescriptor } from '@/types/domain';
 
 export type ThinkingEffort = string;
 
@@ -68,6 +70,8 @@ export function getProviderInfo(modelId: string): {
   label: string;
 } {
   const m = (modelId || '').toLowerCase();
+  if (m.startsWith('native:')) return { provider: 'local', label: 'Local (Native Metal)' };
+  if (m.startsWith('local/') || m.startsWith('local:')) return { provider: 'local', label: 'Local (Apple Silicon)' };
   if (m.startsWith('ollama/')) return { provider: 'local', label: 'Local (Ollama)' };
   if (m.startsWith('copilot/')) return { provider: 'copilot', label: 'GitHub Copilot' };
   if (m.startsWith('antigravity/')) return { provider: 'antigravity', label: 'Antigravity' };
@@ -75,8 +79,8 @@ export function getProviderInfo(modelId: string): {
   if (m.includes('gpt') || m.includes('o1') || m.includes('o3') || m.includes('openai')) return { provider: 'openai', label: 'OpenAI' };
   if (m.includes('gemini') || m.includes('google')) return { provider: 'gemini', label: 'Google Gemini' };
   if (m.includes('deepseek')) return { provider: 'deepseek', label: 'DeepSeek' };
-  if (m.includes('llama') || m.includes('qwen') || m.includes('mistral') || m.includes('local') || m.includes('ollama')) {
-    return { provider: 'local', label: 'Local (Ollama)' };
+  if (m.includes('qwopus') || m.includes('llama') || m.includes('qwen') || m.includes('mistral') || m.includes('local') || m.includes('ollama')) {
+    return { provider: 'local', label: 'Local (Apple Silicon)' };
   }
   return { provider: 'other', label: 'Custom' };
 }
@@ -111,7 +115,17 @@ export function ProviderIcon({
 }
 
 export function formatModelDisplayName(rawId: string): string {
-  const clean = rawId.replace(/^(antigravity|ollama|copilot|gemini-oauth)\//i, '').replace(/-tiered$/, '');
+  let clean = rawId
+    .replace(/^native:/i, '')
+    .replace(/^(antigravity|ollama|copilot|local|gemini-oauth)\//i, '')
+    .replace(/^local:/i, '');
+  clean = clean.replace(/-(high|medium|low|extra-low|tiered)$/i, '');
+  if (clean.includes('/') || clean.includes('\\')) {
+    clean = clean.split(/[/\\]/).pop() || clean;
+  }
+  if (clean.toLowerCase().endsWith('.gguf')) {
+    clean = clean.slice(0, -5);
+  }
   return clean.split(/[-_]/).map(word => {
     if (/^(gpt|oss)$/i.test(word)) return word.toUpperCase();
     return word.charAt(0).toUpperCase() + word.slice(1);
@@ -251,6 +265,27 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     top: number;
     left: number;
   } | null>(null);
+  const [loadedInstances, setLoadedInstances] = useState<LoadedModelInstance[]>([]);
+  const [localScannedModels, setLocalScannedModels] = useState<LocalModelDescriptor[]>([]);
+  const [loadingNativeModel, setLoadingNativeModel] = useState<string | null>(null);
+  const [nativeLoadError, setNativeLoadError] = useState<string | null>(null);
+
+  const refreshLoadedInstances = async () => {
+    try {
+      const [instRes, scanRes] = await Promise.all([
+        daemonClient.listLoadedInstances(),
+        daemonClient.listLocalModels(),
+      ]);
+      setLoadedInstances(instRes.instances || []);
+      setLocalScannedModels(scanRes.models || []);
+    } catch (error) {
+      setNativeLoadError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  useEffect(() => {
+    void refreshLoadedInstances();
+  }, []);
 
   const popoverRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -275,6 +310,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     };
 
     if (isOpen) {
+      void refreshLoadedInstances();
       document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('keydown', handleKeyDown);
       setTimeout(() => searchInputRef.current?.focus(), 50);
@@ -285,7 +321,51 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     };
   }, [isOpen]);
 
-  const rawModels = useMemo(() => getConnectedModelOptions(connectedAccounts), [connectedAccounts]);
+  const rawModels = useMemo(() => {
+    const baseOptions = getConnectedModelOptions(connectedAccounts);
+
+    // 1. Instances currently resident in RAM
+    const loadedPaths = new Set(loadedInstances.map((inst) => inst.model_path));
+    const nativeLoadedOptions: ModelOption[] = loadedInstances.map((inst) => {
+      return {
+        accountId: 'local-native',
+        id: `native:${inst.model_path}`,
+        name: inst.model_name || formatModelDisplayName(inst.model_path),
+        provider: 'local' as const,
+        providerName: 'Local (Native)',
+        badge: 'Loaded',
+        badgeColor: 'emerald',
+        description: 'Loaded in the Custos local inference runtime',
+        contextWindow: inst.context_limit > 0 ? `${Math.round(inst.context_limit / 1000)}k tokens` : undefined,
+        isConfigured: true,
+        efforts: [],
+        supportsThinking: false,
+      };
+    });
+
+    // 2. Scanned GGUF models on disk (ready to load)
+    const scannedOptions: ModelOption[] = localScannedModels
+      .filter((m) => !loadedPaths.has(m.file_path))
+      .map((m) => {
+        const sizeGb = (m.file_size_bytes / (1024 * 1024 * 1024)).toFixed(1);
+        return {
+          accountId: 'local-native',
+          id: `native:${m.file_path}`,
+          name: m.model_name || formatModelDisplayName(m.file_name),
+          provider: 'local' as const,
+          providerName: 'Local (Native)',
+          badge: `${sizeGb} GB`,
+          badgeColor: 'teal',
+          description: `GGUF · Arch: ${m.architecture || 'gguf'} · Quant: ${m.quantization || 'Q4'}`,
+          contextWindow: `${m.context_length || 8192}`,
+          isConfigured: true,
+          efforts: [],
+          supportsThinking: false,
+        };
+      });
+
+    return [...nativeLoadedOptions, ...scannedOptions, ...baseOptions];
+  }, [connectedAccounts, loadedInstances, localScannedModels]);
 
   const unifiedModels = useMemo<UnifiedModelItem[]>(() => groupModelOptions(rawModels).map(routes => {
     const activeRoute = routes.find(route => route.id === activeModelId);
@@ -374,7 +454,37 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     return groups;
   }, [filteredModels]);
 
-  const handleSelectWithEffort = (model: UnifiedModelItem, effort: ThinkingEffort) => {
+  const handleSelectWithEffort = async (model: UnifiedModelItem, effort: ThinkingEffort) => {
+    if (loadingNativeModel) return;
+    setNativeLoadError(null);
+
+    // Native local model loading lifecycle
+    if (model.id.startsWith('native:')) {
+      const filePath = model.id.slice('native:'.length);
+      const isAlreadyLoaded = loadedInstances.some((inst) => inst.model_path === filePath);
+      if (!isAlreadyLoaded) {
+        setLoadingNativeModel(model.id);
+        try {
+          const preflight = await daemonClient.preflightLocalModel(filePath, 8192);
+          if (!preflight.can_load) {
+            throw new Error(preflight.issues.join('. ') || 'Model file may exceed physical memory');
+          }
+          await daemonClient.loadLocalModel(filePath, preflight.context_limit, preflight.recommended_gpu_layers);
+          void refreshLoadedInstances();
+        } catch (error) {
+          setNativeLoadError(error instanceof Error ? error.message : String(error));
+          return;
+        } finally {
+          setLoadingNativeModel(null);
+        }
+      }
+      handleSelect(model.id);
+      setIsOpen(false);
+      setHoveredBaseId(null);
+      setHoveredEffortItem(null);
+      return;
+    }
+
     const route = model.routes.map(candidate => resolveModelRoute(model.routes, candidate.accountId, effort, model.id)).find(Boolean);
     if (!route) return;
     const preferenceKey = model.baseId;
@@ -429,7 +539,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             ? 'bg-surface-2 text-fg-editor border border-border-default shadow-xs'
             : 'bg-surface-1/80 hover:bg-surface-2 text-fg-muted hover:text-fg-editor border border-border-muted hover:border-border-default'
         }`}
-        title={!hasModel ? 'No model selected' : `Active model: ${activeModelId}`}
+        title={loadingNativeModel ? 'Loading local model…' : !hasModel ? 'No model selected' : `Active model: ${activeModelId}`}
       >
         {!hasModel ? (
           <Cpu size={13} className="shrink-0 text-amber-400" />
@@ -438,11 +548,13 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         )}
 
         <span className="font-mono text-[11px] truncate max-w-[170px] text-fg-editor">
-          {!hasModel ? (
+          {loadingNativeModel ? (
+            'Loading local model…'
+          ) : !hasModel ? (
             'No model selected'
           ) : (
             <>
-              {activeUnifiedItem?.name || activeModelId}{!activeUnifiedItem && ' · Unavailable'}
+              {activeUnifiedItem?.name || formatModelDisplayName(activeModelId)}{!activeUnifiedItem && ' · Unavailable'}
               {activeUnifiedItem?.supportsEffort && (
                 <span className="ml-1 text-[10px] text-zinc-400 capitalize opacity-90 font-sans">
                   {activeUnifiedItem.selectedEffort}
@@ -543,6 +655,11 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           </div>
 
           {/* Model Options List */}
+          {nativeLoadError && (
+            <div role="alert" className="mx-2 mt-2 rounded-md border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-300">
+              {nativeLoadError}
+            </div>
+          )}
           <div className="min-h-0 overflow-y-auto p-1.5 space-y-2" style={{ maxHeight: '320px' }}>
             {groupedByProvider.length === 0 ? (
               <div className="p-4 text-center text-fg-subtle text-xs">
@@ -594,6 +711,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                         <button
                           type="button"
                           onClick={() => handleDirectModelClick(m)}
+                          disabled={loadingNativeModel !== null}
                           className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition group select-none ${
                             isSelected
                               ? 'border border-blue-500 bg-[#252528] text-fg-editor shadow-sm'
@@ -611,6 +729,19 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                             {m.supportsEffort && (
                               <span className="text-[11px] text-zinc-400 capitalize font-sans shrink-0">
                                 {m.selectedEffort}
+                              </span>
+                            )}
+
+                            {/* In RAM / Custom Badge */}
+                            {m.badge && (
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-sans border shrink-0 ${
+                                  m.badge === 'Loaded'
+                                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400 font-medium'
+                                    : 'border-zinc-700/60 bg-zinc-800/80 text-zinc-400'
+                                }`}
+                              >
+                                {m.badge}
                               </span>
                             )}
 
@@ -714,6 +845,20 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             >
               <Ban size={11} />
               Unset Model
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsOpen(false);
+                setHoveredBaseId(null);
+                setHoveredEffortItem(null);
+                openSettings('runtime');
+              }}
+              className="text-teal-400 hover:text-teal-300 flex items-center gap-1 px-2 py-0.5 rounded hover:bg-surface-2 transition text-xs font-medium"
+            >
+              <Cpu size={11} />
+              Local Models
             </button>
 
             <button

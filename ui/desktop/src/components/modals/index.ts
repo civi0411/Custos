@@ -4,3 +4,7 @@ export * from './SettingsModal';
 export * from './DelegateTaskModal';
 export * from './WorktreeManagerModal';
 export * from './OpenProjectModal';
+export * from './PluginsModal';
+export * from './SkillsModal';
+export * from './HelpModal';
+export * from './GitHubAuthModal';
