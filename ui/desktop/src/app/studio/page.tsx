@@ -203,28 +203,31 @@ export function StudioPage() {
   // Global Keyboard Shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey)) return;
-      if (e.key === '1') {
-        e.preventDefault();
-        switchMode('copilot');
-      } else if (e.key === '2') {
-        e.preventDefault();
-        switchMode('engineering');
-      } else if (e.key === '3') {
-        e.preventDefault();
-        switchMode('research');
-      } else if (e.key === 'f' && e.shiftKey && e.metaKey) {
+      // Option/Alt + 1/2/3 to switch workbench mode without colliding with Cmd+1/2/3
+      if (e.altKey && !e.metaKey && !e.ctrlKey) {
+        if (e.key === '1') {
+          e.preventDefault();
+          switchMode('copilot');
+        } else if (e.key === '2') {
+          e.preventDefault();
+          switchMode('engineering');
+        } else if (e.key === '3') {
+          e.preventDefault();
+          switchMode('research');
+        }
+      }
+      if (e.key === 'f' && e.shiftKey && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setIsWebTabOpen(true);
         setIsWebTabExpanded(true);
-      } else if (e.key === 'b' && e.shiftKey && e.metaKey) {
+      } else if (e.key === 'b' && e.shiftKey && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setIsWebTabOpen(true);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [showToast, currentProject, currentSessions, sessionLenses, lastSessionByLens]);
+  }, [showToast, currentProject, currentSessions, sessionLenses, lastSessionByLens, setIsWebTabOpen, setIsWebTabExpanded]);
 
   const activeModeSessions = sessionsForMode(mode);
   const displaySessions = activeModeSessions;

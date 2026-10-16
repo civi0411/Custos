@@ -498,13 +498,6 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     setInputText(previous => previous ? `${previous}\n\n${draft}` : draft);
   }, []);
 
-  const handleAddNewTab = () => {
-    if (!isWebTabOpen) {
-      onToggleWebTab();
-    }
-    setIsResourcePickerOpen((previous) => !previous);
-  };
-
   const pickerResources = resolveResources(
     pickerCapabilities,
     pickerCapabilityState !== 'loading',
@@ -761,7 +754,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-6 max-w-2xl mx-auto w-full">
+                  <div className="space-y-6 max-w-3xl mx-auto w-full">
                     {activeSession.messages.map((msg, i) => {
                       const isUser = msg.role === 'user';
                       return (
@@ -842,7 +835,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   />
                 </div>
               )}
-              <div className="workbench-composer max-w-2xl mx-auto p-3 transition group relative">
+              <div className="workbench-composer max-w-3xl mx-auto p-3 transition group relative">
                 <SlashCommandMenu
                   query={inputText}
                   mode={mode}
@@ -866,13 +859,6 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
 
                 <div className="flex items-center justify-between mt-2 pt-2">
                   <div className="flex items-center gap-2 text-fg-muted">
-                    <button
-                      onClick={handleAddNewTab}
-                      className="p-1 hover:text-fg-editor transition rounded"
-                      title="Launch agent or open tab"
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
                     <span className={`text-[11px] font-mono border border-border-default bg-surface-1 px-2 py-0.5 rounded ${lensMeta.iconColor}`}>
                       {lensMeta.badge}
                     </span>

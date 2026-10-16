@@ -631,7 +631,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const toggleSidebar = useCallback(() => setIsSidebarCollapsed((prev) => !prev), []);
 
-  const [isWebTabOpen, setIsWebTabOpen] = useState<boolean>(true);
+  const [isWebTabOpen, setIsWebTabOpen] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('custos_resource_pane_open');
+      if (saved !== null) return saved === 'true';
+    } catch {}
+    return false;
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('custos_resource_pane_open', String(isWebTabOpen));
+    } catch {}
+  }, [isWebTabOpen]);
+
   const toggleWebTab = useCallback(() => setIsWebTabOpen((prev) => !prev), []);
 
   const [isWebTabExpanded, setIsWebTabExpanded] = useState<boolean>(false);
@@ -715,12 +728,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (splitTabId === tabId) {
       setSplitTabId(null);
     }
-    if (resourceTabs.tabs.length <= 1) {
+    const nextTabs = resourceTabs.tabs.filter((t) => t.id !== tabId);
+    resourceTabs.setTabs(nextTabs);
+    if (nextTabs.length === 0) {
       setIsWebTabOpen(false);
       return;
     }
-    const nextTabs = resourceTabs.tabs.filter((t) => t.id !== tabId);
-    resourceTabs.setTabs(nextTabs);
     if (resourceTabs.activeTabId === tabId) {
       const closedIndex = resourceTabs.tabs.findIndex((t) => t.id === tabId);
       const nextActive = nextTabs[Math.max(0, closedIndex - 1)];
