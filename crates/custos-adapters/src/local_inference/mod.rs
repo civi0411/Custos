@@ -12,7 +12,10 @@ pub mod folder_scanner;
 pub mod adapter;
 pub use adapter::NativeLocalModelAdapter;
 pub mod sidecar;
-pub use sidecar::{get_loaded_sidecar_instance, get_sidecar_port, is_sidecar_healthy, start_sidecar, stop_sidecar};
+pub use sidecar::{
+    get_loaded_sidecar_instance, get_sidecar_port, is_sidecar_healthy,
+    set_sidecar_generation_verified, start_sidecar, stop_sidecar, verify_sidecar_generation,
+};
 
 pub mod backend;
 #[cfg(feature = "hf-hub")]
@@ -65,6 +68,8 @@ enum ModelSlotState {
         model: Box<dyn BackendLoadedModel>,
         resolved: Box<ResolvedModelPaths>,
         loaded_at: i64,
+        profile_revision: u64,
+        effective_gpu_layers: Option<u32>,
     },
 }
 
@@ -270,7 +275,7 @@ pub async fn list_loaded_instances() -> Result<Vec<custos_domain::LoadedModelIns
 
     for (model_id, backend_id, slot) in slots {
         if let Ok(state) = slot.state.try_lock() {
-            if let ModelSlotState::Loaded { resolved, loaded_at, .. } = &*state {
+            if let ModelSlotState::Loaded { resolved, loaded_at, profile_revision, effective_gpu_layers, .. } = &*state {
                 let instance_id = format!("inst_{}", &custos_domain::digest(model_id.as_bytes())[..12]);
                 instances.push(custos_domain::LoadedModelInstance {
                     instance_id,
@@ -280,6 +285,9 @@ pub async fn list_loaded_instances() -> Result<Vec<custos_domain::LoadedModelIns
                     context_limit: resolved.context_limit as u64,
                     memory_used_bytes: 0,
                     loaded_at: *loaded_at,
+                    profile_revision: *profile_revision,
+                    effective_gpu_layers: *effective_gpu_layers,
+                    generation_verified: false,
                 });
             }
         }
@@ -292,6 +300,27 @@ pub async fn preload_model(
     context_size: Option<usize>,
     gpu_layers: Option<u32>,
 ) -> Result<custos_domain::LoadedModelInstance, ProviderError> {
+    let profile = custos_domain::LocalModelLoadProfile {
+        model_path: model_name.strip_prefix("native:").unwrap_or(model_name).to_string(),
+        revision: 0,
+        context_size: context_size.unwrap_or(8192) as u64,
+        gpu_mode: if gpu_layers == Some(0) { "off" } else { "manual" }.to_string(),
+        gpu_layers,
+        eval_batch_size: None,
+        cpu_threads: None,
+        flash_attention: None,
+        mmap: true,
+        mlock: false,
+        idle_timeout_seconds: None,
+        updated_at: 0,
+    };
+    preload_model_with_profile(model_name, &profile).await
+}
+
+pub async fn preload_model_with_profile(
+    model_name: &str,
+    profile: &custos_domain::LocalModelLoadProfile,
+) -> Result<custos_domain::LoadedModelInstance, ProviderError> {
     let runtime = InferenceRuntime::get_or_init()
         .map_err(|e| ProviderError::ExecutionError(e.to_string()))?;
 
@@ -301,13 +330,21 @@ pub async fn preload_model(
         .map_err(|e| ProviderError::ExecutionError(e.to_string()))?
         .ok_or_else(|| ProviderError::ExecutionError(format!("Model path not found: {clean_model}")))?;
 
-    if let Some(ctx) = context_size {
-        resolved.context_limit = ctx;
-        resolved.settings.context_size = Some(ctx as u32);
-    }
-    if let Some(layers) = gpu_layers {
-        resolved.settings.n_gpu_layers = Some(layers);
-    }
+    let context_size = usize::try_from(profile.context_size).map_err(|_| ProviderError::ExecutionError("Local model context size exceeds this platform".to_string()))?;
+    resolved.context_limit = context_size;
+    resolved.settings.context_size = Some(profile.context_size.min(u32::MAX as u64) as u32);
+    resolved.settings.n_gpu_layers = match profile.gpu_mode.as_str() {
+        "off" => Some(0),
+        "manual" => profile.gpu_layers,
+        "auto" => None,
+        "max" => Some(u32::MAX),
+        other => return Err(ProviderError::ExecutionError(format!("Unsupported GPU mode: {other}"))),
+    };
+    resolved.settings.n_batch = profile.eval_batch_size;
+    resolved.settings.n_threads = profile.cpu_threads.map(|value| value.min(i32::MAX as u32) as i32);
+    resolved.settings.flash_attention = profile.flash_attention;
+    resolved.settings.use_mlock = profile.mlock;
+    resolved.settings.use_mmap = profile.mmap;
 
     let backend = runtime.backend_for_model(&resolved)?;
     let cache_key = ModelCacheKey::new(
@@ -319,17 +356,23 @@ pub async fn preload_model(
 
     let cold_load_guard = runtime.cold_load_lock.lock().await;
     let mut state = model_slot.state.lock().await;
-    if let ModelSlotState::Loaded { resolved: loaded_resolved, loaded_at, .. } = &*state {
-        let instance_id = format!("inst_{}", &custos_domain::digest(clean_model.as_bytes())[..12]);
-        return Ok(custos_domain::LoadedModelInstance {
-            instance_id,
-            model_name: resolved.model_path.file_name().and_then(|n| n.to_str()).unwrap_or(clean_model).to_string(),
-            model_path: resolved.model_path.to_string_lossy().to_string(),
-            backend_id: backend.id().to_string(),
-            context_limit: loaded_resolved.context_limit as u64,
-            memory_used_bytes: 0,
-            loaded_at: *loaded_at,
-        });
+    if let ModelSlotState::Loaded { resolved: loaded_resolved, loaded_at, profile_revision, effective_gpu_layers, .. } = &*state {
+        if *profile_revision == profile.revision {
+            let instance_id = format!("inst_{}", &custos_domain::digest(clean_model.as_bytes())[..12]);
+            return Ok(custos_domain::LoadedModelInstance {
+                instance_id,
+                model_name: resolved.model_path.file_name().and_then(|n| n.to_str()).unwrap_or(clean_model).to_string(),
+                model_path: resolved.model_path.to_string_lossy().to_string(),
+                backend_id: backend.id().to_string(),
+                context_limit: loaded_resolved.context_limit as u64,
+                memory_used_bytes: 0,
+                loaded_at: *loaded_at,
+                profile_revision: *profile_revision,
+                effective_gpu_layers: *effective_gpu_layers,
+                generation_verified: false,
+            });
+        }
+        *state = ModelSlotState::Empty;
     }
 
     *state = ModelSlotState::Loading;
@@ -359,9 +402,7 @@ pub async fn preload_model(
                     model = %clean_model,
                     "In-process load failed ({err}), falling back to modern llama-server sidecar..."
                 );
-                let ctx_size = resolved.context_limit.clamp(2048, 8192);
-                let layers = gpu_layers.unwrap_or(99);
-                match sidecar::start_sidecar(&resolved.model_path, ctx_size, layers).await {
+                match sidecar::start_sidecar(&resolved.model_path, profile).await {
                     Ok(instance) => {
                         let mut state = model_slot.state.lock().await;
                         *state = ModelSlotState::Empty;
@@ -389,9 +430,7 @@ pub async fn preload_model(
                     model = %clean_model,
                     "In-process task spawn failed ({err}), falling back to modern llama-server sidecar..."
                 );
-                let ctx_size = resolved.context_limit.clamp(2048, 8192);
-                let layers = gpu_layers.unwrap_or(99);
-                if let Ok(instance) = sidecar::start_sidecar(&resolved.model_path, ctx_size, layers).await {
+                if let Ok(instance) = sidecar::start_sidecar(&resolved.model_path, profile).await {
                     let mut state = model_slot.state.lock().await;
                     *state = ModelSlotState::Empty;
                     drop(cold_load_guard);
@@ -411,6 +450,8 @@ pub async fn preload_model(
         model: loaded,
         resolved: Box::new(resolved.clone()),
         loaded_at,
+        profile_revision: profile.revision,
+        effective_gpu_layers: if matches!(profile.gpu_mode.as_str(), "manual" | "off") { resolved.settings.n_gpu_layers } else { None },
     };
     model_slot.notify.notify_waiters();
     drop(cold_load_guard);
@@ -424,6 +465,9 @@ pub async fn preload_model(
         context_limit: resolved.context_limit as u64,
         memory_used_bytes: 0,
         loaded_at,
+        profile_revision: profile.revision,
+        effective_gpu_layers: if matches!(profile.gpu_mode.as_str(), "manual" | "off") { resolved.settings.n_gpu_layers } else { None },
+        generation_verified: false,
     })
 }
 
@@ -1145,9 +1189,21 @@ impl Provider for LocalInferenceProvider {
                                         model = %model_id,
                                         "In-process load failed ({err}), falling back to modern llama-server sidecar..."
                                     );
-                                    let ctx_size = resolved_for_load.context_limit.clamp(2048, 8192);
-                                    let layers = 99;
-                                    match sidecar::start_sidecar(&resolved_for_load.model_path, ctx_size, layers).await {
+                                    let sidecar_profile = custos_domain::LocalModelLoadProfile {
+                                        model_path: resolved_for_load.model_path.to_string_lossy().to_string(),
+                                        revision: 0,
+                                        context_size: resolved_for_load.context_limit as u64,
+                                        gpu_mode: if resolved_for_load.settings.n_gpu_layers == Some(0) { "off" } else if resolved_for_load.settings.n_gpu_layers == Some(u32::MAX) { "max" } else if resolved_for_load.settings.n_gpu_layers.is_some() { "manual" } else { "auto" }.to_string(),
+                                        gpu_layers: resolved_for_load.settings.n_gpu_layers.filter(|layers| *layers != u32::MAX),
+                                        eval_batch_size: resolved_for_load.settings.n_batch,
+                                        cpu_threads: resolved_for_load.settings.n_threads.and_then(|value| u32::try_from(value).ok()),
+                                        flash_attention: resolved_for_load.settings.flash_attention,
+                                        mmap: resolved_for_load.settings.use_mmap,
+                                        mlock: resolved_for_load.settings.use_mlock,
+                                        idle_timeout_seconds: None,
+                                        updated_at: 0,
+                                    };
+                                    match sidecar::start_sidecar(&resolved_for_load.model_path, &sidecar_profile).await {
                                         Ok(instance) => {
                                             let mut state = model_slot.state.lock().await;
                                             *state = ModelSlotState::Empty;
@@ -1212,6 +1268,8 @@ impl Provider for LocalInferenceProvider {
                             model: loaded,
                             resolved: Box::new(resolved_model.clone()),
                             loaded_at: chrono::Utc::now().timestamp_millis(),
+                            profile_revision: 0,
+                            effective_gpu_layers: resolved_model.settings.n_gpu_layers,
                         };
                         model_slot.notify.notify_waiters();
                         drop(cold_load_guard);

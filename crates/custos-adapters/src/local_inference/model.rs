@@ -75,6 +75,8 @@ pub struct ModelSettings {
     pub n_gpu_layers: Option<u32>,
     #[serde(default)]
     pub use_mlock: bool,
+    #[serde(default = "default_true")]
+    pub use_mmap: bool,
     pub flash_attention: Option<bool>,
     pub n_threads: Option<i32>,
     #[serde(default)]
@@ -122,6 +124,7 @@ impl Default for ModelSettings {
             n_batch: None,
             n_gpu_layers: None,
             use_mlock: false,
+            use_mmap: true,
             flash_attention: None,
             n_threads: None,
             tool_calling: ToolCallingMode::Auto,

@@ -108,7 +108,7 @@ pub use notebook::{
 pub use packet::ContinuationPacket as PacketContinuation;
 pub use provider_config::{
     ClientApiKeyRecord, LoadedModelInstance, LocalHardwareProfile, LocalModelDescriptor,
-    LocalModelFolder, LocalModelLoadRequest, LocalModelPreflightRequest,
+    LocalModelFolder, LocalModelLoadProfile, LocalModelLoadRequest, LocalModelPreflightRequest,
     LocalModelPreflightResponse, ModelCatalogOption, ModelCatalogResult, ModelCompatibility,
     ModelPricing, OAuthTokenRecord, ProbedModel, ProviderConfig,
 };
@@ -130,6 +130,7 @@ pub use run::{
     RunHandle, RunStatus, StartRunCommand, UsageExecutorKind, UsageMeasurement, UsageRecord,
     WorkerRun,
 };
+pub use run::{LiveRunEvent, LiveRunReplay, LiveRunSnapshot};
 pub use session::{
     ConversationTurn, Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus,
     SessionTaskBinding, TurnActorKind, WorkbenchLens,
@@ -157,4 +158,3 @@ pub use workspace_files::{
     WorkspaceDiffEntry, WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff,
     WorkspaceFileEntry, WorkspaceFileTree, WriteWorkspaceFileParams,
 };
-pub use run::{LiveRunEvent, LiveRunReplay, LiveRunSnapshot};

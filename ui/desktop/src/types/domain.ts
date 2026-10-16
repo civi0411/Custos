@@ -1203,7 +1203,7 @@ export interface LocalModelPreflightResponse {
   free_ram_bytes: number;
   metal_vram_limit_bytes: number;
   compatibility: ModelCompatibility;
-  recommended_gpu_layers: number;
+  recommended_gpu_layers?: number;
   issues: string[];
 }
 
@@ -1216,6 +1216,24 @@ export interface LoadedModelInstance {
   /** Measured resident memory in bytes; zero means unavailable, not zero use. */
   memory_used_bytes: number;
   loaded_at: number;
+  profile_revision: number;
+  effective_gpu_layers?: number;
+  generation_verified: boolean;
+}
+
+export interface LocalModelLoadProfile {
+  model_path: string;
+  revision: number;
+  context_size: number;
+  gpu_mode: 'auto' | 'max' | 'off' | 'manual';
+  gpu_layers?: number;
+  eval_batch_size?: number;
+  cpu_threads?: number;
+  flash_attention?: boolean;
+  mmap: boolean;
+  mlock: boolean;
+  idle_timeout_seconds?: number;
+  updated_at: number;
 }
 
 export interface OAuthAuthorizeResult {

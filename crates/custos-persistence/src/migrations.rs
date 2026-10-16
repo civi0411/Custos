@@ -107,5 +107,8 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.execute_batch(include_str!("../migrations/0032_provider_model_capabilities.sql"))?;
     }
     conn.execute_batch(include_str!("../migrations/0033_local_models.sql"))?;
+    conn.execute_batch(include_str!(
+        "../migrations/0034_local_model_load_profiles.sql"
+    ))?;
     Ok(())
 }
