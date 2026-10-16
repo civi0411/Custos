@@ -22,6 +22,7 @@ import {
   Send,
   Users,
   Calendar,
+  Plus,
 } from 'lucide-react';
 
 import {
@@ -136,6 +137,7 @@ interface OrcaTabbedContainerProps {
   onHandoffToCoding?: (claims: unknown[]) => void;
   splitPercent?: number;
   onOpenTab?: (id: OrcaTabId, customUrl?: string, customTitle?: string) => void;
+  onOpenResourcePicker?: (targetPane?: 'primary' | 'split') => void;
   activeWorkspaceId?: string;
   onSelectWorkspace?: (id: string) => void;
   activeWorkspace?: import('@/types/domain').ExecutionWorkspace | null;
@@ -438,6 +440,7 @@ const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
   onAskAgent,
   onHandoffToCoding,
   onOpenTab,
+  onOpenResourcePicker,
   activeWorkspaceId,
   onSelectWorkspace,
   activeWorkspace: _activeWorkspace,
@@ -822,45 +825,175 @@ const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
     };
   }, [setSplitRatio]);
 
-  if (isSplitActive && splitTab) {
+  const getTabIcon = (type: OrcaTabId, active: boolean) => {
+    const cls = `size-3.5 shrink-0 ${active ? 'text-workbench-accent' : 'text-white/40'}`;
+    switch (type) {
+      case 'files': return <FolderTree className={cls} />;
+      case 'activity': return <Activity className={cls} />;
+      case 'terminal': return <Terminal className={cls} />;
+      case 'worktrees': return <WorktreeIcon className={cls} />;
+      case 'agents': return <Bot className={cls} />;
+      case 'browser': return <Globe className={cls} />;
+      case 'emulator': return <Smartphone className={cls} />;
+      case 'fleet': return <Server className={cls} />;
+      case 'literature': return <BookOpen className={cls} />;
+      case 'findings': return <ShieldCheck className={cls} />;
+      case 'lab': return <FlaskConical className={cls} />;
+      case 'synthesis': return <Layers className={cls} />;
+      case 'artifacts': return <FileCode className={cls} />;
+      case 'drafts': return <FileText className={cls} />;
+      case 'outbox': return <Send className={cls} />;
+      case 'contacts': return <Users className={cls} />;
+      case 'calendar': return <Calendar className={cls} />;
+      default: return <Globe className={cls} />;
+    }
+  };
+
+  if (isSplitActive && splitTab && activeTab) {
+    const otherTabsForPane1 = resourceTabs.tabs.filter(
+      (t) => t.id !== activeTab.id && t.id !== splitTab.id
+    );
+    const otherTabsForPane2 = resourceTabs.tabs.filter(
+      (t) => t.id !== splitTab.id && t.id !== activeTab.id
+    );
+
     return (
       <div ref={splitContainerRef} className="flex h-full w-full min-h-0 min-w-0 flex-row overflow-hidden relative">
-        {/* Left Pane (Primary Active Tab) */}
+        {/* Left Pane (Primary Active Tab - Pane 1) */}
         <div
-          className="h-full min-h-0 min-w-0 overflow-hidden flex flex-col"
+          className="h-full min-h-0 min-w-0 overflow-hidden flex flex-col bg-[#121214]"
           style={{ width: `${splitRatio}%` }}
         >
-          {renderTab(activeTab)}
+          {/* Browser-style Tab Header for Pane 1 */}
+          <div className="h-7.5 px-2.5 bg-[#18181b] border-b border-white/10 flex items-center justify-between shrink-0 select-none">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span className="px-1 py-0.2 rounded text-[8.5px] font-mono bg-blue-500/20 text-blue-400 font-semibold border border-blue-500/30 shrink-0">
+                1
+              </span>
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/8 border border-white/10 max-w-[190px] min-w-0 shrink-0">
+                {getTabIcon(getTabType(activeTab), true)}
+                <span className="text-[11px] font-medium text-white/90 truncate">
+                  {activeTab.title}
+                </span>
+              </div>
+
+              {/* Add tab to Pane 1 (+) */}
+              <button
+                type="button"
+                onClick={() => onOpenResourcePicker?.('primary')}
+                className="flex size-5 items-center justify-center rounded-md bg-white/5 hover:bg-white/15 text-white/60 hover:text-white border border-white/10 hover:border-white/20 transition cursor-pointer shrink-0"
+                title="Mở thêm tab mới vào Bên 1 (+)"
+              >
+                <Plus className="size-3" />
+              </button>
+            </div>
+
+            {/* Quick Tab Switcher for Pane 1 */}
+            {otherTabsForPane1.length > 0 && (
+              <div className="flex items-center gap-1 shrink-0 ml-1">
+                <select
+                  aria-label="Chuyển tab bên 1"
+                  value={activeTab.id}
+                  onChange={(e) => resourceTabs.setActiveTabId(e.target.value)}
+                  className="bg-white/5 border border-white/10 text-white/70 text-[10px] rounded px-1.5 py-0.5 outline-none hover:bg-white/10 cursor-pointer max-w-[100px] truncate"
+                >
+                  <option value={activeTab.id} className="bg-[#1e1e22] text-white">{activeTab.title}</option>
+                  {otherTabsForPane1.map((t) => (
+                    <option key={t.id} value={t.id} className="bg-[#1e1e22] text-white">{t.title}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {renderTab(activeTab)}
+          </div>
         </div>
 
-        {/* Draggable Inner Splitter */}
+        {/* Draggable Inner Splitter with Center Floating Split Action (+) */}
         <div
-          className="w-1.5 h-full bg-white/5 hover:bg-workbench-accent cursor-col-resize shrink-0 z-30 transition-colors flex items-center justify-center group select-none relative"
+          className="w-2.5 h-full bg-[#18181b] border-x border-white/10 hover:bg-workbench-accent/20 cursor-col-resize shrink-0 z-30 transition-colors flex flex-col items-center justify-center group select-none relative"
           onMouseDown={() => {
             isDraggingSplit.current = true;
           }}
           onDoubleClick={() => setSplitRatio?.(50)}
-          title="Kéo để chỉnh tỷ lệ song song (Nhấn đúp về 50/50)"
+          title="Kéo để chỉnh tỷ lệ chia đôi | Nhấp đúp về 50/50"
         >
-          <div className="w-0.5 h-8 rounded-full bg-white/20 group-hover:bg-white transition-colors" />
+          {/* Top '+' Button at header level between panes */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenResourcePicker?.('split');
+            }}
+            className="absolute top-1 size-5 rounded-md bg-[#222226] border border-white/20 text-white/60 hover:text-white hover:bg-workbench-accent hover:border-workbench-accent shadow-sm transition flex items-center justify-center cursor-pointer z-40"
+            title="Thêm tab vào chỗ chia (+)"
+          >
+            <Plus className="size-3" />
+          </button>
+
+          {/* Vertical handle bar */}
+          <div className="w-0.5 h-12 rounded-full bg-white/20 group-hover:bg-workbench-accent transition-colors" />
+
+          {/* Floating Quick Add (+) Button on Split Divider Hover */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenResourcePicker?.('split');
+            }}
+            className="absolute top-1/2 -translate-y-1/2 size-5 rounded-full bg-[#27272a] border border-white/20 text-white/70 hover:text-white hover:bg-workbench-accent hover:border-workbench-accent shadow-md opacity-60 group-hover:opacity-100 hover:scale-110 transition-all flex items-center justify-center cursor-pointer z-40"
+            title="Thêm tab mới vào chỗ chia (+)"
+          >
+            <Plus className="size-3" />
+          </button>
         </div>
 
-        {/* Right Pane (Secondary Split Tab) */}
+        {/* Right Pane (Secondary Split Tab - Pane 2) */}
         <div
-          className="h-full min-h-0 min-w-0 overflow-hidden flex flex-col border-l border-white/10"
+          className="h-full min-h-0 min-w-0 overflow-hidden flex flex-col bg-[#121214]"
           style={{ width: `${100 - splitRatio}%` }}
         >
-          {/* Sub-Header for Parallel Split Pane */}
-          <div className="h-7 px-2.5 bg-[#18181b] border-b border-white/10 flex items-center justify-between shrink-0 select-none">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="px-1 py-0.2 rounded text-[8.5px] font-mono bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/30">
+          {/* Browser-style Tab Header for Pane 2 */}
+          <div className="h-7.5 px-2.5 bg-[#18181b] border-b border-white/10 flex items-center justify-between shrink-0 select-none">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span className="px-1 py-0.2 rounded text-[8.5px] font-mono bg-purple-500/20 text-purple-300 font-semibold border border-purple-500/30 shrink-0">
                 2
               </span>
-              <span className="text-[11px] font-medium text-white/90 truncate">
-                {splitTab.title}
-              </span>
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/8 border border-white/10 max-w-[190px] min-w-0 shrink-0">
+                {getTabIcon(getTabType(splitTab), true)}
+                <span className="text-[11px] font-medium text-white/90 truncate">
+                  {splitTab.title}
+                </span>
+              </div>
+
+              {/* Add tab to Pane 2 (+) */}
+              <button
+                type="button"
+                onClick={() => onOpenResourcePicker?.('split')}
+                className="flex size-5 items-center justify-center rounded-md bg-white/5 hover:bg-white/15 text-white/60 hover:text-white border border-white/10 hover:border-white/20 transition cursor-pointer shrink-0"
+                title="Mở thêm tab mới vào Bên 2 (+)"
+              >
+                <Plus className="size-3" />
+              </button>
             </div>
-            <div className="flex items-center gap-1">
+
+            <div className="flex items-center gap-1 shrink-0 ml-1">
+              {otherTabsForPane2.length > 0 && (
+                <select
+                  aria-label="Chuyển tab bên 2"
+                  value={splitTab.id}
+                  onChange={(e) => resourceTabs.setSplitTabId?.(e.target.value)}
+                  className="bg-white/5 border border-white/10 text-white/70 text-[10px] rounded px-1.5 py-0.5 outline-none hover:bg-white/10 cursor-pointer max-w-[100px] truncate mr-1"
+                >
+                  <option value={splitTab.id} className="bg-[#1e1e22] text-white">{splitTab.title}</option>
+                  {otherTabsForPane2.map((t) => (
+                    <option key={t.id} value={t.id} className="bg-[#1e1e22] text-white">{t.title}</option>
+                  ))}
+                </select>
+              )}
+
               <button
                 type="button"
                 onClick={() => {
