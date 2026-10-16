@@ -5,3 +5,4 @@ export * from './markdownMath';
 export * from './AgentActionCard';
 export * from './AgentHarnessSelector';
 export * from './AgentWorkingStatus';
+export * from './ComposerPlusMenu';
