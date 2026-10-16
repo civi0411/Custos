@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, CircleHelp, LogOut, ChevronRight } from 'lucide-react';
+import { Settings, Cpu, CircleHelp, LogOut, ChevronRight } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { formatKeyCombo } from '@/lib/utils';
 
@@ -14,7 +14,7 @@ export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { openSettings, openHelp, openGitHubAuth, handleGitHubLogout, userProfile } = useAppContext();
+  const { openAiSetup, openSettings, openHelp, openGitHubAuth, handleGitHubLogout, userProfile } = useAppContext();
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Click outside to close
@@ -44,6 +44,11 @@ export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({
   const handleProfileHeaderClick = () => {
     onClose();
     openGitHubAuth();
+  };
+
+  const handleAiSetupClick = () => {
+    onClose();
+    openAiSetup();
   };
 
   const handleSettingsClick = () => {
@@ -111,6 +116,22 @@ export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({
 
           {/* Divider */}
           <div className="my-1 h-px bg-white/10 mx-1" />
+
+          {/* AI & Model Setup Item with shortcut */}
+          <button
+            type="button"
+            onClick={handleAiSetupClick}
+            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[13px] font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+            role="menuitem"
+          >
+            <div className="flex items-center gap-3">
+              <Cpu className="size-4 text-teal-400" strokeWidth={1.8} />
+              <span>AI & Model Setup</span>
+            </div>
+            <span className="rounded border border-white/10 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-teal-300/80 shadow-none">
+              {formatKeyCombo({ ctrlOrCmd: true, key: '3' })}
+            </span>
+          </button>
 
           {/* Settings Item with shortcut */}
           <button

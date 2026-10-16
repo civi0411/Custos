@@ -4,6 +4,7 @@ import { useAppContext } from '@/context/AppContext';
 import { StatusBar, Toast, ActivityRail, AppTopBar } from '@/components/shell';
 import {
   SettingsModal,
+  AiSetupModal,
   NewSessionModal,
   AddProviderModal,
   OpenProjectModal,
@@ -23,6 +24,9 @@ export const RootLayout: React.FC = () => {
     isSettingsOpen,
     setIsSettingsOpen,
     settingsTab,
+    isAiSetupOpen,
+    setIsAiSetupOpen,
+    aiSetupTab,
     isNewSessionOpen,
     setIsNewSessionOpen,
     isOpenProjectOpen,
@@ -85,6 +89,13 @@ export const RootLayout: React.FC = () => {
       </div>
 
       {/* ── Global Modals (Preserves session context without full-page navigation) ── */}
+      <AiSetupModal
+        isOpen={isAiSetupOpen}
+        initialTab={aiSetupTab}
+        onClose={() => setIsAiSetupOpen(false)}
+        onShowToast={showToast}
+      />
+
       <SettingsModal
         isOpen={isSettingsOpen}
         initialTab={settingsTab}

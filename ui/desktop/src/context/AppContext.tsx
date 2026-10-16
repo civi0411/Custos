@@ -85,6 +85,11 @@ interface AppContextType {
   settingsTab: string;
   setSettingsTab: (tab: string) => void;
   openSettings: (tab?: string) => void;
+  isAiSetupOpen: boolean;
+  setIsAiSetupOpen: (open: boolean) => void;
+  aiSetupTab: 'local' | 'cloud' | 'routing' | 'subagents' | 'quotas';
+  setAiSetupTab: (tab: 'local' | 'cloud' | 'routing' | 'subagents' | 'quotas') => void;
+  openAiSetup: (tab?: 'local' | 'cloud' | 'routing' | 'subagents' | 'quotas') => void;
   isNewSessionOpen: boolean;
   setIsNewSessionOpen: (open: boolean) => void;
   isOpenProjectOpen: boolean;
@@ -603,6 +608,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Modals state
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [settingsTab, setSettingsTab] = useState<string>('general');
+  const [isAiSetupOpen, setIsAiSetupOpen] = useState<boolean>(false);
+  const [aiSetupTab, setAiSetupTab] = useState<'local' | 'cloud' | 'routing' | 'subagents' | 'quotas'>('local');
+  const openAiSetup = useCallback((tab?: 'local' | 'cloud' | 'routing' | 'subagents' | 'quotas') => {
+    if (tab) setAiSetupTab(tab);
+    setIsAiSetupOpen(true);
+  }, []);
   const [isNewSessionOpen, setIsNewSessionOpen] = useState<boolean>(false);
   const [isOpenProjectOpen, setIsOpenProjectOpen] = useState<boolean>(false);
   const [isAddProviderOpen, setIsAddProviderOpen] = useState<boolean>(false);
@@ -861,9 +872,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const openSettings = useCallback((tab?: string) => {
+    if (tab === 'providers' || tab === 'runtime') {
+      openAiSetup(tab === 'runtime' ? 'local' : 'cloud');
+      return;
+    }
+    if (tab === 'subagents') {
+      openAiSetup('subagents');
+      return;
+    }
+    if (tab === 'quotas') {
+      openAiSetup('quotas');
+      return;
+    }
     if (tab) setSettingsTab(tab);
     setIsSettingsOpen(true);
-  }, []);
+  }, [openAiSetup]);
 
   const [appearance, setAppearance] = useState<AppearancePreferences>(readAppearance);
   const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
@@ -1452,9 +1475,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         e.preventDefault();
         handleSetUiScale(100);
       }
+      // Open AI Setup (Ctrl+3 or Cmd+3)
+      if ((e.metaKey || e.ctrlKey) && e.key === '3') {
+        e.preventDefault();
+        openAiSetup('local');
+      }
+      // Open Settings (Ctrl+, or Cmd+,)
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        openSettings('general');
+      }
       // Close open modals on Escape
       if (e.key === 'Escape') {
         setIsSettingsOpen(false);
+        setIsAiSetupOpen(false);
         setIsNewSessionOpen(false);
         setIsAddProviderOpen(false);
       }
@@ -2291,6 +2325,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         settingsTab,
         setSettingsTab,
         openSettings,
+        isAiSetupOpen,
+        setIsAiSetupOpen,
+        aiSetupTab,
+        setAiSetupTab,
+        openAiSetup,
         isNewSessionOpen,
         setIsNewSessionOpen,
         isOpenProjectOpen,

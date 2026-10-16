@@ -7,8 +7,9 @@ import {
   BookOpen,
   Compass,
   MoreHorizontal,
-  LayoutGrid,
   Download,
+  Cpu,
+  Settings,
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { UserProfileMenu } from './UserProfileMenu';
@@ -21,7 +22,8 @@ export const ActivityRail: React.FC = () => {
     openPlugins,
     openSettings,
     isSettingsOpen,
-    settingsTab,
+    openAiSetup,
+    isAiSetupOpen,
     userProfile,
     showToast,
   } = useAppContext();
@@ -31,7 +33,6 @@ export const ActivityRail: React.FC = () => {
 
   const isStudioActive = location.pathname === '/' || location.pathname.startsWith('/studio');
   const isDashboardActive = location.pathname.startsWith('/dashboard');
-  const isProvidersActive = isSettingsOpen && (settingsTab === 'providers' || settingsTab === 'runtime');
 
   const handleHomeClick = () => {
     navigate('/studio');
@@ -61,10 +62,6 @@ export const ActivityRail: React.FC = () => {
 
   const handleMoreClick = () => {
     openPlugins();
-  };
-
-  const handleGridClick = () => {
-    openSettings('providers');
   };
 
   const handleUpdateCheck = () => {
@@ -207,33 +204,33 @@ export const ActivityRail: React.FC = () => {
           {/* Subtle Horizontal Divider */}
           <div className="my-1 h-[1px] w-4.5 bg-white/10 shrink-0" />
 
-          {/* 7. Distinctive Grid Box Button (LayoutGrid) */}
+          {/* 7. Dedicated AI & Model Setup Button */}
           <div className="relative flex items-center justify-center">
             <button
               type="button"
-              onClick={handleGridClick}
-              onMouseEnter={() => setHoveredItem('grid')}
+              onClick={() => openAiSetup('local')}
+              onMouseEnter={() => setHoveredItem('ai-setup')}
               onMouseLeave={() => setHoveredItem(null)}
-              aria-label="Models and Providers"
+              aria-label="AI & Model Setup"
               className={`flex size-7.5 items-center justify-center rounded-lg transition-all duration-150 cursor-pointer shadow-xs ${
-                isProvidersActive
-                  ? 'bg-blue-600 text-white ring-2 ring-blue-400/40 shadow-blue-500/20'
-                  : 'bg-[#36363a] hover:bg-[#424248] text-white border border-white/10 hover:scale-105 active:scale-95'
+                isAiSetupOpen
+                  ? 'bg-teal-600 text-white ring-2 ring-teal-400/40 shadow-teal-500/20 scale-105'
+                  : 'bg-[#2a2a2e] hover:bg-[#36363a] text-teal-400 hover:text-teal-300 border border-teal-500/25 hover:border-teal-500/50 hover:scale-105 active:scale-95'
               }`}
             >
-              <LayoutGrid className="size-4 shrink-0" strokeWidth={1.8} />
+              <Cpu className="size-4 shrink-0" strokeWidth={1.8} />
             </button>
-            {hoveredItem === 'grid' && (
+            {hoveredItem === 'ai-setup' && (
               <div className="pointer-events-none fixed left-[48px] z-50 flex items-center gap-1.5 rounded-md border border-white/10 bg-[#222226] px-2 py-0.5 text-[11px] font-medium text-white shadow-xl backdrop-blur-md whitespace-nowrap">
-                <span>Models & Local Runtimes</span>
-                <span className="font-mono text-[9px] text-white/50">⌘3</span>
+                <span>AI & Model Setup</span>
+                <span className="font-mono text-[9px] text-teal-300">⌘3</span>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* ── BOTTOM SECTION: Blue Sync Button + TV User Profile Avatar ── */}
+      {/* ── BOTTOM SECTION: Blue Sync Button + Settings Gear + User Profile Avatar ── */}
       <div className="flex w-full flex-col items-center gap-2 pb-1.5 px-1">
         {/* Blue Sync / Download Circular Pill */}
         <div className="relative flex items-center justify-center">
@@ -250,6 +247,30 @@ export const ActivityRail: React.FC = () => {
           {hoveredItem === 'update' && (
             <div className="pointer-events-none fixed left-[48px] z-50 rounded-md border border-white/10 bg-[#222226] px-2 py-0.5 text-[11px] font-medium text-white shadow-xl backdrop-blur-md whitespace-nowrap">
               <span>Local Engine Synchronized</span>
+            </div>
+          )}
+        </div>
+
+        {/* Settings Gear Button */}
+        <div className="relative flex items-center justify-center">
+          <button
+            type="button"
+            onClick={() => openSettings('general')}
+            onMouseEnter={() => setHoveredItem('settings')}
+            onMouseLeave={() => setHoveredItem(null)}
+            aria-label="Settings"
+            className={`flex size-6.5 items-center justify-center rounded-md transition-all duration-150 cursor-pointer ${
+              isSettingsOpen
+                ? 'text-white bg-white/14 shadow-xs ring-1 ring-white/15 scale-105'
+                : 'text-[#a1a1a6] hover:text-white hover:bg-white/8 hover:scale-105'
+            }`}
+          >
+            <Settings className="size-3.5 shrink-0" strokeWidth={1.8} />
+          </button>
+          {hoveredItem === 'settings' && (
+            <div className="pointer-events-none fixed left-[48px] z-50 flex items-center gap-1.5 rounded-md border border-white/10 bg-[#222226] px-2 py-0.5 text-[11px] font-medium text-white shadow-xl backdrop-blur-md whitespace-nowrap">
+              <span>Settings</span>
+              <span className="font-mono text-[9px] text-white/50">⌘,</span>
             </div>
           )}
         </div>
