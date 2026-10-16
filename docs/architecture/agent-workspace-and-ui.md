@@ -763,16 +763,16 @@ Live response scheduling uses requestAnimationFrame only for the visible active 
 Custos Desktop features an Orca-inspired fixed vertical Activity Rail spanning the far-left edge of the entire application window:
 - **Geometry & Alignment**: `w-14` (56px) width, matte surface `bg-[#131315]`, subtle border-r `border-border-default/40`.
 - **macOS Titlebar Overlay Integration**: Under `titleBarStyle: "Overlay"`, macOS native traffic lights (red, yellow, green) are anchored at `(x: 13, y: 14)`. The Activity Rail handles this with an integrated top drag region `pt-10` (`data-tauri-drag-region`) to ensure traffic lights breathe smoothly above navigation icons, while Windows and Linux use standard top padding with native window controls positioned at the top-right of `AppHeader`.
-- **Top Navigation Group**:
-  1. **Studio (`Home`)**: Direct routing to Sovereign Studio (`/studio`) and active workbench (`⌘1`).
-  2. **Workspaces (`Layers`)**: Quick switcher for registered workspaces and active chat sessions.
-  3. **History (`Clock`)**: Run history and task execution audit logs.
-  4. **Documentation (`BookOpen`)**: Engineering guides, token usage metrics, and documentation.
-  5. **Agent Dashboard (`Compass`)**: Agent Fleet Dashboard and system status (`/dashboard`) (`⌘2`).
-  6. **Extensions (`MoreHorizontal`)**: Modular extensions and Model Context Protocol (MCP) tool host dialog.
-  7. **AI & Model Setup (`Cpu`)**: Sovereign AI & Model Hub modal (`⌘3`) for local GGUF/Metal hardware runtime, cloud providers, routing priority, subagent workers, and token quotas.
+- **Top Navigation Group (Primary Views & Tools)**:
+  1. **Studio (`Home`)**: Direct routing to Sovereign Studio (`/studio`) (`⌘1`).
+  2. **Workspaces & Chats (`Layers`)**: Active conversation and workspace file tree with reactive sidebar sync.
+  3. **Tasks & Kanban (`Clock`)**: Task execution audit logs, Kanban board, and active runs.
+  4. **Agent Dashboard (`Compass`)**: Agent Fleet Dashboard and system status (`/dashboard`) (`⌘2`).
+  5. **AI & Model Setup (`Cpu`)**: Sovereign AI & Model Hub modal (`⌘3`) for local GGUF/Metal hardware runtime, cloud providers, routing priority, subagent workers, and token quotas.
+  6. **Extensions (`Blocks`)**: Modular extensions and Model Context Protocol (MCP) tool host dialog.
 - **Bottom Section & User Profile Menu**:
   - **System Synchronized Indicator**: Blue circular pill with `Download` icon indicating local daemon status and update checks.
+  - **Help & Documentation (`BookOpen`)**: Opens HelpModal with keyboard shortcuts cheatsheet, daemon IPC status, and architecture documentation.
   - **Settings Gear (`Settings`)**: Sovereign application preferences (`⌘,`) for General, Appearance, Keyboard Shortcuts, Daemon status, Security & Sandbox, Storage & Artifacts, and About Custos.
   - **User Profile Avatar**: Circular avatar with initials ("TV", Trần Vĩ) with a pink/rose gradient. Clicking toggles the floating `UserProfileMenu` popover matching Orca's canonical design:
     - User Identity card: Name ("Trần Vĩ") and GitHub connection status.

@@ -325,6 +325,9 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   const [sessionQuery, setSessionQuery] = useState('');
   const changeListMode = (next: 'chats' | 'tasks') => {
     onChangeListMode(next);
+    try {
+      window.dispatchEvent(new CustomEvent('custos:switch-sidebar-view', { detail: next }));
+    } catch {}
   };
 
   // StudioPage supplies the canonical lens membership projection. Do not
