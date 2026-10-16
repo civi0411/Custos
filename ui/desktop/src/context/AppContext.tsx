@@ -722,8 +722,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const handleResetColumn2Width = useCallback(() => {
-    const def = Math.max(320, Math.min(540, Math.round(window.innerWidth * 0.38)));
+    const def = Math.max(340, Math.min(540, Math.round(window.innerWidth * 0.38)));
     setColumn2Width(def);
+    setIsWebTabOpen(true);
   }, []);
 
   // Global mousemove and mouseup listeners when isResizingColumn is true
@@ -731,16 +732,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!isResizingColumn) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = Math.round(window.innerWidth - e.clientX);
-      const minCol2 = 260;
+      const rawWidth = Math.round(window.innerWidth - e.clientX);
+      const minCol2 = 240;
       const leftReserved = (isSidebarCollapsed ? 44 : 44 + 256) + 320;
       const maxCol2 = Math.max(minCol2, window.innerWidth - leftReserved);
-      const clamped = Math.min(Math.max(newWidth, minCol2), maxCol2);
-      setColumn2Width(clamped);
-      setSplitPercent(Math.round(((window.innerWidth - clamped) / window.innerWidth) * 100));
+
+      if (rawWidth < 140) {
+        // Dragged all the way over to the right edge: collapse into topbar tab interface
+        setIsWebTabOpen(false);
+      } else {
+        setIsWebTabOpen(true);
+        const clamped = Math.min(Math.max(rawWidth, minCol2), maxCol2);
+        setColumn2Width(clamped);
+        setSplitPercent(Math.round(((window.innerWidth - clamped) / window.innerWidth) * 100));
+      }
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e: MouseEvent) => {
+      const rawWidth = Math.round(window.innerWidth - e.clientX);
+      if (rawWidth < 140) {
+        setIsWebTabOpen(false);
+      }
       setIsResizingColumn(false);
     };
 
