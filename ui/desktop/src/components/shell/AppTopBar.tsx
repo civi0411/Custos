@@ -310,7 +310,9 @@ export const AppTopBar: React.FC = () => {
  
       {/* ── RIGHT: Unified Resource Tabs & Pane Controls ── */}
       <div
-        className="flex items-center shrink-0 h-full relative"
+        className={`flex items-center shrink-0 h-full relative ${
+          !isWebTabOpen ? 'max-w-[480px]' : ''
+        }`}
         style={{
           width:
             isWebTabOpen && !isWebTabExpanded
@@ -335,191 +337,190 @@ export const AppTopBar: React.FC = () => {
           </div>
         )}
 
-        <div className={`flex-1 min-w-0 flex items-center gap-1 overflow-hidden h-full pl-2 pr-2 ${isWebTabOpen ? 'justify-between' : 'justify-end'}`}>
-          <div className="flex-1 min-w-0 flex items-center justify-between gap-1 overflow-hidden h-full">
-            {/* Resource Tabs Strip (Always visible on menu bar) */}
-            <div className="flex-1 min-w-0 flex items-center gap-0.5 overflow-x-auto no-scrollbar py-0.5">
-              {resourceTabs.tabs.map((tab) => {
-                const isActive = tab.id === resourceTabs.activeTabId;
-                const isSplit = tab.id === splitTabId;
-                const tabType = getTabType(tab);
-                return (
-                  <div
-                    key={tab.id}
-                    draggable={true}
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('application/custos-tab-id', tab.id);
-                      e.dataTransfer.setData('text/plain', tab.id);
-                      e.dataTransfer.effectAllowed = 'copyMove';
-                    }}
-                    onClick={() => {
-                      resourceTabs.setActiveTabId(tab.id);
-                      if (!isWebTabOpen) {
-                        setIsWebTabOpen(true);
-                      }
-                    }}
-                    className={`group flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer transition shrink-0 text-[11.5px] h-6 select-none ${
-                      isActive
-                        ? isWebTabOpen
-                          ? 'bg-white/14 text-white font-medium shadow-xs border border-white/10'
-                          : 'bg-white/10 text-white/90 font-medium border border-white/10 hover:bg-white/16'
-                        : isSplit
-                          ? 'bg-purple-500/15 text-purple-200 border border-purple-500/40 font-medium'
-                          : 'bg-transparent text-white/50 hover:text-white/80 hover:bg-white/6'
-                    }`}
-                    title={isWebTabOpen ? `${tab.title} (Kéo thả xuống canvas để mở song song)` : `${tab.title} (Click để mở canvas)`}
-                  >
-                    {getTabIcon(tabType, isActive || isSplit)}
-                    <span className="truncate max-w-[100px]">{tab.title}</span>
+        <div className="flex items-center justify-between gap-1.5 w-full h-full px-2 overflow-hidden">
+          {/* Resource Tabs Strip (Always visible on menu bar) */}
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 flex-1 min-w-0">
+            {resourceTabs.tabs.map((tab) => {
+              const isActive = tab.id === resourceTabs.activeTabId;
+              const isSplit = tab.id === splitTabId;
+              const tabType = getTabType(tab);
+              return (
+                <div
+                  key={tab.id}
+                  draggable={true}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('application/custos-tab-id', tab.id);
+                    e.dataTransfer.setData('text/plain', tab.id);
+                    e.dataTransfer.effectAllowed = 'copyMove';
+                  }}
+                  onClick={() => {
+                    resourceTabs.setActiveTabId(tab.id);
+                    if (!isWebTabOpen) {
+                      setIsWebTabOpen(true);
+                    }
+                  }}
+                  className={`group flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer transition shrink-0 text-[11.5px] h-6 select-none ${
+                    isActive
+                      ? isWebTabOpen
+                        ? 'bg-white/14 text-white font-medium shadow-xs border border-white/10'
+                        : 'bg-white/12 text-white font-medium border border-white/20 shadow-xs hover:bg-white/18'
+                      : isSplit
+                        ? 'bg-purple-500/15 text-purple-200 border border-purple-500/40 font-medium'
+                        : 'bg-transparent text-white/50 hover:text-white/80 hover:bg-white/6'
+                  }`}
+                  title={isWebTabOpen ? `${tab.title} (Kéo thả xuống canvas để mở song song)` : `${tab.title} (Click để mở canvas)`}
+                >
+                  {getTabIcon(tabType, isActive || isSplit)}
+                  <span className="truncate max-w-[100px]">{tab.title}</span>
 
-                    {/* Split View Indicator Badges */}
-                    {splitTabId && isActive && isWebTabOpen && (
-                      <span className="px-1 py-0.2 rounded text-[8.5px] font-mono bg-blue-500/20 text-blue-400 font-semibold border border-blue-500/30 shrink-0">
-                        1
-                      </span>
-                    )}
-                    {splitTabId && isSplit && isWebTabOpen && (
-                      <span className="px-1 py-0.2 rounded text-[8.5px] font-mono bg-purple-500/25 text-purple-300 font-semibold border border-purple-500/40 shrink-0">
-                        2
-                      </span>
-                    )}
+                  {/* Split View Indicator Badges */}
+                  {splitTabId && isActive && isWebTabOpen && (
+                    <span className="px-1 py-0.2 rounded text-[8.5px] font-mono bg-blue-500/20 text-blue-400 font-semibold border border-blue-500/30 shrink-0">
+                      1
+                    </span>
+                  )}
+                  {splitTabId && isSplit && isWebTabOpen && (
+                    <span className="px-1 py-0.2 rounded text-[8.5px] font-mono bg-purple-500/25 text-purple-300 font-semibold border border-purple-500/40 shrink-0">
+                      2
+                    </span>
+                  )}
 
-                    {/* Quick Split Toggle Button on Tab Hover (When pane is open) */}
-                    {isWebTabOpen && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleSplitTab(tab.id);
-                        }}
-                        className={`opacity-0 group-hover:opacity-100 hover:text-white p-0.5 rounded transition text-white/40 hover:bg-white/10 shrink-0 cursor-pointer ${
-                          isSplit ? '!opacity-100 text-purple-300' : ''
-                        }`}
-                        title={isSplit ? 'Tắt xem song song tab này' : 'Xem song song với tab hiện tại (Split View)'}
-                      >
-                        <Columns2 className="size-2.5" />
-                      </button>
-                    )}
-
-                    {/* Close Tab Button */}
+                  {/* Quick Split Toggle Button on Tab Hover (When pane is open) */}
+                  {isWebTabOpen && (
                     <button
                       type="button"
-                      onClick={(e) => handleCloseResourceTab(e, tab.id)}
-                      className="opacity-0 group-hover:opacity-100 hover:text-white p-0.5 rounded transition text-white/40 hover:bg-white/10 shrink-0 cursor-pointer"
-                      title="Close tab"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleSplitTab(tab.id);
+                      }}
+                      className={`opacity-0 group-hover:opacity-100 hover:text-white p-0.5 rounded transition text-white/40 hover:bg-white/10 shrink-0 cursor-pointer ${
+                        isSplit ? '!opacity-100 text-purple-300' : ''
+                      }`}
+                      title={isSplit ? 'Tắt xem song song tab này' : 'Xem song song với tab hiện tại (Split View)'}
                     >
-                      <X className="size-2.5" />
+                      <Columns2 className="size-2.5" />
                     </button>
-                  </div>
-                );
-              })}
+                  )}
 
-              {/* Add New Tab Button */}
+                  {/* Close Tab Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => handleCloseResourceTab(e, tab.id)}
+                    className="opacity-0 group-hover:opacity-100 hover:text-white p-0.5 rounded transition text-white/40 hover:bg-white/10 shrink-0 cursor-pointer"
+                    title="Close tab"
+                  >
+                    <X className="size-2.5" />
+                  </button>
+                </div>
+              );
+            })}
+
+            {/* Add New Tab Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsResourcePickerOpen(true);
+                if (!isWebTabOpen) setIsWebTabOpen(true);
+              }}
+              className="flex size-6 items-center justify-center rounded-md text-white/40 hover:text-white hover:bg-white/10 transition shrink-0 cursor-pointer"
+              title="New resource tab"
+            >
+              <Plus className="size-3" />
+            </button>
+          </div>
+
+          {/* Action Cluster (Split, Maximize, PanelRight, Native Window Controls) */}
+          <div className="flex items-center gap-1 shrink-0 ml-1">
+            {/* Split View Toggle Button */}
+            {isWebTabOpen && resourceTabs.tabs.length > 1 && (
               <button
                 type="button"
                 onClick={() => {
-                  setIsResourcePickerOpen(true);
-                  if (!isWebTabOpen) setIsWebTabOpen(true);
+                  if (splitTabId) {
+                    closeSplitTab();
+                  } else {
+                    const secondary = resourceTabs.tabs.find((t) => t.id !== resourceTabs.activeTabId);
+                    if (secondary) setSplitTabId(secondary.id);
+                  }
                 }}
-                className="flex size-6 items-center justify-center rounded-md text-white/40 hover:text-white hover:bg-white/10 transition shrink-0 cursor-pointer"
-                title="New resource tab"
+                className={`flex size-6 items-center justify-center rounded-md transition cursor-pointer ${
+                  splitTabId
+                    ? 'bg-purple-600/30 text-purple-200 border border-purple-500/40 shadow-xs'
+                    : 'text-white/45 hover:text-white hover:bg-white/8'
+                }`}
+                title={splitTabId ? 'Tắt xem song song (Exit split view)' : 'Bật xem song song 2 tab (Split view)'}
               >
-                <Plus className="size-3" />
+                <Columns2 className="size-3.5" />
               </button>
-            </div>
+            )}
 
-            {/* Pane Controls Right Cluster (Visible when pane is open) */}
+            {/* Maximize / Restore Split Toggle */}
             {isWebTabOpen && (
-              <div className="flex items-center gap-1 shrink-0">
-                {/* Split View Toggle Button */}
-                {resourceTabs.tabs.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (splitTabId) {
-                        closeSplitTab();
-                      } else {
-                        const secondary = resourceTabs.tabs.find((t) => t.id !== resourceTabs.activeTabId);
-                        if (secondary) setSplitTabId(secondary.id);
-                      }
-                    }}
-                    className={`flex size-6 items-center justify-center rounded-md transition cursor-pointer ${
-                      splitTabId
-                        ? 'bg-purple-600/30 text-purple-200 border border-purple-500/40 shadow-xs'
-                        : 'text-white/45 hover:text-white hover:bg-white/8'
-                    }`}
-                    title={splitTabId ? 'Tắt xem song song (Exit split view)' : 'Bật xem song song 2 tab (Split view)'}
-                  >
-                    <Columns2 className="size-3.5" />
-                  </button>
-                )}
+              <button
+                type="button"
+                onClick={toggleExpandWebTab}
+                className="flex size-6 items-center justify-center rounded-md text-white/45 hover:text-white hover:bg-white/8 transition cursor-pointer"
+                title={isWebTabExpanded ? 'Restore split layout' : 'Maximize resource canvas'}
+              >
+                {isWebTabExpanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+              </button>
+            )}
 
-                {/* Subtle Divider */}
-                <div className="h-3.5 w-px bg-white/10 mx-0.5 shrink-0" />
+            {isWebTabOpen && (
+              <div className="h-3.5 w-px bg-white/10 mx-0.5 shrink-0" />
+            )}
 
-                {/* Maximize / Restore Split Toggle */}
+            {/* Resource Canvas Toggle Button - Always visible! */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleWebTab();
+              }}
+              className={`flex size-6 items-center justify-center rounded-md transition cursor-pointer ${
+                isWebTabOpen
+                  ? 'bg-white/18 text-white shadow-xs'
+                  : 'text-white/45 hover:bg-white/8 hover:text-white/90'
+              }`}
+              title={`Toggle Resource Canvas (${formatKeyCombo({ ctrlOrCmd: true, shift: true, key: 'B' })})`}
+              aria-label="Toggle Resource Canvas"
+            >
+              <PanelRight className="size-3.5" />
+            </button>
+
+            {/* Windows / Linux Native Window Controls */}
+            {!isMac && (
+              <div className="flex items-center ml-1">
                 <button
                   type="button"
-                  onClick={toggleExpandWebTab}
-                  className="flex size-6 items-center justify-center rounded-md text-white/45 hover:text-white hover:bg-white/8 transition cursor-pointer"
-                  title={isWebTabExpanded ? 'Restore split layout' : 'Maximize resource canvas'}
+                  onClick={handleMinimize}
+                  className="flex size-7 items-center justify-center text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                  title="Minimize"
+                  aria-label="Minimize Window"
                 >
-                  {isWebTabExpanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+                  <Minus className="size-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleMaximize}
+                  className="flex size-7 items-center justify-center text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+                  title={isWindowMaximized ? 'Restore' : 'Maximize'}
+                  aria-label={isWindowMaximized ? 'Restore Window' : 'Maximize Window'}
+                >
+                  {isWindowMaximized ? <Copy className="size-3" /> : <Square className="size-3" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="flex size-7 items-center justify-center text-white/60 hover:bg-red-500 hover:text-white transition-colors cursor-pointer"
+                  title="Close"
+                  aria-label="Close Window"
+                >
+                  <X className="size-3" />
                 </button>
               </div>
             )}
           </div>
-
-        {/* Resource Canvas Toggle Button */}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            toggleWebTab();
-          }}
-          className={`flex size-6 items-center justify-center rounded-md transition cursor-pointer ${
-            isWebTabOpen
-              ? 'bg-white/18 text-white shadow-xs'
-              : 'text-white/45 hover:bg-white/8 hover:text-white/90'
-          }`}
-          title={`Toggle Resource Canvas (${formatKeyCombo({ ctrlOrCmd: true, shift: true, key: 'B' })})`}
-          aria-label="Toggle Resource Canvas"
-        >
-          <PanelRight className="size-3.5" />
-        </button>
-
-        {/* Windows / Linux Native Window Controls */}
-        {!isMac && (
-          <div className="flex items-center ml-1">
-            <button
-              type="button"
-              onClick={handleMinimize}
-              className="flex size-7 items-center justify-center text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-              title="Minimize"
-              aria-label="Minimize Window"
-            >
-              <Minus className="size-3" />
-            </button>
-            <button
-              type="button"
-              onClick={handleToggleMaximize}
-              className="flex size-7 items-center justify-center text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-              title={isWindowMaximized ? 'Restore' : 'Maximize'}
-              aria-label={isWindowMaximized ? 'Restore Window' : 'Maximize Window'}
-            >
-              {isWindowMaximized ? <Copy className="size-3" /> : <Square className="size-3" />}
-            </button>
-            <button
-              type="button"
-              onClick={handleClose}
-              className="flex size-7 items-center justify-center text-white/60 hover:bg-red-500 hover:text-white transition-colors cursor-pointer"
-              title="Close"
-              aria-label="Close Window"
-            >
-              <X className="size-3" />
-            </button>
-          </div>
-        )}
         </div>
       </div>
     </header>
