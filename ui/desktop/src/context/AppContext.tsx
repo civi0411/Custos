@@ -1450,15 +1450,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Toggle settings (Ctrl+,)
+      // Toggle settings (Ctrl+, or Cmd+,)
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault();
         setIsSettingsOpen((prev) => !prev);
       }
-      // Toggle Sessions Sidebar (Ctrl+B)
+      // Toggle Workspace Sidebar (Ctrl+B or Cmd+B)
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'b') {
         e.preventDefault();
-        setIsSessionsCollapsed((prev) => !prev);
+        setIsSidebarCollapsed((prev) => !prev);
       }
       // UI Zoom In (Ctrl++ or Ctrl+=)
       if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
@@ -1479,11 +1479,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if ((e.metaKey || e.ctrlKey) && e.key === '3') {
         e.preventDefault();
         openAiSetup('local');
-      }
-      // Open Settings (Ctrl+, or Cmd+,)
-      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
-        e.preventDefault();
-        openSettings('general');
       }
       // Close open modals on Escape
       if (e.key === 'Escape') {

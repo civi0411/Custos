@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Home,
   Layers,
   Clock,
-  BookOpen,
   Compass,
-  MoreHorizontal,
-  Download,
+  Blocks,
   Cpu,
+  BookOpen,
+  Download,
   Settings,
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
@@ -20,25 +20,59 @@ export const ActivityRail: React.FC = () => {
 
   const {
     openPlugins,
+    isPluginsOpen,
+    isSkillsOpen,
+    openHelp,
+    isHelpOpen,
     openSettings,
     isSettingsOpen,
     openAiSetup,
     isAiSetupOpen,
     userProfile,
     showToast,
+    isSidebarCollapsed,
+    setIsSidebarCollapsed,
+    activeWorkbench,
   } = useAppContext();
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
+  // Synchronize sidebar active view (chats vs tasks)
+  const [activeSidebarView, setActiveSidebarView] = useState<'chats' | 'tasks'>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('custos_sidebar_view') || '{}');
+      return saved[activeWorkbench] === 'tasks' ? 'tasks' : 'chats';
+    } catch {
+      return 'chats';
+    }
+  });
+
+  useEffect(() => {
+    const handleSwitch = (e: Event) => {
+      const customEvent = e as CustomEvent<'chats' | 'tasks'>;
+      if (customEvent.detail) {
+        setActiveSidebarView(customEvent.detail);
+      }
+    };
+    window.addEventListener('custos:switch-sidebar-view', handleSwitch);
+    return () => window.removeEventListener('custos:switch-sidebar-view', handleSwitch);
+  }, []);
+
   const isStudioActive = location.pathname === '/' || location.pathname.startsWith('/studio');
   const isDashboardActive = location.pathname.startsWith('/dashboard');
 
   const handleHomeClick = () => {
-    navigate('/studio');
+    if (!isStudioActive) {
+      navigate('/studio');
+    }
   };
 
   const handleWorkspacesClick = () => {
+    setActiveSidebarView('chats');
+    if (isSidebarCollapsed) {
+      setIsSidebarCollapsed(false);
+    }
     try {
       window.dispatchEvent(new CustomEvent('custos:switch-sidebar-view', { detail: 'chats' }));
     } catch {}
@@ -46,22 +80,34 @@ export const ActivityRail: React.FC = () => {
   };
 
   const handleHistoryClick = () => {
+    setActiveSidebarView('tasks');
+    if (isSidebarCollapsed) {
+      setIsSidebarCollapsed(false);
+    }
     try {
       window.dispatchEvent(new CustomEvent('custos:switch-sidebar-view', { detail: 'tasks' }));
     } catch {}
     if (!isStudioActive) navigate('/studio');
   };
 
-  const handleDocsClick = () => {
-    openSettings('usage');
-  };
-
   const handleCompassClick = () => {
     navigate('/dashboard');
   };
 
-  const handleMoreClick = () => {
+  const handleAiSetupClick = () => {
+    openAiSetup('local');
+  };
+
+  const handleExtensionsClick = () => {
     openPlugins();
+  };
+
+  const handleHelpDocsClick = () => {
+    openHelp();
+  };
+
+  const handleSettingsClick = () => {
+    openSettings('general');
   };
 
   const handleUpdateCheck = () => {
@@ -73,11 +119,10 @@ export const ActivityRail: React.FC = () => {
       className="relative flex h-full w-11 shrink-0 flex-col items-center justify-between bg-[#212124] border-r border-white/[0.08] select-none z-40 py-2.5"
       aria-label="Activity Rail"
     >
-      {/* ── TOP SECTION: Navigation Action Stack ── */}
+      {/* ── TOP SECTION: Primary Navigation & Sovereign AI Hub ── */}
       <div className="flex w-full flex-col items-center">
-        {/* Navigation Action Stack */}
         <div className="flex flex-col items-center gap-2 w-full px-1">
-          {/* 1. Home Icon */}
+          {/* 1. Home Studio */}
           <div className="relative flex items-center justify-center">
             <button
               type="button"
@@ -86,7 +131,7 @@ export const ActivityRail: React.FC = () => {
               onMouseLeave={() => setHoveredItem(null)}
               aria-label="Home Studio"
               className={`flex size-7 items-center justify-center rounded-md transition-all duration-150 cursor-pointer ${
-                isStudioActive
+                isStudioActive && !isAiSetupOpen && !isPluginsOpen && !isHelpOpen
                   ? 'text-white bg-white/14 shadow-xs ring-1 ring-white/15'
                   : 'text-[#a1a1a6] hover:text-white hover:bg-white/8 hover:scale-105'
               }`}
@@ -101,64 +146,53 @@ export const ActivityRail: React.FC = () => {
             )}
           </div>
 
-          {/* 2. Workspaces / Layers Icon */}
+          {/* 2. Conversations & Workspaces (Chats view) */}
           <div className="relative flex items-center justify-center">
             <button
               type="button"
               onClick={handleWorkspacesClick}
               onMouseEnter={() => setHoveredItem('workspaces')}
               onMouseLeave={() => setHoveredItem(null)}
-              aria-label="Workspaces & Canvas"
-              className="flex size-7 items-center justify-center rounded-md text-[#a1a1a6] hover:text-white hover:bg-white/8 hover:scale-105 transition-all duration-150 cursor-pointer"
+              aria-label="Conversations & Workspaces"
+              className={`flex size-7 items-center justify-center rounded-md transition-all duration-150 cursor-pointer ${
+                isStudioActive && activeSidebarView === 'chats' && !isSidebarCollapsed
+                  ? 'text-white bg-white/14 shadow-xs ring-1 ring-white/15'
+                  : 'text-[#a1a1a6] hover:text-white hover:bg-white/8 hover:scale-105'
+              }`}
             >
               <Layers className="size-[15px] shrink-0" strokeWidth={1.8} />
             </button>
             {hoveredItem === 'workspaces' && (
               <div className="pointer-events-none fixed left-[48px] z-50 flex items-center gap-1.5 rounded-md border border-white/10 bg-[#222226] px-2 py-0.5 text-[11px] font-medium text-white shadow-xl backdrop-blur-md whitespace-nowrap">
-                <span>Workspaces & Canvas</span>
+                <span>Conversations & Workspaces</span>
               </div>
             )}
           </div>
 
-          {/* 3. Recent History / Clock Icon */}
+          {/* 3. Tasks, Kanban & Run History */}
           <div className="relative flex items-center justify-center">
             <button
               type="button"
               onClick={handleHistoryClick}
               onMouseEnter={() => setHoveredItem('history')}
               onMouseLeave={() => setHoveredItem(null)}
-              aria-label="Recent History"
-              className="flex size-7 items-center justify-center rounded-md text-[#a1a1a6] hover:text-white hover:bg-white/8 hover:scale-105 transition-all duration-150 cursor-pointer"
+              aria-label="Tasks & Runs"
+              className={`flex size-7 items-center justify-center rounded-md transition-all duration-150 cursor-pointer ${
+                isStudioActive && activeSidebarView === 'tasks' && !isSidebarCollapsed
+                  ? 'text-white bg-white/14 shadow-xs ring-1 ring-white/15'
+                  : 'text-[#a1a1a6] hover:text-white hover:bg-white/8 hover:scale-105'
+              }`}
             >
               <Clock className="size-[15px] shrink-0" strokeWidth={1.8} />
             </button>
             {hoveredItem === 'history' && (
               <div className="pointer-events-none fixed left-[48px] z-50 flex items-center gap-1.5 rounded-md border border-white/10 bg-[#222226] px-2 py-0.5 text-[11px] font-medium text-white shadow-xl backdrop-blur-md whitespace-nowrap">
-                <span>Recent Tasks & History</span>
+                <span>Tasks & Execution History</span>
               </div>
             )}
           </div>
 
-          {/* 4. Documentation / Books Icon */}
-          <div className="relative flex items-center justify-center">
-            <button
-              type="button"
-              onClick={handleDocsClick}
-              onMouseEnter={() => setHoveredItem('docs')}
-              onMouseLeave={() => setHoveredItem(null)}
-              aria-label="Documentation & Knowledge"
-              className="flex size-7 items-center justify-center rounded-md text-[#a1a1a6] hover:text-white hover:bg-white/8 hover:scale-105 transition-all duration-150 cursor-pointer"
-            >
-              <BookOpen className="size-[15px] shrink-0" strokeWidth={1.8} />
-            </button>
-            {hoveredItem === 'docs' && (
-              <div className="pointer-events-none fixed left-[48px] z-50 flex items-center gap-1.5 rounded-md border border-white/10 bg-[#222226] px-2 py-0.5 text-[11px] font-medium text-white shadow-xl backdrop-blur-md whitespace-nowrap">
-                <span>Documentation & Usage</span>
-              </div>
-            )}
-          </div>
-
-          {/* 5. Compass / Agent Fleet Icon */}
+          {/* 4. Agent Fleet Dashboard */}
           <div className="relative flex items-center justify-center">
             <button
               type="button"
@@ -182,43 +216,24 @@ export const ActivityRail: React.FC = () => {
             )}
           </div>
 
-          {/* 6. More Options (...) Icon */}
-          <div className="relative flex items-center justify-center">
-            <button
-              type="button"
-              onClick={handleMoreClick}
-              onMouseEnter={() => setHoveredItem('more')}
-              onMouseLeave={() => setHoveredItem(null)}
-              aria-label="More Extensions"
-              className="flex size-7 items-center justify-center rounded-md text-[#a1a1a6] hover:text-white hover:bg-white/8 hover:scale-105 transition-all duration-150 cursor-pointer"
-            >
-              <MoreHorizontal className="size-[15px] shrink-0" strokeWidth={1.8} />
-            </button>
-            {hoveredItem === 'more' && (
-              <div className="pointer-events-none fixed left-[48px] z-50 flex items-center gap-1.5 rounded-md border border-white/10 bg-[#222226] px-2 py-0.5 text-[11px] font-medium text-white shadow-xl backdrop-blur-md whitespace-nowrap">
-                <span>Plugins, Skills & MCP</span>
-              </div>
-            )}
-          </div>
-
           {/* Subtle Horizontal Divider */}
           <div className="my-1 h-[1px] w-4.5 bg-white/10 shrink-0" />
 
-          {/* 7. Dedicated AI & Model Setup Button */}
+          {/* 5. Sovereign AI & Model Setup */}
           <div className="relative flex items-center justify-center">
             <button
               type="button"
-              onClick={() => openAiSetup('local')}
+              onClick={handleAiSetupClick}
               onMouseEnter={() => setHoveredItem('ai-setup')}
               onMouseLeave={() => setHoveredItem(null)}
               aria-label="AI & Model Setup"
-              className={`flex size-7.5 items-center justify-center rounded-lg transition-all duration-150 cursor-pointer shadow-xs ${
+              className={`flex size-7 items-center justify-center rounded-md transition-all duration-150 cursor-pointer ${
                 isAiSetupOpen
-                  ? 'bg-teal-600 text-white ring-2 ring-teal-400/40 shadow-teal-500/20 scale-105'
-                  : 'bg-[#2a2a2e] hover:bg-[#36363a] text-teal-400 hover:text-teal-300 border border-teal-500/25 hover:border-teal-500/50 hover:scale-105 active:scale-95'
+                  ? 'text-teal-300 bg-teal-500/20 shadow-xs ring-1 ring-teal-400/40 scale-105'
+                  : 'text-teal-400 hover:text-teal-300 hover:bg-teal-500/10 hover:scale-105 active:scale-95'
               }`}
             >
-              <Cpu className="size-4 shrink-0" strokeWidth={1.8} />
+              <Cpu className="size-[15px] shrink-0" strokeWidth={1.8} />
             </button>
             {hoveredItem === 'ai-setup' && (
               <div className="pointer-events-none fixed left-[48px] z-50 flex items-center gap-1.5 rounded-md border border-white/10 bg-[#222226] px-2 py-0.5 text-[11px] font-medium text-white shadow-xl backdrop-blur-md whitespace-nowrap">
@@ -227,12 +242,35 @@ export const ActivityRail: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* 6. Modular Extensions & MCP (Blocks) */}
+          <div className="relative flex items-center justify-center">
+            <button
+              type="button"
+              onClick={handleExtensionsClick}
+              onMouseEnter={() => setHoveredItem('extensions')}
+              onMouseLeave={() => setHoveredItem(null)}
+              aria-label="Plugins, Skills & MCP"
+              className={`flex size-7 items-center justify-center rounded-md transition-all duration-150 cursor-pointer ${
+                isPluginsOpen || isSkillsOpen
+                  ? 'text-white bg-white/14 shadow-xs ring-1 ring-white/15'
+                  : 'text-[#a1a1a6] hover:text-white hover:bg-white/8 hover:scale-105'
+              }`}
+            >
+              <Blocks className="size-[15px] shrink-0" strokeWidth={1.8} />
+            </button>
+            {hoveredItem === 'extensions' && (
+              <div className="pointer-events-none fixed left-[48px] z-50 flex items-center gap-1.5 rounded-md border border-white/10 bg-[#222226] px-2 py-0.5 text-[11px] font-medium text-white shadow-xl backdrop-blur-md whitespace-nowrap">
+                <span>Plugins, Skills & MCP</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* ── BOTTOM SECTION: Blue Sync Button + Settings Gear + User Profile Avatar ── */}
+      {/* ── BOTTOM SECTION: Engine Sync + Help/Docs + Settings + Profile Avatar ── */}
       <div className="flex w-full flex-col items-center gap-2 pb-1.5 px-1">
-        {/* Blue Sync / Download Circular Pill */}
+        {/* 7. Local Engine Synchronized Status */}
         <div className="relative flex items-center justify-center">
           <button
             type="button"
@@ -251,11 +289,34 @@ export const ActivityRail: React.FC = () => {
           )}
         </div>
 
-        {/* Settings Gear Button */}
+        {/* 8. Help & Sovereign Documentation */}
         <div className="relative flex items-center justify-center">
           <button
             type="button"
-            onClick={() => openSettings('general')}
+            onClick={handleHelpDocsClick}
+            onMouseEnter={() => setHoveredItem('docs')}
+            onMouseLeave={() => setHoveredItem(null)}
+            aria-label="Help & Documentation"
+            className={`flex size-6.5 items-center justify-center rounded-md transition-all duration-150 cursor-pointer ${
+              isHelpOpen
+                ? 'text-white bg-white/14 shadow-xs ring-1 ring-white/15 scale-105'
+                : 'text-[#a1a1a6] hover:text-white hover:bg-white/8 hover:scale-105'
+            }`}
+          >
+            <BookOpen className="size-3.5 shrink-0" strokeWidth={1.8} />
+          </button>
+          {hoveredItem === 'docs' && (
+            <div className="pointer-events-none fixed left-[48px] z-50 flex items-center gap-1.5 rounded-md border border-white/10 bg-[#222226] px-2 py-0.5 text-[11px] font-medium text-white shadow-xl backdrop-blur-md whitespace-nowrap">
+              <span>Help & Documentation</span>
+            </div>
+          )}
+        </div>
+
+        {/* 9. Application Settings Gear */}
+        <div className="relative flex items-center justify-center">
+          <button
+            type="button"
+            onClick={handleSettingsClick}
             onMouseEnter={() => setHoveredItem('settings')}
             onMouseLeave={() => setHoveredItem(null)}
             aria-label="Settings"
@@ -275,7 +336,7 @@ export const ActivityRail: React.FC = () => {
           )}
         </div>
 
-        {/* User Profile Avatar Circle (triggers UserProfileMenu) */}
+        {/* 10. User Profile Avatar */}
         <div className="relative flex items-center justify-center">
           <button
             type="button"
@@ -310,4 +371,3 @@ export const ActivityRail: React.FC = () => {
     </aside>
   );
 };
-

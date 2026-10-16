@@ -100,6 +100,21 @@ export function StudioPage() {
     try { localStorage.setItem(LAST_SESSION_KEY, JSON.stringify(lastSessionByLens)); } catch { }
   }, [lastSessionByLens]);
 
+  // Handle sidebar view switching from ActivityRail or other triggers
+  useEffect(() => {
+    const handleSwitchSidebar = (e: Event) => {
+      const customEvent = e as CustomEvent<'chats' | 'tasks'>;
+      if (customEvent.detail) {
+        setSidebarView(mode, customEvent.detail);
+        if (isSidebarCollapsed) {
+          setIsSidebarCollapsed(false);
+        }
+      }
+    };
+    window.addEventListener('custos:switch-sidebar-view', handleSwitchSidebar);
+    return () => window.removeEventListener('custos:switch-sidebar-view', handleSwitchSidebar);
+  }, [mode, isSidebarCollapsed, isSidebarCollapsed, setIsSidebarCollapsed]);
+
   const sessionsForMode = (targetMode: ActiveWorkbench) => currentSessions.filter((session) =>
     homeMode(session) === targetMode || session.openedLenses?.includes(targetMode as any) || sessionLenses[session.id]?.includes(targetMode)
   );
