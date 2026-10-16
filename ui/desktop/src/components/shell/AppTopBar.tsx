@@ -54,8 +54,10 @@ export const AppTopBar: React.FC = () => {
     resourceTabs,
     handleCloseResourceTab,
     setIsResourcePickerOpen,
-    splitPercent,
     column2Width,
+    isResizingColumn,
+    handleStartResizeColumn2,
+    handleResetColumn2Width,
     splitTabId,
     setSplitTabId,
     toggleSplitTab,
@@ -181,7 +183,7 @@ export const AppTopBar: React.FC = () => {
 
   return (
     <header
-      className="relative flex h-9.5 w-full shrink-0 items-center justify-between bg-[#212124] border-b border-white/10 text-white/70 select-none z-50 px-2"
+      className="relative flex h-9.5 w-full shrink-0 items-center justify-between bg-[#212124] border-b border-white/10 text-white/70 select-none z-50 pl-2 pr-0"
       aria-label="Unified Sovereign Titlebar"
     >
       {/* ── LEFT: macOS Traffic Lights + Nav + Sidebar Toggle + 3 Lenses ── */}
@@ -307,19 +309,34 @@ export const AppTopBar: React.FC = () => {
  
       {/* ── RIGHT: Unified Resource Tabs & Pane Controls ── */}
       <div
-        className={`flex items-center gap-1 shrink-0 h-full ${
-          isWebTabOpen && !isWebTabExpanded ? 'border-l border-white/10 pl-2' : ''
-        }`}
+        className="flex items-center shrink-0 h-full relative"
         style={{
           width:
             isWebTabOpen && !isWebTabExpanded
-              ? (column2Width ? `${column2Width}px` : `${100 - splitPercent}%`)
+              ? `${column2Width}px`
               : undefined,
           minWidth: 0,
         }}
       >
-        {isWebTabOpen && (
-          <div className="flex-1 min-w-0 flex items-center justify-between gap-1 overflow-hidden h-full">
+        {/* Continuous Active Drag Handle Divider (Aligned with Workspace Splitter) */}
+        {isWebTabOpen && !isWebTabExpanded && (
+          <div
+            className="absolute left-0 inset-y-0 w-3 -ml-1.5 cursor-col-resize z-40 group flex items-center justify-center select-none"
+            onMouseDown={handleStartResizeColumn2}
+            onDoubleClick={handleResetColumn2Width}
+            title="Drag to resize pane (double click to reset)"
+          >
+            <div
+              className={`w-px h-full transition-colors ${
+                isResizingColumn ? 'bg-workbench-accent' : 'bg-white/10 group-hover:bg-workbench-accent'
+              }`}
+            />
+          </div>
+        )}
+
+        <div className={`flex-1 min-w-0 flex items-center gap-1 overflow-hidden h-full pl-2 pr-2 ${isWebTabOpen ? 'justify-between' : 'justify-end'}`}>
+          {isWebTabOpen && (
+            <div className="flex-1 min-w-0 flex items-center justify-between gap-1 overflow-hidden h-full">
             {/* Resource Tabs Strip */}
             <div className="flex-1 min-w-0 flex items-center gap-0.5 overflow-x-auto no-scrollbar py-0.5">
               {resourceTabs.tabs.map((tab) => {
@@ -492,6 +509,7 @@ export const AppTopBar: React.FC = () => {
             </button>
           </div>
         )}
+        </div>
       </div>
     </header>
   );

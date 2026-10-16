@@ -168,8 +168,10 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     isResourcePickerOpen,
     setIsResourcePickerOpen,
     splitPercent,
-    setSplitPercent,
-    setColumn2Width,
+    column2Width,
+    isResizingColumn,
+    handleStartResizeColumn2,
+    handleResetColumn2Width,
     savedWorkError,
     retrySavedWork,
   } = useAppContext();
@@ -219,7 +221,6 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([]);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const isDragging = useRef(false);
 
   // Active session lookup
   const activeSession =
@@ -242,50 +243,6 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
 
   const hasMessages = activeSession.messages && activeSession.messages.length > 0;
-
-  // Split-pane dragging logic synchronized with TopBar
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDragging.current || !containerRef.current) return;
-      const rect = containerRef.current.getBoundingClientRect();
-      const newPercent = ((e.clientX - rect.left) / rect.width) * 100;
-      if (newPercent >= 20 && newPercent <= 75) {
-        setSplitPercent(newPercent);
-        const col2 = Math.round(rect.right - e.clientX);
-        setColumn2Width(col2);
-      }
-    };
-
-    const handleMouseUp = () => {
-      isDragging.current = false;
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [setSplitPercent, setColumn2Width]);
-
-  // Keep column2Width synchronized on resize / splitPercent change
-  useEffect(() => {
-    if (!containerRef.current || !isWebTabOpen || isWebTabExpanded) {
-      setColumn2Width(null);
-      return;
-    }
-    const updateCol2 = () => {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        const calculated = Math.round(rect.width * (1 - splitPercent / 100));
-        setColumn2Width(calculated);
-      }
-    };
-    updateCol2();
-    const observer = new ResizeObserver(updateCol2);
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, [isWebTabOpen, isWebTabExpanded, splitPercent, setColumn2Width]);
 
   // Global Keyboard Shortcuts (Cmd+K for Jump Palette, Cmd+Opt+K for Kanban)
   useEffect(() => {
@@ -626,13 +583,8 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
         <div ref={containerRef} className="flex-1 flex overflow-hidden min-w-0 relative">
           {/* COLUMN 1: CONVERSATION PANE */}
           <div
-            className="flex flex-col h-full overflow-hidden bg-canvas relative select-text transition-all duration-150"
+            className="flex-1 flex flex-col h-full overflow-hidden bg-canvas relative select-text min-w-0"
             style={{
-              width: isWebTabExpanded
-                ? '0%'
-                : isWebTabOpen
-                  ? `${splitPercent}%`
-                  : '100%',
               display: isWebTabExpanded ? 'none' : 'flex'
             }}
           >
@@ -930,26 +882,29 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           )}
           </div>
 
-          {/* DRAG HANDLE SPLITTER */}
-          {isWebTabOpen && !isWebTabExpanded && (
-            <div
-              className="w-px bg-white/10 hover:bg-workbench-accent cursor-col-resize shrink-0 z-30 transition-colors"
-              onMouseDown={() => {
-                isDragging.current = true;
-              }}
-              onDoubleClick={() => setSplitPercent(45)}
-              title="Drag to resize (double click to reset)"
-            />
-          )}
-
           {/* COLUMN 2: RIGHT RESOURCE CANVAS & TABBED CONTAINER */}
           {isWebTabOpen && (
             <div
               className="h-full shrink-0 bg-surface-0 relative z-20 flex flex-col overflow-hidden"
               style={{
-                width: isWebTabExpanded ? '100%' : `${100 - splitPercent}%`
+                width: isWebTabExpanded ? '100%' : `${column2Width}px`
               }}
             >
+              {/* Continuous Active Drag Handle Splitter (Aligned with TopBar Divider) */}
+              {!isWebTabExpanded && (
+                <div
+                  className="absolute left-0 inset-y-0 w-3 -ml-1.5 cursor-col-resize z-30 group flex items-center justify-center select-none"
+                  onMouseDown={handleStartResizeColumn2}
+                  onDoubleClick={handleResetColumn2Width}
+                  title="Drag to resize pane (double click to reset)"
+                >
+                  <div
+                    className={`w-px h-full transition-colors ${
+                      isResizingColumn ? 'bg-workbench-accent' : 'bg-white/10 group-hover:bg-workbench-accent'
+                    }`}
+                  />
+                </div>
+              )}
               <div className="flex-1 min-h-0 overflow-hidden relative">
                 <OrcaTabbedContainer
                   resourceTabs={resourceTabs}

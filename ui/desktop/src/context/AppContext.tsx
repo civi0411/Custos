@@ -151,8 +151,11 @@ interface AppContextType {
   setSplitRatio: React.Dispatch<React.SetStateAction<number>>;
   toggleSplitTab: (tabId: string) => void;
   closeSplitTab: () => void;
-  column2Width: number | null;
-  setColumn2Width: React.Dispatch<React.SetStateAction<number | null>>;
+  column2Width: number;
+  setColumn2Width: React.Dispatch<React.SetStateAction<number>>;
+  isResizingColumn: boolean;
+  handleStartResizeColumn2: (e: React.MouseEvent) => void;
+  handleResetColumn2Width: () => void;
 
   // Device-local appearance
   appearance: AppearancePreferences;
@@ -693,7 +696,74 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [splitTabId, setSplitTabId] = useState<string | null>(null);
   const [splitRatio, setSplitRatio] = useState<number>(50);
-  const [column2Width, setColumn2Width] = useState<number | null>(null);
+  const [column2Width, setColumn2Width] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('custos_column2_width');
+      if (saved) {
+        const val = parseInt(saved, 10);
+        if (!isNaN(val) && val >= 260 && val <= 1600) return val;
+      }
+    } catch {}
+    return 480;
+  });
+
+  const [isResizingColumn, setIsResizingColumn] = useState<boolean>(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('custos_column2_width', column2Width.toString());
+    } catch {}
+  }, [column2Width]);
+
+  const handleStartResizeColumn2 = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsResizingColumn(true);
+  }, []);
+
+  const handleResetColumn2Width = useCallback(() => {
+    const def = Math.max(320, Math.min(540, Math.round(window.innerWidth * 0.38)));
+    setColumn2Width(def);
+  }, []);
+
+  // Global mousemove and mouseup listeners when isResizingColumn is true
+  useEffect(() => {
+    if (!isResizingColumn) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newWidth = Math.round(window.innerWidth - e.clientX);
+      const minCol2 = 260;
+      const leftReserved = (isSidebarCollapsed ? 44 : 44 + 256) + 320;
+      const maxCol2 = Math.max(minCol2, window.innerWidth - leftReserved);
+      const clamped = Math.min(Math.max(newWidth, minCol2), maxCol2);
+      setColumn2Width(clamped);
+      setSplitPercent(Math.round(((window.innerWidth - clamped) / window.innerWidth) * 100));
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingColumn(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingColumn, isSidebarCollapsed]);
+
+  // Window resize clamp
+  useEffect(() => {
+    const handleWindowResize = () => {
+      const minCol2 = 260;
+      const leftReserved = (isSidebarCollapsed ? 44 : 44 + 256) + 320;
+      const maxCol2 = Math.max(minCol2, window.innerWidth - leftReserved);
+      setColumn2Width((prev) => Math.min(Math.max(prev, minCol2), maxCol2));
+    };
+
+    window.addEventListener('resize', handleWindowResize);
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, [isSidebarCollapsed]);
 
   const toggleSplitTab = useCallback((tabId: string) => {
     setSplitTabId((prev) => {
@@ -2387,6 +2457,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         closeSplitTab,
         column2Width,
         setColumn2Width,
+        isResizingColumn,
+        handleStartResizeColumn2,
+        handleResetColumn2Width,
         appearance,
         resolvedTheme,
         updateAppearance,

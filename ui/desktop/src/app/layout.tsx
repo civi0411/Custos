@@ -54,12 +54,21 @@ export const RootLayout: React.FC = () => {
     handleCreateNewSession,
     handleCreateChatSession,
     handleSaveProvider,
+    isResizingColumn,
   } = useAppContext();
 
   return (
-    <div className="bg-[#212124] text-editor-fg font-sans antialiased app-viewport overflow-hidden flex flex-col select-none">
+    <div className={`bg-[#212124] text-editor-fg font-sans antialiased app-viewport overflow-hidden flex flex-col ${isResizingColumn ? 'select-none cursor-col-resize' : 'select-none'}`}>
       {/* ── 1. Sovereign Fixed Top Bar Across Top ── */}
       <AppTopBar />
+
+      {/* ── Active Dragging Overlay to prevent iframes/canvases/editors from stealing mouse events ── */}
+      {isResizingColumn && (
+        <div
+          className="fixed inset-0 z-[99999] cursor-col-resize select-none bg-transparent"
+          style={{ pointerEvents: 'auto' }}
+        />
+      )}
 
       {/* ── 2. Body: Left Activity Rail + Inner Workspace Island ── */}
       <div className="flex-1 flex flex-row overflow-hidden min-h-0 w-full relative">
