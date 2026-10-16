@@ -3044,6 +3044,28 @@ Keep four identities separate: source (folder/connection), artifact (file or adv
 
 The daemon composes the native GGUF adapter under the distinct `native:<absolute-file-path>` route; MLX is not a default build feature. Registered-folder discovery remains an inventory operation, not proof of loadability; a tokenizer-only GGUF with no tensors must not appear as a runnable model. A native chat turn does not require an external provider account: selection waits for a successful load, and routing preserves the native ID without falling back to a cloud or local HTTP connection. Preflight estimates memory and inspects GGUF metadata but cannot prove tensor compatibility or GPU offload; the real backend load is authoritative for readiness. Native folder and model-selection screens do not automatically probe LM Studio; HTTP model servers are separate optional provider connections. Errors must preserve the loader cause rather than infer incompatibility from a filename or prescribe LM Studio. Native instances are volatile across daemon restarts, and file size is not measured resident memory. No new crate, agent abstraction or public HTTP listener is required. See [provider and adapter boundaries](docs/architecture/provider-and-adapter-boundaries.md#local-ai-source-and-runtime-contract).
 
+Each native artifact has one daemon-owned `LocalModelLoadProfile`. The profile
+stores desired load-time settings such as context size, GPU offload mode,
+evaluation batch size, CPU threads and supported memory optimizations; it is not
+a provider account and it does not claim the model is compatible. Settings may
+edit the profile, while model selection and chat call the same daemon `load`
+operation and may not substitute their own defaults. A loaded instance reports
+the effective profile revision and applied values. Changing a load-time setting
+therefore requires a visible reload; generation-time sampling remains scoped to
+the turn or session and does not reload weights. `Auto` is a first-class GPU
+policy resolved by the active backend, never the magic layer value `99`.
+
+Custos-managed native inference may use a separately installed, explicitly
+discovered `llama-server`, but it must not execute binaries from another
+application's private cache or from a user-specific hard-coded path. The
+process manager owns a dynamically allocated loopback port, drains bounded
+stdout/stderr, identifies the child and requested model before declaring it
+healthy, and preserves the currently resident model when replacement startup
+fails where the backend permits it. A health endpoint proves process liveness,
+not successful generation; UI states keep `loaded` and `verified by a smoke
+generation` distinct. Unsupported architecture, corrupt artifact, backend
+failure and estimated memory pressure remain different errors.
+
 The desktop Local tab connects to Ollama through daemon IPC using the existing local provider configuration. Native discovery uses /api/tags and optional /api/show metadata; discovered IDs use ollama/ namespaces. RouterModelProvider strips that namespace and sends bounded non-streaming /api/chat requests without credentials. Legacy generic local OpenAI-compatible endpoints remain supported. Empty discovery is not an OpenAI fallback. Provider saves retain the existing repository/outbox boundary. No new public DTO, schema, dependency or crate is introduced.
 
 Desktop chat also exposes this transport as **AI Local** without requiring a saved provider account. During provider hydration it probes the standard loopback Ollama endpoint through daemon IPC, projects installed models as a transient local account, and selects the first discovered local model only when no valid model is already selected. This discovery does not persist credentials or provider configuration. The transient account identifier is presentation-only and is not sent as `provider_account_id`; runtime therefore uses the existing credential-free local route. If Ollama is absent or has no installed model, chat remains fail-closed with an actionable local-runtime message rather than substituting a cloud or mock response.

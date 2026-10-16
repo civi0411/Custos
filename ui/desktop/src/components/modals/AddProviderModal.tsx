@@ -14,13 +14,11 @@ import {
   UserCheck,
   Copy,
   Check,
-  FolderPlus,
 } from 'lucide-react';
 import { ProviderBrandIcon } from '@/components/common/AgentIcons';
 import { CustomSelect, CustomSelectOption } from '../common/CustomSelect';
 import { daemonClient } from '@/api/daemon_client';
 import { ProbedModel, ModelCatalogOption, ProviderServiceId } from '@/types';
-import type { LocalHardwareProfile } from '@/types/domain';
 import { useAppContext } from '@/context/AppContext';
 
 interface AddProviderModalProps {
@@ -75,11 +73,10 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   onClose,
   onSaveProvider,
 }) => {
-  const { handleConnectOAuth, showToast } = useAppContext();
+  const { handleConnectOAuth } = useAppContext();
 
   // Auth Mode: API Key, OAuth SSO, or Local AI
   const [authMode, setAuthMode] = useState<'api_key' | 'oauth' | 'local'>('api_key');
-  const [localSubTab, setLocalSubTab] = useState<'native' | 'server'>('native');
 
   // API Key Form State
   const [providerService, setProviderService] = useState('anthropic');
@@ -119,42 +116,6 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
   const [localConnected, setLocalConnected] = useState(false);
   const [localBusy, setLocalBusy] = useState(false);
   const localGeneration = useRef(0);
-
-  // Native GGUF Registration State
-  const [nativeFolderPath, setNativeFolderPath] = useState('');
-  const [nativeFolderLabel, setNativeFolderLabel] = useState('');
-  const [isRegisteringFolder, setIsRegisteringFolder] = useState(false);
-  const [nativeError, setNativeError] = useState<string | null>(null);
-  const [nativeHw, setNativeHw] = useState<LocalHardwareProfile | null>(null);
-
-  useEffect(() => {
-    if (isOpen) {
-      daemonClient.getLocalHardware().then(setNativeHw).catch(() => {});
-    }
-  }, [isOpen]);
-
-  const handleRegisterNativeFolder = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nativeFolderPath.trim()) {
-      setNativeError('Please specify a directory path containing .gguf models.');
-      return;
-    }
-    setNativeError(null);
-    setIsRegisteringFolder(true);
-    try {
-      await daemonClient.addLocalFolder(
-        nativeFolderPath.trim(),
-        nativeFolderLabel.trim() || undefined
-      );
-      await daemonClient.scanLocalModels();
-      showToast('Local GGUF models registered and scanned.');
-      onClose();
-    } catch (err: any) {
-      setNativeError(err.message || 'Failed to register model directory');
-    } finally {
-      setIsRegisteringFolder(false);
-    }
-  };
 
   const handleSelectPreset = (preset: LocalPreset) => {
     setLocalPreset(preset);
@@ -593,161 +554,23 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
         {/* TAB: LOCAL AI (NATIVE GGUF & LOCAL SERVERS) */}
         {authMode === 'local' ? (
           <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-            {/* Sub-tab Switcher: Model Files vs Ollama */}
+            {/* Native GGUF files are managed in Settings > Local AI. This modal owns connections only. */}
             <div className="flex items-center justify-between px-5 py-2.5 bg-surface-2/30 border-b border-border-muted shrink-0">
               <div className="flex items-center gap-1.5 p-0.5 bg-surface-0 rounded-lg border border-border-default/60">
                 <button
                   type="button"
-                  onClick={() => setLocalSubTab('native')}
-                  className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
-                    localSubTab === 'native'
-                      ? 'bg-surface-2 text-teal-300 shadow-xs'
-                      : 'text-fg-muted hover:text-fg-editor'
-                  }`}
-                >
-                  <Cpu className="w-3.5 h-3.5 text-teal-400" />
-                  <span>Model Files (.gguf)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLocalSubTab('server')}
-                  className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1.5 ${
-                    localSubTab === 'server'
-                      ? 'bg-surface-2 text-workbench-accent shadow-xs'
-                      : 'text-fg-muted hover:text-fg-editor'
-                  }`}
+                  className="px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer flex items-center gap-1.5 bg-surface-2 text-workbench-accent shadow-xs"
                 >
                   <Server className="w-3.5 h-3.5 text-workbench-accent" />
                   <span>Ollama / Local Service</span>
                 </button>
               </div>
               <div className="text-[11px] text-fg-subtle hidden sm:block">
-                {localSubTab === 'native' ? 'Runs in Custos; no model server required' : 'Connects to localhost HTTP service'}
+                Connects to a user-managed local HTTP service
               </div>
             </div>
 
-            {localSubTab === 'native' ? (
-              <form onSubmit={handleRegisterNativeFolder} className="flex flex-col flex-1 min-h-0 overflow-hidden">
-                <div className="p-5 space-y-4 text-xs overflow-y-auto min-h-0 flex-1">
-                  {/* Hardware Readiness Badge */}
-                  <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-surface-1)] p-3.5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Cpu className="h-4 w-4 text-teal-400" />
-                        <span className="font-semibold text-xs text-[var(--color-editor-fg)]">
-                          Native Apple Silicon Metal Engine
-                        </span>
-                      </div>
-                      <span className="rounded-full bg-teal-500/10 border border-teal-500/30 px-2 py-0.5 text-[10px] font-medium text-teal-400">
-                        {nativeHw?.is_apple_silicon ? 'Hardware Ready' : 'CPU Fallback'}
-                      </span>
-                    </div>
-                    <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-[var(--color-fg-muted)]">
-                      <div>
-                        Processor: <span className="font-mono text-[var(--color-editor-fg)]">{nativeHw?.chip_name || 'Apple M2 Pro'}</span>
-                      </div>
-                      <div>
-                        Unified RAM: <span className="font-mono text-cyan-400">{nativeHw?.total_ram_bytes ? `${(nativeHw.total_ram_bytes / (1024**3)).toFixed(1)} GB` : '32.0 GB'}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Directory Input */}
-                  <div className="space-y-1.5">
-                    <label className="font-medium text-[var(--color-editor-fg)] flex items-center justify-between">
-                      <span>Model Directory on Disk</span>
-                      <span className="text-[10px] text-[var(--color-fg-subtle)]">Scans for .gguf files recursively</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={nativeFolderPath}
-                        onChange={(e) => setNativeFolderPath(e.target.value)}
-                        placeholder="/Users/mac/models or ~/.custos/models"
-                        className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-0)] px-3 py-2 text-xs text-[var(--color-editor-fg)] font-mono placeholder:text-[var(--color-fg-subtle)] focus:border-workbench-accent focus:outline-hidden"
-                      />
-                    </div>
-                    {/* Quick suggestion pills */}
-                    <div className="flex items-center gap-2 pt-1">
-                      <span className="text-[10px] text-[var(--color-fg-subtle)]">Common paths:</span>
-                      <button
-                        type="button"
-                        onClick={() => setNativeFolderPath('~/.custos/models')}
-                        className="rounded border border-[var(--color-border-muted)] px-2 py-0.5 text-[10px] text-[var(--color-fg-muted)] hover:border-[var(--color-border-default)] hover:text-[var(--color-editor-fg)] font-mono transition"
-                      >
-                        ~/.custos/models
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setNativeFolderPath('~/models')}
-                        className="rounded border border-[var(--color-border-muted)] px-2 py-0.5 text-[10px] text-[var(--color-fg-muted)] hover:border-[var(--color-border-default)] hover:text-[var(--color-editor-fg)] font-mono transition"
-                      >
-                        ~/models
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Label Input */}
-                  <div className="space-y-1.5">
-                    <label className="font-medium text-[var(--color-editor-fg)] flex items-center justify-between">
-                      <span>Folder Label / Category (Optional)</span>
-                      <span className="text-[10px] text-[var(--color-fg-subtle)]">How this group appears in model selector</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={nativeFolderLabel}
-                      onChange={(e) => setNativeFolderLabel(e.target.value)}
-                      placeholder="e.g. Local GGUF LLMs"
-                      className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-0)] px-3 py-2 text-xs text-[var(--color-editor-fg)] placeholder:text-[var(--color-fg-subtle)] focus:border-workbench-accent focus:outline-hidden"
-                    />
-                  </div>
-
-                  {nativeError && (
-                    <div className="flex items-center gap-2 rounded-md bg-rose-500/10 border border-rose-500/20 p-2.5 text-xs text-rose-400">
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      <span>{nativeError}</span>
-                    </div>
-                  )}
-
-                  {/* Direct Hardware Inference Callout */}
-                  <div className="rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-1)]/60 p-3 text-[11px] text-[var(--color-fg-muted)] space-y-1">
-                    <div className="font-semibold text-[var(--color-editor-fg)]">Direct On-Device Inference</div>
-                    <p>
-                      Custos loads .gguf models directly into Apple Silicon Unified RAM using Metal GPU acceleration, running completely offline with no external apps required.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Modal Action Footer */}
-                <div className="flex items-center justify-between border-t border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-4">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="rounded-md px-3 py-1.5 text-xs text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-editor-fg)] transition cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isRegisteringFolder || !nativeFolderPath.trim()}
-                    className="flex items-center gap-1.5 rounded-md bg-[var(--color-editor-fg)] px-4 py-1.5 text-xs font-semibold text-[var(--color-canvas)] hover:opacity-90 transition disabled:opacity-50 cursor-pointer"
-                  >
-                    {isRegisteringFolder ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        <span>Registering & Scanning...</span>
-                      </>
-                    ) : (
-                      <>
-                        <FolderPlus className="w-3.5 h-3.5" />
-                        <span>Add & Scan GGUF Models</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </form>
-            ) : (
-          <form onSubmit={saveLocal} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <form onSubmit={saveLocal} className="flex flex-col flex-1 min-h-0 overflow-hidden">
             <div className="p-5 space-y-4 text-xs overflow-y-auto min-h-0 flex-1">
               {/* Presets Header */}
               <div className="space-y-2">
@@ -897,27 +720,6 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                 </div>
               )}
 
-                  {/* Switch to Native GGUF Bridge Card */}
-                  <div className="rounded-xl border border-border-default/80 bg-surface-2/30 p-3.5 flex items-start gap-3">
-                    <div className="p-2 rounded-lg bg-teal-500/10 text-teal-400 shrink-0 mt-0.5">
-                      <Cpu className="w-4 h-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-semibold text-fg-editor">
-                        Have GGUF model files on disk?
-                      </div>
-                      <p className="text-[11px] text-fg-muted mt-0.5 leading-relaxed">
-                        You can load and execute GGUF files directly into Apple Silicon Metal GPU without running Ollama or external servers.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setLocalSubTab('native')}
-                        className="mt-2 text-xs font-medium text-teal-400 hover:underline flex items-center gap-1 cursor-pointer"
-                      >
-                        <span>Switch to Native GGUF Runtime →</span>
-                      </button>
-                    </div>
-                  </div>
                 </div>
 
                 {/* Footer */}
@@ -946,7 +748,6 @@ export const AddProviderModal: React.FC<AddProviderModalProps> = ({
                   </button>
                 </div>
               </form>
-            )}
           </div>
         ) : authMode === 'api_key' ? (
           <form onSubmit={handleSubmitApiKey} className="flex flex-col flex-1 min-h-0 overflow-hidden">
