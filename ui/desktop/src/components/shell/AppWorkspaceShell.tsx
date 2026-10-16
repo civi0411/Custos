@@ -1,13 +1,17 @@
 import StopIcon from '~icons/lucide/square';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  Send,
   Plus,
   FlaskConical,
   MessageSquare,
   Compass,
-  Zap,
+  ArrowUp,
+  Paperclip,
+  X,
+  Mic,
+  Monitor,
 } from 'lucide-react';
+import { ComposerPlusMenu } from '@/components/chat/ComposerPlusMenu';
 import { TaskAnchorBanner } from '@/components/shell/TaskAnchorBanner';
 import { AgentActionCard, AgentWorkingStatus } from '@/components/chat';
 import { Session } from '@/types';
@@ -253,13 +257,36 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     (item) => item.worktreeId === boundWorkspace?.id || Boolean(activeSession.taskId && item.targetResource.includes(activeSession.taskId))
   ).length;
   const [composerMode, setComposerMode] = useState<'chat' | 'task'>('task');
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleTriggerFileInput = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const newFiles = Array.from(e.target.files);
+      setAttachedFiles((prev) => [...prev, ...newFiles]);
+      onShowToast?.(`Đã thêm ${newFiles.length} tệp đính kèm`);
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const hasMessages = activeSession.messages && activeSession.messages.length > 0;
 
-  // Global Keyboard Shortcuts (Cmd+K for Jump Palette, Cmd+Opt+K for Kanban)
+  // Global Keyboard Shortcuts (Cmd+K for Jump Palette, Cmd+Opt+K for Kanban, Cmd+U for File Attachment)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'u') {
+        e.preventDefault();
+        fileInputRef.current?.click();
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         if (e.altKey) {
           e.preventDefault();
           openTab('kanban', 'Fleet Kanban', 'orca://kanban');
@@ -371,7 +398,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
 
   const handleSend = () => {
     const trimmed = inputText.trim();
-    if (!trimmed || liveMessage) return;
+    if ((!trimmed && attachedFiles.length === 0) || liveMessage) return;
 
     if (trimmed.startsWith('/')) {
       const parts = trimmed.split(' ');
@@ -384,8 +411,21 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       }
     }
 
-    if (!activeSession.nativeHarnessId && !selectedModelAvailable) { onShowToast?.('Select an available model/account and reasoning effort'); return; }
-    onSendMessage(inputText);
+    if (!activeSession.nativeHarnessId && !selectedModelAvailable && !isPackCommand) {
+      onShowToast?.('Select an available model/account and reasoning effort');
+      return;
+    }
+
+    let messageToSend = trimmed;
+    if (attachedFiles.length > 0) {
+      const fileDescriptions = attachedFiles
+        .map((f) => `📎 [Attachment: ${f.name} (${(f.size / 1024).toFixed(1)} KB)]`)
+        .join('\n');
+      messageToSend = messageToSend ? `${messageToSend}\n\n${fileDescriptions}` : fileDescriptions;
+      setAttachedFiles([]);
+    }
+
+    onSendMessage(messageToSend);
     setInputText('');
   };
 
@@ -698,32 +738,193 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                     className="flex-1 overflow-y-auto px-6 py-6 space-y-6"
                   >
                   {!hasMessages ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center my-auto pb-12">
-                    <div className="w-14 h-14 rounded-xl bg-surface-1 border border-border-default flex items-center justify-center text-fg-muted mb-5">
-                      {mode === 'engineering' ? (
-                        <span className="font-mono text-2xl workbench-accent select-none">&#123;_&#125;</span>
-                      ) : mode === 'research' ? (
-                        <FlaskConical className="w-7 h-7 workbench-accent" />
-                      ) : (
-                        <MessageSquare className="w-7 h-7 workbench-accent" />
-                      )}
+                    <div className="h-full flex flex-col items-center justify-center text-center my-auto pb-10 px-4 w-full max-w-2xl mx-auto">
+                      <div className="w-12 h-12 rounded-2xl bg-surface-1 border border-border-default flex items-center justify-center text-fg-muted mb-3 shadow-xs">
+                        {mode === 'engineering' ? (
+                          <span className="font-mono text-xl workbench-accent select-none">&#123;_&#125;</span>
+                        ) : mode === 'research' ? (
+                          <FlaskConical className="w-6 h-6 workbench-accent" />
+                        ) : (
+                          <MessageSquare className="w-6 h-6 workbench-accent" />
+                        )}
+                      </div>
+                      <div className="workbench-kicker mb-1.5 text-xs text-white/50">{lensMeta.badge} workbench</div>
+                      <h1 className="text-xl md:text-2xl font-semibold text-fg-editor tracking-[-0.02em] max-w-lg mb-6">
+                        {currentProject === 'Custos Workspace' ? (
+                          mode === 'engineering' ? 'What should we build today?' : mode === 'research' ? 'What should we investigate today?' : 'How can Custos help you today?'
+                        ) : (
+                          <>
+                            {mode === 'engineering' ? 'What should we build in ' : mode === 'research' ? 'What should we investigate in ' : 'How can Custos help with '}
+                            <span className="underline decoration-[var(--color-border-emphasis)] underline-offset-4">{currentProject}</span>?
+                          </>
+                        )}
+                      </h1>
+
+                      {/* CENTER HERO CHAT BOX (Hình 1) */}
+                      <div className="w-full text-left rounded-3xl bg-[#1c1c20] border border-white/12 shadow-2xl p-4 relative transition-all focus-within:border-white/20 focus-within:ring-1 focus-within:ring-white/10 backdrop-blur-md">
+                        <SlashCommandMenu
+                          query={inputText}
+                          mode={mode}
+                          isOpen={inputText.startsWith('/') && (!inputText.includes(' ') || inputText.length <= 15)}
+                          onSelectCommand={handleSelectSlashCommand}
+                          onClose={() => { }}
+                        />
+
+                        {/* Attached Files Chips */}
+                        {attachedFiles.length > 0 && (
+                          <div className="mb-2.5 flex flex-wrap gap-1.5">
+                            {attachedFiles.map((file, idx) => (
+                              <div
+                                key={`${file.name}-${idx}`}
+                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/8 border border-white/10 text-xs text-white/90"
+                              >
+                                <Paperclip className="size-3 text-white/60" />
+                                <span className="truncate max-w-[150px]">{file.name}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveFile(idx)}
+                                  className="text-white/40 hover:text-white/90 transition-colors ml-0.5 cursor-pointer"
+                                >
+                                  <X className="size-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Textarea */}
+                        <textarea
+                          ref={textareaRef}
+                          rows={3}
+                          value={inputText}
+                          onChange={(e) => setInputText(e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          placeholder={
+                            composerMode === 'chat' && !activeSession.taskId
+                              ? 'Ask Custos anything (Hỏi đáp, tra cứu, giải thích)...'
+                              : lensMeta.placeholder || 'Ask Custos or assign task: Plan, analyze code, execute actions...'
+                          }
+                          className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-white placeholder-white/35 text-[14px] resize-none leading-relaxed min-h-[64px]"
+                          autoFocus
+                        />
+
+                        {/* Bottom Toolbar inside the Box */}
+                        <div className="flex items-center justify-between pt-2 mt-1">
+                          <div className="flex items-center gap-2">
+                            {/* + Button */}
+                            <div className="relative">
+                              <button
+                                type="button"
+                                onClick={() => setIsPlusMenuOpen((prev) => !prev)}
+                                className="size-8 rounded-full hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition cursor-pointer"
+                                title="Add files, skills, plugins (⌘U)"
+                              >
+                                <Plus className="size-4" />
+                              </button>
+                              <ComposerPlusMenu
+                                isOpen={isPlusMenuOpen}
+                                onClose={() => setIsPlusMenuOpen(false)}
+                                onAddFilesOrPhotos={handleTriggerFileInput}
+                                onOpenSkills={() => {
+                                  onShowToast?.('Mở danh mục Skills');
+                                  handleOpenTab('tools');
+                                }}
+                                onAddConnector={() => {
+                                  onShowToast?.('Mở MCP Connectors');
+                                  handleOpenTab('tools');
+                                }}
+                                onAddPlugins={() => {
+                                  onShowToast?.('Mở Plugins');
+                                  handleOpenTab('tools');
+                                }}
+                                position="top"
+                              />
+                            </div>
+
+                            {/* Share screen button (as seen in Image 1) */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onShowToast?.('Chia sẻ màn hình / context workspace');
+                              }}
+                              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs text-white/60 hover:text-white hover:bg-white/8 transition cursor-pointer"
+                            >
+                              <Monitor className="size-3.5" />
+                              <span>Share screen</span>
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {/* Model selector */}
+                            {activeSession.nativeHarnessId ? (
+                              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/80">
+                                {activeSession.nativeHarnessId}
+                              </span>
+                            ) : (
+                              <ModelSelector
+                                currentModel={activeSession?.model || selectedModel}
+                                onSelectModel={handleSelectModel}
+                              />
+                            )}
+
+                            {/* Mic */}
+                            <button
+                              type="button"
+                              className="size-8 rounded-full hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition cursor-pointer"
+                              title="Voice input"
+                            >
+                              <Mic className="size-4" />
+                            </button>
+
+                            {/* Submit button (Image 1 style circular button) */}
+                            <button
+                              type="button"
+                              onClick={handleSend}
+                              disabled={!inputText.trim() && attachedFiles.length === 0}
+                              className={`size-8 rounded-full flex items-center justify-center transition shadow-md cursor-pointer ${
+                                inputText.trim() || attachedFiles.length > 0
+                                  ? 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white'
+                                  : 'bg-white/10 text-white/30 cursor-not-allowed'
+                              }`}
+                              title="Send message (Enter)"
+                            >
+                              <ArrowUp className="size-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* FLOATING CAPSULE TOGGLE: [ Chat | Task ] BELOW THE HERO BOX (Hình 1) */}
+                      <div className="mt-4 flex justify-center select-none">
+                        <div className="flex items-center rounded-full bg-[#18181b] border border-white/10 p-1 shadow-lg">
+                          <button
+                            type="button"
+                            onClick={() => setComposerMode('chat')}
+                            className={`px-4 py-1.5 rounded-full text-xs font-medium transition cursor-pointer ${
+                              composerMode === 'chat' && !activeSession.taskId
+                                ? 'bg-zinc-700/90 text-white shadow-xs font-semibold'
+                                : 'text-white/50 hover:text-white/80'
+                            }`}
+                            title="Chat Thường: Tra cứu, hỏi đáp, an toàn code"
+                          >
+                            Chat
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setComposerMode('task')}
+                            className={`px-4 py-1.5 rounded-full text-xs font-medium transition cursor-pointer ${
+                              composerMode === 'task' || Boolean(activeSession.taskId)
+                                ? 'bg-zinc-700/90 text-white shadow-xs font-semibold'
+                                : 'text-white/50 hover:text-white/80'
+                            }`}
+                            title="Chế độ Task: Giao việc cho Agent phân tích và sửa code"
+                          >
+                            Task
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="workbench-kicker mb-2">{lensMeta.badge} workbench</div>
-                    <h1 className="text-xl md:text-2xl font-semibold text-fg-editor tracking-[-0.02em] max-w-md">
-                      {currentProject === 'Custos Workspace' ? (
-                        mode === 'engineering' ? 'What should we build?' : mode === 'research' ? 'What should we investigate?' : 'How can Custos help?'
-                      ) : (
-                        <>
-                          {mode === 'engineering' ? 'What should we build in ' : mode === 'research' ? 'What should we investigate in ' : 'How can Custos help with '}
-                          <span className="underline decoration-[var(--color-border-emphasis)] underline-offset-4">{currentProject}</span>?
-                        </>
-                      )}
-                    </h1>
-                    <p className="text-[12px] text-fg-muted mt-2 max-w-sm">
-                      Each workbench keeps its own conversations. Open a full saved chat in another workbench when you want to continue there.
-                    </p>
-                  </div>
-                ) : (
+                  ) : (
                   <div className="space-y-6 max-w-3xl mx-auto w-full">
                     {activeSession.messages.map((msg, i) => {
                       const isUser = msg.role === 'user';
@@ -782,91 +983,115 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
               )}
             </div>
 
-            {/* DOCKED CHAT COMPOSER (Natural Flex Child) */}
-            {sidebarView !== 'tasks' && !selectedTaskId && (
-              <div className="shrink-0 p-4 bg-canvas">
-              {liveMessage && (
-                <div className="max-w-2xl mx-auto mb-2.5">
-                  <AgentWorkingStatus
-                    status={liveMessage.runStatus}
-                    runId={liveMessage.runId}
-                    harnessName={
-                      mode === 'research'
-                        ? 'Research Copilot'
-                        : mode === 'copilot'
-                        ? 'Personal Copilot'
-                        : activeSession.nativeHarnessId
-                        ? `Coding Agent (${activeSession.nativeHarnessId})`
-                        : 'Coding Assistant'
-                    }
-                    currentActivity={liveMessage.activities?.[liveMessage.activities.length - 1]}
-                    onStop={() => liveMessage.runId && void handleStopRun(liveMessage.runId)}
-                    onFocusSteer={() => textareaRef.current?.focus()}
+            {/* DOCKED CHAT COMPOSER (Natural Flex Child) - Only when hasMessages */}
+            {sidebarView !== 'tasks' && !selectedTaskId && hasMessages && (
+              <div className="shrink-0 px-4 py-3 bg-canvas">
+                {liveMessage && (
+                  <div className="max-w-3xl mx-auto mb-2.5">
+                    <AgentWorkingStatus
+                      status={liveMessage.runStatus}
+                      runId={liveMessage.runId}
+                      harnessName={
+                        mode === 'research'
+                          ? 'Research Copilot'
+                          : mode === 'copilot'
+                          ? 'Personal Copilot'
+                          : activeSession.nativeHarnessId
+                          ? `Coding Agent (${activeSession.nativeHarnessId})`
+                          : 'Coding Assistant'
+                      }
+                      currentActivity={liveMessage.activities?.[liveMessage.activities.length - 1]}
+                      onStop={() => liveMessage.runId && void handleStopRun(liveMessage.runId)}
+                      onFocusSteer={() => textareaRef.current?.focus()}
+                    />
+                  </div>
+                )}
+
+                {/* Attached Files Chips */}
+                {attachedFiles.length > 0 && (
+                  <div className="max-w-3xl mx-auto mb-2 flex flex-wrap gap-1.5">
+                    {attachedFiles.map((file, idx) => (
+                      <div
+                        key={`${file.name}-${idx}`}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#27272a] border border-white/10 text-xs text-white/90"
+                      >
+                        <Paperclip className="size-3 text-white/60" />
+                        <span className="truncate max-w-[150px]">{file.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveFile(idx)}
+                          className="text-white/40 hover:text-white/90 transition-colors ml-0.5 cursor-pointer"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* DOCKED PILL COMPOSER (Hình 2: Compact rounded-full pill) */}
+                <div className="max-w-3xl mx-auto rounded-full bg-[#242428] border border-white/10 shadow-xl px-2.5 py-1.5 flex items-center gap-2 relative transition-all focus-within:border-white/20 focus-within:ring-1 focus-within:ring-white/15">
+                  <SlashCommandMenu
+                    query={inputText}
+                    mode={mode}
+                    isOpen={inputText.startsWith('/') && (!inputText.includes(' ') || inputText.length <= 15)}
+                    onSelectCommand={handleSelectSlashCommand}
+                    onClose={() => { }}
                   />
-                </div>
-              )}
-              <div className="workbench-composer max-w-3xl mx-auto p-3 transition group relative">
-                <SlashCommandMenu
-                  query={inputText}
-                  mode={mode}
-                  isOpen={inputText.startsWith('/') && (!inputText.includes(' ') || inputText.length <= 15)}
-                  onSelectCommand={handleSelectSlashCommand}
-                  onClose={() => { }}
-                />
-                <textarea
-                  ref={textareaRef}
-                  rows={2}
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={
-                    liveMessage
-                      ? 'Agent is working… Type guidance here to steer agent in-flight (or press Stop/Esc)...'
-                      : composerMode === 'chat' && !activeSession.taskId
-                      ? 'Hỏi đáp, tra cứu, giải thích code hoặc thảo luận ý tưởng (An toàn, không sửa code)...'
-                      : lensMeta.placeholder || 'Giao việc: Agent sẽ phân tích, lập kế hoạch, sửa code và báo cáo diff...'
-                  }
-                  className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-fg-editor placeholder-fg-subtle text-[13px] resize-none leading-relaxed"
-                />
 
-                <div className="flex items-center justify-between mt-2 pt-2">
-                  <div className="flex items-center gap-2 text-fg-muted">
-                    {/* Operational Mode Switcher: Chat (Ask) vs Task (Act) */}
-                    <div className="flex items-center rounded-lg bg-black/40 border border-white/10 p-0.5 shrink-0 select-none">
-                      <button
-                        type="button"
-                        onClick={() => setComposerMode('chat')}
-                        className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-medium transition cursor-pointer ${
-                          composerMode === 'chat' && !activeSession.taskId
-                            ? 'bg-white/18 text-white shadow-xs font-semibold'
-                            : 'text-white/45 hover:text-white/80'
-                        }`}
-                        title="Chế độ Chat Thường: Chỉ hỏi đáp, giải thích, an toàn tuyệt đối cho code"
-                      >
-                        <MessageSquare className="size-3" />
-                        <span>Chat</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setComposerMode('task')}
-                        className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-medium transition cursor-pointer ${
-                          composerMode === 'task' || Boolean(activeSession.taskId)
-                            ? 'bg-workbench-accent text-white shadow-xs font-semibold'
-                            : 'text-white/45 hover:text-white/80'
-                        }`}
-                        title="Chế độ Task: Giao việc cho Agent thực thi, sửa code và chạy test"
-                      >
-                        <Zap className="size-3" />
-                        <span>Task</span>
-                      </button>
-                    </div>
+                  {/* Plus button with popover */}
+                  <div className="relative shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setIsPlusMenuOpen((prev) => !prev)}
+                      className="size-8 rounded-full hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition cursor-pointer"
+                      title="Add files, skills, plugins (⌘U)"
+                    >
+                      <Plus className="size-4" />
+                    </button>
 
-                    <span className={`text-[11px] font-mono border border-border-default bg-surface-1 px-2 py-0.5 rounded ${lensMeta.iconColor}`}>
-                      {lensMeta.badge}
-                    </span>
+                    <ComposerPlusMenu
+                      isOpen={isPlusMenuOpen}
+                      onClose={() => setIsPlusMenuOpen(false)}
+                      onAddFilesOrPhotos={handleTriggerFileInput}
+                      onOpenSkills={() => {
+                        onShowToast?.('Mở danh mục Skills');
+                        handleOpenTab('tools');
+                      }}
+                      onAddConnector={() => {
+                        onShowToast?.('Mở MCP Connectors');
+                        handleOpenTab('tools');
+                      }}
+                      onAddPlugins={() => {
+                        onShowToast?.('Mở Plugins');
+                        handleOpenTab('tools');
+                      }}
+                      position="top"
+                    />
+                  </div>
+
+                  {/* Input / Textarea */}
+                  <textarea
+                    ref={textareaRef}
+                    rows={1}
+                    value={inputText}
+                    onChange={(e) => setInputText(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder={
+                      liveMessage
+                        ? 'Agent is working… Type guidance here to steer agent in-flight (or press Stop/Esc)...'
+                        : composerMode === 'chat' && !activeSession.taskId
+                        ? 'Ask Custos...'
+                        : 'Ask Custos or assign task...'
+                    }
+                    className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-white placeholder-white/40 text-[13.5px] resize-none leading-relaxed py-1.5 max-h-32 min-h-[28px]"
+                  />
+
+                  {/* Right Controls: Model Selector, Mic, and Blue Up-Arrow Send Button */}
+                  <div className="flex items-center gap-1.5 shrink-0">
                     {activeSession.nativeHarnessId ? (
-                      <span className="rounded border border-border-default px-2 py-1 text-xs text-fg-editor">
-                        Native · {activeSession.nativeHarnessId}
+                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-white/80">
+                        {activeSession.nativeHarnessId}
                       </span>
                     ) : (
                       <ModelSelector
@@ -874,9 +1099,17 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                         onSelectModel={handleSelectModel}
                       />
                     )}
-                  </div>
-                  <div className="flex items-center gap-2">
+
                     <button
+                      type="button"
+                      className="size-8 rounded-full hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition cursor-pointer"
+                      title="Voice input"
+                    >
+                      <Mic className="size-4" />
+                    </button>
+
+                    <button
+                      type="button"
                       onClick={() => {
                         if (liveMessage) {
                           if (inputText.trim()) {
@@ -888,7 +1121,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                           handleSend();
                         }
                       }}
-                      disabled={!liveMessage && (!inputText.trim() || (!activeSession.nativeHarnessId && !selectedModelAvailable && !isPackCommand))}
+                      disabled={!liveMessage && (!inputText.trim() && attachedFiles.length === 0)}
                       aria-label={
                         liveMessage
                           ? inputText.trim()
@@ -899,37 +1132,34 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                       title={
                         liveMessage
                           ? inputText.trim()
-                            ? 'Queue guidance for next turn (live steering unsupported for headless CLI)'
+                            ? 'Queue guidance for next turn'
                             : 'Stop response'
-                          : !activeSession.nativeHarnessId && !selectedModelAvailable
-                          ? 'Select an available model/account and reasoning effort'
-                          : 'Send message'
+                          : 'Send message (Enter)'
                       }
-                      className={`p-1.5 rounded-lg transition ${
+                      className={`size-8 rounded-full flex items-center justify-center transition shadow-sm cursor-pointer ${
                         liveMessage
                           ? inputText.trim()
-                            ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20'
-                            : 'bg-transparent text-rose-400 hover:opacity-80'
-                          : inputText.trim()
-                          ? 'bg-transparent workbench-accent hover:opacity-80'
-                          : 'text-fg-muted bg-transparent cursor-not-allowed opacity-60'
+                            ? 'bg-amber-500 text-black hover:bg-amber-400'
+                            : 'bg-rose-500 text-white hover:bg-rose-600'
+                          : inputText.trim() || attachedFiles.length > 0
+                          ? 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white'
+                          : 'bg-white/10 text-white/30 cursor-not-allowed'
                       }`}
                     >
                       {liveMessage ? (
                         inputText.trim() ? (
-                          <Compass className="w-4 h-4 text-amber-400 animate-spin-slow" aria-hidden="true" />
+                          <Compass className="size-4 animate-spin-slow" aria-hidden="true" />
                         ) : (
-                          <StopIcon className="w-4 h-4 fill-current" aria-hidden="true" />
+                          <StopIcon className="size-3.5 fill-current" aria-hidden="true" />
                         )
                       ) : (
-                        <Send className={`w-4 h-4 ${inputText.trim() ? 'fill-current' : ''}`} aria-hidden="true" />
+                        <ArrowUp className="size-4" aria-hidden="true" />
                       )}
                     </button>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
           </div>
 
           {/* EDGE REVEAL DRAG HANDLE (When pane is collapsed, drag left to reveal) */}
@@ -1061,6 +1291,16 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
         initialWorkspaceId={createTaskPrefill.workspaceId || activeWorkspaceId}
         initialSessionId={createTaskPrefill.sessionId}
         initialPackId={createTaskPrefill.packId}
+      />
+
+      {/* Hidden File Input for Attachments (⌘U) */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelect}
+        multiple
+        className="hidden"
+        aria-hidden="true"
       />
 
     </div>
