@@ -1,7 +1,8 @@
 use crate::connection::DbConnection;
 use custos_domain::{
-    ClientApiKeyRecord, DomainError, LocalModelDescriptor, LocalModelFolder, ModelCatalogOption,
-    ModelCompatibility, ModelPricing, OAuthTokenRecord, ProviderConfig,
+    ClientApiKeyRecord, DomainError, LocalModelDescriptor, LocalModelFolder,
+    LocalModelLoadProfile, ModelCatalogOption, ModelCompatibility, ModelPricing, OAuthTokenRecord,
+    ProviderConfig,
 };
 use rusqlite::params;
 
@@ -868,6 +869,53 @@ impl ProviderRepository {
         .optional()
         .map_err(|e| DomainError::Validation(e.to_string()))
     }
+
+    pub fn get_local_model_load_profile(&self, model_path: &str) -> Result<Option<LocalModelLoadProfile>, DomainError> {
+        use rusqlite::OptionalExtension;
+        let conn = self.db.lock()?;
+        conn.query_row(
+            "SELECT model_path, revision, context_size, gpu_mode, gpu_layers, eval_batch_size,
+                    cpu_threads, flash_attention, mmap, mlock, idle_timeout_seconds, updated_at
+             FROM local_model_load_profiles WHERE model_path = ?1",
+            params![model_path],
+            |row| Ok(LocalModelLoadProfile {
+                model_path: row.get(0)?,
+                revision: row.get::<_, i64>(1)? as u64,
+                context_size: row.get::<_, i64>(2)? as u64,
+                gpu_mode: row.get(3)?,
+                gpu_layers: row.get::<_, Option<i64>>(4)?.map(|v| v as u32),
+                eval_batch_size: row.get::<_, Option<i64>>(5)?.map(|v| v as u32),
+                cpu_threads: row.get::<_, Option<i64>>(6)?.map(|v| v as u32),
+                flash_attention: row.get::<_, Option<i32>>(7)?.map(|v| v != 0),
+                mmap: row.get::<_, i32>(8)? != 0,
+                mlock: row.get::<_, i32>(9)? != 0,
+                idle_timeout_seconds: row.get::<_, Option<i64>>(10)?.map(|v| v as u64),
+                updated_at: row.get(11)?,
+            }),
+        ).optional().map_err(|e| DomainError::Validation(e.to_string()))
+    }
+
+    pub fn save_local_model_load_profile(&self, profile: &LocalModelLoadProfile) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        conn.execute(
+            "INSERT INTO local_model_load_profiles(model_path, revision, context_size, gpu_mode,
+                gpu_layers, eval_batch_size, cpu_threads, flash_attention, mmap, mlock,
+                idle_timeout_seconds, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+             ON CONFLICT(model_path) DO UPDATE SET revision=excluded.revision,
+                context_size=excluded.context_size, gpu_mode=excluded.gpu_mode,
+                gpu_layers=excluded.gpu_layers, eval_batch_size=excluded.eval_batch_size,
+                cpu_threads=excluded.cpu_threads, flash_attention=excluded.flash_attention,
+                mmap=excluded.mmap, mlock=excluded.mlock,
+                idle_timeout_seconds=excluded.idle_timeout_seconds, updated_at=excluded.updated_at",
+            params![profile.model_path, profile.revision as i64, profile.context_size as i64,
+                profile.gpu_mode, profile.gpu_layers.map(i64::from),
+                profile.eval_batch_size.map(i64::from), profile.cpu_threads.map(i64::from),
+                profile.flash_attention.map(i32::from), profile.mmap as i32, profile.mlock as i32,
+                profile.idle_timeout_seconds.map(|v| v as i64), profile.updated_at],
+        ).map_err(|e| DomainError::Validation(e.to_string()))?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1042,9 +1090,19 @@ mod catalog_snapshot_tests {
         let by_path = repo.get_cached_model_by_path("/tmp/models/qwen2.5-7b.gguf").unwrap().unwrap();
         assert_eq!(by_path.file_size_bytes, 4_500_000_000);
 
+        let profile = LocalModelLoadProfile {
+            model_path: model.file_path.clone(), revision: 1, context_size: 4096,
+            gpu_mode: "auto".into(), gpu_layers: None, eval_batch_size: Some(512),
+            cpu_threads: Some(8), flash_attention: Some(true), mmap: true, mlock: false,
+            idle_timeout_seconds: Some(900), updated_at: 400,
+        };
+        repo.save_local_model_load_profile(&profile).unwrap();
+        assert_eq!(repo.get_local_model_load_profile(&model.file_path).unwrap().unwrap(), profile);
+
         repo.delete_local_folder("fld-1").unwrap();
         assert!(repo.list_local_folders().unwrap().is_empty());
         assert!(repo.list_cached_models(None).unwrap().is_empty());
+        assert!(repo.get_local_model_load_profile(&model.file_path).unwrap().is_none());
     }
 
 }

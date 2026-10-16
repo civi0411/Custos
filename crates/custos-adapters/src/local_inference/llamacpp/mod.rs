@@ -445,6 +445,7 @@ impl LocalInferenceBackend for LlamaCppBackend {
         if settings.use_mlock {
             params = params.with_use_mlock(true);
         }
+        params = params.with_use_mmap(settings.use_mmap);
         let model = LlamaModel::load_from_file(&self.backend, model_path, &params)
             .map_err(|e| ProviderError::ExecutionError(e.to_string()))?;
 

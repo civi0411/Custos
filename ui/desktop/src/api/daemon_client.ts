@@ -60,6 +60,7 @@ import {
   LocalHardwareProfile,
   LocalModelPreflightResponse,
   LoadedModelInstance,
+  LocalModelLoadProfile,
   OAuthAuthorizeResult,
   OAuthConnectionMetadata,
   OAuthStatusResult,
@@ -841,15 +842,47 @@ export class DaemonClient {
     });
   }
 
-  async loadLocalModel(
+  async getLocalModelLoadProfile(
+    modelPath: string
+  ): Promise<{ profile: LocalModelLoadProfile }> {
+    return this.request('v1.local_models.profile.get', { model_path: modelPath });
+  }
+
+  async saveLocalModelLoadProfile(
+    profile: Omit<LocalModelLoadProfile, 'revision' | 'updated_at'>
+  ): Promise<{ profile: LocalModelLoadProfile }> {
+    return this.request('v1.local_models.profile.save', profile);
+  }
+
+  async ensureLocalModel(
     modelPath: string,
-    contextSize?: number,
-    gpuLayers?: number
+    forceReload?: boolean
+  ): Promise<{ instance: LoadedModelInstance; drift_detected: boolean; reloaded: boolean }> {
+    return this.request<{ instance: LoadedModelInstance; drift_detected: boolean; reloaded: boolean }>(
+      'v1.local_models.ensure',
+      {
+        model_path: modelPath,
+        force_reload: forceReload ?? false,
+      }
+    );
+  }
+
+  async verifyLocalModelGeneration(
+    modelPathOrName?: string
+  ): Promise<{ verified: boolean; model: string; test_output: string; latency_ms: number }> {
+    return this.request<{ verified: boolean; model: string; test_output: string; latency_ms: number }>(
+      'v1.local_models.verify',
+      {
+        model_path: modelPathOrName,
+      }
+    );
+  }
+
+  async loadLocalModel(
+    modelPath: string
   ): Promise<LoadedModelInstance> {
     return this.request<LoadedModelInstance>('v1.local_models.load', {
       model_path: modelPath,
-      context_size: contextSize,
-      gpu_layers: gpuLayers,
     });
   }
 

@@ -199,7 +199,10 @@ pub struct LocalModelPreflightResponse {
     pub free_ram_bytes: u64,
     pub metal_vram_limit_bytes: u64,
     pub compatibility: ModelCompatibility,
-    pub recommended_gpu_layers: u32,
+    /// Backend-derived recommendation when available. `None` means use the
+    /// saved `auto` policy; it must not be replaced with a magic layer count.
+    #[serde(default)]
+    pub recommended_gpu_layers: Option<u32>,
     #[serde(default)]
     pub issues: Vec<String>,
 }
@@ -214,6 +217,35 @@ pub struct LocalModelLoadRequest {
     pub gpu_layers: Option<u32>,
 }
 
+/// Desired load-time configuration for one native model artifact.
+///
+/// This profile is durable. A loaded instance remains volatile and records the
+/// revision that was actually applied, so editing a profile never pretends to
+/// mutate weights that are already resident.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LocalModelLoadProfile {
+    pub model_path: String,
+    pub revision: u64,
+    pub context_size: u64,
+    /// `auto`, `max`, `off`, or `manual`.
+    pub gpu_mode: String,
+    #[serde(default)]
+    pub gpu_layers: Option<u32>,
+    #[serde(default)]
+    pub eval_batch_size: Option<u32>,
+    #[serde(default)]
+    pub cpu_threads: Option<u32>,
+    #[serde(default)]
+    pub flash_attention: Option<bool>,
+    #[serde(default = "default_true")]
+    pub mmap: bool,
+    #[serde(default)]
+    pub mlock: bool,
+    #[serde(default)]
+    pub idle_timeout_seconds: Option<u64>,
+    pub updated_at: i64,
+}
+
 /// Active in-memory loaded model instance.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LoadedModelInstance {
@@ -225,4 +257,13 @@ pub struct LoadedModelInstance {
     /// Measured resident memory, or zero when the backend cannot report it.
     pub memory_used_bytes: u64,
     pub loaded_at: i64,
+    /// Durable desired-profile revision applied to this volatile instance.
+    #[serde(default)]
+    pub profile_revision: u64,
+    /// Effective GPU layer count when known; `None` means backend-managed.
+    #[serde(default)]
+    pub effective_gpu_layers: Option<u32>,
+    /// A successful load is not the same as successful generation.
+    #[serde(default)]
+    pub generation_verified: bool,
 }
