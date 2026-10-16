@@ -10,6 +10,8 @@ import {
   XCircle,
   Play,
   PowerOff,
+  Settings2,
+  Save,
 } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
 import type {
@@ -18,6 +20,8 @@ import type {
   LocalHardwareProfile,
   ModelCompatibility,
   LoadedModelInstance,
+  LocalModelLoadProfile,
+  LocalModelPreflightResponse,
 } from '@/types/domain';
 
 interface LocalRuntimePaneProps {
@@ -41,22 +45,40 @@ export const LocalRuntimePane: React.FC<LocalRuntimePaneProps> = ({
   const [newFolderPath, setNewFolderPath] = useState('');
   const [newFolderLabel, setNewFolderLabel] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [editingProfile, setEditingProfile] = useState<LocalModelLoadProfile | null>(null);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileEstimate, setProfileEstimate] = useState<LocalModelPreflightResponse | null>(null);
+  const [estimatingProfile, setEstimatingProfile] = useState(false);
+  const [profilesByPath, setProfilesByPath] = useState<Record<string, LocalModelLoadProfile>>({});
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const [foldersRes, modelsRes, hwRes, instancesRes] = await Promise.all([
+      const [foldersResult, modelsResult, hardwareResult, instancesResult] = await Promise.allSettled([
         daemonClient.listLocalFolders(),
         daemonClient.listLocalModels(),
         daemonClient.getLocalHardware(),
         daemonClient.listLoadedInstances(),
       ]);
-      setFolders(foldersRes || []);
-      setModels(modelsRes.models || []);
-      setHardware(hwRes);
-      setInstances(instancesRes.instances || []);
-
+      if (foldersResult.status === 'fulfilled') setFolders(foldersResult.value || []);
+      if (modelsResult.status === 'fulfilled') {
+        const discovered = modelsResult.value.models || [];
+        setModels(discovered);
+        const profileResults = await Promise.allSettled(discovered.map((model) => daemonClient.getLocalModelLoadProfile(model.file_path)));
+        const profiles: Record<string, LocalModelLoadProfile> = {};
+        profileResults.forEach((result) => {
+          if (result.status === 'fulfilled') profiles[result.value.profile.model_path] = result.value.profile;
+        });
+        setProfilesByPath(profiles);
+      }
+      if (hardwareResult.status === 'fulfilled') setHardware(hardwareResult.value);
+      if (instancesResult.status === 'fulfilled') setInstances(instancesResult.value.instances || []);
+      const failure = [foldersResult, modelsResult, hardwareResult, instancesResult]
+        .find((result) => result.status === 'rejected');
+      if (failure?.status === 'rejected') {
+        setErrorMsg(failure.reason instanceof Error ? failure.reason.message : String(failure.reason));
+      }
     } catch (err: any) {
       console.error('Failed to load local models data:', err);
       setErrorMsg(err.message || 'Failed to load local models');
@@ -85,6 +107,8 @@ export const LocalRuntimePane: React.FC<LocalRuntimePaneProps> = ({
     }
   };
 
+  const [verifyingPath, setVerifyingPath] = useState<string | null>(null);
+
   const handleLoadModel = async (model: LocalModelDescriptor) => {
     setLoadingModelPath(model.file_path);
     setErrorMsg(null);
@@ -94,13 +118,7 @@ export const LocalRuntimePane: React.FC<LocalRuntimePaneProps> = ({
       return next;
     });
     try {
-      const preflight = await daemonClient.preflightLocalModel(model.file_path, 8192);
-      if (!preflight.can_load) {
-        throw new Error(
-          preflight.issues.join('. ') || 'Model exceeds system memory limits'
-        );
-      }
-      await daemonClient.loadLocalModel(model.file_path, preflight.context_limit, preflight.recommended_gpu_layers);
+      await daemonClient.ensureLocalModel(model.file_path, true);
       await loadData();
       onShowToast?.(`Model "${model.model_name || model.file_name}" loaded by Custos.`);
     } catch (err: any) {
@@ -111,6 +129,62 @@ export const LocalRuntimePane: React.FC<LocalRuntimePaneProps> = ({
       }));
     } finally {
       setLoadingModelPath(null);
+    }
+  };
+
+  const handleVerifyGeneration = async (model: LocalModelDescriptor) => {
+    setVerifyingPath(model.file_path);
+    setErrorMsg(null);
+    try {
+      const result = await daemonClient.verifyLocalModelGeneration(model.file_path);
+      await loadData();
+      onShowToast?.(`Generation probe verified successfully in ${result.latency_ms}ms.`);
+    } catch (err: any) {
+      console.error('Verification error:', err);
+      setErrorMsg(err.message || 'Generation probe failed');
+    } finally {
+      setVerifyingPath(null);
+    }
+  };
+
+  const handleEditProfile = async (model: LocalModelDescriptor) => {
+    setErrorMsg(null);
+    try {
+      const result = await daemonClient.getLocalModelLoadProfile(model.file_path);
+      setEditingProfile(result.profile);
+      setProfileEstimate(null);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const handleEstimateProfile = async () => {
+    if (!editingProfile) return;
+    setEstimatingProfile(true);
+    setErrorMsg(null);
+    try {
+      setProfileEstimate(await daemonClient.preflightLocalModel(editingProfile.model_path, editingProfile.context_size));
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : String(error));
+    } finally {
+      setEstimatingProfile(false);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!editingProfile) return;
+    setSavingProfile(true);
+    setErrorMsg(null);
+    try {
+      const { revision: _revision, updated_at: _updatedAt, ...desired } = editingProfile;
+      const result = await daemonClient.saveLocalModelLoadProfile(desired);
+      setEditingProfile(result.profile);
+      setProfilesByPath((current) => ({ ...current, [result.profile.model_path]: result.profile }));
+      onShowToast?.('Local model load settings saved. Reload the model to apply them.');
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -406,6 +480,108 @@ export const LocalRuntimePane: React.FC<LocalRuntimePaneProps> = ({
           </div>
         </div>
 
+        {editingProfile && (
+          <div className="rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-1)] p-4 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs font-semibold text-[var(--color-editor-fg)]">Load settings</div>
+                <div className="truncate font-mono text-[10px] text-[var(--color-fg-subtle)]" title={editingProfile.model_path}>
+                  {editingProfile.model_path}
+                </div>
+              </div>
+              <button type="button" onClick={() => setEditingProfile(null)} className="text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]">
+                Close
+              </button>
+            </div>
+
+            {profileEstimate && (
+              <div className="rounded-md border border-[var(--color-border-muted)] bg-[var(--color-canvas)] px-3 py-2 text-[11px] text-[var(--color-fg-muted)]">
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <span>Estimated memory: <strong className="text-[var(--color-editor-fg)]">{formatBytes(profileEstimate.estimated_memory_bytes)}</strong></span>
+                  <span>Free now: <strong className="text-[var(--color-editor-fg)]">{formatBytes(profileEstimate.free_ram_bytes)}</strong></span>
+                  <span>Context checked: <strong className="text-[var(--color-editor-fg)]">{profileEstimate.context_limit.toLocaleString()}</strong></span>
+                </div>
+                <div className="mt-1 text-[10px] text-[var(--color-fg-subtle)]">Estimate only. A real load remains the compatibility check.</div>
+                {profileEstimate.issues.length > 0 && <div className="mt-1 text-amber-400">{profileEstimate.issues.join(' ')}</div>}
+              </div>
+            )}
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1">
+                <span className="text-[11px] font-medium text-[var(--color-fg-muted)]">Context tokens</span>
+                <input
+                  type="number"
+                  min={512}
+                  step={512}
+                  value={editingProfile.context_size}
+                  onChange={(event) => { setEditingProfile({ ...editingProfile, context_size: Number(event.target.value) }); setProfileEstimate(null); }}
+                  className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-canvas)] px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] outline-none"
+                />
+                <div className="text-[10px] text-[var(--color-fg-subtle)]">Larger context increases KV-cache memory. This is a load-time setting.</div>
+              </label>
+              <label className="space-y-1">
+                <span className="text-[11px] font-medium text-[var(--color-fg-muted)]">GPU offload</span>
+                <select
+                  value={editingProfile.gpu_mode}
+                  onChange={(event) => setEditingProfile({ ...editingProfile, gpu_mode: event.target.value as LocalModelLoadProfile['gpu_mode'] })}
+                  className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-canvas)] px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] outline-none"
+                >
+                  <option value="auto">Auto</option>
+                  <option value="max">Maximum supported</option>
+                  <option value="off">CPU only</option>
+                  <option value="manual">Manual layers</option>
+                </select>
+                {editingProfile.gpu_mode === 'manual' && (
+                  <input
+                    type="number"
+                    min={0}
+                    value={editingProfile.gpu_layers ?? 0}
+                    onChange={(event) => setEditingProfile({ ...editingProfile, gpu_layers: Number(event.target.value) })}
+                    className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-canvas)] px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] outline-none"
+                    aria-label="GPU layers"
+                  />
+                )}
+              </label>
+              <label className="space-y-1">
+                <span className="text-[11px] font-medium text-[var(--color-fg-muted)]">Evaluation batch</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={editingProfile.eval_batch_size ?? 512}
+                  onChange={(event) => setEditingProfile({ ...editingProfile, eval_batch_size: Number(event.target.value) })}
+                  className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-canvas)] px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] outline-none"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-[11px] font-medium text-[var(--color-fg-muted)]">CPU threads</span>
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="Backend default"
+                  value={editingProfile.cpu_threads ?? ''}
+                  onChange={(event) => setEditingProfile({ ...editingProfile, cpu_threads: event.target.value ? Number(event.target.value) : undefined })}
+                  className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-canvas)] px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] outline-none"
+                />
+              </label>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 text-[11px] text-[var(--color-fg-muted)]">
+              <label className="flex items-center gap-2"><input type="checkbox" checked={editingProfile.flash_attention ?? false} onChange={(event) => setEditingProfile({ ...editingProfile, flash_attention: event.target.checked })} />Flash attention</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={editingProfile.mmap} onChange={(event) => setEditingProfile({ ...editingProfile, mmap: event.target.checked })} />Memory map weights</label>
+              <label className="flex items-center gap-2"><input type="checkbox" checked={editingProfile.mlock} onChange={(event) => setEditingProfile({ ...editingProfile, mlock: event.target.checked })} />Lock memory</label>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={handleEstimateProfile} disabled={estimatingProfile} className="rounded-md border border-[var(--color-border-default)] px-3 py-1.5 text-xs text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] disabled:opacity-50">
+                {estimatingProfile ? 'Estimating…' : 'Estimate memory'}
+              </button>
+              <button type="button" onClick={handleSaveProfile} disabled={savingProfile} className="flex items-center gap-1.5 rounded-md bg-teal-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-teal-500 disabled:opacity-50">
+                <Save size={12} />{savingProfile ? 'Saving…' : 'Save load settings'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {models.length === 0 ? (
           <div className="rounded-xl border border-dashed border-[var(--color-border-muted)] p-6 text-center text-xs text-[var(--color-fg-subtle)]">
             {loading ? 'Inspecting local model files…' : 'No GGUF models detected in registered directories. Add a folder above to scan.'}
@@ -413,9 +589,10 @@ export const LocalRuntimePane: React.FC<LocalRuntimePaneProps> = ({
         ) : (
           <div className="space-y-2">
             {models.map((m) => {
-              const isLoaded = instances.some(
-                (inst) => inst.model_path === m.file_path
-              );
+              const instance = instances.find((inst) => inst.model_path === m.file_path);
+              const isLoaded = Boolean(instance);
+              const savedProfile = profilesByPath[m.file_path];
+              const reloadRequired = Boolean(instance && savedProfile && instance.profile_revision !== savedProfile.revision);
               const isOperating = loadingModelPath === m.file_path;
               const loadError = modelLoadErrors[m.file_path];
 
@@ -433,10 +610,18 @@ export const LocalRuntimePane: React.FC<LocalRuntimePaneProps> = ({
                       <span className="font-semibold text-[var(--color-editor-fg)] truncate">
                         {m.model_name || m.file_name}
                       </span>
-                      {isLoaded ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300 border border-emerald-500/30">
+                      {reloadRequired ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-300 border border-amber-500/30">
+                          <AlertTriangle size={11} />Reload required
+                        </span>
+                      ) : isLoaded ? (
+                        <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-semibold border ${
+                          instance?.generation_verified
+                            ? 'bg-teal-500/20 text-teal-300 border-teal-500/30'
+                            : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                        }`}>
                           <CheckCircle2 size={11} />
-                          Load succeeded · ready to try in chat
+                          {instance?.generation_verified ? 'Ready · generation verified' : 'Load succeeded · unverified'}
                         </span>
                       ) : isOperating ? (
                         <span className="text-[10px] text-[var(--color-fg-muted)]">Checking and loading weights…</span>
@@ -470,20 +655,52 @@ export const LocalRuntimePane: React.FC<LocalRuntimePaneProps> = ({
                       <span className="truncate max-w-[220px]" title={m.file_path}>
                         {m.file_path}
                       </span>
+                      {instance && <><span>·</span><span>{instance.context_limit.toLocaleString()} ctx</span></>}
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    {isLoaded ? (
+                    <button
+                      type="button"
+                      onClick={() => void handleEditProfile(m)}
+                      disabled={isOperating}
+                      className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border-default)] px-2.5 py-1.5 text-xs text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-editor-fg)] disabled:opacity-50"
+                    >
+                      <Settings2 size={12} />
+                      Configure
+                    </button>
+                    {reloadRequired && (
                       <button
                         type="button"
-                        onClick={() => handleUnloadModel(m)}
+                        onClick={() => handleLoadModel(m)}
                         disabled={isOperating}
-                        className="flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-xs font-medium text-rose-300 hover:bg-rose-500/20 transition disabled:opacity-50"
+                        className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/20 transition disabled:opacity-50"
                       >
-                        <PowerOff size={12} />
-                        {isOperating ? 'Unloading…' : 'Unload'}
+                        <RefreshCw size={12} />{isOperating ? 'Reloading…' : 'Reload'}
                       </button>
+                    )}
+                    {isLoaded ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => void handleVerifyGeneration(m)}
+                          disabled={isOperating || verifyingPath === m.file_path}
+                          className="flex items-center gap-1.5 rounded-lg border border-teal-500/30 bg-teal-500/10 px-2.5 py-1.5 text-xs font-medium text-teal-300 hover:bg-teal-500/20 transition disabled:opacity-50 cursor-pointer"
+                          title="Run 1-token test generation to verify KV-cache & tensor execution"
+                        >
+                          <Play size={12} className={verifyingPath === m.file_path ? 'animate-spin' : ''} />
+                          {verifyingPath === m.file_path ? 'Probing…' : 'Verify'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUnloadModel(m)}
+                          disabled={isOperating || verifyingPath === m.file_path}
+                          className="flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-xs font-medium text-rose-300 hover:bg-rose-500/20 transition disabled:opacity-50 cursor-pointer"
+                        >
+                          <PowerOff size={12} />
+                          {isOperating ? 'Unloading…' : 'Unload'}
+                        </button>
+                      </>
                     ) : (
                       <button
                         type="button"

@@ -122,6 +122,23 @@ must be labeled as such; file size is not resident RAM and unknown is not
 “100% Metal”. Loader errors retain their actual cause, including for MTP files.
 Native folder and model-selection screens do not automatically probe LM Studio;
 HTTP model servers remain separate optional provider connections.
+
+The daemon is the only owner of native model load profiles and live instances.
+One persisted profile is keyed by canonical artifact path and has a monotonic
+revision. It contains desired load-time parameters; the instance records the
+revision and effective context/GPU configuration that actually reached the
+backend. Settings edits the profile. The model picker and chat may request
+`ensure ready`, but they must not hard-code another context size, GPU layer
+count or fallback policy. A profile change does not mutate a resident instance:
+the UI exposes `reload required` until an explicit reload succeeds.
+
+Native process discovery is restricted to an explicitly configured executable
+or a supported system installation. Custos never reaches into LM Studio or
+another application's private runtime directory. Sidecar startup uses an
+allocated loopback port and validates child ownership plus model identity;
+bounded diagnostics are drained while loading. Loader success, process health
+and a successful smoke generation are separate observations. The adapter does
+not claim universal GGUF support and does not silently clamp requested context.
 The opt-in `CUSTOS_TEST_CHAT_GGUF` fixture exercises the same native load and
 provider generation path with a real chat GGUF; without the environment
 variable, the test explicitly skips. A passing metadata-only test or a skipped

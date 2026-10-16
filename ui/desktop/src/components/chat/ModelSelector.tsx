@@ -357,7 +357,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
           badge: `${sizeGb} GB`,
           badgeColor: 'teal',
           description: `GGUF · Arch: ${m.architecture || 'gguf'} · Quant: ${m.quantization || 'Q4'}`,
-          contextWindow: `${m.context_length || 8192}`,
+          contextWindow: m.context_length ? `${m.context_length}` : undefined,
           isConfigured: true,
           efforts: [],
           supportsThinking: false,
@@ -461,22 +461,15 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     // Native local model loading lifecycle
     if (model.id.startsWith('native:')) {
       const filePath = model.id.slice('native:'.length);
-      const isAlreadyLoaded = loadedInstances.some((inst) => inst.model_path === filePath);
-      if (!isAlreadyLoaded) {
-        setLoadingNativeModel(model.id);
-        try {
-          const preflight = await daemonClient.preflightLocalModel(filePath, 8192);
-          if (!preflight.can_load) {
-            throw new Error(preflight.issues.join('. ') || 'Model file may exceed physical memory');
-          }
-          await daemonClient.loadLocalModel(filePath, preflight.context_limit, preflight.recommended_gpu_layers);
-          void refreshLoadedInstances();
-        } catch (error) {
-          setNativeLoadError(error instanceof Error ? error.message : String(error));
-          return;
-        } finally {
-          setLoadingNativeModel(null);
-        }
+      setLoadingNativeModel(model.id);
+      try {
+        await daemonClient.ensureLocalModel(filePath);
+        void refreshLoadedInstances();
+      } catch (error) {
+        setNativeLoadError(error instanceof Error ? error.message : String(error));
+        return;
+      } finally {
+        setLoadingNativeModel(null);
       }
       handleSelect(model.id);
       setIsOpen(false);
