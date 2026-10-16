@@ -6,9 +6,9 @@ import {
   FlaskConical,
   MessageSquare,
   Compass,
-  ListTodo,
-  ExternalLink,
+  Zap,
 } from 'lucide-react';
+import { TaskAnchorBanner } from '@/components/shell/TaskAnchorBanner';
 import { AgentActionCard, AgentWorkingStatus } from '@/components/chat';
 import { Session } from '@/types';
 import { OrcaTabbedContainer, resolveResources, type ResourceTabsState, type OrcaTabId, type OrcaTab, getTabType } from '@/components/workbenches/OrcaTabbedContainer';
@@ -247,7 +247,12 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       diffCode: [],
     };
 
-  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
+  const boundTask = activeSession.taskId ? (tasks.find((task) => task.id === activeSession.taskId) ?? null) : null;
+  const boundWorkspace = workspaces.find((w) => w.id === (boundTask?.metadata?.workspace_id || activeWorkspaceId));
+  const taskAttentionCount = attentionItems.filter(
+    (item) => item.worktreeId === boundWorkspace?.id || Boolean(activeSession.taskId && item.targetResource.includes(activeSession.taskId))
+  ).length;
+  const [composerMode, setComposerMode] = useState<'chat' | 'task'>('task');
 
   const hasMessages = activeSession.messages && activeSession.messages.length > 0;
 
@@ -648,48 +653,40 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                 />
               ) : (
                 <div className="flex flex-col h-full overflow-hidden">
-                  {/* Conversation Task Anchor Bar */}
-                  {activeSession.taskId ? (
-                    <div className="flex h-9 items-center gap-2 px-4 border-b border-white/10 bg-surface-1/40 text-xs shrink-0">
-                      <ListTodo className="w-3.5 h-3.5 text-workbench-accent shrink-0" />
-                      <span className="text-fg-muted">Bound Task:</span>
-                      <span className="font-medium text-fg-editor truncate">{selectedTask?.title || (activeSession.taskId.length > 20 ? `${activeSession.taskId.slice(0, 16)}…` : activeSession.taskId)}</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onSelectTask(activeSession.taskId!);
-                          onChangeSidebarView('tasks');
-                        }}
-                        className="ml-auto flex items-center gap-1 text-[11px] text-workbench-accent hover:underline shrink-0"
-                      >
-                        <span>View Task</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ) : hasMessages ? (
-                    <div className="flex h-9 items-center justify-between px-4 border-b border-white/10 bg-surface-1/20 text-xs shrink-0">
-                      <span className="text-[11px] text-fg-muted">Independent chat</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const firstUserMsg = activeSession.messages.find((m) => m.role === 'user')?.text || '';
-                          setCreateTaskPrefill({
-                            title: activeSession.title,
-                            description: firstUserMsg || activeSession.preview || '',
-                            workspaceId: activeSession.workspaceId || activeWorkspaceId,
-                            sessionId: activeSession.id,
-                            packId: mode === 'engineering' ? 'code' : mode === 'research' ? 'research' : 'copilot',
-                          });
-                          setIsGlobalCreateTaskOpen(true);
-                        }}
-                        className="flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium text-fg-muted hover:text-workbench-accent hover:bg-surface-2 transition"
-                        title="Promote this conversation to a formal Task with criteria"
-                      >
-                        <ListTodo className="w-3 h-3" />
-                        <span>Turn into Task</span>
-                      </button>
-                    </div>
-                  ) : null}
+                  {/* Task Anchor Banner (Decoupled Task & Session Anchor) */}
+                  <TaskAnchorBanner
+                    session={activeSession}
+                    task={boundTask}
+                    boundWorkspace={boundWorkspace}
+                    attentionCount={taskAttentionCount}
+                    hasMessages={Boolean(hasMessages)}
+                    onViewTask={() => {
+                      if (activeSession.taskId) {
+                        onSelectTask(activeSession.taskId);
+                        onChangeSidebarView('tasks');
+                      }
+                    }}
+                    onOpenSplitCanvas={() => {
+                      if (!isWebTabOpen) {
+                        onToggleWebTab();
+                      }
+                    }}
+                    onPromoteToTask={() => {
+                      const firstUserMsg = activeSession.messages.find((m) => m.role === 'user')?.text || '';
+                      setCreateTaskPrefill({
+                        title: activeSession.title,
+                        description: firstUserMsg || activeSession.preview || '',
+                        workspaceId: activeSession.workspaceId || activeWorkspaceId,
+                        sessionId: activeSession.id,
+                        packId: mode === 'engineering' ? 'code' : mode === 'research' ? 'research' : 'copilot',
+                      });
+                      setIsGlobalCreateTaskOpen(true);
+                    }}
+                    onDetachTask={() => {
+                      activeSession.taskId = undefined;
+                      onShowToast?.('Đã tách phiên trò chuyện khỏi Task (Về Chat Thường)');
+                    }}
+                  />
 
                   <div
                     ref={dialogueRef}
@@ -825,13 +822,45 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                   placeholder={
                     liveMessage
                       ? 'Agent is working… Type guidance here to steer agent in-flight (or press Stop/Esc)...'
-                      : lensMeta.placeholder
+                      : composerMode === 'chat' && !activeSession.taskId
+                      ? 'Hỏi đáp, tra cứu, giải thích code hoặc thảo luận ý tưởng (An toàn, không sửa code)...'
+                      : lensMeta.placeholder || 'Giao việc: Agent sẽ phân tích, lập kế hoạch, sửa code và báo cáo diff...'
                   }
                   className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-fg-editor placeholder-fg-subtle text-[13px] resize-none leading-relaxed"
                 />
 
                 <div className="flex items-center justify-between mt-2 pt-2">
                   <div className="flex items-center gap-2 text-fg-muted">
+                    {/* Operational Mode Switcher: Chat (Ask) vs Task (Act) */}
+                    <div className="flex items-center rounded-lg bg-black/40 border border-white/10 p-0.5 shrink-0 select-none">
+                      <button
+                        type="button"
+                        onClick={() => setComposerMode('chat')}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-medium transition cursor-pointer ${
+                          composerMode === 'chat' && !activeSession.taskId
+                            ? 'bg-white/18 text-white shadow-xs font-semibold'
+                            : 'text-white/45 hover:text-white/80'
+                        }`}
+                        title="Chế độ Chat Thường: Chỉ hỏi đáp, giải thích, an toàn tuyệt đối cho code"
+                      >
+                        <MessageSquare className="size-3" />
+                        <span>Chat</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setComposerMode('task')}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-medium transition cursor-pointer ${
+                          composerMode === 'task' || Boolean(activeSession.taskId)
+                            ? 'bg-workbench-accent text-white shadow-xs font-semibold'
+                            : 'text-white/45 hover:text-white/80'
+                        }`}
+                        title="Chế độ Task: Giao việc cho Agent thực thi, sửa code và chạy test"
+                      >
+                        <Zap className="size-3" />
+                        <span>Task</span>
+                      </button>
+                    </div>
+
                     <span className={`text-[11px] font-mono border border-border-default bg-surface-1 px-2 py-0.5 rounded ${lensMeta.iconColor}`}>
                       {lensMeta.badge}
                     </span>
