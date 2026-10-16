@@ -129,9 +129,9 @@ export const AppTopBar: React.FC = () => {
     icon: React.ElementType;
     shortcut: string;
   }[] = [
-    { id: 'copilot', label: 'Copilot', icon: MessageSquare, shortcut: '⌘1' },
-    { id: 'engineering', label: 'Engineering', icon: Code2, shortcut: '⌘2' },
-    { id: 'research', label: 'Research', icon: FlaskConical, shortcut: '⌘3' },
+    { id: 'copilot', label: 'Copilot', icon: MessageSquare, shortcut: '⌥1' },
+    { id: 'engineering', label: 'Engineering', icon: Code2, shortcut: '⌥2' },
+    { id: 'research', label: 'Research', icon: FlaskConical, shortcut: '⌥3' },
   ];
 
   const getTabIcon = (id: OrcaTabId, isActive: boolean) => {
