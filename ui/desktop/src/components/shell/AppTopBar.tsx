@@ -48,6 +48,7 @@ export const AppTopBar: React.FC = () => {
     isSidebarCollapsed,
     toggleSidebar,
     isWebTabOpen,
+    setIsWebTabOpen,
     toggleWebTab,
     isWebTabExpanded,
     toggleExpandWebTab,
@@ -335,9 +336,8 @@ export const AppTopBar: React.FC = () => {
         )}
 
         <div className={`flex-1 min-w-0 flex items-center gap-1 overflow-hidden h-full pl-2 pr-2 ${isWebTabOpen ? 'justify-between' : 'justify-end'}`}>
-          {isWebTabOpen && (
-            <div className="flex-1 min-w-0 flex items-center justify-between gap-1 overflow-hidden h-full">
-            {/* Resource Tabs Strip */}
+          <div className="flex-1 min-w-0 flex items-center justify-between gap-1 overflow-hidden h-full">
+            {/* Resource Tabs Strip (Always visible on menu bar) */}
             <div className="flex-1 min-w-0 flex items-center gap-0.5 overflow-x-auto no-scrollbar py-0.5">
               {resourceTabs.tabs.map((tab) => {
                 const isActive = tab.id === resourceTabs.activeTabId;
@@ -354,45 +354,52 @@ export const AppTopBar: React.FC = () => {
                     }}
                     onClick={() => {
                       resourceTabs.setActiveTabId(tab.id);
+                      if (!isWebTabOpen) {
+                        setIsWebTabOpen(true);
+                      }
                     }}
                     className={`group flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer transition shrink-0 text-[11.5px] h-6 select-none ${
                       isActive
-                        ? 'bg-white/14 text-white font-medium shadow-xs border border-white/10'
+                        ? isWebTabOpen
+                          ? 'bg-white/14 text-white font-medium shadow-xs border border-white/10'
+                          : 'bg-white/10 text-white/90 font-medium border border-white/10 hover:bg-white/16'
                         : isSplit
                           ? 'bg-purple-500/15 text-purple-200 border border-purple-500/40 font-medium'
                           : 'bg-transparent text-white/50 hover:text-white/80 hover:bg-white/6'
                     }`}
-                    title={`${tab.title} (Kéo thả xuống canvas để mở song song)`}
+                    title={isWebTabOpen ? `${tab.title} (Kéo thả xuống canvas để mở song song)` : `${tab.title} (Click để mở canvas)`}
                   >
                     {getTabIcon(tabType, isActive || isSplit)}
                     <span className="truncate max-w-[100px]">{tab.title}</span>
 
                     {/* Split View Indicator Badges */}
-                    {splitTabId && isActive && (
+                    {splitTabId && isActive && isWebTabOpen && (
                       <span className="px-1 py-0.2 rounded text-[8.5px] font-mono bg-blue-500/20 text-blue-400 font-semibold border border-blue-500/30 shrink-0">
                         1
                       </span>
                     )}
-                    {splitTabId && isSplit && (
+                    {splitTabId && isSplit && isWebTabOpen && (
                       <span className="px-1 py-0.2 rounded text-[8.5px] font-mono bg-purple-500/25 text-purple-300 font-semibold border border-purple-500/40 shrink-0">
                         2
                       </span>
                     )}
 
-                    {/* Quick Split Toggle Button on Tab Hover */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleSplitTab(tab.id);
-                      }}
-                      className={`opacity-0 group-hover:opacity-100 hover:text-white p-0.5 rounded transition text-white/40 hover:bg-white/10 shrink-0 cursor-pointer ${
-                        isSplit ? '!opacity-100 text-purple-300' : ''
-                      }`}
-                      title={isSplit ? 'Tắt xem song song tab này' : 'Xem song song với tab hiện tại (Split View)'}
-                    >
-                      <Columns2 className="size-2.5" />
-                    </button>
+                    {/* Quick Split Toggle Button on Tab Hover (When pane is open) */}
+                    {isWebTabOpen && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleSplitTab(tab.id);
+                        }}
+                        className={`opacity-0 group-hover:opacity-100 hover:text-white p-0.5 rounded transition text-white/40 hover:bg-white/10 shrink-0 cursor-pointer ${
+                          isSplit ? '!opacity-100 text-purple-300' : ''
+                        }`}
+                        title={isSplit ? 'Tắt xem song song tab này' : 'Xem song song với tab hiện tại (Split View)'}
+                      >
+                        <Columns2 className="size-2.5" />
+                      </button>
+                    )}
 
                     {/* Close Tab Button */}
                     <button
@@ -410,7 +417,10 @@ export const AppTopBar: React.FC = () => {
               {/* Add New Tab Button */}
               <button
                 type="button"
-                onClick={() => setIsResourcePickerOpen(true)}
+                onClick={() => {
+                  setIsResourcePickerOpen(true);
+                  if (!isWebTabOpen) setIsWebTabOpen(true);
+                }}
                 className="flex size-6 items-center justify-center rounded-md text-white/40 hover:text-white hover:bg-white/10 transition shrink-0 cursor-pointer"
                 title="New resource tab"
               >
@@ -418,46 +428,47 @@ export const AppTopBar: React.FC = () => {
               </button>
             </div>
 
-            {/* Pane Controls Right Cluster */}
-            <div className="flex items-center gap-1 shrink-0">
-              {/* Split View Toggle Button */}
-              {resourceTabs.tabs.length > 1 && (
+            {/* Pane Controls Right Cluster (Visible when pane is open) */}
+            {isWebTabOpen && (
+              <div className="flex items-center gap-1 shrink-0">
+                {/* Split View Toggle Button */}
+                {resourceTabs.tabs.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (splitTabId) {
+                        closeSplitTab();
+                      } else {
+                        const secondary = resourceTabs.tabs.find((t) => t.id !== resourceTabs.activeTabId);
+                        if (secondary) setSplitTabId(secondary.id);
+                      }
+                    }}
+                    className={`flex size-6 items-center justify-center rounded-md transition cursor-pointer ${
+                      splitTabId
+                        ? 'bg-purple-600/30 text-purple-200 border border-purple-500/40 shadow-xs'
+                        : 'text-white/45 hover:text-white hover:bg-white/8'
+                    }`}
+                    title={splitTabId ? 'Tắt xem song song (Exit split view)' : 'Bật xem song song 2 tab (Split view)'}
+                  >
+                    <Columns2 className="size-3.5" />
+                  </button>
+                )}
+
+                {/* Subtle Divider */}
+                <div className="h-3.5 w-px bg-white/10 mx-0.5 shrink-0" />
+
+                {/* Maximize / Restore Split Toggle */}
                 <button
                   type="button"
-                  onClick={() => {
-                    if (splitTabId) {
-                      closeSplitTab();
-                    } else {
-                      const secondary = resourceTabs.tabs.find((t) => t.id !== resourceTabs.activeTabId);
-                      if (secondary) setSplitTabId(secondary.id);
-                    }
-                  }}
-                  className={`flex size-6 items-center justify-center rounded-md transition cursor-pointer ${
-                    splitTabId
-                      ? 'bg-purple-600/30 text-purple-200 border border-purple-500/40 shadow-xs'
-                      : 'text-white/45 hover:text-white hover:bg-white/8'
-                  }`}
-                  title={splitTabId ? 'Tắt xem song song (Exit split view)' : 'Bật xem song song 2 tab (Split view)'}
+                  onClick={toggleExpandWebTab}
+                  className="flex size-6 items-center justify-center rounded-md text-white/45 hover:text-white hover:bg-white/8 transition cursor-pointer"
+                  title={isWebTabExpanded ? 'Restore split layout' : 'Maximize resource canvas'}
                 >
-                  <Columns2 className="size-3.5" />
+                  {isWebTabExpanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
                 </button>
-              )}
-
-              {/* Subtle Divider */}
-              <div className="h-3.5 w-px bg-white/10 mx-0.5 shrink-0" />
-
-              {/* Maximize / Restore Split Toggle */}
-              <button
-                type="button"
-                onClick={toggleExpandWebTab}
-                className="flex size-6 items-center justify-center rounded-md text-white/45 hover:text-white hover:bg-white/8 transition cursor-pointer"
-                title={isWebTabExpanded ? 'Restore split layout' : 'Maximize resource canvas'}
-              >
-                {isWebTabExpanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-              </button>
-            </div>
+              </div>
+            )}
           </div>
-        )}
 
         {/* Resource Canvas Toggle Button */}
         <button
