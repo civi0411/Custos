@@ -885,11 +885,11 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           {/* EDGE REVEAL DRAG HANDLE (When pane is collapsed, drag left to reveal) */}
           {!isWebTabOpen && (
             <div
-              className="absolute right-0 inset-y-0 w-2.5 z-30 cursor-col-resize group flex items-center justify-end select-none"
+              className="absolute right-0 inset-y-0 w-3.5 z-30 cursor-col-resize group flex items-center justify-end select-none"
               onMouseDown={handleStartResizeColumn2}
-              title="Drag left to reveal resource canvas"
+              title="Kéo sang trái hoặc click vào tab trên menu để mở lại khung tài nguyên"
             >
-              <div className="w-0.5 h-10 bg-white/10 rounded-l group-hover:bg-workbench-accent group-hover:w-1 transition-all" />
+              <div className="w-1 h-16 bg-white/20 rounded-l group-hover:bg-workbench-accent group-hover:w-1.5 transition-all shadow-sm" />
             </div>
           )}
 

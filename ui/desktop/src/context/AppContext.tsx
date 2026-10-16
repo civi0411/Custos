@@ -715,11 +715,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
   }, [column2Width]);
 
+  const dragStartCollapsedRef = useRef<boolean>(false);
+
   const handleStartResizeColumn2 = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    dragStartCollapsedRef.current = !isWebTabOpen;
     setIsResizingColumn(true);
-  }, []);
+  }, [isWebTabOpen]);
 
   const handleResetColumn2Width = useCallback(() => {
     const def = Math.max(340, Math.min(540, Math.round(window.innerWidth * 0.38)));
@@ -737,21 +740,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const leftReserved = (isSidebarCollapsed ? 44 : 44 + 256) + 320;
       const maxCol2 = Math.max(minCol2, window.innerWidth - leftReserved);
 
-      if (rawWidth < 140) {
-        // Dragged all the way over to the right edge: collapse into topbar tab interface
-        setIsWebTabOpen(false);
+      if (dragStartCollapsedRef.current) {
+        // Dragging left from edge handle to reveal
+        if (rawWidth > 40) {
+          setIsWebTabOpen(true);
+          const clamped = Math.min(Math.max(rawWidth, minCol2), maxCol2);
+          setColumn2Width(clamped);
+          setSplitPercent(Math.round(((window.innerWidth - clamped) / window.innerWidth) * 100));
+        }
       } else {
-        setIsWebTabOpen(true);
-        const clamped = Math.min(Math.max(rawWidth, minCol2), maxCol2);
-        setColumn2Width(clamped);
-        setSplitPercent(Math.round(((window.innerWidth - clamped) / window.innerWidth) * 100));
+        // Dragging rightwards to collapse into topbar tab interface
+        if (rawWidth < 180) {
+          setIsWebTabOpen(false);
+        } else {
+          setIsWebTabOpen(true);
+          // Allow visual feedback down to 180px before collapse snap
+          const clamped = Math.min(Math.max(rawWidth, 180), maxCol2);
+          setColumn2Width(clamped);
+          setSplitPercent(Math.round(((window.innerWidth - clamped) / window.innerWidth) * 100));
+        }
       }
     };
 
     const handleMouseUp = (e: MouseEvent) => {
       const rawWidth = Math.round(window.innerWidth - e.clientX);
-      if (rawWidth < 140) {
+      if (rawWidth < 200) {
         setIsWebTabOpen(false);
+        const def = Math.max(340, Math.min(540, Math.round(window.innerWidth * 0.38)));
+        setColumn2Width(def);
+      } else {
+        setIsWebTabOpen(true);
+        const minCol2 = 240;
+        const leftReserved = (isSidebarCollapsed ? 44 : 44 + 256) + 320;
+        const maxCol2 = Math.max(minCol2, window.innerWidth - leftReserved);
+        const clamped = Math.min(Math.max(rawWidth, minCol2), maxCol2);
+        setColumn2Width(clamped);
       }
       setIsResizingColumn(false);
     };
