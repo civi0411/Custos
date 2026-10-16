@@ -217,6 +217,13 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     return () => window.removeEventListener('keydown', dismiss);
   }, [isResourcePickerOpen]);
 
+  const [pickerTargetPane, setPickerTargetPane] = useState<'primary' | 'split'>('primary');
+
+  const handleOpenResourcePicker = useCallback((targetPane: 'primary' | 'split' = 'primary') => {
+    setPickerTargetPane(targetPane);
+    setIsResourcePickerOpen(true);
+  }, [setIsResourcePickerOpen]);
+
   // Populated only from daemon approval/effect events. Never fabricate authority requests.
   const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([]);
 
@@ -398,7 +405,8 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     title: string,
     url: string,
     agentId?: string,
-    workspaceId?: string
+    workspaceId?: string,
+    targetPane: 'primary' | 'split' = 'primary'
   ) => {
     if (!isWebTabOpen) {
       onToggleWebTab();
@@ -420,36 +428,49 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
               prev.map((t) => (t.id === existing.id ? { ...t, url, title: title || t.title } : t))
             );
           }
-          resourceTabs.setActiveTabId(existing.id);
+          if (targetPane === 'split') {
+            resourceTabs.setSplitTabId?.(existing.id);
+          } else {
+            resourceTabs.setActiveTabId(existing.id);
+          }
           return;
         }
       }
       resourceTabs.setTabs((prev) => [...prev, newTab]);
     }
-    resourceTabs.setActiveTabId(newTabId);
+
+    if (targetPane === 'split') {
+      resourceTabs.setSplitTabId?.(newTabId);
+    } else {
+      resourceTabs.setActiveTabId(newTabId);
+    }
   }, [isWebTabOpen, onToggleWebTab, resourceTabs]);
 
-  const handleOpenTab = useCallback((id: OrcaTabId) => {
+  const handleOpenTab = useCallback((id: OrcaTabId, customUrl?: string, customTitle?: string, targetPane: 'primary' | 'split' = 'primary') => {
     const existing = resourceTabs.tabs.find((t) => getTabType(t) === id);
     if (existing) {
       if (!isWebTabOpen) {
         onToggleWebTab();
       }
-      resourceTabs.setActiveTabId(existing.id);
+      if (targetPane === 'split') {
+        resourceTabs.setSplitTabId?.(existing.id);
+      } else {
+        resourceTabs.setActiveTabId(existing.id);
+      }
     } else {
-      openTab(id, id.charAt(0).toUpperCase() + id.slice(1), `custos://resource/${id}`);
+      openTab(id, customTitle || (id.charAt(0).toUpperCase() + id.slice(1)), customUrl || `custos://resource/${id}`, undefined, undefined, targetPane);
     }
   }, [resourceTabs, isWebTabOpen, onToggleWebTab, openTab]);
 
 
-  const handleLaunchAgentTab = useCallback((harness: HarnessDescriptor) => {
+  const handleLaunchAgentTab = useCallback((harness: HarnessDescriptor, targetPane: 'primary' | 'split' = 'primary') => {
     const existingAgentTabs = resourceTabs.tabs.filter((t) => t.type === 'agents' || t.agentId);
     const count = existingAgentTabs.length + 1;
     const title = count > 1 ? `${harness.name} #${count}` : harness.name;
-    openTab('agents', title, `custos://agent/${harness.id}`, harness.id, activeWorkspaceId);
+    openTab('agents', title, `custos://agent/${harness.id}`, harness.id, activeWorkspaceId, targetPane);
     setIsResourcePickerOpen(false);
     onShowToast?.(`Launched ${harness.name} in parallel tab`);
-  }, [openTab, resourceTabs.tabs, activeWorkspaceId, onShowToast]);
+  }, [openTab, resourceTabs.tabs, activeWorkspaceId, onShowToast, setIsResourcePickerOpen]);
 
   const handleResourceAskAgent = useCallback((draft: string) => {
     setInputText(previous => previous ? `${previous}\n\n${draft}` : draft);
@@ -920,32 +941,35 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
                 <OrcaTabbedContainer
                   resourceTabs={resourceTabs}
                   isPaneOpen={Boolean(isWebTabOpen)}
-                session={activeSession}
-                onAcceptAndRun={onAcceptAndRun}
-                onRejectDiff={onRejectDiff}
-                onCopyDiff={onCopyDiff}
-                onShowToast={onShowToast}
-                isExpanded={isWebTabExpanded}
-                onToggleExpand={onToggleExpandWebTab}
-                mode={mode}
-                splitPercent={splitPercent}
-                onOpenTab={handleOpenTab}
-                onAskAgent={handleResourceAskAgent}
-                activeWorkspaceId={activeWorkspaceId}
-                onSelectWorkspace={setActiveWorkspaceId}
-                activeWorkspace={activeWorkspace}
-                workspaces={workspaces}
-              />
+                  session={activeSession}
+                  onAcceptAndRun={onAcceptAndRun}
+                  onRejectDiff={onRejectDiff}
+                  onCopyDiff={onCopyDiff}
+                  onShowToast={onShowToast}
+                  isExpanded={isWebTabExpanded}
+                  onToggleExpand={onToggleExpandWebTab}
+                  mode={mode}
+                  splitPercent={splitPercent}
+                  onOpenTab={handleOpenTab}
+                  onOpenResourcePicker={handleOpenResourcePicker}
+                  onAskAgent={handleResourceAskAgent}
+                  activeWorkspaceId={activeWorkspaceId}
+                  onSelectWorkspace={setActiveWorkspaceId}
+                  activeWorkspace={activeWorkspace}
+                  workspaces={workspaces}
+                />
               </div>
               <TabQuickLaunchMenu
                 isOpen={isResourcePickerOpen}
                 onClose={() => setIsResourcePickerOpen(false)}
                 pickerResources={pickerResources}
                 onOpenResource={(resId) => {
-                  handleOpenTab(resId);
+                  handleOpenTab(resId, undefined, undefined, pickerTargetPane);
                   setIsResourcePickerOpen(false);
                 }}
-                onLaunchAgent={handleLaunchAgentTab}
+                onLaunchAgent={(harness) => {
+                  handleLaunchAgentTab(harness, pickerTargetPane);
+                }}
                 activeWorkspaceTitle={activeWorkspace?.name || activeWorkspace?.id}
                 mode={mode}
               />
