@@ -4,10 +4,10 @@ import { daemonClient } from '@/api/daemon_client';
 import type { ResearchExecutionRecord, ResearchRecipe } from '@/types/research';
 
 const statusTone: Record<ResearchExecutionRecord['status'], string> = {
-  pending: 'text-amber-500',
-  running: 'text-blue-500',
-  completed: 'text-emerald-500',
-  failed: 'text-rose-500',
+  pending: 'text-white/60',
+  running: 'text-white/90 font-bold',
+  completed: 'text-white/80',
+  failed: 'text-red-400',
   cancelled: 'text-[var(--color-fg-subtle)]',
 };
 
@@ -67,8 +67,8 @@ export const ResearchMethodsPane: React.FC = () => {
   }
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[260px_minmax(0,1fr)] bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
-      <aside className="min-h-0 overflow-y-auto border-r border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3">
+    <div className="wb-split wb-split-grid grid h-full min-h-0 grid-cols-[260px_minmax(0,1fr)] bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
+      <aside className="wb-master min-h-0 overflow-y-auto border-r border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3">
         <div className="px-2 pb-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg-subtle)]">Methods</div>
         <div className="space-y-1">
           {recipes.map((recipe) => (

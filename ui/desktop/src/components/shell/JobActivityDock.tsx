@@ -37,10 +37,12 @@ export const JobActivityDock: React.FC<JobActivityDockProps> = ({
 }) => {
   const { jobs, activeCount, clearCompleted } = useJobRegistry();
   const [, setTick] = useState(0);
+  const [isDismissed, setIsDismissed] = useState(false);
 
   // Update timer tick every second for running jobs
   useEffect(() => {
     if (activeCount === 0) return;
+    setIsDismissed(false); // Re-open when a new job starts running
     const interval = setInterval(() => {
       setTick((t) => t + 1);
     }, 1000);
@@ -49,9 +51,14 @@ export const JobActivityDock: React.FC<JobActivityDockProps> = ({
 
   const hasCompletedJobs = jobs.some((j) => j.status === 'done' || j.status === 'started' || j.status === 'failed');
 
+  // Do NOT render when dismissed or when there are no active/recent jobs
+  if (isDismissed || (activeCount === 0 && !hasCompletedJobs)) {
+    return null;
+  }
+
   return (
-    <div className="absolute z-50 bottom-5 right-5 w-[380px] pointer-events-auto animate-in slide-in-from-bottom-2 duration-150">
-      <div className="bg-surface-1/95 backdrop-blur-xl border border-border-default rounded-2xl p-3 shadow-[0_12px_45px_-10px_rgba(0,0,0,0.85)] focus-within:border-border-emphasis relative">
+    <div className="absolute z-50 bottom-5 right-5 w-[360px] pointer-events-auto animate-in slide-in-from-bottom-2 duration-150">
+      <div className="bg-surface-1/95 backdrop-blur-xl border border-border-default rounded-xl p-3 shadow-[0_12px_45px_-10px_rgba(0,0,0,0.85)] focus-within:border-border-emphasis relative">
         {/* Header */}
         <div className="flex items-center justify-between pb-2 mb-2 border-b border-border-muted text-[11px] text-fg-muted">
           <div className="flex items-center gap-1.5">
@@ -59,14 +66,30 @@ export const JobActivityDock: React.FC<JobActivityDockProps> = ({
             <span className="font-semibold text-fg-editor tracking-wide">
               {lensBadge} Activity Monitor
             </span>
+            {activeCount > 0 && (
+              <span className="font-mono text-[10px] bg-emerald-500/15 text-emerald-400 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                {activeCount} running
+              </span>
+            )}
           </div>
-          <button
-            onClick={onRestoreSplit}
-            className="hover:text-fg-editor flex items-center gap-1 text-[10px] bg-surface-2 hover:bg-surface-3 px-2 py-0.5 rounded transition text-fg-muted border border-border-subtle"
-            title="Restore split layout to access chat"
-          >
-            <Minimize2 size={11} /> Restore Split
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onRestoreSplit}
+              className="hover:text-fg-editor flex items-center gap-1 text-[10px] bg-surface-2 hover:bg-surface-3 px-2 py-0.5 rounded transition text-fg-muted border border-border-subtle cursor-pointer"
+              title="Restore split layout to access chat"
+            >
+              <Minimize2 size={11} /> Restore Split
+            </button>
+            <button
+              onClick={() => setIsDismissed(true)}
+              className="hover:text-fg-editor flex items-center justify-center size-5 rounded hover:bg-surface-2 transition text-fg-subtle cursor-pointer"
+              title="Dismiss activity monitor"
+              aria-label="Dismiss monitor"
+            >
+              <Trash2 size={11} className="hidden" />
+              <span className="text-xs leading-none">×</span>
+            </button>
+          </div>
         </div>
 
         {/* Body */}
@@ -143,7 +166,7 @@ export const JobActivityDock: React.FC<JobActivityDockProps> = ({
             {/* Footer Quick Action */}
             <div className="pt-2 border-t border-border-muted flex items-center justify-between gap-2">
               <span className="text-[10px] text-fg-subtle">
-                Orca handles background concurrency
+                Local launch activity · inspect runtime status in Supervision
               </span>
               {onOpenKanban && (
                 <button

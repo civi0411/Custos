@@ -16,6 +16,7 @@ import {
   Check,
   X,
 } from 'lucide-react';
+import type { ReviewerRecord } from '@/types/domain';
 import type { ResearchClaim, ClaimGroundingLevel } from '@/types/research';
 import { daemonClient } from '@/api/daemon_client';
 import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
@@ -23,14 +24,12 @@ import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 export interface FindingsPaneProps {
   sessionId?: string;
   onShowToast?: (msg: string) => void;
-  onHandoffToCoding?: (claims: ResearchClaim[]) => void;
-  onOpenTab?: (id: OrcaTabId) => void;
+  onOpenTab?: (id: OrcaTabId, url?: string, title?: string) => void;
 }
 
 export const FindingsPane: React.FC<FindingsPaneProps> = ({
   sessionId: _sessionId,
   onShowToast,
-  onHandoffToCoding,
   onOpenTab,
 }) => {
   const [claims, setClaims] = useState<ResearchClaim[]>([]);
@@ -46,8 +45,9 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
   // New claim modal state
   const [isNewClaimOpen, setIsNewClaimOpen] = useState(false);
   const [newStatement, setNewStatement] = useState('');
-  const [newConfidence, setNewConfidence] = useState('0.85');
-  const [newLevel, setNewLevel] = useState<ClaimGroundingLevel>('L1_CITED');
+  const [reviewClaim, setReviewClaim] = useState<ResearchClaim | null>(null);
+  const [reviews, setReviews] = useState<ReviewerRecord[]>([]);
+  const [reviewError, setReviewError] = useState<string | null>(null);
 
   const loadClaims = () => {
     setLoading(true);
@@ -55,13 +55,14 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
     daemonClient
       .listResearchClaims()
       .then((loaded) => {
-        setClaims(loaded);
-        if (loaded.length > 0 && !selectedClaimId) {
+        setClaims(loaded || []);
+        if (loaded && loaded.length > 0 && !selectedClaimId) {
           setSelectedClaimId(loaded[0].id);
         }
       })
       .catch((err) => {
         setLoadError(err instanceof Error ? err.message : String(err));
+        setClaims([]);
       })
       .finally(() => setLoading(false));
   };
@@ -73,24 +74,11 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
   const activeClaim = claims.find((c) => c.id === selectedClaimId) ?? claims[0];
 
   const handleValidateClaim = async () => {
-    if (!activeClaim) return;
-    setValidating(true);
-    try {
-      const updated: ResearchClaim = {
-        ...activeClaim,
-        level: 'L2_VERIFIED',
-        confidenceScore: Math.max(activeClaim.confidenceScore, 0.95),
-        sealedProofUri:
-          activeClaim.sealedProofUri || `urn:custos:proof:${activeClaim.id.slice(0, 12)}`,
-      };
-      await daemonClient.saveResearchClaim(updated);
-      setClaims((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
-      onShowToast?.('Claim validated and sealed with verifiable proof URI.');
-    } catch (err: any) {
-      onShowToast?.(`Validation failed: ${err?.message || err}`);
-    } finally {
-      setValidating(false);
-    }
+    if (!activeClaim || validating) return;
+    setReviewClaim(activeClaim); setReviews([]); setReviewError(null); setValidating(true);
+    try { setReviews(await daemonClient.listReviews({ target_id: activeClaim.id })); }
+    catch (error) { setReviewError(String(error)); }
+    finally { setValidating(false); }
   };
 
   const handleCreateClaim = async () => {
@@ -100,9 +88,9 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
       const claim: ResearchClaim = {
         id,
         statement: newStatement.trim(),
-        level: newLevel,
-        confidenceScore: parseFloat(newConfidence) || 0.85,
-        invariants: ['INV-CLAIM-ACCURACY', 'INV-NO-CONTRADICTION'],
+        level: 'L0_UNGROUNDED',
+        confidenceScore: 0,
+        invariants: [],
         evidenceLinks: [],
         createdAt: Date.now(),
       };
@@ -146,22 +134,10 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
     }
   };
 
-  const handleHandoff = async () => {
+  const handleHandoff = () => {
     setShowSecondaryMenu(false);
-    if (!activeClaim) return;
-    try {
-      const res = await daemonClient.executeSynthesisHandoff({
-        title: `Research Handoff (${activeClaim.statement.slice(0, 30)}...)`,
-        claim_ids: [activeClaim.id],
-        recipe_ids: [],
-        enforce_verification: true,
-      });
-      onHandoffToCoding?.([activeClaim]);
-      onShowToast?.(`Created ${res.task_ids.length} coding task(s) from claim.`);
-      onOpenTab?.('files');
-    } catch (err: any) {
-      onShowToast?.(`Handoff rejected: ${err?.message || err}`);
-    }
+    if (!activeClaim || !onOpenTab) return;
+    onOpenTab('synthesis', `custos://synthesis?claim=${encodeURIComponent(activeClaim.id)}`, 'Synthesis');
   };
 
   const handleExport = () => {
@@ -189,8 +165,19 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
 
   return (
     <div className="flex h-full w-full flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)] overflow-hidden font-sans">
+      {reviewClaim && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6" role="dialog" aria-modal="true" aria-label="Claim review records">
+        <section className="w-full max-w-xl max-h-[80vh] overflow-auto rounded-xl border border-border-default bg-canvas p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3"><h2 className="text-sm font-semibold">Claim review records</h2><button type="button" autoFocus aria-label="Close reviews" className="canvas-icon" onClick={() => setReviewClaim(null)}><X size={16} /></button></div>
+          <p className="text-xs text-fg-muted">{reviewClaim.statement}</p>
+          {validating ? <p role="status" className="text-xs">Loading records…</p> : reviewError ? <p role="alert" className="text-xs text-rose-400">{reviewError}</p> : reviews.length === 0 ? <p className="text-xs text-fg-muted">No review records are attached. Opening this view does not validate or seal the claim.</p> : reviews.map(review => <article key={review.id} className="rounded border border-border-default p-3 text-xs space-y-2">
+            <div className="flex justify-between gap-2"><strong>{review.reviewer}</strong><span>{review.status} · {review.is_fresh ? 'Current' : 'Stale'}</span></div>
+            <p>{review.evidence_summary}</p><p className="text-fg-muted">{review.method} · {review.id}</p>
+            {review.evidence_digest && <code className="block break-all text-[11px]">{review.evidence_digest}</code>}
+          </article>)}
+        </section>
+      </div>}
       {/* ── Surface Header ── */}
-      <div className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border-muted)] px-3 bg-[var(--color-surface-1)]">
+      <div className="wb-pane-toolbar flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border-muted)] px-3 bg-[var(--color-surface-1)]">
         <div className="flex items-center gap-2 min-w-0">
           {!isSidebarOpen && (
             <button
@@ -216,11 +203,11 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
             type="button"
             onClick={handleValidateClaim}
             disabled={validating || !activeClaim}
-            title="Verify evidence grounding and seal claim with cryptographic proof URI"
+            title="Inspect saved reviews for this claim"
             className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-400 hover:bg-emerald-500/20 transition disabled:opacity-50"
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
-            <span>{validating ? 'Verifying…' : 'Validate Claim'}</span>
+            <span>{validating ? 'Loading…' : 'Inspect reviews'}</span>
           </button>
 
           {/* Secondary Actions in ··· Menu */}
@@ -241,11 +228,12 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
               >
                 <button
                   type="button"
+                  disabled={!activeClaim || !onOpenTab}
                   onClick={handleHandoff}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-emerald-400 hover:bg-[var(--color-surface-2)]"
                 >
                   <Code className="h-3.5 w-3.5" />
-                  <span>Handoff to Coding</span>
+                  <span>Prepare in Synthesis</span>
                 </button>
                 <button
                   type="button"
@@ -262,10 +250,10 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
       </div>
 
       {/* ── Main Content Area: Collapsible Sidebar + Detail Canvas ── */}
-      <div className="flex flex-1 min-h-0">
+      <div className="wb-split flex flex-1 min-h-0">
         {/* Left Column: Claims List */}
         {isSidebarOpen && (
-          <div className="w-72 md:w-80 shrink-0 border-r border-[var(--color-border-muted)] flex flex-col bg-[var(--color-surface-1)]">
+          <div className="wb-master w-72 md:w-80 shrink-0 border-r border-[var(--color-border-muted)] flex flex-col bg-[var(--color-surface-1)]">
             <div className="h-9 px-3 border-b border-[var(--color-border-muted)] flex items-center justify-between shrink-0">
               <span className="text-[11px] font-semibold text-[var(--color-fg-muted)] uppercase tracking-wider">
                 Evidence Matrix
@@ -523,37 +511,7 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-medium text-[var(--color-fg-muted)] mb-1">
-                    Initial Grounding Level
-                  </label>
-                  <select
-                    value={newLevel}
-                    onChange={(e) => setNewLevel(e.target.value as ClaimGroundingLevel)}
-                    className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-1)] px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] outline-none"
-                  >
-                    <option value="L0_UNGROUNDED">L0 Ungrounded</option>
-                    <option value="L1_CITED">L1 Cited</option>
-                    <option value="L2_VERIFIED">L2 Verified</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-medium text-[var(--color-fg-muted)] mb-1">
-                    Confidence Score (0.0 - 1.0)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.05"
-                    min="0"
-                    max="1"
-                    value={newConfidence}
-                    onChange={(e) => setNewConfidence(e.target.value)}
-                    className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-1)] px-3 py-1.5 text-xs text-[var(--color-editor-fg)] outline-none"
-                  />
-                </div>
-              </div>
+              <p className="text-xs text-fg-muted">New claims are ungrounded drafts. Citations and review records must be inspected before using them as verified evidence.</p>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--color-border-muted)]">

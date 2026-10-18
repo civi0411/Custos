@@ -57,19 +57,22 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({
     daemonClient
       .listResearchSources()
       .then((loaded) => {
-        setSources(loaded);
-        if (loaded.length > 0 && !selectedSourceId) {
+        setSources(loaded || []);
+        if (loaded && loaded.length > 0 && !selectedSourceId) {
           setSelectedSourceId(loaded[0].id);
         }
       })
-      .catch((err) => setLoadError(String(err)));
+      .catch((err) => {
+        setLoadError(String(err));
+        setSources([]);
+      });
   }, [selectedSourceId]);
 
   useEffect(() => {
     loadSources();
   }, [loadSources]);
 
-  const activeSource = sources.find((s) => s.id === selectedSourceId) ?? sources[0];
+  const activeSource = sources.find((s) => s.id === selectedSourceId);
 
   // Load anchors for active source
   useEffect(() => {
@@ -80,8 +83,12 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({
     setLoadingAnchors(true);
     daemonClient
       .listResearchAnchors(activeSource.id)
-      .then((res) => setAnchors(res || []))
-      .catch(() => setAnchors([]))
+      .then((res) => {
+        setAnchors(res || []);
+      })
+      .catch(() => {
+        setAnchors([]);
+      })
       .finally(() => setLoadingAnchors(false));
   }, [activeSource?.id]);
 
@@ -190,10 +197,10 @@ export const LiteraturePane: React.FC<LiteraturePaneProps> = ({
   );
 
   return (
-    <div className="flex h-full w-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)] overflow-hidden select-none font-sans">
+    <div className="wb-split flex h-full w-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)] overflow-hidden select-none font-sans">
       {/* ── LEFT: SOURCE LIST (COLLAPSIBLE) ── */}
       {isSidebarOpen && (
-        <div className="w-72 md:w-80 border-r border-[var(--color-border-muted)] flex flex-col bg-[var(--color-surface-1)] shrink-0 relative z-10 transition-all duration-150">
+        <div className="wb-master w-72 md:w-80 border-r border-[var(--color-border-muted)] flex flex-col bg-[var(--color-surface-1)] shrink-0 relative z-10 transition-all duration-150">
           {/* Header */}
           <div className="h-9 px-3 border-b border-[var(--color-border-muted)] flex items-center justify-between shrink-0 bg-[var(--color-surface-1)]">
             <div className="flex items-center gap-2">

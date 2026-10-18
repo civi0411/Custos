@@ -136,3 +136,5 @@ export type {
   ProviderConfigRecord,
 } from './domain';
 export type { Session as DomainSession } from './domain';
+export * from './canvas';
+export * from './screen';

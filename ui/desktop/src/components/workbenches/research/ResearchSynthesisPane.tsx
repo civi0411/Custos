@@ -35,12 +35,16 @@ import type { ResearchClaim, ResearchRecipe, ClaimGroundingLevel } from '@/types
 
 interface ResearchSynthesisPaneProps {
   onShowToast?: (msg: string) => void;
-  onNavigateToTask?: (taskId: string) => void;
+  initialWorkspaceId?: string;
+  initialClaimId?: string;
+  onNavigateToTask?: (taskId: string, result: HandoffToCodingResult) => void;
 }
 
 export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
   onShowToast,
   onNavigateToTask,
+  initialWorkspaceId,
+  initialClaimId,
 }) => {
   // Data states
   const [proposals, setProposals] = useState<ResearchSynthesisProposal[]>([]);
@@ -66,9 +70,17 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
   const [formSummary, setFormSummary] = useState<string>('');
   const [selectedClaimIds, setSelectedClaimIds] = useState<string[]>([]);
   const [selectedRecipeIds, setSelectedRecipeIds] = useState<string[]>([]);
-  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('');
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(initialWorkspaceId || '');
   const [targetBranch, setTargetBranch] = useState<string>('synthesis/handoff-v1');
   const [enforceVerification, setEnforceVerification] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (!initialClaimId) return;
+    setSelectedProposalId(null);
+    setIsComposing(true);
+    setSelectedClaimIds(previous => previous.includes(initialClaimId) ? previous : [...previous, initialClaimId]);
+    setLastHandoffResult(null);
+  }, [initialClaimId]);
 
   // Last handoff receipt modal/card
   const [lastHandoffResult, setLastHandoffResult] = useState<HandoffToCodingResult | null>(null);
@@ -90,14 +102,11 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
       setRecipes(recipesList);
       setWorkspaces(workspacesList);
 
-      if (workspacesList.length > 0 && !selectedWorkspaceId) {
-        setSelectedWorkspaceId(workspacesList[0].id);
-      }
 
       // If nothing selected, select first proposal or open composer if empty
       if (!selectedProposalId && proposalsList.length > 0) {
-        setSelectedProposalId(proposalsList[0].id);
-        setIsComposing(false);
+        // Open the composer until the user explicitly selects a saved proposal.
+        setIsComposing(true);
       } else if (proposalsList.length === 0) {
         setIsComposing(true);
       }
@@ -108,7 +117,7 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [selectedProposalId, selectedWorkspaceId, onShowToast]);
+  }, [onShowToast]);
 
   useEffect(() => {
     loadData();
@@ -151,11 +160,7 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
     setIsComposing(true);
     setFormTitle('');
     setFormSummary('');
-    // Pre-select any verified claims by default for developer convenience
-    const verifiedIds = claims
-      .filter((c) => c.level === 'L2_VERIFIED' || c.level === 'L3_SEALED')
-      .map((c) => c.id);
-    setSelectedClaimIds(verifiedIds);
+    setSelectedClaimIds([]);
     setSelectedRecipeIds([]);
     setTargetBranch('synthesis/handoff-v1');
     setLastHandoffResult(null);
@@ -206,7 +211,7 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
       );
     }
     if (!selectedWorkspaceId) {
-      caveats.push('No Git execution workspace target designated; default workspace will be bound.');
+      caveats.push('Select a registered Git workspace before handing off to Coding.');
     }
     return caveats;
   }, [claims, selectedClaimIds, selectedRecipeIds, selectedWorkspaceId]);
@@ -265,6 +270,12 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
       return;
     }
 
+    if (executing || saving) return;
+    const target = workspaces.find(workspace => workspace.id === selectedWorkspaceId);
+    if (!target || target.kind.type !== 'git' || target.status !== 'ready') {
+      onShowToast?.('Choose a ready Git workspace for the Coding handoff.');
+      return;
+    }
     setExecuting(true);
     try {
       const params: HandoffToCodingParams = {
@@ -279,9 +290,7 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
 
       const result = await daemonClient.executeSynthesisHandoff(params);
       setLastHandoffResult(result);
-      onShowToast?.(
-        `Coding Handoff created ${result.task_ids.length} Invariant Task(s) in workspace.`
-      );
+      onShowToast?.(`Coding handoff created ${result.task_ids.length} Task(s). Open a Task to continue.`);
       await loadData();
       if (result.proposal_id) {
         setSelectedProposalId(result.proposal_id);
@@ -298,26 +307,26 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
     switch (level) {
       case 'L3_SEALED':
         return (
-          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 font-mono text-[10px] font-semibold">
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/[0.08] text-white border border-white/15 font-mono text-[10px] font-semibold">
             <Lock size={10} /> L3 SEALED
           </span>
         );
       case 'L2_VERIFIED':
         return (
-          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono text-[10px] font-semibold">
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/[0.06] text-white/90 border border-white/10 font-mono text-[10px] font-semibold">
             <CheckCircle2 size={10} /> L2 VERIFIED
           </span>
         );
       case 'L1_CITED':
         return (
-          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-mono text-[10px] font-semibold">
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/[0.04] text-white/70 border border-white/10 font-mono text-[10px] font-semibold">
             <FileCheck size={10} /> L1 CITED
           </span>
         );
       case 'L0_UNGROUNDED':
       default:
         return (
-          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 font-mono text-[10px] font-semibold">
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/[0.02] text-white/40 border border-white/5 font-mono text-[10px] font-semibold">
             <AlertCircle size={10} /> L0 UNGROUNDED
           </span>
         );
@@ -328,26 +337,26 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
     switch (status) {
       case 'handoff_completed':
         return (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-semibold uppercase tracking-wider">
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.08] text-white border border-white/15 text-[10px] font-semibold uppercase tracking-wider">
             <CheckCircle2 size={10} /> Completed
           </span>
         );
       case 'submitted':
         return (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-[10px] font-semibold uppercase tracking-wider">
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.06] text-white/80 border border-white/10 text-[10px] font-semibold uppercase tracking-wider">
             <ShieldCheck size={10} /> Submitted
           </span>
         );
       case 'rejected':
         return (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-semibold uppercase tracking-wider">
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.03] text-white/40 border border-white/5 text-[10px] font-semibold uppercase tracking-wider">
             <XCircle size={10} /> Rejected
           </span>
         );
       case 'draft':
       default:
         return (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 text-[10px] font-semibold uppercase tracking-wider">
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.04] text-white/60 border border-white/10 text-[10px] font-semibold uppercase tracking-wider">
             <Clock size={10} /> Draft
           </span>
         );
@@ -367,7 +376,7 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
               <h2 className="text-xs font-semibold tracking-wide text-[var(--color-editor-fg)]">
                 Research Synthesis & Coding Handoff
               </h2>
-              <span className="px-2 py-0.2 rounded-full text-[9px] font-mono font-medium uppercase tracking-wider border border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+              <span className="px-2 py-0.2 rounded-full text-[9px] font-mono font-medium uppercase tracking-wider border border-white/10 text-white/70 bg-white/[0.04]">
                 Gate 4 Fail-Closed
               </span>
             </div>
@@ -399,9 +408,9 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
       {loadError && <div role="alert" className="border-b border-rose-500/30 px-4 py-2 text-xs text-rose-500">Research data unavailable: {loadError}</div>}
 
       {/* ─── Main Two-Column Layout ─── */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="wb-split flex flex-1 overflow-hidden">
         {/* ── Left Column: Proposals Ledger ── */}
-        <aside className="w-80 border-r border-[var(--color-border-muted)] flex flex-col bg-[var(--color-surface-1)]/50 shrink-0">
+        <aside className="wb-master w-80 border-r border-[var(--color-border-muted)] flex flex-col bg-[var(--color-surface-1)]/50 shrink-0">
           {/* Search & Filter Header */}
           <div className="p-2.5 border-b border-[var(--color-border-muted)] space-y-2">
             <div className="relative">
@@ -501,7 +510,7 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
           {/* Ledger Footer Metric */}
           <div className="p-2.5 border-t border-[var(--color-border-muted)] bg-[var(--color-surface-1)] text-[10px] text-[var(--color-fg-subtle)] flex items-center justify-between">
             <span>Total Proposals: {proposals.length}</span>
-            <span className="font-mono text-[9px] text-emerald-400">Daemon Registry Online</span>
+            <span className="font-mono text-[9px] text-white/60">Daemon Registry Online</span>
           </div>
         </aside>
 
@@ -509,39 +518,39 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
         <main className="flex-1 overflow-y-auto flex flex-col bg-[var(--color-surface-0)]">
           {/* Banner for completed handoff if just performed */}
           {lastHandoffResult && (
-            <div className="m-4 p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 space-y-2">
+            <div className="m-4 p-4 rounded-xl border border-white/15 bg-white/[0.04] text-white/90 space-y-2">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 font-semibold text-xs text-emerald-300">
-                  <CheckCircle2 size={16} className="text-emerald-400" />
+                <div className="flex items-center gap-2 font-semibold text-xs text-white">
+                  <CheckCircle2 size={16} className="text-white/70" />
                   Coding Handoff Dispatched Successfully
                 </div>
-                <span className="font-mono text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded text-emerald-300 border border-emerald-500/30">
+                <span className="font-mono text-[10px] bg-white/10 px-2 py-0.5 rounded text-white/80 border border-white/10">
                   Handoff ID: {lastHandoffResult.handoff_id}
                 </span>
               </div>
-              <p className="text-xs text-emerald-400/90 leading-relaxed">
-                Created {lastHandoffResult.task_ids.length} invariant-governed task(s) in workspace.
-                Target branch <code className="font-mono px-1 py-0.5 rounded bg-emerald-950/60">{lastHandoffResult.target_branch || 'synthesis/handoff-v1'}</code> bound to safe worktree.
+              <p className="text-xs text-white/70 leading-relaxed">
+                Created {lastHandoffResult.task_ids.length} Coding Task(s).
+                Target branch <code className="font-mono px-1 py-0.5 rounded bg-white/10">{lastHandoffResult.target_branch || 'Not specified'}</code>. Open a Task to inspect its workspace and start work.
               </p>
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {lastHandoffResult.task_ids.map((tid) => (
                   <span
                     key={tid}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--color-surface-1)] border border-emerald-500/30 text-xs font-mono text-[var(--color-editor-fg)]"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[var(--color-surface-1)] border border-white/10 text-xs font-mono text-[var(--color-editor-fg)]"
                   >
-                    <Code2 size={12} className="text-emerald-400" />
+                    <Code2 size={12} className="text-white/60" />
                     <span>{tid}</span>
                     <button
                       onClick={() => copyText(tid, tid)}
                       className="text-[var(--color-fg-muted)] hover:text-white"
                       title="Copy Task ID"
                     >
-                      {copiedId === tid ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                      {copiedId === tid ? <Check size={11} className="text-white" /> : <Copy size={11} />}
                     </button>
                     {onNavigateToTask && (
                       <button
-                        onClick={() => onNavigateToTask(tid)}
-                        className="text-emerald-400 hover:text-emerald-300 ml-1"
+                        onClick={() => onNavigateToTask(tid, lastHandoffResult)}
+                        className="text-white/70 hover:text-white ml-1"
                         title="View Task in Engineering Workbench"
                       >
                         <ExternalLink size={11} />
@@ -651,8 +660,8 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
                       onChange={(e) => setSelectedWorkspaceId(e.target.value)}
                       className="w-full bg-[var(--color-surface-2)] border border-[var(--color-border-muted)] rounded-lg px-3 py-1.5 text-xs text-[var(--color-editor-fg)] focus:outline-none focus:border-[var(--workbench-accent)] disabled:opacity-60"
                     >
-                      <option value="">Default Workspace (Automatic Assignment)</option>
-                      {workspaces.map((ws) => (
+                      <option value="">Choose a Git workspace</option>
+                      {workspaces.filter(ws => ws.kind.type === 'git' && ws.status === 'ready').map((ws) => (
                         <option key={ws.id} value={ws.id}>
                           {ws.name} ({ws.kind.type}) - {ws.path}
                         </option>
@@ -849,8 +858,8 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
               </div>
 
               {computedLiveCaveats.length === 0 ? (
-                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs flex items-center gap-2">
-                  <CheckCircle2 size={14} />
+                <div className="p-3 rounded-lg bg-white/[0.04] border border-white/10 text-white/80 text-xs flex items-center gap-2">
+                  <CheckCircle2 size={14} className="text-white/70" />
                   <span>All selected claims satisfy Gate 4 verification preconditions. Zero grounding caveats detected.</span>
                 </div>
               ) : (
@@ -858,9 +867,9 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
                   {computedLiveCaveats.map((cav, idx) => (
                     <div
                       key={idx}
-                      className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-start gap-2 leading-relaxed"
+                      className="p-2.5 rounded-lg bg-white/[0.03] border border-white/10 text-white/70 text-xs flex items-start gap-2 leading-relaxed"
                     >
-                      <AlertCircle size={13} className="text-amber-400 shrink-0 mt-0.5" />
+                      <AlertCircle size={13} className="text-white/50 shrink-0 mt-0.5" />
                       <span>{cav}</span>
                     </div>
                   ))}
@@ -873,7 +882,7 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 text-xs font-semibold text-[var(--color-editor-fg)]">
-                    <ShieldCheck size={14} className={enforceVerification ? 'text-emerald-400' : 'text-amber-400'} />
+                    <ShieldCheck size={14} className="text-white/70" />
                     <span>Enforce Verification Pre-conditions (Gate 4 Fail-Closed Posture)</span>
                   </div>
                   <p className="text-[11px] text-[var(--color-fg-muted)] mt-0.5 leading-relaxed">
@@ -887,7 +896,7 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
                     onChange={(e) => setEnforceVerification(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-10 h-5 bg-[var(--color-surface-3)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                  <div className="w-10 h-5 bg-[var(--color-surface-3)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-white/40"></div>
                 </label>
               </div>
 

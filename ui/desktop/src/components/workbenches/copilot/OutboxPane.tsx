@@ -20,18 +20,20 @@ export const OutboxPane: React.FC<OutboxPaneProps> = ({ onShowToast }) => {
     setError('');
     try {
       const current = await daemonClient.listOutbox();
-      setItems(current);
+      const effective = Array.isArray(current) ? current : [];
+      setItems(effective);
       setSelectedId((previous) =>
-        previous && current.some((item) => item.id === previous) ? previous : current[0]?.id ?? null
+        previous && effective.some((item) => item.id === previous) ? previous : effective[0]?.id ?? null
       );
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
       setError(message);
-      onShowToast?.(`Could not load the outbox: ${message}`);
+      setItems([]);
+      setSelectedId(null);
     } finally {
       setLoading(false);
     }
-  }, [onShowToast]);
+  }, []);
 
   useEffect(() => {
     void refresh();
@@ -67,7 +69,7 @@ export const OutboxPane: React.FC<OutboxPaneProps> = ({ onShowToast }) => {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
-      <header className="flex h-11 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]/50 px-3">
+      <header className="wb-pane-toolbar flex h-11 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]/50 px-3">
         <div className="flex items-center gap-2">
           <Send className="h-4 w-4 text-[var(--color-fg-muted)]" />
           <span className="text-xs font-semibold">Outbox Ledger</span>
@@ -86,11 +88,11 @@ export const OutboxPane: React.FC<OutboxPaneProps> = ({ onShowToast }) => {
         </button>
       </header>
 
-      {error && <p role="alert" className="px-4 py-2 text-xs text-rose-400">Outbox error: {error}</p>}
+      {error && <p role="alert" className="px-4 py-2 text-xs text-white/60">Outbox: {error}</p>}
 
-      <div className="flex min-h-0 flex-1">
+      <div className="wb-split flex min-h-0 flex-1">
         {/* Left List */}
-        <nav aria-label="Outbox records" className="w-64 shrink-0 space-y-1 overflow-y-auto border-r border-[var(--color-border-subtle)] p-2">
+        <nav aria-label="Outbox records" className="wb-master w-64 shrink-0 space-y-1 overflow-y-auto border-r border-[var(--color-border-subtle)] p-2">
           {loading && items.length === 0 && (
             <p role="status" className="p-3 text-xs text-[var(--color-fg-subtle)]">Loading outbox…</p>
           )}
@@ -101,8 +103,6 @@ export const OutboxPane: React.FC<OutboxPaneProps> = ({ onShowToast }) => {
           )}
           {items.map((item) => {
             const isSelected = active?.id === item.id;
-            const isPending = item.status === 'pending_approval' || item.status === 'pending';
-            const isReceipted = item.status === 'receipted' || item.status === 'succeeded';
             return (
               <button
                 key={item.id}
@@ -117,15 +117,7 @@ export const OutboxPane: React.FC<OutboxPaneProps> = ({ onShowToast }) => {
               >
                 <div className="flex items-center justify-between gap-1 mb-1">
                   <span className="block truncate font-medium">{item.action_type || item.title}</span>
-                  <span
-                    className={`rounded px-1.5 py-0.2 text-[9px] font-semibold uppercase ${
-                      isReceipted
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        : isPending
-                        ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                        : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                    }`}
-                  >
+                  <span className="rounded px-1.5 py-0.2 text-[9px] font-semibold uppercase bg-white/[0.06] text-white/70 border border-white/10">
                     {item.status}
                   </span>
                 </div>
@@ -157,7 +149,7 @@ export const OutboxPane: React.FC<OutboxPaneProps> = ({ onShowToast }) => {
                           type="button"
                           onClick={handleApprove}
                           disabled={acting}
-                          className="flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+                          className="flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/15 border border-white/10 disabled:opacity-50"
                         >
                           <Check className="h-3.5 w-3.5" />
                           Approve Action
@@ -167,7 +159,7 @@ export const OutboxPane: React.FC<OutboxPaneProps> = ({ onShowToast }) => {
                         type="button"
                         onClick={handleDispatch}
                         disabled={acting}
-                        className="flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+                        className="flex items-center gap-1.5 rounded-md bg-white/15 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20 border border-white/10 disabled:opacity-50"
                       >
                         <Send className="h-3.5 w-3.5" />
                         Dispatch Now
@@ -202,7 +194,7 @@ export const OutboxPane: React.FC<OutboxPaneProps> = ({ onShowToast }) => {
               </div>
 
               {active.receipt_id && (
-                <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-400 font-mono">
+                <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/70 font-mono">
                   <ShieldCheck className="h-4 w-4 shrink-0" />
                   <span>Execution Receipt Recorded: {active.receipt_id}</span>
                 </div>
@@ -210,7 +202,7 @@ export const OutboxPane: React.FC<OutboxPaneProps> = ({ onShowToast }) => {
             </section>
           ) : (
             <div className="flex h-full items-center justify-center text-xs text-[var(--color-fg-subtle)]">
-              Select an Outbox record to review payload details and dispatch status.
+              No outbox action items recorded.
             </div>
           )}
         </main>

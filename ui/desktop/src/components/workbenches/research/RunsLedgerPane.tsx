@@ -14,6 +14,9 @@ import {
   Terminal,
   Database,
   BarChart3,
+  ShieldCheck,
+  GitBranch,
+  BookmarkCheck,
 } from 'lucide-react';
 import { ResearchExperimentRun } from '@/types/research';
 import { daemonClient } from '@/api/daemon_client';
@@ -42,11 +45,12 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
     daemonClient
       .listResearchRuns()
       .then((loaded) => {
-        setRuns(loaded);
-        setExpandedId(loaded[0]?.runId ?? null);
+        const scoped = sessionId ? loaded.filter(run => run.sessionId === sessionId) : [];
+        setRuns(scoped);
+        setExpandedId(scoped[0]?.runId ?? null);
       })
       .catch((err) => setLoadError(String(err)));
-  }, []);
+  }, [sessionId]);
 
   const filteredRuns = runs.filter((r) => {
     const matchesSearch =
@@ -91,9 +95,9 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
             label="Audit Dataset"
             icon={Database}
             getInputs={() => {
-              if (runs.length === 0) return null;
+              if (!runs[0]?.outputFiles?.[0]?.path) return null;
               return {
-                dataset_path: runs[0].outputFiles?.[0]?.path || 'artifacts/dataset',
+                dataset_path: runs[0].outputFiles[0].path,
                 benchmark_split: 'eval',
               };
             }}
@@ -127,11 +131,11 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
             onClick={() => setStatusFilter(statusFilter === 'ok' ? 'all' : 'ok')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition ${
               statusFilter === 'ok'
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500'
+                ? 'bg-white/10 border-white/20 text-white'
                 : 'bg-[var(--color-surface-0)] border-[var(--color-border-muted)] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)]'
             }`}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'ok' ? 'bg-emerald-500' : 'bg-[var(--color-fg-subtle)]'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'ok' ? 'bg-white/90' : 'bg-[var(--color-fg-subtle)]'}`} />
             <span>Success</span>
           </button>
 
@@ -139,11 +143,11 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
             onClick={() => setStatusFilter(statusFilter === 'failed' ? 'all' : 'failed')}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition ${
               statusFilter === 'failed'
-                ? 'bg-rose-500/10 border-rose-500/30 text-rose-500'
+                ? 'bg-white/10 border-white/20 text-white'
                 : 'bg-[var(--color-surface-0)] border-[var(--color-border-muted)] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)]'
             }`}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'failed' ? 'bg-rose-500' : 'bg-[var(--color-fg-subtle)]'}`} />
+            <span className={`w-1.5 h-1.5 rounded-full ${statusFilter === 'failed' ? 'bg-red-400' : 'bg-[var(--color-fg-subtle)]'}`} />
             <span>Failed</span>
           </button>
         </div>
@@ -175,7 +179,7 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                   </div>
                   <span
                     className={`w-2 h-2 rounded-full shrink-0 ${
-                      isOk ? 'bg-emerald-500' : 'bg-rose-500'
+                      isOk ? 'bg-white/90' : 'bg-red-400'
                     }`}
                   />
                   <span className="font-mono text-xs text-[var(--color-editor-fg)] font-medium truncate">
@@ -208,12 +212,8 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                         jobId="research__reproduce"
                         label="Reproduce"
                         icon={RotateCcw}
-                        getInputs={() => ({
-                          code_repo: run.codeFiles?.[0]?.path || run.command,
-                          config_yaml: run.envSnapshot?.hardware || 'default',
-                          seeds: ['42'],
-                          expected_metrics: { wall_ms: run.wallMs, status: run.status },
-                        })}
+                        getInputs={() => null}
+                        notReadyTooltip="This run has no recorded reproduction manifest with exact config and seeds. Open its method recipe before reproducing."
                         sessionId={sessionId}
                         sourceTabId="runs"
                         onNavigate={onOpenTab}
@@ -245,7 +245,7 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                         className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] transition text-xs font-medium"
                       >
                         {copiedId === run.runId ? (
-                          <Check size={12} className="text-emerald-500" />
+                          <Check size={12} className="text-white/80" />
                         ) : (
                           <Copy size={12} />
                         )}
@@ -276,6 +276,69 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                     </span>
                   </div>
 
+                  {/* Checkpoint Relay & Durability Milestones */}
+                  {run.checkpointRelay && (
+                    <div className="p-3.5 rounded-xl bg-[var(--color-surface-0)] border border-[var(--color-border-muted)] space-y-2.5">
+                      <div className="flex items-center justify-between text-[10px] text-[var(--color-fg-subtle)] font-semibold uppercase tracking-wider">
+                        <div className="flex items-center gap-1.5">
+                          <ShieldCheck size={12} className="text-emerald-400" />
+                          <span>Durable Checkpoint Relay</span>
+                        </div>
+                        {run.checkpointRelay.resumabilityLevel && (
+                          <span className="px-2 py-0.5 rounded bg-[var(--color-surface-2)] text-[var(--color-editor-fg)] border border-[var(--color-border-muted)] font-mono text-[10px] normal-case">
+                            {run.checkpointRelay.resumabilityLevel === 'validated_resume'
+                              ? 'Validated Parity'
+                              : run.checkpointRelay.resumabilityLevel === 'training_state_resume'
+                              ? 'Training-State Resume'
+                              : run.checkpointRelay.resumabilityLevel === 'warm_start'
+                              ? 'Warm Start'
+                              : 'Export Only'}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2 font-mono text-xs">
+                        <div className="p-2 rounded-lg bg-[var(--color-surface-1)] border border-[var(--color-border-muted)] flex flex-col">
+                          <span className="text-[10px] text-[var(--color-fg-muted)]">Observed Step</span>
+                          <span className="font-semibold text-[var(--color-editor-fg)]">
+                            {run.checkpointRelay.latestObservedStep ?? '—'}
+                          </span>
+                        </div>
+
+                        <div className="p-2 rounded-lg bg-[var(--color-surface-1)] border border-[var(--color-border-muted)] flex flex-col">
+                          <span className="text-[10px] text-[var(--color-fg-muted)]">Local Staged</span>
+                          <span className="font-semibold text-blue-400">
+                            {run.checkpointRelay.latestLocalCheckpointStep ?? '—'}
+                          </span>
+                        </div>
+
+                        <div className="p-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 flex flex-col">
+                          <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
+                            <BookmarkCheck size={10} /> Protected Step
+                          </span>
+                          <span className="font-semibold text-emerald-400">
+                            {run.checkpointRelay.latestProtectedCheckpointStep ?? '—'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {(run.checkpointRelay.resumedFromCheckpointId || run.checkpointRelay.outputNamespace) && (
+                        <div className="flex items-center gap-3 text-[11px] font-mono text-[var(--color-fg-subtle)] pt-1 border-t border-[var(--color-border-muted)]">
+                          {run.checkpointRelay.resumedFromCheckpointId && (
+                            <span className="flex items-center gap-1 text-[var(--color-fg-muted)]">
+                              <GitBranch size={11} /> Resumed from: <span className="text-[var(--color-editor-fg)] font-medium">{run.checkpointRelay.resumedFromCheckpointId}</span>
+                            </span>
+                          )}
+                          {run.checkpointRelay.outputNamespace && (
+                            <span className="text-[var(--color-fg-subtle)]">
+                              Namespace: <span className="text-[var(--color-editor-fg)]">{run.checkpointRelay.outputNamespace}</span>
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Input Code & Outputs */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
                     {run.codeFiles && (
@@ -305,7 +368,7 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                           {run.outputFiles.map((f) => (
                             <div key={f.path} className="font-mono text-xs flex justify-between items-center bg-[var(--color-surface-1)] p-2 rounded-lg border border-[var(--color-border-muted)]">
                               <span className="truncate text-[var(--color-editor-fg)]">{f.path}</span>
-                              <span className="text-emerald-500 font-medium bg-emerald-500/10 px-1.5 py-0.5 rounded text-[10px] ml-2 shrink-0">
+                              <span className="text-white/80 font-medium bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-[10px] ml-2 shrink-0">
                                 {(f.size / 1024).toFixed(1)} KB
                               </span>
                             </div>
@@ -326,8 +389,8 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
                         <pre className="whitespace-pre-wrap">
                           {run.logText.split('\n').map((line, i) => {
                             let colorClass = 'text-[var(--color-fg-muted)]';
-                            if (line.includes('[FATAL]') || line.includes('Violation')) colorClass = 'text-rose-500 font-semibold';
-                            else if (line.includes('[Result]') || line.includes('verified')) colorClass = 'text-emerald-500';
+                            if (line.includes('[FATAL]') || line.includes('Violation')) colorClass = 'text-red-400 font-semibold';
+                            else if (line.includes('[Result]') || line.includes('verified')) colorClass = 'text-white/90 font-medium';
                             else if (line.includes('[SADE]')) colorClass = 'text-[var(--workbench-accent)]';
                             
                             return (

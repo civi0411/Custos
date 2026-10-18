@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   FileText,
   Lock,
@@ -13,13 +13,18 @@ import { daemonClient } from '@/api/daemon_client';
 import type { AssistantDraft } from '@/types/domain';
 import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 
+// Unsaved buffers survive tab/lens navigation for the lifetime of the desktop session.
+const draftEdits = new Map<string, { title: string; content: string }>();
+
 export interface DraftsPaneProps {
+  taskId?: string;
   sessionId?: string;
   onShowToast?: (msg: string) => void;
   onOpenTab?: (id: OrcaTabId) => void;
 }
 
 export const DraftsPane: React.FC<DraftsPaneProps> = ({
+  taskId,
   sessionId,
   onShowToast,
 }) => {
@@ -32,42 +37,54 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
   const [saving, setSaving] = useState<boolean>(false);
   const [showSecondaryMenu, setShowSecondaryMenu] = useState<boolean>(false);
 
+  const loadEpoch = useRef(0);
   const loadDrafts = useCallback(async () => {
+    const epoch = ++loadEpoch.current;
+    setLoading(true);
+    setLoadError(null);
     try {
-      setLoading(true);
-      setLoadError(null);
-      const list = await daemonClient.listDrafts(sessionId);
-      setDrafts(list);
-      if (list.length > 0 && !selectedDraftId) {
-        setSelectedDraftId(list[0].id);
-        setEditingTitle(list[0].title);
-        setEditingContent(list[0].content);
-      }
+      const list = sessionId ? await daemonClient.listDrafts(sessionId) : [];
+      if (epoch !== loadEpoch.current) return;
+      const effective = list && list.length > 0 ? list : [];
+      setDrafts(effective);
+      setSelectedDraftId((prev) => (prev && effective.some((d) => d.id === prev) ? prev : effective[0]?.id || null));
     } catch (err: any) {
-      setLoadError(err?.message || String(err));
+      if (epoch === loadEpoch.current) {
+        setDrafts([]);
+        setSelectedDraftId(null);
+      }
     } finally {
-      setLoading(false);
+      if (epoch === loadEpoch.current) setLoading(false);
     }
-  }, [sessionId, selectedDraftId]);
+  }, [sessionId]);
 
   useEffect(() => {
-    loadDrafts();
+    void loadDrafts();
+    return () => { loadEpoch.current++; };
   }, [loadDrafts]);
 
   const activeDraft = drafts.find((d) => d.id === selectedDraftId) || drafts[0];
 
   useEffect(() => {
     if (activeDraft) {
-      setEditingTitle(activeDraft.title);
-      setEditingContent(activeDraft.content);
+      const edited = draftEdits.get(activeDraft.id);
+      setEditingTitle(edited?.title ?? activeDraft.title);
+      setEditingContent(edited?.content ?? activeDraft.content);
     }
   }, [activeDraft]);
 
-  const isLocked = Boolean(activeDraft?.payload_lock);
+  const isLocked = Boolean(activeDraft?.payload_lock || activeDraft?.payloadLock);
+  const isModified = !!activeDraft && (editingTitle !== activeDraft.title || editingContent !== activeDraft.content);
+  useEffect(() => {
+    if (!isModified) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [isModified]);
 
-  // Approval marks this draft and enqueues a durable outbox item for human-governed dispatch.
+  // Local review is separate from outbound authority and queue creation.
   const handlePrimaryAction = async () => {
-    if (!activeDraft) return;
+    if (!activeDraft || saving || loading) return;
     setSaving(true);
     try {
       const updated = await daemonClient.saveDraft({
@@ -79,16 +96,8 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
       });
       setDrafts((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
 
-      try {
-        await daemonClient.createOutbox({
-          action_type: activeDraft.kind === 'email' ? 'email_dispatch' : 'document_dispatch',
-          task_id: sessionId || 'copilot',
-          content: `${editingTitle}\n\n${editingContent}`,
-        });
-        onShowToast?.(`Draft "${updated.title}" approved and enqueued into Outbox for dispatch.`);
-      } catch {
-        onShowToast?.(`Draft "${updated.title}" approved and locked.`);
-      }
+      draftEdits.delete(activeDraft.id);
+      onShowToast?.(`Draft "${updated.title}" reviewed and locked. No outbound action was queued.`);
     } catch (err: any) {
       onShowToast?.(`Approval failed: ${err?.message || err}`);
     } finally {
@@ -97,7 +106,7 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
   };
 
   const handleSaveDraft = async () => {
-    if (!activeDraft) return;
+    if (!activeDraft || saving || loading) return;
     setShowSecondaryMenu(false);
     setSaving(true);
     try {
@@ -107,6 +116,7 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
         content: editingContent,
       });
       setDrafts((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
+      draftEdits.delete(activeDraft.id);
       onShowToast?.('Draft saved.');
     } catch (err: any) {
       onShowToast?.(`Save failed: ${err?.message || err}`);
@@ -116,34 +126,41 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
   };
 
   const handleCreateDraft = async () => {
+    if (!sessionId || saving || loading) return;
+    const epoch = loadEpoch.current;
+    setSaving(true);
     setShowSecondaryMenu(false);
     try {
       const created = await daemonClient.saveDraft({
         title: 'New Communication Draft',
-        content: 'Hi Team,\n\nHere is the update regarding our latest progress...',
+        content: '',
         kind: 'email',
         session_id: sessionId,
+        task_id: taskId,
       });
+      if (epoch !== loadEpoch.current) return;
       setDrafts((prev) => [created, ...prev]);
       setSelectedDraftId(created.id);
       onShowToast?.('Created new draft.');
     } catch (err: any) {
       onShowToast?.(`Create failed: ${err?.message || err}`);
-    }
+    } finally { setSaving(false); }
   };
 
   const handleDeleteDraft = async () => {
-    if (!activeDraft) return;
+    if (!activeDraft || saving || loading) return;
     setShowSecondaryMenu(false);
     if (!confirm(`Delete draft "${activeDraft.title}"?`)) return;
+    setSaving(true);
     try {
       await daemonClient.deleteDraft(activeDraft.id);
+      draftEdits.delete(activeDraft.id);
       setDrafts((prev) => prev.filter((d) => d.id !== activeDraft.id));
       setSelectedDraftId(null);
       onShowToast?.('Draft deleted.');
     } catch (err: any) {
       onShowToast?.(`Delete failed: ${err?.message || err}`);
-    }
+    } finally { setSaving(false); }
   };
 
   const handleCopyContent = () => {
@@ -157,7 +174,7 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
   return (
     <div className="flex h-full flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
       {/* Header */}
-      <div className="flex h-11 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-3 bg-[var(--color-surface-1)]/50">
+      <div className="wb-pane-toolbar flex h-11 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-3 bg-[var(--color-surface-1)]/50">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-[var(--color-fg-muted)] shrink-0" />
           <span className="text-xs font-semibold">Drafts</span>
@@ -167,10 +184,11 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {activeDraft && <button type="button" disabled={!isModified || saving || isLocked} onClick={handleSaveDraft} className="canvas-open-button disabled:opacity-40">{saving ? 'Saving…' : isModified ? 'Save changes' : 'Saved'}</button>}
           {/* Local draft review; outbound action is a separate governed flow. */}
           <button
             type="button"
-            disabled={!activeDraft || saving}
+            disabled={!activeDraft || saving || isLocked}
             onClick={handlePrimaryAction}
             className="flex items-center gap-1.5 rounded bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
           >
@@ -196,6 +214,7 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
               >
                 <button
                   type="button"
+                  disabled={!sessionId || saving || loading}
                   onClick={handleCreateDraft}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-emerald-400 hover:bg-[var(--color-surface-2)]"
                 >
@@ -204,6 +223,7 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
                 </button>
                 <button
                   type="button"
+                  disabled={!activeDraft || saving || loading || isLocked || !isModified}
                   onClick={handleSaveDraft}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-editor-fg)]"
                 >
@@ -220,6 +240,7 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
                 </button>
                 <button
                   type="button"
+                  disabled={!activeDraft || saving || loading}
                   onClick={handleDeleteDraft}
                   className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-rose-400 hover:bg-[var(--color-surface-2)]"
                 >
@@ -233,9 +254,9 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
       </div>
 
       {/* Main Content Area */}
-      <div className="flex flex-1 min-h-0">
+      <div className="wb-split flex flex-1 min-h-0">
         {/* Left Column: Drafts List */}
-        <div className="w-64 shrink-0 border-r border-[var(--color-border-subtle)] overflow-y-auto p-2 space-y-1.5 bg-[var(--color-surface-1)]/20">
+        <div className="wb-master w-64 shrink-0 border-r border-[var(--color-border-subtle)] overflow-y-auto p-2 space-y-1.5 bg-[var(--color-surface-1)]/20">
           {loadError && <div role="alert" className="p-3 text-xs text-rose-400">Could not load drafts: {loadError}</div>}
           {drafts.length === 0 && !loading && !loadError && (
             <div className="p-4 text-center text-xs text-[var(--color-fg-subtle)]">
@@ -249,6 +270,7 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
               <button
                 key={draft.id}
                 type="button"
+                disabled={saving}
                 onClick={() => setSelectedDraftId(draft.id)}
                 className={`w-full text-left rounded-lg p-2.5 transition text-xs border ${
                   isSelected
@@ -289,8 +311,8 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
               <input
                 type="text"
                 value={editingTitle}
-                disabled={isLocked}
-                onChange={(e) => setEditingTitle(e.target.value)}
+                disabled={isLocked || saving || loading}
+                onChange={(e) => { setEditingTitle(e.target.value); draftEdits.set(activeDraft.id, { title: e.target.value, content: editingContent }); }}
                 className="w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] px-3 py-1.5 text-sm font-semibold text-[var(--color-editor-fg)] focus:outline-none focus:border-emerald-500"
                 placeholder="Draft Title"
               />
@@ -298,8 +320,8 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
               {/* Content Textarea */}
               <textarea
                 value={editingContent}
-                disabled={isLocked}
-                onChange={(e) => setEditingContent(e.target.value)}
+                disabled={isLocked || saving || loading}
+                onChange={(e) => { setEditingContent(e.target.value); draftEdits.set(activeDraft.id, { title: editingTitle, content: e.target.value }); }}
                 className="flex-1 resize-none rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-3 text-xs leading-relaxed text-[var(--color-editor-fg)] focus:outline-none focus:border-emerald-500"
                 placeholder="Draft content..."
               />
@@ -307,7 +329,7 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
               {isLocked && (
                 <div className="flex items-center gap-2 rounded bg-purple-500/5 border border-purple-500/20 px-3 py-1.5 text-xs text-purple-300">
                   <Lock className="h-3.5 w-3.5 shrink-0" />
-                  <span>Payload is locked and verified. Duplicate or create new draft to edit.</span>
+                  <span>Draft is locked after local review. This does not authorize or confirm sending.</span>
                 </div>
               )}
             </>

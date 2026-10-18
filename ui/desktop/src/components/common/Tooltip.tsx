@@ -4,7 +4,7 @@ export type TooltipPosition = 'top' | 'bottom' | 'left' | 'right';
 export type TooltipAlign = 'start' | 'center' | 'end';
 
 export interface TooltipProps {
-  content: string;
+  content: React.ReactNode;
   position?: TooltipPosition;
   align?: TooltipAlign;
   children: React.ReactNode;

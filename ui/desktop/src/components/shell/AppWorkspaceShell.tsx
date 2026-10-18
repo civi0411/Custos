@@ -1,71 +1,21 @@
-import StopIcon from '~icons/lucide/square';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import {
-  Plus,
-  FlaskConical,
-  MessageSquare,
-  Compass,
-  ArrowUp,
-  Paperclip,
-  X,
-  Mic,
-  Monitor,
-} from 'lucide-react';
-import { ComposerPlusMenu } from '@/components/chat/ComposerPlusMenu';
-import { TaskAnchorBanner } from '@/components/shell/TaskAnchorBanner';
-import { AgentActionCard, AgentWorkingStatus } from '@/components/chat';
+import { Plus } from 'lucide-react';
+import { appendConversationDraft, readConversationDraft } from '@/components/chat/ConversationPane';
 import { Session } from '@/types';
-import { OrcaTabbedContainer, resolveResources, type ResourceTabsState, type OrcaTabId, type OrcaTab, getTabType } from '@/components/workbenches/OrcaTabbedContainer';
+import { OrcaTabbedContainer, resolveResources, type ResourceTabsState, type OrcaTabId, type OrcaTab, getTabType, findScopedResourceTab, workbenchResourceIds } from '@/components/workbenches/OrcaTabbedContainer';
 import { WorkspaceSidebar, type SidebarTool } from '@/components/shell/WorkspaceSidebar';
 import { type ActiveWorkbench } from '@/components/shell/AppHeader';
 import { CommandPalette } from '@/components/shell/CommandPalette';
 import { AttentionBanner, type AttentionItem } from '@/components/shell/AttentionBanner';
-import { JobActivityDock } from '@/components/shell/JobActivityDock';
-import { useJobRegistry } from '@/hooks/useJobRegistry';
-import { ModelSelector } from '@/components/chat/ModelSelector';
+import { RightSidebar } from '@/components/shell/RightSidebar';
 
 import { useAppContext } from '@/context/AppContext';
-import { TasksPane } from '@/components/tasks/TasksPane';
 import { CreateTaskModal } from '@/components/tasks/CreateTaskModal';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
-import { remarkNormalizeChatMath } from '@/components/chat/markdownMath';
-import { HighlightedCodeBlock } from '@/components/chat/HighlightedCodeBlock';
-import { SlashCommandMenu, SLASH_COMMANDS, type SlashCommandDef } from '@/components/chat/SlashCommandMenu';
 import { daemonClient } from '@/api/daemon_client';
 import type { CapabilityDescriptor, HarnessDescriptor } from '@/types/domain';
 import { TabQuickLaunchMenu } from '@/components/workbenches/TabQuickLaunchMenu';
+import { useScreenContext } from '@/context/ScreenContext';
 
-
-
-
-// Width changes are handled by CSS; only new message text needs parsing.
-const ConversationMarkdown = React.memo(function ConversationMarkdown({ text }: { text: string }) {
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath, remarkNormalizeChatMath]}
-      rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, strict: false, maxExpand: 1000, maxSize: 20 }]]}
-      components={{
-        pre({ children }) {
-          const child = React.Children.toArray(children)[0];
-          if (!React.isValidElement<{ className?: string; children?: React.ReactNode }>(child)) {
-            return <pre>{children}</pre>;
-          }
-          const language = /(?:^|\s)language-([^\s]+)/.exec(child.props.className || '')?.[1];
-          return <HighlightedCodeBlock code={String(child.props.children ?? '').replace(/\n$/, '')} language={language} />;
-        },
-        code({ children, className }) {
-          return <code className={className || 'px-1.5 py-0.5 rounded bg-surface-1 text-fg-editor border border-border-muted font-mono text-[12px]'}>{children}</code>;
-        }
-      }}
-    >
-      {text}
-    </ReactMarkdown>
-  );
-});
 
 interface AppWorkspaceShellProps {
   mode: ActiveWorkbench;
@@ -86,7 +36,8 @@ interface AppWorkspaceShellProps {
   onOpenFullChatIn?: (mode: ActiveWorkbench) => void;
   onOpenSessionHere?: (id: string) => void;
   onNewSession: () => void;
-  onSendMessage: (text: string) => void;
+  onNewSessionForTask: (taskId: string) => Promise<void>;
+  onSendMessage: (text: string) => Promise<boolean>;
   onClearHistory: () => void;
   onDeleteConversation: (sessionId: string) => void | Promise<void>;
   onAcceptAndRun?: () => void;
@@ -129,6 +80,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   onOpenFullChatIn,
   onOpenSessionHere,
   onNewSession,
+  onNewSessionForTask,
   onSendMessage,
   onClearHistory: _onClearHistory,
   onDeleteConversation,
@@ -154,10 +106,6 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
 }) => {
   const {
     openSettings,
-    selectedModel,
-    selectedModelAvailable,
-    handleSelectModel,
-    handleStopRun,
     workspaces: ctxWorkspaces,
     activeWorkspaceId: ctxActiveWorkspaceId,
     setActiveWorkspaceId: ctxSetActiveWorkspaceId,
@@ -172,12 +120,10 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     isResourcePickerOpen,
     setIsResourcePickerOpen,
     splitPercent,
-    column2Width,
-    isResizingColumn,
-    handleStartResizeColumn2,
-    handleResetColumn2Width,
     savedWorkError,
     retrySavedWork,
+    isInspectorOpen,
+    setIsInspectorOpen,
   } = useAppContext();
 
   const workspaces = propWorkspaces ?? ctxWorkspaces;
@@ -185,8 +131,35 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   const setActiveWorkspaceId = propOnSelectWorkspace ?? propSetActiveWorkspaceId ?? ctxSetActiveWorkspaceId;
   const activeWorkspace = propActiveWorkspace ?? ctxActiveWorkspace;
   const refreshWorkspaces = propRefreshWorkspaces ?? ctxRefreshWorkspaces;
-  const [inputText, setInputText] = useState('');
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [compactWorkspace, setCompactWorkspace] = useState(false);
+
+  const {
+    activeScreenId,
+    activeScreen,
+    updateActiveScreen,
+  } = useScreenContext();
+
+  // Sync active screen's session, task and view state when screen switches
+  useEffect(() => {
+    if (!activeScreen) return;
+    if (activeScreen.activeSessionId && activeScreen.activeSessionId !== activeSessionId) {
+      onSelectSession(activeScreen.activeSessionId);
+    }
+    if (activeScreen.selectedTaskId !== undefined && activeScreen.selectedTaskId !== selectedTaskId) {
+      if (activeScreen.selectedTaskId) onSelectTask(activeScreen.selectedTaskId);
+      else onClearTask();
+    }
+    if (activeScreen.sidebarView && activeScreen.sidebarView !== sidebarView) {
+      onChangeSidebarView(activeScreen.sidebarView);
+    }
+  }, [activeScreenId]);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 1100px)');
+    const update = () => { setCompactWorkspace(query.matches); if (query.matches) setIsInspectorOpen(false); };
+    update(); query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
   const [isGlobalCreateTaskOpen, setIsGlobalCreateTaskOpen] = useState(false);
   const [createTaskPrefill, setCreateTaskPrefill] = useState<{
     title?: string;
@@ -222,16 +195,22 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   }, [isResourcePickerOpen]);
 
   const [pickerTargetPane, setPickerTargetPane] = useState<'primary' | 'split'>('primary');
+  const [pickerAnchor, setPickerAnchor] = useState<{ top: number; left: number } | null>(null);
 
-  const handleOpenResourcePicker = useCallback((targetPane: 'primary' | 'split' = 'primary') => {
+  const handleOpenResourcePicker = useCallback((targetPane: 'primary' | 'split' = 'primary', anchor?: { top: number; left: number }) => {
     setPickerTargetPane(targetPane);
+    setPickerAnchor(anchor || null);
+    if (!isWebTabOpen) onToggleWebTab();
     setIsResourcePickerOpen(true);
-  }, [setIsResourcePickerOpen]);
+  }, [setIsResourcePickerOpen, isWebTabOpen, onToggleWebTab]);
 
   // Populated only from daemon approval/effect events. Never fabricate authority requests.
   const [attentionItems, setAttentionItems] = useState<AttentionItem[]>([]);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const openedCanvasScopes = useRef(new Set<string>());
+  const canvasScope = resourceTabs.scopeKey || mode;
+  if (isWebTabOpen) openedCanvasScopes.current.add(canvasScope);
 
   // Active session lookup
   const activeSession =
@@ -256,37 +235,80 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   const taskAttentionCount = attentionItems.filter(
     (item) => item.worktreeId === boundWorkspace?.id || Boolean(activeSession.taskId && item.targetResource.includes(activeSession.taskId))
   ).length;
-  const [composerMode, setComposerMode] = useState<'chat' | 'task'>('task');
-  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
-  const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleTriggerFileInput = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const newFiles = Array.from(e.target.files);
-      setAttachedFiles((prev) => [...prev, ...newFiles]);
-      onShowToast?.(`Đã thêm ${newFiles.length} tệp đính kèm`);
-      e.target.value = '';
+  const openTab = useCallback((
+    id: OrcaTabId,
+    title: string,
+    url: string,
+    agentId?: string,
+    workspaceId?: string,
+    targetPane: 'primary' | 'split' = 'primary',
+    targetSessionId?: string,
+  ) => {
+    if (!isWebTabOpen) {
+      onToggleWebTab();
     }
-  };
+    const activeTab = resourceTabs.tabs.find((t) => t.id === resourceTabs.activeTabId);
+    const newTabId = `${id}-${crypto.randomUUID()}`;
+    const newTab: OrcaTab = {
+      id: newTabId,
+      type: id,
+      title,
+      url,
+      agentId,
+      workspaceId: workspaceId || activeWorkspaceId || undefined,
+      sessionId: targetSessionId || activeSession.id || undefined,
+      taskId: selectedTaskId || activeSession.taskId,
+    };
 
-  const handleRemoveFile = (index: number) => {
-    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
-  };
+    if (activeTab && getTabType(activeTab) === 'tools') {
+      resourceTabs.setTabs((prev) =>
+        prev.map((t) => (t.id === activeTab.id ? newTab : t))
+      );
+    } else {
+      const isMultiInstance = ['terminal', 'agents', 'browser', 'emulator', 'conversation', 'chat', 'tasks', 'task'].includes(id);
+      const isSpecificFile = id === 'files' && Boolean(url && (url.startsWith('custos://file?') || url.startsWith('custos://diff?')));
 
-  const hasMessages = activeSession.messages && activeSession.messages.length > 0;
+      if (!isMultiInstance && !isSpecificFile) {
+        const existing = findScopedResourceTab(resourceTabs.tabs, id, {
+          agentId,
+          workspaceId: workspaceId || activeWorkspaceId || undefined,
+          sessionId: targetSessionId || activeSession.id || undefined,
+          taskId: selectedTaskId || activeSession.taskId,
+        });
+        if (existing) {
+          if (targetPane === 'split') {
+            resourceTabs.setSplitTabId?.(existing.id);
+          } else {
+            resourceTabs.setActiveTabId(existing.id);
+          }
+          return;
+        }
+      } else if (isSpecificFile) {
+        const existingFile = resourceTabs.tabs.find((t) => t.type === 'files' && t.url === url);
+        if (existingFile) {
+          if (targetPane === 'split') {
+            resourceTabs.setSplitTabId?.(existingFile.id);
+          } else {
+            resourceTabs.setActiveTabId(existingFile.id);
+          }
+          return;
+        }
+      }
 
-  // Global Keyboard Shortcuts (Cmd+K for Jump Palette, Cmd+Opt+K for Kanban, Cmd+U for File Attachment)
+      resourceTabs.setTabs((prev) => [...prev, newTab]);
+    }
+
+    if (targetPane === 'split') {
+      resourceTabs.setSplitTabId?.(newTabId);
+    } else {
+      resourceTabs.setActiveTabId(newTabId);
+    }
+  }, [isWebTabOpen, onToggleWebTab, resourceTabs, activeWorkspaceId, activeSession.id, activeSession.taskId, selectedTaskId]);
+
+  // Global Keyboard Shortcuts (Cmd+K for Jump Palette, Cmd+Opt+K for Kanban)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'u') {
-        e.preventDefault();
-        fileInputRef.current?.click();
-      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         if (e.altKey) {
           e.preventDefault();
           openTab('kanban', 'Fleet Kanban', 'orca://kanban');
@@ -297,203 +319,110 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         setIsCommandPaletteOpen((prev) => !prev);
+      } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        onToggleExpandWebTab();
       }
     };
+    const onOpenPalette = () => {
+      setIsCommandPaletteOpen(true);
+    };
+    const onToggleChat = () => {
+      onToggleExpandWebTab();
+    };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onShowToast]);
+    window.addEventListener('custos:open-command-palette', onOpenPalette);
+    window.addEventListener('custos:toggle-chat', onToggleChat);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('custos:open-command-palette', onOpenPalette);
+      window.removeEventListener('custos:toggle-chat', onToggleChat);
+    };
+  }, [openTab, onToggleExpandWebTab]);
 
-  const liveMessage = activeSession.messages.find(message => message.runId && !['completed', 'failed', 'cancelled', 'interrupted'].includes(message.runStatus || ''));
-  const isPackCommand = SLASH_COMMANDS.some(command => command.command.toLowerCase() === inputText.trim().split(/\s+/)[0].toLowerCase());
-  const dialogueRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const followBottom = useRef(true);
+  const handleOpenTab = useCallback((
+    id: OrcaTabId,
+    customUrl?: string,
+    customTitle?: string,
+    targetPane: 'primary' | 'split' = 'primary',
+    targetWorkspaceId?: string,
+  ) => {
+    const effectiveWsId = targetWorkspaceId || activeWorkspaceId;
 
-  const [scrollEdges, setScrollEdges] = useState({ top: false, bottom: false });
-  const updateScrollEdges = () => {
-    const el = dialogueRef.current;
-    if (!el) return;
-    const canScroll = el.scrollHeight > el.clientHeight;
-    const top = canScroll && el.scrollTop > 12;
-    const bottom = canScroll && el.scrollTop < el.scrollHeight - el.clientHeight - 12;
-    setScrollEdges(previous => previous.top === top && previous.bottom === bottom ? previous : { top, bottom });
-  };
-
-  useEffect(() => {
-    const el = dialogueRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver(() => updateScrollEdges());
-    observer.observe(el);
-    updateScrollEdges();
-    return () => observer.disconnect();
-  }, [activeSessionId, hasMessages]);
-
-  useEffect(() => { followBottom.current = true; }, [activeSessionId]);
-  useEffect(() => {
-    if (followBottom.current && dialogueRef.current) dialogueRef.current.scrollTop = dialogueRef.current.scrollHeight;
-    updateScrollEdges();
-  }, [activeSession.messages]);
-
-  const { dispatchJob, updateJob } = useJobRegistry();
-
-  const executeSlashCommand = (cmd: SlashCommandDef, args: string) => {
-    setInputText('');
-
-    if (cmd.command === '/task') {
-      setCreateTaskPrefill({
-        title: args.trim(),
-        workspaceId: activeSession.workspaceId || activeWorkspaceId,
-        sessionId: activeSession.id,
-        packId: mode === 'engineering' ? 'code' : mode === 'research' ? 'research' : 'copilot',
-      });
-      setIsGlobalCreateTaskOpen(true);
+    // 1. Specific file editor or diff tab
+    if (id === 'files' && customUrl && (customUrl.startsWith('custos://file?') || customUrl.startsWith('custos://diff?'))) {
+      const existingFile = resourceTabs.tabs.find(t => t.type === 'files' && t.url === customUrl);
+      if (existingFile) {
+        if (!isWebTabOpen) onToggleWebTab();
+        if (targetPane === 'split') resourceTabs.setSplitTabId?.(existingFile.id);
+        else resourceTabs.setActiveTabId(existingFile.id);
+        return;
+      }
+      openTab('files', customTitle || 'File', customUrl, undefined, effectiveWsId, targetPane);
       return;
     }
 
-    // 1. Dispatch in JobRegistry so active tabs & sidebar show running status immediately
-    const entryId = dispatchJob({
-      jobId: cmd.jobId,
-      jobName: cmd.label,
-      sourceTabId: mode === 'engineering' ? 'changes' : mode === 'research' ? 'literature' : undefined,
-    });
-
-    // 2. Trigger daemon packs job directly (single accepted command path; avoid double-dispatch into chat LLM)
-    daemonClient
-      .runPacksJob({
-        jobId: cmd.jobId,
-        sessionId: activeSession.id,
-        inputs: cmd.getInputs(args, { sessionId: activeSession.id }),
-      })
-      .then((res) => {
-        const taskId = res.taskId || res.task_id || 'unknown';
-        updateJob(entryId, { taskId, status: 'started', endedAt: Date.now() });
-        onShowToast?.(`Started ${cmd.command} (Task ${taskId})`);
-      })
-      .catch((err: any) => {
-        updateJob(entryId, { status: 'failed', error: err.message || String(err), endedAt: Date.now() });
-        onShowToast?.(`Failed to run ${cmd.command}: ${err.message || String(err)}`);
-      });
-  };
-
-  const handleSelectSlashCommand = (cmd: SlashCommandDef) => {
-    if (cmd.hasArgs) {
-      setInputText(`${cmd.command} `);
-    } else {
-      executeSlashCommand(cmd, '');
-    }
-  };
-
-  const handleSteer = async () => {
-    const trimmed = inputText.trim();
-    if (!trimmed || !liveMessage?.runId) return;
-    setInputText('');
-    try {
-      const harnessId = activeSession.nativeHarnessId || 'claude-code';
-      await daemonClient.steerHarness(harnessId, liveMessage.runId, trimmed);
-      onShowToast?.(`Guidance queued for next turn: "${trimmed}"`);
-    } catch (err: any) {
-      onShowToast?.(`Live steering unsupported for headless CLI harness: ${err?.message || err}`);
-    }
-  };
-
-  const handleSend = () => {
-    const trimmed = inputText.trim();
-    if ((!trimmed && attachedFiles.length === 0) || liveMessage) return;
-
-    if (trimmed.startsWith('/')) {
-      const parts = trimmed.split(' ');
-      const cmdName = parts[0].toLowerCase();
-      const args = parts.slice(1).join(' ');
-      const match = SLASH_COMMANDS.find((c) => c.command.toLowerCase() === cmdName);
-      if (match) {
-        executeSlashCommand(match, args);
+    // 2. Parallel multi-instance runtimes (Terminal, Agents, Browser, Phone Simulator, Chat, Tasks)
+    if (['terminal', 'browser', 'emulator', 'agents', 'conversation', 'chat', 'tasks', 'task'].includes(id)) {
+      if (id === 'conversation' || id === 'chat') {
+        const existingCount = resourceTabs.tabs.filter(t => t.type === 'conversation' || t.type === 'chat' || t.id.startsWith('conversation')).length;
+        const count = existingCount + 1;
+        const title = customTitle || (count > 1 ? `Chat #${count}` : (activeSession?.title || 'Chat'));
+        const url = customUrl || `custos://chat/${count}`;
+        openTab('conversation', title, url, undefined, effectiveWsId, targetPane);
+        return;
+      }
+      if (id === 'tasks' || id === 'task') {
+        const existingCount = resourceTabs.tabs.filter(t => t.type === 'tasks' || t.type === 'task' || t.id.startsWith('tasks')).length;
+        const count = existingCount + 1;
+        const title = customTitle || (count > 1 ? `Tasks #${count}` : 'Tasks');
+        const url = customUrl || `custos://tasks/${count}`;
+        openTab('tasks', title, url, undefined, effectiveWsId, targetPane);
+        return;
+      }
+      if (id === 'terminal') {
+        const existingCount = resourceTabs.tabs.filter(t => t.type === 'terminal' || t.id.startsWith('terminal')).length;
+        const count = existingCount + 1;
+        const title = customTitle || (count > 1 ? `Terminal ${count}` : 'Terminal');
+        const url = customUrl || `custos://terminal/${count}`;
+        openTab('terminal', title, url, undefined, effectiveWsId, targetPane);
+        return;
+      }
+      if (id === 'browser') {
+        const existingCount = resourceTabs.tabs.filter(t => t.type === 'browser' || t.id.startsWith('browser')).length;
+        const count = existingCount + 1;
+        const title = customTitle || (count > 1 ? `Browser ${count}` : 'Web Preview');
+        const url = customUrl || `custos://browser/${count}`;
+        openTab('browser', title, url, undefined, effectiveWsId, targetPane);
+        return;
+      }
+      if (id === 'emulator') {
+        const existingCount = resourceTabs.tabs.filter(t => t.type === 'emulator' || t.id.startsWith('emulator')).length;
+        const count = existingCount + 1;
+        const title = customTitle || (count > 1 ? `Phone Simulator ${count}` : 'Phone Simulator');
+        const url = customUrl || `custos://emulator/${count}`;
+        openTab('emulator', title, url, undefined, effectiveWsId, targetPane);
+        return;
+      }
+      if (id === 'agents') {
+        const existingCount = resourceTabs.tabs.filter(t => t.type === 'agents' || t.id.startsWith('agents')).length;
+        const count = existingCount + 1;
+        const title = customTitle || (count > 1 ? `Coding Agents #${count}` : 'Coding Agents');
+        const url = customUrl || `custos://agent/session-${count}`;
+        openTab('agents', title, url, undefined, effectiveWsId, targetPane);
         return;
       }
     }
 
-    if (!activeSession.nativeHarnessId && !selectedModelAvailable && !isPackCommand) {
-      onShowToast?.('Select an available model/account and reasoning effort');
-      return;
-    }
-
-    let messageToSend = trimmed;
-    if (attachedFiles.length > 0) {
-      const fileDescriptions = attachedFiles
-        .map((f) => `📎 [Attachment: ${f.name} (${(f.size / 1024).toFixed(1)} KB)]`)
-        .join('\n');
-      messageToSend = messageToSend ? `${messageToSend}\n\n${fileDescriptions}` : fileDescriptions;
-      setAttachedFiles([]);
-    }
-
-    onSendMessage(messageToSend);
-    setInputText('');
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Escape' && liveMessage?.runId) {
-      e.preventDefault();
-      void handleStopRun(liveMessage.runId);
-      return;
-    }
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      if (liveMessage) {
-        handleSteer();
-      } else {
-        handleSend();
-      }
-    }
-  };
-
-  const openTab = useCallback((
-    id: OrcaTabId,
-    title: string,
-    url: string,
-    agentId?: string,
-    workspaceId?: string,
-    targetPane: 'primary' | 'split' = 'primary'
-  ) => {
-    if (!isWebTabOpen) {
-      onToggleWebTab();
-    }
-    const activeTab = resourceTabs.tabs.find((t) => t.id === resourceTabs.activeTabId);
-    const newTabId = `${id}-${agentId ? `${agentId}-` : ''}${Date.now()}`;
-    const newTab: OrcaTab = { id: newTabId, type: id, title, url, agentId, workspaceId };
-
-    if (activeTab && getTabType(activeTab) === 'tools') {
-      resourceTabs.setTabs((prev) =>
-        prev.map((t) => (t.id === activeTab.id ? newTab : t))
-      );
-    } else {
-      if (id !== 'agents' || !agentId) {
-        const existing = resourceTabs.tabs.find((t) => getTabType(t) === id && (!agentId || t.agentId === agentId));
-        if (existing) {
-          if ((id === 'browser' || id === 'emulator') && url && !url.startsWith('custos:')) {
-            resourceTabs.setTabs((prev) =>
-              prev.map((t) => (t.id === existing.id ? { ...t, url, title: title || t.title } : t))
-            );
-          }
-          if (targetPane === 'split') {
-            resourceTabs.setSplitTabId?.(existing.id);
-          } else {
-            resourceTabs.setActiveTabId(existing.id);
-          }
-          return;
-        }
-      }
-      resourceTabs.setTabs((prev) => [...prev, newTab]);
-    }
-
-    if (targetPane === 'split') {
-      resourceTabs.setSplitTabId?.(newTabId);
-    } else {
-      resourceTabs.setActiveTabId(newTabId);
-    }
-  }, [isWebTabOpen, onToggleWebTab, resourceTabs]);
-
-  const handleOpenTab = useCallback((id: OrcaTabId, customUrl?: string, customTitle?: string, targetPane: 'primary' | 'split' = 'primary') => {
-    const existing = resourceTabs.tabs.find((t) => getTabType(t) === id);
+    // 3. Singleton scoped lenses (worktrees, activity, lab, literature, findings, drafts, outbox, etc.)
+    const existing = findScopedResourceTab(resourceTabs.tabs, id, {
+      workspaceId: effectiveWsId || undefined, sessionId: activeSession.id || undefined,
+      taskId: selectedTaskId || activeSession.taskId,
+    });
     if (existing) {
+      if (id === 'synthesis' && customUrl) {
+        resourceTabs.setTabs(previous => previous.map(tab => tab.id === existing.id ? { ...tab, url: customUrl } : tab));
+      }
       if (!isWebTabOpen) {
         onToggleWebTab();
       }
@@ -503,9 +432,9 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
         resourceTabs.setActiveTabId(existing.id);
       }
     } else {
-      openTab(id, customTitle || (id.charAt(0).toUpperCase() + id.slice(1)), customUrl || `custos://resource/${id}`, undefined, undefined, targetPane);
+      openTab(id, customTitle || (id.charAt(0).toUpperCase() + id.slice(1)), customUrl || `custos://resource/${id}`, undefined, effectiveWsId, targetPane);
     }
-  }, [resourceTabs, isWebTabOpen, onToggleWebTab, openTab]);
+  }, [resourceTabs, isWebTabOpen, onToggleWebTab, openTab, activeWorkspaceId, activeSession.id, activeSession.taskId, selectedTaskId]);
 
 
   const handleLaunchAgentTab = useCallback((harness: HarnessDescriptor, targetPane: 'primary' | 'split' = 'primary') => {
@@ -514,29 +443,94 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     const title = count > 1 ? `${harness.name} #${count}` : harness.name;
     openTab('agents', title, `custos://agent/${harness.id}`, harness.id, activeWorkspaceId, targetPane);
     setIsResourcePickerOpen(false);
-    onShowToast?.(`Launched ${harness.name} in parallel tab`);
+    onShowToast?.(`Opened ${harness.name}. Choose a Task and start the agent when ready.`);
   }, [openTab, resourceTabs.tabs, activeWorkspaceId, onShowToast, setIsResourcePickerOpen]);
 
-  const handleResourceAskAgent = useCallback((draft: string) => {
-    setInputText(previous => previous ? `${previous}\n\n${draft}` : draft);
-  }, []);
+  const handleResourceAskAgent = useCallback((draft: string, sessionId = activeSession.id) => {
+    if (!sessionId || !allSessions.some(session => session.id === sessionId)) {
+      onShowToast?.('Open the resource conversation before adding context.'); return;
+    }
+    if (readConversationDraft(sessionId) !== draft) appendConversationDraft(sessionId, draft);
+    if (sessionId !== activeSession.id) onSelectSession(sessionId);
+    onChangeSidebarView('chats');
+    if (isWebTabExpanded) onToggleExpandWebTab();
+    if (compactWorkspace && isWebTabOpen) onToggleWebTab();
+  }, [activeSession.id, allSessions, onSelectSession, onChangeSidebarView, onShowToast, isWebTabExpanded, onToggleExpandWebTab, compactWorkspace, isWebTabOpen, onToggleWebTab]);
+
+  const handleSelectSessionWithScreen = useCallback((id: string) => {
+    onSelectSession(id);
+    updateActiveScreen({ activeSessionId: id });
+    const targetSession = allSessions.find((s) => s.id === id) || sessions.find((s) => s.id === id);
+    const title = targetSession?.title || 'Chat';
+    const existingTab = resourceTabs.tabs.find((t) => (t.type === 'conversation' || t.type === 'chat') && t.sessionId === id);
+    if (existingTab) {
+      resourceTabs.setActiveTabId(existingTab.id);
+    } else {
+      const activeTab = resourceTabs.tabs.find((t) => t.id === resourceTabs.activeTabId);
+      if (activeTab && (activeTab.type === 'conversation' || activeTab.type === 'chat')) {
+        resourceTabs.setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, sessionId: id, title } : t)));
+      } else {
+        openTab('conversation', title, `custos://chat/${id}`, undefined, activeWorkspaceId, 'primary', id);
+      }
+    }
+  }, [onSelectSession, updateActiveScreen, allSessions, sessions, resourceTabs, openTab, activeWorkspaceId]);
+
+  const handleSelectTaskWithScreen = useCallback((id: string) => {
+    onSelectTask(id);
+    updateActiveScreen({ selectedTaskId: id });
+    const existing = resourceTabs.tabs.find((t) => t.type === 'tasks' || t.type === 'task');
+    if (existing) {
+      resourceTabs.setActiveTabId(existing.id);
+    } else {
+      openTab('tasks', 'Tasks & Timeline', 'custos://resource/tasks', undefined, activeWorkspaceId);
+    }
+  }, [onSelectTask, updateActiveScreen, resourceTabs, openTab, activeWorkspaceId]);
+
+  const handleChangeSidebarViewWithScreen = useCallback((view: 'chats' | 'tasks') => {
+    onChangeSidebarView(view);
+    updateActiveScreen({ sidebarView: view });
+    if (view === 'tasks') {
+      const existing = resourceTabs.tabs.find((t) => t.type === 'tasks' || t.type === 'task');
+      if (existing) {
+        resourceTabs.setActiveTabId(existing.id);
+      } else {
+        openTab('tasks', 'Tasks & Timeline', 'custos://resource/tasks', undefined, activeWorkspaceId);
+      }
+    } else {
+      const existing = resourceTabs.tabs.find((t) => t.type === 'conversation' || t.type === 'chat');
+      if (existing) {
+        resourceTabs.setActiveTabId(existing.id);
+      }
+    }
+  }, [onChangeSidebarView, updateActiveScreen, resourceTabs, openTab, activeWorkspaceId]);
+
+  const handleNewSession = useCallback(() => {
+    onNewSession();
+    const existingCount = resourceTabs.tabs.filter((t) => t.type === 'conversation' || t.type === 'chat').length;
+    const count = existingCount + 1;
+    const title = count > 1 ? `Chat #${count}` : 'AI Assistant';
+    openTab('conversation', title, `custos://chat/new-${Date.now()}`, undefined, activeWorkspaceId);
+  }, [onNewSession, resourceTabs.tabs, openTab, activeWorkspaceId]);
+
+  useEffect(() => {
+    const handleOpenChatEvent = () => {
+      const existing = resourceTabs.tabs.find((t) => t.type === 'conversation' || t.type === 'chat');
+      if (existing) {
+        resourceTabs.setActiveTabId(existing.id);
+      } else {
+        handleOpenTab('conversation');
+      }
+    };
+    window.addEventListener('custos:open-chat-tab', handleOpenChatEvent);
+    return () => window.removeEventListener('custos:open-chat-tab', handleOpenChatEvent);
+  }, [resourceTabs, handleOpenTab]);
 
   const pickerResources = resolveResources(
     pickerCapabilities,
     pickerCapabilityState !== 'loading',
     pickerCapabilityState === 'failed',
     typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
-  ).filter((resource) => {
-    // Shared across all workbenches (Browser Preview & Phone Simulator & Notes)
-    if (['browser', 'emulator', 'notes'].includes(resource.id)) return true;
-    if (mode === 'engineering') {
-      return ['files', 'activity', 'terminal', 'worktrees', 'agents'].includes(resource.id);
-    }
-    if (mode === 'research') {
-      return ['literature', 'findings', 'lab', 'knowledge', 'artifacts', 'synthesis'].includes(resource.id);
-    }
-    return ['drafts', 'outbox', 'contacts', 'calendar'].includes(resource.id);
-  });
+  ).filter(resource => workbenchResourceIds(mode).includes(resource.id));
 
   // Lens metadata & personality
   const lensMeta = {
@@ -578,6 +572,18 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     }
   }[mode];
 
+  const workbenchTasks = tasks.filter(task => {
+    if (task.metadata?.kind === 'conversation_chat_turn') return false;
+    const pack = String(task.contract?.pack_id || task.metadata?.pack_id || '').toLowerCase();
+    if (!pack) return true;
+    return mode === 'engineering' ? ['engineering', 'coding', 'code'].includes(pack)
+      : mode === 'research' ? pack === 'research' : ['assistant', 'copilot'].includes(pack);
+  });
+  const inspectedTab = resourceTabs.tabs.find(tab => tab.id === resourceTabs.activeTabId);
+  const inspectedWorkspace = isWebTabOpen && inspectedTab?.workspaceId ? workspaces.find(workspace => workspace.id === inspectedTab.workspaceId) : activeWorkspace;
+  const inspectedSession = isWebTabOpen && inspectedTab?.sessionId ? allSessions.find(session => session.id === inspectedTab.sessionId) : activeSession;
+  const inspectedTask = isWebTabOpen && inspectedTab?.taskId ? tasks.find(task => task.id === inspectedTab.taskId) : tasks.find(task => task.id === selectedTaskId) || boundTask;
+
   // Sidebar Tools: Keep sidebar clean (resources accessed via '+' picker in workbenches)
   const sidebarTools: SidebarTool[] = [];
 
@@ -595,7 +601,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
         </div>
       )}
 
-      {/* ── 3. ADAPTIVE WORKSPACE BODY ── */}
+      {/* ── 2. ADAPTIVE WORKSPACE BODY ── */}
       <div className="flex-1 flex overflow-hidden min-h-0 relative">
         {/* Shared Sidebar */}
         <WorkspaceSidebar
@@ -607,20 +613,23 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           sessions={sessions}
           allSessions={allSessions}
           activeSessionId={activeSessionId}
-          onSelectSession={onSelectSession}
-          tasks={tasks}
+          onSelectSession={handleSelectSessionWithScreen}
+          tasks={workbenchTasks}
           selectedTaskId={selectedTaskId}
-          onSelectTask={onSelectTask}
-          onClearTask={onClearTask}
+          onSelectTask={handleSelectTaskWithScreen}
+          onClearTask={() => {
+            onClearTask();
+            updateActiveScreen({ selectedTaskId: null });
+          }}
           listMode={sidebarView}
-          onChangeListMode={onChangeSidebarView}
+          onChangeListMode={handleChangeSidebarViewWithScreen}
           onOpenFullChatIn={onOpenFullChatIn}
           onOpenSessionHere={onOpenSessionHere}
           onDeleteSession={onDeleteConversation}
           newTaskLabel={lensMeta.taskLabel}
           newTaskIcon={Plus}
           newTaskIconColor={lensMeta.iconColor}
-          onNewSession={onNewSession}
+          onNewSession={handleNewSession}
           onRequestCreateTask={() => {
             setCreateTaskPrefill({
               workspaceId: activeWorkspaceId,
@@ -645,607 +654,118 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           refreshWorkspaces={refreshWorkspaces}
         />
 
-        {/* Central Workspace Canvas */}
-        <div ref={containerRef} className="flex-1 flex overflow-hidden min-w-0 relative">
-          {/* COLUMN 1: CONVERSATION PANE */}
-          <div
-            className="flex-1 flex flex-col h-full overflow-hidden bg-canvas relative select-text min-w-0"
-            style={{
-              display: isWebTabExpanded ? 'none' : 'flex'
-            }}
-          >
-            {/* Dialogue Messages Canvas */}
-            <div className="relative flex-1 min-h-0">
-              {sidebarView === 'tasks' || selectedTaskId ? (
-                <TasksPane
-                  tasks={tasks}
-                  sessions={allSessions}
-                  workspaces={workspaces}
-                  selectedTaskId={selectedTaskId}
-                  onSelectTask={(id) => {
-                    if (id) {
-                      onSelectTask(id);
-                    } else {
-                      onClearTask();
-                    }
-                  }}
-                  onOpenSession={(sessionId) => {
-                    onChangeSidebarView('chats');
-                    onSelectSession(sessionId);
-                    onClearTask();
-                  }}
-                  onNewSessionForTask={(_taskId) => {
-                    onChangeSidebarView('chats');
-                    onNewSession();
-                    onClearTask();
-                  }}
-                  onCreateTask={createTask}
-                  onAdvanceStatus={async (taskId, status) => {
-                    await advanceTask(taskId, status);
-                  }}
-                  onCompleteTask={async (taskId, summary) => {
-                    await completeTask(taskId, summary);
-                  }}
-                  onCancelTask={async (taskId, reason) => {
-                    await cancelTask(taskId, reason);
-                  }}
-                  onRefreshTasks={refreshTasks}
-                />
-              ) : (
-                <div className="flex flex-col h-full overflow-hidden">
-                  {/* Task Anchor Banner (Decoupled Task & Session Anchor) */}
-                  <TaskAnchorBanner
-                    session={activeSession}
-                    task={boundTask}
-                    boundWorkspace={boundWorkspace}
-                    attentionCount={taskAttentionCount}
-                    hasMessages={Boolean(hasMessages)}
-                    onViewTask={() => {
-                      if (activeSession.taskId) {
-                        onSelectTask(activeSession.taskId);
-                        onChangeSidebarView('tasks');
-                      }
-                    }}
-                    onOpenSplitCanvas={() => {
-                      if (!isWebTabOpen) {
-                        onToggleWebTab();
-                      }
-                    }}
-                    onPromoteToTask={() => {
-                      const firstUserMsg = activeSession.messages.find((m) => m.role === 'user')?.text || '';
-                      setCreateTaskPrefill({
-                        title: activeSession.title,
-                        description: firstUserMsg || activeSession.preview || '',
-                        workspaceId: activeSession.workspaceId || activeWorkspaceId,
-                        sessionId: activeSession.id,
-                        packId: mode === 'engineering' ? 'code' : mode === 'research' ? 'research' : 'copilot',
-                      });
-                      setIsGlobalCreateTaskOpen(true);
-                    }}
-                    onDetachTask={() => {
-                      activeSession.taskId = undefined;
-                      onShowToast?.('Đã tách phiên trò chuyện khỏi Task (Về Chat Thường)');
-                    }}
-                  />
-
-                  <div
-                    ref={dialogueRef}
-                    onScroll={event => {
-                      const element = event.currentTarget;
-                      followBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
-                      updateScrollEdges();
-                    }}
-                    className="flex-1 overflow-y-auto px-6 py-6 space-y-6"
-                  >
-                  {!hasMessages ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center my-auto pb-10 px-4 w-full max-w-2xl mx-auto">
-                      <div className="w-12 h-12 rounded-2xl bg-surface-1 border border-border-default flex items-center justify-center text-fg-muted mb-3 shadow-xs">
-                        {mode === 'engineering' ? (
-                          <span className="font-mono text-xl workbench-accent select-none">&#123;_&#125;</span>
-                        ) : mode === 'research' ? (
-                          <FlaskConical className="w-6 h-6 workbench-accent" />
-                        ) : (
-                          <MessageSquare className="w-6 h-6 workbench-accent" />
-                        )}
-                      </div>
-                      <div className="workbench-kicker mb-1.5 text-xs text-white/50">{lensMeta.badge} workbench</div>
-                      <h1 className="text-xl md:text-2xl font-semibold text-fg-editor tracking-[-0.02em] max-w-lg mb-6">
-                        {currentProject === 'Custos Workspace' ? (
-                          mode === 'engineering' ? 'What should we build today?' : mode === 'research' ? 'What should we investigate today?' : 'How can Custos help you today?'
-                        ) : (
-                          <>
-                            {mode === 'engineering' ? 'What should we build in ' : mode === 'research' ? 'What should we investigate in ' : 'How can Custos help with '}
-                            <span className="underline decoration-[var(--color-border-emphasis)] underline-offset-4">{currentProject}</span>?
-                          </>
-                        )}
-                      </h1>
-
-                      {/* CENTER HERO CHAT BOX (Hình 1) */}
-                      <div className="w-full text-left rounded-3xl bg-[#1c1c20] border border-white/12 shadow-2xl p-4 relative transition-all focus-within:border-white/20 focus-within:ring-1 focus-within:ring-white/10 backdrop-blur-md">
-                        <SlashCommandMenu
-                          query={inputText}
-                          mode={mode}
-                          isOpen={inputText.startsWith('/') && (!inputText.includes(' ') || inputText.length <= 15)}
-                          onSelectCommand={handleSelectSlashCommand}
-                          onClose={() => { }}
-                        />
-
-                        {/* Attached Files Chips */}
-                        {attachedFiles.length > 0 && (
-                          <div className="mb-2.5 flex flex-wrap gap-1.5">
-                            {attachedFiles.map((file, idx) => (
-                              <div
-                                key={`${file.name}-${idx}`}
-                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/8 border border-white/10 text-xs text-white/90"
-                              >
-                                <Paperclip className="size-3 text-white/60" />
-                                <span className="truncate max-w-[150px]">{file.name}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveFile(idx)}
-                                  className="text-white/40 hover:text-white/90 transition-colors ml-0.5 cursor-pointer"
-                                >
-                                  <X className="size-3" />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Textarea */}
-                        <textarea
-                          ref={textareaRef}
-                          rows={3}
-                          value={inputText}
-                          onChange={(e) => setInputText(e.target.value)}
-                          onKeyDown={handleKeyDown}
-                          placeholder={
-                            composerMode === 'chat' && !activeSession.taskId
-                              ? 'Ask Custos anything (Hỏi đáp, tra cứu, giải thích)...'
-                              : lensMeta.placeholder || 'Ask Custos or assign task: Plan, analyze code, execute actions...'
-                          }
-                          className="w-full bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-white placeholder-white/35 text-[14px] resize-none leading-relaxed min-h-[64px]"
-                          autoFocus
-                        />
-
-                        {/* Bottom Toolbar inside the Box */}
-                        <div className="flex items-center justify-between pt-2 mt-1">
-                          <div className="flex items-center gap-2">
-                            {/* + Button */}
-                            <div className="relative">
-                              <button
-                                type="button"
-                                onClick={() => setIsPlusMenuOpen((prev) => !prev)}
-                                className="size-8 rounded-full hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition cursor-pointer"
-                                title="Add files, skills, plugins (⌘U)"
-                              >
-                                <Plus className="size-4" />
-                              </button>
-                              <ComposerPlusMenu
-                                isOpen={isPlusMenuOpen}
-                                onClose={() => setIsPlusMenuOpen(false)}
-                                onAddFilesOrPhotos={handleTriggerFileInput}
-                                onOpenSkills={() => {
-                                  onShowToast?.('Mở danh mục Skills');
-                                  handleOpenTab('tools');
-                                }}
-                                onAddConnector={() => {
-                                  onShowToast?.('Mở MCP Connectors');
-                                  handleOpenTab('tools');
-                                }}
-                                onAddPlugins={() => {
-                                  onShowToast?.('Mở Plugins');
-                                  handleOpenTab('tools');
-                                }}
-                                position="top"
-                              />
-                            </div>
-
-                            {/* Share screen button (as seen in Image 1) */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                onShowToast?.('Chia sẻ màn hình / context workspace');
-                              }}
-                              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs text-white/60 hover:text-white hover:bg-white/8 transition cursor-pointer"
-                            >
-                              <Monitor className="size-3.5" />
-                              <span>Share screen</span>
-                            </button>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            {/* Model selector */}
-                            {activeSession.nativeHarnessId ? (
-                              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/80">
-                                {activeSession.nativeHarnessId}
-                              </span>
-                            ) : (
-                              <ModelSelector
-                                currentModel={activeSession?.model || selectedModel}
-                                onSelectModel={handleSelectModel}
-                              />
-                            )}
-
-                            {/* Mic */}
-                            <button
-                              type="button"
-                              className="size-8 rounded-full hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition cursor-pointer"
-                              title="Voice input"
-                            >
-                              <Mic className="size-4" />
-                            </button>
-
-                            {/* Submit button (Image 1 style circular button) */}
-                            <button
-                              type="button"
-                              onClick={handleSend}
-                              disabled={!inputText.trim() && attachedFiles.length === 0}
-                              className={`size-8 rounded-full flex items-center justify-center transition shadow-md cursor-pointer ${
-                                inputText.trim() || attachedFiles.length > 0
-                                  ? 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white'
-                                  : 'bg-white/10 text-white/30 cursor-not-allowed'
-                              }`}
-                              title="Send message (Enter)"
-                            >
-                              <ArrowUp className="size-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* FLOATING CAPSULE TOGGLE: [ Chat | Task ] BELOW THE HERO BOX (Hình 1) */}
-                      <div className="mt-4 flex justify-center select-none">
-                        <div className="flex items-center rounded-full bg-[#18181b] border border-white/10 p-1 shadow-lg">
-                          <button
-                            type="button"
-                            onClick={() => setComposerMode('chat')}
-                            className={`px-4 py-1.5 rounded-full text-xs font-medium transition cursor-pointer ${
-                              composerMode === 'chat' && !activeSession.taskId
-                                ? 'bg-zinc-700/90 text-white shadow-xs font-semibold'
-                                : 'text-white/50 hover:text-white/80'
-                            }`}
-                            title="Chat Thường: Tra cứu, hỏi đáp, an toàn code"
-                          >
-                            Chat
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setComposerMode('task')}
-                            className={`px-4 py-1.5 rounded-full text-xs font-medium transition cursor-pointer ${
-                              composerMode === 'task' || Boolean(activeSession.taskId)
-                                ? 'bg-zinc-700/90 text-white shadow-xs font-semibold'
-                                : 'text-white/50 hover:text-white/80'
-                            }`}
-                            title="Chế độ Task: Giao việc cho Agent phân tích và sửa code"
-                          >
-                            Task
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                  <div className="space-y-6 max-w-3xl mx-auto w-full">
-                    {activeSession.messages.map((msg, i) => {
-                      const isUser = msg.role === 'user';
-                      return (
-                        <div
-                          key={msg.id || i}
-                          aria-label={isUser ? "User message" : "Agent message"}
-                          className={isUser ? "conversation-user-message space-y-2 mb-4" : "space-y-2.5 pb-6 border-b border-border-muted/40 last:border-b-0 min-w-0"}
-                        >
-                          {/* Message Content */}
-                          <div className="conversation-markdown text-[13px] leading-relaxed text-fg-editor space-y-3 min-w-0 break-words [overflow-wrap:anywhere]">
-                            <ConversationMarkdown text={msg.text} />
-                            {!msg.text && msg.runId && !['completed', 'failed', 'cancelled', 'interrupted'].includes(msg.runStatus || '') && <p role="status" className="text-xs text-fg-muted">{msg.runStatus === 'thinking' ? 'Thinking...' : 'Running...'}</p>}
-                            {msg.liveError && <p role="alert" className="mt-2 text-xs text-amber-400">{msg.liveError}</p>}
-                            {msg.activities?.map((activity, index) => (
-                              <AgentActionCard
-                                key={`${msg.runId || i}-activity-${index}`}
-                                activity={activity}
-                                onOpenTab={handleOpenTab}
-                                onApproveAction={(actionId) =>
-                                  daemonClient.approveOutbox(actionId).then(() => onShowToast?.('Action approved')).catch(err => onShowToast?.(String(err)))
-                                }
-                                onRejectAction={(actionId) =>
-                                  onShowToast?.(`Action ${actionId} rejected`)
-                                }
-                                onHandoffToCoding={(claimId, statement) =>
-                                  daemonClient.handoffClaimToCoding(claimId, statement).then(() => onShowToast?.('Claim handed off to Coding')).catch(err => onShowToast?.(String(err)))
-                                }
-                                onSendAnswer={(answer) => {
-                                  if (liveMessage?.runId) {
-                                    const harnessId = activeSession.nativeHarnessId || 'claude-code';
-                                    daemonClient.steerHarness(harnessId, liveMessage.runId, answer)
-                                      .then(() => onShowToast?.('Answer delivered to agent'))
-                                      .catch(() => onSendMessage(answer));
-                                  } else {
-                                    onSendMessage(answer);
-                                  }
-                                }}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-              </div>
-              )}
-
-              {sidebarView !== 'tasks' && !selectedTaskId && (
-                <>
-                  <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-top ${scrollEdges.top ? 'is-visible' : ''}`} />
-                  <div aria-hidden="true" className={`conversation-scroll-blur conversation-scroll-blur-bottom ${scrollEdges.bottom ? 'is-visible' : ''}`} />
-                </>
-              )}
-            </div>
-
-            {/* DOCKED CHAT COMPOSER (Natural Flex Child) - Only when hasMessages */}
-            {sidebarView !== 'tasks' && !selectedTaskId && hasMessages && (
-              <div className="shrink-0 px-4 py-3 bg-canvas">
-                {liveMessage && (
-                  <div className="max-w-3xl mx-auto mb-2.5">
-                    <AgentWorkingStatus
-                      status={liveMessage.runStatus}
-                      runId={liveMessage.runId}
-                      harnessName={
-                        mode === 'research'
-                          ? 'Research Copilot'
-                          : mode === 'copilot'
-                          ? 'Personal Copilot'
-                          : activeSession.nativeHarnessId
-                          ? `Coding Agent (${activeSession.nativeHarnessId})`
-                          : 'Coding Assistant'
-                      }
-                      currentActivity={liveMessage.activities?.[liveMessage.activities.length - 1]}
-                      onStop={() => liveMessage.runId && void handleStopRun(liveMessage.runId)}
-                      onFocusSteer={() => textareaRef.current?.focus()}
-                    />
-                  </div>
-                )}
-
-                {/* Attached Files Chips */}
-                {attachedFiles.length > 0 && (
-                  <div className="max-w-3xl mx-auto mb-2 flex flex-wrap gap-1.5">
-                    {attachedFiles.map((file, idx) => (
-                      <div
-                        key={`${file.name}-${idx}`}
-                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#27272a] border border-white/10 text-xs text-white/90"
-                      >
-                        <Paperclip className="size-3 text-white/60" />
-                        <span className="truncate max-w-[150px]">{file.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveFile(idx)}
-                          className="text-white/40 hover:text-white/90 transition-colors ml-0.5 cursor-pointer"
-                        >
-                          <X className="size-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* DOCKED PILL COMPOSER (Hình 2: Compact rounded-full pill) */}
-                <div className="max-w-3xl mx-auto rounded-full bg-[#242428] border border-white/10 shadow-xl px-2.5 py-1.5 flex items-center gap-2 relative transition-all focus-within:border-white/20 focus-within:ring-1 focus-within:ring-white/15">
-                  <SlashCommandMenu
-                    query={inputText}
-                    mode={mode}
-                    isOpen={inputText.startsWith('/') && (!inputText.includes(' ') || inputText.length <= 15)}
-                    onSelectCommand={handleSelectSlashCommand}
-                    onClose={() => { }}
-                  />
-
-                  {/* Plus button with popover */}
-                  <div className="relative shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setIsPlusMenuOpen((prev) => !prev)}
-                      className="size-8 rounded-full hover:bg-white/10 text-white/70 hover:text-white flex items-center justify-center transition cursor-pointer"
-                      title="Add files, skills, plugins (⌘U)"
-                    >
-                      <Plus className="size-4" />
-                    </button>
-
-                    <ComposerPlusMenu
-                      isOpen={isPlusMenuOpen}
-                      onClose={() => setIsPlusMenuOpen(false)}
-                      onAddFilesOrPhotos={handleTriggerFileInput}
-                      onOpenSkills={() => {
-                        onShowToast?.('Mở danh mục Skills');
-                        handleOpenTab('tools');
-                      }}
-                      onAddConnector={() => {
-                        onShowToast?.('Mở MCP Connectors');
-                        handleOpenTab('tools');
-                      }}
-                      onAddPlugins={() => {
-                        onShowToast?.('Mở Plugins');
-                        handleOpenTab('tools');
-                      }}
-                      position="top"
-                    />
-                  </div>
-
-                  {/* Input / Textarea */}
-                  <textarea
-                    ref={textareaRef}
-                    rows={1}
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={
-                      liveMessage
-                        ? 'Agent is working… Type guidance here to steer agent in-flight (or press Stop/Esc)...'
-                        : composerMode === 'chat' && !activeSession.taskId
-                        ? 'Ask Custos...'
-                        : 'Ask Custos or assign task...'
-                    }
-                    className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-white placeholder-white/40 text-[13.5px] resize-none leading-relaxed py-1.5 max-h-32 min-h-[28px]"
-                  />
-
-                  {/* Right Controls: Model Selector, Mic, and Blue Up-Arrow Send Button */}
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {activeSession.nativeHarnessId ? (
-                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-white/80">
-                        {activeSession.nativeHarnessId}
-                      </span>
-                    ) : (
-                      <ModelSelector
-                        currentModel={activeSession?.model || selectedModel}
-                        onSelectModel={handleSelectModel}
-                      />
-                    )}
-
-                    <button
-                      type="button"
-                      className="size-8 rounded-full hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition cursor-pointer"
-                      title="Voice input"
-                    >
-                      <Mic className="size-4" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (liveMessage) {
-                          if (inputText.trim()) {
-                            handleSteer();
-                          } else if (liveMessage.runId) {
-                            void handleStopRun(liveMessage.runId);
-                          }
-                        } else {
-                          handleSend();
-                        }
-                      }}
-                      disabled={!liveMessage && (!inputText.trim() && attachedFiles.length === 0)}
-                      aria-label={
-                        liveMessage
-                          ? inputText.trim()
-                            ? 'Queue guidance for next turn'
-                            : 'Stop response'
-                          : 'Send message'
-                      }
-                      title={
-                        liveMessage
-                          ? inputText.trim()
-                            ? 'Queue guidance for next turn'
-                            : 'Stop response'
-                          : 'Send message (Enter)'
-                      }
-                      className={`size-8 rounded-full flex items-center justify-center transition shadow-sm cursor-pointer ${
-                        liveMessage
-                          ? inputText.trim()
-                            ? 'bg-amber-500 text-black hover:bg-amber-400'
-                            : 'bg-rose-500 text-white hover:bg-rose-600'
-                          : inputText.trim() || attachedFiles.length > 0
-                          ? 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white'
-                          : 'bg-white/10 text-white/30 cursor-not-allowed'
-                      }`}
-                    >
-                      {liveMessage ? (
-                        inputText.trim() ? (
-                          <Compass className="size-4 animate-spin-slow" aria-hidden="true" />
-                        ) : (
-                          <StopIcon className="size-3.5 fill-current" aria-hidden="true" />
-                        )
-                      ) : (
-                        <ArrowUp className="size-4" aria-hidden="true" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* EDGE REVEAL DRAG HANDLE (When pane is collapsed, drag left to reveal) */}
-          {!isWebTabOpen && (
-            <div
-              className="absolute right-0 inset-y-0 w-3.5 z-30 cursor-col-resize group flex items-center justify-end select-none"
-              onMouseDown={handleStartResizeColumn2}
-              title="Kéo sang trái hoặc click vào tab trên menu để mở lại khung tài nguyên"
-            >
-              <div className="w-1 h-16 bg-white/20 rounded-l group-hover:bg-workbench-accent group-hover:w-1.5 transition-all shadow-sm" />
-            </div>
-          )}
-
-          {/* COLUMN 2: RIGHT RESOURCE CANVAS & TABBED CONTAINER */}
-          {isWebTabOpen && (
-            <div
-              className="h-full shrink-0 bg-surface-0 relative z-20 flex flex-col overflow-hidden"
-              style={{
-                width: isWebTabExpanded ? '100%' : `${column2Width}px`
+        {/* Central Workspace Canvas: Tiling Canvas containing all Panes (Chat, Tasks, Terminal, Editor, Research) */}
+        <div ref={containerRef} className="flex-1 flex flex-col overflow-hidden min-w-0 relative bg-canvas">
+          <div className="flex-1 min-h-0 overflow-hidden relative">
+            <OrcaTabbedContainer
+              resourceTabs={resourceTabs}
+              isPaneOpen={true}
+              session={activeSession}
+              onSendMessage={onSendMessage}
+              boundTask={boundTask}
+              boundWorkspace={boundWorkspace}
+              taskAttentionCount={taskAttentionCount}
+              onAcceptAndRun={onAcceptAndRun}
+              onRejectDiff={onRejectDiff}
+              onCopyDiff={onCopyDiff}
+              onShowToast={onShowToast}
+              isExpanded={isWebTabExpanded}
+              onToggleExpand={onToggleExpandWebTab}
+              mode={mode}
+              splitPercent={splitPercent}
+              onOpenTab={handleOpenTab}
+              onOpenResourcePicker={handleOpenResourcePicker}
+              onAskAgent={handleResourceAskAgent}
+              onHandoffToCoding={async (_claims, result) => {
+                const targetId = result.task_ids[0];
+                if (!targetId) { onShowToast?.('The handoff returned no Coding Task.'); return; }
+                try {
+                  await refreshTasks();
+                  if (result.workspace_id) setActiveWorkspaceId(result.workspace_id);
+                  onSwitchMode('engineering');
+                  onSelectTask(targetId);
+                } catch (error) { onShowToast?.(`Handoff created Task ${targetId}; could not open it: ${String(error)}`); }
               }}
-            >
-              {/* Continuous Active Drag Handle Splitter (Aligned with TopBar Divider) */}
-              {!isWebTabExpanded && (
-                <div
-                  className="absolute left-0 inset-y-0 w-3 -ml-1.5 cursor-col-resize z-30 group flex items-center justify-center select-none"
-                  onMouseDown={handleStartResizeColumn2}
-                  onDoubleClick={handleResetColumn2Width}
-                  title="Drag to resize pane (double click to reset)"
-                >
-                  <div
-                    className={`w-px h-full transition-colors ${
-                      isResizingColumn ? 'bg-workbench-accent' : 'bg-white/10 group-hover:bg-workbench-accent'
-                    }`}
-                  />
-                </div>
-              )}
-              <div className="flex-1 min-h-0 overflow-hidden relative">
-                <OrcaTabbedContainer
-                  resourceTabs={resourceTabs}
-                  isPaneOpen={Boolean(isWebTabOpen)}
-                  session={activeSession}
-                  onAcceptAndRun={onAcceptAndRun}
-                  onRejectDiff={onRejectDiff}
-                  onCopyDiff={onCopyDiff}
-                  onShowToast={onShowToast}
-                  isExpanded={isWebTabExpanded}
-                  onToggleExpand={onToggleExpandWebTab}
-                  mode={mode}
-                  splitPercent={splitPercent}
-                  onOpenTab={handleOpenTab}
-                  onOpenResourcePicker={handleOpenResourcePicker}
-                  onAskAgent={handleResourceAskAgent}
-                  activeWorkspaceId={activeWorkspaceId}
-                  onSelectWorkspace={setActiveWorkspaceId}
-                  activeWorkspace={activeWorkspace}
-                  workspaces={workspaces}
-                />
-              </div>
-              <TabQuickLaunchMenu
-                isOpen={isResourcePickerOpen}
-                onClose={() => setIsResourcePickerOpen(false)}
-                pickerResources={pickerResources}
-                onOpenResource={(resId) => {
-                  handleOpenTab(resId, undefined, undefined, pickerTargetPane);
-                  setIsResourcePickerOpen(false);
-                }}
-                onLaunchAgent={(harness) => {
-                  handleLaunchAgentTab(harness, pickerTargetPane);
-                }}
-                activeWorkspaceTitle={activeWorkspace?.name || activeWorkspace?.id}
-                mode={mode}
-              />
-            </div>
-          )}
-
-          {/* FLOATING ACTIVITY DOCK (Only visible when tab canvas is maximized) */}
-          {isWebTabExpanded && (
-            <JobActivityDock
-              onRestoreSplit={onToggleExpandWebTab}
-              onOpenKanban={() => handleOpenTab('kanban')}
-              lensBadge={lensMeta.badge}
-              lensColor={lensMeta.activeColor}
+              activeWorkspaceId={activeWorkspaceId}
+              onSelectWorkspace={setActiveWorkspaceId}
+              activeWorkspace={activeWorkspace}
+              workspaces={workspaces}
+              tasks={workbenchTasks}
+              allSessions={allSessions}
+              selectedTaskId={selectedTaskId}
+              onSelectTask={(id) => {
+                if (id) {
+                  handleSelectTaskWithScreen(id);
+                } else {
+                  onClearTask();
+                }
+              }}
+              onOpenSession={(sessionId) => {
+                handleSelectSessionWithScreen(sessionId);
+              }}
+              onNewSessionForTask={taskId => { void onNewSessionForTask(taskId); }}
+              onCreateTask={createTask}
+              onAdvanceStatus={async (taskId, status) => {
+                await advanceTask(taskId, status);
+              }}
+              onCompleteTask={async (taskId, summary) => {
+                await completeTask(taskId, summary);
+              }}
+              onCancelTask={async (taskId, reason) => {
+                await cancelTask(taskId, reason);
+              }}
+              onRefreshTasks={refreshTasks}
             />
-          )}
+          </div>
+          <TabQuickLaunchMenu
+            isOpen={isResourcePickerOpen}
+            onClose={() => {
+              setIsResourcePickerOpen(false);
+              setPickerAnchor(null);
+            }}
+            anchor={pickerAnchor}
+            pickerResources={pickerResources}
+            onOpenResource={(resId) => {
+              handleOpenTab(resId, undefined, undefined, pickerTargetPane);
+              setIsResourcePickerOpen(false);
+              setPickerAnchor(null);
+            }}
+            onLaunchAgent={(harness) => {
+              handleLaunchAgentTab(harness, pickerTargetPane);
+              setPickerAnchor(null);
+            }}
+            activeWorkspaceTitle={activeWorkspace?.name || activeWorkspace?.id}
+            mode={mode}
+          />
         </div>
+        <RightSidebar
+          isOpen={isInspectorOpen}
+          onClose={() => setIsInspectorOpen(false)}
+          activeWorkspace={inspectedWorkspace}
+          activeSession={inspectedSession}
+          activeTask={inspectedTask}
+          activeTab={inspectedTab}
+          onOpenTab={handleOpenTab}
+          mode={mode}
+          sessions={sessions}
+          allSessions={allSessions}
+          activeSessionId={activeSessionId}
+          onSelectSession={handleSelectSessionWithScreen}
+          onNewSession={handleNewSession}
+          onDeleteSession={onDeleteConversation}
+          tasks={workbenchTasks}
+          selectedTaskId={selectedTaskId}
+          onSelectTask={handleSelectTaskWithScreen}
+          onRequestCreateTask={() => {
+            setCreateTaskPrefill({
+              workspaceId: activeWorkspaceId,
+              packId: mode === 'engineering' ? 'code' : mode === 'research' ? 'research' : 'copilot',
+            });
+            setIsGlobalCreateTaskOpen(true);
+          }}
+        />
       </div>
+
 
       {/* ── 5. MODALS & POPUPS ── */}
       {/* Command & Jump Palette (Cmd+K / Cmd+P) */}
@@ -1292,17 +812,6 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
         initialSessionId={createTaskPrefill.sessionId}
         initialPackId={createTaskPrefill.packId}
       />
-
-      {/* Hidden File Input for Attachments (⌘U) */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileSelect}
-        multiple
-        className="hidden"
-        aria-hidden="true"
-      />
-
     </div>
   );
 };

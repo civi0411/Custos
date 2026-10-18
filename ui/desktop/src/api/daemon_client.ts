@@ -12,6 +12,7 @@ import {
   ExecutionWorkspace,
   CreateWorkspaceParams,
   WorkspaceDetectionResult,
+  GitHubAuthStatusResponse,
   CapabilityDescriptor,
   DirtyManifest,
   SpawnTerminalParams,
@@ -105,6 +106,23 @@ const mapKeysDeep = (value: unknown, transform: (key: string) => string): any =>
 
 const fromDaemon = <T,>(value: unknown): T => mapKeysDeep(value, camelKey) as T;
 const toDaemon = (value: unknown): Record<string, any> => mapKeysDeep(value, snakeKey);
+export function annotationFromWire(value: unknown): AnnotationRecord {
+  const normalized = fromDaemon<AnnotationRecord>(value);
+  const created = normalized.createdAt as unknown;
+  return { ...normalized, createdAt: typeof created === 'string' ? Date.parse(created) : Number(created) };
+}
+export function annotationToWire(annotation: AnnotationRecord): Record<string, unknown> {
+  if (!Number.isFinite(annotation.createdAt)) throw new Error('Annotation timestamp is invalid');
+  return { ...toDaemon(annotation), created_at: new Date(annotation.createdAt).toISOString() };
+}
+
+
+export function normalizeWorkspaceFile(wire: WorkspaceFileContent): WorkspaceFileContent {
+  return { ...wire, workspace_id: wire.workspace_id ?? wire.workspaceId ?? '',
+    is_binary: wire.is_binary ?? wire.isBinary ?? false,
+    size_bytes: wire.size_bytes ?? wire.sizeBytes ?? 0,
+    line_count: wire.line_count ?? wire.lineCount ?? 0 };
+}
 
 const normalizeWorkspace = (wire: any): ExecutionWorkspace => {
   const failure = wire.status && typeof wire.status === 'object' ? wire.status.setup_failed : null;
@@ -150,12 +168,18 @@ export class DaemonClient {
 
   private async resolveHttpEndpoint(): Promise<string> {
     if (this.isTauri) {
-      const endpoint = await invoke<string>('custos_http_endpoint');
-      const parsed = new URL(endpoint);
-      if (parsed.protocol !== 'http:' || parsed.hostname !== '127.0.0.1') throw new Error('Invalid daemon HTTP endpoint');
-      this.baseUrl = endpoint;
+      try {
+        const endpoint = await invoke<string>('custos_http_endpoint');
+        const parsed = new URL(endpoint);
+        if (parsed.protocol !== 'http:' || parsed.hostname !== '127.0.0.1') throw new Error('Invalid daemon HTTP endpoint');
+        this.baseUrl = endpoint;
+      } catch {
+        if (!this.baseUrl) {
+          this.baseUrl = 'http://127.0.0.1:3000';
+        }
+      }
     }
-    return this.baseUrl;
+    return this.baseUrl || 'http://127.0.0.1:3000';
   }
 
   async watchRun(session: string, run: string, update: (snapshot: import('../types/domain').LiveRunSnapshot) => void, signal: AbortSignal): Promise<void> {
@@ -241,6 +265,25 @@ export class DaemonClient {
     return this.request('v1.providers.usage', { include_quota: includeQuota });
   }
 
+  async getSystemMetrics(): Promise<{
+    memory_resident_mb: number;
+    active_runs: number;
+    active_ports: number[];
+    caffeinate: {
+      mode: 'off' | 'agent' | 'always';
+      active: boolean;
+    };
+  }> {
+    return this.request('v1.system.metrics');
+  }
+
+  async setCaffeinate(mode: 'off' | 'agent' | 'always'): Promise<{
+    mode: 'off' | 'agent' | 'always';
+    active: boolean;
+  }> {
+    return this.request('v1.system.caffeinate', { mode });
+  }
+
   async checkHealth(): Promise<boolean> {
     try {
       const res = await fetch(`${await this.resolveHttpEndpoint()}/api/health`, { method: 'GET' });
@@ -264,12 +307,6 @@ export class DaemonClient {
       try {
         return await invoke<T>('custos_request', { method, params });
       } catch (err: any) {
-        // Application errors (credentials, oauth, model probe) should not be repeated over HTTP.
-        if (
-          method.startsWith('v1.providers.') ||
-          method.startsWith('v1.oauth.') ||
-          method === 'v1.models.probe'
-        ) throw err;
         console.warn(`[DaemonClient] Tauri invoke failed on ${method}, falling back to HTTP:`, err);
         return this.requestHttp<T>(method, params);
       }
@@ -503,10 +540,13 @@ export class DaemonClient {
     base_commit_hash?: string;
     harness_ids?: string[];
     setup_script?: string;
-  }): Promise<{ task_id: string; candidates: ExecutionWorkspace[] }> {
-    const raw = await this.request<{ task_id: string; candidates: unknown[] }>('v1.workspaces.candidates.spawn', params);
+    command_id?: string;
+  }): Promise<{ task_id: string; candidates: ExecutionWorkspace[]; partial: boolean; failed: { candidate_index: number; error: string }[] }> {
+    const raw = await this.request<{ task_id: string; candidates: unknown[]; partial?: boolean; failed?: { candidate_index: number; error: string }[] }>('v1.workspaces.candidates.spawn', params);
     return {
       task_id: raw.task_id,
+      partial: raw.partial === true,
+      failed: raw.failed || [],
       candidates: (raw.candidates || []).map(normalizeWorkspace),
     };
   }
@@ -541,6 +581,9 @@ export class DaemonClient {
     target_branch?: string;
     loser_workspace_ids?: string[];
     force_loser_cleanup?: boolean;
+    preview?: boolean;
+    expected_target_head?: string;
+    expected_winner_head?: string;
   }): Promise<{
     winner_workspace_id: string;
     winner_branch: string;
@@ -548,6 +591,9 @@ export class DaemonClient {
     is_stale_base: boolean;
     current_target_head?: string;
     winner_base_commit?: string;
+    winner_head?: string;
+    merge_status?: string;
+    preview?: boolean;
     merge_success: boolean;
     merge_detail: string;
     loser_cleanup: Array<{ workspace_id: string; success: boolean; error?: string }>;
@@ -643,11 +689,12 @@ export class DaemonClient {
   }
 
   async listResearchAnnotations(artifactId: string, version?: number): Promise<AnnotationRecord[]> {
-    return fromDaemon<AnnotationRecord[]>(await this.request<unknown>('v1.research.annotations.list', { artifact_id: artifactId, version }));
+    const records = await this.request<unknown[]>('v1.research.annotations.list', { artifact_id: artifactId, version });
+    return records.map(annotationFromWire);
   }
 
   async saveResearchAnnotation(annotation: AnnotationRecord): Promise<{ saved: boolean; id: string }> {
-    return this.request<{ saved: boolean; id: string }>('v1.research.annotations.save', toDaemon(annotation));
+    return this.request<{ saved: boolean; id: string }>('v1.research.annotations.save', annotationToWire(annotation));
   }
 
   // ---------------------------------------------------------
@@ -728,6 +775,18 @@ export class DaemonClient {
 
   async getOAuthStatus(): Promise<OAuthStatusResult> {
     return this.request<OAuthStatusResult>('v1.oauth.status', {});
+  }
+
+  async startGitHubLogin(): Promise<TerminalSession> {
+    return fromDaemon<TerminalSession>(await this.request<unknown>('v1.github.login', {}));
+  }
+
+  async getGitHubAuthStatus(): Promise<GitHubAuthStatusResponse> {
+    return this.request<GitHubAuthStatusResponse>('v1.github.auth_status', {});
+  }
+
+  async getGitHubViewer(): Promise<any> {
+    return this.request('v1.github.viewer', {});
   }
 
 
@@ -1004,8 +1063,8 @@ export class DaemonClient {
     path: string,
     maxBytes?: number
   ): Promise<WorkspaceFileContent> {
-    return fromDaemon<WorkspaceFileContent>(
-      await this.request<unknown>('v1.workspace.files.read', {
+    return normalizeWorkspaceFile(
+      await this.request<WorkspaceFileContent>('v1.workspace.files.read', {
         workspace_id: workspaceId,
         path,
         max_bytes: maxBytes,
@@ -1014,8 +1073,8 @@ export class DaemonClient {
   }
 
   async writeWorkspaceFile(params: WriteWorkspaceFileParams): Promise<WorkspaceFileContent> {
-    return fromDaemon<WorkspaceFileContent>(
-      await this.request<unknown>('v1.workspace.files.write', toDaemon(params))
+    return normalizeWorkspaceFile(
+      await this.request<WorkspaceFileContent>('v1.workspace.files.write', toDaemon(params))
     );
   }
 
@@ -1072,6 +1131,16 @@ export class DaemonClient {
     });
   }
 
+  async commitWorkspace(
+    workspaceId: string,
+    message: string
+  ): Promise<{ committed: boolean; output: string }> {
+    return this.request<{ committed: boolean; output: string }>('v1.workspace.git.commit', {
+      workspace_id: workspaceId,
+      message,
+    });
+  }
+
   async listHarnesses(): Promise<HarnessDescriptor[]> {
     return this.request<HarnessDescriptor[]>('v1.harness.list', {});
   }
@@ -1109,10 +1178,9 @@ export class DaemonClient {
     return this.request<ArtifactSummary[]>('v1.artifacts.list');
   }
 
-  async getArtifact(path: string): Promise<ArtifactDetailResponse> {
-    return this.request<ArtifactDetailResponse>('v1.artifacts.get', {
-      artifact_path: path,
-    });
+  async getArtifact(path: string, workspaceId?: string): Promise<ArtifactDetailResponse> {
+    const detail = await this.request<ArtifactDetailResponse>('v1.artifacts.get', { artifact_path: path, workspace_id: workspaceId });
+    return { ...detail, annotations: (detail.annotations || []).map(annotationFromWire) };
   }
 
   async getArtifactLineageGraph(path?: string): Promise<ArtifactLineageGraph> {

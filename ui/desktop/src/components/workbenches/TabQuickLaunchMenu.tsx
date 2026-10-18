@@ -17,6 +17,7 @@ export interface TabQuickLaunchMenuProps {
   onLaunchAgent: (harness: HarnessDescriptor) => void;
   activeWorkspaceTitle?: string;
   mode?: import('@/components/shell/AppHeader').ActiveWorkbench;
+  anchor?: { top: number; left: number } | null;
 }
 
 export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
@@ -27,6 +28,7 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
   onLaunchAgent,
   activeWorkspaceTitle,
   mode,
+  anchor,
 }) => {
   const isEngineering = mode === 'engineering';
   const [harnesses, setHarnesses] = useState<HarnessDescriptor[]>([]);
@@ -105,41 +107,144 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
     [filteredHarnesses]
   );
 
-  const filteredResources = useMemo(() => {
-    const list = isEngineering
-      ? pickerResources.filter((r) => r.id !== 'agents')
-      : pickerResources.filter((r) => r.id !== 'agents');
-    if (!searchQuery.trim()) return list;
-    const query = searchQuery.toLowerCase();
-    return list.filter(
-      (r) =>
-        r.title.toLowerCase().includes(query) ||
-        r.id.toLowerCase().includes(query) ||
-        r.description.toLowerCase().includes(query)
+  // Section partitioning per workbench mode
+  const { section1Title, section2Title, section1Resources, section2Resources } = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const matchesSearch = (r?: ResourceDefinition): r is ResourceDefinition =>
+      Boolean(
+        r &&
+          (!query ||
+            r.title.toLowerCase().includes(query) ||
+            r.id.toLowerCase().includes(query) ||
+            r.description.toLowerCase().includes(query))
+      );
+
+    if (mode === 'research') {
+      const sec1Ids: OrcaTabId[] = ['literature', 'lab', 'findings', 'artifacts'];
+      const sec2Ids: OrcaTabId[] = ['conversation'];
+
+      const sec1 = sec1Ids
+        .map((id) => pickerResources.find((r) => r.id === id))
+        .filter(matchesSearch);
+
+      const sec2 = sec2Ids
+        .map((id) => pickerResources.find((r) => r.id === id))
+        .filter(matchesSearch);
+
+      return {
+        section1Title: 'Research Surfaces',
+        section2Title: 'Scientific Dialogue',
+        section1Resources: sec1,
+        section2Resources: sec2,
+      };
+    }
+
+    if (mode === 'copilot') {
+      const sec1Ids: OrcaTabId[] = ['tasks', 'drafts'];
+      const sec2Ids: OrcaTabId[] = ['conversation'];
+
+      const sec1 = sec1Ids
+        .map((id) => pickerResources.find((r) => r.id === id))
+        .filter(matchesSearch);
+
+      const sec2 = sec2Ids
+        .map((id) => pickerResources.find((r) => r.id === id))
+        .filter(matchesSearch);
+
+      return {
+        section1Title: 'Executive Workflows',
+        section2Title: 'Assistant Dialogue',
+        section1Resources: sec1,
+        section2Resources: sec2,
+      };
+    }
+
+    // Default: Engineering
+    const engIds: OrcaTabId[] = ['terminal', 'files', 'worktrees', 'conversation'];
+    const engResources = engIds
+      .map((id) => pickerResources.find((r) => r.id === id))
+      .filter(matchesSearch);
+
+    return {
+      section1Title: 'Coding Agents',
+      section2Title: 'Engineering Surfaces',
+      section1Resources: [], // Harnesses are rendered in Section 1
+      section2Resources: engResources,
+    };
+  }, [pickerResources, searchQuery, mode]);
+
+  const menuTitle = useMemo(() => {
+    if (mode === 'research') return 'Research Surfaces';
+    if (mode === 'copilot') return 'Copilot Surfaces';
+    return 'Engineering Surfaces';
+  }, [mode]);
+
+  const searchPlaceholder = useMemo(() => {
+    if (mode === 'research') return 'Search lab, sources, findings, methods…';
+    if (mode === 'copilot') return 'Search tasks, drafts, calendar, outbox…';
+    return 'Search agents, files, terminal…';
+  }, [mode]);
+
+  const footerText = useMemo(() => {
+    if (mode === 'research') return 'Scientific tools execute in your local Python/R environment';
+    if (mode === 'copilot') return 'Executive surfaces enforce human-in-the-loop review';
+    return 'Each launched agent or tool runs in its own tab';
+  }, [mode]);
+
+  const renderResourceButton = (resource: ResourceDefinition) => {
+    const Icon = resource.icon;
+    return (
+      <button
+        key={resource.id}
+        type="button"
+        onClick={() => onOpenResource(resource.id)}
+        className="group flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-surface-2 transition border border-transparent hover:border-border-default/50 cursor-pointer"
+        title={resource.reason || resource.description}
+      >
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="p-1 rounded-md bg-surface-2/80 group-hover:bg-surface-1 transition shrink-0">
+            <Icon className="w-3.5 h-3.5 text-fg-muted group-hover:text-fg-editor" />
+          </div>
+          <span className="text-xs font-medium text-fg-editor truncate flex-1">
+            {resource.title}
+          </span>
+          {resource.status !== 'available' && (
+            <span className="text-[9px] px-1 rounded bg-amber-500/10 text-amber-400 shrink-0">
+              {resource.status === 'degraded' ? 'Limited' : 'Unavailable'}
+            </span>
+          )}
+        </div>
+        <Plus className="w-3 h-3 text-fg-muted opacity-0 group-hover:opacity-100 transition shrink-0" />
+      </button>
     );
-  }, [pickerResources, searchQuery, isEngineering]);
+  };
 
   if (!isOpen) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-end p-4 pt-12 bg-black/30 backdrop-blur-xs"
+      className="fixed inset-0 z-50 bg-black/25 backdrop-blur-[2px]"
       onClick={onClose}
     >
       <div
         role="dialog"
-        aria-label="New Tab & Agent Quick Launch"
-        className="w-[360px] max-h-[85vh] flex flex-col rounded-xl border border-border-default bg-surface-1 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100"
+        aria-label={menuTitle}
+        style={anchor ? {
+          position: 'fixed',
+          top: `${anchor.top}px`,
+          left: `${Math.max(12, Math.min(anchor.left, window.innerWidth - 308))}px`,
+        } : undefined}
+        className={`w-[296px] max-h-[75vh] flex flex-col rounded-xl border border-white/12 bg-surface-1/95 backdrop-blur-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${!anchor ? 'fixed right-4 top-12' : ''}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header & Search */}
-        <div className="p-3 border-b border-border-default bg-surface-2/40 shrink-0">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold tracking-wider uppercase text-fg-muted">
-              Launch Agent / New Tab
+        <div className="p-2.5 pb-2 border-b border-border-default/60 bg-surface-2/40 shrink-0">
+          <div className="flex items-center justify-between mb-1.5 px-0.5">
+            <span className="text-[10px] font-semibold tracking-wider uppercase text-fg-muted">
+              {menuTitle}
             </span>
             {activeWorkspaceTitle && (
-              <span className="text-[10px] text-fg-muted truncate max-w-[150px]">
+              <span className="text-[10px] text-fg-muted/70 truncate max-w-[120px]">
                 {activeWorkspaceTitle}
               </span>
             )}
@@ -151,20 +256,20 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search coding agents or resources..."
-              className="w-full h-8 pl-8 pr-3 text-xs rounded-lg border border-border-default bg-surface-1 text-fg-editor placeholder:text-fg-muted/60 focus:outline-hidden focus:border-focus focus:ring-1 focus:ring-focus"
+              placeholder={searchPlaceholder}
+              className="w-full h-7 pl-8 pr-3 text-xs rounded-lg border border-border-default/70 bg-surface-1 text-fg-editor placeholder:text-fg-muted/50 focus:outline-hidden focus:border-focus"
             />
           </div>
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-4 no-scrollbar">
-          {/* Section 1: Detected Coding Agents (Only in Engineering Workbench) */}
-          {isEngineering && (
+        <div className="flex-1 overflow-y-auto p-1.5 space-y-3 no-scrollbar">
+          {/* Section 1: Coding Agents (in Engineering) OR Domain Primary Runtimes (in Research / Copilot) */}
+          {isEngineering ? (
             <div>
-              <div className="flex items-center justify-between px-2 py-1 text-[11px] font-semibold text-fg-muted">
-                <span>Coding Agents (Parallel Tasks)</span>
-                <span className="text-[10px] text-emerald-400 font-mono">
+              <div className="flex items-center justify-between px-2 py-0.5 text-[10px] font-semibold text-fg-muted">
+                <span>{section1Title}</span>
+                <span className="text-[10px] text-white/80 font-mono">
                   {installedHarnesses.length} ready
                 </span>
               </div>
@@ -175,133 +280,98 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
                     key={harness.id}
                     type="button"
                     onClick={() => onLaunchAgent(harness)}
-                    className="group flex w-full items-center justify-between gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-surface-2 transition border border-transparent hover:border-border-default/60"
-                    title={`${harness.description} (CLI: ${harness.binary_path})`}
+                    className="group flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-surface-2 transition border border-transparent hover:border-border-default/50 cursor-pointer"
+                    title={harness.description}
                   >
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
                       <div className="p-1 rounded-md bg-surface-2/80 group-hover:bg-surface-1 transition shrink-0">
                         {getAgentIcon(harness.id)}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-medium text-fg-editor truncate">
-                            {harness.name}
-                          </span>
-                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium shrink-0">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            Ready
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-fg-muted truncate">
-                          {harness.description}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition">
-                      <span className="text-[10px] text-fg-muted group-hover:text-fg-editor font-medium">
-                        Launch Tab
+                      <span className="text-xs font-medium text-fg-editor truncate flex-1">
+                        {harness.name}
                       </span>
-                      <Plus className="w-3 h-3 text-fg-muted group-hover:text-fg-editor" />
+                      <span className="inline-flex items-center gap-1 text-[9px] text-white/70 font-medium shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />
+                        Ready
+                      </span>
                     </div>
+                    <Plus className="w-3 h-3 text-fg-muted opacity-0 group-hover:opacity-100 transition shrink-0" />
                   </button>
                 ))}
 
-                {harnessError && <p role="alert" className="px-2 py-2 text-xs text-rose-400">Could not detect coding agents: {harnessError}</p>}
+                {harnessError && <p role="alert" className="px-2 py-1 text-[11px] text-rose-400">Could not detect coding agents: {harnessError}</p>}
                 {installedHarnesses.length === 0 && !loading && !harnessError && (
-                  <div className="px-3 py-2 text-xs text-fg-muted italic">
-                    No installed coding agents found on PATH.
+                  <div className="px-3 py-1.5 text-xs text-fg-muted italic">
+                    No installed coding agents found.
                   </div>
                 )}
               </div>
 
               {/* Uninstalled / Not Detected Agents */}
               {uninstalledHarnesses.length > 0 && (
-                <details className="mt-2 group">
-                  <summary className="flex items-center justify-between px-2 py-1 text-[10px] text-fg-muted cursor-pointer hover:text-fg-editor select-none">
-                    <span>Other Agents ({uninstalledHarnesses.length} uninstalled)</span>
+                <details className="mt-1 group">
+                  <summary className="flex items-center justify-between px-2 py-0.5 text-[10px] text-fg-muted cursor-pointer hover:text-fg-editor select-none">
+                    <span>Other ({uninstalledHarnesses.length})</span>
                     <ChevronRight className="w-3 h-3 transition group-open:rotate-90" />
                   </summary>
-                  <div className="space-y-0.5 mt-1 pt-1 border-t border-border-default/40">
+                  <div className="space-y-0.5 mt-1 pt-1 border-t border-border-default/30">
                     {uninstalledHarnesses.map((harness) => (
                       <div
                         key={harness.id}
-                        className="flex w-full items-center justify-between gap-2.5 rounded-lg px-2.5 py-1.5 opacity-60 hover:opacity-100 transition hover:bg-surface-2/50"
-                        title={`Command '${harness.binary_path}' not found in PATH`}
+                        className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1 opacity-50 text-xs"
+                        title={`Command '${harness.binary_path}' not found`}
                       >
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          <div className="p-1 rounded-md bg-surface-2 shrink-0">
-                            {getAgentIcon(harness.id)}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <span className="text-xs text-fg-editor truncate block">
-                              {harness.name}
-                            </span>
-                            <span className="text-[10px] text-fg-muted">
-                              {harness.binary_path} CLI not found
-                            </span>
-                          </div>
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          {getAgentIcon(harness.id)}
+                          <span className="text-xs text-fg-editor truncate">{harness.name}</span>
                         </div>
-                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-surface-2 text-fg-muted shrink-0">
-                          not installed
-                        </span>
+                        <span className="text-[9px] font-mono text-fg-muted">not installed</span>
                       </div>
                     ))}
                   </div>
                 </details>
               )}
             </div>
+          ) : (
+            section1Resources.length > 0 && (
+              <div>
+                <div className="px-2 py-0.5 text-[10px] font-semibold text-fg-muted">
+                  {section1Title}
+                </div>
+                <div className="space-y-0.5 mt-1">
+                  {section1Resources.map(renderResourceButton)}
+                </div>
+              </div>
+            )
           )}
 
-          {/* Section 2: Workspace Resources */}
-          <div>
-            <div className="px-2 py-1 text-[11px] font-semibold text-fg-muted">
-              Workspace Surfaces & Views
+          {/* Section 2: Secondary Runtimes & Workspace Tools */}
+          {section2Resources.length > 0 && (
+            <div>
+              <div className="px-2 py-0.5 text-[10px] font-semibold text-fg-muted">
+                {section2Title}
+              </div>
+              <div className="space-y-0.5 mt-1">
+                {section2Resources.map(renderResourceButton)}
+              </div>
             </div>
-            <div className="space-y-0.5 mt-1">
-              {filteredResources.map((resource) => {
-                const Icon = resource.icon;
-                return (
-                  <button
-                    key={resource.id}
-                    type="button"
-                    onClick={() => onOpenResource(resource.id)}
-                    className="group flex w-full items-center justify-between gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-surface-2 transition border border-transparent hover:border-border-default/60"
-                    title={resource.reason || resource.description}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <div className="p-1 rounded-md bg-surface-2/80 group-hover:bg-surface-1 transition shrink-0">
-                        <Icon className="w-3.5 h-3.5 text-fg-muted group-hover:text-fg-editor" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-medium text-fg-editor truncate">
-                            {resource.title}
-                          </span>
-                          {resource.status !== 'available' && (
-                            <span className="text-[9px] px-1 rounded bg-amber-500/10 text-amber-400 shrink-0">
-                              {resource.status === 'degraded' ? 'Limited' : 'Unavailable'}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-fg-muted truncate">
-                          {resource.description}
-                        </p>
-                      </div>
-                    </div>
+          )}
 
-                    <ChevronRight className="w-3.5 h-3.5 text-fg-muted opacity-0 group-hover:opacity-100 transition shrink-0" />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {/* Fallback if search yields zero results */}
+          {searchQuery.trim() &&
+            (!isEngineering || installedHarnesses.length === 0) &&
+            section1Resources.length === 0 &&
+            section2Resources.length === 0 && (
+              <div className="px-3 py-6 text-center text-xs text-fg-muted italic">
+                No matching surfaces found for "{searchQuery}".
+              </div>
+            )}
         </div>
 
         {/* Footer info */}
-        <div className="p-2.5 px-3 border-t border-border-default bg-surface-2/30 flex items-center justify-between text-[10px] text-fg-muted shrink-0">
-          <span>Each launched agent runs in its own tab</span>
-          <kbd className="px-1.5 py-0.5 rounded bg-surface-1 border border-border-default font-mono">
+        <div className="p-2 px-3 border-t border-border-default/60 bg-surface-2/20 flex items-center justify-between text-[10px] text-fg-muted shrink-0">
+          <span className="truncate pr-2 text-fg-muted/70">{footerText}</span>
+          <kbd className="px-1.5 py-0.5 rounded bg-surface-1 border border-border-default font-mono text-[9px] shrink-0">
             ESC
           </kbd>
         </div>

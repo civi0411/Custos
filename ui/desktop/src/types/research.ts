@@ -65,6 +65,23 @@ export interface EnvSnapshot {
   platform?: string;
 }
 
+export type CheckpointResumabilityLevel =
+  | 'export_only'
+  | 'warm_start'
+  | 'training_state_resume'
+  | 'validated_resume';
+
+export interface CheckpointRelayState {
+  latestObservedStep?: number;
+  latestLocalCheckpointStep?: number;
+  latestProtectedCheckpointStep?: number;
+  lastProtectedAt?: string;
+  resumabilityLevel?: CheckpointResumabilityLevel;
+  resumedFromCheckpointId?: string;
+  resumedFromAttemptId?: string;
+  outputNamespace?: string;
+}
+
 export interface ResearchExperimentRun {
   runId: string;
   sessionId: string;
@@ -82,6 +99,7 @@ export interface ResearchExperimentRun {
   logText?: string;
   codeFiles?: { path: string; hash: string }[];
   outputFiles?: { path: string; hash: string; size: number }[];
+  checkpointRelay?: CheckpointRelayState;
   ts: number;
 }
 
@@ -101,6 +119,7 @@ export interface ArtifactLineageNode {
 export interface ArtifactVersion {
   label: string; // "v1", "v2"
   code: string;
+  contentAvailable?: boolean;
   executionLog?: string;
   environment?: string;
   reviewPassed?: boolean;

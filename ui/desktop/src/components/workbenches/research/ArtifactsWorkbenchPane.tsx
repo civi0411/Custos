@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   FileCode,
   GitBranch,
@@ -23,11 +23,13 @@ import { ArtifactInspector } from './ArtifactInspector';
 interface ArtifactsWorkbenchPaneProps {
   onShowToast?: (msg: string) => void;
   selectedArtifactPath?: string;
+  workspaceId?: string;
   onAskAgent?: (draft: string) => void;
 }
 
 export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
   onShowToast,
+  workspaceId,
   selectedArtifactPath: initialPath,
   onAskAgent,
 }) => {
@@ -45,42 +47,36 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
     setError(null);
     try {
       const list = await daemonClient.listArtifacts();
-      setArtifacts(list);
-      if (!selectedPath && list.length > 0) {
-        setSelectedPath(list[0].artifact_path || list[0].artifactPath || null);
+      const effective = Array.isArray(list) ? list : [];
+      setArtifacts(effective);
+      if (!selectedPath && effective.length > 0) {
+        setSelectedPath(effective[0].artifact_path || effective[0].artifactPath || null);
       }
     } catch (err: any) {
       setError(err?.message || String(err));
+      setArtifacts([]);
+      if (!selectedPath) setSelectedPath(null);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const fetchDetailAndGraph = async (path: string) => {
-    try {
-      const [detail, graph] = await Promise.all([
-        daemonClient.getArtifact(path),
-        daemonClient.getArtifactLineageGraph(path),
-      ]);
-      setArtifactDetail(detail);
-      setLineageGraph(graph);
-    } catch (err: any) {
-      onShowToast?.(`Failed to load artifact details: ${err?.message || err}`);
-    }
-  };
-
+  const requestEpoch = useRef(0);
+  useEffect(() => { void fetchArtifacts(); }, []);
   useEffect(() => {
-    fetchArtifacts();
-  }, []);
-
-  useEffect(() => {
-    if (selectedPath) {
-      fetchDetailAndGraph(selectedPath);
-    } else {
-      setArtifactDetail(null);
-      setLineageGraph(null);
-    }
-  }, [selectedPath]);
+    const epoch = ++requestEpoch.current;
+    setArtifactDetail(null); setLineageGraph(null); setError(null);
+    if (!selectedPath) return;
+    Promise.all([daemonClient.getArtifact(selectedPath, workspaceId), daemonClient.getArtifactLineageGraph(selectedPath)])
+      .then(([detail, graph]) => { if (epoch === requestEpoch.current) { setArtifactDetail(detail || null); setLineageGraph(graph || null); } })
+      .catch((reason) => {
+        if (epoch === requestEpoch.current) {
+          setError(String(reason));
+          onShowToast?.(`Artifact unavailable: ${String(reason)}`);
+        }
+      });
+    return () => { requestEpoch.current++; };
+  }, [selectedPath, workspaceId]);
 
   const filteredArtifacts = useMemo(() => {
     if (!searchQuery.trim()) return artifacts;
@@ -98,7 +94,8 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
     const path = artifactDetail.artifact_path || artifactDetail.artifactPath || 'artifact';
     const versions: ArtifactVersion[] = (artifactDetail.versions || []).map((v) => ({
       label: `v${v.version}`,
-      code: v.version === (artifactDetail.latest_version || artifactDetail.latestVersion) ? (artifactDetail.content || '') : '',
+      code: v.version === artifactDetail.content_version ? (artifactDetail.content || '') : '',
+      contentAvailable: v.version === artifactDetail.content_version,
       executionLog:
         v.produced_by_run_id || v.producedByRunId
           ? `Produced by run: ${v.produced_by_run_id || v.producedByRunId}`
@@ -118,6 +115,7 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
               {
                 label: 'v1',
                 code: artifactDetail.content || '',
+                contentAvailable: artifactDetail.content != null,
                 reviewPassed: undefined,
               },
             ],
@@ -145,10 +143,10 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
   return (
     <div className="flex h-full w-full flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
       {/* Clean 44px (h-11) Top Bar */}
-      <div className="flex h-11 flex-shrink-0 items-center justify-between border-b border-[var(--color-border-default)] px-3.5 bg-[var(--color-surface-1)]">
+      <div className="wb-pane-toolbar flex h-11 flex-shrink-0 items-center justify-between border-b border-[var(--color-border-default)] px-3.5 bg-[var(--color-surface-1)]">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <FileCode className="h-4 w-4 text-emerald-400" />
+            <FileCode className="h-4 w-4 text-white/70" />
             <span className="text-xs font-semibold text-[var(--color-editor-fg)]">
               Session Artifacts
             </span>
@@ -201,9 +199,9 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
       </div>
 
       {/* Main Workspace Layout */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="wb-split flex flex-1 overflow-hidden">
         {/* Left Sidebar: Artifacts Ledger */}
-        <div className="flex w-64 flex-shrink-0 flex-col border-r border-[var(--color-border-default)] bg-[var(--color-surface-1)]">
+        <div className="wb-master flex w-64 flex-shrink-0 flex-col border-r border-[var(--color-border-default)] bg-[var(--color-surface-1)]">
           <div className="border-b border-[var(--color-border-muted)] p-2.5">
             <div className="relative">
               <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-[var(--color-fg-muted)]" />
@@ -212,14 +210,14 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
                 placeholder="Search artifacts..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-canvas)] py-1 pl-8 pr-2.5 text-xs text-[var(--color-editor-fg)] placeholder:text-[var(--color-fg-subtle)] focus:border-emerald-500 focus:outline-none"
+                className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-canvas)] py-1 pl-8 pr-2.5 text-xs text-[var(--color-editor-fg)] placeholder:text-[var(--color-fg-subtle)] focus:border-white/20 focus:outline-none"
               />
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-2 space-y-1">
             {error && (
-              <div className="m-2 rounded-lg border border-red-500/20 bg-red-500/10 p-2.5 text-xs text-red-400">
+              <div className="m-2 rounded-lg border border-white/10 bg-white/[0.04] p-2.5 text-xs text-white/70">
                 <AlertCircle className="mb-1 h-3.5 w-3.5 inline mr-1" />
                 {error}
               </div>
@@ -248,16 +246,16 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
                   onClick={() => setSelectedPath(path)}
                   className={`w-full rounded-lg p-2.5 text-left transition border ${
                     isSelected
-                      ? 'border-emerald-500/30 bg-emerald-500/10 text-[var(--color-editor-fg)]'
+                      ? 'border-white/15 bg-white/[0.08] text-[var(--color-editor-fg)]'
                       : 'border-transparent hover:border-[var(--color-border-muted)] hover:bg-[var(--color-surface-2)] text-[var(--color-fg-muted)]'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-1.5">
                     <div className="flex items-center gap-1.5 truncate">
                       {isNote ? (
-                        <FileText className="h-3.5 w-3.5 text-indigo-400 flex-shrink-0" />
+                        <FileText className="h-3.5 w-3.5 text-white/60 flex-shrink-0" />
                       ) : (
-                        <FileCode className="h-3.5 w-3.5 text-emerald-400 flex-shrink-0" />
+                        <FileCode className="h-3.5 w-3.5 text-white/60 flex-shrink-0" />
                       )}
                       <span className="truncate text-xs font-medium text-[var(--color-editor-fg)]">
                         {path.split('/').pop() || path}
@@ -293,7 +291,11 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
         <div className="flex-1 overflow-hidden bg-[var(--color-canvas)]">
           {activeView === 'inspector' ? (
             inspectorData ? (
-              <ArtifactInspector data={inspectorData} onAskAgent={onAskAgent} />
+              <ArtifactInspector key={selectedPath} data={inspectorData} detail={artifactDetail || undefined} onAskAgent={onAskAgent} onSaveAnnotation={async annotation => {
+                await daemonClient.saveResearchAnnotation(annotation);
+                const annotations = await daemonClient.listResearchAnnotations(annotation.artifactPath);
+                setArtifactDetail(previous => previous ? { ...previous, annotations } : previous);
+              }} />
             ) : (
               <div className="flex h-full w-full flex-col items-center justify-center p-8 text-center">
                 <FileCode className="h-8 w-8 text-[var(--color-fg-muted)] opacity-50 mb-2" />
@@ -310,7 +312,7 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
             <div className="flex h-full w-full flex-col overflow-y-auto p-6">
               <div className="mb-4">
                 <h2 className="text-sm font-semibold text-[var(--color-editor-fg)] flex items-center gap-2">
-                  <GitBranch className="h-4 w-4 text-emerald-500" />
+                  <GitBranch className="h-4 w-4 text-white/70" />
                   Provenance & Lineage Graph
                 </h2>
                 <p className="text-xs text-[var(--color-fg-muted)] mt-0.5">
@@ -334,11 +336,11 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
                           <div className="flex items-center justify-between">
                             <span className="flex items-center gap-1.5 font-medium text-[var(--color-editor-fg)]">
                               {node.node_type === 'run' ? (
-                                <Terminal className="h-3.5 w-3.5 text-blue-400" />
+                                <Terminal className="h-3.5 w-3.5 text-white/60" />
                               ) : node.node_type === 'note' ? (
-                                <FileText className="h-3.5 w-3.5 text-indigo-400" />
+                                <FileText className="h-3.5 w-3.5 text-white/60" />
                               ) : (
-                                <FileCode className="h-3.5 w-3.5 text-emerald-400" />
+                                <FileCode className="h-3.5 w-3.5 text-white/60" />
                               )}
                               {node.label}
                             </span>
@@ -375,7 +377,7 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
                             <span className="font-mono text-[11px] text-[var(--color-editor-fg)]">
                               {edge.from}
                             </span>
-                            <ArrowRight className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                            <ArrowRight className="h-3.5 w-3.5 text-white/40 flex-shrink-0" />
                             <span className="font-mono text-[11px] text-[var(--color-editor-fg)]">
                               {edge.to}
                             </span>

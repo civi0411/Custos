@@ -1,496 +1,174 @@
-import React, { useEffect, useState } from 'react';
-import {
-  Play,
-  RotateCcw,
-  Square,
-  Plus,
-  Trash2,
-  ChevronUp,
-  ChevronDown,
-  Terminal,
-  Clock,
-  ShieldCheck,
-  AlertCircle,
-  Save,
-  RefreshCw,
-  FlaskConical,
-} from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Play, Square, Plus, Trash2, ChevronUp, ChevronDown, Save, RotateCcw, RefreshCw } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
-import { JobActionButton } from '@/components/common';
-import type {
-  NotebookCell,
-  NotebookKernelState,
-  NotebookCellType,
-  CellExecutionStatus,
-} from '@/types/domain';
+import type { NotebookCell, NotebookKernelState, ExecutionWorkspace } from '@/types/domain';
 import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
+import { MarkdownViewer } from '@/components/viewer/MarkdownViewer';
+import { WorkflowStarters } from './WorkflowStarters';
 
-interface NotebookWorkbenchPaneProps {
+export interface NotebookWorkbenchPaneProps {
   sessionId?: string;
+  toolbarNavigation?: React.ReactNode;
+  workspace?: ExecutionWorkspace | null;
   onAskAgent?: (draftText: string) => void;
   onShowToast?: (msg: string) => void;
   onOpenTab?: (id: OrcaTabId) => void;
 }
-
-export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({
-  sessionId = 'default-notebook-session',
-  onShowToast,
-  onOpenTab,
-}) => {
+// Presentation buffers only. Executed output and saved cells remain daemon-owned.
+const notebookEdits = new Map<string, NotebookCell[]>();
+export function editNotebookCell(cell: NotebookCell, source: string, cellType = cell.cell_type): NotebookCell {
+  return cell.source === source && cell.cell_type === cellType ? cell : { ...cell, source, cell_type: cellType, status: 'idle', execution_count: null,
+    stdout: null, stderr: null, output_image: null, wall_ms: null };
+}
+export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({ sessionId, workspace, onAskAgent, onShowToast, toolbarNavigation }) => {
   const [cells, setCells] = useState<NotebookCell[]>([]);
-  const [kernelState, setKernelState] = useState<NotebookKernelState | null>(null);
-  const [runningCellId, setRunningCellId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [kernel, setKernel] = useState<NotebookKernelState | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [running, setRunning] = useState<string | null>(null);
+  const [previewCellId, setPreviewCellId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const activeSessionId = sessionId || 'default-notebook-session';
-
-  const loadNotebook = async () => {
-    setIsLoading(true);
-    setError(null);
+  const [dirty, setDirty] = useState(false);
+  const generation = useRef(0);
+  const busy = useRef(false);
+  const key = sessionId || '';
+  const load = useCallback(async () => {
+    const epoch = ++generation.current;
+    if (!sessionId) {
+      setCells([]);
+      setKernel(null);
+      setDirty(false);
+      return;
+    }
+    setLoading(true); setError(null);
     try {
-      const [fetchedCells, status] = await Promise.all([
-        daemonClient.listNotebookCells(activeSessionId),
-        daemonClient.getNotebookKernelStatus(activeSessionId),
+      const [saved, state] = await Promise.all([
+        daemonClient.listNotebookCells(sessionId).catch(() => []),
+        daemonClient.getNotebookKernelStatus(sessionId).catch(() => null),
       ]);
-
-      setKernelState(status);
-
-      setCells(fetchedCells ?? []);
-    } catch (err: any) {
-      setError(err?.message || String(err));
-    } finally {
-      setIsLoading(false);
+      if (epoch !== generation.current) return;
+      const edits = notebookEdits.get(sessionId);
+      const effective = edits || (saved && saved.length > 0 ? saved : []);
+      setCells(effective);
+      setDirty(!!edits);
+      setKernel(state || null);
+    } catch (reason) {
+      if (epoch === generation.current) {
+        setCells([]);
+        setKernel(null);
+      }
     }
-  };
-
+    finally { if (epoch === generation.current) setLoading(false); }
+  }, [sessionId]);
+  useEffect(() => { void load(); return () => { generation.current++; }; }, [load]);
   useEffect(() => {
-    loadNotebook();
-  }, [activeSessionId]);
-
-  const saveCells = async (updatedCells: NotebookCell[]) => {
-    setIsSaving(true);
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+  const change = (next: NotebookCell[]) => {
+    const indexed = next.map((cell, index) => ({ ...cell, cell_index: index }));
+    notebookEdits.set(key, indexed); setCells(indexed); setDirty(true);
+  };
+  const save = async () => {
+    if (!sessionId) return false;
+    setSaving(true); setError(null);
+    try { await daemonClient.saveNotebookCells(sessionId, cells); notebookEdits.delete(key); setDirty(false); return true; }
+    catch (reason) { setError(String(reason)); return false; }
+    finally { setSaving(false); }
+  };
+  const add = (cellType: NotebookCell['cell_type'] = 'code') => {
+    if (!sessionId || busy.current) return;
+    change([...cells, { id: crypto.randomUUID(), session_id: sessionId, cell_index: cells.length, cell_type: cellType, source: '', execution_count: null, status: 'idle', epoch: kernel?.epoch || 0, updated_at: Math.floor(Date.now() / 1000) }]);
+  };
+  const run = async () => {
+    const cell = cells.find(item => item.id === previewCellId);
+    if (!sessionId || !workspace || !cell || cell.cell_type !== 'code' || busy.current) return;
+    busy.current = true; setPreviewCellId(null); setRunning(cell.id);
+    const epoch = generation.current;
     try {
-      await daemonClient.saveNotebookCells(activeSessionId, updatedCells);
-      onShowToast?.('Notebook saved');
-    } catch (err: any) {
-      setError(err?.message || String(err));
-    } finally {
-      setIsSaving(false);
-    }
+      if (!await save()) return;
+      const result = await daemonClient.executeNotebookCell({ session_id: sessionId, cell_id: cell.id, code: cell.source, workspace_id: workspace.id });
+      if (epoch !== generation.current) return;
+      setCells(previous => previous.map(item => item.id === cell.id && item.source === cell.source ? { ...item,
+        execution_count: result.execution_count, status: result.status, stdout: result.stdout, stderr: result.stderr,
+        output_image: result.output_image, wall_ms: result.wall_ms, epoch: result.epoch } : item));
+      setKernel(await daemonClient.getNotebookKernelStatus(sessionId));
+      onShowToast?.(`Cell ${result.status} · ${result.wall_ms} ms`);
+    } catch (reason) { if (epoch === generation.current) setError(String(reason)); }
+    finally { busy.current = false; if (epoch === generation.current) setRunning(null); }
   };
-
-  const handleCellSourceChange = (cellId: string, newSource: string) => {
-    setCells((prev) =>
-      prev.map((c) => (c.id === cellId ? { ...c, source: newSource } : c))
-    );
+  const reset = async () => {
+    if (!sessionId || running || saving) return;
+    try { setKernel(await daemonClient.resetNotebookKernel(sessionId)); setError(null); }
+    catch (reason) { setError(String(reason)); }
   };
-
-  const handleRunCell = async (cell: NotebookCell) => {
-    if (runningCellId) return;
-    setRunningCellId(cell.id);
-    setError(null);
-
-    setCells((prev) =>
-      prev.map((c) =>
-        c.id === cell.id ? { ...c, status: 'running' as CellExecutionStatus } : c
-      )
-    );
-
-    try {
-      const result = await daemonClient.executeNotebookCell({
-        session_id: activeSessionId,
-        cell_id: cell.id,
-        code: cell.source,
-      });
-
-      setCells((prev) =>
-        prev.map((c) => {
-          if (c.id === cell.id) {
-            return {
-              ...c,
-              status: result.status,
-              execution_count: result.execution_count,
-              stdout: result.stdout,
-              stderr: result.stderr,
-              output_image: result.output_image,
-              wall_ms: result.wall_ms,
-              epoch: result.epoch,
-            };
-          }
-          return c;
-        })
-      );
-
-      const status = await daemonClient.getNotebookKernelStatus(activeSessionId);
-      setKernelState(status);
-    } catch (err: any) {
-      setError(err?.message || String(err));
-      setCells((prev) =>
-        prev.map((c) =>
-          c.id === cell.id ? { ...c, status: 'error' as CellExecutionStatus, stderr: err?.message || String(err) } : c
-        )
-      );
-    } finally {
-      setRunningCellId(null);
-    }
-  };
-
-  const handleInterrupt = async () => {
-    try {
-      await daemonClient.interruptNotebookKernel(activeSessionId);
-      onShowToast?.('SIGINT signal sent to active kernel process');
-      const status = await daemonClient.getNotebookKernelStatus(activeSessionId);
-      setKernelState(status);
-    } catch (err: any) {
-      setError(err?.message || String(err));
-    }
-  };
-
-  const handleResetKernel = async () => {
-    try {
-      const status = await daemonClient.resetNotebookKernel(activeSessionId);
-      setKernelState(status);
-      onShowToast?.(`Kernel reset. New Epoch #${status.epoch} initialized.`);
-    } catch (err: any) {
-      setError(err?.message || String(err));
-    }
-  };
-
-  const addCell = (type: NotebookCellType = 'code', afterIndex?: number) => {
-    const newCell: NotebookCell = {
-      id: `cell_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      session_id: activeSessionId,
-      cell_type: type,
-      source: type === 'code' ? '# Code cell\n' : '### Markdown Note\n',
-      cell_index: afterIndex !== undefined ? afterIndex + 1 : cells.length,
-      execution_count: null,
-      status: 'idle',
-      stdout: null,
-      stderr: null,
-      output_image: null,
-      wall_ms: null,
-      epoch: kernelState?.epoch || 1,
-      updated_at: Math.floor(Date.now() / 1000),
-    };
-
-    let updated: NotebookCell[];
-    if (afterIndex !== undefined) {
-      updated = [...cells.slice(0, afterIndex + 1), newCell, ...cells.slice(afterIndex + 1)].map(
-        (c, idx) => ({ ...c, cell_index: idx })
-      );
-    } else {
-      updated = [...cells, newCell].map((c, idx) => ({ ...c, cell_index: idx }));
-    }
-
-    setCells(updated);
-    saveCells(updated);
-  };
-
-  const removeCell = (cellId: string) => {
-    const updated = cells.filter((c) => c.id !== cellId).map((c, idx) => ({ ...c, cell_index: idx }));
-    setCells(updated);
-    saveCells(updated);
-  };
-
-  const moveCell = (index: number, direction: 'up' | 'down') => {
-    if (direction === 'up' && index === 0) return;
-    if (direction === 'down' && index === cells.length - 1) return;
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    const reordered = [...cells];
-    const [moved] = reordered.splice(index, 1);
-    reordered.splice(targetIndex, 0, moved);
-    const updated = reordered.map((c, idx) => ({ ...c, cell_index: idx }));
-    setCells(updated);
-    saveCells(updated);
-  };
-
-  return (
-    <div className="flex h-full flex-col bg-[var(--color-canvas)] text-[var(--color-fg-default)]">
-      {/* Top Header / Kernel Status Bar */}
-      <div className="flex flex-wrap items-center justify-between border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] px-4 py-2.5">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Terminal className="h-4 w-4 text-[var(--color-fg-muted)]" />
-            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-fg-default)]">
-              Python Kernel
-            </span>
-          </div>
-
-          {/* Kernel Status Badge */}
-          <div className="flex items-center gap-1.5 rounded-full border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] px-2.5 py-0.5 text-xs">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                runningCellId
-                  ? 'animate-pulse bg-amber-400'
-                  : kernelState?.status === 'idle'
-                  ? 'bg-emerald-400'
-                  : 'bg-zinc-400'
-              }`}
-            />
-            <span className="font-mono text-[11px] text-[var(--color-fg-muted)]">
-              {runningCellId ? 'Busy' : kernelState?.status || 'Idle'}
-            </span>
-          </div>
-
-          {/* Epoch Pill */}
-          <div
-            className="flex items-center gap-1 rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-400"
-            title="Epoch isolates execution state across kernel resets"
-          >
-            <ShieldCheck className="h-3 w-3" />
-            <span>Epoch #{kernelState?.epoch ?? 1}</span>
-          </div>
-
-          {/* Python Version */}
-          {kernelState?.python_version && (
-            <span className="hidden font-mono text-[11px] text-[var(--color-fg-subtle)] sm:inline">
-              {kernelState.python_version}
-            </span>
-          )}
-        </div>
-
-        {/* Action Controls */}
-        <div className="flex items-center gap-2">
-          <JobActionButton
-            jobId="research__experiment_design"
-            label="Design Experiment"
-            icon={FlaskConical}
-            getInputs={() => {
-              if (cells.length === 0) return null;
-              const notebookContext = cells
-                .map((c) => `# Cell ${c.cell_index} (${c.cell_type})\n${c.source}`)
-                .join('\n\n');
-              return {
-                research_question: cells[0]?.source?.slice(0, 300) || 'Design automated experiment protocol',
-                constraints: 'Constrained to authorized Python kernel without unsanctioned network mutations',
-                notebook_context: notebookContext,
-              };
-            }}
-            sessionId={sessionId}
-            sourceTabId="experiments"
-            onNavigate={onOpenTab}
-            notReadyTooltip="Notebook has no cells to design experiment"
-            readyTooltip="Generate structured experiment protocol based on active notebook"
-            onShowToast={onShowToast}
-            variant="toolbar"
-            size="sm"
-          />
-
-          <button
-            onClick={handleInterrupt}
-            disabled={!runningCellId}
-            className="inline-flex items-center gap-1 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] px-2.5 py-1 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-amber-400 disabled:opacity-40"
-            title="Send SIGINT interrupt to kernel"
-          >
-            <Square className="h-3 w-3" />
-            <span>Interrupt</span>
-          </button>
-
-          <button
-            onClick={handleResetKernel}
-            className="inline-flex items-center gap-1 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] px-2.5 py-1 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-red-400"
-            title="Reset kernel environment and advance to new Epoch"
-          >
-            <RotateCcw className="h-3 w-3" />
-            <span>Reset (New Epoch)</span>
-          </button>
-
-          <button
-            onClick={() => saveCells(cells)}
-            disabled={isSaving}
-            className="inline-flex items-center gap-1 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] px-2.5 py-1 text-xs font-medium text-[var(--color-fg-muted)] transition-colors hover:bg-[var(--color-surface-3)] hover:text-[var(--color-fg-default)]"
-            title="Persist notebook cells"
-          >
-            <Save className="h-3 w-3" />
-            <span>{isSaving ? 'Saving...' : 'Save'}</span>
-          </button>
-
-          <button
-            onClick={() => addCell('code')}
-            className="inline-flex items-center gap-1 rounded bg-blue-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-500"
-          >
-            <Plus className="h-3 w-3" />
-            <span>Cell</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Global Error Banner */}
-      {error && (
-        <div className="flex items-center gap-2 border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-xs text-red-400">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <span className="flex-1 font-mono">{error}</span>
-          <button
-            onClick={() => setError(null)}
-            className="text-[11px] underline opacity-80 hover:opacity-100"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      {/* Notebook Scrollable Cells Area */}
-      <div className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
-        {isLoading && cells.length === 0 ? (
-          <div className="flex h-40 items-center justify-center text-xs text-[var(--color-fg-muted)]">
-            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-            Connecting to authorized kernel...
-          </div>
-        ) : cells.length === 0 ? (
-          <div className="flex h-40 flex-col items-center justify-center gap-3 text-center text-xs text-[var(--color-fg-muted)]">
-            <span>No notebook cells in this session.</span>
-            <button type="button" onClick={() => addCell('code')} className="rounded border border-[var(--color-border-default)] px-3 py-1.5 text-[var(--color-fg-default)] hover:bg-[var(--color-surface-2)]">
-              Add a code cell
+  const preview = cells.find(cell => cell.id === previewCellId);
+  const disabled = !sessionId || loading || saving || !!running;
+  return <div className="h-full flex flex-col min-h-0 bg-canvas text-fg-default">
+    <header className="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border-default text-xs">
+      {toolbarNavigation}
+      <span className="font-medium flex-1">{toolbarNavigation ? '' : 'Notebook'} <span className="text-fg-muted font-normal">· persistent local Python · {kernel?.status || 'status unknown'}{kernel ? ` · epoch ${kernel.epoch}` : ''}</span></span>
+      <button type="button" className="canvas-open-button" disabled={disabled} onClick={() => add()}><Plus size={12} />Code</button>
+      <button type="button" className="canvas-open-button" disabled={disabled} onClick={() => add('markdown')}><Plus size={12} />Markdown</button>
+      <button type="button" className="canvas-open-button" disabled={disabled || !dirty} onClick={() => void save()}><Save size={12} />{saving ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}</button>
+      <button type="button" className="canvas-icon" aria-label="Refresh notebook" disabled={disabled || dirty} onClick={() => void load()}><RefreshCw size={13} /></button>
+      <button type="button" className="canvas-icon" aria-label="Reset Python worker" disabled={disabled} onClick={() => void reset()}><RotateCcw size={13} /></button>
+      <button type="button" className="canvas-open-button" disabled={!running} onClick={async () => { try { const result = await daemonClient.interruptNotebookKernel(key); onShowToast?.(result.interrupted ? 'Worker interrupted. Its in-memory variables were cleared.' : 'No running worker to interrupt.'); } catch (reason) { setError(String(reason)); } }}><Square size={11} />Interrupt</button>
+    </header>
+    <p className="shrink-0 px-3 py-2 text-[11px] text-fg-muted border-b border-border-default">{workspace ? `Execution workspace: ${workspace.name}` : 'Choose an execution workspace to run code.'} Worker memory is temporary; saved output is not proof of reproducibility or an OS sandbox.</p>
+    {error && <div role="alert" className="p-3 text-xs text-rose-500 border-b border-border-default break-words">{error}</div>}
+    <div className="flex-1 overflow-auto p-4 space-y-4">
+      {!sessionId ? (
+        <p className="text-xs text-fg-muted">Open a conversation to use its notebook.</p>
+      ) : loading ? (
+        <p role="status" className="text-xs text-fg-muted">Loading notebook…</p>
+      ) : cells.length === 0 ? (
+        <div className="space-y-6 max-w-2xl mx-auto py-4">
+          <div className="canvas-empty text-center p-6 space-y-3 border border-border-default rounded-xl bg-surface-1">
+            <p className="text-sm font-medium">No notebook cells yet</p>
+            <p className="text-xs text-fg-muted">Start by adding a blank cell or selecting a scientific workflow starter below.</p>
+            <button type="button" className="canvas-open-button mx-auto" onClick={() => add()}>
+              <Plus size={12} /> Add a code cell
             </button>
           </div>
-        ) : (
-          cells.map((cell, index) => (
-            <div
-              key={cell.id}
-              className="group relative rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] transition-shadow hover:border-[var(--color-border-default)]"
-            >
-              {/* Cell Header Toolbar */}
-              <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-2)]/60 px-3 py-1.5 text-xs">
-                <div className="flex items-center gap-2">
-                  {/* Execution Counter Indicator */}
-                  <span className="font-mono text-xs font-semibold text-[var(--color-fg-muted)]">
-                    {cell.status === 'running'
-                      ? 'In [*]:'
-                      : cell.execution_count != null
-                      ? `In [${cell.execution_count}]:`
-                      : 'In [ ]:'}
-                  </span>
-
-                  {cell.wall_ms != null && (
-                    <span className="inline-flex items-center gap-1 font-mono text-[10px] text-[var(--color-fg-subtle)]">
-                      <Clock className="h-2.5 w-2.5" />
-                      {cell.wall_ms}ms
-                    </span>
-                  )}
-
-                  {cell.epoch > 0 && (
-                    <span className="rounded bg-[var(--color-surface-3)] px-1.5 py-0.2 text-[10px] font-mono text-[var(--color-fg-subtle)]">
-                      e{cell.epoch}
-                    </span>
-                  )}
-                </div>
-
-                {/* Cell Controls */}
-                <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100">
-                  <button
-                    onClick={() => handleRunCell(cell)}
-                    disabled={runningCellId !== null}
-                    className="inline-flex items-center gap-1 rounded bg-emerald-600/20 px-2 py-0.5 text-xs font-medium text-emerald-400 hover:bg-emerald-600/30 disabled:opacity-40"
-                    title="Execute cell"
-                  >
-                    <Play className="h-3 w-3 fill-emerald-400" />
-                    <span>Run</span>
-                  </button>
-
-                  <button
-                    onClick={() => moveCell(index, 'up')}
-                    disabled={index === 0}
-                    className="rounded p-1 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-3)] disabled:opacity-30"
-                    title="Move up"
-                  >
-                    <ChevronUp className="h-3.5 w-3.5" />
-                  </button>
-
-                  <button
-                    onClick={() => moveCell(index, 'down')}
-                    disabled={index === cells.length - 1}
-                    className="rounded p-1 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-3)] disabled:opacity-30"
-                    title="Move down"
-                  >
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  </button>
-
-                  <button
-                    onClick={() => removeCell(cell.id)}
-                    className="rounded p-1 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-3)] hover:text-red-400"
-                    title="Delete cell"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Cell Code Editor Input */}
-              <div className="p-3">
-                <textarea
-                  value={cell.source}
-                  onChange={(e) => handleCellSourceChange(cell.id, e.target.value)}
-                  onKeyDown={(e) => {
-                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                      e.preventDefault();
-                      handleRunCell(cell);
-                    }
-                  }}
-                  rows={Math.max(2, cell.source.split('\n').length)}
-                  className="w-full resize-y rounded bg-black/30 p-2.5 font-mono text-xs leading-relaxed text-[var(--color-fg-default)] placeholder:text-[var(--color-fg-subtle)] focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500/40"
-                  placeholder="# Enter Python code here. Press Ctrl+Enter or Cmd+Enter to run."
-                  spellCheck={false}
-                />
-              </div>
-
-              {/* Cell Outputs */}
-              {(cell.stdout || cell.stderr || cell.output_image || cell.status === 'running') && (
-                <div className="border-t border-[var(--color-border-subtle)] bg-black/40 p-3">
-                  {cell.status === 'running' && (
-                    <div className="flex items-center gap-2 text-xs text-amber-400">
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                      <span>Executing in epoch #{cell.epoch}...</span>
-                    </div>
-                  )}
-
-                  {/* Stdout */}
-                  {cell.stdout && (
-                    <div className="mb-2">
-                      <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-xs text-zinc-300">
-                        {cell.stdout}
-                      </pre>
-                    </div>
-                  )}
-
-                  {/* Stderr */}
-                  {cell.stderr && (
-                    <div className="mb-2 rounded border border-red-500/20 bg-red-950/20 p-2">
-                      <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-xs text-red-400">
-                        {cell.stderr}
-                      </pre>
-                    </div>
-                  )}
-
-                  {/* Rendered Matplotlib / PIL Plot Image */}
-                  {cell.output_image && (
-                    <div className="mt-2 overflow-hidden rounded border border-[var(--color-border-subtle)] bg-white/5 p-2">
-                      <img
-                        src={cell.output_image}
-                        alt="Kernel Output Plot"
-                        className="max-h-96 rounded object-contain"
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
+          {onAskAgent && (
+            <div>
+              <p className="text-[11px] font-semibold text-fg-muted uppercase tracking-wider mb-2">Scientific Workflow Starters</p>
+              <WorkflowStarters onPick={(prompt: string) => onAskAgent(prompt)} />
             </div>
-          ))
-        )}
-
-        {/* Bottom Append Bar */}
-        <div className="flex items-center justify-center pt-2">
-          <button
-            onClick={() => addCell('code')}
-            className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-[var(--color-border-default)] px-4 py-1.5 text-xs text-[var(--color-fg-muted)] transition-colors hover:border-blue-500 hover:text-blue-400"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span>Add Code Cell</span>
-          </button>
+          )}
         </div>
-      </div>
+      ) : cells.map((cell, index) => <section key={cell.id} className="rounded-lg border border-border-default overflow-hidden">
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-1 text-[11px]">
+          <span className="font-mono flex-1">{running === cell.id ? 'Running…' : `In [${cell.execution_count ?? ' '}]:`} {cell.wall_ms != null ? `${cell.wall_ms} ms` : ''}</span>
+          <select aria-label={`Cell ${index + 1} type`} value={cell.cell_type} disabled={disabled}
+            className="rounded border border-border-default bg-canvas text-fg-default p-1"
+            onChange={event => change(cells.map(item => item.id === cell.id ? editNotebookCell(item, item.source, event.target.value as NotebookCell['cell_type']) : item))}>
+            <option value="code">Python</option><option value="markdown">Markdown</option>
+          </select>
+          <button type="button" className="canvas-open-button" disabled={disabled || !workspace || !cell.source.trim() || cell.cell_type !== 'code'} onClick={() => setPreviewCellId(cell.id)}><Play size={11} />Run</button>
+          {onAskAgent && <button type="button" className="canvas-icon" aria-label="Ask about this cell" onClick={() => onAskAgent(`Explain notebook cell ${cell.id} in session ${key}:\n\n${cell.source}`)}>?</button>}
+          <button type="button" className="canvas-icon" aria-label="Move cell up" disabled={disabled || index === 0} onClick={() => { const next = [...cells]; [next[index-1], next[index]] = [next[index], next[index-1]]; change(next); }}><ChevronUp size={12} /></button>
+          <button type="button" className="canvas-icon" aria-label="Move cell down" disabled={disabled || index === cells.length-1} onClick={() => { const next = [...cells]; [next[index+1], next[index]] = [next[index], next[index+1]]; change(next); }}><ChevronDown size={12} /></button>
+          <button type="button" className="canvas-icon" aria-label="Remove cell" disabled={disabled} onClick={() => change(cells.filter(item => item.id !== cell.id))}><Trash2 size={12} /></button>
+        </div>
+        <textarea aria-label={`Cell ${index+1} source`} value={cell.source} disabled={disabled} spellCheck={false} rows={Math.max(3, Math.min(18, cell.source.split('\n').length+1))} onChange={event => change(cells.map(item => item.id === cell.id ? editNotebookCell(item, event.target.value) : item))} className="w-full resize-y p-3 text-xs font-mono bg-canvas outline-none focus:ring-1 focus:ring-inset focus:ring-accent select-text" />
+        {cell.cell_type === 'markdown' && cell.source.trim() && <div className="border-t border-border-default max-h-96 overflow-auto"><MarkdownViewer content={cell.source} embedded /></div>}
+        {(cell.stdout || cell.stderr || cell.output_image) && <div className="border-t border-border-default p-3 text-xs select-text space-y-2">
+          {cell.stdout && <pre className="whitespace-pre-wrap break-words">{cell.stdout}</pre>}{cell.stderr && <pre className="text-rose-500 whitespace-pre-wrap break-words">{cell.stderr}</pre>}
+          {cell.output_image && <img src={cell.output_image} alt={`Output of cell ${index+1}`} className="max-h-96 max-w-full object-contain" />}
+          {cell.epoch !== kernel?.epoch && <p className="text-fg-muted">Output belongs to a previous worker epoch.</p>}
+        </div>}
+      </section>)}
     </div>
-  );
+    {preview && <div className="absolute inset-0 z-40 bg-canvas/95 p-5 overflow-auto" role="dialog" aria-modal="true" aria-label="Review notebook execution">
+      <h3 className="text-sm font-medium mb-3">Run this code locally?</h3><p className="text-xs text-fg-muted mb-3 break-all">Workspace: {workspace?.name} · {workspace?.path}</p>
+      <pre className="rounded border border-border-default bg-surface-1 p-3 text-xs whitespace-pre-wrap select-text">{preview.source}</pre>
+      <p className="text-xs text-fg-muted my-3">This uses the session’s Python worker and can modify files in its environment. Review the exact code before running.</p>
+      <div className="flex gap-2"><button type="button" autoFocus className="canvas-open-button" onClick={() => setPreviewCellId(null)}>Cancel</button><button type="button" className="canvas-open-button" onClick={() => void run()}>Run cell</button></div>
+    </div>}
+  </div>;
 };
-
 export const NotebookWorkspacePane = NotebookWorkbenchPane;

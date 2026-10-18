@@ -257,8 +257,41 @@ export interface WorkspaceDetectionResult {
   is_dirty: boolean;
   dirty_count: number;
   remote_url?: string | null;
+  github_host?: string | null;
+  github_owner?: string | null;
+  github_repo?: string | null;
+  github_avatar_url?: string | null;
   project_type: string;
   is_worktree: boolean;
+  worktrees?: Array<{
+    path: string;
+    head?: string | null;
+    branch?: string | null;
+    is_main: boolean;
+    is_bare: boolean;
+    is_detached: boolean;
+  }>;
+  sub_repositories?: Array<{
+    name: string;
+    path: string;
+    branch?: string;
+    is_git: boolean;
+    is_dirty?: boolean;
+    dirty_count?: number;
+    remote_url?: string | null;
+    github_host?: string | null;
+    github_owner?: string | null;
+    github_repo?: string | null;
+    github_avatar_url?: string | null;
+    worktrees?: Array<{
+      path: string;
+      head?: string | null;
+      branch?: string | null;
+      is_main: boolean;
+      is_bare: boolean;
+      is_detached: boolean;
+    }>;
+  }>;
 }
 
 export interface WorkspaceNode {
@@ -270,7 +303,30 @@ export interface WorkspaceNode {
   branch?: string;
   isDirty?: boolean;
   dirtyCount?: number;
+  remoteUrl?: string;
+  githubOwner?: string;
+  githubRepo?: string;
+  githubAvatarUrl?: string;
+  isWorktree?: boolean;
   worktrees?: WorkspaceNode[]; // child worktrees
+}
+
+export interface GitHubAuthStatusResponse {
+  authenticated: boolean;
+  source: 'gh_cli' | 'token' | 'oauth';
+  installed?: boolean;
+  user?: {
+    login: string;
+    name?: string;
+    avatar_url?: string;
+    html_url?: string;
+    bio?: string;
+    public_repos?: number;
+    email?: string;
+  } | null;
+  scopes?: string[];
+  details?: string;
+  error?: string;
 }
 
 export interface AssistantDraft {
@@ -684,6 +740,8 @@ export interface ArtifactDetailResponse {
   versions: import('./research').ArtifactLineageNode[];
   annotations: import('./research').AnnotationRecord[];
   content?: string;
+  file?: WorkspaceFileContent;
+  content_version?: number;
 }
 
 export interface NoteRecord {
@@ -1259,6 +1317,7 @@ export interface OAuthConnectionMetadata {
   updated_at?: number;
   connected?: boolean;
   has_refresh_token?: boolean;
+  access_token?: string;
 }
 
 export interface OAuthStatusResult {

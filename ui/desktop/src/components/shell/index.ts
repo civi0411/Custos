@@ -10,3 +10,5 @@ export * from './WorkspaceTree';
 export * from './ActivityRail';
 export * from './UserProfileMenu';
 export * from './AppTopBar';
+export * from './AppStatusBar';
+export * from './RightSidebar';
