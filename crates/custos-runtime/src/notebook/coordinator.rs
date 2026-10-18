@@ -33,7 +33,7 @@ struct WorkerResponse {
 
 struct WorkerHandle {
     sender: mpsc::Sender<WorkerRequest>,
-    pid: Option<u32>,
+    abort: tokio::task::AbortHandle,
 }
 
 const PYTHON_RUNNER_SCRIPT: &str = r#"
@@ -102,13 +102,13 @@ async fn spawn_worker_actor(
         .current_dir(&work_dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
 
     let mut child = cmd
         .spawn()
         .map_err(|e| DomainError::Validation(format!("Failed to launch Python worker: {e}")))?;
 
-    let pid = child.id();
     let mut stdin = child.stdin.take().ok_or_else(|| {
         DomainError::Validation("Failed to acquire stdin for Python worker".into())
     })?;
@@ -117,7 +117,7 @@ async fn spawn_worker_actor(
     })?;
     let mut reader = tokio::io::BufReader::new(stdout).lines();
 
-    tokio::spawn(async move {
+    let actor = tokio::spawn(async move {
         while let Some(req) = rx.recv().await {
             let payload = serde_json::json!({
                 "code": req.code,
@@ -167,7 +167,7 @@ async fn spawn_worker_actor(
         let _ = child.kill().await;
     });
 
-    Ok(WorkerHandle { sender: tx, pid })
+    Ok(WorkerHandle { sender: tx, abort: actor.abort_handle() })
 }
 
 struct ActiveKernel {
@@ -176,6 +176,7 @@ struct ActiveKernel {
     status: KernelStatus,
     python_path: PathBuf,
     worker: Option<WorkerHandle>,
+    work_dir: Option<PathBuf>,
 }
 
 #[derive(Clone)]
@@ -260,7 +261,15 @@ impl PythonKernelCoordinator {
             }
             Ok(state)
         } else if let Some(r) = repo {
-            let state = r.get_notebook_kernel_state(session_id)?;
+            let mut state = r.get_notebook_kernel_state(session_id)?;
+            // A restarted daemon has no Python memory from the recorded epoch.
+            if state.execution_counter > 0 || state.status != KernelStatus::Idle {
+                state.epoch += 1;
+                state.execution_counter = 0;
+                state.status = KernelStatus::Idle;
+                state.updated_at = chrono::Utc::now().timestamp();
+                r.save_notebook_kernel_state(&state)?;
+            }
             let py = Self::discover_python_path();
             kernels.insert(
                 session_id.to_string(),
@@ -270,6 +279,7 @@ impl PythonKernelCoordinator {
                     status: state.status,
                     python_path: py,
                     worker: None,
+                    work_dir: None,
                 },
             );
             Ok(state)
@@ -293,6 +303,7 @@ impl PythonKernelCoordinator {
                     status: KernelStatus::Idle,
                     python_path: py,
                     worker: None,
+                    work_dir: None,
                 },
             );
             Ok(state)
@@ -321,10 +332,15 @@ impl PythonKernelCoordinator {
                     status: KernelStatus::Idle,
                     python_path: python_path.clone(),
                     worker: None,
+                    work_dir: None,
                 });
 
-            kernel.execution_counter += 1;
-            kernel.status = KernelStatus::Busy;
+            if kernel.status == KernelStatus::Busy {
+                return Err(DomainError::Validation("A cell is already running in this session".into()));
+            }
+            if kernel.work_dir.as_ref().is_some_and(|previous| previous != &work_dir) {
+                return Err(DomainError::Validation("Reset this session's Python worker before changing execution workspace".into()));
+            }
 
             let sender = match &kernel.worker {
                 Some(w) if !w.sender.is_closed() => w.sender.clone(),
@@ -336,6 +352,9 @@ impl PythonKernelCoordinator {
                 }
             };
 
+            kernel.work_dir = Some(work_dir.clone());
+            kernel.execution_counter += 1;
+            kernel.status = KernelStatus::Busy;
             (kernel.epoch, kernel.execution_counter, sender)
         };
 
@@ -347,32 +366,13 @@ impl PythonKernelCoordinator {
             resp_tx,
         };
 
-        let worker_res = if worker_sender.send(worker_req).await.is_err() {
-            // Worker channel closed, restart once and retry
-            let handle = spawn_worker_actor(python_path.clone(), work_dir.clone()).await?;
-            let sender = handle.sender.clone();
-            {
-                let mut kernels = self.kernels.write().await;
-                if let Some(k) = kernels.get_mut(&params.session_id) {
-                    k.worker = Some(handle);
-                }
-            }
-            let (retry_tx, retry_rx) = oneshot::channel();
-            let retry_req = WorkerRequest {
-                code: params.code.clone(),
-                cwd: params.cwd.clone(),
-                resp_tx: retry_tx,
-            };
-            sender.send(retry_req).await.map_err(|_| {
-                DomainError::Validation("Failed to communicate with restarted Python worker".into())
-            })?;
-            retry_rx.await.map_err(|_| {
-                DomainError::Validation("Python worker dropped execution response".into())
-            })?
-        } else {
-            resp_rx.await.map_err(|_| {
-                DomainError::Validation("Python worker dropped execution response".into())
-            })?
+        // A failed write/response has an uncertain effect: never replay code automatically.
+        let worker_res = match worker_sender.send(worker_req).await {
+            Ok(()) => match resp_rx.await {
+                Ok(response) => response,
+                Err(_) => Err(DomainError::Validation("Python worker stopped before returning output; execution was not replayed".into())),
+            },
+            Err(_) => Err(DomainError::Validation("Python worker is unavailable; reset it before retrying".into())),
         };
 
         let wall_ms = start.elapsed().as_millis() as u64;
@@ -380,6 +380,9 @@ impl PythonKernelCoordinator {
         {
             let mut kernels = self.kernels.write().await;
             if let Some(k) = kernels.get_mut(&params.session_id) {
+                if k.epoch != epoch {
+                    return Err(DomainError::Validation("Execution was interrupted or reset; its output is stale".into()));
+                }
                 k.status = KernelStatus::Idle;
             }
         }
@@ -407,7 +410,8 @@ impl PythonKernelCoordinator {
                 session_id: params.session_id.clone(),
                 cell_type: NotebookCellType::Code,
                 source: params.code.clone(),
-                cell_index: 0,
+                cell_index: r.list_notebook_cells(&params.session_id)?.iter()
+                    .find(|saved| saved.id == params.cell_id).map(|saved| saved.cell_index).unwrap_or(0),
                 execution_count: Some(execution_count),
                 status,
                 stdout: Some(resp.stdout.clone()),
@@ -421,13 +425,11 @@ impl PythonKernelCoordinator {
                 epoch,
                 updated_at: chrono::Utc::now().timestamp(),
             };
-            let _ = r.save_notebook_cell(&cell);
+            r.save_notebook_cell(&cell)?;
         }
 
-        let execution_record_id = params
-            .task_id
-            .as_ref()
-            .map(|tid| format!("exec_{}_{}", tid, execution_count));
+        // No recipe execution record is fabricated for an ordinary notebook cell.
+        let execution_record_id = None;
 
         Ok(ExecuteCellResult {
             cell_id: params.cell_id,
@@ -446,12 +448,10 @@ impl PythonKernelCoordinator {
         let mut kernels = self.kernels.write().await;
         if let Some(k) = kernels.get_mut(session_id) {
             if let Some(worker) = k.worker.take() {
-                if let Some(pid) = worker.pid {
-                    #[cfg(unix)]
-                    unsafe {
-                        libc::kill(pid as i32, libc::SIGKILL);
-                    }
-                }
+                worker.abort.abort();
+                k.epoch += 1;
+                k.execution_counter = 0;
+                k.work_dir = None;
                 k.status = KernelStatus::Interrupted;
                 return Ok(true);
             }
@@ -475,17 +475,14 @@ impl PythonKernelCoordinator {
                 status: KernelStatus::Idle,
                 python_path: py.clone(),
                 worker: None,
+                work_dir: None,
             });
 
         // Terminate active worker actor process if any
         if let Some(worker) = entry.worker.take() {
-            if let Some(pid) = worker.pid {
-                #[cfg(unix)]
-                unsafe {
-                    libc::kill(pid as i32, libc::SIGKILL);
-                }
-            }
+            worker.abort.abort();
         }
+        entry.work_dir = None;
 
         entry.epoch += 1;
         entry.execution_counter = 0;
@@ -537,6 +534,45 @@ fn base64_encode(data: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn restarting_coordinator_advances_persisted_worker_epoch() {
+        let store = custos_persistence::SqliteTaskStore::new_in_memory().unwrap();
+        let repository = store.research();
+        repository.save_notebook_kernel_state(&NotebookKernelState { session_id: "restart".into(), epoch: 4,
+            status: KernelStatus::Busy, python_version: "Python".into(), execution_counter: 7,
+            created_at: 0, updated_at: 0 }).unwrap();
+        let coordinator = PythonKernelCoordinator::new();
+        let status = coordinator.get_status("restart", Some(repository)).await.unwrap();
+        assert_eq!(status.epoch, 5);
+        assert_eq!(status.status, KernelStatus::Idle);
+        assert_eq!(status.execution_counter, 0);
+        assert_eq!(coordinator.get_status("restart", Some(repository)).await.unwrap().epoch, 5);
+    }
+
+    #[tokio::test]
+    async fn interrupt_releases_busy_worker_and_rejects_stale_result() {
+        let coordinator = PythonKernelCoordinator::new();
+        let temp = tempfile::tempdir().unwrap();
+        let params = ExecuteCellParams { session_id: "interrupt-session".into(), cell_id: "cell".into(),
+            code: "import time; time.sleep(30)".into(), workspace_id: None,
+            cwd: Some(temp.path().to_string_lossy().into()), task_id: None };
+        let running = { let coordinator = coordinator.clone(); let params = params.clone();
+            tokio::spawn(async move { coordinator.execute_cell(params, None).await }) };
+        for _ in 0..100 {
+            if coordinator.kernels.read().await.get("interrupt-session").is_some_and(|kernel| kernel.status == KernelStatus::Busy) { break; }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(coordinator.execute_cell(params.clone(), None).await.is_err(), "concurrent writer must not queue another execution");
+        assert!(coordinator.interrupt("interrupt-session").await.unwrap());
+        let result = tokio::time::timeout(std::time::Duration::from_secs(3), running).await.unwrap().unwrap();
+        assert!(result.is_err());
+        let mut next = params; next.code = "print(42)".into();
+        let output = coordinator.execute_cell(next, None).await.unwrap();
+        assert_eq!(output.stdout.trim(), "42");
+        assert_eq!(output.epoch, 2);
+        coordinator.reset("interrupt-session", None).await.unwrap();
+    }
 
     #[tokio::test]
     async fn test_python_kernel_execution_and_epoch_reset() {

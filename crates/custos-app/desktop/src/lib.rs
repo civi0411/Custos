@@ -34,7 +34,17 @@ async fn custos_request(
         method,
         params,
     };
-    let resp = client.send_request(req).await.map_err(|e| e.to_string())?;
+    let resp = match client.send_request(req.clone()).await {
+        Ok(r) => r,
+        Err(e) => {
+            let profile = ProfileResolver::from_env();
+            if let Ok(new_client) = ensure_daemon_client(&profile) {
+                new_client.send_request(req).await.map_err(|e2| format!("{e}; retry failed: {e2}"))?
+            } else {
+                return Err(e);
+            }
+        }
+    };
     if let Some(err) = resp.error {
         Err(err)
     } else {

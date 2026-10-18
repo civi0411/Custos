@@ -57,6 +57,7 @@ pub const METHOD_WORKSPACE_FILE_DIFF: &str = "v1.workspace.diff.file";
 pub const METHOD_WORKSPACE_GIT_STAGE: &str = "v1.workspace.git.stage";
 pub const METHOD_WORKSPACE_GIT_UNSTAGE: &str = "v1.workspace.git.unstage";
 pub const METHOD_WORKSPACE_GIT_DISCARD: &str = "v1.workspace.git.discard";
+pub const METHOD_WORKSPACE_GIT_COMMIT: &str = "v1.workspace.git.commit";
 
 pub const METHOD_RESEARCH_SOURCES_LIST: &str = "v1.research.sources.list";
 pub const METHOD_RESEARCH_SOURCES_SAVE: &str = "v1.research.sources.save";
@@ -153,6 +154,16 @@ pub const METHOD_OAUTH_GET: &str = "v1.oauth.get";
 pub const METHOD_OAUTH_DELETE: &str = "v1.oauth.delete";
 pub const METHOD_OAUTH_CANCEL: &str = "v1.oauth.cancel";
 pub const METHOD_OAUTH_STATUS: &str = "v1.oauth.status";
+
+pub const METHOD_GITHUB_ACCOUNTS: &str = "v1.github.accounts";
+pub const METHOD_GIT_REPOSITORY: &str = "v1.workspace.git.repository";
+pub const METHOD_GIT_SWITCH: &str = "v1.workspace.git.switch";
+pub const METHOD_GIT_FETCH: &str = "v1.workspace.git.fetch";
+pub const METHOD_GIT_ACCOUNT: &str = "v1.workspace.git.account";
+pub const METHOD_GIT_GITHUB: &str = "v1.workspace.git.github";
+pub const METHOD_GITHUB_LOGIN: &str = "v1.github.login";
+pub const METHOD_GITHUB_AUTH_STATUS: &str = "v1.github.auth_status";
+pub const METHOD_GITHUB_VIEWER: &str = "v1.github.viewer";
 
 pub const METHOD_PACKS_MANIFESTS_LIST: &str = "v1.packs.manifests.list";
 pub const METHOD_PACKS_JOBS_LIST: &str = "v1.packs.jobs.list";
@@ -1710,6 +1721,12 @@ pub struct ArtifactDetailResponse {
     pub versions: Vec<custos_domain::ArtifactLineageNode>,
     pub annotations: Vec<custos_domain::AnnotationRecord>,
     pub content: Option<String>,
+    /// Current workspace bytes, not an archived version snapshot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<custos_domain::WorkspaceFileContent>,
+    /// Present only when current bytes match the recorded version hash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_version: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

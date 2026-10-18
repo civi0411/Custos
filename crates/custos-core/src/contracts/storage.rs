@@ -55,6 +55,9 @@ pub trait RunPort: Send + Sync {
         &self,
         attempt_id: &str,
     ) -> Result<Option<LaunchAttempt>, DomainError>;
+    async fn list_active_claims(&self) -> Result<Vec<DispatchClaim>, DomainError> {
+        Ok(Vec::new())
+    }
     async fn reconcile_runs_on_startup(&self) -> Result<usize, DomainError> {
         Ok(0)
     }
@@ -180,4 +183,22 @@ pub trait AssistantDraftPort: Send + Sync {
         task_id: Option<&str>,
     ) -> Result<Vec<custos_domain::AssistantDraft>, DomainError>;
     async fn delete_draft(&self, id: &str) -> Result<bool, DomainError>;
+}
+
+/// Persistence Port for Interactive Notebook Cells and Execution States (RFC 003 §6).
+#[async_trait]
+pub trait NotebookStoragePort: Send + Sync {
+    async fn list_notebook_cells(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<custos_domain::NotebookCell>, DomainError>;
+    async fn replace_notebook_cells(
+        &self,
+        session_id: &str,
+        cells: &[custos_domain::NotebookCell],
+    ) -> Result<(), DomainError>;
+    async fn save_notebook_cell(
+        &self,
+        cell: &custos_domain::NotebookCell,
+    ) -> Result<(), DomainError>;
 }

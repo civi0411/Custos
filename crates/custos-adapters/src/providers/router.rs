@@ -172,6 +172,7 @@ impl RouterModelProvider {
         if let (Err(error), Some(account)) = (&result, req.provider_account_id.as_deref()) {
             let message = error.to_string();
             let status = message.split("returned ").nth(1).and_then(|part| part.split_whitespace().next()).and_then(|part| part.trim_end_matches(':').parse::<u16>().ok())
+                .or_else(|| (message.contains("429") || message.contains("RESOURCE_EXHAUSTED")).then_some(429))
                 .or_else(|| message.contains("connection failed").then_some(0));
             if let Some(status) = status { self.resolver.observe_response(account, &req.model, status, &message, None).await?; }
         }
@@ -214,6 +215,9 @@ impl RouterModelProvider {
         if m.starts_with("ollama/") || m.starts_with("local/") || m.starts_with("local:") {
             return "local";
         }
+        if m.starts_with("lmstudio/") || m == "lmstudio" {
+            return "lmstudio";
+        }
         if m.starts_with("copilot/") {
             return "copilot";
         }
@@ -238,8 +242,44 @@ impl RouterModelProvider {
         if m.starts_with("perplexity/") || m == "perplexity" {
             return "perplexity";
         }
-        if m.starts_with("mistral/") {
+        if m.starts_with("mistral/") || m == "mistral" {
             return "mistral";
+        }
+        if m.starts_with("nvidia/") || m == "nvidia" {
+            return "nvidia";
+        }
+        if m.starts_with("moonshot/") || m.starts_with("kimi/") || m == "moonshot" || m == "kimi" {
+            return "moonshot";
+        }
+        if m.starts_with("zhipu/") || m.starts_with("zai/") || m == "zhipu" || m == "zai" {
+            return "zhipu";
+        }
+        if m.starts_with("minimax/") || m == "minimax" {
+            return "minimax";
+        }
+        if m.starts_with("alibaba/") || m.starts_with("qwen/") || m == "alibaba" || m == "qwen" {
+            return "alibaba";
+        }
+        if m.starts_with("xai/") || m.starts_with("grok") || m == "xai" {
+            return "xai";
+        }
+        if m.starts_with("sambanova/") || m == "sambanova" {
+            return "sambanova";
+        }
+        if m.starts_with("fireworks/") || m == "fireworks" {
+            return "fireworks";
+        }
+        if m.starts_with("siliconflow/") || m == "siliconflow" {
+            return "siliconflow";
+        }
+        if m.starts_with("nebius/") || m == "nebius" {
+            return "nebius";
+        }
+        if m.starts_with("hyperbolic/") || m == "hyperbolic" {
+            return "hyperbolic";
+        }
+        if m.starts_with("cohere/") || m == "cohere" {
+            return "cohere";
         }
         if m.starts_with("gpt-")
             || m.starts_with("o1")
@@ -298,6 +338,18 @@ impl RouterModelProvider {
             "mistral" => "MISTRAL_API_KEY",
             "cerebras" => "CEREBRAS_API_KEY",
             "perplexity" => "PERPLEXITY_API_KEY",
+            "nvidia" => "NVIDIA_API_KEY",
+            "moonshot" | "kimi" => "MOONSHOT_API_KEY",
+            "zhipu" | "zai" => "ZHIPU_API_KEY",
+            "minimax" => "MINIMAX_API_KEY",
+            "alibaba" | "qwen" => "DASHSCOPE_API_KEY",
+            "xai" => "XAI_API_KEY",
+            "sambanova" => "SAMBANOVA_API_KEY",
+            "fireworks" => "FIREWORKS_API_KEY",
+            "siliconflow" => "SILICONFLOW_API_KEY",
+            "nebius" => "NEBIUS_API_KEY",
+            "hyperbolic" => "HYPERBOLIC_API_KEY",
+            "cohere" => "COHERE_API_KEY",
             _ => return Ok(None),
         };
         Ok(std::env::var(env_var).ok().filter(|s| !s.trim().is_empty()))
@@ -621,24 +673,9 @@ impl RouterModelProvider {
 
         Ok(ModelResponse::text(content, resolved_model, tokens_used).with_usage(input, output, None))
     }
-}
 
-#[async_trait]
-impl ModelProvider for RouterModelProvider {
-    fn provider_id(&self) -> &str {
-        "unified-router"
-    }
-
-    async fn stream(&self, req: &ProviderRequest) -> Result<tokio::sync::mpsc::Receiver<custos_provider::ProviderEvent>, DomainError> {
+    async fn dispatch_stream_attempt(&self, req: &ProviderRequest) -> Result<tokio::sync::mpsc::Receiver<custos_provider::ProviderEvent>, DomainError> {
         use super::streaming::{Wire, stream_response_observed};
-        let mut routed = req.clone();
-        let service = Self::classify_provider(&routed.model);
-        if service == "native-local" {
-            routed.provider_account_id = None;
-        } else if routed.provider_account_id.is_none() {
-            routed.provider_account_id = self.resolver.select_account(if service == "gemini-oauth" { "gemini" } else { service }, &routed.model).await?;
-        }
-        let req = &routed;
         if let Some(account) = &req.provider_account_id { self.resolver.validate_model(account, &req.model, req.reasoning_effort.as_deref()).await?; }
         let model = req.model.trim();
         let service = Self::classify_provider(model);
@@ -652,10 +689,11 @@ impl ModelProvider for RouterModelProvider {
         let service = if model.starts_with("gemini-oauth/") { "gemini-oauth" } else { service_override.as_deref().unwrap_or_else(|| Self::classify_provider(model)) };
         let account = req.provider_account_id.as_deref().unwrap_or(if service == "gemini-oauth" { "gemini" } else { service });
         if req.provider_account_id.is_some() { self.resolver.validate_account(account, if service == "gemini-oauth" { "gemini" } else { service }).await?; }
-        if matches!(service, "antigravity" | "gemini-oauth") {
+        if matches!(service, "google" | "antigravity" | "gemini-oauth" | "gemini") {
             let token = self.resolver.get_token(account).await?.ok_or_else(||DomainError::Validation("Connect Google OAuth first".into()))?;
             let base = self.resolver.get_endpoint_url(account).await?.unwrap_or_else(||"https://cloudcode-pa.googleapis.com".into());
-            let response = self.observe_adapter_error(super::antigravity::stream_codeassist(if service == "gemini-oauth" {"gemini"} else {"antigravity"}, &base, &token, req).await, req).await?;
+            let codeassist_mode = if model.starts_with("gemini-oauth/") || service == "gemini" { "gemini" } else { "antigravity" };
+            let response = self.observe_adapter_error(super::antigravity::stream_codeassist(codeassist_mode, &base, &token, req).await, req).await?;
             return Ok(stream_response_observed(response,req.clone(),Wire::Google,self.resolver.clone()));
         }
         let local_base = if service == "local" { self.resolver.get_endpoint_url(account).await?.unwrap_or_else(||"http://localhost:11434".into()) } else {String::new()};
@@ -673,7 +711,7 @@ impl ModelProvider for RouterModelProvider {
         }
         let oauth=service=="openai" && self.resolver.uses_oauth(account).await?;
         let token=if req.provider_account_id.is_some() || oauth || service=="copilot" { self.resolver.get_token(account).await? } else { self.resolve_token_with_fallback(account).await? };
-        if token.is_none() && service!="local" {
+        if token.is_none() && service!="local" && service!="lmstudio" {
             return Err(DomainError::Validation("Provider credentials not configured".into()));
         }
         let custom=self.resolver.get_endpoint_url(account).await?;
@@ -703,11 +741,39 @@ impl ModelProvider for RouterModelProvider {
                 "openai" => (custom.unwrap_or_else(||"https://api.openai.com/v1".into()),if matches!(model,""|"default"|"openai") {"gpt-4o".into()} else {model.into()},token),
                 "gemini" => (custom.unwrap_or_else(||"https://generativelanguage.googleapis.com/v1beta/openai".into()),model.into(),token),
                 "deepseek" => (custom.unwrap_or_else(||"https://api.deepseek.com/v1".into()),model.into(),token),
+                "groq" => (custom.unwrap_or_else(||"https://api.groq.com/openai/v1".into()),model.strip_prefix("groq/").unwrap_or(model).to_string(),token),
+                "openrouter" => (custom.unwrap_or_else(||"https://openrouter.ai/api/v1".into()),model.strip_prefix("openrouter/").unwrap_or(model).to_string(),token),
+                "together" => (custom.unwrap_or_else(||"https://api.together.xyz/v1".into()),model.strip_prefix("together/").unwrap_or(model).to_string(),token),
+                "mistral" => (custom.unwrap_or_else(||"https://api.mistral.ai/v1".into()),model.strip_prefix("mistral/").unwrap_or(model).to_string(),token),
+                "cerebras" => (custom.unwrap_or_else(||"https://api.cerebras.ai/v1".into()),model.strip_prefix("cerebras/").unwrap_or(model).to_string(),token),
+                "perplexity" => (custom.unwrap_or_else(||"https://api.perplexity.ai".into()),model.strip_prefix("perplexity/").unwrap_or(model).to_string(),token),
+                "nvidia" => (custom.unwrap_or_else(||"https://integrate.api.nvidia.com/v1".into()),model.strip_prefix("nvidia/").unwrap_or(model).to_string(),token),
+                "moonshot" | "kimi" => (custom.unwrap_or_else(||"https://api.moonshot.cn/v1".into()),model.strip_prefix("moonshot/").or_else(|| model.strip_prefix("kimi/")).unwrap_or(model).to_string(),token),
+                "zhipu" | "zai" => (custom.unwrap_or_else(||"https://open.bigmodel.cn/api/paas/v4".into()),model.strip_prefix("zhipu/").or_else(|| model.strip_prefix("zai/")).unwrap_or(model).to_string(),token),
+                "minimax" => (custom.unwrap_or_else(||"https://api.minimax.chat/v1".into()),model.strip_prefix("minimax/").unwrap_or(model).to_string(),token),
+                "alibaba" | "qwen" => (custom.unwrap_or_else(||"https://dashscope.aliyuncs.com/compatible-mode/v1".into()),model.strip_prefix("alibaba/").or_else(|| model.strip_prefix("qwen/")).unwrap_or(model).to_string(),token),
+                "xai" => (custom.unwrap_or_else(||"https://api.x.ai/v1".into()),model.strip_prefix("xai/").unwrap_or(model).to_string(),token),
+                "sambanova" => (custom.unwrap_or_else(||"https://api.sambanova.ai/v1".into()),model.strip_prefix("sambanova/").unwrap_or(model).to_string(),token),
+                "fireworks" => (custom.unwrap_or_else(||"https://api.fireworks.ai/inference/v1".into()),model.strip_prefix("fireworks/").unwrap_or(model).to_string(),token),
+                "siliconflow" => (custom.unwrap_or_else(||"https://api.siliconflow.cn/v1".into()),model.strip_prefix("siliconflow/").unwrap_or(model).to_string(),token),
+                "nebius" => (custom.unwrap_or_else(||"https://api.studio.nebius.ai/v1".into()),model.strip_prefix("nebius/").unwrap_or(model).to_string(),token),
+                "hyperbolic" => (custom.unwrap_or_else(||"https://api.hyperbolic.xyz/v1".into()),model.strip_prefix("hyperbolic/").unwrap_or(model).to_string(),token),
+                "cohere" => (custom.unwrap_or_else(||"https://api.cohere.com/v2".into()),model.strip_prefix("cohere/").unwrap_or(model).to_string(),token),
                 "local" => {
                     let clean = model.strip_prefix("local/").or_else(|| model.strip_prefix("local:")).unwrap_or(model);
                     (local_base, clean.into(), token)
                 }
-                _ => return Err(DomainError::Validation("Unsupported streaming provider".into())),
+                "lmstudio" => {
+                    let base = custom.unwrap_or_else(|| "http://127.0.0.1:1234/v1".into());
+                    let clean = model.strip_prefix("lmstudio/").unwrap_or(model);
+                    (base, clean.into(), token)
+                }
+                _ if custom.is_some() => {
+                    let custom_endpoint = custom.unwrap();
+                    let clean_model = if let Some((_, rem)) = model.split_once('/') { rem } else { model };
+                    (custom_endpoint, clean_model.into(), token)
+                }
+                _ => return Err(DomainError::Validation(format!("Unsupported streaming provider '{service}'"))),
             };
             let mut payload=serde_json::json!({"model":model,"messages":[{"role":"user","content":req.prompt}],"stream":true,"stream_options":{"include_usage":true}});
             if let Some(effort)=&req.reasoning_effort {payload["reasoning_effort"]=serde_json::json!(effort);}
@@ -725,15 +791,7 @@ impl ModelProvider for RouterModelProvider {
         Ok(stream_response_observed(response,req.clone(),wire,self.resolver.clone()))
     }
 
-    async fn generate(&self, req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
-        let mut routed = req.clone();
-        let service = Self::classify_provider(&routed.model);
-        if service == "native-local" {
-            routed.provider_account_id = None;
-        } else if routed.provider_account_id.is_none() {
-            routed.provider_account_id = self.resolver.select_account(if service == "gemini-oauth" { "gemini" } else { service }, &routed.model).await?;
-        }
-        let req = &routed;
+    async fn dispatch_generate_attempt(&self, req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
         let requested_model = req.model.trim();
         debug!(task_id = %req.task_id, request_id = %req.request_id, model = %requested_model, "Routing model request");
         let service_override = match req.provider_account_id.as_deref() { Some(account) => self.resolver.service_for_account(account).await?, None => None };
@@ -760,9 +818,13 @@ impl ModelProvider for RouterModelProvider {
                 let token = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or("gemini")).await?.ok_or_else(|| DomainError::Validation("Connect Gemini OAuth first".into()))?;
                 self.observe_adapter_error(super::antigravity::generate_codeassist_content("gemini", "https://cloudcode-pa.googleapis.com", &token, req).await, req).await
             }
-            "antigravity" => {
-                let token = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or("antigravity")).await?.ok_or_else(|| DomainError::Validation("Connect Antigravity with OAuth first".into()))?;
-                let base = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("antigravity")).await?.unwrap_or_else(|| "https://cloudcode-pa.googleapis.com".into());
+            "google" | "antigravity" => {
+                let token = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or("google")).await?.or_else(|| None);
+                let token = match token {
+                    Some(t) => t,
+                    None => self.resolver.get_token("antigravity").await?.ok_or_else(|| DomainError::Validation("Connect Google OAuth first".into()))?,
+                };
+                let base = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("google")).await?.unwrap_or_else(|| "https://cloudcode-pa.googleapis.com".into());
                 self.observe_adapter_error(super::antigravity::generate_content(&base, &token, req).await, req).await
             }
             "openai" => {
@@ -932,7 +994,34 @@ impl ModelProvider for RouterModelProvider {
                 )
                 .await
             }
-            "groq" | "openrouter" | "together" | "mistral" | "cerebras" | "perplexity" => {
+            "lmstudio" => {
+                let custom_url = self
+                    .resolver
+                    .get_endpoint_url(req.provider_account_id.as_deref().unwrap_or("lmstudio"))
+                    .await
+                    .ok()
+                    .flatten();
+                let base_url = custom_url.unwrap_or_else(|| "http://127.0.0.1:1234/v1".to_string());
+                let token = if let Some(account) = req.provider_account_id.as_deref() {
+                    self.resolver.get_token(account).await?
+                } else {
+                    self.resolve_token_with_fallback("lmstudio").await?
+                };
+                let clean_model = requested_model
+                    .strip_prefix("lmstudio/")
+                    .unwrap_or(requested_model);
+                self.execute_openai_compatible(
+                    &base_url,
+                    token.as_deref(),
+                    clean_model,
+                    req,
+                    "LM Studio",
+                )
+                .await
+            }
+            "groq" | "openrouter" | "together" | "mistral" | "cerebras" | "perplexity"
+            | "nvidia" | "moonshot" | "kimi" | "zhipu" | "zai" | "minimax" | "alibaba" | "qwen" | "xai"
+            | "sambanova" | "fireworks" | "siliconflow" | "nebius" | "hyperbolic" | "cohere" => {
                 let default_base = match target_provider {
                     "groq" => "https://api.groq.com/openai/v1",
                     "openrouter" => "https://openrouter.ai/api/v1",
@@ -940,7 +1029,19 @@ impl ModelProvider for RouterModelProvider {
                     "mistral" => "https://api.mistral.ai/v1",
                     "cerebras" => "https://api.cerebras.ai/v1",
                     "perplexity" => "https://api.perplexity.ai",
-                    _ => unreachable!(),
+                    "nvidia" => "https://integrate.api.nvidia.com/v1",
+                    "moonshot" | "kimi" => "https://api.moonshot.cn/v1",
+                    "zhipu" | "zai" => "https://open.bigmodel.cn/api/paas/v4",
+                    "minimax" => "https://api.minimax.chat/v1",
+                    "alibaba" | "qwen" => "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                    "xai" => "https://api.x.ai/v1",
+                    "sambanova" => "https://api.sambanova.ai/v1",
+                    "fireworks" => "https://api.fireworks.ai/inference/v1",
+                    "siliconflow" => "https://api.siliconflow.cn/v1",
+                    "nebius" => "https://api.studio.nebius.ai/v1",
+                    "hyperbolic" => "https://api.hyperbolic.xyz/v1",
+                    "cohere" => "https://api.cohere.com/v2",
+                    _ => "https://api.openai.com/v1",
                 };
                 let token = (if let Some(account) = req.provider_account_id.as_deref() {
                     self.resolver.get_token(account).await?
@@ -964,11 +1065,116 @@ impl ModelProvider for RouterModelProvider {
                 self.execute_openai_compatible(&base_url, Some(&token), model, req, target_provider)
                     .await
             }
+            _ if self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or(target_provider)).await.ok().flatten().is_some() => {
+                let base_url = self.resolver.get_endpoint_url(req.provider_account_id.as_deref().unwrap_or(target_provider)).await.unwrap().unwrap();
+                let token = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or(target_provider)).await.ok().flatten();
+                let clean_model = if let Some((_, rem)) = requested_model.split_once('/') { rem } else { requested_model };
+                self.execute_openai_compatible(&base_url, token.as_deref(), clean_model, req, target_provider).await
+            }
             _ => {
                 Err(DomainError::Validation(format!(
                     "Unsupported model or provider for '{}'. Please select a supported model in the Model Selector.",
                     requested_model
                 )))
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl ModelProvider for RouterModelProvider {
+    fn provider_id(&self) -> &str {
+        "unified-router"
+    }
+
+    async fn stream(&self, req: &ProviderRequest) -> Result<tokio::sync::mpsc::Receiver<custos_provider::ProviderEvent>, DomainError> {
+        let mut routed = req.clone();
+        let service = Self::classify_provider(&routed.model);
+        let candidate_service = if service == "gemini-oauth" { "gemini" } else { service };
+        if service == "native-local" {
+            routed.provider_account_id = None;
+        } else if routed.provider_account_id.is_none() {
+            routed.provider_account_id = self.resolver.select_account(candidate_service, &routed.model).await?;
+        }
+
+        let max_retries = 3;
+        let mut attempts = 0;
+        loop {
+            attempts += 1;
+            match self.dispatch_stream_attempt(&routed).await {
+                Ok(rx) => return Ok(rx),
+                Err(err) => {
+                    let err_str = err.to_string();
+                    let is_rate_or_quota = err_str.contains("429")
+                        || err_str.contains("RESOURCE_EXHAUSTED")
+                        || err_str.contains("quota exhausted")
+                        || err_str.contains("rate limited")
+                        || err_str.contains("temporary rate limit")
+                        || err_str.contains("Model unavailable");
+
+                    if is_rate_or_quota && attempts < max_retries && service != "native-local" {
+                        if let Ok(Some(next_account)) = self.resolver.select_account(candidate_service, &routed.model).await {
+                            if routed.provider_account_id.as_deref() != Some(&next_account) {
+                                tracing::info!(
+                                    service,
+                                    model = %routed.model,
+                                    previous_account = ?routed.provider_account_id,
+                                    failover_account = %next_account,
+                                    "Rate limit/429 encountered; auto-failing over to next available account in pool"
+                                );
+                                routed.provider_account_id = Some(next_account);
+                                continue;
+                            }
+                        }
+                    }
+                    return Err(err);
+                }
+            }
+        }
+    }
+
+    async fn generate(&self, req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
+        let mut routed = req.clone();
+        let service = Self::classify_provider(&routed.model);
+        let candidate_service = if service == "gemini-oauth" { "gemini" } else { service };
+        if service == "native-local" {
+            routed.provider_account_id = None;
+        } else if routed.provider_account_id.is_none() {
+            routed.provider_account_id = self.resolver.select_account(candidate_service, &routed.model).await?;
+        }
+
+        let max_retries = 3;
+        let mut attempts = 0;
+        loop {
+            attempts += 1;
+            match self.dispatch_generate_attempt(&routed).await {
+                Ok(resp) => return Ok(resp),
+                Err(err) => {
+                    let err_str = err.to_string();
+                    let is_rate_or_quota = err_str.contains("429")
+                        || err_str.contains("RESOURCE_EXHAUSTED")
+                        || err_str.contains("quota exhausted")
+                        || err_str.contains("rate limited")
+                        || err_str.contains("temporary rate limit")
+                        || err_str.contains("Model unavailable");
+
+                    if is_rate_or_quota && attempts < max_retries && service != "native-local" {
+                        if let Ok(Some(next_account)) = self.resolver.select_account(candidate_service, &routed.model).await {
+                            if routed.provider_account_id.as_deref() != Some(&next_account) {
+                                tracing::info!(
+                                    service,
+                                    model = %routed.model,
+                                    previous_account = ?routed.provider_account_id,
+                                    failover_account = %next_account,
+                                    "Rate limit/429 encountered; auto-failing over to next available account in pool"
+                                );
+                                routed.provider_account_id = Some(next_account);
+                                continue;
+                            }
+                        }
+                    }
+                    return Err(err);
+                }
             }
         }
     }
@@ -1742,5 +1948,71 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(matches!(err, DomainError::Validation(_)));
+    }
+
+    struct FailoverResolver {
+        endpoint: String,
+        state: super::super::catalog::ModelAvailability,
+        accounts: std::sync::Mutex<Vec<String>>,
+    }
+    #[async_trait]
+    impl CredentialResolver for FailoverResolver {
+        async fn select_account(&self, _service: &str, model: &str) -> Result<Option<String>, DomainError> {
+            let mut list = self.accounts.lock().unwrap();
+            let mut found = None;
+            for (idx, acc) in list.iter().enumerate() {
+                if self.state.check(acc, model).is_ok() {
+                    found = Some((idx, acc.clone()));
+                    break;
+                }
+            }
+            if let Some((idx, acc)) = found {
+                list.remove(idx);
+                list.push(acc.clone());
+                Ok(Some(acc))
+            } else {
+                Ok(None)
+            }
+        }
+        async fn get_token(&self, id: &str) -> Result<Option<String>, DomainError> { Ok(Some(format!("{id}-token"))) }
+        async fn get_endpoint_url(&self, _: &str) -> Result<Option<String>, DomainError> { Ok(Some(self.endpoint.clone())) }
+        async fn service_for_account(&self, _: &str) -> Result<Option<String>, DomainError> { Ok(Some("openai".into())) }
+        async fn validate_model(&self, account: &str, model: &str, _: Option<&str>) -> Result<(), DomainError> { self.state.check(account, model) }
+        async fn observe_response(&self, account: &str, model: &str, status: u16, body: &str, retry_at: Option<i64>) -> Result<(), DomainError> { self.state.observe(account, model, status, body, retry_at) }
+    }
+
+    #[tokio::test]
+    async fn test_in_flight_429_auto_failover_to_next_account() {
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+        use wiremock::matchers::{method, path, header};
+        let server = MockServer::start().await;
+        Mock::given(method("POST")).and(path("/chat/completions"))
+            .and(header("authorization", "Bearer account-A-token"))
+            .respond_with(ResponseTemplate::new(429).set_body_json(serde_json::json!({"error":{"code":"rate_limit_exceeded","message":"Rate limit reached"}})))
+            .expect(1).mount(&server).await;
+        Mock::given(method("POST")).and(path("/chat/completions"))
+            .and(header("authorization", "Bearer account-B-token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "model":"gpt-4o",
+                "choices":[{"message":{"content":"response from account B"}}],
+                "usage":{"total_tokens":10}
+            })))
+            .expect(1).mount(&server).await;
+
+        let state = super::super::catalog::ModelAvailability::default();
+        let resolver = Arc::new(FailoverResolver {
+            endpoint: server.uri(),
+            state: state.clone(),
+            accounts: std::sync::Mutex::new(vec!["account-A".into(), "account-B".into()]),
+        });
+        let provider = RouterModelProvider::new(resolver);
+        let mut request = ProviderRequest::simple("hello pool");
+        request.model = "gpt-4o".into();
+        request.provider_account_id = Some("account-A".into());
+
+        let response = provider.generate(&request).await.expect("Failover to account B should succeed");
+        assert_eq!(response.content, "response from account B");
+        assert!(state.check("account-A", "gpt-4o").is_err());
+        assert!(state.check("account-B", "gpt-4o").is_ok());
     }
 }

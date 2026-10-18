@@ -14,18 +14,18 @@ use custos_core::contracts::harness::{
 use custos_domain::{
     Action, ActionIntent, ActionLifecycleState, ContextPack, DomainError, RiskLevel, WorkerRun,
 };
-use custos_provider::{ModelProvider, ProviderRequest};
+use custos_provider::{ModelPort, ProviderRequest};
 use std::sync::Arc;
 
 pub struct GovernedAgentRuntime {
-    provider: Arc<dyn ModelProvider>,
+    provider: Arc<dyn ModelPort>,
     system_prompt: String,
     available_tools: Vec<serde_json::Value>,
 }
 
 impl GovernedAgentRuntime {
     pub fn new(
-        provider: Arc<dyn ModelProvider>,
+        provider: Arc<dyn ModelPort>,
         system_prompt: impl Into<String>,
         available_tools: Vec<serde_json::Value>,
     ) -> Self {
@@ -148,7 +148,7 @@ mod tests {
     }
 
     #[async_trait]
-    impl ModelProvider for MockTestProvider {
+    impl ModelPort for MockTestProvider {
         fn provider_id(&self) -> &str {
             "mock-test-provider"
         }

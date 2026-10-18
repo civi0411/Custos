@@ -46,12 +46,14 @@ pub use crate::custos_local_api::{
     METHOD_WORKSPACES_INTEGRATE, METHOD_SETTINGS_GET, METHOD_SETTINGS_SET,
     METHOD_WORKSPACE_DIFF, METHOD_WORKSPACE_FILES_READ,
     METHOD_WORKSPACE_FILES_TREE, METHOD_WORKSPACE_FILES_WRITE, METHOD_WORKSPACE_FILE_DIFF,
-    METHOD_WORKSPACE_GIT_DISCARD, METHOD_WORKSPACE_GIT_STAGE, METHOD_WORKSPACE_GIT_UNSTAGE,
+    METHOD_WORKSPACE_GIT_COMMIT, METHOD_WORKSPACE_GIT_DISCARD, METHOD_WORKSPACE_GIT_STAGE, METHOD_WORKSPACE_GIT_UNSTAGE,
     JobOperationalStatus, PacksJobCatalogItem, METHOD_PACKS_JOBS_GET, METHOD_PACKS_JOBS_LIST,
     METHOD_PACKS_JOBS_RUN, METHOD_PACKS_MANIFESTS_LIST, METHOD_PACKS_ROLES_LIST,
     METHOD_ASSISTANT_DRAFTS_DELETE, METHOD_ASSISTANT_DRAFTS_GET, METHOD_ASSISTANT_DRAFTS_LIST,
     METHOD_ASSISTANT_DRAFTS_SAVE, METHOD_ASSISTANT_OUTBOX_CREATE, METHOD_ASSISTANT_OUTBOX_APPROVE, METHOD_ASSISTANT_OUTBOX_DISPATCH,
     METHOD_ASSISTANT_OUTBOX_LIST, METHOD_RESOURCES_CAPABILITIES, METHOD_WORKSPACES_AGENT_STEER,
+    METHOD_GITHUB_AUTH_STATUS, METHOD_GITHUB_VIEWER, METHOD_GITHUB_LOGIN,
+    METHOD_GITHUB_ACCOUNTS, METHOD_GIT_REPOSITORY, METHOD_GIT_SWITCH, METHOD_GIT_FETCH, METHOD_GIT_ACCOUNT, METHOD_GIT_GITHUB,
 };
 use custos_adapters::harness::HarnessRegistry;
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
@@ -89,9 +91,13 @@ fn default_model_probe_base_url(provider_type: &str) -> Option<&'static str> {
         "antigravity" => Some("https://cloudcode-pa.googleapis.com"),
         "deepseek" => Some("https://api.deepseek.com/v1"),
         "local" | "ollama" => Some("http://localhost:11434"),
+        "lmstudio" | "lm-studio" => Some("http://127.0.0.1:1234/v1"),
         _ => None,
     }
 }
+
+static CAFFEINATE_STATE: std::sync::Mutex<(String, Option<std::process::Child>)> =
+    std::sync::Mutex::new((String::new(), None));
 
 pub fn resolve_agent_browser_binary() -> Option<std::path::PathBuf> {
     if let Ok(path) = std::env::var("AGENT_BROWSER_BINARY") {
@@ -159,6 +165,270 @@ pub fn resolve_ssh_binary() -> Option<std::path::PathBuf> {
     None
 }
 
+static GITHUB_LOGIN_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+fn github_login_command(path: &std::path::Path) -> String {
+    let executable = path.to_string_lossy().replace('\'', "'\\''");
+    format!("exec '{executable}' auth login --hostname github.com --git-protocol https --web --skip-ssh-key")
+}
+
+fn github_auth_metadata(success: bool, stdout: &[u8]) -> serde_json::Value {
+    let user = serde_json::from_slice::<serde_json::Value>(stdout).ok();
+    if success && user.as_ref().and_then(|u| u.get("login")).and_then(|v| v.as_str()).is_some_and(|login| !login.trim().is_empty()) {
+        // Whitelist profile metadata; never forward arbitrary CLI output.
+        let user = user.as_ref();
+        return serde_json::json!({"authenticated": true, "source": "gh_cli", "installed": true, "user": {
+            "login": user.and_then(|u| u.get("login")),
+            "name": user.and_then(|u| u.get("name")),
+            "avatar_url": user.and_then(|u| u.get("avatar_url")),
+            "html_url": user.and_then(|u| u.get("html_url"))
+        }});
+    }
+    serde_json::json!({"authenticated": false, "source": "gh_cli", "installed": true,
+        "error": "GitHub account could not be verified. Connect with gh, or check network access and retry."})
+}
+
+pub fn resolve_gh_binary() -> Option<std::path::PathBuf> {
+    if let Ok(path) = std::env::var("GH_BINARY") {
+        let p = std::path::PathBuf::from(path);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    for candidate in [
+        "/opt/homebrew/bin/gh",
+        "/usr/local/bin/gh",
+        "/usr/bin/gh",
+    ] {
+        let p = std::path::PathBuf::from(candidate);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    if let Some(home) = dirs::home_dir() {
+        let local_bin = home.join(".local/bin/gh");
+        if local_bin.exists() {
+            return Some(local_bin);
+        }
+    }
+    if let Ok(output) = std::process::Command::new("which")
+        .arg("gh")
+        .output()
+    {
+        if output.status.success() {
+            let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let p = std::path::PathBuf::from(path_str);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+pub fn resolve_git_binary() -> std::path::PathBuf {
+    if let Ok(path) = std::env::var("GIT_BINARY") {
+        let p = std::path::PathBuf::from(path);
+        if p.exists() {
+            return p;
+        }
+    }
+    for candidate in [
+        "/opt/homebrew/bin/git",
+        "/usr/local/bin/git",
+        "/usr/bin/git",
+    ] {
+        let p = std::path::PathBuf::from(candidate);
+        if p.exists() {
+            return p;
+        }
+    }
+    std::path::PathBuf::from("git")
+}
+
+/// Parses a Git remote URL into (host, owner, repo, avatar_url)
+/// Supports SSH, HTTPS, git://, and custom enterprise GitHub hosts.
+pub fn parse_github_remote(remote_url: &str) -> (Option<String>, Option<String>, Option<String>, Option<String>) {
+    let raw = remote_url.trim();
+    if raw.is_empty() {
+        return (None, None, None, None);
+    }
+
+    let s = raw.strip_suffix(".git").unwrap_or(raw);
+
+    // Case 1: SCP-like syntax: [user@]host:owner/repo (only when no scheme :// is present)
+    if !s.contains("://") {
+        if let Some((left, path)) = s.split_once(':') {
+            if !left.contains('/') {
+                let host = left.split('@').last().unwrap_or(left).trim();
+                let path = path.trim().trim_start_matches('/');
+                let parts: Vec<&str> = path.split('/').filter(|p| !p.is_empty()).collect();
+                if parts.len() >= 2 {
+                    let owner = parts[0].to_string();
+                    let repo = parts[1..].join("/");
+                    let avatar = if host == "github.com" {
+                        Some(format!("https://github.com/{}.png", owner))
+                    } else {
+                        None
+                    };
+                    return (Some(host.to_string()), Some(owner), Some(repo), avatar);
+                }
+            }
+        }
+    }
+
+    // Case 2: URL syntax: [scheme://][user[:pass]@]host[:port]/owner/repo
+    let after_scheme = if let Some(idx) = s.find("://") {
+        &s[idx + 3..]
+    } else {
+        s
+    };
+
+    let after_auth = if let Some((_, rest)) = after_scheme.split_once('@') {
+        rest
+    } else {
+        after_scheme
+    };
+
+    if let Some((host_part, path_part)) = after_auth.split_once('/') {
+        let host = host_part.split(':').next().unwrap_or(host_part).trim();
+        let parts: Vec<&str> = path_part.split('/').filter(|p| !p.is_empty()).collect();
+        if parts.len() >= 2 {
+            let owner = parts[0].to_string();
+            let repo = parts[1..].join("/");
+            let avatar = if host == "github.com" {
+                Some(format!("https://github.com/{}.png", owner))
+            } else {
+                None
+            };
+            return (Some(host.to_string()), Some(owner), Some(repo), avatar);
+        }
+    }
+
+    (None, None, None, None)
+}
+
+/// Resolves actual gitdir and common gitdir for a path (handling both .git directory and .git file for worktrees/submodules)
+pub async fn resolve_deep_git_paths(path: &std::path::Path) -> Option<(std::path::PathBuf, std::path::PathBuf, bool)> {
+    let dot_git = path.join(".git");
+    if !dot_git.exists() {
+        return None;
+    }
+
+    if dot_git.is_dir() {
+        // Standard repository
+        return Some((dot_git.clone(), dot_git, false));
+    }
+
+    if dot_git.is_file() {
+        // Linked worktree or submodule
+        if let Ok(content) = tokio::fs::read_to_string(&dot_git).await {
+            for line in content.lines() {
+                let trimmed = line.trim();
+                if let Some(rest) = trimmed.strip_prefix("gitdir:") {
+                    let gitdir_str = rest.trim();
+                    let gitdir_path = if std::path::Path::new(gitdir_str).is_absolute() {
+                        std::path::PathBuf::from(gitdir_str)
+                    } else {
+                        path.join(gitdir_str)
+                    };
+                    let gitdir_canonical = gitdir_path.canonicalize().unwrap_or(gitdir_path);
+
+                    let commondir_file = gitdir_canonical.join("commondir");
+                    let commondir_canonical = if commondir_file.is_file() {
+                        if let Ok(common_content) = tokio::fs::read_to_string(&commondir_file).await {
+                            let common_str = common_content.trim();
+                            let common_path = if std::path::Path::new(common_str).is_absolute() {
+                                std::path::PathBuf::from(common_str)
+                            } else {
+                                gitdir_canonical.join(common_str)
+                            };
+                            common_path.canonicalize().unwrap_or(common_path)
+                        } else {
+                            gitdir_canonical.clone()
+                        }
+                    } else {
+                        gitdir_canonical.clone()
+                    };
+
+                    return Some((gitdir_canonical, commondir_canonical, true));
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Lists all worktrees for a Git repository via `git worktree list --porcelain`
+pub async fn list_git_worktrees(git_bin: &std::path::Path, repo_path: &str) -> Vec<serde_json::Value> {
+    let mut worktrees = Vec::new();
+    let output = match tokio::process::Command::new(git_bin)
+        .current_dir(repo_path)
+        .args(["worktree", "list", "--porcelain"])
+        .output()
+        .await
+    {
+        Ok(out) if out.status.success() => out,
+        _ => return worktrees,
+    };
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut current_path: Option<String> = None;
+    let mut current_head: Option<String> = None;
+    let mut current_branch: Option<String> = None;
+    let mut current_bare = false;
+    let mut current_detached = false;
+    let mut is_first = true;
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            if let Some(p) = current_path.take() {
+                worktrees.push(serde_json::json!({
+                    "path": p,
+                    "head": current_head.take(),
+                    "branch": current_branch.take(),
+                    "is_main": is_first,
+                    "is_bare": current_bare,
+                    "is_detached": current_detached,
+                }));
+                is_first = false;
+            }
+            current_bare = false;
+            current_detached = false;
+            continue;
+        }
+
+        if let Some(p) = trimmed.strip_prefix("worktree ") {
+            current_path = Some(p.trim().to_string());
+        } else if let Some(h) = trimmed.strip_prefix("HEAD ") {
+            current_head = Some(h.trim().to_string());
+        } else if let Some(b) = trimmed.strip_prefix("branch ") {
+            let b_ref = b.trim();
+            let short = b_ref.strip_prefix("refs/heads/").unwrap_or(b_ref);
+            current_branch = Some(short.to_string());
+        } else if trimmed == "bare" {
+            current_bare = true;
+        } else if trimmed == "detached" {
+            current_detached = true;
+        }
+    }
+
+    if let Some(p) = current_path.take() {
+        worktrees.push(serde_json::json!({
+            "path": p,
+            "head": current_head.take(),
+            "branch": current_branch.take(),
+            "is_main": is_first,
+            "is_bare": current_bare,
+            "is_detached": current_detached,
+        }));
+    }
+
+    worktrees
+}
+
 // Effectful Browser and Remote Fleet operations stay fail-closed until their
 // transports are composed behind governed capability ports. Keeping this
 // decision in one place prevents persisted inventory/session metadata from
@@ -183,6 +453,7 @@ pub struct LocalApiDispatcher {
     workflow: Option<Arc<dyn WorkflowPort>>,
     usage_runs: Option<Arc<dyn custos_core::contracts::storage::RunPort>>,
     workspace: Option<Arc<WorkspaceCoordinator>>,
+    candidate_mutation: tokio::sync::Mutex<()>,
     research: Option<Arc<ResearchRepository>>,
     providers: Option<Arc<ProviderRepository>>,
     credentials: Option<Arc<crate::credentials::ProviderCredentials>>,
@@ -213,6 +484,7 @@ impl LocalApiDispatcher {
             workflow: None,
             usage_runs: None,
             workspace: None,
+            candidate_mutation: tokio::sync::Mutex::new(()),
             research: None,
             providers: None,
             credentials: None,
@@ -1201,6 +1473,11 @@ impl LocalApiDispatcher {
                     None => return ApiResponse::error(req.id, "Missing task_id param"),
                 };
 
+                match self.task_service.get_task(&task_id).await {
+                    Ok(Some(_)) => {}
+                    Ok(None) => return ApiResponse::error(req.id, format!("Task {task_id} not found")),
+                    Err(error) => return ApiResponse::error(req.id, error.to_string()),
+                }
                 match self
                     .bridge_service
                     .attach(session_id, task_id, AttachMode::Steer)
@@ -1315,6 +1592,128 @@ impl LocalApiDispatcher {
                         "estimated_cost_usd": rounded_cost,
                         "active_runs": active_runs,
                         "pending_approvals": pending_approvals
+                    }),
+                )
+            }
+            "v1.system.metrics" | "v1.system.telemetry" => {
+                let memory_resident_mb = if let Some(out) = std::process::Command::new("ps")
+                    .args(["-A", "-o", "rss=,comm="])
+                    .output()
+                    .ok()
+                    .and_then(|out| String::from_utf8(out.stdout).ok())
+                {
+                    let mut total_kb: f64 = 0.0;
+                    for line in out.lines() {
+                        let lower = line.to_lowercase();
+                        if lower.contains("custos") {
+                            if let Some(rss_str) = line.split_whitespace().next() {
+                                if let Ok(rss) = rss_str.parse::<f64>() {
+                                    total_kb += rss;
+                                }
+                            }
+                        }
+                    }
+                    if total_kb == 0.0 {
+                        let pid = std::process::id();
+                        let rss_kb: f64 = std::process::Command::new("ps")
+                            .args(["-o", "rss=", "-p", &pid.to_string()])
+                            .output()
+                            .ok()
+                            .and_then(|out| String::from_utf8(out.stdout).ok())
+                            .and_then(|s| s.trim().parse::<f64>().ok())
+                            .unwrap_or(0.0);
+                        ((rss_kb / 1024.0) * 10.0).round() / 10.0
+                    } else {
+                        ((total_kb / 1024.0) * 10.0).round() / 10.0
+                    }
+                } else {
+                    0.0
+                };
+
+                let mut active_runs: u64 = 0;
+                if let Some(store) = &self.usage_runs {
+                    if let Ok(tasks) = self.task_service.list_tasks().await {
+                        for task in tasks {
+                            if let Ok(runs) = store.list_runs_for_task(&task.id).await {
+                                for run in runs {
+                                    if !run.status.is_terminal() {
+                                        active_runs += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                let active_ports: Vec<u16> = std::process::Command::new("lsof")
+                    .args(["-iTCP", "-sTCP:LISTEN", "-n", "-P"])
+                    .output()
+                    .ok()
+                    .and_then(|out| String::from_utf8(out.stdout).ok())
+                    .map(|s| {
+                        let mut ports = std::collections::BTreeSet::new();
+                        for line in s.lines().skip(1) {
+                            if let Some(part) = line.split_whitespace().nth(8) {
+                                if let Some(port_str) = part.rsplit(':').next() {
+                                    if let Ok(p) = port_str.parse::<u16>() {
+                                        if (1024..=49151).contains(&p) {
+                                            ports.insert(p);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        ports.into_iter().collect()
+                    })
+                    .unwrap_or_default();
+
+                let caffeinate_status = {
+                    let mut lock = CAFFEINATE_STATE.lock().unwrap();
+                    let (mode, child) = &mut *lock;
+                    if mode.is_empty() {
+                        *mode = "off".to_string();
+                    }
+                    let is_active = child.as_mut().map(|c| c.try_wait().ok().flatten().is_none()).unwrap_or(false);
+                    serde_json::json!({
+                        "mode": mode,
+                        "active": is_active
+                    })
+                };
+
+                ApiResponse::success(
+                    req.id,
+                    serde_json::json!({
+                        "memory_resident_mb": memory_resident_mb,
+                        "active_runs": active_runs,
+                        "active_ports": active_ports,
+                        "caffeinate": caffeinate_status
+                    }),
+                )
+            }
+            "v1.system.caffeinate" => {
+                let mode = req.params.get("mode").and_then(|v| v.as_str()).unwrap_or("off");
+                let mut lock = CAFFEINATE_STATE.lock().unwrap();
+                let (current_mode, child) = &mut *lock;
+                *current_mode = mode.to_string();
+
+                let should_run = mode == "always";
+                if should_run {
+                    if child.is_none() {
+                        *child = std::process::Command::new("caffeinate")
+                            .args(["-i", "-s"])
+                            .spawn()
+                            .ok();
+                    }
+                } else if let Some(mut c) = child.take() {
+                    let _ = c.kill();
+                }
+
+                let is_active = child.as_mut().map(|c| c.try_wait().ok().flatten().is_none()).unwrap_or(false);
+                ApiResponse::success(
+                    req.id,
+                    serde_json::json!({
+                        "mode": mode,
+                        "active": is_active
                     }),
                 )
             }
@@ -1633,53 +2032,60 @@ impl LocalApiDispatcher {
                 }
             }
             METHOD_WORKSPACES_DETECT => {
-                let raw_path = match req.params.get("path").and_then(|v| v.as_str()) {
-                    Some(p) => p.trim(),
-                    None => return ApiResponse::error(req.id, "Missing 'path' parameter"),
-                };
-                let expanded_path = if raw_path.starts_with("~/") {
+                let raw_path_str = req.params.get("path").and_then(|v| v.as_str()).map(|s| s.trim()).unwrap_or("");
+                let expanded_path = if raw_path_str.is_empty() || raw_path_str == "." {
+                    std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
+                } else if raw_path_str.starts_with("~/") {
                     if let Some(home) = dirs::home_dir() {
-                        home.join(&raw_path[2..])
+                        home.join(&raw_path_str[2..])
                     } else {
-                        std::path::PathBuf::from(raw_path)
+                        std::path::PathBuf::from(raw_path_str)
                     }
-                } else if raw_path == "~" {
-                    dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from(raw_path))
+                } else if raw_path_str == "~" {
+                    dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from(raw_path_str))
                 } else {
-                    std::path::PathBuf::from(raw_path)
+                    std::path::PathBuf::from(raw_path_str)
                 };
 
                 let canonical_path = match expanded_path.canonicalize() {
                     Ok(p) => p,
                     Err(e) => {
-                        return ApiResponse::error(
-                            req.id,
-                            format!("Directory '{}' does not exist or cannot be accessed: {}", raw_path, e),
-                        );
+                        if let Ok(curr) = std::env::current_dir().and_then(|c| c.canonicalize()) {
+                            curr
+                        } else {
+                            return ApiResponse::error(
+                                req.id,
+                                format!("Directory '{}' does not exist or cannot be accessed: {}", raw_path_str, e),
+                            );
+                        }
                     }
                 };
 
                 if !canonical_path.is_dir() {
                     return ApiResponse::error(
                         req.id,
-                        format!("Path '{}' is not a directory", raw_path),
+                        format!("Path '{}' is not a directory", raw_path_str),
                     );
                 }
 
-                // 1. Probe Git
-                let toplevel_res = tokio::process::Command::new("git")
-                    .current_dir(&canonical_path)
-                    .args(["rev-parse", "--is-inside-work-tree", "--show-toplevel"])
-                    .output()
-                    .await;
+                // 1. Deep Probe Git (files vs dirs, worktrees, commondir)
+                let git_bin = resolve_git_binary();
+                let deep_git_probe = resolve_deep_git_paths(&canonical_path).await;
 
-                let mut is_git = false;
+                let mut is_git = deep_git_probe.is_some();
                 let mut root_path = canonical_path.to_string_lossy().to_string();
                 let mut branch: Option<String> = None;
                 let mut is_dirty = false;
                 let mut dirty_count = 0;
                 let mut remote_url: Option<String> = None;
-                let mut is_worktree = false;
+                let mut is_worktree = deep_git_probe.as_ref().map(|(_, _, wt)| *wt).unwrap_or(false);
+
+                // Check via git rev-parse for root work-tree toplevel
+                let toplevel_res = tokio::process::Command::new(&git_bin)
+                    .current_dir(&canonical_path)
+                    .args(["rev-parse", "--is-inside-work-tree", "--show-toplevel"])
+                    .output()
+                    .await;
 
                 if let Ok(out) = toplevel_res {
                     if out.status.success() {
@@ -1696,9 +2102,15 @@ impl LocalApiDispatcher {
                     }
                 }
 
+                let mut worktrees: Vec<serde_json::Value> = Vec::new();
+                let mut github_host: Option<String> = None;
+                let mut github_owner: Option<String> = None;
+                let mut github_repo: Option<String> = None;
+                let mut github_avatar_url: Option<String> = None;
+
                 if is_git {
                     // Get current branch
-                    if let Ok(b_out) = tokio::process::Command::new("git")
+                    if let Ok(b_out) = tokio::process::Command::new(&git_bin)
                         .current_dir(&root_path)
                         .args(["rev-parse", "--abbrev-ref", "HEAD"])
                         .output()
@@ -1713,7 +2125,7 @@ impl LocalApiDispatcher {
                     }
 
                     // Check dirty status
-                    if let Ok(s_out) = tokio::process::Command::new("git")
+                    if let Ok(s_out) = tokio::process::Command::new(&git_bin)
                         .current_dir(&root_path)
                         .args(["status", "--porcelain=v1"])
                         .output()
@@ -1726,23 +2138,34 @@ impl LocalApiDispatcher {
                         }
                     }
 
-                    // Get remote URL
-                    if let Ok(r_out) = tokio::process::Command::new("git")
-                        .current_dir(&root_path)
-                        .args(["remote", "get-url", "origin"])
-                        .output()
-                        .await
-                    {
-                        if r_out.status.success() {
-                            let r_str = String::from_utf8_lossy(&r_out.stdout).trim().to_string();
-                            if !r_str.is_empty() {
-                                remote_url = Some(r_str);
+                    // Get remote URL (origin first, then upstream)
+                    for remote_name in ["origin", "upstream"] {
+                        if let Ok(r_out) = tokio::process::Command::new(&git_bin)
+                            .current_dir(&root_path)
+                            .args(["remote", "get-url", remote_name])
+                            .output()
+                            .await
+                        {
+                            if r_out.status.success() {
+                                let r_str = String::from_utf8_lossy(&r_out.stdout).trim().to_string();
+                                if !r_str.is_empty() {
+                                    remote_url = Some(r_str);
+                                    break;
+                                }
                             }
                         }
                     }
 
+                    if let Some(ref r_url) = remote_url {
+                        let (gh_host, gh_owner, gh_repo, gh_avatar) = parse_github_remote(r_url);
+                        github_host = gh_host;
+                        github_owner = gh_owner;
+                        github_repo = gh_repo;
+                        github_avatar_url = gh_avatar;
+                    }
+
                     // Check if linked worktree
-                    let dir_out = tokio::process::Command::new("git")
+                    let dir_out = tokio::process::Command::new(&git_bin)
                         .current_dir(&root_path)
                         .args(["rev-parse", "--git-dir", "--git-common-dir"])
                         .output()
@@ -1753,6 +2176,92 @@ impl LocalApiDispatcher {
                             let d_lines: Vec<&str> = out_str.lines().collect();
                             if d_lines.len() >= 2 && d_lines[0] != d_lines[1] {
                                 is_worktree = true;
+                            }
+                        }
+                    }
+
+                    // List all worktrees for this repository
+                    worktrees = list_git_worktrees(&git_bin, &root_path).await;
+                }
+
+                // 1b. Scan immediate subdirectories for child Git repositories / workspaces
+                let mut sub_repositories: Vec<serde_json::Value> = Vec::new();
+                if let Ok(mut dir_entries) = tokio::fs::read_dir(&canonical_path).await {
+                    while let Ok(Some(entry)) = dir_entries.next_entry().await {
+                        if let Ok(file_type) = entry.file_type().await {
+                            if file_type.is_dir() {
+                                let sub_dir = entry.path();
+                                if let Some((_sub_gitdir, _sub_commondir, _sub_is_wt)) = resolve_deep_git_paths(&sub_dir).await {
+                                    let sub_name = entry.file_name().to_string_lossy().to_string();
+                                    let mut sub_branch = String::from("main");
+                                    if let Ok(sub_b_out) = tokio::process::Command::new(&git_bin)
+                                        .current_dir(&sub_dir)
+                                        .args(["rev-parse", "--abbrev-ref", "HEAD"])
+                                        .output()
+                                        .await
+                                    {
+                                        if sub_b_out.status.success() {
+                                            let s = String::from_utf8_lossy(&sub_b_out.stdout).trim().to_string();
+                                            if !s.is_empty() {
+                                                sub_branch = s;
+                                            }
+                                        }
+                                    }
+
+                                    let mut sub_dirty_count = 0;
+                                    if let Ok(s_out) = tokio::process::Command::new(&git_bin)
+                                        .current_dir(&sub_dir)
+                                        .args(["status", "--porcelain=v1"])
+                                        .output()
+                                        .await
+                                    {
+                                        if s_out.status.success() {
+                                            let changes = String::from_utf8_lossy(&s_out.stdout);
+                                            sub_dirty_count = changes.lines().filter(|l| !l.trim().is_empty()).count();
+                                        }
+                                    }
+
+                                    let mut sub_remote_url: Option<String> = None;
+                                    for remote_name in ["origin", "upstream"] {
+                                        if let Ok(r_out) = tokio::process::Command::new(&git_bin)
+                                            .current_dir(&sub_dir)
+                                            .args(["remote", "get-url", remote_name])
+                                            .output()
+                                            .await
+                                        {
+                                            if r_out.status.success() {
+                                                let r = String::from_utf8_lossy(&r_out.stdout).trim().to_string();
+                                                if !r.is_empty() {
+                                                    sub_remote_url = Some(r);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    let (sub_gh_host, sub_gh_owner, sub_gh_repo, sub_gh_avatar) = if let Some(ref r) = sub_remote_url {
+                                        parse_github_remote(r)
+                                    } else {
+                                        (None, None, None, None)
+                                    };
+
+                                    let sub_worktrees = list_git_worktrees(&git_bin, &sub_dir.to_string_lossy()).await;
+
+                                    sub_repositories.push(serde_json::json!({
+                                        "name": sub_name,
+                                        "path": sub_dir.to_string_lossy().to_string(),
+                                        "branch": sub_branch,
+                                        "is_git": true,
+                                        "is_dirty": sub_dirty_count > 0,
+                                        "dirty_count": sub_dirty_count,
+                                        "remote_url": sub_remote_url,
+                                        "github_host": sub_gh_host,
+                                        "github_owner": sub_gh_owner,
+                                        "github_repo": sub_gh_repo,
+                                        "github_avatar_url": sub_gh_avatar,
+                                        "worktrees": sub_worktrees
+                                    }));
+                                }
                             }
                         }
                     }
@@ -1790,8 +2299,14 @@ impl LocalApiDispatcher {
                     "is_dirty": is_dirty,
                     "dirty_count": dirty_count,
                     "remote_url": remote_url,
+                    "github_host": github_host,
+                    "github_owner": github_owner,
+                    "github_repo": github_repo,
+                    "github_avatar_url": github_avatar_url,
                     "project_type": project_type,
-                    "is_worktree": is_worktree
+                    "is_worktree": is_worktree,
+                    "worktrees": worktrees,
+                    "sub_repositories": sub_repositories
                 });
 
                 ApiResponse::success(req.id, result)
@@ -1824,6 +2339,12 @@ impl LocalApiDispatcher {
                 }
             }
             METHOD_WORKSPACES_CANDIDATES_SPAWN => {
+                let _mutation = self.candidate_mutation.lock().await;
+                let command_id = req.params.get("command_id").and_then(|value| value.as_str()).unwrap_or(&req.id).to_string();
+                if command_id.is_empty() || command_id.len() > 128 || !command_id.chars().all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_')) {
+                    return ApiResponse::error(req.id, "Candidate command_id must be an identifier of at most 128 characters");
+                }
+                let request_hash = blake3::hash(req.params.to_string().as_bytes()).to_hex().to_string();
                 let coordinator = match self.workspace.as_ref() {
                     Some(c) => c,
                     None => {
@@ -1851,6 +2372,19 @@ impl LocalApiDispatcher {
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 }
 
+                let recorded = match coordinator.list_workspaces().await {
+                    Ok(workspaces) => workspaces.into_iter().filter(|workspace| workspace.metadata.get("batch_command_id").and_then(|value| value.as_str()) == Some(&command_id)).collect::<Vec<_>>(),
+                    Err(error) => return ApiResponse::error(req.id, error.to_string()),
+                };
+                if !recorded.is_empty() {
+                    if recorded.iter().any(|workspace| workspace.owner_task_id.as_deref() != Some(&task_id) || workspace.metadata.get("batch_request_hash").and_then(|value| value.as_str()) != Some(&request_hash)) {
+                        return ApiResponse::error(req.id, "This command_id already belongs to a different candidate request");
+                    }
+                    let requested = req.params.get("count").and_then(|value| value.as_u64()).unwrap_or(2).clamp(1, 8) as usize;
+                    let pending = recorded.iter().any(|workspace| !workspace.is_ready());
+                    return ApiResponse::success(req.id, serde_json::json!({"batch_command_id": command_id, "task_id": task_id,
+                        "candidates": recorded, "failed": [], "partial": pending || requested != recorded.len(), "needs_reconciliation": pending || requested != recorded.len(), "replayed": true}));
+                }
                 let count = req.params.get("count").and_then(|v| v.as_u64()).unwrap_or(2) as usize;
                 let count = count.clamp(1, 8);
 
@@ -1899,6 +2433,8 @@ impl LocalApiDispatcher {
                 };
 
                 let mut spawned_workspaces = Vec::new();
+                let mut failed_workspaces = Vec::new();
+                let batch_command_id = command_id;
                 let base_path = std::path::Path::new(&base_repo_path);
                 let (Some(parent), Some(repo_name)) = (base_path.parent(), base_path.file_name()) else {
                     return ApiResponse::error(req.id, "Candidate base must have a named parent directory");
@@ -1917,7 +2453,9 @@ impl LocalApiDispatcher {
                         "candidate_index": i,
                         "task_id": task_id,
                         "branch": branch,
-                        "base_commit_hash": base_commit_hash
+                        "base_commit_hash": base_commit_hash,
+                        "batch_command_id": &batch_command_id,
+                        "batch_request_hash": &request_hash,
                     });
 
                     let create_req = CreateWorkspaceRequest {
@@ -1941,19 +2479,30 @@ impl LocalApiDispatcher {
 
                     match coordinator.create_workspace(create_req).await {
                         Ok(ws) => spawned_workspaces.push(ws),
-                        Err(e) => return ApiResponse::error(req.id, format!("Failed to create candidate #{i}: {e}")),
+                        Err(e) => {
+                            failed_workspaces.push(serde_json::json!({
+                                "candidate_index": i,
+                                "branch": branch,
+                                "error": e.to_string(),
+                            }));
+                        }
                     }
                 }
 
-                match serde_json::to_value(&spawned_workspaces) {
-                    Ok(val) => ApiResponse::success(req.id, serde_json::json!({
-                        "task_id": task_id,
-                        "base_repo_path": base_repo_path,
-                        "base_commit_hash": base_commit_hash,
-                        "candidates": val
-                    })),
-                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                if spawned_workspaces.is_empty() && !failed_workspaces.is_empty() {
+                    return ApiResponse::error(req.id, format!("Failed to create candidate worktrees: {:?}", failed_workspaces));
                 }
+
+                let candidates_val = serde_json::to_value(&spawned_workspaces).unwrap_or_default();
+                ApiResponse::success(req.id, serde_json::json!({
+                    "batch_command_id": batch_command_id,
+                    "task_id": task_id,
+                    "base_repo_path": base_repo_path,
+                    "base_commit_hash": base_commit_hash,
+                    "candidates": candidates_val,
+                    "failed": failed_workspaces,
+                    "partial": !failed_workspaces.is_empty(),
+                }))
             }
             METHOD_WORKSPACES_CANDIDATES_COMPARE => {
                 let coordinator = match self.workspace.as_ref() {
@@ -1970,28 +2519,89 @@ impl LocalApiDispatcher {
                     let mut list = Vec::new();
                     for val in ws_ids {
                         if let Some(id_str) = val.as_str() {
-                            if let Ok(Some(ws)) = coordinator.get_workspace(&custos_domain::WorkspaceId::new(id_str)).await {
-                                list.push(ws);
+                            match coordinator.get_workspace(&custos_domain::WorkspaceId::new(id_str)).await {
+                                Ok(Some(ws)) => list.push(ws),
+                                Ok(None) => return ApiResponse::error(req.id, format!("Workspace '{id_str}' not found")),
+                                Err(e) => return ApiResponse::error(req.id, format!("Failed to retrieve workspace '{id_str}': {e}")),
                             }
                         }
                     }
+                    if list.len() != ws_ids.len() { return ApiResponse::error(req.id, "Invalid workspace ID in comparison"); }
                     list
                 } else if let Some(task_id) = req.params.get("task_id").and_then(|v| v.as_str()) {
-                    let all = coordinator.list_workspaces().await.unwrap_or_default();
+                    let all = match coordinator.list_workspaces().await { Ok(all) => all, Err(error) => return ApiResponse::error(req.id, error.to_string()) };
                     all.into_iter().filter(|w| w.owner_task_id.as_deref() == Some(task_id)).collect()
                 } else {
                     return ApiResponse::error(req.id, "Either 'workspace_ids' or 'task_id' must be provided");
                 };
 
+                if target_workspaces.is_empty() {
+                    return ApiResponse::error(req.id, "No candidate workspaces found for comparison");
+                }
+
+                let baseline = &target_workspaces[0];
+                let Some(owner_task) = baseline.owner_task_id.as_deref() else {
+                    return ApiResponse::error(req.id, "Comparison requires Task-owned candidate worktrees");
+                };
+                let Some(base_commit) = baseline.base_commit_hash.as_deref().filter(|hash| !hash.is_empty()) else {
+                    return ApiResponse::error(req.id, "Comparison requires a recorded base commit");
+                };
+                let requested_task = req.params.get("task_id").and_then(|value| value.as_str());
+                let mut selected_ids = std::collections::HashSet::new();
+                for candidate in &target_workspaces {
+                    if !selected_ids.insert(candidate.id.to_string()) || !candidate.is_ready()
+                        || candidate.owner_task_id.as_deref() != Some(owner_task)
+                        || requested_task.is_some_and(|task| task != owner_task)
+                        || candidate.base_commit_hash.as_deref() != Some(base_commit) {
+                        return ApiResponse::error(req.id, "Candidates must be distinct ready worktrees of one Task and base commit");
+                    }
+                }
+
+                let first_repo = match &target_workspaces[0].kind {
+                    custos_domain::WorkspaceKind::Git { repo_path, .. } => repo_path.clone(),
+                    _ => return ApiResponse::error(req.id, format!("Workspace '{}' is not a Git workspace; candidates must be Git worktrees", target_workspaces[0].id)),
+                };
+
+                for ws in &target_workspaces {
+                    match &ws.kind {
+                        custos_domain::WorkspaceKind::Git { repo_path, .. } => {
+                            if *repo_path != first_repo {
+                                return ApiResponse::error(
+                                    req.id,
+                                    format!("Candidate workspace '{}' belongs to repository '{}', but baseline repository is '{}'", ws.id, repo_path, first_repo)
+                                );
+                            }
+                        }
+                        _ => {
+                            return ApiResponse::error(
+                                req.id,
+                                format!("Workspace '{}' is not a Git workspace", ws.id)
+                            );
+                        }
+                    }
+                }
+
                 let mut candidate_comparisons = Vec::new();
                 for ws in target_workspaces {
-                    let dirty = coordinator.inspect_dirty(&ws.id).await.unwrap_or_default();
-                    let diff_text = coordinator.diff(&ws.id).await.unwrap_or_default();
+                    let dirty_res = coordinator.inspect_dirty(&ws.id).await;
+                    let diff_res = coordinator.diff(&ws.id).await;
+
+                    let (dirty, dirty_err) = match dirty_res {
+                        Ok(d) => (Some(d), None),
+                        Err(e) => (None, Some(e.to_string())),
+                    };
+                    let (diff_text, diff_err) = match diff_res {
+                        Ok(d) => (Some(d), None),
+                        Err(e) => (None, Some(e.to_string())),
+                    };
 
                     let branch = match &ws.kind {
                         custos_domain::WorkspaceKind::Git { branch, .. } => branch.clone(),
                         _ => "main".to_string(),
                     };
+
+                    let inspection_ok = dirty_err.is_none() && diff_err.is_none();
+                    let is_ready_for_integration = inspection_ok && ws.is_ready();
 
                     candidate_comparisons.push(serde_json::json!({
                         "workspace_id": ws.id.to_string(),
@@ -1999,14 +2609,19 @@ impl LocalApiDispatcher {
                         "path": ws.path,
                         "branch": branch,
                         "base_commit_hash": ws.base_commit_hash,
-                        "is_dirty": dirty.is_dirty,
-                        "modified_count": dirty.modified_files.len(),
-                        "untracked_count": dirty.untracked_files.len(),
-                        "deleted_count": dirty.deleted_files.len(),
-                        "modified_files": dirty.modified_files,
-                        "untracked_files": dirty.untracked_files,
-                        "deleted_files": dirty.deleted_files,
-                        "diff": diff_text,
+                        "owner_task_id": ws.owner_task_id,
+                        "is_dirty": dirty.as_ref().map(|d| d.is_dirty).unwrap_or(false),
+                        "modified_count": dirty.as_ref().map(|d| d.modified_files.len()).unwrap_or(0),
+                        "untracked_count": dirty.as_ref().map(|d| d.untracked_files.len()).unwrap_or(0),
+                        "deleted_count": dirty.as_ref().map(|d| d.deleted_files.len()).unwrap_or(0),
+                        "modified_files": dirty.as_ref().map(|d| d.modified_files.clone()).unwrap_or_default(),
+                        "untracked_files": dirty.as_ref().map(|d| d.untracked_files.clone()).unwrap_or_default(),
+                        "deleted_files": dirty.as_ref().map(|d| d.deleted_files.clone()).unwrap_or_default(),
+                        "diff": diff_text.unwrap_or_default(),
+                        "dirty_error": dirty_err,
+                        "diff_error": diff_err,
+                        "inspection_error": if !inspection_ok { Some("Failed to inspect candidate worktree status or diff") } else { None },
+                        "is_ready_for_integration": is_ready_for_integration,
                         "status": ws.status.to_string(),
                     }));
                 }
@@ -2017,6 +2632,7 @@ impl LocalApiDispatcher {
                 }))
             }
             METHOD_WORKSPACES_INTEGRATE => {
+                let _mutation = self.candidate_mutation.lock().await;
                 let coordinator = match self.workspace.as_ref() {
                     Some(c) => c,
                     None => {
@@ -2032,7 +2648,7 @@ impl LocalApiDispatcher {
                     _ => return ApiResponse::error(req.id, "Missing 'winner_workspace_id' parameter"),
                 };
 
-                let winner_ws = match coordinator.get_workspace(&winner_id).await {
+                let mut winner_ws = match coordinator.get_workspace(&winner_id).await {
                     Ok(Some(ws)) => ws,
                     _ => return ApiResponse::error(req.id, format!("Winner workspace '{winner_id}' not found")),
                 };
@@ -2042,9 +2658,33 @@ impl LocalApiDispatcher {
                     _ => return ApiResponse::error(req.id, "Winner workspace must be a Git workspace"),
                 };
 
+                if winner_ws.owner_task_id.is_none() || !winner_ws.metadata.is_object() {
+                    return ApiResponse::error(req.id, "Integration requires a Task-owned candidate worktree");
+                }
+                if let Some(intent) = winner_ws.metadata.get("integration").cloned() {
+                    if let Some(result) = intent.get("result").filter(|result| result.get("merge_success").and_then(|value| value.as_bool()) == Some(true)) { return ApiResponse::success(req.id, result.clone()); }
+                    let recorded_head = intent.get("winner_head").and_then(|value| value.as_str()).unwrap_or("");
+                    let recorded_target = intent.get("target_branch").and_then(|value| value.as_str()).unwrap_or("");
+                    let target_ref = format!("refs/heads/{recorded_target}");
+                    let ancestry = tokio::process::Command::new("git").current_dir(&repo_path)
+                        .args(["merge-base", "--is-ancestor", recorded_head, &target_ref]).output().await;
+                    if matches!(ancestry, Ok(ref output) if output.status.success()) {
+                        let result = serde_json::json!({"winner_workspace_id": winner_id.to_string(), "winner_branch": winner_branch,
+                            "target_branch": intent.get("target_branch"), "merge_success": true, "merge_status": "merged_reconciled",
+                            "merge_detail": "Recorded winner commit is already included in the recorded target branch; no merge was replayed", "is_stale_base": false, "loser_cleanup": []});
+                        winner_ws.metadata["integration"]["result"] = result.clone();
+                        if let Err(error) = coordinator.update_workspace(&winner_ws).await { return ApiResponse::error(req.id, error.to_string()); }
+                        return ApiResponse::success(req.id, result);
+                    }
+                    let merge_head = tokio::process::Command::new("git").current_dir(&repo_path).args(["rev-parse", "--verify", "MERGE_HEAD"]).output().await;
+                    let conflict = matches!(merge_head, Ok(ref output) if output.status.success());
+                    return ApiResponse::success(req.id, serde_json::json!({"winner_workspace_id": winner_id.to_string(), "winner_branch": winner_branch,
+                        "target_branch": intent.get("target_branch"), "merge_success": false, "merge_status": if conflict { "conflict_needs_resolution" } else { "uncertain" },
+                        "merge_detail": "An earlier integration has no confirmed result. Inspect the target repository; the command was not replayed.", "is_stale_base": false, "loser_cleanup": []}));
+                }
                 let target_branch = req.params.get("target_branch").and_then(|v| v.as_str())
                     .or(winner_ws.lineage.target_branch.as_deref());
-                let Some(target_branch) = target_branch else {
+                let Some(target_branch) = target_branch.map(str::to_string) else {
                     return ApiResponse::error(req.id, "Candidate has no recorded target branch");
                 };
 
@@ -2096,7 +2736,7 @@ impl LocalApiDispatcher {
 
                 // Stale-Base Drift Check
                 let mut rev_cmd = tokio::process::Command::new("git");
-                rev_cmd.current_dir(&repo_path).arg("rev-parse").arg(target_branch);
+                rev_cmd.current_dir(&repo_path).arg("rev-parse").arg(&target_branch);
                 let current_target_head = rev_cmd.output().await.ok().filter(|o| o.status.success()).map(|o| {
                     String::from_utf8_lossy(&o.stdout).trim().to_string()
                 });
@@ -2111,6 +2751,23 @@ impl LocalApiDispatcher {
                     ));
                 }
 
+                let winner_head = match tokio::process::Command::new("git").current_dir(&winner_ws.path).args(["rev-parse", "HEAD"]).output().await {
+                    Ok(output) if output.status.success() => String::from_utf8_lossy(&output.stdout).trim().to_string(),
+                    _ => return ApiResponse::error(req.id, "Could not verify winner HEAD"),
+                };
+                let preflight = serde_json::json!({"winner_workspace_id": winner_id.to_string(), "winner_branch": winner_branch,
+                    "target_branch": target_branch, "current_target_head": current_target_head, "winner_head": winner_head,
+                    "winner_base_commit": winner_ws.base_commit_hash, "is_stale_base": false, "preview": true,
+                    "merge_success": false, "merge_detail": "Ready for explicit integration", "merge_status": "ready"});
+                if req.params.get("preview").and_then(|value| value.as_bool()) == Some(true) { return ApiResponse::success(req.id, preflight); }
+                if req.params.get("expected_target_head").and_then(|value| value.as_str()) != current_target_head.as_deref()
+                    || req.params.get("expected_winner_head").and_then(|value| value.as_str()) != Some(&winner_head) {
+                    return ApiResponse::error(req.id, "Review a fresh integration preview before applying; expected heads are missing or changed");
+                }
+                winner_ws.metadata["integration"] = serde_json::json!({"winner_head": winner_head, "target_head": current_target_head,
+                    "target_branch": target_branch, "started_at": chrono::Utc::now().to_rfc3339()});
+                if let Err(error) = coordinator.update_workspace(&winner_ws).await { return ApiResponse::error(req.id, error.to_string()); }
+
                 // Merge winner branch into target repository
                 let mut merge_cmd = tokio::process::Command::new("git");
                 merge_cmd.current_dir(&repo_path)
@@ -2121,19 +2778,29 @@ impl LocalApiDispatcher {
                     .arg(&winner_branch);
 
                 let merge_output = merge_cmd.output().await;
-                let (merge_success, merge_detail) = match merge_output {
+                let (merge_success, merge_detail, conflict_detected) = match merge_output {
                     Ok(out) => {
                         let text = String::from_utf8_lossy(&out.stdout).to_string() + &String::from_utf8_lossy(&out.stderr);
-                        (out.status.success(), text.trim().to_string())
+                        let success = out.status.success();
+                        let conflict = !success && (text.contains("CONFLICT") || text.contains("Automatic merge failed"));
+                        (success, text.trim().to_string(), conflict)
                     }
-                    Err(e) => (false, format!("Failed to spawn git merge: {e}")),
+                    Err(e) => (false, format!("Failed to spawn git merge: {e}"), false),
+                };
+
+                let merge_status = if merge_success {
+                    "merged"
+                } else if conflict_detected {
+                    "conflict_needs_resolution"
+                } else {
+                    "failed"
                 };
 
                 // Integration never implies permission to delete other workspaces.
                 // Candidate cleanup is a separate, explicit archive operation.
                 let loser_cleanup_results: Vec<serde_json::Value> = Vec::new();
 
-                ApiResponse::success(req.id, serde_json::json!({
+                let result = serde_json::json!({
                     "winner_workspace_id": winner_id.to_string(),
                     "winner_branch": winner_branch,
                     "target_branch": target_branch,
@@ -2141,9 +2808,14 @@ impl LocalApiDispatcher {
                     "current_target_head": current_target_head,
                     "winner_base_commit": winner_ws.base_commit_hash,
                     "merge_success": merge_success,
+                    "merge_status": merge_status,
+                    "conflict_detected": conflict_detected,
                     "merge_detail": merge_detail,
                     "loser_cleanup": loser_cleanup_results,
-                }))
+                });
+                winner_ws.metadata["integration"]["result"] = result.clone();
+                if let Err(error) = coordinator.update_workspace(&winner_ws).await { return ApiResponse::error(req.id, format!("Integration effect requires reconciliation: {error}")); }
+                ApiResponse::success(req.id, result)
             }
             METHOD_SETTINGS_GET => {
                 let store = match self.sqlite_store.as_ref() {
@@ -2577,6 +3249,28 @@ impl LocalApiDispatcher {
                         )
                     }
                 };
+                if anno.id.trim().is_empty() || anno.note.trim().is_empty() || anno.note.len() > 16_384
+                    || anno.actor.trim().is_empty() || anno.side_chat_session_id.is_some() || anno.submitted_turn_id.is_some() {
+                    return ApiResponse::error(req.id, "Annotation requires an identity, actor and note; conversation links must come from a real handoff");
+                }
+                let versions = match research.list_artifact_lineage(&anno.artifact_path) {
+                    Ok(versions) => versions,
+                    Err(error) => return ApiResponse::error(req.id, error.to_string()),
+                };
+                if !versions.iter().any(|version| version.version == anno.artifact_version) {
+                    return ApiResponse::error(req.id, "Annotation must target a recorded artifact version");
+                }
+                let valid_target = match &anno.target {
+                    custos_domain::AnnotationTarget::Text { start_offset, end_offset, exact_text } =>
+                        start_offset < end_offset && !exact_text.is_empty() && exact_text.len() <= 65_536,
+                    custos_domain::AnnotationTarget::ImagePin { x_ratio, y_ratio, pin_number } =>
+                        x_ratio.is_finite() && y_ratio.is_finite() && (0.0..=1.0).contains(x_ratio)
+                            && (0.0..=1.0).contains(y_ratio) && *pin_number > 0,
+                    custos_domain::AnnotationTarget::DomElement { selector } => !selector.trim().is_empty() && selector.len() <= 4096,
+                };
+                if !valid_target || anno.status != custos_domain::AnnotationStatus::Pending {
+                    return ApiResponse::error(req.id, "Annotations enter as pending notes with a valid target; they do not certify review completion");
+                }
                 match research.save_annotation(&anno) {
                     Ok(()) => ApiResponse::success(
                         req.id,
@@ -2622,17 +3316,46 @@ impl LocalApiDispatcher {
                 };
 
                 let mut content: Option<String> = None;
+                let mut content_version = None;
+                let mut file = None;
                 if artifact_path.starts_with("notes/") {
                     let note_id = artifact_path.trim_start_matches("notes/").trim_end_matches(".md");
-                    if let Ok(Some(note)) = research.get_note(note_id) {
-                        content = Some(note.content);
+                    match research.get_note(note_id) {
+                        Ok(Some(note)) => { content_version = Some(note.version); content = Some(note.content); },
+                        Ok(None) => {},
+                        Err(error) => return ApiResponse::error(req.id, error.to_string()),
                     }
-                }
-
-                if content.is_none() {
-                    if let Ok(data) = tokio::fs::read_to_string(artifact_path).await {
-                        content = Some(data);
+                } else if let Some(workspace_id) = req.params.get("workspace_id").and_then(|value| value.as_str()) {
+                    if versions.is_empty() {
+                        return ApiResponse::error(req.id, "Artifact has no recorded lineage");
                     }
+                    let workspace = match self.resolve_workspace_for_dispatch(&req.id, workspace_id).await {
+                        Ok(workspace) => workspace,
+                        Err(response) => return response,
+                    };
+                    let artifact = std::path::Path::new(artifact_path);
+                    let relative = if artifact.is_absolute() {
+                        match artifact.strip_prefix(&workspace.path) {
+                            Ok(relative) => relative.to_string_lossy().to_string(),
+                            Err(_) => return ApiResponse::error(req.id, "Artifact is outside the selected workspace"),
+                        }
+                    } else { artifact_path.to_string() };
+                    let current = match self.files.read_file(&workspace, &relative, Some(10 * 1024 * 1024)).await {
+                        Ok(current) => current,
+                        Err(error) => return ApiResponse::error(req.id, error.to_string()),
+                    };
+                    let bytes = if current.is_binary {
+                        match base64::engine::general_purpose::STANDARD.decode(&current.content) {
+                            Ok(bytes) => bytes,
+                            Err(error) => return ApiResponse::error(req.id, format!("Invalid binary artifact encoding: {error}")),
+                        }
+                    } else { current.content.as_bytes().to_vec() };
+                    let hash = blake3::hash(&bytes).to_hex().to_string();
+                    if !current.truncated && (latest_content_hash == hash || latest_content_hash == format!("blake3:{hash}")) {
+                        content_version = Some(latest_version);
+                        if !current.is_binary { content = Some(current.content.clone()); }
+                    }
+                    file = Some(current);
                 }
 
                 let resp = ArtifactDetailResponse {
@@ -2642,6 +3365,8 @@ impl LocalApiDispatcher {
                     versions,
                     annotations,
                     content,
+                    file,
+                    content_version,
                 };
                 match serde_json::to_value(&resp) {
                     Ok(val) => ApiResponse::success(req.id, val),
@@ -2845,13 +3570,20 @@ impl LocalApiDispatcher {
                     Some(r) => r,
                     None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
                 };
+                if let Some(kernel) = self.python_kernel.as_ref() {
+                    match kernel.get_status(session_id, Some(research)).await {
+                        Ok(state) if state.status == custos_domain::KernelStatus::Busy => return ApiResponse::error(req.id, "Wait for notebook execution or interrupt it before changing cells"),
+                        Err(error) => return ApiResponse::error(req.id, error.to_string()),
+                        _ => {},
+                    }
+                }
                 let stored = match research.list_notebook_cells(session_id) {
                     Ok(cells) => cells,
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
                 for cell in &mut cells {
                     if let Some(previous) = stored.iter().find(|saved| saved.id == cell.id) {
-                        if previous.source == cell.source {
+                        if previous.source == cell.source && previous.cell_type == cell.cell_type {
                             cell.execution_count = previous.execution_count;
                             cell.status = previous.status;
                             cell.stdout = previous.stdout.clone();
@@ -2877,7 +3609,7 @@ impl LocalApiDispatcher {
                         cell.epoch = 0;
                     }
                 }
-                match research.save_notebook_cells(&cells) {
+                match research.replace_notebook_cells(session_id, &cells) {
                     Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "saved": true, "count": cells.len() })),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
@@ -2887,29 +3619,35 @@ impl LocalApiDispatcher {
                     Some(k) => k,
                     None => return ApiResponse::error(req.id, "PythonKernelCoordinator not configured on daemon"),
                 };
-                let params: ExecuteCellParams = match serde_json::from_value(req.params) {
+                let mut params: ExecuteCellParams = match serde_json::from_value(req.params) {
                     Ok(p) => p,
                     Err(e) => return ApiResponse::error(req.id, format!("Invalid execute cell params: {e}")),
                 };
-
-                // Admission Gate: Ensure requested cwd is valid and not a restricted root/system directory
-                if let Some(ref cwd) = params.cwd {
-                    let path = std::path::Path::new(cwd);
-                    let canon = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-                    let s = canon.to_string_lossy();
-                    if s == "/" || s.starts_with("/etc") || s.starts_with("/dev") || s.starts_with("/proc") || s.starts_with("/sys") {
-                        return ApiResponse::error(
-                            req.id,
-                            format!("Admission gate refused restricted execution directory: '{s}'"),
-                        );
-                    }
-                    if !path.exists() || !path.is_dir() {
-                        return ApiResponse::error(
-                            req.id,
-                            format!("Execution cwd does not exist or is not a directory: '{cwd}'"),
-                        );
-                    }
+                let workspace_id = match params.workspace_id.as_deref().filter(|id| !id.trim().is_empty()) {
+                    Some(id) => id,
+                    None => return ApiResponse::error(req.id, "Notebook execution requires a registered workspace_id"),
+                };
+                let workspace = match self.resolve_workspace_for_dispatch(&req.id, workspace_id).await {
+                    Ok(workspace) => workspace,
+                    Err(response) => return response,
+                };
+                let research = match self.research.as_ref() {
+                    Some(repository) => repository,
+                    None => return ApiResponse::error(req.id, "ResearchRepository not configured"),
+                };
+                let saved = match research.list_notebook_cells(&params.session_id) {
+                    Ok(cells) => cells,
+                    Err(error) => return ApiResponse::error(req.id, error.to_string()),
+                };
+                match saved.iter().find(|cell| cell.id == params.cell_id) {
+                    Some(cell) if cell.source == params.code && cell.cell_type == custos_domain::NotebookCellType::Code => {},
+                    _ => return ApiResponse::error(req.id, "Save the exact code cell in this session before executing it"),
                 }
+                // cwd is resolved from the registered workspace, never from daemon process state.
+                if params.cwd.as_deref().is_some_and(|cwd| cwd != workspace.path) {
+                    return ApiResponse::error(req.id, "Notebook cwd must match the registered workspace");
+                }
+                params.cwd = Some(workspace.path);
 
                 let repo_ref = self.research.as_deref();
                 match kernel.execute_cell(params, repo_ref).await {
@@ -3625,8 +4363,29 @@ impl LocalApiDispatcher {
                 }
                 let probe = if oauth && provider_type == "copilot" {
                     match api_key_owned.as_deref() { Some(token) => custos_adapters::providers::probe::probe_copilot_models(token).await, None => Err(custos_domain::DomainError::Validation("Copilot OAuth credentials missing".into())) }
-                } else if oauth && provider_type == "gemini" {
-                    match api_key_owned.as_deref() { Some(token) => custos_adapters::providers::antigravity::probe_codeassist_models("gemini", "https://cloudcode-pa.googleapis.com", token).await, None => Err(custos_domain::DomainError::Validation("Gemini OAuth credentials missing".into())) }
+                } else if provider_type == "antigravity" || (oauth && provider_type == "gemini") {
+                    match api_key_owned.as_deref() {
+                        Some(token) => {
+                            let mut combined = Vec::new();
+                            let mut seen_ids = std::collections::HashSet::new();
+                            if let Ok(models) = custos_adapters::providers::antigravity::probe_codeassist_models("antigravity", "https://cloudcode-pa.googleapis.com", token).await {
+                                for m in models {
+                                    if seen_ids.insert(m.id.clone()) { combined.push(m); }
+                                }
+                            }
+                            if let Ok(models) = custos_adapters::providers::antigravity::probe_codeassist_models("gemini", "https://cloudcode-pa.googleapis.com", token).await {
+                                for m in models {
+                                    if seen_ids.insert(m.id.clone()) { combined.push(m); }
+                                }
+                            }
+                            if combined.is_empty() {
+                                custos_adapters::providers::antigravity::probe_codeassist_models("antigravity", "https://cloudcode-pa.googleapis.com", token).await
+                            } else {
+                                Ok(combined)
+                            }
+                        }
+                        None => Err(custos_domain::DomainError::Validation("Google OAuth credentials missing".into()))
+                    }
                 } else if oauth && matches!(provider_type, "openai" | "codex") {
                     match api_key_owned.as_deref() {
                         Some(token) => custos_adapters::providers::probe::probe_oauth_models(token).await,
@@ -3646,7 +4405,7 @@ impl LocalApiDispatcher {
                     Ok(mut models) => {
                         models.retain(|model| custos_adapters::providers::probe::conversation_model_is_visible(&model.id, model.name.as_deref()));
                         let mut unavailable_models = std::collections::HashMap::new();
-                        if !matches!(provider_type, "openai" | "codex" | "anthropic" | "gemini" | "antigravity" | "copilot" | "deepseek" | "local" | "ollama" | "groq" | "openrouter" | "together" | "cerebras" | "perplexity" | "mistral") { models.clear(); }
+                        if !matches!(provider_type, "openai" | "codex" | "anthropic" | "gemini" | "antigravity" | "copilot" | "deepseek" | "local" | "ollama" | "groq" | "openrouter" | "together" | "cerebras" | "perplexity" | "mistral" | "lmstudio" | "custom") { models.clear(); }
                         if !matches!(provider_type, "openai" | "codex" | "copilot") {
                             for model in &mut models {
                                 if provider_type == "antigravity" && custos_adapters::providers::antigravity::supports_tiered_reasoning(&model.id) { continue; }
@@ -4350,7 +5109,9 @@ impl LocalApiDispatcher {
                     Ok(p) => p,
                     Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
                 };
-                if params.service_type.as_deref().or(params.provider_id.as_deref()) == Some("copilot") {
+                let raw_service = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
+                let service = raw_service.split('-').next().unwrap_or(raw_service);
+                if service == "copilot" {
                     let server = match self.oauth_callback_server.as_ref() { Some(v) => v, None => return ApiResponse::error(req.id, "OAuth callback server not configured") };
                     return match custos_adapters::providers::oauth_pkce::start_copilot_device().await {
                         Ok(mut device) => {
@@ -4364,7 +5125,6 @@ impl LocalApiDispatcher {
                         Err(e) => ApiResponse::error(req.id, e.to_string()),
                     };
                 }
-                let service = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
                 let settings = match custos_adapters::providers::oauth_pkce::oauth_settings(service) { Ok(v) => v, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
                 let auth_url = params
                     .auth_endpoint
@@ -4378,7 +5138,7 @@ impl LocalApiDispatcher {
                     .client_id
                     .as_deref()
                     .unwrap_or(&settings.2);
-                let service_type_or_default = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
+                let service_type_or_default = service;
                 let redirect_uri = params
                     .redirect_uri
                     .as_deref()
@@ -4393,7 +5153,7 @@ impl LocalApiDispatcher {
                         // Start the loopback callback server on port 1455 if available
                         if let Some(ref cb_server) = self.oauth_callback_server {
                             let provider_id = params.provider_id.as_deref().unwrap_or("openai");
-                            let service_type = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
+                            let service_type = service;
                             let pending = crate::oauth_callback_server::PendingOAuthContext {
                                 provider_id: provider_id.to_string(),
                                 service_type: service_type.to_string(),
@@ -4427,13 +5187,14 @@ impl LocalApiDispatcher {
                 };
 
                 let provider_id = params.provider_id.as_deref().unwrap_or("openai");
-                let service_type = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
+                let raw_service = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
+                let service_type = raw_service.split('-').next().unwrap_or(raw_service);
                 let settings = match custos_adapters::providers::oauth_pkce::oauth_settings(service_type) { Ok(v) => v, Err(e) => return ApiResponse::error(req.id, e.to_string()) };
                 let client_id = params
                     .client_id
                     .as_deref()
                     .unwrap_or(&settings.2);
-                let service_type_or_default = params.service_type.as_deref().or(params.provider_id.as_deref()).unwrap_or("openai");
+                let service_type_or_default = service_type;
                 let redirect_uri = params
                     .redirect_uri
                     .as_deref()
@@ -4592,6 +5353,141 @@ impl LocalApiDispatcher {
                     ApiResponse::success(req.id, status_val)
                 } else {
                     ApiResponse::success(req.id, serde_json::json!({ "status": "idle" }))
+                }
+            }
+            METHOD_GITHUB_ACCOUNTS => {
+                let gh = match resolve_gh_binary() { Some(gh) => gh, None => return ApiResponse::success(req.id, serde_json::json!({"installed":false,"accounts":[]})) };
+                match custos_adapters::repository_git::github_accounts(&gh).await {
+                    Ok(value) => ApiResponse::success(req.id,value),
+                    Err(error) => ApiResponse::error(req.id,error.to_string()),
+                }
+            }
+            METHOD_GIT_REPOSITORY | METHOD_GIT_SWITCH | METHOD_GIT_FETCH | METHOD_GIT_ACCOUNT | METHOD_GIT_GITHUB => {
+                let workspace_id = match req.params.get("workspace_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.is_empty() => id,
+                    _ => return ApiResponse::error(req.id,"An exact workspace_id is required"),
+                };
+                let ws = match self.resolve_workspace_for_dispatch(&req.id,workspace_id).await { Ok(ws) => ws, Err(response) => return response };
+                if !matches!(ws.kind,custos_domain::WorkspaceKind::Git { .. }) { return ApiResponse::error(req.id,"Local registered Git checkout required; remote-host Git routing is not available here"); }
+                let _guard = self.candidate_mutation.lock().await;
+                let path = std::path::Path::new(&ws.path);
+                let gh = resolve_gh_binary();
+                let result: Result<serde_json::Value,DomainError> = async {
+                    use custos_adapters::repository_git as git;
+                    tracing::debug!(request_id = %req.id, workspace_id, method = %req.method, "Repository Git operation");
+                    match req.method.as_str() {
+                        METHOD_GIT_REPOSITORY => git::repository(path).await,
+                        METHOD_GIT_ACCOUNT => {
+                            let binding = req.params.get("account").filter(|v| !v.is_null()).map(|v| serde_json::from_value::<git::GitHubBinding>(v.clone()).map_err(|_| DomainError::Validation("Invalid account preference".into()))).transpose()?;
+                            git::bind_account(path,gh.as_deref(),binding.as_ref()).await?;
+                            git::repository(path).await
+                        }
+                        METHOD_GIT_GITHUB => {
+                            let binding = git::account_binding(path).await?.ok_or_else(|| DomainError::Validation("Choose a repository GitHub account first".into()))?;
+                            git::github_viewer(gh.as_deref().ok_or_else(|| DomainError::Validation("GitHub CLI is not installed".into()))?,&binding).await
+                        }
+                        METHOD_GIT_FETCH => {
+                            let remote = req.params.get("remote").and_then(|v| v.as_str()).ok_or_else(|| DomainError::Validation("Explicit remote required".into()))?;
+                            git::fetch_remote(path,gh.as_deref(),remote).await
+                        }
+                        METHOD_GIT_SWITCH => {
+                            let branch = req.params.get("branch").and_then(|v| v.as_str()).ok_or_else(|| DomainError::Validation("Explicit branch required".into()))?;
+                            let expected = req.params.get("expected_head").and_then(|v| v.as_str()).ok_or_else(|| DomainError::Validation("Observed HEAD required".into()))?;
+                            if self.terminal.list_sessions(Some(workspace_id)).await?.iter().any(|s| matches!(s.status,custos_domain::TerminalSessionStatus::Active)) {
+                                return Err(DomainError::Conflict("Close active checkout terminals before switching, or use a new worktree".into()));
+                            }
+                            let runs = self.usage_runs.as_ref().ok_or_else(|| DomainError::Validation("Cannot verify active runs; branch switch unavailable".into()))?;
+                            for task in self.task_service.list_tasks().await? {
+                                for run in runs.list_runs_for_task(&task.id).await? {
+                                    let target = run.metadata.get("execution_workspace_id").or_else(||run.metadata.get("workspace_id")).and_then(|v|v.as_str());
+                                    if !run.status.is_terminal() && (target.is_none() || target==Some(workspace_id)) {
+                                        return Err(DomainError::Conflict("Active or unscoped run prevents branch switching; use a separate worktree".into()));
+                                    }
+                                }
+                            }
+                            git::switch_branch(path,branch,expected).await
+                        }
+                        _ => Err(DomainError::Validation("Unsupported Git operation".into())),
+                    }
+                }.await;
+                match result { Ok(value) => ApiResponse::success(req.id,value), Err(error) => ApiResponse::error(req.id,error.to_string()) }
+            }
+            METHOD_GITHUB_LOGIN => {
+                let _login_guard = GITHUB_LOGIN_LOCK.lock().await;
+                let gh = match resolve_gh_binary() {
+                    Some(path) => path,
+                    None => return ApiResponse::error(req.id, "Install GitHub CLI (gh) to connect. Local Git/worktrees remain available."),
+                };
+                // Reuse the bounded PTY lifecycle, never the model OAuth singleton.
+                let existing = self.terminal.list_sessions(Some("github-auth")).await;
+                if let Ok(sessions) = existing {
+                    if let Some(session) = sessions.into_iter().find(|session| matches!(session.status, custos_domain::TerminalSessionStatus::Active)) {
+                        return match serde_json::to_value(session) {
+                            Ok(value) => ApiResponse::success(req.id, value),
+                            Err(error) => ApiResponse::error(req.id, error.to_string()),
+                        };
+                    }
+                }
+                let command = github_login_command(&gh);
+                tracing::info!(request_id = %req.id, "Starting user-requested GitHub CLI login");
+                match self.terminal.spawn("github-auth", &std::env::temp_dir(), Some(&command), 100, 28).await {
+                    Ok(session) => match serde_json::to_value(session) {
+                        Ok(value) => ApiResponse::success(req.id, value),
+                        Err(error) => ApiResponse::error(req.id, error.to_string()),
+                    },
+                    Err(error) => ApiResponse::error(req.id, error.to_string()),
+                }
+            }
+            METHOD_GITHUB_AUTH_STATUS => {
+                let gh = match resolve_gh_binary() {
+                    Some(path) => path,
+                    None => return ApiResponse::success(req.id, serde_json::json!({
+                        "authenticated": false, "source": "gh_cli", "installed": false,
+                        "error": "GitHub CLI (gh) is not installed. Local Git/worktrees remain available."
+                    })),
+                };
+                // The authenticated viewer is authoritative. Never export gh's token or
+                // trust a cached profile / a fragment of multi-account auth-status text.
+                let mut command = tokio::process::Command::new(gh);
+                command.args(["api", "--hostname", "github.com", "user"]);
+                command.kill_on_drop(true);
+                let result = tokio::time::timeout(std::time::Duration::from_secs(10), command.output()).await;
+                let value = match result {
+                    Ok(Ok(output)) => github_auth_metadata(output.status.success(), &output.stdout),
+                    Ok(Err(_)) => serde_json::json!({"authenticated": false, "source": "gh_cli", "installed": true, "error": "Could not launch GitHub CLI."}),
+                    Err(_) => serde_json::json!({"authenticated": false, "source": "gh_cli", "installed": true, "error": "GitHub verification timed out. Check the network and retry."}),
+                };
+                ApiResponse::success(req.id, value)
+            }
+            METHOD_GITHUB_VIEWER => {
+                let gh_bin = match resolve_gh_binary() {
+                    Some(b) => b,
+                    None => {
+                        return ApiResponse::error(
+                            req.id,
+                            "GitHub CLI (`gh`) is not installed or not in PATH",
+                        );
+                    }
+                };
+
+                match tokio::process::Command::new(&gh_bin)
+                    .args(["api", "user"])
+                    .output()
+                    .await
+                {
+                    Ok(out) if out.status.success() => {
+                        match serde_json::from_slice::<serde_json::Value>(&out.stdout) {
+                            Ok(val) => ApiResponse::success(req.id, val),
+                            Err(e) => {
+                                ApiResponse::error(req.id, format!("Invalid JSON from gh api user: {e}"))
+                            }
+                        }
+                    }
+                    Ok(out) => {
+                        let err_msg = String::from_utf8_lossy(&out.stderr);
+                        ApiResponse::error(req.id, format!("gh api user failed: {}", err_msg.trim()))
+                    }
+                    Err(e) => ApiResponse::error(req.id, format!("Failed to run gh api user: {e}")),
                 }
             }
             METHOD_CAPABILITIES_LIST => {
@@ -4994,6 +5890,25 @@ impl LocalApiDispatcher {
 
                 match self.files.discard_file(&ws, path).await {
                     Ok(()) => ApiResponse::success(req.id, serde_json::json!({ "discarded": true, "path": path })),
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_WORKSPACE_GIT_COMMIT => {
+                let workspace_id = match req.params.get("workspace_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing workspace_id parameter"),
+                };
+                let message = match req.params.get("message").and_then(|v| v.as_str()) {
+                    Some(m) if !m.trim().is_empty() => m,
+                    _ => return ApiResponse::error(req.id, "Missing message parameter"),
+                };
+                let ws = match self.resolve_workspace_for_dispatch(&req.id, workspace_id).await {
+                    Ok(ws) => ws,
+                    Err(resp) => return resp,
+                };
+
+                match self.files.commit(&ws, message).await {
+                    Ok(out) => ApiResponse::success(req.id, serde_json::json!({ "committed": true, "output": out })),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
             }
@@ -6508,10 +7423,39 @@ impl LocalApiDispatcher {
                     Some(a) => a,
                     None => return ApiResponse::error(req.id, "AssistantRepository not configured on daemon"),
                 };
-                let draft: AssistantDraft = match serde_json::from_value(req.params) {
+                let mut params = req.params;
+                let Some(fields) = params.as_object_mut() else { return ApiResponse::error(req.id, "Expected draft object"); };
+                let now = chrono::Utc::now().to_rfc3339();
+                fields.entry("status").or_insert(serde_json::json!("draft"));
+                fields.entry("created_at").or_insert(serde_json::json!(now));
+                fields.insert("updated_at".into(), serde_json::json!(now));
+                let mut draft: AssistantDraft = match serde_json::from_value(params) {
                     Ok(d) => d,
                     Err(e) => return ApiResponse::error(req.id, format!("Invalid AssistantDraft: {e}")),
                 };
+                if draft.id.is_empty() || draft.id.len() > 128 || draft.title.trim().is_empty()
+                    || !matches!(draft.status.as_str(), "draft" | "approved" | "archived")
+                    || !matches!(draft.kind.as_str(), "email" | "document" | "schedule" | "note") {
+                    return ApiResponse::error(req.id, "Invalid draft id, title, kind or status");
+                }
+                match assistant.get_draft_sync(&draft.id) {
+                    Ok(Some(existing)) => {
+                        if existing.session_id != draft.session_id || existing.task_id != draft.task_id {
+                            return ApiResponse::error(req.id, "Draft scope cannot be changed");
+                        }
+                        if existing.payload_lock.is_some() && (existing.title != draft.title || existing.content != draft.content
+                            || existing.recipient != draft.recipient || existing.kind != draft.kind || existing.status != draft.status) {
+                            return ApiResponse::error(req.id, "Reviewed draft is locked; create a new draft to revise it");
+                        }
+                        draft.created_at = existing.created_at;
+                    }
+                    Ok(None) => { draft.created_at = now; }
+                    Err(error) => return ApiResponse::error(req.id, error.to_string()),
+                }
+                draft.payload_lock = if draft.status == "approved" {
+                    let payload = serde_json::json!({"title": draft.title, "content": draft.content, "kind": draft.kind, "recipient": draft.recipient});
+                    Some(blake3::hash(payload.to_string().as_bytes()).to_hex().to_string())
+                } else { None };
                 match assistant.save_draft_sync(&draft) {
                     Ok(()) => ApiResponse::success(req.id, serde_json::to_value(&draft).unwrap_or_default()),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
@@ -6575,113 +7519,8 @@ impl LocalApiDispatcher {
                 }).collect();
                 ApiResponse::success(req.id, serde_json::to_value(&items).unwrap_or_default())
             }
-            METHOD_ASSISTANT_OUTBOX_CREATE => {
-                let outbox = match self.outbox.as_ref() {
-                    Some(o) => o,
-                    None => return ApiResponse::error(req.id, "OutboxPort not configured on daemon"),
-                };
-                let action_type = req.params.get("action_type").and_then(|v| v.as_str()).unwrap_or("communication_dispatch");
-                let raw_task_id = req.params.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
-                let content = req.params.get("content").and_then(|v| v.as_str()).unwrap_or("");
-                let digest = blake3::hash(content.as_bytes()).to_hex().to_string();
-
-                let task_id = if !raw_task_id.trim().is_empty() && self.task_service.get_task(raw_task_id.trim()).await.is_ok() {
-                    raw_task_id.trim().to_string()
-                } else if let Ok(tasks) = self.task_service.list_tasks().await {
-                    if let Some(t) = tasks.first() {
-                        t.id.clone()
-                    } else {
-                        match self.task_service.execute_create(CreateTask {
-                            title: "General Outbox Dispatch".into(),
-                            metadata: None,
-                            contract: None,
-                        }).await {
-                            Ok((created, _)) => created.id,
-                            Err(e) => return ApiResponse::error(req.id, format!("Failed to create parent task: {e}")),
-                        }
-                    }
-                } else {
-                    return ApiResponse::error(req.id, "Failed to resolve parent task for outbox entry");
-                };
-
-                let entry = custos_core::contracts::storage::OutboxEntry {
-                    id: custos_domain::new_id("out"),
-                    task_id,
-                    action_id: action_type.to_string(),
-                    permit_id: custos_domain::new_id("pmt"),
-                    argument_digest: digest.clone(),
-                    idempotency_key: Some(custos_domain::new_id("idemp")),
-                    status: custos_core::contracts::storage::OutboxStatus::Pending,
-                    created_at: chrono::Utc::now(),
-                    receipt: None,
-                };
-
-                match outbox.enqueue(entry.clone()).await {
-                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({
-                        "id": entry.id,
-                        "status": "pending_approval",
-                        "action_type": entry.action_id,
-                        "argument_digest": entry.argument_digest,
-                        "task_id": entry.task_id
-                    })),
-                    Err(e) => ApiResponse::error(req.id, format!("Failed to enqueue outbox entry: {e}")),
-                }
-            }
-            METHOD_ASSISTANT_OUTBOX_APPROVE => {
-                let outbox = match self.outbox.as_ref() {
-                    Some(o) => o,
-                    None => return ApiResponse::error(req.id, "OutboxPort not configured on daemon"),
-                };
-                let entry_id = match req.params.get("id").and_then(|v| v.as_str()) {
-                    Some(id) if !id.trim().is_empty() => id.trim(),
-                    _ => return ApiResponse::error(req.id, "Missing 'id' parameter"),
-                };
-
-                match outbox.mark_dispatching(entry_id).await {
-                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({
-                        "id": entry_id,
-                        "status": "approved",
-                        "message": "Action item approved for dispatch"
-                    })),
-                    Err(e) => ApiResponse::error(req.id, format!("Failed to approve outbox entry: {e}")),
-                }
-            }
-            METHOD_ASSISTANT_OUTBOX_DISPATCH => {
-                let outbox = match self.outbox.as_ref() {
-                    Some(o) => o,
-                    None => return ApiResponse::error(req.id, "OutboxPort not configured on daemon"),
-                };
-                let entry_id = match req.params.get("id").and_then(|v| v.as_str()) {
-                    Some(id) if !id.trim().is_empty() => id.trim(),
-                    _ => return ApiResponse::error(req.id, "Missing 'id' parameter"),
-                };
-
-                let _ = outbox.mark_dispatching(entry_id).await;
-
-                let receipt_id = custos_domain::new_id("rec");
-                let permit_id = custos_domain::new_id("pmt");
-                let receipt = custos_domain::ExecutionReceipt {
-                    receipt_id: receipt_id.clone(),
-                    permit_id,
-                    action_id: "communication_dispatch".to_string(),
-                    status: custos_domain::ReceiptStatus::Success,
-                    output_digest: "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855".into(),
-                    output_data: Some(serde_json::json!({ "dispatched": true })),
-                    error_message: None,
-                    duration_ms: Some(15),
-                    executed_at: chrono::Utc::now(),
-                    assurance: Default::default(),
-                };
-
-                match outbox.mark_receipted(entry_id, receipt).await {
-                    Ok(()) => ApiResponse::success(req.id, serde_json::json!({
-                        "id": entry_id,
-                        "status": "receipted",
-                        "receipt_id": receipt_id,
-                        "message": "Action item successfully dispatched and receipted"
-                    })),
-                    Err(e) => ApiResponse::error(req.id, format!("Failed to dispatch outbox entry: {e}")),
-                }
+            METHOD_ASSISTANT_OUTBOX_CREATE | METHOD_ASSISTANT_OUTBOX_APPROVE | METHOD_ASSISTANT_OUTBOX_DISPATCH => {
+                ApiResponse::error(req.id, "Outbound connector execution is not configured with a mediated permit/receipt pipeline. Save and review a local draft; Outbox is read-only.")
             }
             METHOD_WORKSPACES_AGENT_STEER => {
                 let guidance = match req.params.get("guidance").and_then(|v| v.as_str()) {
@@ -8021,6 +8860,208 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn task_conversation_attachment_uses_existing_task_without_duplicate_creation() {
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let service = Arc::new(TaskService::new(store));
+        let task = service.execute_create(CreateTask { title: "Existing work".into(), metadata: None, contract: None }).await.unwrap().0;
+        let sessions = Arc::new(SessionManager::new());
+        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+        let dispatcher = LocalApiDispatcher::new(service, sessions, bridge);
+        let request = |method: &str, params| ApiRequest { id: "task-chat".into(), method: method.into(), params };
+        let session = dispatcher.handle_request(request("v1.sessions.create", serde_json::json!({"mode": "assisted"}))).await.result.unwrap();
+        let id = session["id"].as_str().unwrap();
+        let invalid = dispatcher.handle_request(request("v1.sessions.attach", serde_json::json!({"session_id": id, "task_id": "missing-task"}))).await;
+        assert!(!invalid.is_success());
+        let unbound = dispatcher.handle_request(request("v1.sessions.get", serde_json::json!({"session_id": id}))).await.result.unwrap();
+        assert!(unbound.get("attached_to").is_none_or(|value| value.is_null()));
+        for _ in 0..2 {
+            let attached = dispatcher.handle_request(request("v1.sessions.attach", serde_json::json!({"session_id": id, "task_id": task.id}))).await;
+            assert!(attached.is_success(), "{:?}", attached.error);
+        }
+        let attached = dispatcher.handle_request(request("v1.sessions.get", serde_json::json!({"session_id": id}))).await.result.unwrap();
+        assert_eq!(attached["attached_to"], task.id);
+        let tasks = dispatcher.handle_request(request("v1.tasks.list", serde_json::json!({}))).await.result.unwrap();
+        assert_eq!(tasks.as_array().unwrap().len(), 1);
+        assert_eq!(tasks[0]["id"], task.id);
+    }
+
+    #[tokio::test]
+    async fn assistant_draft_creation_review_and_scope_are_enforced() {
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let service = Arc::new(TaskService::new(store));
+        let sessions = Arc::new(SessionManager::new());
+        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+        let db = custos_persistence::connection::DbConnection::open_in_memory().unwrap();
+        let assistant = Arc::new(AssistantRepository::new(db.clone()));
+        let dispatcher = LocalApiDispatcher::new(service, sessions, bridge).with_assistant(assistant.clone());
+        let request = |params| ApiRequest { id: "draft-test".into(), method: METHOD_ASSISTANT_DRAFTS_SAVE.into(), params };
+        let created = dispatcher.handle_request(request(serde_json::json!({"id": "draft-test", "title": "Draft", "kind": "email", "content": "Exact text", "session_id": "session-a"}))).await;
+        assert!(created.is_success(), "{:?}", created.error);
+        let mut draft = created.result.unwrap();
+        assert_eq!(draft["status"], "draft");
+        assert!(draft["created_at"].as_str().is_some());
+        draft["session_id"] = serde_json::json!("session-b");
+        assert!(!dispatcher.handle_request(request(draft.clone())).await.is_success());
+        draft["session_id"] = serde_json::json!("session-a");
+        draft["status"] = serde_json::json!("approved");
+        draft["payload_lock"] = serde_json::json!("locked");
+        let reviewed = dispatcher.handle_request(request(draft)).await;
+        assert!(reviewed.is_success(), "{:?}", reviewed.error);
+        let mut reviewed = reviewed.result.unwrap();
+        assert_eq!(reviewed["payload_lock"].as_str().unwrap().len(), 64);
+        reviewed["content"] = serde_json::json!("Changed after review");
+        assert!(!dispatcher.handle_request(request(reviewed)).await.is_success());
+        assert_eq!(assistant.get_draft_sync("draft-test").unwrap().unwrap().content, "Exact text");
+        let events: i64 = db.lock().unwrap().query_row("SELECT COUNT(*) FROM outbox_messages WHERE topic = 'assistant.draft.saved'", [], |row| row.get(0)).unwrap();
+        assert_eq!(events, 2, "only committed mutations emit notifications");
+        for method in [METHOD_ASSISTANT_OUTBOX_CREATE, METHOD_ASSISTANT_OUTBOX_APPROVE, METHOD_ASSISTANT_OUTBOX_DISPATCH] {
+            assert!(!dispatcher.handle_request(ApiRequest { id: "outbound-test".into(), method: method.into(), params: serde_json::json!({}) }).await.is_success());
+        }
+    }
+
+    #[tokio::test]
+    async fn candidate_creation_and_integration_replay_use_recorded_workspace_state() {
+        use custos_core::contracts::WorkspaceRepository;
+        let temp = tempfile::tempdir().unwrap();
+        let repo = temp.path().join("repository"); std::fs::create_dir(&repo).unwrap();
+        let git = |path: &std::path::Path, args: &[&str]| {
+            let output = std::process::Command::new("git").current_dir(path)
+                .env("GIT_CONFIG_GLOBAL", "/dev/null").env("GIT_CONFIG_NOSYSTEM", "1")
+                .args(["-c", "user.name=Custos Test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false"])
+                .args(args).output().unwrap();
+            assert!(output.status.success(), "{:?}: {}", args, String::from_utf8_lossy(&output.stderr));
+            String::from_utf8_lossy(&output.stdout).trim().to_string()
+        };
+        git(&repo, &["init", "-b", "main"]);
+        std::fs::write(repo.join("file.txt"), "base").unwrap(); git(&repo, &["add", "."]); git(&repo, &["commit", "-m", "base"]);
+        // Merge commands inherit only fixture-local identity, never the user's repo configuration.
+        git(&repo, &["config", "user.name", "Custos Test"]); git(&repo, &["config", "user.email", "test@example.invalid"]); git(&repo, &["config", "commit.gpgsign", "false"]);
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new(&temp.path().join("test.db").to_string_lossy()).unwrap());
+        let service = Arc::new(TaskService::new(store.clone()));
+        let task = service.execute_create(CreateTask { title: "Candidate integration test".into(), metadata: None, contract: None }).await.unwrap().0;
+        let sessions = Arc::new(SessionManager::new());
+        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+        let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(store.clone(), Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new())));
+        let mut base = custos_domain::ExecutionWorkspace::new(custos_domain::WorkspaceId::new("base"), "base", custos_domain::WorkspaceKind::Git { repo_path: repo.to_string_lossy().into(), branch: "main".into(), base_commit: None }, repo.to_string_lossy().to_string());
+        base.status = custos_domain::WorkspaceStatus::Ready; store.save_workspace(&base).await.unwrap();
+        let make_dispatcher = || LocalApiDispatcher::new(service.clone(), sessions.clone(), bridge.clone()).with_workspace(coordinator.clone());
+        let dispatcher = make_dispatcher();
+        let spawn_params = serde_json::json!({"task_id": task.id, "base_workspace_id": "base", "count": 1, "command_id": "create-candidates-once"});
+        let request = |method: &str, params: serde_json::Value| ApiRequest { id: "fixture-request".into(), method: method.into(), params };
+        let first = dispatcher.handle_request(request(METHOD_WORKSPACES_CANDIDATES_SPAWN, spawn_params.clone())).await;
+        assert!(first.is_success(), "{:?}", first.error);
+        let first = first.result.unwrap();
+        let winner_id = first["candidates"][0]["id"].as_str().unwrap().to_string();
+        let candidate = std::path::PathBuf::from(first["candidates"][0]["path"].as_str().unwrap());
+        let second = make_dispatcher().handle_request(request(METHOD_WORKSPACES_CANDIDATES_SPAWN, spawn_params.clone())).await;
+        assert!(second.is_success(), "{:?}", second.error);
+        assert_eq!(second.result.unwrap()["candidates"][0]["id"], winner_id);
+        assert_eq!(store.list_workspaces().await.unwrap().len(), 2);
+        let mut different = spawn_params; different["count"] = serde_json::json!(2);
+        assert!(!dispatcher.handle_request(request(METHOD_WORKSPACES_CANDIDATES_SPAWN, different)).await.is_success());
+        std::fs::write(candidate.join("file.txt"), "candidate").unwrap(); git(&candidate, &["add", "."]); git(&candidate, &["commit", "-m", "candidate"]);
+        let before = git(&repo, &["rev-parse", "HEAD"]);
+        assert!(!dispatcher.handle_request(request(METHOD_WORKSPACES_INTEGRATE, serde_json::json!({"winner_workspace_id": winner_id}))).await.is_success());
+        let preview = dispatcher.handle_request(request(METHOD_WORKSPACES_INTEGRATE, serde_json::json!({"winner_workspace_id": winner_id, "preview": true}))).await;
+        assert!(preview.is_success(), "{:?}", preview.error);
+        let preview = preview.result.unwrap();
+        assert_eq!(git(&repo, &["rev-parse", "HEAD"]), before, "preview must not merge");
+        let apply = serde_json::json!({"winner_workspace_id": winner_id, "expected_target_head": preview["current_target_head"], "expected_winner_head": preview["winner_head"]});
+        let mut stale = apply.clone(); stale["expected_winner_head"] = serde_json::json!("stale");
+        assert!(!dispatcher.handle_request(request(METHOD_WORKSPACES_INTEGRATE, stale)).await.is_success());
+        let integrated = dispatcher.handle_request(request(METHOD_WORKSPACES_INTEGRATE, apply.clone())).await;
+        assert!(integrated.is_success(), "{:?}", integrated.error);
+        assert_eq!(integrated.result.unwrap()["merge_success"], true);
+        let merged_head = git(&repo, &["rev-parse", "HEAD"]);
+        assert_ne!(merged_head, before);
+        let repeated = make_dispatcher().handle_request(request(METHOD_WORKSPACES_INTEGRATE, apply.clone())).await;
+        assert!(repeated.is_success()); assert_eq!(repeated.result.unwrap()["merge_success"], true);
+        assert_eq!(git(&repo, &["rev-parse", "HEAD"]), merged_head);
+        let mut interrupted = store.get_workspace(&custos_domain::WorkspaceId::new(&winner_id)).await.unwrap().unwrap();
+        interrupted.metadata["integration"].as_object_mut().unwrap().remove("result");
+        store.save_workspace(&interrupted).await.unwrap();
+        // Recovery follows the recorded target even when the user switches checkout.
+        git(&repo, &["checkout", "-b", "unrelated", &before]);
+        let reconciled = make_dispatcher().handle_request(request(METHOD_WORKSPACES_INTEGRATE, apply)).await;
+        assert!(reconciled.is_success()); assert_eq!(reconciled.result.unwrap()["merge_status"], "merged_reconciled");
+        assert_eq!(git(&repo, &["rev-parse", "main"]), merged_head);
+        assert_eq!(git(&repo, &["rev-parse", "HEAD"]), before, "recovery must not change the user's checkout");
+        assert!(candidate.exists(), "integration never removes candidate checkout");
+    }
+
+    #[tokio::test]
+    async fn candidate_comparison_rejects_mixed_scope_and_reports_inspection_failure() {
+        use custos_core::contracts::WorkspaceRepository;
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let service = Arc::new(TaskService::new(store.clone()));
+        let sessions = Arc::new(SessionManager::new());
+        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+        let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(store.clone(), Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new())));
+        let dispatcher = LocalApiDispatcher::new(service, sessions, bridge).with_workspace(coordinator);
+        let make = |id: &str, task: &str, base: &str, repo: &str| {
+            let mut workspace = custos_domain::ExecutionWorkspace::new(custos_domain::WorkspaceId::new(id), id.to_string(),
+                custos_domain::WorkspaceKind::Git { repo_path: repo.into(), branch: id.into(), base_commit: Some(base.into()) },
+                format!("/missing/candidate/{id}"));
+            workspace.status = custos_domain::WorkspaceStatus::Ready;
+            workspace.owner_task_id = Some(task.into()); workspace.base_commit_hash = Some(base.into()); workspace
+        };
+        for workspace in [make("a", "task-a", "base-a", "/repo-a"), make("b", "task-b", "base-a", "/repo-a"), make("c", "task-a", "base-c", "/repo-a"), make("d", "task-a", "base-a", "/repo-d")] {
+            store.save_workspace(&workspace).await.unwrap();
+        }
+        for ids in [serde_json::json!(["a", "missing"]), serde_json::json!(["a", "b"]), serde_json::json!(["a", "c"]), serde_json::json!(["a", "d"]), serde_json::json!(["a", "a"]), serde_json::json!(["a", 42])] {
+            let response = dispatcher.handle_request(ApiRequest { id: "compare".into(), method: METHOD_WORKSPACES_CANDIDATES_COMPARE.into(), params: serde_json::json!({"workspace_ids": ids}) }).await;
+            assert!(!response.is_success(), "comparison must reject mismatched or invalid candidates");
+        }
+        let response = dispatcher.handle_request(ApiRequest { id: "inspect".into(), method: METHOD_WORKSPACES_CANDIDATES_COMPARE.into(), params: serde_json::json!({"workspace_ids": ["a"]}) }).await;
+        assert!(response.is_success());
+        let candidate = &response.result.unwrap()["candidates"][0];
+        assert_eq!(candidate["is_ready_for_integration"], false);
+        assert!(candidate["inspection_error"].is_string());
+    }
+
+    #[tokio::test]
+    async fn artifact_reads_are_workspace_scoped_and_annotations_are_version_bound() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let service = Arc::new(TaskService::new(store.clone()));
+        let sessions = Arc::new(SessionManager::new());
+        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+        let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(store.clone(), Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new())));
+        let research = Arc::new(store.research().clone());
+        let dispatcher = LocalApiDispatcher::new(service, sessions, bridge).with_workspace(coordinator).with_research(research.clone());
+        let path = temp.path().join("workspace").to_string_lossy().to_string();
+        let created = dispatcher.handle_request(ApiRequest { id: "artifact-workspace".into(), method: METHOD_WORKSPACES_CREATE.into(), params: serde_json::json!({"name": "artifacts", "kind": {"type": "folder", "path": path}, "path": path}) }).await;
+        assert!(created.is_success(), "{:?}", created.error);
+        let workspace_id = created.result.unwrap()["id"].as_str().unwrap().to_string();
+        let file = std::path::Path::new(&path).join("analysis.py");
+        std::fs::write(&file, "print(42)").unwrap();
+        research.record_artifact_lineage(&ArtifactLineageNode { artifact_path: "analysis.py".into(), version: 1, content_hash: blake3::hash(b"print(42)").to_hex().to_string(), produced_by_run_id: None, parent_version_hash: None, timestamp: 0 }).unwrap();
+        let read = |params| ApiRequest { id: "artifact-read".into(), method: METHOD_ARTIFACTS_GET.into(), params };
+        let scoped = dispatcher.handle_request(read(serde_json::json!({"artifact_path": "analysis.py", "workspace_id": workspace_id}))).await;
+        assert!(scoped.is_success(), "{:?}", scoped.error);
+        assert_eq!(scoped.result.as_ref().unwrap()["content_version"], 1);
+        assert_eq!(scoped.result.as_ref().unwrap()["content"], "print(42)");
+        std::fs::write(&file, "print('changed')").unwrap();
+        let changed = dispatcher.handle_request(read(serde_json::json!({"artifact_path": "analysis.py", "workspace_id": workspace_id}))).await;
+        assert!(changed.is_success());
+        assert!(changed.result.as_ref().unwrap().get("content_version").is_none());
+        assert!(changed.result.as_ref().unwrap()["content"].is_null());
+        let escaped = dispatcher.handle_request(read(serde_json::json!({"artifact_path": "../secret.txt", "workspace_id": workspace_id}))).await;
+        assert!(!escaped.is_success());
+        let unscoped = dispatcher.handle_request(read(serde_json::json!({"artifact_path": file.to_string_lossy()}))).await;
+        assert!(unscoped.is_success());
+        assert!(unscoped.result.as_ref().unwrap()["content"].is_null());
+        let annotation = custos_domain::AnnotationRecord::new_text("analysis.py", 1, 0, 5, "print", "Check this calculation", "researcher");
+        let save = |annotation: &custos_domain::AnnotationRecord| ApiRequest { id: "annotation".into(), method: "v1.research.annotations.save".into(), params: serde_json::to_value(annotation).unwrap() };
+        assert!(dispatcher.handle_request(save(&annotation)).await.is_success());
+        let mut forged = annotation.clone(); forged.artifact_version = 999;
+        assert!(!dispatcher.handle_request(save(&forged)).await.is_success());
+        forged = annotation.clone(); forged.status = custos_domain::AnnotationStatus::Addressed;
+        assert!(!dispatcher.handle_request(save(&forged)).await.is_success());
+        assert_eq!(research.list_annotations_for_artifact("analysis.py", Some(1)).unwrap().len(), 1);
+    }
+
+    #[tokio::test]
     async fn test_notebook_kernel_api_lifecycle() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db_path = temp_dir.path().join("custos_test_nb.db");
@@ -8033,9 +9074,16 @@ mod tests {
             task_service.clone(),
         ));
         let research = Arc::new(store.research().clone());
+        let coordinator = Arc::new(custos_runtime::workspace::WorkspaceCoordinator::new(
+            store.clone(), Arc::new(custos_adapters::workspace::LocalWorkspaceProvider::new())));
         let dispatcher = LocalApiDispatcher::new(task_service, session_manager, bridge_service)
-            .with_research(research);
+            .with_research(research).with_workspace(coordinator);
         let session_id = "test_nb_session_42";
+        let path = temp_dir.path().join("notebook-workspace").to_string_lossy().to_string();
+        let created = dispatcher.handle_request(ApiRequest { id: "nb_workspace".into(), method: METHOD_WORKSPACES_CREATE.into(),
+            params: serde_json::json!({"name": "notebook", "kind": {"type": "folder", "path": path}, "path": path}) }).await;
+        assert!(created.is_success(), "{:?}", created.error);
+        let workspace_id = created.result.unwrap()["id"].as_str().unwrap().to_string();
 
         // 1. Initial kernel status
         let status_req = ApiRequest {
@@ -8117,6 +9165,11 @@ mod tests {
         assert_eq!(loaded_cells[0].execution_count, None);
         assert_eq!(loaded_cells[0].stdout, None);
 
+        let unscoped = dispatcher.handle_request(ApiRequest { id: "nb_unscoped".into(), method: METHOD_NOTEBOOK_EXECUTE.into(), params: serde_json::json!({"session_id": session_id, "cell_id": cell.id, "code": cell.source}) }).await;
+        assert!(!unscoped.is_success());
+        let changed_source = dispatcher.handle_request(ApiRequest { id: "nb_changed".into(), method: METHOD_NOTEBOOK_EXECUTE.into(), params: serde_json::json!({"session_id": session_id, "cell_id": cell.id, "code": "print('not saved')", "workspace_id": workspace_id}) }).await;
+        assert!(!changed_source.is_success());
+
         // 4. Execute cell
         let exec_req = ApiRequest {
             id: "nb_exec_1".into(),
@@ -8125,6 +9178,7 @@ mod tests {
                 "session_id": session_id,
                 "cell_id": cell.id,
                 "code": "print(6 * 7)",
+                "workspace_id": workspace_id,
             }),
         };
         let exec_resp = dispatcher.handle_request(exec_req).await;
@@ -8142,6 +9196,27 @@ mod tests {
         assert_eq!(exec_result.stdout.trim(), "42");
         assert_eq!(exec_result.execution_count, 1);
         assert_eq!(exec_result.epoch, 1);
+
+        // Changing code into notes must not retain executed Python output.
+        let mut markdown = cell.clone();
+        markdown.cell_type = custos_domain::NotebookCellType::Markdown;
+        let save_markdown = dispatcher.handle_request(ApiRequest {
+            id: "nb_markdown".into(), method: METHOD_NOTEBOOK_CELLS_SAVE.into(),
+            params: serde_json::json!({"session_id": session_id, "cells": [markdown]}),
+        }).await;
+        assert!(save_markdown.is_success(), "{:?}", save_markdown.error);
+        let notes = dispatcher.handle_request(ApiRequest {
+            id: "nb_notes".into(), method: METHOD_NOTEBOOK_CELLS_LIST.into(),
+            params: serde_json::json!({"session_id": session_id}),
+        }).await.result.unwrap();
+        assert_eq!(notes[0]["cell_type"], "markdown");
+        assert!(notes[0]["stdout"].is_null());
+        assert!(notes[0]["execution_count"].is_null());
+        let execute_notes = dispatcher.handle_request(ApiRequest {
+            id: "nb_notes_execute".into(), method: METHOD_NOTEBOOK_EXECUTE.into(),
+            params: serde_json::json!({"session_id": session_id, "cell_id": cell.id, "code": cell.source, "workspace_id": workspace_id}),
+        }).await;
+        assert!(!execute_notes.is_success());
 
         // 5. Reset kernel
         let reset_req = ApiRequest {
@@ -9224,3 +10299,178 @@ mod conversation_effort_api_tests {
         }).await.unwrap();
     }
 }
+
+#[cfg(test)]
+mod git_and_github_workspace_detection_tests {
+    use super::*;
+
+    #[test]
+    fn github_status_requires_successful_verified_viewer_and_never_exposes_secrets() {
+        for (success, body) in [(false, br#"{"login":"someone","token":"secret"}"#.as_slice()),
+            (true, b"not json".as_slice()), (true, br#"{"login":""}"#.as_slice()),
+            (true, br#"{"message":"Bad credentials"}"#.as_slice())] {
+            let result = github_auth_metadata(success, body);
+            assert_eq!(result["authenticated"], false);
+            assert!(result.get("token").is_none());
+        }
+        let result = github_auth_metadata(true, br#"{"login":"verified","name":"Human","token":"secret","other":"private"}"#);
+        assert_eq!(result["authenticated"], true);
+        assert_eq!(result["user"]["login"], "verified");
+        assert!(!result.to_string().contains("secret"));
+        assert!(result["user"].get("other").is_none());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn github_login_pty_supports_real_prompts_and_cancellation_without_credentials() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let fake_gh = directory.path().join("fake gh's cli");
+        std::fs::write(&fake_gh, "#!/bin/sh\nprintf 'Code: TEST-CODE\\nPress Enter\\n'\nread reply\nprintf 'Browser approval pending\\n'\nread reply\n").unwrap();
+        std::fs::set_permissions(&fake_gh, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let terminal = TerminalCoordinator::new();
+        let command = github_login_command(&fake_gh);
+        let session = terminal.spawn("github-auth", directory.path(), Some(&command), 100, 28).await.unwrap();
+        let mut output = String::new();
+        let mut seq = 0;
+        for _ in 0..100 {
+            let chunk = terminal.read_output(session.id.as_str(), seq, 16384).await.unwrap();
+            seq = chunk.next_seq;
+            output.push_str(&chunk.data);
+            if output.contains("Press Enter") { break; }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert!(output.contains("TEST-CODE"), "Real PTY should expose the device code");
+        terminal.write(session.id.as_str(), b"\r").await.unwrap();
+        for _ in 0..100 {
+            let chunk = terminal.read_output(session.id.as_str(), seq, 16384).await.unwrap();
+            seq = chunk.next_seq;
+            output.push_str(&chunk.data);
+            if output.contains("Browser approval pending") { break; }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        assert!(output.contains("Browser approval pending"));
+        terminal.terminate(session.id.as_str()).await.unwrap();
+        assert!(matches!(terminal.get_session(session.id.as_str()).await.unwrap().status, custos_domain::TerminalSessionStatus::Terminated));
+    }
+
+    #[test]
+    fn github_login_quotes_executable_and_uses_source_control_flow() {
+        let command = github_login_command(std::path::Path::new("/tmp/it's gh"));
+        assert!(command.starts_with("exec '/tmp/it'\\''s gh' "));
+        assert!(command.contains("auth login --hostname github.com"));
+        assert!(!command.contains("copilot"));
+    }
+
+    #[test]
+    fn test_parse_github_remote_various_formats() {
+        // SSH scp-style
+        let (host, owner, repo, avatar) = parse_github_remote("git@github.com:civi0411/Custos.git");
+        assert_eq!(host.as_deref(), Some("github.com"));
+        assert_eq!(owner.as_deref(), Some("civi0411"));
+        assert_eq!(repo.as_deref(), Some("Custos"));
+        assert_eq!(avatar.as_deref(), Some("https://github.com/civi0411.png"));
+
+        // HTTPS style
+        let (host, owner, repo, avatar) = parse_github_remote("https://github.com/civi0411/AgentHub.git");
+        assert_eq!(host.as_deref(), Some("github.com"));
+        assert_eq!(owner.as_deref(), Some("civi0411"));
+        assert_eq!(repo.as_deref(), Some("AgentHub"));
+        assert_eq!(avatar.as_deref(), Some("https://github.com/civi0411.png"));
+
+        // HTTPS without .git
+        let (host, owner, repo, _) = parse_github_remote("https://github.com/facebook/react");
+        assert_eq!(host.as_deref(), Some("github.com"));
+        assert_eq!(owner.as_deref(), Some("facebook"));
+        assert_eq!(repo.as_deref(), Some("react"));
+
+        // Enterprise GitHub
+        let (host, owner, repo, avatar) = parse_github_remote("git@ghe.corporate.com:ai-team/core-model.git");
+        assert_eq!(host.as_deref(), Some("ghe.corporate.com"));
+        assert_eq!(owner.as_deref(), Some("ai-team"));
+        assert_eq!(repo.as_deref(), Some("core-model"));
+        assert_eq!(avatar, None);
+    }
+
+    #[tokio::test]
+    async fn test_deep_git_paths_standard_and_worktree() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let repo_path = temp_dir.path().join("main_repo");
+        tokio::fs::create_dir_all(&repo_path).await.unwrap();
+
+        // Standard directory .git
+        let dot_git_dir = repo_path.join(".git");
+        tokio::fs::create_dir_all(&dot_git_dir).await.unwrap();
+        let res = resolve_deep_git_paths(&repo_path).await;
+        assert!(res.is_some());
+        let (git_dir, common_dir, is_wt) = res.unwrap();
+        assert_eq!(git_dir, dot_git_dir);
+        assert_eq!(common_dir, dot_git_dir);
+        assert!(!is_wt);
+
+        // Linked worktree with .git file
+        let wt_path = temp_dir.path().join("worktree_child");
+        tokio::fs::create_dir_all(&wt_path).await.unwrap();
+        let wt_gitdir = dot_git_dir.join("worktrees/child-1");
+        tokio::fs::create_dir_all(&wt_gitdir).await.unwrap();
+        tokio::fs::write(wt_gitdir.join("commondir"), "../..\n").await.unwrap();
+
+        let dot_git_file = wt_path.join(".git");
+        tokio::fs::write(&dot_git_file, format!("gitdir: {}\n", wt_gitdir.display())).await.unwrap();
+
+        let wt_res = resolve_deep_git_paths(&wt_path).await;
+        assert!(wt_res.is_some());
+        let (wt_actual_gitdir, wt_actual_common, wt_is_wt) = wt_res.unwrap();
+        assert_eq!(wt_actual_gitdir, wt_gitdir.canonicalize().unwrap());
+        assert_eq!(wt_actual_common, dot_git_dir.canonicalize().unwrap());
+        assert!(wt_is_wt);
+    }
+
+    #[tokio::test]
+    async fn test_github_auth_status_dispatch() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("gh-api.db");
+        let runtime = crate::runtime::CustosRuntime::bootstrap(db.to_str().unwrap()).unwrap();
+        let req = ApiRequest {
+            id: "gh-auth-req".into(),
+            method: METHOD_GITHUB_AUTH_STATUS.into(),
+            params: serde_json::json!({}),
+        };
+        let res = runtime.local_api.handle_request(req).await;
+        assert!(res.is_success());
+        let val = res.result.unwrap();
+        assert_eq!(val["source"], "gh_cli");
+    }
+
+    #[tokio::test]
+    async fn test_workspaces_detect_empty_or_missing_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("ws-detect.db");
+        let runtime = crate::runtime::CustosRuntime::bootstrap(db.to_str().unwrap()).unwrap();
+        
+        // Test with empty path string
+        let req1 = ApiRequest {
+            id: "ws-det-1".into(),
+            method: METHOD_WORKSPACES_DETECT.into(),
+            params: serde_json::json!({ "path": "" }),
+        };
+        let res1 = runtime.local_api.handle_request(req1).await;
+        assert!(res1.is_success());
+        let val1 = res1.result.unwrap();
+        assert!(val1["path"].is_string());
+        assert_eq!(val1["is_git"], true);
+
+        // Test with missing path parameter entirely
+        let req2 = ApiRequest {
+            id: "ws-det-2".into(),
+            method: METHOD_WORKSPACES_DETECT.into(),
+            params: serde_json::json!({}),
+        };
+        let res2 = runtime.local_api.handle_request(req2).await;
+        assert!(res2.is_success());
+        let val2 = res2.result.unwrap();
+        assert!(val2["path"].is_string());
+        assert_eq!(val2["is_git"], true);
+    }
+}
+

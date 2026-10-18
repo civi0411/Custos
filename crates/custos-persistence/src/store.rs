@@ -7,15 +7,16 @@ use crate::repositories::{
 };
 use async_trait::async_trait;
 use custos_core::contracts::storage::{
-    DecisionPort, EffectLedgerPort, OutboxEntry, OutboxPort, OutboxStatus, ReplanPort, RunPort,
-    WorkflowRevisionPort,
+    DecisionPort, EffectLedgerPort, NotebookStoragePort, OutboxEntry, OutboxPort, OutboxStatus,
+    ReplanPort, RunPort, WorkflowRevisionPort,
 };
 use custos_core::contracts::workspace::WorkspaceRepository as WorkspaceRepoPort;
 use custos_core::kernel::{SessionStore, TaskEvent, TaskStore};
 use custos_domain::{
     ContinuationPacket, DecisionRecord, DispatchClaim, DomainError, ExecutionReceipt,
-    ExecutionWorkspace, LaunchAttempt, NodePlacement, ReplanRecord, Run, Session, SessionId,
-    SessionJournalEntry, Span, Task, WorkerRun, WorkflowRevision, WorkspaceId, WorkspaceStatus,
+    ExecutionWorkspace, LaunchAttempt, NodePlacement, NotebookCell, ReplanRecord, Run, Session,
+    SessionId, SessionJournalEntry, Span, Task, WorkerRun, WorkflowRevision, WorkspaceId,
+    WorkspaceStatus,
 };
 
 /// SQLite-backed persistent storage implementing TaskStore, SessionStore, OutboxPort, RunPort,
@@ -653,6 +654,10 @@ impl RunPort for SqliteTaskStore {
         self.run_repo.get_launch_attempt(attempt_id)
     }
 
+    async fn list_active_claims(&self) -> Result<Vec<DispatchClaim>, DomainError> {
+        self.run_repo.list_active_claims()
+    }
+
     async fn reconcile_runs_on_startup(&self) -> Result<usize, DomainError> {
         self.run_repo.reconcile_runs_on_startup()
     }
@@ -720,6 +725,28 @@ impl ReplanPort for SqliteTaskStore {
 
     async fn list_replans_for_task(&self, task_id: &str) -> Result<Vec<ReplanRecord>, DomainError> {
         self.replan_repo.list_replans_for_task(task_id)
+    }
+}
+
+#[async_trait]
+impl NotebookStoragePort for SqliteTaskStore {
+    async fn list_notebook_cells(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<NotebookCell>, DomainError> {
+        self.research_repo.list_notebook_cells(session_id)
+    }
+
+    async fn replace_notebook_cells(
+        &self,
+        session_id: &str,
+        cells: &[NotebookCell],
+    ) -> Result<(), DomainError> {
+        self.research_repo.replace_notebook_cells(session_id, cells)
+    }
+
+    async fn save_notebook_cell(&self, cell: &NotebookCell) -> Result<(), DomainError> {
+        self.research_repo.save_notebook_cell(cell)
     }
 }
 

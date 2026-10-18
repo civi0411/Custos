@@ -845,7 +845,17 @@ impl ResearchRepository {
     }
 
     pub fn save_notebook_cell(&self, cell: &NotebookCell) -> Result<(), DomainError> {
-        let conn = self.db.lock()?;
+        let mut conn = self.db.lock()?;
+        let tx = conn.transaction().map_err(|error| DomainError::Validation(error.to_string()))?;
+        Self::write_notebook_cell(&tx, cell)?;
+        tx.execute("INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![custos_domain::new_id("cell_event"), "notebook.cell.saved", serde_json::json!({"cell_id": cell.id, "session_id": cell.session_id, "epoch": cell.epoch}).to_string(), Utc::now().timestamp()])
+            .map_err(|error| DomainError::Validation(error.to_string()))?;
+        tx.commit().map_err(|error| DomainError::Validation(error.to_string()))?;
+        Ok(())
+    }
+
+    fn write_notebook_cell(conn: &rusqlite::Connection, cell: &NotebookCell) -> Result<(), DomainError> {
         let cell_type_str = match cell.cell_type {
             NotebookCellType::Code => "code",
             NotebookCellType::Markdown => "markdown",
@@ -903,6 +913,26 @@ impl ResearchRepository {
         for cell in cells {
             self.save_notebook_cell(cell)?;
         }
+        Ok(())
+    }
+
+    /// Replaces a session projection atomically, including explicit cell deletions.
+    pub fn replace_notebook_cells(&self, session_id: &str, cells: &[NotebookCell]) -> Result<(), DomainError> {
+        let ids: std::collections::HashSet<_> = cells.iter().map(|cell| cell.id.as_str()).collect();
+        if session_id.trim().is_empty() || cells.len() > 256 || ids.len() != cells.len()
+            || cells.iter().any(|cell| cell.id.is_empty() || cell.session_id != session_id) {
+            return Err(DomainError::Validation("Invalid notebook cell identities or session scope".into()));
+        }
+        let mut conn = self.db.lock()?;
+        let tx = conn.transaction().map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.execute("DELETE FROM notebook_cells WHERE session_id = ?1", params![session_id])
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        for cell in cells { Self::write_notebook_cell(&tx, cell)?; }
+        let payload = serde_json::json!({"session_id": session_id, "cell_ids": cells.iter().map(|cell| &cell.id).collect::<Vec<_>>()}).to_string();
+        tx.execute("INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![custos_domain::new_id("nb"), "notebook.cells.replaced", payload, Utc::now().timestamp()])
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        tx.commit().map_err(|e| DomainError::Validation(e.to_string()))?;
         Ok(())
     }
 
@@ -1475,6 +1505,7 @@ impl ResearchRepository {
             ExecutionRecordStatus::Completed => "completed",
             ExecutionRecordStatus::Failed => "failed",
             ExecutionRecordStatus::Cancelled => "cancelled",
+            ExecutionRecordStatus::Preempted => "preempted",
         };
         let artifacts_json = serde_json::to_string(&record.artifacts)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -1528,6 +1559,7 @@ impl ResearchRepository {
                     "completed" => ExecutionRecordStatus::Completed,
                     "failed" => ExecutionRecordStatus::Failed,
                     "cancelled" => ExecutionRecordStatus::Cancelled,
+                    "preempted" => ExecutionRecordStatus::Preempted,
                     _ => ExecutionRecordStatus::Pending,
                 };
                 let started_ts: i64 = row.get(7)?;
@@ -1547,6 +1579,15 @@ impl ResearchRepository {
                     started_at: DateTime::from_timestamp(started_ts, 0).unwrap_or_else(Utc::now),
                     ended_at: ended_ts.and_then(|ts| DateTime::from_timestamp(ts, 0)),
                     artifacts,
+                    checkpoint: None,
+                    resume_from_attempt_id: None,
+                    resumed_from_checkpoint_id: None,
+                    backend: None,
+                    output_namespace: None,
+                    latest_observed_step: None,
+                    latest_local_checkpoint_step: None,
+                    latest_protected_checkpoint_step: None,
+                    last_protected_at: None,
                 })
             })
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -1579,6 +1620,7 @@ impl ResearchRepository {
                     "completed" => ExecutionRecordStatus::Completed,
                     "failed" => ExecutionRecordStatus::Failed,
                     "cancelled" => ExecutionRecordStatus::Cancelled,
+                    "preempted" => ExecutionRecordStatus::Preempted,
                     _ => ExecutionRecordStatus::Pending,
                 };
                 let started_ts: i64 = row.get(7)?;
@@ -1598,6 +1640,15 @@ impl ResearchRepository {
                     started_at: DateTime::from_timestamp(started_ts, 0).unwrap_or_else(Utc::now),
                     ended_at: ended_ts.and_then(|ts| DateTime::from_timestamp(ts, 0)),
                     artifacts,
+                    checkpoint: None,
+                    resume_from_attempt_id: None,
+                    resumed_from_checkpoint_id: None,
+                    backend: None,
+                    output_namespace: None,
+                    latest_observed_step: None,
+                    latest_local_checkpoint_step: None,
+                    latest_protected_checkpoint_step: None,
+                    last_protected_at: None,
                 })
             })
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -1611,7 +1662,8 @@ impl ResearchRepository {
 
     // Annotations
     pub fn save_annotation(&self, ann: &AnnotationRecord) -> Result<(), DomainError> {
-        let conn = self.db.lock()?;
+        let mut conn = self.db.lock()?;
+        let tx = conn.transaction().map_err(|error| DomainError::Validation(error.to_string()))?;
         let target_json = serde_json::to_string(&ann.target)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
         let status_str = match ann.status {
@@ -1621,7 +1673,7 @@ impl ResearchRepository {
             AnnotationStatus::Dismissed => "dismissed",
         };
 
-        conn.execute(
+        let affected = tx.execute(
             "INSERT INTO research_annotations (
                 id, artifact_path, artifact_version, target_json, note, actor,
                 status, side_chat_session_id, submitted_turn_id, created_at
@@ -1631,7 +1683,9 @@ impl ResearchRepository {
                 note = excluded.note,
                 status = excluded.status,
                 side_chat_session_id = excluded.side_chat_session_id,
-                submitted_turn_id = excluded.submitted_turn_id",
+                submitted_turn_id = excluded.submitted_turn_id
+            WHERE research_annotations.artifact_path = excluded.artifact_path
+                AND research_annotations.artifact_version = excluded.artifact_version",
             params![
                 ann.id,
                 ann.artifact_path,
@@ -1647,6 +1701,11 @@ impl ResearchRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
 
+        if affected == 0 { return Err(DomainError::Validation("Annotation identity belongs to a different artifact/version".into())); }
+        tx.execute("INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![custos_domain::new_id("ann_event"), "research.annotation.saved", serde_json::json!({"annotation_id": ann.id, "artifact_path": ann.artifact_path, "artifact_version": ann.artifact_version}).to_string(), Utc::now().timestamp()])
+            .map_err(|error| DomainError::Validation(error.to_string()))?;
+        tx.commit().map_err(|error| DomainError::Validation(error.to_string()))?;
         Ok(())
     }
 
@@ -1768,6 +1827,29 @@ impl ResearchRepository {
 mod tests {
     use super::*;
     use crate::connection::DbConnection;
+
+    #[test]
+    fn notebook_replace_is_atomic_scoped_and_deletes_removed_cells() {
+        let db = DbConnection::open_in_memory().unwrap();
+        let repo = ResearchRepository::new(db);
+        let cell = |id: &str, session: &str| NotebookCell {
+            id: id.into(), session_id: session.into(), cell_type: NotebookCellType::Code,
+            source: "print(42)".into(), cell_index: 0, execution_count: None,
+            status: CellExecutionStatus::Idle, stdout: None, stderr: None, output_image: None,
+            wall_ms: None, epoch: 0, updated_at: 0,
+        };
+        repo.replace_notebook_cells("a", &[cell("one", "a"), cell("two", "a")]).unwrap();
+        repo.replace_notebook_cells("b", &[cell("other", "b")]).unwrap();
+        repo.replace_notebook_cells("a", &[cell("two", "a")]).unwrap();
+        assert_eq!(repo.list_notebook_cells("a").unwrap().len(), 1);
+        assert_eq!(repo.list_notebook_cells("a").unwrap()[0].id, "two");
+        assert!(repo.replace_notebook_cells("a", &[cell("other", "a")]).is_err());
+        assert_eq!(repo.list_notebook_cells("a").unwrap()[0].id, "two", "failed replacement rolls back deletion");
+        assert_eq!(repo.list_notebook_cells("b").unwrap()[0].id, "other");
+        assert!(repo.replace_notebook_cells("a", &[cell("duplicate", "a"), cell("duplicate", "a")]).is_err());
+        repo.replace_notebook_cells("a", &[]).unwrap();
+        assert!(repo.list_notebook_cells("a").unwrap().is_empty());
+    }
 
     #[test]
     fn test_research_repository_full_lifecycle() {

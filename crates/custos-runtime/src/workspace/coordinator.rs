@@ -140,7 +140,13 @@ impl WorkspaceCoordinator {
         }
 
         // Step 5: Capture initial Git / host baseline and mark Ready
-        let dirty = self.provider.inspect_dirty(&ws).await.unwrap_or_default();
+        let dirty = match self.provider.inspect_dirty(&ws).await {
+            Ok(dirty) => dirty,
+            Err(error) => {
+                self.repository.update_workspace_status(&ws_id, WorkspaceStatus::SetupFailed { reason: error.to_string() }).await?;
+                return Err(error);
+            }
+        };
         if let Some(head) = dirty.head_commit.as_ref() {
             ws = ws.with_base_commit_hash(head);
         }
@@ -216,7 +222,7 @@ impl WorkspaceCoordinator {
 
         let is_valid = self.provider.recover(&ws).await.unwrap_or(false);
         if is_valid {
-            let dirty = self.provider.inspect_dirty(&ws).await.unwrap_or_default();
+            let dirty = self.provider.inspect_dirty(&ws).await?;
             ws = ws.with_dirty_manifest(dirty);
             if matches!(
                 ws.status,
@@ -286,7 +292,7 @@ impl WorkspaceCoordinator {
 
         if delete_physical {
             if !force {
-                let dirty = self.provider.inspect_dirty(&ws).await.unwrap_or_default();
+                let dirty = self.provider.inspect_dirty(&ws).await?;
                 if dirty.is_dirty {
                     return Err(DomainError::Conflict(format!(
                         "Workspace '{}' contains uncommitted changes ({} modified, {} untracked, {} deleted). Set force=true to discard.",

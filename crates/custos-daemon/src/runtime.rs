@@ -213,6 +213,12 @@ impl CustosRuntime {
                 .with_journal_manager(session_manager.clone())
                 .with_workspace_coordinator(workspace_coordinator.clone()),
         );
+        let startup_dispatcher = workflow.dispatcher().clone();
+        tokio::spawn(async move {
+            if let Err(e) = startup_dispatcher.restore_from_store().await {
+                tracing::warn!("Failed to restore active claims on startup: {:?}", e);
+            }
+        });
         let terminal_coordinator = Arc::new(custos_runtime::TerminalCoordinator::new());
         let python_coordinator = Arc::new(custos_runtime::PythonKernelCoordinator::new());
 
@@ -277,16 +283,17 @@ pub(crate) fn reserve_available_provider_account(repo: &custos_persistence::Prov
     let providers = repo.list_providers()?;
     let mut eligible = Vec::new();
     let mut stored = false;
-    for account in providers.iter().filter(|p| p.service_type == service) {
+    for account in providers.iter().filter(|p| p.service_type == service || (matches!(service, "antigravity" | "gemini") && matches!(p.service_type.as_str(), "antigravity" | "gemini"))) {
         stored = true;
         if !matches!(account.status.as_str(), "active"|"configured"|"primary"|"standby") { continue; }
         let metadata = repo.credential_metadata(&account.id)?;
-        if service != "local" && !metadata.as_ref().is_some_and(|m| m.state == "active" && (m.has_refresh_token || m.expires_at > chrono::Utc::now().timestamp_millis())) { continue; }
+        let effective_service = account.service_type.as_str();
+        if effective_service != "local" && !metadata.as_ref().is_some_and(|m| m.state == "active" && (m.has_refresh_token || m.expires_at > chrono::Utc::now().timestamp_millis())) { continue; }
         let oauth = metadata.as_ref().is_some_and(|m| m.has_refresh_token || m.scope.as_deref().is_some_and(|s| !s.is_empty()));
-        let endpoint = account.endpoint_url.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or(match service {
-            "openai" => "https://api.openai.com/v1", "anthropic" => "https://api.anthropic.com/v1", "gemini" => "https://generativelanguage.googleapis.com", "copilot" => "https://api.githubcopilot.com", "antigravity" => "https://cloudcode-pa.googleapis.com", "deepseek" => "https://api.deepseek.com/v1", "local" => "http://localhost:11434", _ => "",
+        let endpoint = account.endpoint_url.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or(match effective_service {
+            "openai" => "https://api.openai.com/v1", "anthropic" => "https://api.anthropic.com/v1", "gemini" => "https://cloudcode-pa.googleapis.com", "copilot" => "https://api.githubcopilot.com", "antigravity" => "https://cloudcode-pa.googleapis.com", "deepseek" => "https://api.deepseek.com/v1", "local" => "http://localhost:11434", _ => "",
         });
-        let key = custos_adapters::providers::probe::verified_catalog_key(&account.id, endpoint, oauth, metadata.as_ref().map(|m| m.created_at).unwrap_or(0), service);
+        let key = custos_adapters::providers::probe::verified_catalog_key(&account.id, endpoint, oauth, metadata.as_ref().map(|m| m.created_at).unwrap_or(0), effective_service);
         if availability.check(&key, model).is_err() { continue; }
         if repo.list_catalog_models(Some(&key))?.iter().any(|m|m.id == model && custos_adapters::providers::probe::conversation_model_is_visible(&m.id, Some(&m.label)) && effort.is_none_or(|value| m.efforts.iter().any(|supported| supported == value))) {
             eligible.push(account.id.clone());
@@ -312,10 +319,11 @@ impl CredentialResolver for DaemonCredentialResolver {
     async fn validate_account(&self, account_id: &str, service: &str) -> Result<(), DomainError> {
         let record = self.store.providers().get_provider(account_id)?.ok_or_else(|| DomainError::Validation("Selected provider account no longer exists".into()))?;
         if !matches!(record.status.as_str(), "active" | "configured" | "primary" | "standby") { return Err(DomainError::Validation("Selected provider account is inactive".into())); }
-        if record.service_type != service {
+        let matches_service = record.service_type == service || (matches!(service, "antigravity" | "gemini") && matches!(record.service_type.as_str(), "antigravity" | "gemini"));
+        if !matches_service {
             return Err(DomainError::Validation("Selected account does not belong to the requested model provider".into()));
         }
-        if !matches!(service,"local"|"ollama") && self.credentials.get_oauth_token(account_id).await?.is_none() {
+        if !matches!(service, "local" | "ollama" | "lmstudio" | "custom") && self.credentials.get_oauth_token(account_id).await?.is_none() {
             return Err(DomainError::Validation("secure_storage_missing: Reconnect this provider account".into()));
         }
         Ok(())

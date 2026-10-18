@@ -14,6 +14,7 @@ pub mod browser;
 pub mod budget;
 pub mod capability;
 pub mod claim;
+pub mod compute;
 pub mod context;
 pub mod continuation;
 pub mod decision;
@@ -74,6 +75,11 @@ pub use claim::{
     ArtifactLineageNode, Claim, ClaimEvidenceLink, ClaimGroundingLevel, EnvSnapshot,
     EvidenceRelation, PassageAnchor, PassageAnchorProposal, ResearchClaim, ResearchClaimProposal,
     ResearchExperimentRun, SourceProposal, SourceRecord,
+};
+pub use compute::{
+    AcceleratorSpec, CheckpointCommitStatus, CheckpointFileEntry, CloudPodLease, CloudPodStatus,
+    ComputeBackendKind, CompatibilityGateEvaluation, CompatibilityVerdict, HardwareAdaptationPlan,
+    ResumabilityLevel, TrainingCheckpointManifest,
 };
 pub use context::{
     ContextDeliveryState, ContextItem, ContextPack, ContextReceipt, OmittedContextReason,

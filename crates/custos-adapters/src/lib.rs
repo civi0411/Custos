@@ -21,6 +21,7 @@ pub mod roaming;
 pub mod sandbox;
 pub mod tools;
 pub mod workspace;
+pub mod repository_git;
 
 pub mod model {
     pub use crate::local_inference::model::*;

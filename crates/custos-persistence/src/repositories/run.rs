@@ -348,6 +348,26 @@ impl RunRepository {
         Ok(claim)
     }
 
+    pub fn list_active_claims(&self) -> Result<Vec<DispatchClaim>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, task_id, node_id, assignee, depth, status, claimed_at, dispatched_at, released_at, worker_run_id
+                 FROM dispatch_claims
+                 WHERE status IN ('pending', 'dispatched')
+                 ORDER BY claimed_at ASC",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let claims = stmt
+            .query_map([], Self::map_dispatch_claim)
+            .map_err(|e| DomainError::Validation(e.to_string()))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(claims)
+    }
+
     pub fn save_launch_attempt(&self, attempt: &LaunchAttempt) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
         conn.execute(
