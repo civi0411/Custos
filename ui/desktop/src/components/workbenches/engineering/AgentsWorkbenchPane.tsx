@@ -19,6 +19,10 @@ import {
   Power,
   Sparkles,
   AlertCircle,
+  RotateCcw,
+  Trash2,
+  FolderGit2,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { daemonClient } from '@/api/daemon_client';
@@ -90,6 +94,7 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
 
   // View mode: 'interactive' (Live PTY Terminal like Orca) vs 'governed' (Custos Mediated Prompt/Jobs)
   const [viewMode, setViewMode] = useState<'interactive' | 'governed'>('interactive');
+  const [showFleetSidebar, setShowFleetSidebar] = useState<boolean>(!initialHarnessId);
 
   // Harness & Workspace fleet state
   const [harnesses, setHarnesses] = useState<HarnessDescriptor[]>([]);
@@ -247,6 +252,25 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
       setPtySpawning(false);
     }
   };
+
+  // Auto-spawn interactive agent PTY session upon tab open (Orca parity)
+  const autoSpawnDoneRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedWorkspaceId || !selectedHarness || loadingHarnesses) return;
+    const key = `${selectedWorkspaceId}:${selectedHarness.id}`;
+    if (autoSpawnDoneRef.current === key) return;
+    autoSpawnDoneRef.current = key;
+
+    const cmd = selectedHarness.launch_cmd || (selectedHarness as any)?.launchCmd || selectedHarness.binary_path;
+    const existing = ptySessions.find(
+      (s) => s.workspace_id === selectedWorkspaceId && s.status.type === 'active' && (s.command === cmd || s.command?.includes(selectedHarness.id))
+    );
+    if (existing) {
+      setActivePtyId(existing.id);
+    } else {
+      void spawnAgentPty(cmd);
+    }
+  }, [selectedWorkspaceId, selectedHarness, loadingHarnesses, ptySessions]);
 
   const ptyNextSeqsRef = useRef(ptyNextSeqs);
   useEffect(() => {
@@ -427,23 +451,23 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
     switch (tier) {
       case 'custos_mediated':
         return (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-            <ShieldCheck className="h-3 w-3" />
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/[0.08] px-2 py-0.5 text-[10px] font-medium text-white/90">
+            <ShieldCheck className="h-3 w-3 text-white/70" />
             Custos Mediated (Permit Enforced)
           </span>
         );
       case 'provider_governed':
         return (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400">
-            <ShieldAlert className="h-3 w-3" />
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-white/70">
+            <ShieldAlert className="h-3 w-3 text-white/50" />
             Provider Governed (Gate 4 Bypass)
           </span>
         );
       case 'observe_only':
       default:
         return (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-400">
-            <Eye className="h-3 w-3" />
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.02] px-2 py-0.5 text-[10px] font-medium text-white/60">
+            <Eye className="h-3 w-3 text-white/50" />
             Observe Only
           </span>
         );
@@ -454,17 +478,17 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
     if (maturity === 'verified_native') {
       return (
         <span
-          className="inline-flex items-center gap-1 rounded border border-emerald-500/40 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400"
+          className="inline-flex items-center gap-1 rounded border border-white/15 bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-white/90"
           title="Verified Native: Protocol conformance with structured tool events and live observer"
         >
-          <Sparkles className="h-2.5 w-2.5" />
+          <Sparkles className="h-2.5 w-2.5 text-white/70" />
           Verified Native
         </span>
       );
     }
     return (
       <span
-        className="inline-flex items-center gap-1 rounded border border-zinc-600/40 bg-zinc-700/20 px-1.5 py-0.5 text-[10px] font-medium text-zinc-400"
+        className="inline-flex items-center gap-1 rounded border border-white/10 bg-white/[0.03] px-1.5 py-0.5 text-[10px] font-medium text-white/60"
         title="Discovered CLI: Standard host CLI executable; unmediated subprocess execution"
       >
         Discovered CLI
@@ -498,75 +522,177 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
-      {/* Top Header & Mode Switcher */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border-default)] px-5 py-3">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--color-surface-2)]">
+      {/* Unified 38px Toolbar: Identity, Worktree, Status, Actions */}
+      <div className="flex h-10 shrink-0 items-center justify-between border-b border-[var(--color-border-default)] bg-[var(--color-surface-1)] px-3 text-xs select-none">
+        {/* Left: Agent Identity + Worktree + Session status */}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center gap-1.5 font-medium text-[var(--color-fg-default)] shrink-0">
             {selectedHarness ? (
-              getAgentBrandIcon(selectedHarness.id, 18, 'shrink-0')
+              getAgentBrandIcon(selectedHarness.id, 16, 'shrink-0')
             ) : (
               <Bot className="h-4 w-4 text-[var(--color-fg-muted)]" />
             )}
+            <span className="text-xs font-semibold">
+              {selectedHarness ? selectedHarness.name : 'Coding Agent'}
+            </span>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="workbench-kicker">Agent Execution Engine</span>
-              <span className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--color-fg-muted)]">
-                46 Harnesses Integrated
-              </span>
-            </div>
-            <h1 className="text-sm font-semibold tracking-tight text-[var(--color-fg-default)]">
-              {selectedHarness ? selectedHarness.name : 'Coding Agent Engine'}
-            </h1>
+
+          <div className="h-3.5 w-px bg-[var(--color-border-subtle)] shrink-0" />
+
+          {/* Worktree Target selector */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <FolderGit2 className="h-3.5 w-3.5 text-[var(--color-fg-subtle)]" />
+            <NativeSelect
+              value={selectedWorkspaceId}
+              onChange={(e) => {
+                const newId = e.target.value;
+                setSelectedWorkspaceId(newId);
+                onSelectWorkspace?.(newId);
+              }}
+              className="rounded border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-fg-default)] outline-none hover:bg-[var(--color-surface-3)]"
+            >
+              <option value="">Current Working Directory</option>
+              {workspaces.map((ws) => (
+                <option key={ws.id} value={ws.id}>
+                  {ws.name} ({ws.kind.type === 'git' ? 'git worktree' : 'directory'})
+                </option>
+              ))}
+            </NativeSelect>
           </div>
+
+          <div className="h-3.5 w-px bg-[var(--color-border-subtle)] shrink-0" />
+
+          {/* Session indicator */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                activePtySession?.status.type === 'active'
+                  ? 'bg-white/80 animate-pulse'
+                  : 'bg-zinc-500'
+              }`}
+            />
+            <span className="text-[11px] text-[var(--color-fg-muted)]">
+              {activePtySession ? (activePtySession.status.type === 'active' ? 'Active' : 'Stopped') : 'Idle'}
+            </span>
+          </div>
+
+          {ptySessions.length > 1 && (
+            <NativeSelect
+              value={activePtyId}
+              onChange={(e) => setActivePtyId(e.target.value)}
+              className="rounded border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px] text-[var(--color-fg-default)]"
+            >
+              {ptySessions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.command} ({s.status.type})
+                </option>
+              ))}
+            </NativeSelect>
+          )}
         </div>
 
-        {/* View Mode Toggle: Interactive PTY vs Governed Run */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-0.5 text-xs">
+        {/* Right: Actions */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Mode Switcher */}
+          <div className="flex items-center rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] p-0.5 text-[11px]">
             <button
               type="button"
               onClick={() => setViewMode('interactive')}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1 font-medium transition ${
+              className={`flex items-center gap-1 rounded px-2 py-0.5 font-medium transition cursor-pointer ${
                 viewMode === 'interactive'
-                  ? 'bg-[var(--color-surface-3)] text-[var(--color-fg-default)] shadow-xs'
+                  ? 'bg-[var(--color-surface-1)] text-[var(--color-fg-default)] shadow-xs'
                   : 'text-[var(--color-fg-muted)] hover:text-[var(--color-fg-default)]'
               }`}
+              title="Interactive PTY (Live Claude Code Terminal)"
             >
-              <Terminal className="h-3.5 w-3.5" />
-              Interactive PTY (TUI Mode)
+              <Terminal className="h-3 w-3" />
+              Terminal
             </button>
             <button
               type="button"
               onClick={() => setViewMode('governed')}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1 font-medium transition ${
+              className={`flex items-center gap-1 rounded px-2 py-0.5 font-medium transition cursor-pointer ${
                 viewMode === 'governed'
-                  ? 'bg-[var(--color-surface-3)] text-[var(--color-fg-default)] shadow-xs'
+                  ? 'bg-[var(--color-surface-1)] text-[var(--color-fg-default)] shadow-xs'
                   : 'text-[var(--color-fg-muted)] hover:text-[var(--color-fg-default)]'
               }`}
+              title="Autonomous Governed Jobs"
             >
-              <ShieldCheck className="h-3.5 w-3.5" />
-              Governed Run & Inspector
+              <ShieldCheck className="h-3 w-3" />
+              Governed
             </button>
           </div>
 
+          <div className="h-3.5 w-px bg-[var(--color-border-subtle)]" />
+
+          {/* Restart / Spawn */}
           <button
             type="button"
-            onClick={fetchHarnesses}
-            disabled={loadingHarnesses}
-            className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-2.5 py-1 text-xs font-medium text-[var(--color-fg-muted)] transition hover:bg-[var(--color-surface-2)] hover:text-[var(--color-fg-default)] disabled:opacity-50"
-            title="Rescan system PATH for agent CLIs"
+            onClick={() => spawnAgentPty()}
+            disabled={ptySpawning}
+            className="flex items-center gap-1 rounded border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-2 py-1 text-[11px] font-medium text-[var(--color-fg-default)] transition hover:bg-[var(--color-surface-3)] disabled:opacity-50 cursor-pointer"
+            title="Restart or spawn agent CLI process"
           >
-            <RefreshCw className={`h-3 w-3 ${loadingHarnesses ? 'animate-spin' : ''}`} />
-            Scan Fleet
+            {ptySpawning ? (
+              <RefreshCw className="h-3 w-3 animate-spin" />
+            ) : (
+              <RotateCcw className="h-3 w-3" />
+            )}
+            <span>Restart</span>
+          </button>
+
+          {/* Kill / Terminate */}
+          {activePtySession && activePtySession.status.type === 'active' && (
+            <button
+              type="button"
+              onClick={handlePtyTerminate}
+              className="flex items-center gap-1 rounded border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-[11px] font-medium text-rose-400 hover:bg-rose-500/20 cursor-pointer"
+              title="Terminate running process"
+            >
+              <Power className="h-3 w-3" />
+              <span>Kill</span>
+            </button>
+          )}
+
+          {/* Clear Output */}
+          <button
+            type="button"
+            onClick={() => {
+              if (activePtyId) {
+                setPtyLogs((prev) => ({ ...prev, [activePtyId]: '' }));
+              }
+            }}
+            className="flex items-center gap-1 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] px-2 py-1 text-[11px] text-[var(--color-fg-muted)] hover:text-[var(--color-fg-default)] cursor-pointer"
+            title="Clear terminal buffer"
+          >
+            <Trash2 className="h-3 w-3" />
+            <span>Clear</span>
+          </button>
+
+          <div className="h-3.5 w-px bg-[var(--color-border-subtle)]" />
+
+          {/* Fleet directory toggle */}
+          <button
+            type="button"
+            onClick={() => setShowFleetSidebar((prev) => !prev)}
+            className={`flex items-center gap-1 rounded border px-2 py-1 text-[11px] font-medium transition cursor-pointer ${
+              showFleetSidebar
+                ? 'border-[var(--color-accent-emphasis)] bg-[var(--color-accent-subtle)] text-[var(--color-accent-fg)]'
+                : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] text-[var(--color-fg-muted)] hover:text-[var(--color-fg-default)]'
+            }`}
+            title={showFleetSidebar ? 'Hide harness directory' : 'Show harness directory to select another CLI agent'}
+          >
+            <SlidersHorizontal className="h-3 w-3" />
+            <span>Harnesses</span>
           </button>
         </div>
       </div>
 
       {/* Main Container */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Left: Harness Fleet Sidebar */}
-        <div className="w-80 flex-shrink-0 flex flex-col border-r border-[var(--color-border-default)] bg-[var(--color-surface-1)]">
+      <div className="wb-split flex min-h-0 flex-1 overflow-hidden">
+        {/* Left: Harness Fleet Sidebar (collapsible for focused Orca-style terminal) */}
+        {showFleetSidebar && (
+          <div className="wb-master w-80 flex-shrink-0 flex flex-col border-r border-[var(--color-border-default)] bg-[var(--color-surface-1)]">
           {/* Search & Filter Header */}
           <div className="p-3 border-b border-[var(--color-border-subtle)] space-y-2">
             <div className="relative">
@@ -589,40 +715,52 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
               )}
             </div>
 
-            {/* Filter Chips */}
-            <div className="flex items-center gap-1 text-[11px]">
+            {/* Filter Chips & Rescan */}
+            <div className="flex items-center justify-between text-[11px]">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setFilterFilter('all')}
+                  className={`px-2 py-0.5 rounded ${
+                    filterFilter === 'all'
+                      ? 'bg-[var(--color-surface-3)] text-[var(--color-fg-default)] font-semibold'
+                      : 'text-[var(--color-fg-muted)] hover:text-[var(--color-fg-default)]'
+                  }`}
+                >
+                  All ({harnesses.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterFilter('installed')}
+                  className={`px-2 py-0.5 rounded ${
+                    filterFilter === 'installed'
+                      ? 'bg-white/10 text-white font-semibold'
+                      : 'text-[var(--color-fg-muted)] hover:text-[var(--color-fg-default)]'
+                  }`}
+                >
+                  Installed ({harnesses.filter((h) => h.is_available ?? (h as any).isAvailable).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFilterFilter('missing')}
+                  className={`px-2 py-0.5 rounded ${
+                    filterFilter === 'missing'
+                      ? 'bg-white/10 text-white font-semibold'
+                      : 'text-[var(--color-fg-muted)] hover:text-[var(--color-fg-default)]'
+                  }`}
+                >
+                  Missing
+                </button>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setFilterFilter('all')}
-                className={`px-2 py-0.5 rounded ${
-                  filterFilter === 'all'
-                    ? 'bg-[var(--color-surface-3)] text-[var(--color-fg-default)] font-semibold'
-                    : 'text-[var(--color-fg-muted)] hover:text-[var(--color-fg-default)]'
-                }`}
+                onClick={fetchHarnesses}
+                disabled={loadingHarnesses}
+                className="p-1 rounded text-[var(--color-fg-muted)] hover:text-[var(--color-fg-default)] hover:bg-[var(--color-surface-2)] transition disabled:opacity-50 cursor-pointer"
+                title="Rescan system PATH for agent CLIs"
               >
-                All ({harnesses.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterFilter('installed')}
-                className={`px-2 py-0.5 rounded ${
-                  filterFilter === 'installed'
-                    ? 'bg-emerald-500/20 text-emerald-400 font-semibold'
-                    : 'text-[var(--color-fg-muted)] hover:text-[var(--color-fg-default)]'
-                }`}
-              >
-                Installed ({harnesses.filter((h) => h.is_available ?? (h as any).isAvailable).length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterFilter('missing')}
-                className={`px-2 py-0.5 rounded ${
-                  filterFilter === 'missing'
-                    ? 'bg-amber-500/20 text-amber-400 font-semibold'
-                    : 'text-[var(--color-fg-muted)] hover:text-[var(--color-fg-default)]'
-                }`}
-              >
-                Available on PATH ({harnesses.filter((h) => !(h.is_available ?? (h as any).isAvailable)).length})
+                <RefreshCw className={`h-3 w-3 ${loadingHarnesses ? 'animate-spin' : ''}`} />
               </button>
             </div>
           </div>
@@ -662,7 +800,7 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
                       {renderMaturityBadge(harness.maturity)}
                       <div
                         className={`h-2 w-2 rounded-full ${
-                          available ? 'bg-emerald-400 ring-2 ring-emerald-500/20' : 'bg-amber-400/80'
+                          available ? 'bg-white/80 ring-2 ring-white/15' : 'bg-white/20'
                         }`}
                         title={available ? 'Installed on PATH' : 'Not found on PATH'}
                       />
@@ -677,128 +815,13 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
             })}
           </div>
         </div>
+        )}
 
         {/* Right: Active Console & Engine */}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-canvas)]">
-          {/* Workspace Affinity & Agent Context Header */}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] px-5 py-2.5">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)] font-semibold">
-                  Worktree Target:
-                </span>
-                <NativeSelect
-                  value={selectedWorkspaceId}
-                  onChange={(e) => {
-                    const newId = e.target.value;
-                    setSelectedWorkspaceId(newId);
-                    onSelectWorkspace?.(newId);
-                  }}
-                  className="rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-2 py-1 text-xs font-medium text-[var(--color-fg-default)] outline-none hover:bg-[var(--color-surface-3)]"
-                >
-                  <option value="">Current Working Directory</option>
-                  {workspaces.map((ws) => (
-                    <option key={ws.id} value={ws.id}>
-                      {ws.name} ({ws.kind.type === 'git' ? 'git worktree' : 'directory'})
-                    </option>
-                  ))}
-                </NativeSelect>
-              </div>
-
-              {selectedWorkspace && (
-                <span className="hidden truncate font-mono text-[10px] text-[var(--color-fg-subtle)] lg:inline-block max-w-[280px]">
-                  {selectedWorkspace.path}
-                </span>
-              )}
-            </div>
-
-            {selectedHarness && (
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-[11px] rounded bg-[var(--color-surface-2)] px-2 py-0.5 text-[var(--color-fg-muted)]">
-                  launch: <code>{selectedHarness.launch_cmd || selectedHarness.binary_path}</code>
-                </span>
-                {renderMaturityBadge(selectedHarness.maturity)}
-                {renderMediationBadge(selectedHarness.profile.tool_mediation)}
-              </div>
-            )}
-          </div>
-
           {/* VIEW MODE 1: INTERACTIVE PTY TERMINAL (ORCA PARITY) */}
           {viewMode === 'interactive' && (
             <div className="flex flex-1 flex-col overflow-hidden">
-              {/* Terminal Session Toolbar */}
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-2)]/60 px-4 py-2">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`h-2 w-2 rounded-full ${
-                        activePtySession?.status.type === 'active'
-                          ? 'bg-emerald-400 animate-pulse'
-                          : 'bg-zinc-500'
-                      }`}
-                    />
-                    <span className="text-xs font-medium text-[var(--color-fg-default)]">
-                      {activePtySession
-                        ? `Session (${activePtySession.command})`
-                        : 'No session running'}
-                    </span>
-                  </div>
-
-                  {ptySessions.length > 1 && (
-                    <NativeSelect
-                      value={activePtyId}
-                      onChange={(e) => setActivePtyId(e.target.value)}
-                      className="rounded border border-[var(--color-border-default)] bg-[var(--color-surface-1)] px-2 py-0.5 text-xs text-[var(--color-fg-default)]"
-                    >
-                      {ptySessions.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.command} ({s.status.type})
-                        </option>
-                      ))}
-                    </NativeSelect>
-                  )}
-                </div>
-
-                {/* Session Action Buttons */}
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => spawnAgentPty()}
-                    disabled={ptySpawning}
-                    className="flex items-center gap-1.5 rounded-md bg-[var(--color-btn-primary-bg)] px-3 py-1 text-xs font-medium text-[var(--color-btn-primary-fg)] transition hover:opacity-90 disabled:opacity-50"
-                  >
-                    {ptySpawning ? (
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Play className="h-3.5 w-3.5 fill-current" />
-                    )}
-                    {activePtySession ? 'Restart Agent Process' : 'Spawn Agent Session'}
-                  </button>
-
-                  {activePtySession && activePtySession.status.type === 'active' && (
-                    <button
-                      type="button"
-                      onClick={handlePtyTerminate}
-                      className="flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-xs font-medium text-rose-400 hover:bg-rose-500/20"
-                    >
-                      <Power className="h-3.5 w-3.5" />
-                      Terminate
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (activePtyId) {
-                        setPtyLogs((prev) => ({ ...prev, [activePtyId]: '' }));
-                      }
-                    }}
-                    className="flex items-center gap-1 rounded-md border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-2 py-1 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-fg-default)]"
-                  >
-                    Clear Output
-                  </button>
-                </div>
-              </div>
 
               {/* Not Installed Banner / Install Helper */}
               {!isAvailable && (
@@ -820,10 +843,10 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
                           <button
                             type="button"
                             onClick={() => handleCopyInstall(installCmd)}
-                            className="flex items-center gap-1 rounded bg-amber-500/20 px-2.5 py-1 text-xs font-medium text-amber-200 hover:bg-amber-500/30"
+                            className="flex items-center gap-1 rounded bg-white/10 px-2.5 py-1 text-xs font-medium text-white hover:bg-white/15 border border-white/10"
                           >
                             {copiedInstall ? (
-                              <Check className="h-3.5 w-3.5 text-emerald-400" />
+                              <Check className="h-3.5 w-3.5 text-white" />
                             ) : (
                               <Copy className="h-3.5 w-3.5" />
                             )}
@@ -892,9 +915,17 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
                   className="flex-1 rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-3 py-1.5 font-mono text-xs text-[var(--color-fg-default)] placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-border-focus)] focus:outline-none"
                 />
                 <button
+                  type="button"
+                  onClick={() => sendPtyInput('\x03')}
+                  className="flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 font-mono text-[11px] font-semibold text-rose-400 hover:bg-rose-500/20 transition cursor-pointer"
+                  title="Send Ctrl+C (SIGINT) to interrupt agent"
+                >
+                  ^C
+                </button>
+                <button
                   type="submit"
                   disabled={!ptyInput.trim()}
-                  className="flex items-center gap-1.5 rounded-md bg-[var(--color-surface-3)] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-default)] hover:bg-[var(--color-surface-2)] disabled:opacity-40"
+                  className="flex items-center gap-1.5 rounded-md bg-[var(--color-surface-3)] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-default)] hover:bg-[var(--color-surface-2)] disabled:opacity-40 transition cursor-pointer"
                 >
                   <Send className="h-3.5 w-3.5" />
                   Send
@@ -910,7 +941,7 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
                 <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-surface-1)] p-5">
                   <div className="flex items-center justify-between border-b border-[var(--color-border-muted)] pb-3">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-surface-2)]">
+                      <div className="wb-pane-toolbar flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-surface-2)]">
                         <Zap className="h-5 w-5 text-amber-400" />
                       </div>
                       <div>
@@ -1072,7 +1103,7 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
               {/* Status Banner */}
               {statusMessage && (
                 <div className="flex items-center gap-2 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-surface-1)] p-3 text-xs text-[var(--color-fg-default)]">
-                  <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-400" />
+                  <CheckCircle2 className="h-4 w-4 flex-shrink-0 text-white/70" />
                   <span>{statusMessage}</span>
                 </div>
               )}
@@ -1125,8 +1156,8 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
                         <span
                           className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
                             runResult.status === 'completed'
-                              ? 'bg-emerald-500/10 text-emerald-400'
-                              : 'bg-rose-500/10 text-rose-400'
+                              ? 'bg-white/10 text-white'
+                              : 'bg-white/5 text-white/50'
                           }`}
                         >
                           {runResult.status}
@@ -1138,7 +1169,7 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
                         className="flex items-center gap-1 rounded bg-[var(--color-surface-1)] px-2 py-1 text-[11px] text-[var(--color-fg-muted)] hover:text-[var(--color-fg-default)]"
                       >
                         {copiedStdout ? (
-                          <Check className="h-3 w-3 text-emerald-400" />
+                          <Check className="h-3 w-3 text-white" />
                         ) : (
                           <Copy className="h-3 w-3" />
                         )}

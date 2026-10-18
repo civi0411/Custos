@@ -5,11 +5,11 @@ import {
   File,
   FileCode,
   FileText,
-  FileDiff,
   RefreshCw,
   Search,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
   Copy,
   Check,
   Plus,
@@ -18,6 +18,9 @@ import {
   FolderTree,
   FolderGit2,
   Filter,
+  PanelLeft,
+  PanelLeftClose,
+  Terminal,
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { daemonClient } from '@/api/daemon_client';
@@ -35,6 +38,8 @@ import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 export interface FilesChangesPaneProps {
   sessionId?: string;
   initialWorkspaceId?: string;
+  initialFilePath?: string;
+  initialViewMode?: 'content' | 'diff';
   activeWorkspaceId?: string;
   onSelectWorkspace?: (id: string) => void;
   onShowToast?: (msg: string) => void;
@@ -55,15 +60,14 @@ function getFileIcon(name: string) {
     case 'cpp':
     case 'html':
     case 'css':
-      return <FileCode className="h-3.5 w-3.5 text-blue-400 shrink-0" />;
+      return <FileCode className="h-3.5 w-3.5 text-white/60 shrink-0" />;
     case 'json':
     case 'yaml':
     case 'yml':
     case 'toml':
-      return <FileText className="h-3.5 w-3.5 text-amber-400 shrink-0" />;
     case 'md':
     case 'txt':
-      return <FileText className="h-3.5 w-3.5 text-emerald-400 shrink-0" />;
+      return <FileText className="h-3.5 w-3.5 text-white/50 shrink-0" />;
     default:
       return <File className="h-3.5 w-3.5 text-[var(--color-fg-muted)] shrink-0" />;
   }
@@ -124,21 +128,24 @@ function buildFileTree(entries: WorkspaceFileEntry[]): TreeNode {
 export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
   sessionId: _sessionId,
   initialWorkspaceId,
+  initialFilePath,
+  initialViewMode,
   activeWorkspaceId: propActiveWorkspaceId,
-  onSelectWorkspace: propOnSelectWorkspace,
+  onSelectWorkspace: _propOnSelectWorkspace,
   onShowToast,
-  onOpenTab: _onOpenTab,
+  onOpenTab,
 }) => {
-  const { handleOpenFolderDirect, activeWorkspaceId: ctxActiveWorkspaceId, setActiveWorkspaceId: ctxSetActiveWorkspaceId } = useAppContext();
+  const { handleOpenFolderDirect, activeWorkspaceId: ctxActiveWorkspaceId } = useAppContext();
   const activeWorkspaceId = propActiveWorkspaceId ?? ctxActiveWorkspaceId;
-  const onSelectWorkspace = propOnSelectWorkspace ?? ctxSetActiveWorkspaceId;
 
   const [workspaces, setWorkspaces] = useState<ExecutionWorkspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>(activeWorkspaceId || initialWorkspaceId || '');
   const appliedInitialWorkspace = useRef<string | undefined>(undefined);
+  const treeGeneration = useRef(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [filterQuery, setFilterQuery] = useState<string>('');
   const [onlyChanged, setOnlyChanged] = useState<boolean>(false);
+  const [isExplorerOpen, setIsExplorerOpen] = useState<boolean>(!initialFilePath);
 
   // Files & Diff state
   const [fileEntries, setFileEntries] = useState<WorkspaceFileEntry[]>([]);
@@ -146,31 +153,38 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
 
   // Active selected file (never a folder)
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [selectedPath, setSelectedPath] = useState<string | null>(initialFilePath || null);
   const [fileContent, setFileContent] = useState<WorkspaceFileContent | null>(null);
   const [fileDiff, setFileDiff] = useState<WorkspaceFileDiff | null>(null);
   const [loadingContent, setLoadingContent] = useState<boolean>(false);
 
+  useEffect(() => {
+    if (initialFilePath && initialFilePath !== selectedPath) {
+      setSelectedPath(initialFilePath);
+    }
+  }, [initialFilePath]);
+
   // Actions
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
+  const [fileViewMode, setFileViewMode] = useState<'content' | 'diff'>(initialViewMode || 'content');
 
   const loadWorkspaces = useCallback(async () => {
     try {
       setLoading(true);
       const list = await daemonClient.listWorkspaces();
-      const activeList = list.filter((w) => w.status !== 'archived');
+      const activeList = Array.isArray(list) ? list.filter((w) => w.status !== 'archived') : [];
       setWorkspaces(activeList);
-      if (activeList.length > 0 && !selectedWorkspaceId && !activeWorkspaceId) {
+      if (!selectedWorkspaceId && activeList.length > 0) {
         setSelectedWorkspaceId(activeList[0].id);
-        onSelectWorkspace?.(activeList[0].id);
       }
-    } catch (err: any) {
-      onShowToast?.(`Failed to load workspaces: ${err?.message || err}`);
+    } catch {
+      setWorkspaces([]);
+      if (!selectedWorkspaceId) setSelectedWorkspaceId('');
     } finally {
       setLoading(false);
     }
-  }, [selectedWorkspaceId, activeWorkspaceId, onSelectWorkspace, onShowToast]);
+  }, [selectedWorkspaceId]);
 
   useEffect(() => {
     loadWorkspaces();
@@ -197,15 +211,22 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
   }, [initialWorkspaceId, workspaces]);
 
   const loadData = useCallback(async () => {
-    if (!selectedWorkspaceId) return;
+    const generation = ++treeGeneration.current;
+    if (!selectedWorkspaceId) {
+      setFileEntries([]);
+      setDiffSummary(null);
+      setSelectedPath(null);
+      return;
+    }
     try {
       const [tree, diff] = await Promise.all([
         daemonClient.getWorkspaceFileTree(selectedWorkspaceId),
         daemonClient.getWorkspaceDiff(selectedWorkspaceId),
       ]);
-      const files: WorkspaceFileEntry[] = tree.entries || [];
+      if (generation !== treeGeneration.current) return;
+      const files: WorkspaceFileEntry[] = (tree && Array.isArray(tree.entries)) ? tree.entries : [];
       setFileEntries(files);
-      setDiffSummary(diff);
+      setDiffSummary(diff || null);
 
       // Expand top-level dirs
       const initialExpanded = new Set<string>();
@@ -217,26 +238,18 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
       });
       setExpandedDirs(initialExpanded);
 
-      // Default selection to first changed file
-      if (selectedPath === null) {
-        if (diff && diff.files && diff.files.length > 0) {
-          setSelectedPath(diff.files[0].path);
-        } else if (files.length > 0) {
-          const firstFile = files.find((f) => !checkIsDir(f));
-          if (firstFile) setSelectedPath(firstFile.path);
-        }
-      }
-    } catch (err: any) {
+      setSelectedPath(previous => previous || diff?.files?.[0]?.path || files.find(file => !checkIsDir(file))?.path || null);
+    } catch {
+      if (generation !== treeGeneration.current) return;
       setFileEntries([]);
       setDiffSummary(null);
-      setFileContent(null);
-      setFileDiff(null);
-      onShowToast?.(`Failed to load workspace files: ${err?.message || err}`);
+      setSelectedPath(null);
     }
-  }, [selectedWorkspaceId, selectedPath, onShowToast]);
+  }, [selectedWorkspaceId]);
 
   useEffect(() => {
-    loadData();
+    void loadData();
+    return () => { treeGeneration.current++; };
   }, [loadData]);
 
   // Changed files map
@@ -263,7 +276,7 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
     return counts;
   }, [diffSummary]);
 
-  // Load content or diff for selected file
+  // Load content and diff for selected file
   useEffect(() => {
     if (!selectedWorkspaceId || !selectedPath) {
       setFileContent(null);
@@ -276,48 +289,51 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
     setLoadingContent(true);
 
     const diffEntry = diffSummary?.files.find((f) => f.path === selectedPath);
-
-    if (diffEntry) {
-      daemonClient
-        .getWorkspaceFileDiff(selectedWorkspaceId, selectedPath, diffEntry.is_staged)
-        .then((diff) => {
-          if (isMounted) {
-            setFileDiff(diff);
-            setFileContent(null);
-          }
-        })
-        .catch(() => {
-          return daemonClient
-            .readWorkspaceFile(selectedWorkspaceId, selectedPath)
-            .then((content) => {
-              if (isMounted) {
-                setFileContent(content);
-                setFileDiff(null);
-              }
-            });
-        })
-        .finally(() => {
-          if (isMounted) setLoadingContent(false);
-        });
+    if (initialViewMode) {
+      setFileViewMode(initialViewMode);
+    } else if (diffEntry) {
+      setFileViewMode('diff');
     } else {
+      setFileViewMode('content');
+    }
+
+    const promises: Promise<any>[] = [];
+
+    // Fetch full file content
+    promises.push(
       daemonClient
-        .readWorkspaceFile(selectedWorkspaceId, selectedPath)
+        .readWorkspaceFile(
+          selectedWorkspaceId,
+          selectedPath,
+          /\.(pdf|png|jpe?g|gif|webp|avif)$/i.test(selectedPath) ? 10 * 1024 * 1024 : undefined
+        )
         .then((content) => {
-          if (isMounted) {
-            setFileContent(content);
-            setFileDiff(null);
-          }
+          if (isMounted) setFileContent(content);
         })
         .catch(() => {
-          if (isMounted) {
-            setFileContent(null);
-            setFileDiff(null);
-          }
+          if (isMounted) setFileContent(null);
         })
-        .finally(() => {
-          if (isMounted) setLoadingContent(false);
-        });
+    );
+
+    // If diff entry exists, fetch file diff
+    if (diffEntry) {
+      promises.push(
+        daemonClient
+          .getWorkspaceFileDiff(selectedWorkspaceId, selectedPath, diffEntry.is_staged)
+          .then((diff) => {
+            if (isMounted) setFileDiff(diff);
+          })
+          .catch(() => {
+            if (isMounted) setFileDiff(null);
+          })
+      );
+    } else {
+      setFileDiff(null);
     }
+
+    Promise.allSettled(promises).finally(() => {
+      if (isMounted) setLoadingContent(false);
+    });
 
     return () => {
       isMounted = false;
@@ -349,6 +365,32 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
       return next;
     });
   };
+
+  const changedFileList = useMemo(() => diffSummary?.files || [], [diffSummary]);
+  const currentDiffIndex = changedFileList.findIndex((f) => f.path === selectedPath);
+
+  const handlePrevDiff = () => {
+    if (changedFileList.length === 0) return;
+    const prev = currentDiffIndex <= 0 ? changedFileList.length - 1 : currentDiffIndex - 1;
+    setSelectedPath(changedFileList[prev].path);
+  };
+
+  const handleNextDiff = () => {
+    if (changedFileList.length === 0) return;
+    const next = currentDiffIndex >= changedFileList.length - 1 ? 0 : currentDiffIndex + 1;
+    setSelectedPath(changedFileList[next].path);
+  };
+
+  const diffStats = useMemo(() => {
+    if (!fileDiff?.diff) return null;
+    let added = 0;
+    let deleted = 0;
+    for (const line of fileDiff.diff.split('\n')) {
+      if (line.startsWith('+') && !line.startsWith('+++')) added++;
+      else if (line.startsWith('-') && !line.startsWith('---')) deleted++;
+    }
+    return { added, deleted };
+  }, [fileDiff]);
 
   const currentDiffEntry = useMemo(() => {
     return selectedPath ? changedFilesMap.get(selectedPath) : undefined;
@@ -445,14 +487,14 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
                 )}
               </span>
               {isExpanded ? (
-                <FolderOpen className="h-3.5 w-3.5 shrink-0 text-amber-500/90" />
+                <FolderOpen className="h-3.5 w-3.5 shrink-0 text-white/60" />
               ) : (
-                <Folder className="h-3.5 w-3.5 shrink-0 text-amber-500/70" />
+                <Folder className="h-3.5 w-3.5 shrink-0 text-white/40" />
               )}
               <span className="truncate">{node.name}</span>
             </div>
             {folderChangeCount > 0 && (
-              <span className="text-[10px] font-mono font-medium text-amber-400/80 mr-1">
+              <span className="text-[10px] font-mono font-medium text-white/60 mr-1">
                 {folderChangeCount}
               </span>
             )}
@@ -476,17 +518,17 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
 
     if (hasDiff) {
       if (hasDiff.status === 'added' || hasDiff.status === '??') {
-        nameColorClass = 'text-emerald-400 font-medium';
+        nameColorClass = 'text-white font-medium';
         statusLetter = hasDiff.status === '??' ? 'U' : 'A';
-        statusColor = 'text-emerald-400';
+        statusColor = 'text-white/70';
       } else if (hasDiff.status === 'deleted') {
-        nameColorClass = 'text-rose-400 line-through';
+        nameColorClass = 'text-white/40 line-through';
         statusLetter = 'D';
-        statusColor = 'text-rose-400';
+        statusColor = 'text-white/40';
       } else {
-        nameColorClass = 'text-amber-400 font-medium';
+        nameColorClass = 'text-white font-medium';
         statusLetter = 'M';
-        statusColor = 'text-amber-400';
+        statusColor = 'text-white/70';
       }
     }
 
@@ -523,11 +565,11 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
   };
 
   return (
-    <div className="flex h-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
+    <div className="wb-split flex h-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
       {workspaces.length === 0 && !loading ? (
         <div className="flex-1 flex items-center justify-center p-6 bg-[var(--color-canvas)]">
           <div className="max-w-md w-full rounded-2xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-6 text-center space-y-4 shadow-xl">
-            <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+            <div className="w-12 h-12 rounded-xl bg-white/[0.04] border border-white/10 text-white/70 flex items-center justify-center mx-auto">
               <FolderGit2 className="w-6 h-6" />
             </div>
             <div className="space-y-1">
@@ -538,126 +580,188 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
             </div>
             <button
               onClick={handleOpenFolderDirect}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs transition shadow-lg shadow-emerald-950/20"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-black font-semibold text-xs hover:bg-white/90 shadow-sm transition"
             >
-              <FolderOpen className="w-4 h-4" />
-              <span>Open Project Folder from Disk...</span>
+              <FolderOpen className="w-4 h-4 text-black" />
+              <span>Open Project Folder</span>
             </button>
           </div>
         </div>
       ) : (
         <>
-          {/* Left Column: Explorer Sidebar */}
-          <div className="w-64 shrink-0 border-r border-[var(--color-border-subtle)] flex flex-col bg-[var(--color-surface-1)]/20">
-            {/* Sidebar Clean Header */}
-            <div className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-2.5 bg-[var(--color-surface-1)]/40">
-              <div className="flex items-center gap-1.5 truncate">
-                <FolderTree className="h-3.5 w-3.5 text-[var(--color-fg-subtle)] shrink-0" />
-                <select
-                  aria-label="Files workspace"
-                  value={selectedWorkspaceId}
-                  onChange={(event) => {
-                    const newId = event.target.value;
-                    setSelectedWorkspaceId(newId);
-                    onSelectWorkspace?.(newId);
-                    setSelectedPath(null);
-                    setFileContent(null);
-                    setFileDiff(null);
-                  }}
-                  className="min-w-0 max-w-40 bg-transparent text-xs font-semibold text-[var(--color-editor-fg)] outline-none"
-                >
-                  {workspaces.map((workspace) => (
-                    <option key={workspace.id} value={workspace.id}>{workspace.name || workspace.path}</option>
-                  ))}
-                </select>
-                {changedFilesMap.size > 0 && (
-                  <span className="text-[10px] font-mono text-amber-400 font-medium">
-                    ({changedFilesMap.size})
+          {/* Optional In-Canvas Mini File Navigator (Collapsible, default collapsed when file is open) */}
+          {isExplorerOpen && (
+            <div className="wb-master w-60 shrink-0 border-r border-[var(--color-border-subtle)] flex flex-col bg-[var(--color-surface-1)]/30 z-10 transition-all">
+              {/* Explorer Header */}
+              <div className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-2.5 bg-[var(--color-surface-1)]/50">
+                <div className="flex items-center gap-1.5 truncate">
+                  <FolderTree className="h-3.5 w-3.5 text-white/60 shrink-0" />
+                  <span className="text-xs font-semibold text-[var(--color-editor-fg)] truncate">
+                    Files Navigator
                   </span>
+                  {changedFilesMap.size > 0 && (
+                    <span className="text-[10px] font-mono text-white/60 font-medium">
+                      ({changedFilesMap.size})
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setOnlyChanged(!onlyChanged)}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition flex items-center gap-1 ${
+                      onlyChanged
+                        ? 'bg-white/10 text-white border border-white/15'
+                        : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)]'
+                    }`}
+                    title={onlyChanged ? 'Show all files' : 'Show only changed files'}
+                  >
+                    <Filter className="h-3 w-3" />
+                    <span>{onlyChanged ? 'Changed' : 'All'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={loadData}
+                    className="p-1 rounded text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"
+                    title="Refresh files"
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsExplorerOpen(false)}
+                    className="p-1 rounded text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"
+                    title="Close files navigator"
+                  >
+                    <PanelLeftClose className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Filter Box */}
+              <div className="p-1.5 border-b border-[var(--color-border-subtle)]">
+                <div className="relative">
+                  <Search className="absolute left-2 top-1.5 h-3 w-3 text-[var(--color-fg-subtle)]" />
+                  <input
+                    type="text"
+                    placeholder="Filter files..."
+                    value={filterQuery}
+                    onChange={(e) => setFilterQuery(e.target.value)}
+                    className="w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] pl-6 pr-2 py-0.5 text-xs text-[var(--color-editor-fg)] focus:outline-none focus:border-white/20"
+                  />
+                </div>
+              </div>
+
+              {/* Tree */}
+              <div className="flex-1 overflow-y-auto p-1 font-mono text-xs">
+                {renderTree(treeRoot)}
+                {fileEntries.length === 0 && !loading && (
+                  <div className="p-4 text-center text-xs text-[var(--color-fg-subtle)]">
+                    No files found.
+                  </div>
                 )}
               </div>
-
-              <div className="flex items-center gap-0.5">
-                <button
-                  type="button"
-                  onClick={() => setOnlyChanged(!onlyChanged)}
-                  className={`p-1 rounded text-xs transition ${
-                    onlyChanged
-                      ? 'bg-amber-500/15 text-amber-400'
-                      : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)]'
-                  }`}
-                  title={onlyChanged ? 'Show all files' : 'Show only changed files'}
-                >
-                  <Filter className="h-3 w-3" />
-                </button>
-                <button
-                  type="button"
-                  onClick={loadData}
-                  className="p-1 rounded text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"
-                  title="Refresh files"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                </button>
-              </div>
             </div>
+          )}
 
-            {/* Compact Filter Box */}
-            <div className="p-1.5 border-b border-[var(--color-border-subtle)]">
-              <div className="relative">
-                <Search className="absolute left-2 top-1.5 h-3 w-3 text-[var(--color-fg-subtle)]" />
-                <input
-                  type="text"
-                  placeholder="Filter files..."
-                  value={filterQuery}
-                  onChange={(e) => setFilterQuery(e.target.value)}
-                  className="w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] pl-6 pr-2 py-0.5 text-xs text-[var(--color-editor-fg)] focus:outline-none focus:border-emerald-500/50"
-                />
-              </div>
-            </div>
-
-            {/* Tree */}
-            <div className="flex-1 overflow-y-auto p-1 font-mono text-xs">
-              {renderTree(treeRoot)}
-              {fileEntries.length === 0 && !loading && (
-                <div className="p-4 text-center text-xs text-[var(--color-fg-subtle)]">
-                  No files found.
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Right Column: Code & Diff Viewer */}
-          <div className="flex-1 flex flex-col min-w-0 bg-[var(--color-canvas)]">
+          {/* Main Column: Full-width Code & Diff Canvas */}
+          <div className="flex-1 flex flex-col min-w-0 bg-[var(--color-canvas)] h-full overflow-hidden">
             {selectedPath ? (
               loadingContent ? (
                 <div className="flex h-full items-center justify-center text-xs text-[var(--color-fg-subtle)]">
-                  Loading...
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin text-white/60" />
+                  <span>Loading file details...</span>
                 </div>
-              ) : fileDiff ? (
+              ) : fileDiff && fileViewMode === 'diff' ? (
                 <>
-                  {/* File Header */}
-                  <div className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-3 text-xs bg-[var(--color-surface-1)]/30 font-mono">
+                  {/* Diff Header */}
+                  <div className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-3 text-xs bg-[var(--color-surface-1)]/40 font-mono">
                     <div className="flex items-center gap-2 truncate text-[11px] text-[var(--color-fg-muted)]">
+                      <button
+                        type="button"
+                        onClick={() => setIsExplorerOpen((prev) => !prev)}
+                        className={`p-1 rounded transition mr-0.5 ${
+                          isExplorerOpen
+                            ? 'bg-[var(--color-surface-2)] text-[var(--color-editor-fg)]'
+                            : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)]'
+                        }`}
+                        title={isExplorerOpen ? 'Hide Files Navigator' : 'Show Files Navigator'}
+                      >
+                        {isExplorerOpen ? <PanelLeftClose className="h-3.5 w-3.5" /> : <PanelLeft className="h-3.5 w-3.5" />}
+                      </button>
+                      <span className="text-[var(--color-border-subtle)]">|</span>
                       {getFileIcon(selectedPath)}
-                      <span className="text-[var(--color-editor-fg)] font-medium truncate">{selectedPath}</span>
+                      <span className="text-[var(--color-editor-fg)] font-semibold truncate">{selectedPath}</span>
                       {currentDiffEntry && (
-                        <span className="text-[10px] text-amber-400 font-semibold">
+                        <span className="text-[10px] font-mono text-white/70">
                           {currentDiffEntry.is_staged ? '• Staged' : '• Modified'}
                         </span>
                       )}
                     </div>
 
                     <div className="flex items-center gap-1.5">
+                      {/* View Mode Toggle */}
+                      {fileContent && (
+                        <div className="flex items-center rounded bg-[var(--color-surface-2)] p-0.5 border border-[var(--color-border-subtle)] text-[10px] mr-1">
+                          <button
+                            type="button"
+                            onClick={() => setFileViewMode('diff')}
+                            className="px-2 py-0.5 rounded transition bg-[var(--color-surface-1)] text-[var(--color-editor-fg)] shadow-xs font-semibold"
+                          >
+                            Git Diff
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFileViewMode('content')}
+                            className="px-2 py-0.5 rounded transition text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]"
+                          >
+                            Code Details
+                          </button>
+                        </div>
+                      )}
+
+                      {diffStats && (
+                        <span className="flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface-2)] border border-[var(--color-border-subtle)] mr-0.5">
+                          <span className="text-white/90 font-semibold font-mono">+{diffStats.added}</span>
+                          <span className="text-white/50 font-semibold font-mono">-{diffStats.deleted}</span>
+                        </span>
+                      )}
+
+                      {changedFileList.length > 1 && (
+                        <div className="flex items-center gap-0.5 px-1 py-0.5 rounded bg-[var(--color-surface-2)] border border-[var(--color-border-subtle)] text-[10px] text-[var(--color-fg-muted)] mr-0.5">
+                          <button
+                            type="button"
+                            onClick={handlePrevDiff}
+                            className="hover:text-[var(--color-editor-fg)] transition p-0.5"
+                            title="Previous changed file"
+                          >
+                            <ChevronUp className="h-3 w-3" />
+                          </button>
+                          <span className="font-mono text-[9px] px-1 select-none">
+                            {currentDiffIndex >= 0 ? currentDiffIndex + 1 : 1}/{changedFileList.length}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={handleNextDiff}
+                            className="hover:text-[var(--color-editor-fg)] transition p-0.5"
+                            title="Next changed file"
+                          >
+                            <ChevronDown className="h-3 w-3" />
+                          </button>
+                        </div>
+                      )}
+
                       {currentDiffEntry && (
                         <>
                           <button
                             type="button"
                             disabled={!!actionInProgress}
                             onClick={handlePrimaryAction}
-                            className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition disabled:opacity-50 ${
+                            className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition disabled:opacity-50 ${
                               currentDiffEntry.is_staged
-                                ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-200'
-                                : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                                ? 'border border-white/15 bg-white/5 text-white/80 hover:bg-white/10 hover:text-white font-medium'
+                                : 'bg-white text-black hover:bg-white/90 font-semibold shadow-sm'
                             }`}
                           >
                             {currentDiffEntry.is_staged ? (
@@ -676,7 +780,7 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
                             type="button"
                             disabled={!!actionInProgress}
                             onClick={handleDiscardCurrent}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-rose-400 hover:bg-rose-500/10 transition"
+                            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-white/60 hover:text-white hover:bg-white/10 transition"
                             title="Discard changes"
                           >
                             <Trash2 className="h-2.5 w-2.5" />
@@ -689,14 +793,14 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
                         type="button"
                         onClick={handleCopyPath}
                         className="p-1 rounded text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"
-                        title="Copy path"
+                        title="Copy file path"
                       >
-                        {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                        {copied ? <Check className="h-3 w-3 text-white" /> : <Copy className="h-3 w-3" />}
                       </button>
                     </div>
                   </div>
 
-                  {/* Diff Viewer */}
+                  {/* Diff Viewer Body */}
                   <div className="flex-1 overflow-auto p-3 font-mono text-xs">
                     <div className="space-y-0.5">
                       {fileDiff.diff ? (
@@ -741,17 +845,57 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
                   path={selectedPath}
                   content={fileContent.content}
                   isBinary={fileContent.is_binary}
+                  truncated={fileContent.truncated}
                   sizeBytes={fileContent.size_bytes}
                   lineCount={fileContent.line_count}
                   isReadOnly={true}
                   onOpenInBrowser={(url) => {
                     const fileName = selectedPath.split('/').pop() || 'Web Preview';
-                    _onOpenTab?.('browser', url, `${fileName} - Browser`);
+                    onOpenTab?.('browser', url, `${fileName} - Browser`);
                     onShowToast?.(`Opened ${fileName} in Browser Workbench`);
                   }}
                   extraHeaderActions={
-                    currentDiffEntry ? (
-                      <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setIsExplorerOpen((prev) => !prev)}
+                        className={`p-1 rounded transition mr-0.5 ${
+                          isExplorerOpen
+                            ? 'bg-[var(--color-surface-2)] text-[var(--color-editor-fg)]'
+                            : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)]'
+                        }`}
+                        title={isExplorerOpen ? 'Hide Files Navigator' : 'Show Files Navigator'}
+                      >
+                        {isExplorerOpen ? <PanelLeftClose className="h-3.5 w-3.5" /> : <PanelLeft className="h-3.5 w-3.5" />}
+                      </button>
+                      <span className="text-[var(--color-border-subtle)]">|</span>
+                      {fileDiff && (
+                        <div className="flex items-center rounded bg-[var(--color-surface-2)] p-0.5 border border-[var(--color-border-subtle)] text-[10px]">
+                          <button
+                            type="button"
+                            onClick={() => setFileViewMode('diff')}
+                            className={`px-2 py-0.5 rounded transition ${
+                              fileViewMode === 'diff'
+                                ? 'bg-[var(--color-surface-1)] text-[var(--color-editor-fg)] shadow-xs font-semibold'
+                                : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+                            }`}
+                          >
+                            Git Diff
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFileViewMode('content')}
+                            className={`px-2 py-0.5 rounded transition ${
+                              fileViewMode === 'content'
+                                ? 'bg-[var(--color-surface-1)] text-[var(--color-editor-fg)] shadow-xs font-semibold'
+                                : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+                            }`}
+                          >
+                            Code Details
+                          </button>
+                        </div>
+                      )}
+                      {currentDiffEntry && (
                         <button
                           type="button"
                           disabled={!!actionInProgress}
@@ -759,24 +903,99 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
                           className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition disabled:opacity-50 ${
                             currentDiffEntry.is_staged
                               ? 'bg-zinc-700 hover:bg-zinc-600 text-zinc-200'
-                              : 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                              : 'bg-white/10 hover:bg-white/15 text-white border border-white/10'
                           }`}
                         >
                           {currentDiffEntry.is_staged ? 'Unstage' : 'Stage'}
                         </button>
-                      </div>
-                    ) : undefined
+                      )}
+                    </div>
                   }
                 />
               ) : (
-                <div className="flex h-full items-center justify-center text-xs text-[var(--color-fg-subtle)]">
-                  File content is binary or unavailable.
+                <div className="flex flex-col items-center justify-center h-full text-xs text-[var(--color-fg-subtle)] space-y-2 p-6 text-center">
+                  <FileCode className="w-8 h-8 opacity-40 text-white/40" />
+                  <p className="font-semibold text-[var(--color-editor-fg)]">{selectedPath}</p>
+                  <p className="text-[11px] text-[var(--color-fg-muted)]">
+                    File content is unavailable or unreadable.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (selectedPath) {
+                        setLoadingContent(true);
+                        daemonClient
+                          .readWorkspaceFile(selectedWorkspaceId, selectedPath)
+                          .then(setFileContent)
+                          .catch(() => {})
+                          .finally(() => setLoadingContent(false));
+                      }
+                    }}
+                    className="px-3 py-1 rounded bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-[11px] text-[var(--color-editor-fg)] border border-[var(--color-border-subtle)] transition"
+                  >
+                    Retry
+                  </button>
                 </div>
               )
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-xs text-[var(--color-fg-subtle)] space-y-2">
-                <FileDiff className="w-6 h-6 text-[var(--color-fg-subtle)]/40" />
-                <p>Select a file to view code or diff.</p>
+              /* Center Canvas Clean Welcome & Hub */
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-xs text-[var(--color-fg-subtle)] space-y-4">
+                <div className="w-12 h-12 rounded-xl bg-white/[0.04] border border-white/10 text-white/70 flex items-center justify-center mx-auto">
+                  <FileCode className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-sm font-semibold text-[var(--color-editor-fg)]">
+                    Workspace Editor Canvas
+                  </h3>
+                  <p className="text-xs text-[var(--color-fg-muted)] max-w-sm">
+                    Select any file to inspect code with full syntax highlighting, line numbers, and git diff.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsExplorerOpen(true)}
+                    className="px-3 py-1.5 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-[11px] font-medium text-[var(--color-editor-fg)] border border-[var(--color-border-subtle)] transition flex items-center gap-1.5"
+                  >
+                    <FolderTree className="w-3.5 h-3.5 text-white/60" />
+                    <span>Open In-Canvas Navigator</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenTab?.('terminal')}
+                    className="px-3 py-1.5 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-[11px] font-medium text-[var(--color-editor-fg)] border border-[var(--color-border-subtle)] transition flex items-center gap-1.5"
+                  >
+                    <Terminal className="w-3.5 h-3.5 text-white/60" />
+                    <span>Open Terminal</span>
+                  </button>
+                </div>
+
+                {changedFileList.length > 0 && (
+                  <div className="w-full max-w-md pt-4 text-left border-t border-[var(--color-border-subtle)] mt-4">
+                    <div className="text-[11px] font-medium text-[var(--color-fg-muted)] mb-2 flex items-center justify-between">
+                      <span>Modified files ({changedFileList.length}):</span>
+                    </div>
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {changedFileList.map((f) => (
+                        <div
+                          key={f.path}
+                          onClick={() => setSelectedPath(f.path)}
+                          className="flex items-center justify-between px-2.5 py-1.5 rounded bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-2)] cursor-pointer text-[11px] font-mono transition border border-[var(--color-border-subtle)]/50 group"
+                        >
+                          <div className="flex items-center gap-1.5 truncate">
+                            {getFileIcon(f.path)}
+                            <span className="text-[var(--color-editor-fg)] group-hover:text-white transition truncate">{f.path}</span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0 font-mono text-[10px]">
+                            {f.additions > 0 && <span className="text-white/80 font-medium">+{f.additions}</span>}
+                            {f.deletions > 0 && <span className="text-white/40 font-medium">-{f.deletions}</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

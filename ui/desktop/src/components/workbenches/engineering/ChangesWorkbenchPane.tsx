@@ -333,9 +333,9 @@ export const ChangesWorkbenchPane: React.FC<ChangesWorkbenchPaneProps> = ({
       </div>
 
       {/* Main Split Body */}
-      <div className="flex flex-1 min-h-0">
+      <div className="wb-split flex flex-1 min-h-0">
         {/* Left Side: Changed Files List */}
-        <div className="w-72 border-r border-[var(--color-border-muted)] bg-[var(--color-surface-1)]/50 flex flex-col">
+        <div className="wb-master w-72 border-r border-[var(--color-border-muted)] bg-[var(--color-surface-1)]/50 flex flex-col">
           <div className="p-2.5 border-b border-[var(--color-border-subtle)] flex items-center justify-between text-xs font-semibold text-[var(--color-fg-muted)]">
             <span>Changed Files</span>
             <span className="text-[10px] font-mono text-[var(--color-fg-subtle)]">

@@ -1,4 +1,3 @@
-import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   CornerDownLeft,
@@ -15,12 +14,14 @@ export interface TerminalWorkbenchPaneProps {
   initialWorkspaceId?: string;
   activeWorkspaceId?: string;
   onSelectWorkspace?: (id: string) => void;
+  initialCommand?: string;
 }
 
 export const TerminalWorkbenchPane: React.FC<TerminalWorkbenchPaneProps> = ({
   initialWorkspaceId,
   activeWorkspaceId: propActiveWorkspaceId,
   onSelectWorkspace: propOnSelectWorkspace,
+  initialCommand,
 }) => {
   const { activeWorkspaceId: ctxActiveWorkspaceId, setActiveWorkspaceId: ctxSetActiveWorkspaceId } = useAppContext();
   const currentActiveWorkspaceId = propActiveWorkspaceId ?? ctxActiveWorkspaceId;
@@ -43,6 +44,7 @@ export const TerminalWorkbenchPane: React.FC<TerminalWorkbenchPaneProps> = ({
   activeWorkspaceRef.current = activeWorkspaceId;
   const appliedInitialWorkspace = useRef<string | undefined>(undefined);
   const sessionLoadEpoch = useRef(0);
+  const autoSpawnDoneRef = useRef<string | null>(null);
 
   // 1. Load registered workspaces
   const loadWorkspaces = async () => {
@@ -86,17 +88,39 @@ export const TerminalWorkbenchPane: React.FC<TerminalWorkbenchPaneProps> = ({
   // 2. Load active sessions for selected workspace
   const loadSessions = async () => {
     const workspaceId = activeWorkspaceRef.current;
-    if (!workspaceId) return;
+    if (!workspaceId) {
+      setSessions([]);
+      setActiveSessionId('');
+      return;
+    }
     const epoch = ++sessionLoadEpoch.current;
     try {
       const list = await daemonClient.listTerminals(workspaceId);
       if (epoch !== sessionLoadEpoch.current || activeWorkspaceRef.current !== workspaceId) return;
-      setSessions(list);
-      setActiveSessionId((previous) => list.some((session) => session.id === previous) ? previous : (list[0]?.id || ''));
+      const activeList = list ? list.filter((s) => s.status.type === 'active') : [];
+      if (activeList.length > 0) {
+        setSessions(list);
+        setActiveSessionId((previous) => (activeList.some((session) => session.id === previous) ? previous : activeList[0].id));
+      } else {
+        // Automatically spawn a real live PTY session for this workspace!
+        if (autoSpawnDoneRef.current !== workspaceId) {
+          autoSpawnDoneRef.current = workspaceId;
+          void spawnSession(initialCommand);
+        } else {
+          setSessions(list || []);
+          setActiveSessionId(list && list.length > 0 ? list[0].id : '');
+        }
+      }
       setError(null);
-    } catch (err: any) {
+    } catch {
       if (epoch === sessionLoadEpoch.current) {
-        setError(`Failed to load terminal sessions: ${err?.message || err}`);
+        if (autoSpawnDoneRef.current !== workspaceId) {
+          autoSpawnDoneRef.current = workspaceId;
+          void spawnSession(initialCommand);
+        } else {
+          setSessions([]);
+          setActiveSessionId('');
+        }
       }
     }
   };
@@ -227,46 +251,20 @@ export const TerminalWorkbenchPane: React.FC<TerminalWorkbenchPaneProps> = ({
     <div className="flex h-full flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
       {/* Header & Workspace Affinity Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] px-4 py-2.5">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <div className="flex items-center gap-2">
-            <Terminal className="h-4 w-4 text-[var(--color-fg-muted)]" />
-            <span className="text-xs font-semibold tracking-tight">PTY Terminal</span>
-          </div>
-
-          <div className="h-4 w-px bg-[var(--color-border-muted)]" />
-
-          {/* Execution Workspace Selector */}
-          <div className="flex items-center gap-1.5 text-xs">
-            <span className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)]">
-              Workspace:
-            </span>
-            <NativeSelect
-              value={activeWorkspaceId}
-              onChange={(e) => {
-                const newId = e.target.value;
-                setActiveSessionId('');
-                setSessions([]);
-                setActiveWorkspaceId(newId);
-                onSelectWorkspace?.(newId);
-              }}
-              className="rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-2 py-1 text-xs font-medium text-[var(--color-fg-default)] outline-none hover:bg-[var(--color-surface-3)]"
-            >
-              {workspaces.map((ws) => (
-                <option key={ws.id} value={ws.id}>
-                  {ws.name} ({ws.kind.type === 'git' ? 'git' : 'folder'})
-                </option>
-              ))}
-            </NativeSelect>
+            <Terminal className="h-3.5 w-3.5 text-[var(--color-fg-muted)]" />
+            <span className="text-xs font-semibold tracking-tight">Terminal</span>
           </div>
 
           {activeWs && (
-            <span className="hidden truncate font-mono text-[10px] text-[var(--color-fg-subtle)] md:inline-block max-w-[260px]">
-              {activeWs.path}
+            <span className="font-mono text-[10px] text-[var(--color-fg-subtle)] bg-[var(--color-surface-2)] px-1.5 py-0.5 rounded border border-[var(--color-border-subtle)]">
+              {activeWs.name}
             </span>
           )}
 
           {activeSess && (
-            <span className="hidden font-mono text-[10px] text-[var(--color-fg-subtle)] lg:inline-block">
+            <span className="hidden font-mono text-[10px] text-[var(--color-fg-subtle)] sm:inline-block">
               {activeSess.cols}x{activeSess.rows} • {activeSess.status.type}
             </span>
           )}
@@ -319,7 +317,7 @@ export const TerminalWorkbenchPane: React.FC<TerminalWorkbenchPaneProps> = ({
             >
               <div
                 className={`h-1.5 w-1.5 rounded-full ${
-                  isTermActive ? 'bg-emerald-400 animate-pulse' : 'bg-[var(--color-fg-subtle)]'
+                  isTermActive ? 'bg-white/80 animate-pulse' : 'bg-[var(--color-fg-subtle)]'
                 }`}
               />
               <span className="font-mono text-[11px] truncate max-w-[120px]">
@@ -328,7 +326,7 @@ export const TerminalWorkbenchPane: React.FC<TerminalWorkbenchPaneProps> = ({
               <button
                 type="button"
                 onClick={(e) => terminateSession(sess.id, e)}
-                className="opacity-0 group-hover:opacity-100 rounded p-0.5 hover:bg-[var(--color-surface-3)] text-[var(--color-fg-subtle)] hover:text-rose-400"
+                className="opacity-0 group-hover:opacity-100 rounded p-0.5 hover:bg-[var(--color-surface-3)] text-[var(--color-fg-subtle)] hover:text-white/80"
                 title="Terminate terminal"
               >
                 <X className="h-2.5 w-2.5" />
@@ -355,7 +353,7 @@ export const TerminalWorkbenchPane: React.FC<TerminalWorkbenchPaneProps> = ({
             <div className="flex h-full items-center justify-center text-zinc-500 text-xs">
               {sessions.length === 0 ? (
                 <div className="text-center">
-                  <Terminal className="mx-auto h-8 w-8 mb-2 opacity-40" />
+                  <Terminal className="mx-auto h-8 w-8 mb-2 opacity-40 text-white/50" />
                   <p>No active terminal session</p>
                   <p className="text-[10px] mt-1 text-zinc-600">
                     Click "New PTY" above to start a session in{' '}
@@ -383,7 +381,7 @@ export const TerminalWorkbenchPane: React.FC<TerminalWorkbenchPaneProps> = ({
             <button
               type="button"
               onClick={() => sendInput('\x03')}
-              className="rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] px-2 py-0.5 font-mono text-amber-400 hover:bg-[var(--color-surface-3)]"
+              className="rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] px-2 py-0.5 font-mono text-white/70 hover:bg-[var(--color-surface-3)]"
               title="Send SIGINT (Ctrl+C)"
             >
               Ctrl+C
@@ -422,7 +420,7 @@ export const TerminalWorkbenchPane: React.FC<TerminalWorkbenchPaneProps> = ({
 
           {/* Stdin Bar */}
           <form onSubmit={handleCommandSubmit} className="flex items-center gap-2">
-            <span className="font-mono text-xs font-bold text-emerald-400">❯</span>
+            <span className="font-mono text-xs font-bold text-white/70">❯</span>
             <input
               ref={inputRef}
               type="text"
