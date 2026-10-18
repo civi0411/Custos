@@ -1,6 +1,8 @@
 # Kế hoạch refactor Custos SADE và tối ưu chi phí
 
-**Queue hiện hành:** [Backend–desktop convergence §2/§7](sade-frontend-backend-convergence-plan.md#2-những-vấn-đề-hiện-tại-phải-xử-lý-theo-thứ-tự-rủi-ro) chốt thứ tự cấp tốc trên checkout `4b73cce`. Các nhãn R/P/OF trong tài liệu dài này là backlog capability và dependency map; nếu một đoạn dưới đây xếp việc khác thứ tự, dùng queue hiện hành rồi kiểm lại source tại packet đó.
+**Queue khảo sát mới 18-10-2026:** [SADE core refactor plan §14](sade-core-refactor-plan.md#14-implementation-campaign--thứ-tự-cụ-thể-và-exit-gates) cập nhật campaign R0–R11 theo checkout `rft_ui` tại `ac8a6a7` cộng working changes. Phân biệt ba trục Task–resource–Screen, sửa dispatch/recovery và application seams trước orchestration optimization. Đây là proposal có source evidence, chưa là code đã triển khai; packet R trong bản mới không đồng nghĩa nhãn R lịch sử bên dưới.
+
+**Queue lịch sử:** [Backend–desktop convergence §2/§7](sade-frontend-backend-convergence-plan.md#2-những-vấn-đề-hiện-tại-phải-xử-lý-theo-thứ-tự-rủi-ro) chốt thứ tự cấp tốc trên checkout `4b73cce`. Các nhãn R/P/OF trong tài liệu dài này là backlog capability và dependency map; kiểm lại source tại từng packet, không coi snapshot cũ là hiện trạng mới.
 
 **Deliverable:** bản kế hoạch kiến trúc và migration để triển khai trên checkout hiện có. Phần 1–10 giữ inventory và các packet R0–R10; phần 11–19 cụ thể hóa execution spine, economics, ba pack, thứ tự tích hợp và nghiệm thu; §20 map đầy đủ nền năng lực OrCa vào chương trình refactor Custos OF0–OF7. Đây là kế hoạch, chưa là chứng nhận refactor đã thực hiện. Không thay source of truth của [Custos.md](../../Custos.md).
 

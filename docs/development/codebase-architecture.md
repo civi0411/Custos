@@ -1,5 +1,65 @@
 # Monorepo Topology, Crate Boundaries & Deep Codebase Map
 
+### Remote compute placement proposal
+
+Checkpoint portability target bổ sung ở [relay/failover design](../architecture/compute-relay-and-heterogeneous-failover.md#13-placement-và-data-contract-trong-custos), provider lifecycle ở [GPU thuê/SSH design](../architecture/remote-compute-external-gpu.md). Reuse domain recipe/execution/artifact + RemoteFleet, core contracts/admission, runtime workflow/notebook và persistence; target compute/storage/training adapters chỉ được inventory là implemented khi có code/tests. No new production files, structs, migrations, crates or dependencies in this documentation refinement. Writer fencing/immutable manifests/remote commit và engine-specific resume eligibility là obligations cần implement, không đủ chỉ copy cloud CLI hay thêm enum status.
+
+[Colab/Kaggle design](../architecture/remote-compute-colab-kaggle.md#4-placement-trong-repository) maps existing domain `recipe.rs`/`execution_record.rs`/`notebook.rs`, core contracts, runtime notebook/workflow, ResearchRepository, daemon API and Research panes to proposed compute adapters. Target `custos-adapters/src/compute/` and `sidecars/compute-py/` do not exist as a shipped integration; their files, exports, line counts and dependency pins must enter the physical catalog only when implemented. No production file/schema/package count changes in this documentation packet. The Python helper is an I/O boundary, never a second DB/runtime authority; native agent access reuses admitted capabilities.
+
+**Audit bổ sung 18-10-2026:** [SADE core refactor plan §2–4](sade-core-refactor-plan.md#2-những-vấn-đề-hiện-tại-có-bằng-chứng) ghi production dependency thực, compiled/legacy distinction, gaps của dispatcher/OI/notebook/Screen và target module placement. Bản này không tuyên bố các folder target đã được tạo; các inventory bên dưới giữ snapshot lịch sử của chúng. Đếm workspace theo Cargo metadata, không thêm/xóa package để khớp khẩu hiệu “11 crates”.
+
+### Parallel Screen design refinement
+
+Canonical source: [Workspace/UI §14](../architecture/agent-workspace-and-ui.md#14-screens-work-areas-and-parallel-supervision), source study and plan §23. Existing `types/screen.ts` (Screen), `types/canvas.ts` (ResourceRef/CanvasNode), ScreenContext and OrcaTabbedContainer remain the sole presentation types/state/renderer. Target optional resource anchors and bounded scope-subtree annotations require explicit versioned restore work; they are not current interfaces. Work areas are presentation regions, not a new domain entity or nested provider. Existing AppContext/Session/Run/terminal/notebook owners retain canonical resources, drafts and execution. Dashboard/ActivityPane remain supervision owners. Correct current display-name Project keys, global active-session assumptions and tab/process coupling before claiming complete parallel support. This documentation-only refinement adds zero production files, crates, schemas or dependencies; actual source metrics change only when implemented.
+
+### Unified Git design and implementation ownership
+
+Canonical target: [Workspace/UI §13](../architecture/agent-workspace-and-ui.md#13-unified-git-and-worktree-product-design); delivery gates: [plan §22](../../plan.md#22-unified-git-and-worktree-delivery). These are design requirements, not implemented API inventory. Existing core `contracts/workspace.rs` and `contracts/workspace_files.rs` remain ports; `custos-adapters/src/workspace.rs` owns host Git/worktree operations; runtime workspace coordinator/files own coordination while direct Git I/O in `files.rs` must migrate to adapters incrementally. Daemon `api.rs`, `local_api/lib.rs` and `runtime.rs` extend request/result/capability composition in place. Existing WorkspaceRepository/event/outbox owners retain persistence; no new database or schema is approved here.
+
+Desktop Vinh: mounted `FilesChangesPane.tsx` owns the converged Changes experience; `FilesWorkbenchPane.tsx` and `ChangesWorkbenchPane.tsx` are legacy duplication to retire only after checking all live consumers. WorkspaceSidebar owns Project/repository/checkout hierarchy; WorktreeManagerPane owns scoped inventory/lifecycle details. ResourceRef, ScreenContext and OrcaTabbedContainer retain independent checkout-bound tabs and Project-owned Screens. Branch/history/remote/conflict views must reuse this resource host and canonical daemon projections, with no frontend Git runner or second state registry. Existing Session/Run and candidate/integration coordinators retain execution and acceptance authority.
+
+This design update changes zero production files and zero production file counts; it extends four existing design documents plus the existing root plan. Exact DTO/migration changes and source line metrics must be recorded when each slice is implemented. The source audit, current capability gaps, non-Git workbench behavior and concrete acceptance matrix are linked rather than duplicated here.
+
+### Git and checkout lifecycle correctness
+
+Existing `crates/custos-adapters/src/workspace.rs` (adapter owner Trường + Vinh) remains the physical Git provision/validation owner; no parallel Git service. Existing WorkspaceSidebar uses daemon detection before registering an externally observed checkout. Existing coordinator records Initializing/Ready/SetupFailed and does not equate registration with checkout switching. Branch catalog and remote credential binding are documented gaps. Tests use temporary real Git repositories and existing adapter test module; no crate/dependency/schema is added.
+
+### Shared supervision and settings navigation ownership
+
+Latest navigation contract: ActivityRail owns Home, Conversations, Tasks and Supervision destinations; WorkspaceSidebar exclusively owns Project/workspace/worktree navigation. Existing `App.tsx` adds `/conversations` and `/tasks`. New `ui/desktop/src/app/history/page.tsx` owns read-only history/filter/detail and exact reveal, reusing canonical Task/session DTOs, daemon client and AppContext/ScreenContext; exports `HistoryPage` and session-history normalization. No new runtime, persistence store, schema or dependency. This adds one production UI file; history page is 109 lines at this slice; production build and 25 regressions pass.
+
+Home/navigation correction: ActivityRail owns the last working route and closes management surfaces; RootLayout hosts embedded full-content Settings/Connections while retaining Outlet state. Existing SettingsModal/AiSetupModal accept an embedded presentation flag. WorkspaceSidebar renders Workspaces/Conversations/Tasks using existing selection callbacks; no new navigation store or backend. Current follow-up sizes: WorkspaceSidebar 666 lines; RootLayout 135.
+
+Desktop owner: Vinh. Existing `components/shell/ActivityRail.tsx` owns primary work navigation and footer configuration entries. `app/dashboard/page.tsx` owns daemon session-run aggregation, filters and attention selection; `components/workbenches/engineering/ActivityPane.tsx` owns the reused exact run inspector. `features/settings/SettingsModal.tsx` owns preferences/advanced diagnostics; `features/ai-setup/AiSetupModal.tsx` owns Connections & Tools over existing configuration panes. `context/AppContext.tsx` keeps modal routing and canonical projections. `UserProfileMenu.tsx`, `CommandPalette.tsx` and `JobActivityDock.tsx` retain compatible labels and navigation. No new production file, crate, schema or dependency is required. Validated file sizes: ActivityRail 59 lines; dashboard page 141; ActivityPane 123; SettingsModal 390; AiSetupModal 458; ScreenContext 231; StudioPage 327. Existing `ScreenContext` also exports `applyScreenCanvas`, a pure identity-preserving no-op guard for equal layouts. `tools/canvas-smoke.mjs` now covers 24 regressions including bounded supervision reads and Screen feedback prevention. No production-file count changes.
+
+### Desktop reference research tooling
+
+| File | Role | Ownership |
+|---|---|---|
+| [`workbench-core-and-controls-audit.md`](workbench-core-and-controls-audit.md) | Source-backed core/panel/action atlas and Custos gap analysis | Research documentation, desktop Vinh |
+| [`workbench-control-inventory-panels.md`](workbench-control-inventory-panels.md) | Generated navigation index for all control-bearing component files | Research evidence only |
+| [`workbench-control-inventory.json`](workbench-control-inventory.json) | Generated JSX control/action declarations and source hashes, not domain state | Research evidence only |
+| [`tools/workbench-control-audit.cjs`](../../tools/workbench-control-audit.cjs) | Read-only TypeScript AST inventory using the existing desktop compiler; no source execution | Desktop research tooling, Vinh |
+
+This adds one research tool and three evidence documents; no production file, crate, dependency, schema or persistence owner changes. Exact scan counts are generated in the report, not mixed into product code metrics.
+
+### Desktop canvas presentation ownership
+
+Desktop owner: Vinh. Existing `ui/desktop/src/types/canvas.ts` owns pure recursive layout types, reducer and restore validation; `components/workbenches/OrcaTabbedContainer.tsx` renders resource groups and split interactions; `context/AppContext.tsx` owns versioned, scoped tab preferences; `components/shell/AppWorkspaceShell.tsx` owns lens toolbars, inspector and canvas visibility; `WorkspaceSidebar.tsx` owns sidebar resizing. `tools/canvas-smoke.mjs` validates layout invariants with the existing TypeScript compiler and Node tests. No new production module, backend file, crate, dependency or schema is added. Existing file counts remain unchanged; one tooling test is added. Current line counts are recorded below.
+
+| Existing source | Lines | Responsibility |
+|---|---:|---|
+| `ui/desktop/src/types/canvas.ts` | 195 | CanvasNode, CanvasState, canvasReducer, restoreCanvas, reconcileCanvas |
+| `ui/desktop/src/components/workbenches/OrcaTabbedContainer.tsx` | 1160 | Resource hosting, scoped tabs, group geometry, drag/drop, resizing and focus |
+| `ui/desktop/src/context/AppContext.tsx` | 2697 | Scoped tab metadata and pane visibility preferences |
+| `ui/desktop/src/components/shell/AppWorkspaceShell.tsx` | 753 | Lens resource toolbars, Task filtering, inspector and handoff navigation |
+| `ui/desktop/src/components/shell/WorkspaceSidebar.tsx` | 696 | Resizable shared navigation |
+| `ui/desktop/src/components/workbenches/copilot/DraftsPane.tsx` | 332 | Unsaved edit buffers, explicit save and local review only |
+| `ui/desktop/src/components/workbenches/research/FindingsPane.tsx` | 583 | Forward canonical handoff result to the workspace shell |
+
+Validation: eight Node reducer/restore tests pass; desktop TypeScript and Vite production build pass. Browser walkthrough exercised Coding nested groups, Research resource navigation and empty artifact records, and Copilot Chat/Cowork with filtered Tasks. Live compute, integration, dispatch, native Tauri webviews, exact-size Light/Dark QA and crash recovery are not certified by these checks. The observed PDF binary/text failure is repaired in WorkspaceFilesCoordinator with bounded byte-preserving reads; the PDF decoder refuses malformed/truncated transport.
+
+
 > **Desktop navigation interaction target:** [Workspace/UI §4.5 & §4.6](../architecture/agent-workspace-and-ui.md#45-điều-hướng-tối-thiểu-và-tính-nhất-quán-khi-đổi-ngữ-cảnh) traces OrCa activation/tab ownership against Custos selection/execution. Existing `ui/desktop/src/app/studio/page.tsx` owns lens/view restoration, `context/AppContext.tsx` holds canonical projections and execution commands, `components/shell/{WorkspaceSidebar,WorkspaceTree,AppHeader,AppWorkspaceShell,ActivityRail,UserProfileMenu}.tsx` own navigation/presentation, `components/tasks/{TaskCard,TaskKanbanBoard,TaskListView,TaskDetailView,CreateTaskModal,TasksPane}.tsx` own the Orca-inspired dual-view Tasks suite, `components/modals/{PluginsModal,SkillsModal,HelpModal,SettingsModal}.tsx` own modal workflows, and `components/workbenches/OrcaTabbedContainer.tsx` owns resource hosting. Target: fixed Orca-style left Activity Rail, one sidebar, one header lens switcher, distinct conversation/task views and consistent workspace/session/run bindings.
 
 > **Notebook empty-state rule:** Opening an empty notebook must not persist an example cell. Cell creation is explicit; this does not upgrade the current per-cell subprocess coordinator into a stateful kernel.
@@ -20,7 +80,7 @@
 
 > **Current Desktop/ADE projection:** [`AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) owns the shared conversation/workbench shell and [`OrcaTabbedContainer.tsx`](../../ui/desktop/src/components/workspaces/OrcaTabbedContainer.tsx) owns the capability-aware resource catalog. [`ResearchMethodsPane.tsx`](../../ui/desktop/src/components/workspaces/research/ResearchMethodsPane.tsx) (158 lines at this audit) exports a read-only recipe/execution ledger. [`ExecutionWorkspacesPane.tsx`](../../ui/desktop/src/components/workspaces/engineering/ExecutionWorkspacesPane.tsx) (86 lines) exports the daemon-backed folder/Git workspace projection. These panes do not execute recipe commands, create PTYs, claim SSH support or infer scientific acceptance from process completion. See [ADE kernel plan §25](workspace-restructuring-plan.md#25-ade-kernel-linh-hoạt-cho-ba-workbench-và-research-capability-stack).
 
-> **Research transport and compute audit:** `daemon_client.ts` maps Research wire keys between Rust `snake_case` and TypeScript `camelCase`; recipe execution records have read-only `v1.research.executions.list/get` endpoints. `ResearchRepository` returns an observable error for corrupt environment JSON instead of fabricating a Python/hardware snapshot. Notebook dispatch is now daemon-composed through `PythonKernelCoordinator`, but each cell launches a fresh Python subprocess from a temporary script. The coordinator persists counters/cell output while its active process table is in memory; it is not yet a stateful notebook kernel, compute sandbox, or complete provenance/authority path. UI and capability copy must preserve this distinction.
+> **Research transport and compute audit:** `daemon_client.ts` normalizes Research wire keys and annotation RFC3339 dates; recipe execution records remain separate read-only projections. Lab now composes NotebookWorkbenchPane and RunsLedgerPane, with one notebook editor/executor path. PythonKernelCoordinator uses a persistent local worker per session, epoch/counter tracking, abort-based interrupt/reset and saved outputs. Execution requires a registered workspace and exact saved code cell. It is not an OS sandbox or a reproducibility certificate. Daemon restarts discard Python memory; old output remains associated with its original epoch. ResearchRepository atomically replaces the session cell set, including deletion, and writes existing outbox notifications.
 
 > **Desktop resource-tab ownership:** [`AppWorkspaceShell.tsx`](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) and [`OrcaTabbedContainer.tsx`](../../ui/desktop/src/components/workspaces/OrcaTabbedContainer.tsx) render one shared shell/resource catalog for all three lenses. Research, workspace, notebook, terminal, files, changes, agents, evidence, browser and fleet panes now exist at different realization levels. A rendered pane is not proof that its physical operations work: browser capability metadata still advertises limited operations; Fleet can advertise availability when upstream transport discovery succeeds. Missing transports fail closed, and engine discovery is not proof of permit mediation. Daemon-owned actions are gated by `supported_operations`. Manual browser navigation is provided separately by the native desktop host, with lazy child webviews and no automation authority.
 
@@ -251,9 +311,11 @@ Custos/
 | [`src/budget.rs`](../../crates/custos-domain/src/budget.rs) | 203 | Hạch toán reserve/settle/refund span và token với checked arithmetic | `struct Budget`, `struct ReservationToken`, `fn reserve`, `fn settle`, `fn refund` |
 | [`src/capability.rs`](../../crates/custos-domain/src/capability.rs) | 14 | Khai báo CapabilityManifest và năng lực thực thi của công cụ | `struct CapabilityManifest` |
 | [`src/claim.rs`](../../crates/custos-domain/src/claim.rs) | 291 | Research source/passage/claim/experiment values; tách client proposal khỏi trusted hash/verification status | `struct SourceProposal`, `struct PassageAnchorProposal`, `struct ResearchClaimProposal`, `struct ResearchClaim`, `struct ResearchExperimentRun` |
+| [`src/compute.rs`](../../crates/custos-domain/src/compute.rs) | 427 | Sovereign compute tiers, heterogeneous accelerator specs, 4-level resumability manifests, commit stages, and hardware compatibility gate evaluation | `AcceleratorSpec, CheckpointCommitStatus, CheckpointFileEntry, CloudPodLease, CloudPodStatus, ComputeBackendKind, CompatibilityGateEvaluation, CompatibilityVerdict, HardwareAdaptationPlan, ResumabilityLevel, TrainingCheckpointManifest` |
 | [`src/context.rs`](../../crates/custos-domain/src/context.rs) | 205 | ContextPack và receipt ghi included/omitted refs, redaction, token estimate và delivery state | `struct ContextItem`, `struct ContextPack`, `struct ContextReceipt`, `enum OmittedContextReason` |
 | [`src/continuation.rs`](../../crates/custos-domain/src/continuation.rs) | 290 | Integrity packet và linked-continuation manifest/state không mang permit hoặc secret | `struct ContinuationPacket`, `struct ContinuationManifest`, `enum ContinuationState`, `fn verify` |
 | [`src/error.rs`](../../crates/custos-domain/src/error.rs) | 33 | Phân loại lỗi hệ thống DomainError thuần khiết | `enum DomainError` |
+| [`src/execution_record.rs`](../../crates/custos-domain/src/execution_record.rs) | 135 | Recipe execution records capturing stdout/stderr CAS URIs, 3-tier checkpoint durability milestones, and attempt lineage | `ExecutionRecord, ExecutionRecordStatus, ExecutionArtifact` |
 | [`src/evidence.rs`](../../crates/custos-domain/src/evidence.rs) | 351 | Evidence, per-criterion verifier record và Task outcome projection với unknown/stale first-class | `enum EvidenceStatus`, `struct EvidenceRecord`, `struct CriterionVerificationRecord`, `struct TaskOutcome` |
 | [`src/fact.rs`](../../crates/custos-domain/src/fact.rs) | 13 | Thực thể sự thật Fact trích xuất từ môi trường | `struct Fact` |
 | [`src/ids.rs`](../../crates/custos-domain/src/ids.rs) | 46 | Generates a prefixed unique ID: `{prefix}_{uuidv4_simple}` | `fn new_id`, `type TaskId`, `fn digest`, `fn canonical_json` |
@@ -290,6 +352,7 @@ Custos/
 | Tập tin | Số dòng | Vai trò & Trách nhiệm kiến trúc | Các Struct / Trait / Hàm cốt lõi |
 |---|:---:|---|---|
 | [`Cargo.toml`](../../crates/custos-core/Cargo.toml) | 25 | Module Cargo: phục vụ các cấu trúc và chức năng liên quan | None |
+| [src/contracts/compute.rs](../../crates/custos-core/src/contracts/compute.rs) | 82 | Sovereign Compute & Relay port contracts with non-silent compatibility evaluation gate (RFC 005) | `ComputePort, CloudPodRequest, ComputeTelemetry` |
 | [src/contracts/workflow.rs](../../crates/custos-core/src/contracts/workflow.rs) | 35 | Background workflow admission and session-scoped live snapshot/replay contract (Vĩ) | `WorkflowPort` |
 | [src/contracts/harness.rs](../../crates/custos-core/src/contracts/harness.rs) | 226 | Transport-neutral native observation and existing authority/profile contracts (Vinh + Vĩ) | `AgentRuntimePort, RunObserver, HarnessExecutionResult` |
 | [Credential vault contract](../../crates/custos-core/src/contracts/credentials.rs) | 90 | Pure vault and metadata contracts (Owner: Vĩ) | CredentialLocation, CredentialVault, CredentialVaultError, CredentialMetadata, CredentialOperation |
@@ -1321,3 +1384,81 @@ Conversation catalog curation excludes Gemini 2.5, 3 (exact major), 3.1, 3.5 and
 Copilot discovery treats policy.state=enabled plus explicit chat capability as positive availability even when the legacy model_picker_enabled flag is false. Disabled/unconfigured policies, internal models, non-text models and unsupported endpoints stay excluded; other providers retain their visibility checks. The existing probe parser owns this provider-specific normalization (Trường/Vinh), daemon API/runtime apply shared curation to verified caches and admission (Vĩ), and existing desktop model catalog tests cover visibility (Vinh). No new file, dependency, crate or table is introduced.
 
 Curated catalog validation: 329 adapter provider tests and 46 daemon tests pass (three existing tests ignored), plus six desktop model-family regression tests. After loading the rebuilt daemon, live account discovery returns five Copilot chat routes and four Antigravity routes (Gemini 3.8, Claude Sonnet, Claude Opus, GPT-OSS). Browser verification confirms Copilot model visibility, no excluded Gemini generation or Tab rows, and retained Gemini 3.8 effort controls. Verification uses catalog calls only; no paid inference is sent. Copilot policy compatibility reference: https://github.com/anomalyco/opencode/issues/42083.
+
+### Existing workflow consolidation ownership
+
+Runtime workspace/files.rs (Vinh) owns bounded reads and binary classification; daemon api.rs (Vĩ) owns notebook/annotation/candidate admission and scoped artifact lookup; persistence repositories/research.rs (Trường) owns atomic session cell replacement with the existing outbox_messages table. Desktop LabPane composes NotebookWorkbenchPane and RunsLedgerPane, while ArtifactInspector/ArtifactsWorkbenchPane/FigureAnnotator and viewer components extend the existing resource host (Vinh). daemon_client and research types own annotation wire normalization. No new production file, table, schema, crate or dependency is planned for this slice. Existing tests are extended; line counts and verification evidence will be refreshed after implementation.
+
+Existing `custos-adapters/src/workspace.rs` (Trường/Vinh) must return inspection errors for missing Git directories or failed git status; a missing checkout cannot project as clean. This extends the current WorkspaceProvider rather than adding a second inspection path.
+
+Current workflow source ownership and line counts (existing files):
+
+| Source | Lines | Responsibility |
+|---|---:|---|
+| `crates/custos-runtime/src/workspace/files.rs` | 791 | Bounded binary/text file read; PDF bytes preserved |
+| `crates/custos-runtime/src/notebook/coordinator.rs` | 654 | Persistent Python worker, interrupt/reset, no automatic replay |
+| `crates/custos-runtime/src/workspace/coordinator.rs` | 569 | Propagate inspection errors before Ready/archive |
+| `crates/custos-adapters/src/workspace.rs` | 680 | Git inspection errors stay observable |
+| `crates/custos-persistence/src/repositories/research.rs` | 2191 | Atomic session cell replacement and annotation identity/outbox |
+| `crates/custos-daemon/src/api.rs` | 9618 | Scoped artifact/notebook/annotation/candidate admission |
+| `crates/custos-daemon/src/local_api/lib.rs` | 1798 | Existing artifact response extended with scoped file and content version |
+| `ui/desktop/src/components/workbenches/research/LabPane.tsx` | 16 | Compose existing notebook and runs resources |
+| `ui/desktop/src/components/workbenches/research/NotebookWorkbenchPane.tsx` | 127 | Single notebook editor, execution preview and save |
+| `ui/desktop/src/components/workbenches/research/ArtifactInspector.tsx` | 550 | Existing viewer/annotation interaction |
+| `ui/desktop/src/components/workbenches/research/ArtifactsWorkbenchPane.tsx` | 397 | Race-safe scoped artifact detail |
+| `ui/desktop/src/components/workbenches/research/FigureAnnotator.tsx` | 353 | Await persistent save; no fabricated side-chat IDs |
+| `ui/desktop/src/components/workbenches/engineering/WorktreeManagerPane.tsx` | 643 | Task-scoped compare and partial batch results |
+
+Workflow validation: 49 daemon tests (including scoped artifact/annotation, notebook admission and compare mismatch/error tests), 7 runtime workspace tests, 3 worker tests (persistent state, interrupt and restart epoch), 7 adapter workspace tests, 2 Research repository tests, and 12 desktop helper/layout regression tests pass. Desktop TypeScript + Vite production build passes. No paid inference, real merge, outbound dispatch or user-data notebook execution was performed. Latest native/Light/Dark GUI walkthrough remains unverified; the shared browser was in active user use. Existing bundle-size and mixed Tauri import warnings remain. Reproduction buttons require actual manifests; no invented seed/config is dispatched.
+
+Candidate create/integrate completion extends the existing daemon workspace commands and Workspace metadata. The single daemon serializes candidate mutations; caller command IDs and request digests persist with workspace records. Replayed creation returns recorded candidates without reprovisioning. Integration has a read-only preview, expected-head checks and a persisted intent/result; restart recovery reconciles Git ancestry/conflict state before any retry. No new command store, table or workspace backend is introduced. Desktop WorktreeManager uses the same client methods for preview and apply.
+
+The legacy Assistant outbox create/approve/dispatch endpoints must fail without a configured mediated connector. They must not fabricate permit/receipt IDs or mark dispatching as approval. Local draft editing/review and read-only outbox remain usable; adding a real external connector is a separate composition/configuration requirement.
+
+Canvas side-open commands consume the legacy split request into the existing canvas reducer, then clear it; no second split layout is rendered. Detached routes do not mount interactive resources until shared-window scope/state reconciliation exists. Integration recovery checks the recorded target branch reference, independent of the current checkout.
+
+Assistant draft saves use the existing daemon/repository boundary: daemon supplies creation/update timestamps and validates scope/status, preserves immutable draft ownership, and computes reviewed payload digests. Reviewed content cannot be silently changed. Repository mutations include an outbox notification in the same transaction. DraftsPane ignores obsolete session responses and blocks overlapping edits/mutations.
+
+The legacy FilesWorkbenchPane export delegates to FilesChangesPane, the canonical file/change viewer. It no longer owns a second tree loader, editor, or workspace selector. Existing imports remain compatible.
+
+ResearchSynthesisPane continues through the existing resource host into Coding using the actual handoff receipt and selected destination Task. Workspace selection is explicit (or the resource's bound workspace), never the first registered workspace. New proposals begin with no selected claims; the server remains authoritative for evidence admission. The pane does not assert a safe worktree was created merely from a Task receipt.
+
+Canvas tab navigation supports keyboard first/last/close and explicit move-to-group through the same reducer used by drag/drop. These actions move presentation ownership only and never start or terminate a backend run. Tab and panel accessible identities remain paired.
+
+Resource opening uses findScopedResourceTab in the existing resource host to compare explicit kind, workspace, session, Task and agent identity. Shell and resource-picker fallback share this rule; opening a resource in the same scope focuses its tab, while another scope never reuses it. Native agent launch configuration may still open multiple tabs intentionally.
+
+Task conversation creation extends AppContext.handleCreateChatSession with an optional existing Task ID. Both Task-list entrypoints use that single action: load the canonical Task, create/attach a daemon Session, record lens visibility, and project the bound conversation. It does not create a second Task or clear the selected Task. In-flight duplicate clicks for the same Task are rejected.
+
+FindingsPane inspects stored reviewer records rather than minting verification in client state. New claims are ungrounded drafts, matching research_ingress. Findings prepares a selected claim in the existing Synthesis composer through its scoped resource URL; only ResearchSynthesisPane owns handoff submission. Opening or preparing a proposal never executes the handoff.
+
+FilesChangesPane keeps a tab-bound workspace selector read-only; another workspace is opened through the shell rather than rebinding a live resource behind its identity. File selection does not reload the entire tree/diff summary. Workspace tree loads use request generations so obsolete responses cannot replace the current workspace.
+
+The existing daemon session-attach route validates the destination Task through TaskService before mutating Session attachment. Missing or unreadable Tasks leave the Session unbound; attachment does not create a Task or start a Run.
+
+NotebookWorkbenchPane exposes the existing code/markdown cell types and reuses MarkdownViewer for notes. Changing cell type invalidates prior execution output just like source edits. Markdown cells cannot execute; the existing save/run coordinator remains the sole execution owner.
+
+Workbench frames are explicit presentation presets over the existing canvas: Coding Files/Agents/Terminal, Research Sources/Lab/Artifacts, and Copilot Drafts/Notes/Calendar. One shared workbenchResourceIds registry controls picker visibility and preset membership. Applying a desk reuses scoped tabs and retains other open resources; canvas arrange validates membership/uniqueness and never dispatches domain execution. Presets require a selected session and registered workspace.
+
+ConversationPane owns one ephemeral composer draft per Session, shared across its main and resource renderers through useSyncExternalStore. Drafts are never written to localStorage or sent by navigation. Resource Ask appends to the tab-bound Session draft before the shell navigates to that conversation, preventing cross-session insertion or lost events during mounting. File attachments are cleared on Session changes.
+
+The shared workspace shell exposes a persistent workbench workflow strip from the canonical resource membership/capability descriptors. It names the current conversation/workspace and provides direct resource navigation with unavailable reasons. Application-level workbench switching remains in AppTopBar; the strip controls resources rather than introducing another workbench selector.
+
+Desktop information hierarchy: the shell owns one workflow navigation row; canvas arrangement lives in a disclosure menu on the focused group, not a permanent desk header. Empty canvas provides a scoped workbench overview and existing desk action. Lab view selection is injected into the notebook content toolbar to avoid stacked navigation; embedded Markdown previews hide their standalone toolbar. Existing components/reducer remain the owners; no new production file or execution API.
+
+Conversation submit returns an explicit acceptance boolean through AppContext, Studio and the shared shell. Composer clears only the exact submitted Session draft after accepted run admission; rejection/error retains it, newer edits remain untouched, and an in-flight guard prevents double submit. Resource conversation panes remain draft-preparation surfaces rather than claiming execution acceptance. Steering likewise clears only after acknowledgement.
+
+Tauri executes frontend command hooks from the desktop crate parent in this repository, so UI commands retain ../../ui/desktop; frontendDist is resolved relative to tauri.conf.json. Development explicitly uses the configured 1420 port. Desktop packaging consumes the existing Vite dist without adding another frontend or runtime.
+
+Composer menu actions open the existing Skills/Plugins modals; unsupported connector/voice actions are disabled instead of claiming success. Text attachment reads must succeed within the explicit size/type bounds; binary attachments are rejected rather than represented by filenames. Activity rejection is not advertised without an implemented backend action.
+
+Internal workbench UI uses shared pane-container responsive classes in index.css. Lists and details in Files, Agents, Activity, Sources, Findings, Artifacts, Methods, Synthesis, Drafts and Outbox adapt to each resource pane width rather than the application viewport. Narrow panes stack a bounded scrollable list above usable detail content; wide panes retain master/detail. Existing data loaders, editors and action owners are reused. Toolbar wrapping/focus/disabled affordances are shared within the resource host.
+
+ContactsCalendarPane retains its existing local roster storage while providing searchable/editable contacts and a month/agenda calendar with explicit local date selection. Local contact records do not grant outbound authority, and local milestones are not daemon connector confirmations. Existing unparseable calendar text remains visible in agenda instead of being assigned an invented date.
+
+### GitHub authentication correction ownership
+
+Existing daemon `api.rs` (composition owner Vĩ) and `local_api/lib.rs` extend the GitHub API with login backed by the existing TerminalCoordinator; no new production file, crate, dependency, schema or credential store. `GitHubAuthModal.tsx` replaces frontend Copilot/direct-browser OAuth and public-username pseudo-login with bounded PTY interaction. `AppContext.tsx` verifies daemon identity before setting authenticated, and treats saved profiles as unverified. `daemon_client.ts` and `types/domain.ts` retain metadata-only status and the terminal DTO. Git/worktree adapters are unaffected. Existing smoke tooling and daemon tests verify failure/status behavior without real account authorization.
+
+### Repository Git vertical implementation
+
+New adapter file `crates/custos-adapters/src/repository_git.rs` (Trường + Vinh) extends existing workspace I/O ownership; exported module in adapters `lib.rs`. Functions own bounded Git snapshots/branch switch/fetch, gh account inventory/viewer verification and non-secret Git-config binding. New desktop `components/workbenches/engineering/RepositoryGitPanel.tsx` (Vinh) renders these operations within the mounted FilesChangesPane, with client methods in daemon_client.ts. Existing daemon `api.rs`/`local_api/lib.rs` compose versioned routes and resolve registered execution scopes; existing workspace/files.rs commit uses staged index only. No new crate/dependency/domain schema or SQLite store. This adds two production source files; source counts and validation evidence are recorded after implementation. The canonical Git/Screen requirements remain §§13–14; this is a bounded local implementation, not a second Git service.

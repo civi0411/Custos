@@ -7,6 +7,7 @@
 > 
 > **Architecture Authority:** [`Custos.md`](Custos.md) (Must be strictly followed for all design decisions).
 > **Master Codebase Catalog:** [`docs/development/codebase-architecture.md`](docs/development/codebase-architecture.md) (Physical file-by-file mapping & AST index).
+> **Desktop UI Protocol:** [`.agents/rules/desktop_ui_architecture_standards.md`](.agents/rules/desktop_ui_architecture_standards.md) (Strict React 19, Zero-Mock, 3-Tier Hierarchy, Quality Gates).
 
 ---
 

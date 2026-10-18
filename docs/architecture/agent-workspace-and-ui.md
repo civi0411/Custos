@@ -1,5 +1,17 @@
 # Agent Workspace và giao diện ba miền
 
+## Git identity and checkout correctness
+
+LocalWorkspaceProvider verifies existing repository roots and declared checkout branch before marking Ready. Canonical path resolution cannot equate two failures; linked provisioning validates a literal branch with Git check-ref-format and resolves an explicit base to a commit before worktree add. No reset, stash or checkout is introduced. Sidebar registration uses detectWorkspace and actual main-worktree repository association, never a fabricated main branch or fake selected ID on failure. Full branch catalog/switch/fetch/push remains a separate capability migration; remote names or GitHub login alone do not establish transport authorization.
+
+## Shared supervision and focused preferences implementation
+
+Screen-to-canvas synchronization must ignore unchanged layouts and register focused commands only when their relevant identities change. This prevents context updates from starving route navigation; command registries clear on canvas unmount. This is a targeted lifecycle correction in the existing Screen owner.
+
+The Activity Rail uses Home, Conversations, Tasks and Supervision, with Connections & Tools, Settings and Account below. Conversations and Tasks are independent cross-workbench history routes, not alternate workspace sidebar modes. The workspace sidebar always shows the Project selector and repository/worktree tree; no duplicate Project/workspace chooser appears on the rail. Home closes management and returns to the last working route. Settings/Connections remain embedded in the content area. History reads daemon sessions/Tasks and uses existing Project/session bindings for exact reveal; opening history never changes the working execution target. Supervision reuses `/dashboard` and aggregates daemon session-run records with bounded concurrency, explicit Project/all-session filtering, partial-load errors and an exact session/run inspector. Scope membership comes from loaded Project projections; unfiled daemon sessions are available in All sessions and are never assigned by title heuristics. Blocked Tasks are attention signals, not fabricated approval requests. Completed runs remain separate from accepted outcomes. Full approval/effect queues are not claimed where APIs are absent. Reveal synchronizes the existing Screen selection with the exact target session before navigation; a layout write does not force the workbench lens back to an earlier value. Task attention avoids adding a second blocked-Task card when a suspended run already represents that Task.
+
+ActivityPane is the shared persisted/live run inspector and must never replace empty/error data with demo facts. Cancellation requires an advertised operation and is shown as requested until runtime confirms termination. Settings defaults to preferences; diagnostics are Advanced, while the existing AI configuration surface becomes Connections & Tools with links to existing extensions and capability-gated environments. These changes reuse the existing daemon client, run stream and modal owners, with no new schema, execution engine or dependency.
+
 **Trạng thái: kiến trúc đích, chưa phải tuyên bố UI/runtime đã hoàn tất.** Tài liệu hiện thực hóa định vị trong [Custos.md](../../Custos.md), bổ sung cách người dùng làm việc với các contract hiện có. Không tạo một kernel, scheduler hay sản phẩm mang tên khác.
 
 ## 1. Quyết định sản phẩm
@@ -60,6 +72,10 @@ flowchart TD
 Daemon ráp implementations. Runtime quản lý run/workspace/process lifecycle qua ports; adapter thực hiện Git, PTY, browser hoặc connector I/O. UI gửi command và hiển thị projection; không spawn agent thực thi, tự merge hay tự mint permit. Webview host cũng không trở thành composition root thứ hai.
 
 ## 4. Bố cục và điều hướng
+
+### Desktop canvas implementation contract
+
+The existing shell and resource host use a recursive group/split presentation tree. Each tab belongs to one group; active tabs must exist; ratios are bounded; closing the final tab preserves a usable empty group. Drag/drop, split right/down, merge, keyboard focus, resize and zoom never execute domain commands. Unknown kinds render unsupported. AppContext persists sanitized resource metadata by project/lens/workspace/session; the resource host persists the matching validated layout. Resource IDs bind scope on creation; worktree selection never retargets existing tabs. Compact desktop shows one focused group with group navigation. Coding, Research and Copilot expose distinct resource shortcuts and a contextual scope inspector. Main conversation can remain beside resources or be hidden using canvas expansion. Popout editing remains deferred until shared-window reconciliation. Scientific annotation/reproduction and external dispatch retain existing backend capability gates. Findings forwards actual handoff Task IDs to the shell, which refreshes Tasks and opens the destination Coding Task; this is not itself evidence of a verified scientific handoff. Drafts keeps unsaved edits in memory across resource navigation, offers explicit save, and local review/lock does not enqueue an Outbox action or claim scientific verification.
 
 Desktop/headless integration theo [superplan §21](../development/workspace-restructuring-plan.md#21-superplan-kết-hợp-custos-và-orca-cho-desktop-và-headless): selective port OrCa presentation components qua Custos SDK facade; projection/event store do backend IDs/version/cursor chi phối; terminal/token streams bounded riêng với persisted state events. Layout restore không tự spawn agent. Mobile app/client/push/packaging chưa nằm trong phạm vi; giao diện hẹp dưới đây chỉ là responsive desktop.
 
@@ -815,3 +831,383 @@ Conversation catalog curation excludes Gemini 2.5, 3 (exact major), 3.1, 3.5 and
 Copilot discovery treats policy.state=enabled plus explicit chat capability as positive availability even when the legacy model_picker_enabled flag is false. Disabled/unconfigured policies, internal models, non-text models and unsupported endpoints stay excluded; other providers retain their visibility checks. The existing probe parser owns this provider-specific normalization (Trường/Vinh), daemon API/runtime apply shared curation to verified caches and admission (Vĩ), and existing desktop model catalog tests cover visibility (Vinh). No new file, dependency, crate or table is introduced.
 
 Curated catalog validation: 329 adapter provider tests and 46 daemon tests pass (three existing tests ignored), plus six desktop model-family regression tests. After loading the rebuilt daemon, live account discovery returns five Copilot chat routes and four Antigravity routes (Gemini 3.8, Claude Sonnet, Claude Opus, GPT-OSS). Browser verification confirms Copilot model visibility, no excluded Gemini generation or Tab rows, and retained Gemini 3.8 effort controls. Verification uses catalog calls only; no paid inference is sent. Copilot policy compatibility reference: https://github.com/anomalyco/opencode/issues/42083.
+
+### Existing workflow consolidation
+
+Lab becomes a view switcher around NotebookWorkbenchPane and RunsLedgerPane; the notebook component owns editing/save/run/interrupt/reset. The existing coordinator source uses a persistent Python worker per session, despite older prose describing subprocess-per-cell; process state is not durable or a reproducibility certificate. Desktop sends the existing workspace_id field; daemon resolves cwd through the registered workspace and rejects cell/session/source mismatches. Session cell saves replace the full cell set atomically, preserve server execution fields, remove deleted cells, and emit an outbox notification.
+
+Artifact inspection reuses CompanionFileViewer, FigureAnnotator, list/saveResearchAnnotations and existing lineage/review records. Scope-bound file content is read through WorkspaceFilesPort, never arbitrary daemon filesystem reads. Historical versions without captured bytes are explicitly unavailable; annotations remain attached to the selected version. Asking about a selection prepares a composer draft for human submission, not an automatic run. Compare operates on candidates of one Task/repository/base and fails visibly on missing IDs or read errors.
+
+Existing `custos-adapters/src/workspace.rs` (Trường/Vinh) must return inspection errors for missing Git directories or failed git status; a missing checkout cannot project as clean. This extends the current WorkspaceProvider rather than adding a second inspection path.
+
+Recorded run reproduction remains unavailable until a real config/seed manifest is present; the ledger never substitutes hardware metadata for config or invents a seed. Binary file DTO normalization retains the existing snake-case metadata used by shared viewers. Capability lookup is performed once per resource host and passed to its tab renderers.
+
+Candidate create/integrate completion extends the existing daemon workspace commands and Workspace metadata. The single daemon serializes candidate mutations; caller command IDs and request digests persist with workspace records. Replayed creation returns recorded candidates without reprovisioning. Integration has a read-only preview, expected-head checks and a persisted intent/result; restart recovery reconciles Git ancestry/conflict state before any retry. No new command store, table or workspace backend is introduced. Desktop WorktreeManager uses the same client methods for preview and apply.
+
+The legacy Assistant outbox create/approve/dispatch endpoints must fail without a configured mediated connector. They must not fabricate permit/receipt IDs or mark dispatching as approval. Local draft editing/review and read-only outbox remain usable; adding a real external connector is a separate composition/configuration requirement.
+
+Canvas side-open commands consume the legacy split request into the existing canvas reducer, then clear it; no second split layout is rendered. Detached routes do not mount interactive resources until shared-window scope/state reconciliation exists. Integration recovery checks the recorded target branch reference, independent of the current checkout.
+
+Assistant draft saves use the existing daemon/repository boundary: daemon supplies creation/update timestamps and validates scope/status, preserves immutable draft ownership, and computes reviewed payload digests. Reviewed content cannot be silently changed. Repository mutations include an outbox notification in the same transaction. DraftsPane ignores obsolete session responses and blocks overlapping edits/mutations.
+
+The legacy FilesWorkbenchPane export delegates to FilesChangesPane, the canonical file/change viewer. It no longer owns a second tree loader, editor, or workspace selector. Existing imports remain compatible.
+
+ResearchSynthesisPane continues through the existing resource host into Coding using the actual handoff receipt and selected destination Task. Workspace selection is explicit (or the resource's bound workspace), never the first registered workspace. New proposals begin with no selected claims; the server remains authoritative for evidence admission. The pane does not assert a safe worktree was created merely from a Task receipt.
+
+Canvas tab navigation supports keyboard first/last/close and explicit move-to-group through the same reducer used by drag/drop. These actions move presentation ownership only and never start or terminate a backend run. Tab and panel accessible identities remain paired.
+
+Resource opening uses findScopedResourceTab in the existing resource host to compare explicit kind, workspace, session, Task and agent identity. Shell and resource-picker fallback share this rule; opening a resource in the same scope focuses its tab, while another scope never reuses it. Native agent launch configuration may still open multiple tabs intentionally.
+
+Task conversation creation extends AppContext.handleCreateChatSession with an optional existing Task ID. Both Task-list entrypoints use that single action: load the canonical Task, create/attach a daemon Session, record lens visibility, and project the bound conversation. It does not create a second Task or clear the selected Task. In-flight duplicate clicks for the same Task are rejected.
+
+FindingsPane inspects stored reviewer records rather than minting verification in client state. New claims are ungrounded drafts, matching research_ingress. Findings prepares a selected claim in the existing Synthesis composer through its scoped resource URL; only ResearchSynthesisPane owns handoff submission. Opening or preparing a proposal never executes the handoff.
+
+FilesChangesPane keeps a tab-bound workspace selector read-only; another workspace is opened through the shell rather than rebinding a live resource behind its identity. File selection does not reload the entire tree/diff summary. Workspace tree loads use request generations so obsolete responses cannot replace the current workspace.
+
+The existing daemon session-attach route validates the destination Task through TaskService before mutating Session attachment. Missing or unreadable Tasks leave the Session unbound; attachment does not create a Task or start a Run.
+
+NotebookWorkbenchPane exposes the existing code/markdown cell types and reuses MarkdownViewer for notes. Changing cell type invalidates prior execution output just like source edits. Markdown cells cannot execute; the existing save/run coordinator remains the sole execution owner.
+
+Workbench frames are explicit presentation presets over the existing canvas: Coding Files/Agents/Terminal, Research Sources/Lab/Artifacts, and Copilot Drafts/Notes/Calendar. One shared workbenchResourceIds registry controls picker visibility and preset membership. Applying a desk reuses scoped tabs and retains other open resources; canvas arrange validates membership/uniqueness and never dispatches domain execution. Presets require a selected session and registered workspace.
+
+ConversationPane owns one ephemeral composer draft per Session, shared across its main and resource renderers through useSyncExternalStore. Drafts are never written to localStorage or sent by navigation. Resource Ask appends to the tab-bound Session draft before the shell navigates to that conversation, preventing cross-session insertion or lost events during mounting. File attachments are cleared on Session changes.
+
+The shared workspace shell exposes a persistent workbench workflow strip from the canonical resource membership/capability descriptors. It names the current conversation/workspace and provides direct resource navigation with unavailable reasons. Application-level workbench switching remains in AppTopBar; the strip controls resources rather than introducing another workbench selector.
+
+The [desktop core and controls audit](../development/workbench-core-and-controls-audit.md) separates renderer controls, presentation state, execution, replay and scientific evidence across Orca and Open Science. Its chrome/identity/lifecycle recommendations are implementation review targets, not proof that Custos has reached them.
+
+Desktop information hierarchy: the shell owns one workflow navigation row; canvas arrangement lives in a disclosure menu on the focused group, not a permanent desk header. Empty canvas provides a scoped workbench overview and existing desk action. Lab view selection is injected into the notebook content toolbar to avoid stacked navigation; embedded Markdown previews hide their standalone toolbar. Existing components/reducer remain the owners; no new production file or execution API.
+
+### Workbench frame hierarchy and interaction specification
+
+The reference audit informs the following Custos desktop design. The design uses the existing shell, canvas and content components; it does not introduce a fourth workspace or duplicate runtime. Implementation evidence and unresolved backend gates remain in `plan.md`.
+
+| Layer | Purpose | Persistent controls | Contextual controls |
+|---|---|---|---|
+| AppTopBar | Choose the product context | Project/workbench, global search, settings/account | Actual usage and availability |
+| Workspace sidebar | Choose the owner of work | Workspace, Conversations/Tasks, search and create | Session/Task actions on their own rows |
+| Workflow strip | Navigate the current workbench | Primary resource names with capability reasons | Active resource indication |
+| Group tab row | Identify and arrange resources | Tabs, add, split, zoom | Layout disclosure, move-to-group, close |
+| Content toolbar | Operate on selected content | Only the controls needed by that resource | Save/run/history/review according to capability and state |
+| Inspector | Explain the selected resource | Scope, backing identity and recorded origin | Actual version/run/evidence details |
+| Status/attention | Describe execution and waits | Current workspace/Task/session | Real approval/error/retry with exact owner |
+
+A pane title must not be repeated in a wrapper header above the same title. The layout preset is a shortcut in the focused group's Layout disclosure, not a permanent additional toolbar. Empty groups provide work-specific entry points and explain missing scope; they never create synthetic Tasks, sessions or execution receipts. Context inspection follows the selected tab's bound workspace/session/Task rather than silently describing the globally selected conversation.
+
+| Workbench | User question | Primary resources | Default desk | Intended sequence |
+|---|---|---|---|---|
+| Coding | What changed, who is working, and what verifies it? | Files, Activity, Terminal, Worktrees, Agents | Files main, Agents above Terminal | Select Task/worktree → inspect/edit → explicitly run → inspect changes/evidence → preview integration |
+| Research | Which source, code and run support this result? | Sources, Findings, Lab, Methods, Artifacts, Handoff | Sources main, Lab above Artifacts | Read sources → maintain claims → experiment → inspect output/provenance → review → prepare handoff |
+| Copilot | What should be prepared, reviewed and acted on? | Drafts, Outbox, Contacts, Calendar; shared Notes | Drafts main, Notes above Calendar | Converse/plan → prepare draft → review exact content → supported external effect and receipt |
+
+Shared Conversation, Notes and native previews are accessible from Resources, without presenting every shared tool as a primary workflow stage. The same resource membership registry feeds the workflow strip and picker. Unavailable capabilities cannot be bypassed by a preset; the UI reports the daemon's reason. Desk creation requires a selected conversation and registered workspace, and does not spawn a shell/agent or run a cell.
+
+Research Lab uses one navigation/action baseline for Notebook and Runs where possible. The notebook retains its mounted editor when switching to Runs. Markdown rendered inside a cell reuses the shared renderer in embedded mode, with no second standalone viewer toolbar. Standalone Markdown files retain their full preview/source/copy controls.
+
+#### Width and focus behavior
+
+- The sidebar remains resizable within its existing bounded range; content groups adapt to their actual measured area.
+- Main-plus-review tiling is a starting arrangement. When any group would become too small, show the focused group with explicit group navigation rather than unreadable slivers.
+- Layout disclosure opens with keyboard/native details semantics, closes on Escape or focus departure, and restores focus to its summary on Escape.
+- Workbench entry actions remain labelled; icon-only group actions have accessible labels. Disabled execution/navigation must carry a reason, and focus style uses shared tokens.
+- Colors come from canvas/surface/foreground/border tokens so Light and Dark share the same hierarchy. Research starter cards must not force white text over light surfaces.
+
+#### Review gates before declaring the design complete
+
+Validate at 1440×900, 1280×800 and 1024×768, including Light/Dark, an empty workspace, populated Task/session, multiple groups, long tab names, unavailable daemon, and keyboard-only navigation. Check the actual useful content area and absence of duplicate title/action rows. A production build and reducer tests establish structural compatibility; they do not substitute for these visual checks or for backend execution conformance.
+
+Conversation submit returns an explicit acceptance boolean through AppContext, Studio and the shared shell. Composer clears only the exact submitted Session draft after accepted run admission; rejection/error retains it, newer edits remain untouched, and an in-flight guard prevents double submit. Resource conversation panes remain draft-preparation surfaces rather than claiming execution acceptance. Steering likewise clears only after acknowledgement.
+
+Tauri executes frontend command hooks from the desktop crate parent in this repository, so UI commands retain ../../ui/desktop; frontendDist is resolved relative to tauri.conf.json. Development explicitly uses the configured 1420 port. Desktop packaging consumes the existing Vite dist without adding another frontend or runtime.
+
+Composer menu actions open the existing Skills/Plugins modals; unsupported connector/voice actions are disabled instead of claiming success. Text attachment reads must succeed within the explicit size/type bounds; binary attachments are rejected rather than represented by filenames. Activity rejection is not advertised without an implemented backend action.
+
+Internal workbench UI uses shared pane-container responsive classes in index.css. Lists and details in Files, Agents, Activity, Sources, Findings, Artifacts, Methods, Synthesis, Drafts and Outbox adapt to each resource pane width rather than the application viewport. Narrow panes stack a bounded scrollable list above usable detail content; wide panes retain master/detail. Existing data loaders, editors and action owners are reused. Toolbar wrapping/focus/disabled affordances are shared within the resource host.
+
+ContactsCalendarPane retains its existing local roster storage while providing searchable/editable contacts and a month/agenda calendar with explicit local date selection. Local contact records do not grant outbound authority, and local milestones are not daemon connector confirmations. Existing unparseable calendar text remains visible in agenda instead of being assigned an invented date.
+
+### Internal panel sizing
+
+The existing resource host is a named `resource-pane` inline-size container. Internal master/detail layout responds to its pane width, not the desktop window width. This matters because a wide desktop can contain a narrow split pane. Sources/claims/artifacts/proposals, repository/agents/activity, drafts/outbox and methods share the same sizing behavior: bounded list alongside details when wide; bounded list above details below 680px. List and detail keep independent scroll areas, and toolbars wrap rather than hiding actions. The calendar uses a seven-column semantic date layout at all widths and a bounded scrolling month section so its agenda still has space.
+
+Local Contacts/Calendar state remains a presentation feature with no outbound authorization or connector receipt. The calendar exposes Month/Agenda, date selection, search, editable milestones and explicit invalid-date handling; local persistence failure remains visible instead of a success toast. This is implemented in the existing ContactsCalendarPane, not a parallel calendar subsystem.
+
+### GitHub connection correction
+
+The account dialog exposes optional GitHub connection beside an explicit return to local work. `v1.github.login` starts or resumes a dedicated `github-auth` terminal using the resolved gh executable and fixed `auth login --hostname github.com --git-protocol https --web --skip-ssh-key` arguments. Existing terminal read/write/terminate APIs carry the visible CLI interaction and cancellation; no second OAuth lifecycle or credential store is introduced. The UI can send Enter for native CLI prompts, presents the real device-code output, and verifies `v1.github.auth_status` after process exit. Closing/cancelling terminates only that login PTY; an expired/error exit is never reported as success. The daemon verifies github.com viewer with a bounded command and returns metadata only. Cached identity is unverified until checked. gh manages credentials and its own transport configuration; Git commit identity and repo/SSH transport remain distinct. Copilot configuration stays in model connections.
+
+## 13. Unified Git and worktree product design
+
+**Status: implementation target.** Screen/reveal composition is refined by §14 below. Existing Git operations are partial; this specification does not mark branch switching, remote synchronization, conflict management or durable operations as shipped. It supersedes earlier Git/navigation sketches where they disagree. The current source audit remains in [the development model](../development/coding-conversation-and-research-workbench-model.md#github-branch-and-worktree-core). Existing public API compatibility must be preserved.
+
+### 13.1. Product model and identity
+
+| Object | Meaning and ownership | Must not be inferred from |
+| --- | --- | --- |
+| Project | Human grouping of repositories and Screens | A single filesystem folder or active account |
+| Repository Workspace | Product navigation node for one repository on one execution host | Remote URL, display name or selected Screen |
+| Checkout / worktree | Concrete working directory with its own HEAD, index and working files | Branch name alone |
+| ExecutionWorkspace | Existing daemon execution record for a registered checkout, folder or remote environment | A second repository model or a Screen ID |
+| Branch | Repository ref; may have no checkout, or be checked out elsewhere | A task, terminal or running agent |
+| Task / Session / Run | Work intent / conversation / one execution attempt; Run binds exact checkout and baseline | UI focus |
+| Screen / group / tab | Project-owned arrangement / split leaf / resource view | Git allocation or process lifetime |
+
+Repository identity is `(execution host identity, canonical common Git directory)`. Checkout identity adds the canonical checkout root. Separate clones of one remote remain separate repositories. Host filesystem case/symlink semantics determine canonical equality; do not lowercase paths generically. A moved or inaccessible path becomes unresolved until reconciled, not a newly invented repo. Remotes are mutable metadata, with credentials redacted from displayed URLs.
+
+Preserve existing ExecutionWorkspace IDs, Task links and journals. The primary checkout appears as `Main checkout` with its actual branch, not an invented `main` branch. Product repository grouping initially projects existing checkout records plus observed Git metadata; stable identity must be persisted through existing repository/event ownership before claiming durable migration. No new domain schema or crate is authorized by this document.
+
+```mermaid
+flowchart TD
+    P[Project] --> R[Repository Workspace]
+    R --> C[Primary and linked checkouts]
+    C --> E[Registered ExecutionWorkspace]
+    E --> U[Bound sessions and runs]
+    P --> S[Named Screens]
+    S --> G[Split groups]
+    G --> T[Resource tabs]
+    T -. exact resource reference .-> E
+    T -. session or run reference .-> U
+```
+
+### 13.2. Desktop placement and interaction
+
+Keep Activity Rail destinations Home, Conversations, Tasks and Supervision, plus footer Connections & Tools, Settings and Account. Do not add another workspace selector, Git activity mode or permanent branch sidebar. Home returns to work from full-content management.
+
+| Surface | Contents | Interaction |
+| --- | --- | --- |
+| Left sidebar | One Project picker, repositories, primary checkout, linked worktrees, creation/discovery status | Reveal checkout working area/anchored Screen per §14; row menu opens Branches, Changes, History, Remotes or worktree actions |
+| Screen strip | Compact current title with one view; named Project Screen switcher when multiple; New, rename, duplicate layout, close, arrange | Switching restores layout, never creates/checks out a branch or restarts a run |
+| Focused group header | Repository, checkout label, branch/detached OID, host and freshness | Branch opens picker for this exact checkout; context change affects only newly opened resources |
+| Resource tabs | Chat, Task, Run, Files/Changes, Terminal, History, Browser/device preview | Each retains its own execution/resource reference; mixed-checkout groups show a scope label per tab |
+| Files/Changes | Existing file viewer with Explorer/Changes modes and file diff | One implementation and shared loaders; staged/unstaged/untracked/conflicts shown separately |
+| Worktrees resource | Repository-scoped inventory and selected-checkout details; comparison in split groups | Overview and lifecycle controls, not a second Project tree or branch catalog |
+| Inspector/status | Exact run/operation/checkout details, errors and freshness | Details open on demand; no second global action toolbar |
+
+At 1440 px: rail approximately 48 px, sidebar 240–280 px, flexible canvas, optional inspector 280–360 px. At 1280 px inspector starts closed. When two groups cannot each retain approximately 360 px, use tabs/zoom rather than squeezing unreadable columns. Keyboard actions resolve the focused resource target; no global branch selector can silently override another tab. Theme tokens and existing resize/canvas behavior remain canonical.
+
+Example: Screen `Build` has Chat A and Terminal A bound to `feature/api`, beside Changes B bound to `feature/ui`. Selecting B in the sidebar changes the default for the next resource only. Existing Chat A and its next native run stay on A unless an explicit validated continuation changes that binding. A repository overview resource may intentionally have repository scope, but write actions still require an exact checkout.
+
+### 13.3. Branch picker
+
+One searchable picker opens from the checkout branch label or repo menu. Sections: current checkout, other local branches, remote-tracking refs. Rows show full ref identity, current-here/checked-out-elsewhere badge, associated checkout path/host, upstream and freshness when available. Ahead/behind is shown only after successful comparison against observed refs; cached remote refs are not live server state.
+
+| Selection | Primary action | Other valid action |
+| --- | --- | --- |
+| Current branch | Reveal current checkout | Open Changes/History |
+| Branch checked out elsewhere | Reveal that checkout; register it if external | Open resource in another split group |
+| Available local branch | Use in new worktree | Explicit Switch this checkout |
+| Remote-tracking branch | Create local tracking branch in new worktree | Explicit switch/create tracking branch in eligible checkout |
+| Detached HEAD | Show exact commit and Create branch | New worktree from the commit |
+| Unborn repo | Show no commits and first-commit workflow | Do not offer commit-based worktree creation |
+
+The creation form names repo/host, mode (new branch or existing branch), full base ref and resolved commit, destination path and optional setup. Validate before creation, revalidate at execution, never reset an existing branch. Git remains authoritative about checkout ownership. A race produces an actionable conflict and refresh, not a second guessed branch or force checkout. Fetch is explicit and independently reported.
+
+Switch is a command, not a picker selection side effect: show checkout path, old/new branch, local changes, unsaved buffers and active writer/session implications. Initial release blocks switching a checkout with any dirty state, unsaved editor buffer, active writer or unresolved mutation; offer a new worktree. Idle terminals remain bound to the same path and receive a visible branch-change notification. Existing chats require explicit baseline refresh/continuation acknowledgment before further writes after an external branch change. Do not auto-stash, reset, or retarget live runs.
+
+### 13.4. Worktree lifecycle
+
+Create, adopt, reveal, archive/unregister and physically remove are distinct actions. Existing workspace lifecycle Initializing/Ready/SetupFailed/Archived remains canonical; missing/locked/prunable/external are observed Git conditions, not replacement lifecycle enums.
+
+Creation: resolve repo/host → inspect refs/path/ownership → allocate through existing provider → register exact checkout → run explicitly requested setup → observe Git → expose Ready or SetupFailed. Allocation and setup failures retain useful error/path information; never substitute an empty directory. Retry uses the same command identity and reconciles partial side effects before allocating again.
+
+Discovery uses actual Git worktree inventory, including primary, locked and prunable entries. External checkouts are visible as external and are adopted by verifying their root/common-dir/host, without `worktree add`. Branch count is not worktree count. Refresh reconciles external create/remove/checkout changes.
+
+Unregister hides/removes the app registration while preserving files and Git registration. Physical removal previews path, dirty/untracked files, active runs/terminals, unsaved buffers, lock status and remaining branch. Initial implementation refuses removal of dirty, locked or actively written checkouts; it must not terminate a run or delete a branch implicitly. Primary checkout is never removed by linked-worktree removal. Branch deletion is a separate action with explicit branch/OID and reachability checks. Archive terminates neither a Task nor a conversation journal; retain resource references as unavailable with recovery choices. Lifecycle operations reuse existing coordinator/adapter owners; do not silently overload current archive behavior where it already invokes teardown.
+
+### 13.5. Changes, commit, history and conflict recovery
+
+Changes is checkout-scoped and separates staged index, unstaged working tree, untracked files and conflicts. A partially staged file appears in both relevant sections. Diff explicitly says its endpoints: HEAD→index, index→working tree, base→candidate, or immutable commit→commit. Binary, renamed, deleted and submodule entries receive appropriate representations; no blank text diff is reported as proof of no changes.
+
+Stage/unstage operate on explicit paths using literal path arguments. Commit shows repository, checkout, branch, staged file list and message. Commit only the existing staged index. Empty index disables Commit and returns a typed failure if called. `Stage all` is a separate explicit action. Preserve staged bytes on hook failure; show actual hook/error output. Return actual commit OID and refresh HEAD/index/worktree; an exit code alone is not a fabricated commit receipt. Commit identity comes from effective Git config, with a repair action if missing; GitHub profile does not set it silently.
+
+Discard previews exact affected paths and tracked/untracked scope; do not turn folder selection into recursive deletion without explicit scope. It must recheck file identity/version before applying so a stale diff does not discard new edits. Unsaved buffers and external writes produce a conflict, not silent overwrite. Fine-grained hunk staging/discard is a later capability with patch/base validation, not a fake enabled button in the first release.
+
+History is one resource opened in the existing tab host: paginated commit rows, author/time/OID/parents, selected commit file list/diff, explicit branch/base comparisons. Commit snapshots stay pinned to OIDs when live HEAD changes. Comparison marks unrelated histories or missing objects; shallow repositories expose the limitation rather than zero commits. Candidate comparison keeps its Task/base provenance and existing integration gate; ordinary Git merge is not Task acceptance.
+
+Conflict state names merge/rebase/cherry-pick when detected and exposes affected files plus index stages. Resolve via supported editor/manual file work, then explicit stage and operation-specific Continue or Abort. Initial conflict UI may be read-only if mutation capability is absent. Never label abort as undo for arbitrary edits. Failed pull/rebase retains conflict state and recovery context; do not automatically reset to a clean checkout.
+
+### 13.6. Remote and credentials
+
+Remotes live in the repository resource/menu, not global Settings. Show remote name, redacted fetch/push URLs, upstream branch, account/SSH binding when known, last fetch result and independent ahead/behind freshness. Support multiple remotes and separate fetch/push targets; never assume origin/main or treat upstream as origin.
+
+| Action | Required behavior |
+| --- | --- |
+| Fetch | Explicit remote; progress/cancel; refresh remote refs; does not claim local files were updated |
+| Publish / Push | Exact source branch/OID and destination remote/ref; normal push first; show receipt and non-fast-forward/auth failures |
+| Pull / Fast-forward | Show tracking target and expected HEAD; first release uses fast-forward-only and reports divergence |
+| Rebase / Merge | Explicit target and preview, eligible clean checkout, writer exclusion and conflict recovery; separate capability from Pull |
+| Clone | Explicit host, redacted remote and target folder; partial clone recoverable, no Ready until verified |
+| PR | Separate GitHub API action bound to repo/account/base/head; successful push does not imply PR creation |
+
+Force-push, hard reset and force-delete stay out of default actions. Do not bundle Push into Commit. GitHub API auth, HTTPS credential helper/SSH agent and user.name/email are independent. Account repair belongs in Connections & Tools; repo account selection belongs with repo remotes. Preserve host-specific account binding. Remote execution must resolve the owning host; no local fallback when an SSH/remote host is unavailable. Current github.com CLI login is a limited supported path, not Enterprise/multi-account/SSH parity.
+
+### 13.7. Command, observation and concurrency contract
+
+Extend existing versioned local API and core ports; names below describe required operation families, not new implemented endpoints. UI never executes Git or writes daemon storage directly. Adapters own process/file/credential I/O; runtime owns coordination; core owns pure policy/contracts; persistence owns durable records/events; daemon is sole composition root.
+
+A mutating command carries command identity, resolved repository/ExecutionWorkspace/host, operation and literal arguments, expected HEAD/ref/base and operation-specific index/path observations, plus existing authorization context. The daemon re-observes before mutation. Stale expectations return Conflict with refreshed metadata. Display name, sidebar focus and client-supplied path cannot select an unrelated checkout. Authorize network/publishing effects through existing authority policy. This design approval does not authorize actual push/merge/discard actions on the user's repository.
+
+Operation state is separate from workspace state: requested → running → succeeded / failed / cancelled / outcome-unknown. Persist command intent/results through existing events/outbox/repository boundaries; no second operation database or in-memory-only success ledger. On lost connection or cancellation after Git may have changed state, inspect refs/HEAD/index/paths before determining outcome. Never auto-retry commit, push or allocation without reconciliation. Backend timeout/output bounds and cancellation apply to every subprocess; redact credentials, preserve actionable diagnostics.
+
+Use repository-level serialization for ref/topology/remote operations and checkout-level exclusion for index/worktree mutations, with a consistent repository-before-checkout lock order. Start conservatively by serializing app-issued writes per repository; narrow only with tests. Active native writers participate through existing workspace/run coordination; unknown terminal/external processes cannot be assumed locked by the app. Use final precondition checks, Git's own locks and external-change observation to detect races. Worktree isolation is not OS sandboxing.
+
+Read projections carry observation time, source, coverage and explicit fresh/stale/error/unavailable states. Failed status is unknown, never clean. Bound background probes; prioritize focused checkout, visible inventory and active runs. After a mutation invalidate only affected repository/checkout projections; coalesce refreshes, reject late responses from old selections. Reconnect/startup reconciles unfinished operations before enabling conflicting mutations.
+
+### 13.8. API and component consolidation
+
+| Responsibility | Extend canonical owner | Consolidation requirement |
+| --- | --- | --- |
+| Physical Git/worktree lifecycle | `custos-adapters/src/workspace.rs`, existing WorkspaceProvider contract | Preserve provisioning tests; route new lifecycle operations through this boundary |
+| Files/status/diff/index/commit and future Git reads | Existing WorkspaceFilesPort and workspace adapter implementations | Move direct Git subprocess work out of runtime incrementally; do not build a parallel Git service |
+| Coordination, preconditions, recovery and Task bindings | `custos-runtime/src/workspace/coordinator.rs`, `files.rs`, existing run/integration owners | Preserve existing candidate/integration semantics; no UI-only writer gate |
+| Versioned commands and capabilities | Daemon `api.rs`, `local_api/lib.rs`, composition in `runtime.rs` | Targeted inventory/branch/history/remote/conflict operations; advertise only composed operations |
+| Persistence | Existing WorkspaceRepository and event/outbox owners | Preserve IDs and migration compatibility; durable identity/operation extensions need reviewed schema changes before code |
+| Source control UI | Mounted `FilesChangesPane`, shared ResourceRef/canvas and daemon client | Converge legacy ChangesWorkbenchPane/FilesWorkbenchPane logic into mounted owner before adding more panes |
+| Inventory and navigation | WorkspaceSidebar and WorktreeManagerPane | Sidebar is hierarchy; manager is details/actions; neither keeps a second Git truth store |
+| Parallel work | ScreenContext, OrcaTabbedContainer, Session/Run bindings | Stored tab reference wins over global activeWorkspaceId; no first-workspace fallback |
+
+Required operation families: repository/worktree inventory; branch catalog with checkout ownership; branch switch; worktree adopt/create/remove; scoped status/diffs/index/commit; history and comparisons; remote/upstream reads and fetch/push/fast-forward; conflict inspection and recovery. Extend existing request/result structures deliberately; exact DTO additions follow implementation review, not a competing protocol document. Capability availability includes host support and runtime composition; do not advertise a button just because a handler name exists.
+
+### 13.9. Same canvas across all workbenches
+
+Coding defaults to repository/checkouts and source control resources. Research keeps sources/notebooks/artifacts/runs; a notebook may explicitly reference a Git checkout without turning every research Screen into a worktree. Assistant keeps conversations/drafts/outbox/contacts; Git resources appear only when explicitly opened for a repository. All three retain the same Project Screen strip, split groups, tab persistence and scoped resource references. Domain-specific toolbars differ; Git is not a global required layer for non-Git resources.
+
+Parallel Screens do not imply simultaneous OS windows; opening the same resource in two views does not create another process or checkout. Independent writable editor views need shared buffers/conflict handling, and preview/device ports belong to explicit host/process resources. Restore missing checkout/session resources as recoverable unavailable tabs, never attach them to the first available workspace.
+
+### 13.10. Delivery gates
+
+The dependency order and acceptance matrix are tracked in [plan §22](../../plan.md#22-unified-git-and-worktree-delivery). No gate is complete from static design or a passing frontend build alone. Mutation tests use disposable real Git repositories; credential/remote tests use local bare remotes or fakes. Actual account authorization and remote publishing are separate human actions.
+
+## 14. Screens, work areas and parallel supervision
+
+**Status: researched design target, not implementation certification.** This section resolves the ambiguity in §13.2 and earlier Screen sketches. Preserve Project-owned Screens while making a worktree immediately usable from the sidebar. Screen is the saved composition of resource views and interaction context, not only a geometry preset and not a new execution container. The source evidence and limits are in [Open Science study](../development/open-science-source-study.md#screen-composition-and-lifecycle-evidence).
+
+### 14.1. Two independent relationships
+
+The resource hierarchy answers what exists: Project → repository Workspace → physical checkout/worktree → bound sessions/runs. Research sources, notebooks, experiments and Assistant tasks/drafts are also Project-associated resources; their existence does not require a repository. The presentation hierarchy answers what is visible: Project → Screen → scoped work areas → split tab groups → resource views. Connections between the two are explicit references, not ownership transfers.
+
+A work area is a visually identified region of the existing canvas, not a new Task, database entity, runtime, or mandatory navigation tier. In Coding, a worktree-centered area is the central working panel requested by the user: it can show several agent sessions, editor/diff and terminals internally. Put two such areas beside each other to compare/monitor worktrees without flattening their scope. A single area fills the center without redundant framing.
+
+Implement work areas as optional scope annotations on bounded subtrees of the same canvas tree. Reuse the existing split/group/tab reducer and renderer; do not embed independent canvas providers recursively. A scope region can contain several leaf groups. The region and tab resource identity are distinct: tab references remain authoritative for every command. Read-only related evidence from another scope must carry its origin; mixed writable contexts use separate identified areas. Moving a tab does not change the backing checkout/kernel/session. Cross-area moves must preserve and visibly label its actual scope, or offer a move of its whole area; never rebind silently.
+
+```mermaid
+flowchart LR
+    P[Project] --> R[Repository Workspaces]
+    R --> W[Worktrees and exact execution contexts]
+    P --> X[Research and Assistant resources]
+    P --> S[Screens]
+    S --> A[Scoped work areas]
+    A --> G[Split groups and resource tabs]
+    G -. references .-> W
+    G -. references .-> X
+```
+
+### 14.2. Screen ownership and what is saved
+
+| Candidate ownership | Strength | Failure if used as universal rule |
+| --- | --- | --- |
+| Worktree owns every Screen | Simple direct Coding restore | Cannot naturally compose multiple repos or non-Git Research/Assistant work |
+| Repo Workspace owns every Screen | Natural repository overview | Cross-repo work becomes orphaned or duplicated |
+| Project owns Screen, optional resource anchor | Cross-repo/domain composition and direct resource reveal coexist | Requires explicit target references and deterministic navigation |
+
+Choose the last option. Each Screen has one owning Project and can reference multiple workspaces/checkouts in that Project. An optional anchor identifies its main worktree, notebook/experiment, Task or session for naming and preferred reveal. Anchor is a navigation hint, never permission or inherited execution scope for existing resources. Several Screens may reference one worktree; one Screen may reference several worktrees. Only create additional named Screens when the user needs distinct arrangements.
+
+Save resource references, optional anchor and area scope labels, recursive layout, active tab/group, zoom, revision/follow policy and view state. Do not store a second canonical transcript, agent process, kernel, Git state, Task state, credential or artifact in Screen data. Resource-specific drafts and unsaved buffers belong to shared resource/session owners so they survive view eviction. A layout preset is reusable geometry without live resource identity; duplicating a Screen instead retains references without duplicating execution.
+
+No mandatory Screen wizard. Direct work starts in an automatically provided resource-centered Screen. With one Screen, show its title compactly; expose the fuller Screen switcher when multiple views are open or the user asks to manage them. Name meaningful Screens after work: `API implementation`, `Candidate review`, `Literature map`, `Experiment comparison`, `Release supervision`; do not generate anonymous Screen 1/2/3 for every click.
+
+### 14.3. Exact sidebar and reveal behavior
+
+| Gesture/state | Behavior |
+| --- | --- |
+| Click worktree already represented as a working area in current Screen | Focus/zoom that area's working content; preserve the other areas and an easy unzoom return |
+| Worktree appears only as an overview card | Open its preferred working Screen; a status card is not considered the full work area |
+| Click worktree not in current Screen, preferred anchored working Screen exists | Activate it and restore its layout; no process starts |
+| No working Screen exists for worktree | Materialize one from a safe preset using existing sessions/resources; do not fabricate an agent or spawn a terminal automatically |
+| Click another resource in an untouched preview Screen | Preview may be reused; preview owns no process/unsaved state and no arranged work |
+| User edits, starts work, splits, arranges or pins preview | Promote to saved working Screen; subsequent navigation cannot replace it |
+| Open beside / drag worktree into Screen edge | Add/reveal a scoped work area in the existing Screen; no implicit Git worktree creation |
+| Open in another Screen | New view composition referencing the same resources; no clone of sessions/processes |
+| Open Project | Restore last surviving Screen for that Project, else its default view |
+| Switch Screen | Restore its areas/tabs/focus; existing background work continues |
+
+Preferred reveal is a pointer/index into Screen state, not a second independently stored worktree-layout system. If its view no longer exists, resolve another saved anchored Screen or create the safe default. Current resource selection follows focused content for contextual actions. Sidebar selection alone cannot override a chat's execution binding. The global active workspace remains a fallback only during explicit new-resource creation; opening an existing scoped resource requires its stored target.
+
+Do not make three competing active identities: active Project comes from the displayed Screen; default workbench/lens and resource anchor guide creation, while focused area/resource determines available actions. Invalid legacy Project/Screen bindings must be reconciled, not guessed from names or silently filed under a default while the Project list is incomplete.
+
+### 14.4. The same composition model in three workbenches
+
+| Workbench | Natural working center | Content inside its work area | Meaningful parallel separation |
+| --- | --- | --- | --- |
+| Coding | Registered worktree | Chats/native agents, Task/run, editor, Changes, terminals, app/device preview | Separate checkout/branch for independent writers; or explicit read-only collaboration on one checkout |
+| Research | Question/Task, source study or notebook/experiment context | Research chat, sources/PDF, notebook, kernel/compute run, artifacts, claims/review | Independent experiments identify code/data/environment/seed and distinct kernel/run/output locations where required |
+| Assistant | Task/session/draft or an approved workflow context | Chat, draft, calendar context, connector result and Outbox item | Distinct work items with independent context; effect permissions stay scoped to exact action/account |
+
+These are different domain anchors, not three separate layout engines. Do not invent a generic domain WorkUnit entity just to make the UI table symmetrical. Research may use several repo/worktree-backed experiments, but paper review needs none. Assistant may open repository evidence, but a draft never acquires Git or outbound permissions because it shares a Screen with Coding.
+
+The left Project/repo/worktree navigator stays stable. Research/Assistant resources enter through their existing resource picker, Task/session history and resource links; the default canvas exposes their domain resources rather than forcing empty worktree rows. Do not add three sidebar-mode buttons or duplicate Project selectors to achieve symmetry.
+
+Workbench is a lens/preset/default action set; it is not a hard filter that closes incompatible tabs. A Screen can combine Research evidence, Coding changes and an Assistant draft. Its default lens controls suggested new resources; each area retains domain actions from its resource context. Changing the default lens never rewrites refs, moves data, restarts a run or grants an effect. Explicit cross-workbench handoff creates/links the existing Task/context receipt, whereas merely viewing evidence beside code is read-only composition.
+
+### 14.5. Three kinds of parallelism
+
+| Parallelism | What changes | What does not follow automatically |
+| --- | --- | --- |
+| Visual | Split areas, tabs, several Screens or eventually windows | New agent, isolated files, new kernel or extra permissions |
+| Execution | Multiple actual Runs/processes/kernels with resource limits | Safe independent writers, acceptance or successful results |
+| Isolation | Separate worktrees/kernel contexts/output roots and host policy | OS sandboxing, reproducibility or authority to publish |
+
+Two chat tabs can address one worktree, but independent concurrent writers must pass runtime coordination or use separate worktrees. Separate notebook files can still share a kernel and hidden memory; show the kernel identity and serialize/use distinct kernels as required. Two Assistant drafts can still target the same external item/account; effect deduplication and revision checks must prevent duplicate dispatch. Screen split is not a parallel-work scheduling command.
+
+Human actions `Open beside`, `New conversation` and `Run in isolated worktree` are therefore separate. The last requires an execution plan showing Task, repo/base, new checkout, agent and permitted effects; it must use existing allocation/admission and leave a real run receipt. Supervision can propose parallel work, but should not infer approval to create writers or spend resources from opening an overview.
+
+### 14.6. Focus, compare and supervise
+
+Use the same Screen/canvas with three presentation presets, not new entities or three runtimes:
+
+- **Focus:** one working area expanded; secondary tools as tabs/splits.
+- **Compare:** two or more explicit areas, pinned source revisions/run IDs when comparing results; expand either area and return without losing arrangement.
+- **Supervise:** compact run/Task projections with attention-first ordering; open exact detail or working area on selection. Avoid rendering every live terminal/chat simultaneously.
+
+Coding comparison: `repo/api@feature/api` beside `repo/web@feature/ui`. Research comparison: experiment Run A/B with dataset/environment/metric provenance. Assistant supervision: draft-review/outbound workflows with exact account and approval status. A mixed Project Screen can combine these areas without moving ownership.
+
+The existing Supervision rail destination remains the aggregate entry across Projects and workbenches. A saved Project supervision Screen is a filtered composition of those same projections, not another run/status database. Aggregate by unique canonical run/Task ID, not number of tabs or agent labels. Show running, real awaiting-input/approval, blocked, failed, finished, cancelled and unknown/stale distinctly; never infer approval requests from generic blocked text or acceptance from completion. Preserve the difference between partial coverage and zero running jobs.
+
+Compact cards show goal/Task, repo/experiment/work item, host, latest observed state and attention reason/time; optional progress only when reported. Click reveals exact Run; explicit `Open working area` takes the user to its worktree/experiment/task view. Stop/steer/approve target one run/request with advertised capability. No broadcast command across all agents without explicit target list and authorized batch semantics. Global supervision opens the owning Project Screen; cross-Project mixed editable Screens are deferred to avoid hidden context spill.
+
+### 14.7. View, runtime and lifecycle independence
+
+| Action | Presentation outcome | Runtime/resource outcome |
+| --- | --- | --- |
+| Switch lens/Screen, split/move/zoom area | Change visible arrangement/focus | No process or effect lifecycle change |
+| Close resource tab | Remove that view, handle unsaved content | Does not itself cancel Run, shut down kernel or terminate PTY |
+| Close Screen | Remove composition; use same-Project fallback or blank default | Background resources remain visible in Supervision/resource history |
+| Stop Run / Shut down kernel / Terminate terminal | Update actual runtime state after explicit command | All views observe the same result |
+| Remove worktree | Coordinated lifecycle action with checks from §13 | Never triggered by closing area or Screen |
+| Duplicate Screen | New layout/view identities | Same underlying resource/process identities unless explicitly creating new work |
+
+This deliberately differs from Open Science's leaf-owned terminal cleanup: Custos uses daemon-owned PTY/run identities. A close action may offer explicit Stop and close where useful, but closing a view alone cannot terminate work. Resource retention/timeouts remain daemon policy and are visible; no promise that processes survive daemon/host restart unless reattachment is supported. Restoring a layout reconnects to known resources or marks them unavailable; it never auto-replays terminal startup commands, launches agents or executes notebook cells.
+
+Several views may observe the same resource. Shared editor buffers key by host/checkout/path; independent snapshot views key by immutable revision. Chat drafts key by canonical conversation; sends use existing acknowledgment/deduplication. PTY views share one process, with one active input/resize owner; secondary mirrors are read-only until explicit takeover. Kernel execution ownership is explicit. Unmount/eviction cannot be the resource shutdown signal.
+
+### 14.8. State, performance and multi-window boundaries
+
+Keep three state owners: canonical domain/runtime records in daemon; Screen/canvas references and geometry in the existing presentation owner; resource view/draft/buffer state in shared resource owners. No duplicate worktree layout registry, process store or global Screen-owned active session can overwrite another area. Current Screen.activeSessionId/defaultWorkspaceId remain legacy presentation hints until scoped area/focused-resource selection replaces their authority; preserve migrations and exact refs.
+
+Stable Project IDs replace current display-name storage keys before claiming durable identity. Optional Screen anchor/scope metadata requires versioned restoration through existing types; this is a target extension, not an implemented DTO. Partial invalid tabs are recoverable independently; preserve valid siblings and user-pinned empty layouts. If a last-worktree/tab record is explicitly empty, do not repopulate it with a demo/default running process.
+
+Keep active plus bounded recent Screens warm; park/reconnect expensive view instances and persist drafts independently before eviction. Subscribe to canonical state once per resource/host, fan out to views, throttle background logs/status and prioritize attention signals. Hidden panes cannot capture shortcuts, auto-focus editors or resize PTYs. Avoid claiming unbounded simultaneously mounted Screens are free.
+
+Screen is not an OS window. Multiple native windows later host Screen views and need process/input ownership plus versioned layout edits; do not expose a working `Detach window` control until supported. Single-window parallel areas and several saved Screens deliver the initial scope without promising multi-host/window synchronization.
+
+### 14.9. Rejected simplifications
+
+Do not make Screen a synonym for worktree: it excludes non-Git/cross-repo work. Do not reduce Screen to geometry only: the useful thing restored is the chosen work, refs and focus. Do not remove Screen entirely: multi-resource research/comparison/supervision requires a persistent composition. Do not demand manual Screen creation before opening a worktree: direct navigation is a shortcut into that same model. Do not make every scope region a second persistent workspace or a new nesting level in the sidebar.
+
+Implementation sequence: exact ResourceRef and runtime/view independence → direct resource reveal and anchored default views → optional scoped canvas subtrees → same-resource mirrors/ownership → aggregate and saved supervision → mixed-domain Screens → native windows only after explicit support. Tests and source limitations are recorded in plan §23. §13's Git operation gates remain required; better composition does not manufacture missing Git capabilities.
+
+### Repository Git implementation boundary
+
+`custos-adapters/src/repository_git.rs` extends the existing workspace adapter family for bounded local Git/gh commands, repository inventory, local ref switching, history, fetch and account metadata. Daemon routes `v1.workspace.git.repository`, `.switch`, `.fetch`, `.account`, `.github` and `v1.github.accounts` resolve a registered Ready local checkout first; remote SSH records fail closed. The exact local checkout/common-dir is re-observed. Account preference uses shared repository-local Git config, so all linked checkouts read one binding without a second SQLite store/schema. Bind only after verifying the requested host/user through gh; unbinding never logs out gh. Account-bound GitHub API calls scrub ambient auth and use the selected host's token only in the child. HTTPS fetch checks remote host/protocol; bound credentials are not sent to another host or injected into SSH. Snapshot exposes metadata only. Fetch is explicit, no checkout/merge/push, with timeout errors requiring refreshed observation.
+
+Switch accepts an expected HEAD, validates literal local branch/ref and refuses dirty/in-progress checkout, occupied branch or known active run/terminal; adapter rechecks before Git. Daemon serializes it with existing candidate mutations; external writes remain a race surfaced by Git/preconditions, not a global lock guarantee. Scope-pinned Files/Changes ignores global sidebar changes; its Git panel shows actual branch inventory/account/remote/history. No fake file/diff/workspace fallback may mask an error or empty repo. Commit no longer stages all when index is empty. UI/server tests must inspect temporary real Git state; fake gh fixtures verify account/host isolation without real credentials. This slice is not full Orca remote-host/publishing/conflict parity.
