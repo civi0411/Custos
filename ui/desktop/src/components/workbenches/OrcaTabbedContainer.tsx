@@ -841,13 +841,15 @@ export const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
     }
 
     if (tabType === 'terminal') {
-      const effectiveWorkspaceId = activeWorkspaceId || tab.workspaceId || initialTerminalWorkspaceId;
+      const effectiveWorkspaceId = tab.workspaceId || activeWorkspaceId || initialTerminalWorkspaceId;
       return frameTabResource(
         <TerminalWorkbenchPane
-          key={`${tab.id}-${effectiveWorkspaceId}`}
+          key={tab.id}
+          tabId={tab.id}
           initialWorkspaceId={effectiveWorkspaceId}
           activeWorkspaceId={effectiveWorkspaceId}
           onSelectWorkspace={onSelectWorkspace}
+          onOpenTab={onOpenTab}
         />
       );
     }
