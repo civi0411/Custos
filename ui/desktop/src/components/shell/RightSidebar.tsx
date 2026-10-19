@@ -90,8 +90,9 @@ export const getTabsForMode = (workbenchMode: string): TabConfig[] => {
       { id: 'governance', label: 'Approvals', icon: ShieldCheck, title: 'Human-in-the-Loop Safeguards & Pending Actions' },
     ];
   }
-  // Engineering mode: 2 focused tabs (Changes, Context)
+  // Engineering mode: 3 focused tabs (Files, Changes, Context)
   return [
+    { id: 'files', label: 'Files', icon: Folder, title: 'Workspace File Explorer' },
     { id: 'changes', label: 'Changes', icon: GitBranch, title: 'Source Control & Git Diff' },
     { id: 'inspector', label: 'Context', icon: SlidersHorizontal, title: 'Worktree, Branch & Session Scope' },
   ];
@@ -144,10 +145,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   const [activeTabId, setActiveTabId] = useState<RightSidebarTab>(() => {
     try {
       const stored = localStorage.getItem('custos.right-sidebar-tab') as RightSidebarTab;
-      if (stored && stored !== 'files') return stored;
-      return mode === 'engineering' ? 'changes' : 'inspector';
+      if (stored) return stored;
+      return mode === 'engineering' ? 'files' : 'inspector';
     } catch {
-      return mode === 'engineering' ? 'changes' : 'inspector';
+      return mode === 'engineering' ? 'files' : 'inspector';
     }
   });
 
@@ -163,10 +164,6 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     const handleSwitch = (e: Event) => {
       const custom = e as CustomEvent<{ tabId: RightSidebarTab }>;
       if (custom.detail?.tabId) {
-        if (custom.detail.tabId === 'files') {
-          window.dispatchEvent(new CustomEvent('custos:open-file-explorer'));
-          return;
-        }
         setActiveTabId(custom.detail.tabId);
         try {
           localStorage.setItem('custos.right-sidebar-tab', custom.detail.tabId);
@@ -650,7 +647,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
       {/* ── Top Activity Bar: 38px Strip with Icon-Only Tab Switcher & Close Button ── */}
       <div className="h-10 shrink-0 flex items-center justify-between px-2.5 border-b border-white/8 bg-[#141518] text-xs">
-        {/* Navigation Tabs (Icon Only with hover tooltip) */}
+        {/* Navigation Tabs (Label + Icon) */}
         <div className="flex items-center gap-1 p-0.5 rounded-lg bg-black/40 border border-white/8 text-xs shrink-0" role="tablist">
           {currentTabs.map((tab) => {
             const Icon = tab.icon;
@@ -660,24 +657,25 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
             return (
               <Tooltip
                 key={tab.id}
-                content={`${tab.label} — ${tab.title}`}
+                content={tab.title}
                 position="bottom"
               >
                 <button
                   type="button"
                   onClick={() => handleSelectTab(tab.id)}
-                  className={`relative size-7 flex items-center justify-center rounded-md transition cursor-pointer select-none ${
+                  className={`relative h-7 px-2.5 flex items-center gap-1.5 rounded-md transition cursor-pointer select-none text-[11px] ${
                     isActive
                       ? 'bg-white/14 text-white shadow-xs font-semibold'
-                      : 'text-white/40 hover:text-white/80 hover:bg-white/6'
+                      : 'text-white/45 hover:text-white/80 hover:bg-white/6 font-medium'
                   }`}
                   role="tab"
                   aria-selected={isActive}
                   aria-label={tab.label}
                 >
                   <Icon className="size-3.5 shrink-0" />
+                  <span>{tab.label}</span>
                   {changeCount !== undefined && changeCount > 0 ? (
-                    <span className="absolute -top-1 -right-1 px-1 min-w-[14px] h-3.5 flex items-center justify-center rounded-full bg-amber-500 text-black text-[9px] font-mono font-bold leading-none shadow-xs">
+                    <span className="px-1 min-w-[13px] h-3.5 flex items-center justify-center rounded-full bg-amber-500 text-black text-[9px] font-mono font-bold leading-none">
                       {changeCount}
                     </span>
                   ) : null}

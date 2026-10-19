@@ -90,7 +90,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   onShowToast,
   onOpenSettings: _onOpenSettings,
   isSidebarCollapsed,
-  onToggleSidebar,
+  onToggleSidebar: _onToggleSidebar,
   resourceTabs,
   isWebTabOpen,
   isWebTabExpanded,
@@ -350,11 +350,10 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     const effectiveWsId = targetWorkspaceId || activeWorkspaceId;
 
     // 1. Files handling:
-    // If opening 'files' without a specific file URL, reveal the Files Explorer in the Left Sidebar
+    // If opening 'files' without a specific file URL, reveal the Files Explorer in the Right Sidebar (Orca pattern)
     if (id === 'files' && (!customUrl || !customUrl.startsWith('custos://'))) {
-      if (isSidebarCollapsed && onToggleSidebar) {
-        onToggleSidebar();
-      }
+      setIsInspectorOpen(true);
+      window.dispatchEvent(new CustomEvent('custos:switch-inspector-tab', { detail: { tabId: 'files' } }));
       return;
     }
 
@@ -538,9 +537,8 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       }
     };
     const handleOpenFilesSidebar = () => {
-      if (isSidebarCollapsed && onToggleSidebar) {
-        onToggleSidebar();
-      }
+      setIsInspectorOpen(true);
+      window.dispatchEvent(new CustomEvent('custos:switch-inspector-tab', { detail: { tabId: 'files' } }));
     };
     window.addEventListener('custos:open-chat-tab', handleOpenChatEvent);
     window.addEventListener('custos:open-tab', handleOpenTabEvent);
@@ -552,7 +550,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       window.removeEventListener('custos:open-files-sidebar', handleOpenFilesSidebar);
       window.removeEventListener('custos:open-file-explorer', handleOpenFilesSidebar);
     };
-  }, [resourceTabs, handleOpenTab, isSidebarCollapsed, onToggleSidebar]);
+  }, [resourceTabs, handleOpenTab, setIsInspectorOpen]);
 
   const pickerResources = resolveResources(
     pickerCapabilities,
@@ -681,15 +679,6 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           activeWorkspaceId={activeWorkspaceId}
           onSelectWorkspace={setActiveWorkspaceId}
           refreshWorkspaces={refreshWorkspaces}
-          onOpenFile={(path, name) => handleOpenTab('files', `custos://file?path=${encodeURIComponent(path)}`, name)}
-          onOpenTab={handleOpenTab}
-          activeFilePath={(() => {
-            const activeTab = resourceTabs.tabs.find((t) => t.id === resourceTabs.activeTabId);
-            if (activeTab?.type === 'files' && activeTab?.url && activeTab.url.startsWith('custos://file?path=')) {
-              return decodeURIComponent(activeTab.url.replace(/^custos:\/\/file\?path=/, ''));
-            }
-            return undefined;
-          })()}
         />
 
         {/* Central Workspace Canvas: Tiling Canvas containing all Panes (Chat, Tasks, Terminal, Editor, Research) */}

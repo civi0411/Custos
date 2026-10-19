@@ -1476,11 +1476,11 @@ export const OrcaTabbedContainer = React.memo(function OrcaTabbedContainer(props
                       type="button"
                       className="px-3.5 py-2 text-xs flex items-center gap-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.09] border border-white/10 transition text-white/80 font-medium cursor-pointer"
                       onClick={() => {
-                        window.dispatchEvent(new CustomEvent('custos:open-file-explorer'));
+                        window.dispatchEvent(new CustomEvent('custos:open-files-sidebar'));
                       }}
                     >
                       <FolderTree size={14} className="text-amber-400/80" />
-                      Open Files
+                      Browse Files (Sidebar)
                     </button>
                     <button
                       type="button"
