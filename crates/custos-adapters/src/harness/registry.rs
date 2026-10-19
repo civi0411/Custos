@@ -457,7 +457,7 @@ impl HarnessRegistry {
 
         for agent in catalog_agents {
             let (mediation, maturity) = if agent.bin == "internal" {
-                (ToolMediationLevel::CustosMediated, HarnessMaturity::VerifiedNative)
+                (ToolMediationLevel::ObserveOnly, HarnessMaturity::VerifiedNative)
             } else {
                 (ToolMediationLevel::ProviderGoverned, HarnessMaturity::DiscoveredCli)
             };
