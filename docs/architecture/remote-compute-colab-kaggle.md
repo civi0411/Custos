@@ -91,6 +91,107 @@ flowchart TD
     R --> V[Research verifier → criterion records]
 ```
 
+### 4.1 Notebook compute binding and recovery design
+
+**Design only:** the current `NotebookCell` and `NotebookKernelState` are keyed by conversation `session_id`; the active coordinator runs a local Python worker. Remote Jupyter connections, multiple notebooks per conversation, compute selection and automatic continuation are not implemented by the Training inspector. No package or cloud runtime is installed by this design.
+
+#### Separate five resource identities
+
+| Resource | Meaning | What survives losing compute |
+|---|---|---|
+| Notebook document | Stable notebook identity, versioned cells, selected files/data and saved outputs; linked to Task/conversation rather than identified by them | Content and recorded outputs, subject to actual persistence |
+| Kernel binding | Exact connection profile/server/kernel/process identity plus epoch and permitted operations | Reference/last observation, not Python variables |
+| Compute lease | Exact provider account/resource, ownership, region, actual accelerator and cleanup obligations | Canonical metadata and unresolved billing responsibility |
+| Training attempt | Frozen recipe/code/data/environment, external job identity, logical progress and parent attempt | Observations/artifacts/checkpoint lineage; not a running process |
+| Checkpoint bundle | Immutable engine-specific state and commit/integrity observations | Only bytes committed to storage that remains accessible |
+
+Notebook is not a Git worktree and is not owned by a Screen. One conversation can refer to several notebooks; two Screens opening the same notebook share the admitted kernel binding and execution queue, not duplicate executions. Initial support uses one active kernel per notebook; comparison uses an explicit fork/new notebook binding, not silent variable sharing. Legacy session-keyed notebooks must migrate deterministically with preserved cell IDs/outputs and links; do not derive new notebook identity from a display title.
+
+Current core `contracts/kernel.rs::KernelPort` means the trusted Task Kernel, not a Python/Jupyter kernel. Do not overload or replace it. Add only the minimal notebook-execution contract to the existing core contract layer when implementing the first remote connection, with explicit notebook terminology and conformance fixtures. Domain types stay I/O-free.
+
+#### Connection path
+
+```mermaid
+flowchart TD
+    N[Notebook resource in Research Lab] --> API[Existing daemon notebook commands]
+    API --> G[Scope and execution admission]
+    G --> Q[Notebook coordinator: binding, epoch and queue]
+    Q --> L[Existing local Python profile]
+    Q --> J[Remote Jupyter adapter]
+    Q --> C[Colab interactive adapter]
+    J --> T[Authenticated TLS or verified SSH tunnel]
+    T --> S[Jupyter Server and exact remote kernel]
+    C --> K[Colab assignment and kernel]
+    S --> GPU[Remote process uses observed accelerator]
+    K --> GPU
+    Q --> E[Bounded output events and execution receipts]
+    E --> P[Research persistence and artifact references]
+    P --> N
+    N --> B[Explicit batch submission of frozen notebook recipe]
+    B --> KG[Kaggle exact notebook version / other admitted job target]
+```
+
+A GPU is available to the remote process through its framework/device environment; it is not forwarded into the desktop process. SSH is transport/host access, Jupyter is a kernel protocol, and a rented-GPU provider is allocation control. They can compose, but are not interchangeable backends. Prefer an existing authenticated Jupyter Server over a private connection or a verified SSH tunnel for the first remote slice. A raw ZeroMQ implementation in Rust and a public unauthenticated notebook server are not prerequisites.
+
+Connect sequence: select an account/host profile → validate endpoint/trust/credential scope → read capabilities and kernelspecs → adopt an explicitly selected kernel or authorize creation → bind exact identity/epoch → probe environment and actual accelerator with a separately admitted bounded diagnostic → show connected status. Creating a kernel is execution, not a read-only probe. Installing packages, creating a VM or uploading files are additional effects, never hidden inside Connect.
+
+Persist only connection/credential references and redacted endpoint metadata. No tokens in notebook cells, URL queries, output logs, prompts or frontend localStorage. Connection setup must constrain destination hosts/redirects and tunnel targets; do not let notebook content choose arbitrary internal URLs. Verify TLS/SSH identity, retain account binding, and do not weaken host verification to make reconnection succeed.
+
+#### Execution and output correctness
+
+- Bind every cell operation to notebook/cell/source digest, kernel ID/epoch, command ID, scope and deadline. A stale binding/epoch/source revision fails before dispatch. Serialize ordinary cell execution per kernel while allowing independent kernels to run concurrently.
+- Jupyter requests have message identity and parent correlation. Match output by exact request/kernel, not the current selected cell or global execution counter. A shell reply and IOPub output can arrive separately; track both, including gaps and post-idle asynchronous output. Idle is not proof a background training process has ended.
+- Handle stream/error/result/display updates with bounded payloads, output truncation markers and CAS references for large artifacts. Treat rich HTML/JavaScript and widget communication as untrusted, not permission to execute frontend code. Initial profile can support text/images and explicitly mark widgets/comm unsupported. Default `allow_stdin=false` until an explicit safe input flow exists.
+- Local inline Python worker is not yet a full Jupyter kernel. Declare its supported output/interrupt semantics rather than claiming protocol parity. Moving process I/O to an adapter must preserve current notebook behavior and outputs.
+- Cell timeout/disconnect after dispatch leaves outcome uncertain; never auto-resend arbitrary cell code. Reconnect to the exact kernel if available, mark missing output, or ask for an explicit new operation. Daemon event replay recovers persisted events, not messages the adapter never received.
+
+#### Three different meanings of switching GPU
+
+| Request | Supported design | Must not claim |
+|---|---|---|
+| Reconnect after transport loss | Reattach exact surviving kernel; verify epoch/process continuity; recover observed output where possible | That a connection loss means kernel death, or all missing output can be replayed |
+| Change interactive notebook compute | Create/adopt another kernel, new binding epoch; retain saved content/outputs with old provenance; offer explicit replay of selected reproducible cells | Moving arbitrary Python namespace, open files, sockets or VRAM; automatic replay of effectful cells |
+| Continue a managed training job elsewhere | Safe-save → independent durable commit → target/engine/authority checks → new attempt restores exact checkpoint | Live migration or guaranteed zero lost steps |
+
+For notebook replay, dependency order must be declared or reviewed; text position alone cannot prove safe order. Network writes, file deletion, dataset publication, account actions and cloud allocations are not replay-safe. Generic `pickle`/`dill` serialization of a whole namespace is not a portable or safe default. Background training should launch as a supervised job from an immutable recipe, rather than an untracked thread owned by a cell execution.
+
+#### Operations and user-visible truth
+
+The existing Local API remains the only desktop entry. Extend existing notebook operations for bind/detach/reconcile, with expected identity/epoch. Keep compute allocation/release, notebook interrupt/restart, job stop and checkpoint operations separate. Operation names and DTOs are frozen only in their implementation packet; this design does not create another protocol namespace.
+
+The future Notebook Compute control renders capabilities and observed state, not a list of always-enabled providers. It must distinguish connection unavailable, kernel busy, observation stale and compute still allocated. A notebook can be disconnected while its remote job and billing resource remain active. Restart warns about memory loss; release previews the exact owned resource and other known active bindings/jobs. Shared/adopted resources cannot be terminated by closing a notebook. Kaggle is shown as a batch destination, not an interactive kernel choice.
+
+Autocontinuation policy belongs to the job, not the toolbar selection: allowed source/target accounts, regions, compatible engine profiles, resume mode, cost/overlap limits and required protection must all be explicit. When a target is unavailable, show waiting/export/fallback choices. Never switch to paid compute, different data or lower precision merely to keep a progress bar moving.
+
+#### Additional upstream research and selection
+
+Research URLs below were read as online source/docs, not cloned or SHA-audited. Pin exact commits/licenses/security advisories and run conformance before copying or adding any dependency. This is a focused study, not a whole-repository audit.
+
+| Upstream | Read entry points | What Custos should learn / not import |
+|---|---|---|
+| [jupyter/jupyter_client](https://github.com/jupyter/jupyter_client) | [`session.py`](https://github.com/jupyter/jupyter_client/blob/main/jupyter_client/session.py), [messaging specification](https://jupyter-client.readthedocs.io/en/stable/messaging.html) | Request/parent IDs, kernel-session changes and channel semantics; use a compatible client/adapter rather than designing an ad-hoc notebook wire protocol. It does not preserve arbitrary state across machines. |
+| [jupyter-server/jupyter_server](https://github.com/jupyter-server/jupyter_server) | [REST API](https://jupyter-server.readthedocs.io/en/latest/developers/rest-api.html), [`connection/channels.py`](https://github.com/jupyter-server/jupyter_server/blob/main/jupyter_server/services/kernels/connection/channels.py) | Kernel lifecycle and channel bridge; optional existing-server attachment, not copying a server into Tauri. REST/kernel channels and version-dependent buffering require conformance; no universal durable replay assumption. |
+| [jupyter-server/enterprise_gateway](https://github.com/jupyter-server/enterprise_gateway) | [`enterprisegatewayapp.py`](https://github.com/jupyter-server/enterprise_gateway/blob/main/enterprise_gateway/enterprisegatewayapp.py), [`remotemanager.py`](https://github.com/jupyter-server/enterprise_gateway/blob/main/enterprise_gateway/services/kernels/remotemanager.py) | Optional later deployment for distributed kernels; not the default local-first dependency or a required Kubernetes control plane. Custos still owns admission and resource identity. These two additional code paths require deeper audit before integration. |
+| [skypilot-org/skypilot](https://github.com/skypilot-org/skypilot) | [managed-job guide](https://docs.skypilot.ai/en/latest/examples/managed-jobs.html), [`jobs/recovery_strategy.py`](https://github.com/skypilot-org/skypilot/blob/master/sky/jobs/recovery_strategy.py) | Relaunch/recovery strategy and persistent checkpoint requirements. Optional managed-job backend for clouds it actually supports; no evidence here of a Colab/Kaggle universal backend. If adopted, do not stack an independent Custos retry controller over its recovery controller. |
+| [fsspec/filesystem_spec](https://github.com/fsspec/filesystem_spec) | [`transaction.py`](https://github.com/fsspec/filesystem_spec/blob/master/fsspec/transaction.py), [transaction documentation](https://filesystem-spec.readthedocs.io/en/latest/features.html#transactions) | Optional Python storage plumbing; transaction guarantees depend on the filesystem and are described as semi-atomic. It cannot replace Custos immutable manifest/verification protocol or guarantee multi-object remote atomicity. |
+
+Selection: Jupyter Client/Server concepts directly inform the next notebook contract; Enterprise Gateway is deferred; SkyPilot is an optional provider adapter candidate after direct single-target correctness; fsspec is optional only if the chosen Python storage path needs it. No dependency is added solely because a repo appears in this table.
+
+#### Placement and delivery order
+
+Extend domain `notebook.rs` with document/binding/observation semantics only when implemented; existing recipe/execution/checkpoint types retain job provenance. Core adds a minimal notebook-execution contract distinct from the trusted Task Kernel. Existing runtime `notebook/coordinator.rs` owns queues/epochs through ports; proposed adapters `notebook/` owns remote/local process transport, while `compute/`, `training/`, `checkpoint/` retain allocation, engine and storage responsibilities from the relay design. Existing ResearchRepository, daemon composition, SDK and Lab remain the persistence/API/presentation owners. No second notebook store or provider registry.
+
+This refines the earlier Colab-first roadmap: **first make the existing local notebook contract safe and host-independent; attach an existing remote Jupyter Server on an owned GPU host; then add cloud allocation and Colab interactive integration.** Kaggle remains a separate batch slice. This avoids testing kernel transport, cloud billing, auth and checkpoint recovery as one inseparable first feature.
+
+Acceptance sequence:
+
+1. Local regression: preserve cells/outputs/interrupt/reset; two notebooks in one conversation and two panes of one notebook do not share unintended state or double-dispatch.
+2. Owned remote CPU/Jupyter fixture: two dependent cells, correct source/output IDs, bounded MIME outputs, lost reply, restarted kernel, stale epoch and daemon reconnect; no automatic replay.
+3. Remote GPU opt-in: actual framework device availability/memory observation, exact environment binding and successful bounded workload. `nvidia-smi` alone does not prove the framework can use the device.
+4. Background job separation: launch a frozen recipe, disconnect/close/reopen without killing it; stop job and release compute tested independently. No lease cleanup of another notebook's/adopted workload.
+5. Save/restore and remote commit follow relay F0–F3, then provider F4–F7; a new GPU kernel can open the same notebook, while only the admitted training attempt restores checkpoint state.
+6. Failure tests include expired auth/tunnel, resource replacement, unknown source still alive, storage outage, unavailable fallback quota, privacy-rejected target and denied paid fallback. Expected result may be blocked/uncertain/waiting, never fabricated continuity.
+
 ## 5. Cách wrap CLI: không parse giao diện terminal
 
 MVP dùng thin Python helper import các module API tại SHA/package đã pin. Tái sử dụng conventions envelope stdio/JSON/version/deadline/cancellation của Custos; concrete helper binding được freeze bằng fixtures ở packet đầu, không tạo protocol có tên mới. Không bắt buộc thêm MCP/A2A giữa hai process do chính Custos sở hữu.

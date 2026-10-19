@@ -110,5 +110,12 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!(
         "../migrations/0034_local_model_load_profiles.sql"
     ))?;
+    let execution_columns = conn
+        .prepare("PRAGMA table_info(research_execution_records)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    if !execution_columns.iter().any(|column| column == "record_json") {
+        conn.execute_batch(include_str!("../migrations/0035_research_execution_snapshot.sql"))?;
+    }
     Ok(())
 }

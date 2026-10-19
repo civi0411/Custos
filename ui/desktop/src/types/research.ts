@@ -235,13 +235,39 @@ export interface ResearchExecutionRecord {
   id: string;
   recipeId: string;
   sessionId?: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'preempted';
   exitCode?: number;
   stdoutCasUri?: string;
   stderrCasUri?: string;
   startedAt: string;
   endedAt?: string;
   artifacts: ResearchExecutionArtifact[];
+  backend?: 'local' | 'colab' | 'kaggle' | 'dedicated_ssh' | 'run_pod' | 'vast_ai' | 'lambda_cloud' | null;
+  checkpoint?: TrainingCheckpointManifest | null;
+  resumeFromAttemptId?: string | null;
+  resumedFromCheckpointId?: string | null;
+  outputNamespace?: string | null;
+  latestObservedStep?: number | null;
+  latestLocalCheckpointStep?: number | null;
+  latestProtectedCheckpointStep?: number | null;
+  lastProtectedAt?: string | null;
+}
+
+export interface TrainingCheckpointManifest {
+  checkpointId: string;
+  globalStep: number;
+  precision: string;
+  commitStatus: 'observed' | 'local_staged' | 'uploading' | 'committed_protected' | 'corrupted';
+  resumabilityLevel: 'export_only' | 'warm_start' | 'training_state_resume' | 'validated_resume';
+  files: { path: string; sizeBytes: number; digest: string; requiredForStateResume: boolean }[];
+}
+
+export interface CheckpointResumeAssessment {
+  metadataValid: boolean;
+  stateInventoryDeclared: boolean;
+  canStart: boolean;
+  blockers: string[];
+  unverifiedChecks: string[];
 }
 
 // ---------------------------------------------------------

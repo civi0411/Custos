@@ -310,3 +310,69 @@ test('GitHub login output preserves device code and strips terminal escape seque
   assert.equal(githubTerminalText('\x1b[32mCode: ABCD-1234\x1b[0m\r\nPress Enter'), 'Code: ABCD-1234\nPress Enter');
   assert.equal(githubTerminalText('\x1b]0;title\x07Device page'), 'Device page');
 });
+
+// Execute the actual nested event handlers, without mounting editors or starting runtimes.
+function nestedHandler(path, predicate, globals) {
+  const source = fs.readFileSync(new URL(`../ui/desktop/src/${path}`, import.meta.url), 'utf8');
+  const parsed = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let expression;
+  function visit(node) {
+    if (!expression && predicate(node)) expression = ts.isVariableDeclaration(node) ? node.initializer : node.initializer.expression;
+    ts.forEachChild(node, visit);
+  }
+  visit(parsed);
+  assert.ok(expression, `Expected handler in ${path}`);
+  const output = ts.transpileModule(`const handler = ${expression.getText(parsed)}; exports.handler = handler;`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText;
+  const exports = {};
+  vm.runInNewContext(output, { exports, ...globals });
+  return exports.handler;
+}
+
+test('focusing a peer Lab tab does not reopen its already-selected conversation or Task', () => {
+  const calls = [];
+  const props = { session: { id: 's' }, selectedTaskId: 't',
+    onOpenSession: id => calls.push(['session', id]), onSelectTask: id => calls.push(['task', id]) };
+  const resourceTabs = { tabs: [{ id: 'lab', sessionId: 's', taskId: 't' }], setActiveTabId: id => calls.push(['tab', id]) };
+  const focus = nestedHandler('components/workbenches/OrcaTabbedContainer.tsx', node => ts.isVariableDeclaration(node) && node.name.getText() === 'focus', {
+    props, resourceTabs, dispatch: action => calls.push(['canvas', action.tabId]),
+  });
+  focus({ id: 'root' }, 'lab');
+  assert.deepEqual(calls, [['canvas', 'lab'], ['tab', 'lab']]);
+  calls.length = 0;
+  props.session = { id: 'other' }; props.selectedTaskId = 'other-task';
+  focus({ id: 'root' }, 'lab');
+  assert.deepEqual(calls, [['canvas', 'lab'], ['tab', 'lab'], ['session', 's'], ['task', 't']]);
+});
+
+test('Lab keyboard navigation wraps, retains focus and leaves modified shortcuts alone', () => {
+  let selected, focused, prevented = 0;
+  const views = ['notebook', 'runs', 'training'];
+  const buttons = views.map((_, index) => ({ focus: () => { focused = index; } }));
+  const handler = nestedHandler('components/workbenches/research/LabPane.tsx', node => ts.isJsxAttribute(node) && node.name.getText() === 'onKeyDown', {
+    views, setView: value => { selected = value; },
+  });
+  const event = key => ({ key, target: buttons[0], currentTarget: { querySelectorAll: () => buttons }, preventDefault: () => { prevented++; } });
+  handler(event('End')); assert.equal(selected, 'training'); assert.equal(focused, 2);
+  handler(event('ArrowLeft')); assert.equal(selected, 'training'); assert.equal(focused, 2);
+  handler(event('ArrowRight')); assert.equal(selected, 'runs'); assert.equal(focused, 1);
+  handler(event('Home')); assert.equal(selected, 'notebook'); assert.equal(focused, 0);
+  handler({ ...event('End'), ctrlKey: true });
+  handler({ ...event('End'), defaultPrevented: true });
+  assert.equal(prevented, 4);
+  assert.equal(selected, 'notebook');
+});
+
+test('Training search shortcut stays pane-local and does not capture typing or IME', () => {
+  let focused = 0, prevented = 0;
+  const handler = nestedHandler('components/workbenches/research/TrainingRunsPane.tsx', node => ts.isJsxAttribute(node) && node.name.getText() === 'onKeyDown', {
+    searchRef: { current: { focus: () => { focused++; } } },
+  });
+  const event = editable => ({ key: '/', nativeEvent: { isComposing: false }, target: { closest: () => editable }, preventDefault: () => { prevented++; } });
+  handler(event(false));
+  handler(event(true));
+  handler({ ...event(false), metaKey: true });
+  handler({ ...event(false), nativeEvent: { isComposing: true } });
+  assert.equal(focused, 1); assert.equal(prevented, 1);
+});

@@ -52,7 +52,7 @@ pub trait ComputePort: Send + Sync {
     /// Stops or terminates an active cloud pod lease to prevent financial leakage
     async fn release_pod(&self, lease_id: &str, terminate: bool) -> Result<(), DomainError>;
 
-    /// Evaluates hardware compatibility gate without silent precision/batch mutation
+    /// Returns a hardware proposal only; does not attest checkpoint bytes or admit execution.
     fn evaluate_compatibility(
         &self,
         source: &AcceleratorSpec,
@@ -79,6 +79,7 @@ pub trait ComputePort: Send + Sync {
         source_grad_accum: u32,
         checkpoint: &TrainingCheckpointManifest,
     ) -> Result<HardwareAdaptationPlan, DomainError> {
+        checkpoint.validate_for_state_resume()?;
         let eval = self.evaluate_compatibility(
             source,
             target,
@@ -93,9 +94,61 @@ pub trait ComputePort: Send + Sync {
                     reasons.join("; ")
                 )))
             }
-            _ => eval.plan.ok_or_else(|| {
+            CompatibilityVerdict::RequiresAdaptation { warnings } => {
+                Err(DomainError::Validation(format!(
+                    "Adaptation requires an explicit recipe revision and engine validation: {}",
+                    warnings.join("; ")
+                )))
+            }
+            CompatibilityVerdict::Compatible => eval.plan.ok_or_else(|| {
                 DomainError::Validation("No adaptation plan available for target".to_string())
             }),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use custos_domain::{CheckpointCommitStatus, CheckpointFileEntry};
+
+    struct OfflineCompute;
+
+    #[async_trait]
+    impl ComputePort for OfflineCompute {
+        async fn probe_accelerator(&self, _: ComputeBackendKind, _: &str) -> Result<AcceleratorSpec, DomainError> {
+            Err(DomainError::Validation("offline test".into()))
+        }
+        async fn get_telemetry(&self, _: ComputeBackendKind, _: &str) -> Result<ComputeTelemetry, DomainError> {
+            Err(DomainError::Validation("offline test".into()))
+        }
+        async fn allocate_pod(&self, _: &CloudPodRequest) -> Result<CloudPodLease, DomainError> {
+            Err(DomainError::Validation("offline test".into()))
+        }
+        async fn release_pod(&self, _: &str, _: bool) -> Result<(), DomainError> {
+            Err(DomainError::Validation("offline test".into()))
+        }
+    }
+
+    #[test]
+    fn failover_requires_protected_state_and_no_implicit_adaptation() {
+        let source = AcceleratorSpec::a100_40gb();
+        let mut checkpoint = TrainingCheckpointManifest::new("c400", 400, 1.0, "s3://b/c", "a".repeat(64))
+            .with_full_state("model@revision", "engine@revision", "cursor400")
+            .with_precision("bf16");
+        for path in ["adapter_model.safetensors", "optimizer.pt", "scheduler.pt", "rng_state.pth", "trainer_state.json"] {
+            checkpoint.files.push(CheckpointFileEntry { path: path.into(), size_bytes: 1,
+                digest: "a".repeat(64), required_for_state_resume: true });
+        }
+        let port = OfflineCompute;
+        assert!(port.plan_failover(&source, &source, 2, 2, &checkpoint).is_err());
+        checkpoint.commit_status = CheckpointCommitStatus::CommittedProtected;
+        assert!(port.plan_failover(&source, &source, 2, 2, &checkpoint).is_ok());
+        let changed_precision = port.plan_failover(&source, &AcceleratorSpec::tesla_t4(), 2, 2, &checkpoint);
+        assert!(matches!(changed_precision, Err(DomainError::Validation(message)) if message.contains("explicit recipe revision")));
+        let smaller_bf16 = AcceleratorSpec::new("small-bf16", 8192, true);
+        assert!(port.plan_failover(&source, &smaller_bf16, 8, 2, &checkpoint).is_err());
+        checkpoint.optimizer_state_preserved = false;
+        assert!(port.plan_failover(&source, &source, 2, 2, &checkpoint).is_err());
     }
 }

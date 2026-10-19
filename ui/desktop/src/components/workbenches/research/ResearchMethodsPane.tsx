@@ -9,6 +9,7 @@ const statusTone: Record<ResearchExecutionRecord['status'], string> = {
   completed: 'text-white/80',
   failed: 'text-red-400',
   cancelled: 'text-[var(--color-fg-subtle)]',
+  preempted: 'text-[var(--color-fg-subtle)]',
 };
 
 export const ResearchMethodsPane: React.FC = () => {

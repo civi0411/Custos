@@ -15,7 +15,7 @@ use custos_domain::{
     ResearchSynthesisProposal, ReviewFinding, ReviewMethod, ReviewStatus, ReviewTargetType,
     ReviewerRecord, SourceRecord, SynthesisProposalStatus,
 };
-use rusqlite::{params, types::Type};
+use rusqlite::{params, types::Type, OptionalExtension};
 
 #[derive(Clone)]
 pub struct ResearchRepository {
@@ -1498,7 +1498,51 @@ impl ResearchRepository {
 
     // Execution Records
     pub fn save_execution_record(&self, record: &ExecutionRecord) -> Result<(), DomainError> {
-        let conn = self.db.lock()?;
+        record.validate_compute_state()?;
+        let snapshot = serde_json::to_string(record)
+            .map_err(|error| DomainError::Validation(error.to_string()))?;
+        let mut conn = self.db.lock()?;
+        let tx = conn.transaction().map_err(|error| DomainError::Validation(error.to_string()))?;
+        let previous: Option<String> = tx.query_row(
+            "SELECT record_json FROM research_execution_records WHERE id = ?1",
+            params![record.id], |row| row.get(0),
+        ).optional().map_err(|error| DomainError::Validation(error.to_string()))?.flatten();
+        let is_new = previous.is_none();
+        if let Some(previous) = previous {
+            let previous: ExecutionRecord = serde_json::from_str(&previous)
+                .map_err(|error| DomainError::Validation(format!("Invalid stored execution snapshot: {error}")))?;
+            if previous.latest_protected_checkpoint_step.is_some_and(|step|
+                record.latest_protected_checkpoint_step.is_none_or(|next| next < step))
+                || previous.latest_observed_step.is_some_and(|step|
+                    record.latest_observed_step.is_none_or(|next| next < step))
+                || previous.latest_local_checkpoint_step.is_some_and(|step|
+                    record.latest_local_checkpoint_step.is_none_or(|next| next < step))
+                || (previous.backend.is_some() && previous.backend != record.backend)
+                || previous.resume_from_attempt_id != record.resume_from_attempt_id
+                || previous.resumed_from_checkpoint_id != record.resumed_from_checkpoint_id
+                || previous.output_namespace != record.output_namespace
+            {
+                return Err(DomainError::Conflict("Execution lineage, output namespace and protected progress cannot be reset".into()));
+            }
+        }
+        if let Some(parent_id) = record.resume_from_attempt_id.as_ref().filter(|_| is_new) {
+            let parent: Option<String> = tx.query_row(
+                "SELECT record_json FROM research_execution_records WHERE id = ?1 AND recipe_id = ?2",
+                params![parent_id, record.recipe_id], |row| row.get(0),
+            ).optional().map_err(|error| DomainError::Validation(error.to_string()))?.flatten();
+            let parent: ExecutionRecord = serde_json::from_str(&parent.ok_or_else(||
+                DomainError::Validation("Continuation parent snapshot was not found for this recipe".into()))?)
+                .map_err(|error| DomainError::Validation(error.to_string()))?;
+            let checkpoint = parent.checkpoint.as_ref().ok_or_else(||
+                DomainError::Validation("Continuation parent has no checkpoint".into()))?;
+            checkpoint.validate_for_state_resume()?;
+            if record.resumed_from_checkpoint_id.as_deref() != Some(checkpoint.checkpoint_id.as_str())
+                || record.output_namespace.as_ref().is_none_or(|ns| ns.trim().is_empty())
+                || record.output_namespace == parent.output_namespace
+            {
+                return Err(DomainError::Validation("Continuation must select the parent's protected checkpoint and an isolated output namespace".into()));
+            }
+        }
         let status_str = match record.status {
             ExecutionRecordStatus::Pending => "pending",
             ExecutionRecordStatus::Running => "running",
@@ -1510,11 +1554,11 @@ impl ResearchRepository {
         let artifacts_json = serde_json::to_string(&record.artifacts)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        conn.execute(
+        let affected = tx.execute(
             "INSERT INTO research_execution_records (
                 id, recipe_id, session_id, status, exit_code, stdout_cas_uri, stderr_cas_uri,
-                started_at, ended_at, artifacts_json
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                started_at, ended_at, artifacts_json, record_json
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
             ON CONFLICT(id) DO UPDATE SET
                 status = excluded.status,
                 exit_code = excluded.exit_code,
@@ -1522,7 +1566,10 @@ impl ResearchRepository {
                 stderr_cas_uri = excluded.stderr_cas_uri,
                 started_at = excluded.started_at,
                 ended_at = excluded.ended_at,
-                artifacts_json = excluded.artifacts_json",
+                artifacts_json = excluded.artifacts_json,
+                record_json = excluded.record_json
+            WHERE research_execution_records.recipe_id = excluded.recipe_id
+              AND research_execution_records.session_id IS excluded.session_id",
             params![
                 record.id,
                 record.recipe_id,
@@ -1534,11 +1581,28 @@ impl ResearchRepository {
                 record.started_at.timestamp(),
                 record.ended_at.map(|dt| dt.timestamp()),
                 artifacts_json,
+                snapshot,
             ],
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
-
+        if affected != 1 {
+            return Err(DomainError::Conflict("Execution recipe and session identities are immutable".into()));
+        }
+        tx.execute("INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![custos_domain::new_id("exec_event"), "research.execution.saved",
+                serde_json::json!({"execution_id": record.id, "recipe_id": record.recipe_id,
+                    "protected_step": record.latest_protected_checkpoint_step}).to_string(), Utc::now().timestamp()])
+            .map_err(|error| DomainError::Validation(error.to_string()))?;
+        tx.commit().map_err(|error| DomainError::Validation(error.to_string()))?;
         Ok(())
+    }
+
+    fn decode_execution_snapshot(snapshot: &str) -> rusqlite::Result<ExecutionRecord> {
+        let record: ExecutionRecord = serde_json::from_str(snapshot)
+            .map_err(|error| rusqlite::Error::FromSqlConversionFailure(10, Type::Text, Box::new(error)))?;
+        record.validate_compute_state()
+            .map_err(|error| rusqlite::Error::FromSqlConversionFailure(10, Type::Text, Box::new(error)))?;
+        Ok(record)
     }
 
     pub fn get_execution_record(&self, id: &str) -> Result<Option<ExecutionRecord>, DomainError> {
@@ -1546,13 +1610,21 @@ impl ResearchRepository {
         let mut stmt = conn
             .prepare(
                 "SELECT id, recipe_id, session_id, status, exit_code, stdout_cas_uri, stderr_cas_uri,
-                        started_at, ended_at, artifacts_json
+                        started_at, ended_at, artifacts_json, record_json
                  FROM research_execution_records WHERE id = ?1",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let mut rows = stmt
             .query_map(params![id], |row| {
+                if let Some(snapshot) = row.get::<_, Option<String>>(10)? {
+                    let record = Self::decode_execution_snapshot(&snapshot)?;
+                    if record.id != row.get::<_, String>(0)? || record.recipe_id != row.get::<_, String>(1)?
+                        || record.session_id != row.get::<_, Option<String>>(2)? {
+                        return Err(rusqlite::Error::InvalidQuery);
+                    }
+                    return Ok(record);
+                }
                 let status_str: String = row.get(3)?;
                 let status = match status_str.as_str() {
                     "running" => ExecutionRecordStatus::Running,
@@ -1560,13 +1632,15 @@ impl ResearchRepository {
                     "failed" => ExecutionRecordStatus::Failed,
                     "cancelled" => ExecutionRecordStatus::Cancelled,
                     "preempted" => ExecutionRecordStatus::Preempted,
-                    _ => ExecutionRecordStatus::Pending,
+                    "pending" => ExecutionRecordStatus::Pending,
+                    _ => return Err(rusqlite::Error::InvalidQuery),
                 };
                 let started_ts: i64 = row.get(7)?;
                 let ended_ts: Option<i64> = row.get(8)?;
                 let artifacts_json: String = row.get(9)?;
                 let artifacts: Vec<ExecutionArtifact> =
-                    serde_json::from_str(&artifacts_json).unwrap_or_default();
+                    serde_json::from_str(&artifacts_json).map_err(|error|
+                        rusqlite::Error::FromSqlConversionFailure(9, Type::Text, Box::new(error)))?;
 
                 Ok(ExecutionRecord {
                     id: row.get(0)?,
@@ -1607,13 +1681,21 @@ impl ResearchRepository {
         let mut stmt = conn
             .prepare(
                 "SELECT id, recipe_id, session_id, status, exit_code, stdout_cas_uri, stderr_cas_uri,
-                        started_at, ended_at, artifacts_json
+                        started_at, ended_at, artifacts_json, record_json
                  FROM research_execution_records WHERE recipe_id = ?1 ORDER BY started_at DESC",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let rows = stmt
             .query_map(params![recipe_id], |row| {
+                if let Some(snapshot) = row.get::<_, Option<String>>(10)? {
+                    let record = Self::decode_execution_snapshot(&snapshot)?;
+                    if record.id != row.get::<_, String>(0)? || record.recipe_id != row.get::<_, String>(1)?
+                        || record.session_id != row.get::<_, Option<String>>(2)? {
+                        return Err(rusqlite::Error::InvalidQuery);
+                    }
+                    return Ok(record);
+                }
                 let status_str: String = row.get(3)?;
                 let status = match status_str.as_str() {
                     "running" => ExecutionRecordStatus::Running,
@@ -1621,13 +1703,15 @@ impl ResearchRepository {
                     "failed" => ExecutionRecordStatus::Failed,
                     "cancelled" => ExecutionRecordStatus::Cancelled,
                     "preempted" => ExecutionRecordStatus::Preempted,
-                    _ => ExecutionRecordStatus::Pending,
+                    "pending" => ExecutionRecordStatus::Pending,
+                    _ => return Err(rusqlite::Error::InvalidQuery),
                 };
                 let started_ts: i64 = row.get(7)?;
                 let ended_ts: Option<i64> = row.get(8)?;
                 let artifacts_json: String = row.get(9)?;
                 let artifacts: Vec<ExecutionArtifact> =
-                    serde_json::from_str(&artifacts_json).unwrap_or_default();
+                    serde_json::from_str(&artifacts_json).map_err(|error|
+                        rusqlite::Error::FromSqlConversionFailure(9, Type::Text, Box::new(error)))?;
 
                 Ok(ExecutionRecord {
                     id: row.get(0)?,
@@ -1827,6 +1911,114 @@ impl ResearchRepository {
 mod tests {
     use super::*;
     use crate::connection::DbConnection;
+
+    fn protected_execution(recipe_id: &str) -> ExecutionRecord {
+        use custos_domain::{CheckpointCommitStatus, CheckpointFileEntry, ComputeBackendKind, TrainingCheckpointManifest};
+        let mut checkpoint = TrainingCheckpointManifest::new("checkpoint400", 400, 1.0, "s3://test/attempt-a/c400", "a".repeat(64))
+            .with_full_state("model@immutable", "unsloth@pinned", "sample400")
+            .with_commit_status(CheckpointCommitStatus::CommittedProtected);
+        for path in ["adapter_model.safetensors", "optimizer.pt", "scheduler.pt", "rng_state.pth", "trainer_state.json"] {
+            checkpoint.files.push(CheckpointFileEntry { path: path.into(), size_bytes: 1,
+                digest: "a".repeat(64), required_for_state_resume: true });
+        }
+        let mut record = ExecutionRecord::new(recipe_id).with_backend(ComputeBackendKind::Colab)
+            .with_output_namespace("attempt-a").with_milestones(450, Some(440), None);
+        record.commit_protected_checkpoint(400, checkpoint).unwrap();
+        record
+    }
+
+    #[test]
+    fn checkpoint_execution_survives_restart_and_preserves_continuation() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("research.db");
+        let path = path.to_str().unwrap();
+        let (recipe_id, parent_id, child_id);
+        {
+            let repo = ResearchRepository::new(DbConnection::open(path).unwrap());
+            let recipe = Recipe::new("train", "train.py", EnvironmentSpec::new());
+            recipe_id = recipe.id.clone();
+            repo.save_recipe(&recipe).unwrap();
+            let parent = protected_execution(&recipe_id);
+            parent_id = parent.id.clone();
+            repo.save_execution_record(&parent).unwrap();
+            let child = ExecutionRecord::new(&recipe_id).with_backend(custos_domain::ComputeBackendKind::Kaggle)
+                .with_resume_from(&parent_id).with_resumed_from_checkpoint("checkpoint400")
+                .with_output_namespace("attempt-b");
+            child_id = child.id.clone();
+            repo.save_execution_record(&child).unwrap();
+        }
+        let db = DbConnection::open(path).unwrap();
+        let repo = ResearchRepository::new(db.clone());
+        let mut parent = repo.get_execution_record(&parent_id).unwrap().unwrap();
+        assert_eq!(parent.latest_observed_step, Some(450));
+        assert_eq!(parent.latest_local_checkpoint_step, Some(440));
+        assert_eq!(parent.latest_protected_checkpoint_step, Some(400));
+        assert_eq!(parent.checkpoint.as_ref().unwrap().checkpoint_id, "checkpoint400");
+        let child = repo.get_execution_record(&child_id).unwrap().unwrap();
+        assert_eq!(child.resume_from_attempt_id.as_deref(), Some(parent_id.as_str()));
+        assert_eq!(child.resumed_from_checkpoint_id.as_deref(), Some("checkpoint400"));
+        assert_eq!(child.backend, Some(custos_domain::ComputeBackendKind::Kaggle));
+        assert_eq!(repo.list_execution_records_for_recipe(&recipe_id).unwrap().len(), 2);
+        let count: u64 = db.lock().unwrap().query_row(
+            "SELECT count(*) FROM outbox_messages WHERE topic = 'research.execution.saved'", [], |row| row.get(0)).unwrap();
+        assert_eq!(count, 2);
+        let mut stale = parent.clone();
+        stale.latest_observed_step = Some(449);
+        assert!(repo.save_execution_record(&stale).is_err());
+        let checkpoint = parent.checkpoint.clone().unwrap();
+        assert!(parent.commit_protected_checkpoint(401, checkpoint).is_err());
+        parent.latest_protected_checkpoint_step = None;
+        parent.last_protected_at = None;
+        assert!(repo.save_execution_record(&parent).is_err());
+    }
+
+    #[test]
+    fn checkpoint_snapshot_and_event_rollback_together() {
+        let db = DbConnection::open_in_memory().unwrap();
+        let repo = ResearchRepository::new(db.clone());
+        let recipe = Recipe::new("train", "train.py", EnvironmentSpec::new());
+        repo.save_recipe(&recipe).unwrap();
+        let record = protected_execution(&recipe.id);
+        db.lock().unwrap().execute_batch(
+            "CREATE TRIGGER fail_execution_event BEFORE INSERT ON outbox_messages
+             WHEN NEW.topic = 'research.execution.saved' BEGIN SELECT RAISE(ABORT, 'injected failure'); END;"
+        ).unwrap();
+        assert!(repo.save_execution_record(&record).is_err());
+        assert!(repo.get_execution_record(&record.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn checkpoint_legacy_rows_decode_but_corrupt_snapshots_do_not_default() {
+        let db = DbConnection::open_in_memory().unwrap();
+        let repo = ResearchRepository::new(db.clone());
+        let recipe = Recipe::new("legacy", "train.py", EnvironmentSpec::new());
+        repo.save_recipe(&recipe).unwrap();
+        let record = ExecutionRecord::new(&recipe.id);
+        repo.save_execution_record(&record).unwrap();
+        db.lock().unwrap().execute("UPDATE research_execution_records SET record_json = NULL WHERE id = ?1", params![record.id]).unwrap();
+        assert!(repo.get_execution_record(&record.id).unwrap().unwrap().checkpoint.is_none());
+        db.lock().unwrap().execute("UPDATE research_execution_records SET record_json = '{broken' WHERE id = ?1", params![record.id]).unwrap();
+        assert!(repo.get_execution_record(&record.id).is_err());
+        assert!(repo.list_execution_records_for_recipe(&recipe.id).is_err());
+    }
+
+    #[test]
+    fn checkpoint_lineage_cannot_target_missing_parent_or_shared_namespace() {
+        let db = DbConnection::open_in_memory().unwrap();
+        let repo = ResearchRepository::new(db);
+        let recipe = Recipe::new("train", "train.py", EnvironmentSpec::new());
+        repo.save_recipe(&recipe).unwrap();
+        let parent = protected_execution(&recipe.id);
+        let mut child = ExecutionRecord::new(&recipe.id).with_resume_from(&parent.id)
+            .with_resumed_from_checkpoint("checkpoint400").with_output_namespace("attempt-a");
+        assert!(repo.save_execution_record(&child).is_err());
+        repo.save_execution_record(&parent).unwrap();
+        assert!(repo.save_execution_record(&child).is_err());
+        child.output_namespace = Some("attempt-b".into());
+        repo.save_execution_record(&child).unwrap();
+        child.session_id = Some("different-session".into());
+        assert!(repo.save_execution_record(&child).is_err());
+    }
 
     #[test]
     fn notebook_replace_is_atomic_scoped_and_deletes_removed_cells() {

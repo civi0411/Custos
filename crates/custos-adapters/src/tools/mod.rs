@@ -5,6 +5,8 @@
 //! - Persistent Memory: Project & global memory management under `.custos/memory`
 //! - Document Processing: Word (.docx), PDF (.pdf), Excel (.xlsx)
 
+pub mod checkpoint;
+
 #[cfg(feature = "autovisualiser")]
 pub mod visualizer {
     pub use crate::mcp::core::autovisualiser::*;

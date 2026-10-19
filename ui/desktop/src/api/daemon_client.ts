@@ -85,6 +85,7 @@ import {
   ArtifactLineageNode,
   ResearchRecipe,
   ResearchExecutionRecord,
+  CheckpointResumeAssessment,
   AnnotationRecord,
 } from '../types/research';
 
@@ -686,6 +687,12 @@ export class DaemonClient {
 
   async getResearchExecution(executionId: string): Promise<ResearchExecutionRecord> {
     return fromDaemon<ResearchExecutionRecord>(await this.request<unknown>('v1.research.executions.get', { execution_id: executionId }));
+  }
+
+  async assessResearchResume(executionId: string): Promise<CheckpointResumeAssessment> {
+    return fromDaemon<CheckpointResumeAssessment>(await this.request<unknown>(
+      'v1.research.executions.resume.assess', { execution_id: executionId },
+    ));
   }
 
   async listResearchAnnotations(artifactId: string, version?: number): Promise<AnnotationRecord[]> {

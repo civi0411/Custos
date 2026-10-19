@@ -20,6 +20,8 @@ use std::os::unix::process::CommandExt;
 pub struct PtyHandle {
     #[cfg(unix)]
     master_fd: i32,
+    #[cfg(windows)]
+    stdin: Arc<std::sync::Mutex<std::process::ChildStdin>>,
     pid: u32,
     terminated: Arc<AtomicBool>,
 }
@@ -59,8 +61,18 @@ impl PtyHandle {
                 return Err(io::Error::last_os_error());
             }
 
-            // Determine shell binary
-            let default_shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+            // Determine shell binary with macOS (/bin/zsh) and Linux (/bin/bash) fallback
+            let default_shell = std::env::var("SHELL").unwrap_or_else(|_| {
+                #[cfg(target_os = "macos")]
+                {
+                    "/bin/zsh".to_string()
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    "/bin/bash".to_string()
+                }
+            });
+
             let (prog, args) = match command_override {
                 Some(cmd) if !cmd.trim().is_empty() => (
                     default_shell.clone(),
@@ -167,11 +179,108 @@ impl PtyHandle {
             ))
         }
 
-        #[cfg(not(unix))]
+        #[cfg(windows)]
         {
+            use std::io::Read;
+            use std::process::{Command, Stdio};
+
+            let comspec = std::env::var("COMSPEC").unwrap_or_else(|_| "powershell.exe".to_string());
+            let (prog, args) = match command_override {
+                Some(cmd) if !cmd.trim().is_empty() => {
+                    if comspec.to_lowercase().ends_with("cmd.exe") {
+                        (comspec, vec!["/c".to_string(), cmd.to_string()])
+                    } else {
+                        (
+                            comspec,
+                            vec![
+                                "-NoProfile".to_string(),
+                                "-Command".to_string(),
+                                cmd.to_string(),
+                            ],
+                        )
+                    }
+                }
+                _ => {
+                    if comspec.to_lowercase().ends_with("cmd.exe") {
+                        (comspec, vec![])
+                    } else {
+                        (comspec, vec!["-NoLogo".to_string()])
+                    }
+                }
+            };
+
+            let mut cmd = Command::new(&prog);
+            cmd.args(&args);
+            cmd.current_dir(working_dir);
+            cmd.stdin(Stdio::piped());
+            cmd.stdout(Stdio::piped());
+            cmd.stderr(Stdio::piped());
+
+            let mut child = cmd.spawn()?;
+            let pid = child.id();
+            let stdin = child.stdin.take().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::Other, "Failed to capture child stdin")
+            })?;
+            let mut stdout = child.stdout.take().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::Other, "Failed to capture child stdout")
+            })?;
+            let mut stderr = child.stderr.take().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::Other, "Failed to capture child stderr")
+            })?;
+
+            let terminated = Arc::new(AtomicBool::new(false));
+            let term_flag = terminated.clone();
+            let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
+
+            let out_tx1 = output_tx.clone();
+            std::thread::spawn(move || {
+                let mut buf = [0u8; 4096];
+                while let Ok(n) = stdout.read(&mut buf) {
+                    if n == 0 {
+                        break;
+                    }
+                    if out_tx1.blocking_send(buf[..n].to_vec()).is_err() {
+                        break;
+                    }
+                }
+            });
+
+            let out_tx2 = output_tx;
+            std::thread::spawn(move || {
+                let mut buf = [0u8; 4096];
+                while let Ok(n) = stderr.read(&mut buf) {
+                    if n == 0 {
+                        break;
+                    }
+                    if out_tx2.blocking_send(buf[..n].to_vec()).is_err() {
+                        break;
+                    }
+                }
+            });
+
+            std::thread::spawn(move || {
+                let status = child.wait().ok();
+                term_flag.store(true, Ordering::SeqCst);
+                let exit_code = status.and_then(|s| s.code());
+                let _ = exit_tx.send(exit_code);
+            });
+
+            Ok((
+                PtyHandle {
+                    stdin: Arc::new(std::sync::Mutex::new(stdin)),
+                    pid,
+                    terminated,
+                },
+                exit_rx,
+            ))
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        {
+            let _ = (working_dir, command_override, cols, rows, output_tx);
             Err(io::Error::new(
                 io::ErrorKind::Unsupported,
-                "PTY streams require a POSIX environment",
+                "PTY streams require a Unix or Windows environment",
             ))
         }
     }
@@ -208,11 +317,23 @@ impl PtyHandle {
             Ok(total)
         }
 
-        #[cfg(not(unix))]
+        #[cfg(windows)]
         {
+            use std::io::Write;
+            let mut lock = self.stdin.lock().map_err(|_| {
+                io::Error::new(io::ErrorKind::Other, "failed to lock child stdin")
+            })?;
+            lock.write_all(data)?;
+            lock.flush()?;
+            Ok(data.len())
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        {
+            let _ = data;
             Err(io::Error::new(
                 io::ErrorKind::Unsupported,
-                "PTY writes require POSIX",
+                "PTY writes require Unix or Windows",
             ))
         }
     }
@@ -234,12 +355,18 @@ impl PtyHandle {
             Ok(())
         }
 
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            let _ = (cols, rows);
+            Ok(())
+        }
+
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = (cols, rows);
             Err(io::Error::new(
                 io::ErrorKind::Unsupported,
-                "PTY resize requires POSIX",
+                "PTY resize requires Unix",
             ))
         }
     }
@@ -257,11 +384,19 @@ impl PtyHandle {
             Ok(())
         }
 
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        {
+            let _ = std::process::Command::new("taskkill")
+                .args(["/PID", &self.pid.to_string(), "/T", "/F"])
+                .output();
+            Ok(())
+        }
+
+        #[cfg(not(any(unix, windows)))]
         {
             Err(io::Error::new(
                 io::ErrorKind::Unsupported,
-                "PTY terminate requires POSIX",
+                "PTY terminate requires Unix or Windows",
             ))
         }
     }

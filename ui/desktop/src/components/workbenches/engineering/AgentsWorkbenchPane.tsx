@@ -15,7 +15,6 @@ import {
   Check,
   Search,
   X,
-  Send,
   Power,
   Sparkles,
   AlertCircle,
@@ -36,6 +35,7 @@ import {
 import { JobActionButton } from '@/components/common';
 import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 import { getAgentBrandIcon } from '@/components/common/AgentIcons';
+import { XTerminalView } from '@/components/common/XTerminalView';
 
 export interface AgentsWorkbenchPaneProps {
   sessionId?: string;
@@ -122,14 +122,8 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
   // Interactive PTY Terminal Mode State
   const [ptySessions, setPtySessions] = useState<TerminalSession[]>([]);
   const [activePtyId, setActivePtyId] = useState<string>('');
-  const [ptyLogs, setPtyLogs] = useState<Record<string, string>>({});
-  const [ptyNextSeqs, setPtyNextSeqs] = useState<Record<string, number>>({});
-  const [ptyInput, setPtyInput] = useState<string>('');
   const [ptySpawning, setPtySpawning] = useState<boolean>(false);
   const [ptyError, setPtyError] = useState<string | null>(null);
-
-  const terminalOutputEndRef = useRef<HTMLDivElement>(null);
-  const ptyInputRef = useRef<HTMLInputElement>(null);
 
   // 1. Fetch Harnesses
   const fetchHarnesses = useCallback(async () => {
@@ -240,11 +234,6 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
 
       setPtySessions((prev) => [session, ...prev]);
       setActivePtyId(session.id);
-      setPtyLogs((prev) => ({
-        ...prev,
-        [session.id]: `[Custos SADE PTY Engine] Spawning agent session for '${selectedHarness?.name || selectedHarnessId}'\n[Command] $ ${launchCommand}\n[Worktree] ${selectedWorkspace?.path || selectedWorkspaceId}\n\n`,
-      }));
-      setPtyNextSeqs((prev) => ({ ...prev, [session.id]: 0 }));
       onShowToast?.(`Spawned interactive session for ${selectedHarness?.name || selectedHarnessId}`);
     } catch (err: any) {
       setPtyError(`Failed to spawn interactive terminal: ${err?.message || err}`);
@@ -272,80 +261,6 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
     }
   }, [selectedWorkspaceId, selectedHarness, loadingHarnesses, ptySessions]);
 
-  const ptyNextSeqsRef = useRef(ptyNextSeqs);
-  useEffect(() => {
-    ptyNextSeqsRef.current = ptyNextSeqs;
-  }, [ptyNextSeqs]);
-
-  // 5. Polling loop for active PTY session output stream
-  useEffect(() => {
-    if (!activePtyId || viewMode !== 'interactive') return;
-    let isSubscribed = true;
-
-    const poll = async () => {
-      const currentSeq = ptyNextSeqsRef.current[activePtyId] || 0;
-      try {
-        const chunk = await daemonClient.readTerminal(activePtyId, currentSeq, 65536);
-        if (!isSubscribed) return;
-
-        if (chunk.data && chunk.data.length > 0) {
-          setPtyLogs((prev) => ({
-            ...prev,
-            [activePtyId]: (prev[activePtyId] || '') + chunk.data,
-          }));
-          const newSeq = chunk.nextSeq ?? chunk.next_seq ?? currentSeq;
-          ptyNextSeqsRef.current = { ...ptyNextSeqsRef.current, [activePtyId]: newSeq };
-          setPtyNextSeqs((prev) => ({
-            ...prev,
-            [activePtyId]: newSeq,
-          }));
-        }
-
-        if (chunk.isEof ?? chunk.is_eof) {
-          setPtySessions((prev) =>
-            prev.map((s) =>
-              s.id === activePtyId && s.status.type === 'active'
-                ? { ...s, status: { type: 'exited' } }
-                : s
-            )
-          );
-        }
-      } catch (err) {
-        console.warn('Agent PTY poll error:', err);
-      }
-    };
-
-    poll();
-    const interval = setInterval(poll, 300);
-    return () => {
-      isSubscribed = false;
-      clearInterval(interval);
-    };
-  }, [activePtyId, viewMode]);
-
-  // Auto-scroll terminal output
-  useEffect(() => {
-    if (viewMode === 'interactive') {
-      terminalOutputEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [ptyLogs, activePtyId, viewMode]);
-
-  // Send input to active PTY terminal
-  const sendPtyInput = async (data: string) => {
-    if (!activePtyId) return;
-    try {
-      await daemonClient.writeTerminal(activePtyId, data);
-    } catch (err: any) {
-      setPtyError(`Terminal write failed: ${err?.message || err}`);
-    }
-  };
-
-  const handlePtySubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!ptyInput.trim() && ptyInput !== '') return;
-    sendPtyInput(ptyInput + '\n');
-    setPtyInput('');
-  };
 
   const handlePtyTerminate = async () => {
     if (!activePtyId) return;
@@ -516,7 +431,6 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
   }, [harnesses, filterFilter, searchQuery]);
 
   const activePtySession = ptySessions.find((s) => s.id === activePtyId);
-  const activePtyLog = (activePtyId && ptyLogs[activePtyId]) || '';
   const isAvailable = selectedHarness?.is_available ?? (selectedHarness as any)?.isAvailable;
   const installCmd = selectedHarness ? INSTALL_COMMANDS[selectedHarness.id] : null;
 
@@ -659,7 +573,7 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
             type="button"
             onClick={() => {
               if (activePtyId) {
-                setPtyLogs((prev) => ({ ...prev, [activePtyId]: '' }));
+                daemonClient.writeTerminal(activePtyId, '\x0c').catch(() => {});
               }
             }}
             className="flex items-center gap-1 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] px-2 py-1 text-[11px] text-[var(--color-fg-muted)] hover:text-[var(--color-fg-default)] cursor-pointer"
@@ -874,63 +788,32 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
                 </div>
               )}
 
-              {/* PTY Terminal Output Stream */}
-              <div className="relative flex-1 overflow-y-auto bg-[#0d1117] p-4 font-mono text-xs leading-relaxed text-zinc-100 select-text">
-                {activePtyLog ? (
-                  <pre className="whitespace-pre-wrap break-all">{activePtyLog}</pre>
+              {/* PTY Interactive Terminal (xterm.js + FitAddon) */}
+              <div className="relative flex-1 overflow-hidden bg-[#0a0a0c]">
+                {activePtyId ? (
+                  <XTerminalView
+                    key={activePtyId}
+                    sessionId={activePtyId}
+                    onSessionTerminated={() => {
+                      setPtySessions((prev) =>
+                        prev.map((s) => (s.id === activePtyId ? { ...s, status: { type: 'exited' } } : s))
+                      );
+                    }}
+                  />
                 ) : (
                   <div className="flex h-full flex-col items-center justify-center text-center text-zinc-500">
                     <Terminal className="h-8 w-8 text-zinc-600 mb-2" />
                     <p className="text-sm font-medium text-zinc-400">
-                      No active PTY process for {selectedHarness?.name || 'this agent'}
+                      No active interactive process for {selectedHarness?.name || 'this agent'}
                     </p>
                     <p className="text-xs text-zinc-600 mt-1 max-w-sm">
-                      Click "Spawn Agent Session" above to launch{' '}
+                      Click &quot;Restart&quot; above to launch{' '}
                       <code>{selectedHarness?.launch_cmd || selectedHarness?.binary_path}</code> in{' '}
                       {selectedWorkspace?.name || 'the workspace'}.
                     </p>
                   </div>
                 )}
-                <div ref={terminalOutputEndRef} />
               </div>
-
-              {/* PTY Interactive Input Bar */}
-              <form
-                onSubmit={handlePtySubmit}
-                className="flex items-center gap-2 border-t border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-3"
-              >
-                <div className="flex items-center gap-1.5 text-zinc-400 font-mono text-xs pl-1">
-                  <span>$</span>
-                </div>
-                <input
-                  ref={ptyInputRef}
-                  type="text"
-                  value={ptyInput}
-                  onChange={(e) => setPtyInput(e.target.value)}
-                  placeholder={
-                    activePtySession && activePtySession.status.type === 'active'
-                      ? `Send keystrokes or prompt to ${selectedHarness?.name}... (Press Enter)`
-                      : 'Session not active. Type initial command or click Spawn above...'
-                  }
-                  className="flex-1 rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-3 py-1.5 font-mono text-xs text-[var(--color-fg-default)] placeholder:text-[var(--color-fg-subtle)] focus:border-[var(--color-border-focus)] focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => sendPtyInput('\x03')}
-                  className="flex items-center gap-1 rounded-md border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 font-mono text-[11px] font-semibold text-rose-400 hover:bg-rose-500/20 transition cursor-pointer"
-                  title="Send Ctrl+C (SIGINT) to interrupt agent"
-                >
-                  ^C
-                </button>
-                <button
-                  type="submit"
-                  disabled={!ptyInput.trim()}
-                  className="flex items-center gap-1.5 rounded-md bg-[var(--color-surface-3)] px-3 py-1.5 text-xs font-medium text-[var(--color-fg-default)] hover:bg-[var(--color-surface-2)] disabled:opacity-40 transition cursor-pointer"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  Send
-                </button>
-              </form>
             </div>
           )}
 

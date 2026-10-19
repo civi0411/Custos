@@ -719,7 +719,7 @@ impl LocalApiDispatcher {
                     CapabilityGroup::Evidence,
                     "Reproduction recipes separated from observed execution records.",
                     Some("knowledge"),
-                    vec!["recipes.list", "recipes.get", "executions.list", "executions.get"],
+                    vec!["recipes.list", "recipes.get", "executions.list", "executions.get", "executions.resume.assess"],
                 )
             } else {
                 CapabilityDescriptor::unavailable(
@@ -3190,7 +3190,7 @@ impl LocalApiDispatcher {
                     Err(error) => ApiResponse::error(req.id, error.to_string()),
                 }
             }
-            "v1.research.executions.get" => {
+            "v1.research.executions.get" | "v1.research.executions.resume.assess" => {
                 let research = match self.research.as_ref() {
                     Some(r) => r,
                     None => return ApiResponse::error(req.id, "ResearchRepository not configured"),
@@ -3200,7 +3200,11 @@ impl LocalApiDispatcher {
                     _ => return ApiResponse::error(req.id, "Missing execution_id parameter"),
                 };
                 match research.get_execution_record(execution_id) {
-                    Ok(Some(record)) => match serde_json::to_value(&record) {
+                    Ok(Some(record)) => match if req.method == "v1.research.executions.resume.assess" {
+                        serde_json::to_value(record.assess_checkpoint_resume())
+                    } else {
+                        serde_json::to_value(&record)
+                    } {
                         Ok(value) => ApiResponse::success(req.id, value),
                         Err(error) => ApiResponse::error(req.id, error.to_string()),
                     },
@@ -8376,6 +8380,24 @@ mod tests {
             })
             .await;
         assert!(get_execution.is_success());
+
+        let assessment = dispatcher.handle_request(ApiRequest {
+            id: "req_exec_assess".into(),
+            method: "v1.research.executions.resume.assess".into(),
+            params: serde_json::json!({ "execution_id": execution.id }),
+        }).await;
+        assert!(assessment.is_success());
+        let assessment = assessment.result.unwrap();
+        assert_eq!(assessment["can_start"], false);
+        assert_eq!(assessment["state_inventory_declared"], false);
+        assert_eq!(assessment["blockers"].as_array().unwrap().len(), 1);
+        for params in [serde_json::json!({}), serde_json::json!({"execution_id": "missing"})] {
+            assert!(!dispatcher.handle_request(ApiRequest {
+                id: "req_exec_assess_bad".into(),
+                method: "v1.research.executions.resume.assess".into(),
+                params,
+            }).await.is_success());
+        }
 
         // 5. Handoff Claim to Coding Task
         let handoff_req = ApiRequest {
