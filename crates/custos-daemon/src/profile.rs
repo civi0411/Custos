@@ -160,27 +160,7 @@ impl ProfileResolver {
     }
 }
 
-/// Ensure a daemon client connection is ready for the given profile.
-///
-/// If daemon is already running, attaches to its local TCP port.
-/// If not running, attempts to spawn `custos-daemon` and waits for it to become ready.
-pub fn ensure_daemon_client(
-    profile: &ProfileResolver,
-) -> Result<std::sync::Arc<crate::local_api::LocalApiClient>, String> {
-    use crate::local_api::LocalApiClient;
-
-    // 1. If port file exists, try to connect and ping
-    if let Ok(client) = LocalApiClient::from_profile(profile) {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| e.to_string())?;
-        if rt.block_on(client.ping()).is_ok() {
-            return Ok(std::sync::Arc::new(client));
-        }
-    }
-
-    // 2. If daemon not reachable, attempt to spawn daemon binary
+fn spawn_daemon_process() {
     let daemon_bin =
         std::env::var("CUSTOS_DAEMON_BIN").unwrap_or_else(|_| "custos-daemon".to_string());
     let mut cmd = std::process::Command::new(&daemon_bin);
@@ -206,21 +186,35 @@ pub fn ensure_daemon_client(
         Ok(_) => eprintln!("[Client] Spawned background custos-daemon process"),
         Err(e) => eprintln!("[Client] Notice: unable to spawn daemon binary directly: {e}"),
     }
+}
 
-    // 3. Poll for port file and successful ping for up to 3 seconds
-    let start = std::time::Instant::now();
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|e| e.to_string())?;
+/// Asynchronously ensure a daemon client connection is ready for the given profile.
+pub async fn ensure_daemon_client_async(
+    profile: &ProfileResolver,
+) -> Result<std::sync::Arc<crate::local_api::LocalApiClient>, String> {
+    use crate::local_api::LocalApiClient;
 
+    // 1. If port file exists, try to connect and ping
+    if let Some(port) = profile.read_port() {
+        let client = LocalApiClient::from_port(port);
+        if client.ping().await.is_ok() {
+            return Ok(std::sync::Arc::new(client));
+        }
+    }
+
+    // 2. If daemon not reachable, attempt to spawn daemon binary
+    spawn_daemon_process();
+
+    // 3. Poll for port file and successful ping for up to 30 seconds
+    let start = tokio::time::Instant::now();
     while start.elapsed() < std::time::Duration::from_secs(30) {
-        if let Ok(client) = LocalApiClient::from_profile(profile) {
-            if rt.block_on(client.ping()).is_ok() {
+        if let Some(port) = profile.read_port() {
+            let client = LocalApiClient::from_port(port);
+            if client.ping().await.is_ok() {
                 return Ok(std::sync::Arc::new(client));
             }
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 
     Err(format!(
@@ -228,6 +222,24 @@ pub fn ensure_daemon_client(
         profile.profile_id(),
         profile.read_port()
     ))
+}
+
+/// Ensure a daemon client connection is ready for the given profile.
+///
+/// If called inside a Tokio runtime, uses block_in_place to prevent nested runtime panics.
+/// Otherwise initializes a current-thread runtime for the blocking wait.
+pub fn ensure_daemon_client(
+    profile: &ProfileResolver,
+) -> Result<std::sync::Arc<crate::local_api::LocalApiClient>, String> {
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        tokio::task::block_in_place(|| handle.block_on(ensure_daemon_client_async(profile)))
+    } else {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| e.to_string())?;
+        rt.block_on(ensure_daemon_client_async(profile))
+    }
 }
 
 /// Exclusive process-level lock held by the running daemon.

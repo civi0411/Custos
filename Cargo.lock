@@ -1558,6 +1558,7 @@ dependencies = [
  "custos-persistence",
  "custos-provider",
  "custos-runtime",
+ "custos-sdk",
  "dirs 5.0.1",
  "fs2",
  "reqwest",
@@ -1695,7 +1696,11 @@ dependencies = [
  "agent-client-protocol",
  "agent-client-protocol-schema",
  "anyhow",
+ "async-trait",
  "base64 0.21.7",
+ "chrono",
+ "custos-core",
+ "custos-domain",
  "futures",
  "rmcp",
  "schemars 1.2.2",
@@ -1705,6 +1710,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "uniffi",
+ "uuid",
 ]
 
 [[package]]

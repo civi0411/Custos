@@ -44,7 +44,7 @@ async fn custos_request(
         Ok(r) => r,
         Err(e) => {
             let profile = ProfileResolver::from_env();
-            if let Ok(new_client) = ensure_daemon_client(&profile) {
+            if let Ok(new_client) = custos_daemon::ensure_daemon_client_async(&profile).await {
                 new_client.send_request(req).await.map_err(|e2| format!("{e}; retry failed: {e2}"))?
             } else {
                 return Err(e);

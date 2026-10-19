@@ -689,11 +689,8 @@ impl LocalApiClient {
         Self::with_arc_transport(Arc::new(TcpTransport::new(addr)))
     }
 
-    pub fn from_profile(profile: &crate::profile::ProfileResolver) -> Result<Self, String> {
-        let port = profile
-            .read_port()
-            .ok_or_else(|| "Daemon port file not found or daemon not running".to_string())?;
-        Ok(Self::from_tcp(format!("127.0.0.1:{port}")))
+    pub fn from_port(port: u16) -> Self {
+        Self::from_tcp(format!("127.0.0.1:{port}"))
     }
 
     pub async fn ping(&self) -> Result<(), String> {
@@ -1048,7 +1045,7 @@ impl LocalApiClient {
         &self,
         req_id: &str,
         request: ExplainPlanRequest,
-    ) -> Result<custos_runtime::oi::ExplainReport, String> {
+    ) -> Result<custos_domain::oi::ExplainReport, String> {
         let params = serde_json::to_value(request).map_err(|e| e.to_string())?;
         let req = ApiRequest::new(req_id, METHOD_OI_EXPLAIN, params);
         let resp = self.transport.send_request(req).await?;
