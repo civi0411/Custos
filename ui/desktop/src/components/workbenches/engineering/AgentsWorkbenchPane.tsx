@@ -22,6 +22,8 @@ import {
   Trash2,
   FolderGit2,
   SlidersHorizontal,
+  Plus,
+  Columns2,
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { daemonClient } from '@/api/daemon_client';
@@ -45,7 +47,13 @@ export interface AgentsWorkbenchPaneProps {
   activeWorkspaceId?: string;
   onSelectWorkspace?: (id: string) => void;
   onShowToast?: (msg: string) => void;
-  onOpenTab?: (id: OrcaTabId) => void;
+  onOpenTab?: (
+    id: OrcaTabId,
+    customUrl?: string,
+    customTitle?: string,
+    targetPane?: 'primary' | 'split',
+    targetWorkspaceId?: string
+  ) => void;
 }
 
 const INSTALL_COMMANDS: Record<string, string> = {
@@ -74,9 +82,12 @@ const INSTALL_COMMANDS: Record<string, string> = {
   deepseek: 'ollama run deepseek-coder-v2',
 };
 
+// Module-level cache keeping session affinity per agent canvas tab across re-renders
+const agentTabSessionMap = new Map<string, string>();
+
 export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
   sessionId,
-  tabId: _tabId,
+  tabId,
   initialHarnessId,
   initialWorkspaceId,
   activeWorkspaceId: propActiveWorkspaceId,
@@ -100,11 +111,18 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
   const [harnesses, setHarnesses] = useState<HarnessDescriptor[]>([]);
   const [loadingHarnesses, setLoadingHarnesses] = useState<boolean>(true);
   const [selectedHarnessId, setSelectedHarnessId] = useState<string>(initialHarnessId || 'claude-code');
+
+  useEffect(() => {
+    if (initialHarnessId && initialHarnessId !== selectedHarnessId) {
+      setSelectedHarnessId(initialHarnessId);
+    }
+  }, [initialHarnessId]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterFilter, setFilterFilter] = useState<'all' | 'installed' | 'missing'>('all');
 
   const [workspaces, setWorkspaces] = useState<ExecutionWorkspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('');
+  const tabKey = tabId || `agent-${selectedHarnessId}-${selectedWorkspaceId || 'main'}`;
   const appliedInitialWorkspace = useRef<string | undefined>(undefined);
 
   // Governed Mode State
@@ -196,13 +214,29 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
     try {
       const list = await daemonClient.listTerminals(selectedWorkspaceId);
       setPtySessions(list);
-      if (list.length > 0 && (!activePtyId || !list.some((s) => s.id === activePtyId))) {
-        setActivePtyId(list[0].id);
+      // 1. Check if this specific tab already has an assigned session that is still active
+      const cachedId = agentTabSessionMap.get(tabKey);
+      if (cachedId && list.some((s) => s.id === cachedId)) {
+        setActivePtyId(cachedId);
+        return;
+      }
+      // 2. Otherwise find an active session running this harness
+      const cmd =
+        selectedHarness?.launch_cmd || (selectedHarness as any)?.launchCmd || selectedHarness?.binary_path;
+      const harnessSession = list.find(
+        (s) =>
+          s.workspace_id === selectedWorkspaceId &&
+          s.status.type === 'active' &&
+          (s.command === cmd || s.command?.includes(selectedHarnessId))
+      );
+      if (harnessSession) {
+        agentTabSessionMap.set(tabKey, harnessSession.id);
+        setActivePtyId(harnessSession.id);
       }
     } catch (err) {
       console.warn('Failed to list terminals:', err);
     }
-  }, [selectedWorkspaceId, activePtyId]);
+  }, [selectedWorkspaceId, tabKey, selectedHarness, selectedHarnessId]);
 
   useEffect(() => {
     loadPtySessions();
@@ -232,6 +266,7 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
         rows: 32,
       });
 
+      agentTabSessionMap.set(tabKey, session.id);
       setPtySessions((prev) => [session, ...prev]);
       setActivePtyId(session.id);
       onShowToast?.(`Spawned interactive session for ${selectedHarness?.name || selectedHarnessId}`);
@@ -246,26 +281,59 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
   const autoSpawnDoneRef = useRef<string | null>(null);
   useEffect(() => {
     if (!selectedWorkspaceId || !selectedHarness || loadingHarnesses) return;
-    const key = `${selectedWorkspaceId}:${selectedHarness.id}`;
+    const isAvail = selectedHarness.is_available ?? (selectedHarness as any)?.isAvailable;
+    if (!isAvail) return;
+
+    const key = `${selectedWorkspaceId}:${selectedHarness.id}:${tabKey}`;
     if (autoSpawnDoneRef.current === key) return;
     autoSpawnDoneRef.current = key;
 
+    const cachedId = agentTabSessionMap.get(tabKey);
+    if (cachedId && ptySessions.some((s) => s.id === cachedId && s.status.type === 'active')) {
+      setActivePtyId(cachedId);
+      return;
+    }
+
     const cmd = selectedHarness.launch_cmd || (selectedHarness as any)?.launchCmd || selectedHarness.binary_path;
     const existing = ptySessions.find(
-      (s) => s.workspace_id === selectedWorkspaceId && s.status.type === 'active' && (s.command === cmd || s.command?.includes(selectedHarness.id))
+      (s) =>
+        s.workspace_id === selectedWorkspaceId &&
+        s.status.type === 'active' &&
+        (s.command === cmd || s.command?.includes(selectedHarness.id))
     );
     if (existing) {
+      agentTabSessionMap.set(tabKey, existing.id);
       setActivePtyId(existing.id);
     } else {
       void spawnAgentPty(cmd);
     }
-  }, [selectedWorkspaceId, selectedHarness, loadingHarnesses, ptySessions]);
+  }, [selectedWorkspaceId, selectedHarness, loadingHarnesses, ptySessions, tabKey]);
 
+  const handleSelectHarness = (harness: HarnessDescriptor) => {
+    setSelectedHarnessId(harness.id);
+    const isAvail = harness.is_available ?? (harness as any)?.isAvailable;
+    if (isAvail) {
+      const cmd = harness.launch_cmd || (harness as any)?.launchCmd || harness.binary_path;
+      const existing = ptySessions.find(
+        (s) =>
+          s.workspace_id === selectedWorkspaceId &&
+          s.status.type === 'active' &&
+          (s.command === cmd || s.command?.includes(harness.id))
+      );
+      if (existing) {
+        agentTabSessionMap.set(tabKey, existing.id);
+        setActivePtyId(existing.id);
+      } else {
+        void spawnAgentPty(cmd);
+      }
+    }
+  };
 
   const handlePtyTerminate = async () => {
     if (!activePtyId) return;
     try {
       await daemonClient.terminateTerminal(activePtyId);
+      agentTabSessionMap.delete(tabKey);
       setPtySessions((prev) =>
         prev.map((s) => (s.id === activePtyId ? { ...s, status: { type: 'terminated' } } : s))
       );
@@ -489,24 +557,50 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
               {activePtySession ? (activePtySession.status.type === 'active' ? 'Active' : 'Stopped') : 'Idle'}
             </span>
           </div>
-
-          {ptySessions.length > 1 && (
-            <NativeSelect
-              value={activePtyId}
-              onChange={(e) => setActivePtyId(e.target.value)}
-              className="rounded border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[11px] text-[var(--color-fg-default)]"
-            >
-              {ptySessions.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.command} ({s.status.type})
-                </option>
-              ))}
-            </NativeSelect>
-          )}
         </div>
 
         {/* Right: Actions */}
         <div className="flex items-center gap-1.5 shrink-0">
+          {/* New Tab */}
+          <button
+            type="button"
+            onClick={() => {
+              onOpenTab?.(
+                'agents',
+                undefined,
+                selectedHarness ? `${selectedHarness.name}` : 'Coding Agent',
+                'primary',
+                selectedWorkspaceId
+              );
+            }}
+            className="flex items-center gap-1 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] px-2 py-1 text-[11px] font-medium text-[var(--color-fg-default)] transition hover:bg-[var(--color-surface-3)] cursor-pointer"
+            title="Open new agent in a separate canvas tab"
+          >
+            <Plus className="h-3 w-3" />
+            <span>New Tab</span>
+          </button>
+
+          {/* Split Tab */}
+          <button
+            type="button"
+            onClick={() => {
+              onOpenTab?.(
+                'agents',
+                undefined,
+                selectedHarness ? `${selectedHarness.name}` : 'Coding Agent',
+                'split',
+                selectedWorkspaceId
+              );
+            }}
+            className="flex items-center gap-1 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] px-2 py-1 text-[11px] font-medium text-[var(--color-fg-default)] transition hover:bg-[var(--color-surface-3)] cursor-pointer"
+            title="Split agent side-by-side (⌘\)"
+          >
+            <Columns2 className="h-3 w-3" />
+            <span>Split</span>
+          </button>
+
+          <div className="h-3.5 w-px bg-[var(--color-border-subtle)]" />
+
           {/* Mode Switcher */}
           <div className="flex items-center rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] p-0.5 text-[11px]">
             <button
@@ -688,7 +782,7 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
               return (
                 <div
                   key={harness.id}
-                  onClick={() => setSelectedHarnessId(harness.id)}
+                  onClick={() => handleSelectHarness(harness)}
                   className={`group relative cursor-pointer rounded-lg border p-2.5 transition ${
                     isSelected
                       ? 'border-[var(--color-border-focus)] bg-[var(--color-surface-2)] shadow-xs'
@@ -750,21 +844,37 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
                         To run {selectedHarness?.name} interactively, install its CLI tool or add it to your PATH:
                       </p>
                       {installCmd && (
-                        <div className="mt-2 flex items-center gap-2">
+                        <div className="mt-2 flex items-center gap-2 flex-wrap">
                           <code className="rounded bg-black/40 px-2 py-1 font-mono text-xs text-amber-100 border border-amber-500/30">
                             {installCmd}
                           </code>
                           <button
                             type="button"
                             onClick={() => handleCopyInstall(installCmd)}
-                            className="flex items-center gap-1 rounded bg-white/10 px-2.5 py-1 text-xs font-medium text-white hover:bg-white/15 border border-white/10"
+                            className="flex items-center gap-1 rounded bg-white/10 px-2.5 py-1 text-xs font-medium text-white hover:bg-white/15 border border-white/10 cursor-pointer"
                           >
                             {copiedInstall ? (
                               <Check className="h-3.5 w-3.5 text-white" />
                             ) : (
                               <Copy className="h-3.5 w-3.5" />
                             )}
-                            {copiedInstall ? 'Copied' : 'Copy Command'}
+                            {copiedInstall ? 'Copied' : 'Copy'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onOpenTab?.(
+                                'terminal',
+                                undefined,
+                                `Install ${selectedHarness?.name || 'Agent'}`,
+                                'primary',
+                                selectedWorkspaceId
+                              );
+                            }}
+                            className="flex items-center gap-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 px-2.5 py-1 text-xs font-medium transition cursor-pointer"
+                          >
+                            <Terminal className="h-3.5 w-3.5" />
+                            <span>Install via Terminal</span>
                           </button>
                         </div>
                       )}
@@ -807,10 +917,21 @@ export const AgentsWorkbenchPane: React.FC<AgentsWorkbenchPaneProps> = ({
                       No active interactive process for {selectedHarness?.name || 'this agent'}
                     </p>
                     <p className="text-xs text-zinc-600 mt-1 max-w-sm">
-                      Click &quot;Restart&quot; above to launch{' '}
-                      <code>{selectedHarness?.launch_cmd || selectedHarness?.binary_path}</code> in{' '}
-                      {selectedWorkspace?.name || 'the workspace'}.
+                      {isAvailable
+                        ? `Click "Launch Agent" below to start ${selectedHarness?.name} in ${selectedWorkspace?.name || 'the workspace'}.`
+                        : `Binary '${selectedHarness?.binary_path}' not found on PATH. Install it to begin.`}
                     </p>
+                    {isAvailable && (
+                      <button
+                        type="button"
+                        onClick={() => spawnAgentPty()}
+                        disabled={ptySpawning}
+                        className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/15 text-white text-xs font-medium transition cursor-pointer disabled:opacity-40"
+                      >
+                        <Play className="size-3.5 text-emerald-400" />
+                        <span>Launch {selectedHarness?.name || 'Agent'}</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

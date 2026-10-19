@@ -36,6 +36,7 @@ import type { ResourceRef } from '@/types/canvas';
 import type { ActiveWorkbench } from '@/components/shell/AppHeader';
 import { useScreenContext } from '@/context/ScreenContext';
 import { ActionIcon } from '@/components/common';
+import { getAgentBrandIcon } from '@/components/common/AgentIcons';
 
 import {
   BrowserWorkbenchPane,
@@ -532,7 +533,12 @@ const getTabIcon = (type: OrcaTabId, active: boolean, tab?: OrcaTab) => {
     case 'activity': return <Activity className={cls} />;
     case 'terminal': return <Terminal className={cls} />;
     case 'worktrees': return <WorktreeIcon className={cls} />;
-    case 'agents': return <Bot className={cls} />;
+    case 'agents': {
+      if (tab?.agentId) {
+        return getAgentBrandIcon(tab.agentId, 14, cls);
+      }
+      return <Bot className={cls} />;
+    }
     case 'browser': return <Globe className={cls} />;
     case 'emulator': return <Smartphone className={cls} />;
     case 'fleet': return <Server className={cls} />;

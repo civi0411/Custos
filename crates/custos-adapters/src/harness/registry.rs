@@ -52,6 +52,36 @@ pub fn probe_binary_available(binary_name: &str) -> bool {
                 return true;
             }
         }
+        #[cfg(windows)]
+        {
+            if let Ok(userprofile) = std::env::var("USERPROFILE") {
+                let cargo_bin = Path::new(&userprofile).join(".cargo/bin");
+                if cargo_bin.join(bin).exists()
+                    || cargo_bin.join(format!("{bin_name}.exe")).exists()
+                    || cargo_bin.join(format!("{bin_name}.cmd")).exists()
+                {
+                    return true;
+                }
+            }
+            if let Ok(appdata) = std::env::var("APPDATA") {
+                let npm_bin = Path::new(&appdata).join("npm");
+                if npm_bin.join(bin).exists()
+                    || npm_bin.join(format!("{bin_name}.cmd")).exists()
+                    || npm_bin.join(format!("{bin_name}.exe")).exists()
+                {
+                    return true;
+                }
+            }
+            if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
+                let pnpm_bin = Path::new(&localappdata).join("pnpm");
+                if pnpm_bin.join(bin).exists()
+                    || pnpm_bin.join(format!("{bin_name}.cmd")).exists()
+                    || pnpm_bin.join(format!("{bin_name}.exe")).exists()
+                {
+                    return true;
+                }
+            }
+        }
     }
     false
 }
