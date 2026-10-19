@@ -50,6 +50,19 @@ impl WorkflowDispatcher {
         format!("{}::{}", task_id, node_id.unwrap_or(""))
     }
 
+    /// Synchronously restores active claims into in-memory state on startup.
+    pub fn restore_from_active_claims(&self, claims: Vec<DispatchClaim>) -> usize {
+        let count = claims.len();
+        if let Ok(mut state) = self.state.try_write() {
+            for claim in claims {
+                let key = Self::index_key(&claim.task_id, claim.node_id.as_deref());
+                state.active_index.insert(key, claim.id.clone());
+                state.claims.insert(claim.id.clone(), claim);
+            }
+        }
+        count
+    }
+
     /// Restores active claims from persistent storage into in-memory state on startup.
     pub async fn restore_from_store(&self) -> Result<usize, DomainError> {
         if let Some(ref store) = self.run_store {
@@ -118,39 +131,63 @@ impl WorkflowDispatcher {
             }
         }
 
-        // 3. Atomic claim check under single state write lock
+        // 3. Check in-memory state under read lock
         let key = Self::index_key(task_id, node_id);
-        let mut state = self.state.write().await;
-
-        if let Some(existing_claim_id) = state.active_index.get(&key) {
-            if let Some(existing_claim) = state.claims.get(existing_claim_id) {
-                if existing_claim.status == ClaimStatus::Pending
-                    || existing_claim.status == ClaimStatus::Dispatched
-                {
-                    return Err(DomainError::Conflict(format!(
-                        "Task '{}'{} is already claimed by '{}' (claim '{}', status {})",
-                        task_id,
-                        node_id
-                            .map(|n| format!(" [node: {}]", n))
-                            .unwrap_or_default(),
-                        existing_claim.assignee,
-                        existing_claim.id,
-                        existing_claim.status
-                    )));
+        {
+            let state = self.state.read().await;
+            if let Some(existing_claim_id) = state.active_index.get(&key) {
+                if let Some(existing_claim) = state.claims.get(existing_claim_id) {
+                    if existing_claim.status == ClaimStatus::Pending
+                        || existing_claim.status == ClaimStatus::Dispatched
+                    {
+                        return Err(DomainError::Conflict(format!(
+                            "Task '{}'{} is already claimed by '{}' (claim '{}', status {})",
+                            task_id,
+                            node_id
+                                .map(|n| format!(" [node: {}]", n))
+                                .unwrap_or_default(),
+                            existing_claim.assignee,
+                            existing_claim.id,
+                            existing_claim.status
+                        )));
+                    }
                 }
             }
         }
 
-        // 4. Create and persist claim
+        // 4. Create claim
         let mut claim = DispatchClaim::new(task_id, assignee, depth);
         if let Some(nid) = node_id {
             claim = claim.with_node_id(nid);
         }
 
+        // 5. Persist to store WITHOUT holding in-memory write lock
         if let Some(ref store) = self.run_store {
             store.claim_ready(&claim).await?;
         }
 
+        // 6. Record in memory state under brief write lock
+        let mut state = self.state.write().await;
+        if self.run_store.is_none() {
+            if let Some(existing_claim_id) = state.active_index.get(&key) {
+                if let Some(existing_claim) = state.claims.get(existing_claim_id) {
+                    if existing_claim.status == ClaimStatus::Pending
+                        || existing_claim.status == ClaimStatus::Dispatched
+                    {
+                        return Err(DomainError::Conflict(format!(
+                            "Task '{}'{} is already claimed by '{}' (claim '{}', status {})",
+                            task_id,
+                            node_id
+                                .map(|n| format!(" [node: {}]", n))
+                                .unwrap_or_default(),
+                            existing_claim.assignee,
+                            existing_claim.id,
+                            existing_claim.status
+                        )));
+                    }
+                }
+            }
+        }
         state.active_index.insert(key, claim.id.clone());
         state.claims.insert(claim.id.clone(), claim.clone());
 
@@ -158,11 +195,15 @@ impl WorkflowDispatcher {
     }
 
     /// Releases an active claim, allowing the task/node to be claimed again.
+    /// Does NOT hold in-memory cache locks across storage I/O.
     pub async fn release_claim(&self, claim_id: &str) -> Result<(), DomainError> {
-        let mut state = self.state.write().await;
+        let claim_opt = {
+            let state = self.state.read().await;
+            state.claims.get(claim_id).cloned()
+        };
 
-        let mut claim = if let Some(c) = state.claims.get(claim_id) {
-            c.clone()
+        let mut claim = if let Some(c) = claim_opt {
+            c
         } else if let Some(ref store) = self.run_store {
             store
                 .get_claim(claim_id)
@@ -180,12 +221,14 @@ impl WorkflowDispatcher {
 
         claim.release()?;
 
-        // Propagate store error: if persistence fails, in-memory active state remains untouched
+        // Propagate store error: if persistence fails, in-memory active state remains untouched.
+        // Storage I/O is performed WITHOUT holding the in-memory write lock.
         if let Some(ref store) = self.run_store {
             store.update_claim(&claim).await?;
         }
 
         let key = Self::index_key(&claim.task_id, claim.node_id.as_deref());
+        let mut state = self.state.write().await;
         if let Some(current_id) = state.active_index.get(&key) {
             if current_id == claim_id {
                 state.active_index.remove(&key);
@@ -197,15 +240,19 @@ impl WorkflowDispatcher {
     }
 
     /// Marks a pending claim as Dispatched and binds it to a WorkerRun ID.
+    /// Does NOT hold in-memory cache locks across storage I/O.
     pub async fn mark_dispatched(
         &self,
         claim_id: &str,
         worker_run_id: &str,
     ) -> Result<(), DomainError> {
-        let mut state = self.state.write().await;
+        let claim_opt = {
+            let state = self.state.read().await;
+            state.claims.get(claim_id).cloned()
+        };
 
-        let mut claim = if let Some(c) = state.claims.get(claim_id) {
-            c.clone()
+        let mut claim = if let Some(c) = claim_opt {
+            c
         } else if let Some(ref store) = self.run_store {
             store
                 .get_claim(claim_id)
@@ -223,11 +270,13 @@ impl WorkflowDispatcher {
 
         claim.mark_dispatched(worker_run_id)?;
 
-        // Propagate store error: if persistence fails, in-memory state remains untouched
+        // Propagate store error: if persistence fails, in-memory state remains untouched.
+        // Storage I/O is performed WITHOUT holding the in-memory write lock.
         if let Some(ref store) = self.run_store {
             store.update_claim(&claim).await?;
         }
 
+        let mut state = self.state.write().await;
         state.claims.insert(claim.id.clone(), claim);
         Ok(())
     }
@@ -565,5 +614,44 @@ mod tests {
             .claim_ready_task("task_restart", None, "worker_2", 1)
             .await;
         assert!(conflict.is_err(), "Should refuse conflict after restore");
+    }
+
+    #[tokio::test]
+    async fn test_restore_from_active_claims_synchronous() {
+        let dispatcher = WorkflowDispatcher::new();
+        let claim = DispatchClaim::new("task_sync_restore", "worker_1", 1);
+        let restored = dispatcher.restore_from_active_claims(vec![claim.clone()]);
+        assert_eq!(restored, 1);
+
+        let active = dispatcher.get_active_claim("task_sync_restore", None).await;
+        assert!(active.is_some());
+        assert_eq!(active.unwrap().id, claim.id);
+
+        let conflict = dispatcher
+            .claim_ready_task("task_sync_restore", None, "worker_2", 1)
+            .await;
+        assert!(conflict.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_mark_dispatched_storage_error_preserves_state() {
+        let store = Arc::new(MockRunStore::new());
+        let dispatcher = WorkflowDispatcher::new().with_run_store(store.clone());
+
+        let claim = dispatcher
+            .claim_ready_task("task_dispatch_err", None, "worker_1", 1)
+            .await
+            .expect("Initial claim succeeds");
+
+        store
+            .fail_update
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+
+        let err = dispatcher.mark_dispatched(&claim.id, "worker_run_999").await;
+        assert!(err.is_err(), "mark_dispatched must fail on store error");
+
+        // In-memory claim status must remain Pending
+        let active = dispatcher.get_active_claim("task_dispatch_err", None).await.unwrap();
+        assert_eq!(active.status, ClaimStatus::Pending);
     }
 }

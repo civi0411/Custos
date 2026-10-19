@@ -213,12 +213,8 @@ impl CustosRuntime {
                 .with_journal_manager(session_manager.clone())
                 .with_workspace_coordinator(workspace_coordinator.clone()),
         );
-        let startup_dispatcher = workflow.dispatcher().clone();
-        tokio::spawn(async move {
-            if let Err(e) = startup_dispatcher.restore_from_store().await {
-                tracing::warn!("Failed to restore active claims on startup: {:?}", e);
-            }
-        });
+        let active_claims = store.runs().list_active_claims()?;
+        workflow.dispatcher().restore_from_active_claims(active_claims);
         let terminal_coordinator = Arc::new(custos_runtime::TerminalCoordinator::new());
         let python_coordinator = Arc::new(custos_runtime::PythonKernelCoordinator::new());
 

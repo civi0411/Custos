@@ -434,15 +434,17 @@ impl RunRepository {
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        let _ = conn.execute(
+        conn.execute(
             "UPDATE dispatch_claims SET status = 'released', released_at = ?1 WHERE status IN ('pending', 'dispatched')",
             params![now],
-        );
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        let _ = conn.execute(
+        conn.execute(
             "UPDATE launch_attempts SET status = 'unknown', detail = 'Daemon restart during in-flight execution; recovered fail-closed', resolved_at = ?1 WHERE status IN ('prepared')",
             params![now],
-        );
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         Ok(updated_wruns + updated_runs)
     }

@@ -274,7 +274,7 @@ impl TaskRuntime {
 
         if recovered_any {
             if let Some(claim) = self.dispatcher.get_active_claim(task_id, None).await {
-                let _ = self.dispatcher.release_claim(&claim.id).await;
+                self.dispatcher.release_claim(&claim.id).await?;
             }
             if let Some(mut claim) = store.get_active_claim(task_id, None).await? {
                 claim.release()?;
@@ -413,21 +413,45 @@ impl TaskRuntime {
         if let Some(ref root) = cmd.workspace_root {
             run.metadata["workspace_root"] = serde_json::json!(root);
         }
+        let host_name = std::env::var("HOSTNAME").unwrap_or_else(|_| "localhost".to_string());
+        run.metadata["host"] = serde_json::json!(host_name);
+        run.metadata["generation"] = serde_json::json!(run.attempt);
+        run.metadata["executor_id"] = serde_json::json!(cmd.actor);
 
         if let Some(ref store) = self.run_store {
-            store.save_run(&run).await?;
+            if let Err(e) = store.save_run(&run).await {
+                if let Err(rel_err) = self.dispatcher.release_claim(&claim.id).await {
+                    tracing::error!(claim_id = %claim.id, error = %rel_err, "Failed to release claim after save_run error");
+                }
+                return Err(e);
+            }
         }
 
         // 5. Instantiate bounded WorkerRun and mark claim dispatched
         let mut wrun = WorkerRun::new(cmd.task_id.clone(), cmd.actor.clone(), 3);
         wrun.run_id = Some(run.id.clone());
-        wrun.transition(RunStatus::Active)?;
-
-        if let Some(ref store) = self.run_store {
-            store.save_worker_run(&wrun).await?;
+        if let Err(e) = wrun.transition(RunStatus::Active) {
+            if let Err(rel_err) = self.dispatcher.release_claim(&claim.id).await {
+                tracing::error!(claim_id = %claim.id, error = %rel_err, "Failed to release claim after wrun transition error");
+            }
+            return Err(e);
         }
 
-        let _ = self.dispatcher.mark_dispatched(&claim.id, &wrun.id).await;
+        if let Some(ref store) = self.run_store {
+            if let Err(e) = store.save_worker_run(&wrun).await {
+                if let Err(rel_err) = self.dispatcher.release_claim(&claim.id).await {
+                    tracing::error!(claim_id = %claim.id, error = %rel_err, "Failed to release claim after save_worker_run error");
+                }
+                return Err(e);
+            }
+        }
+
+        if let Err(e) = self.dispatcher.mark_dispatched(&claim.id, &wrun.id).await {
+            if let Err(rel_err) = self.dispatcher.release_claim(&claim.id).await {
+                tracing::error!(claim_id = %claim.id, error = %rel_err, "Failed to release claim after mark_dispatched error");
+            }
+            return Err(e);
+        }
 
         // Native agents must run in the registered workspace selected by the user.
         // A second implicit lease would be based on the daemon's own cwd and could
@@ -757,7 +781,9 @@ impl TaskRuntime {
                         .filter(|m| !m.trim().is_empty())
                         .unwrap_or_else(|| model.provider_id());
 
-                    let _ = launch.mark_launched("model", Some(target_model.to_string()));
+                    if let Some(ref store) = self.run_store {
+                        store.save_launch_attempt(&launch).await?;
+                    }
                     run.metadata["launch_attempt_id"] = serde_json::json!(launch.id);
                     wrun.continuation_packet_ref = Some(format!("launch:{}", launch.id));
 
@@ -794,7 +820,22 @@ impl TaskRuntime {
                     );
                     req.reasoning_effort = run.metadata.get("reasoning_effort").and_then(|v| v.as_str()).map(str::to_string);
                     req.provider_account_id = run.metadata.get("provider_account_id").and_then(|v| v.as_str()).map(str::to_string);
-                    let mut receiver = model.stream(&req).await?;
+                    let mut receiver = match model.stream(&req).await {
+                        Ok(rx) => {
+                            launch.mark_launched("model", Some(target_model.to_string()))?;
+                            if let Some(ref store) = self.run_store {
+                                store.save_launch_attempt(&launch).await?;
+                            }
+                            rx
+                        }
+                        Err(err) => {
+                            launch.mark_failed(err.to_string())?;
+                            if let Some(ref store) = self.run_store {
+                                let _ = store.save_launch_attempt(&launch).await;
+                            }
+                            return Err(err);
+                        }
+                    };
                     let mut content = String::new();
                     let mut usage = custos_provider::TokenUsage::default();
                     let mut completed = false;
@@ -848,7 +889,7 @@ impl TaskRuntime {
                     turn_output = Some(resp.content);
                     if let Some(ref store) = self.run_store {
                         store.save_run(&run).await?;
-                        let _ = store.save_worker_run(&wrun).await;
+                        store.save_worker_run(&wrun).await?;
                     }
                 }
             }
@@ -963,7 +1004,7 @@ impl TaskRuntime {
             if let Some(ref mut l) = lease {
                 let _ = l.release();
             }
-            let _ = self.dispatcher.release_claim(&claim_id).await;
+            self.dispatcher.release_claim(&claim_id).await?;
         }
 
         let handle = RunHandle {
