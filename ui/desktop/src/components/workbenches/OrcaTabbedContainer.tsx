@@ -841,10 +841,10 @@ export const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
     }
 
     if (tabType === 'terminal') {
-      const effectiveWorkspaceId = tab.workspaceId || initialTerminalWorkspaceId || activeWorkspaceId;
+      const effectiveWorkspaceId = activeWorkspaceId || tab.workspaceId || initialTerminalWorkspaceId;
       return frameTabResource(
         <TerminalWorkbenchPane
-          key={tab.id}
+          key={`${tab.id}-${effectiveWorkspaceId}`}
           initialWorkspaceId={effectiveWorkspaceId}
           activeWorkspaceId={effectiveWorkspaceId}
           onSelectWorkspace={onSelectWorkspace}
@@ -1048,10 +1048,10 @@ export const OrcaTabbedContainer = React.memo(function OrcaTabbedContainer(props
     dispatch({ type: 'focus', groupId: group.id, tabId });
     resourceTabs.setActiveTabId(tabId);
     const targetTab = resourceTabs.tabs.find((t) => t.id === tabId);
-    if (targetTab?.sessionId && props.onOpenSession) {
+    if (targetTab?.sessionId && targetTab.sessionId !== props.session?.id && props.onOpenSession) {
       props.onOpenSession(targetTab.sessionId);
     }
-    if (targetTab?.taskId && props.onSelectTask) {
+    if (targetTab?.taskId && targetTab.taskId !== props.selectedTaskId && props.onSelectTask) {
       props.onSelectTask(targetTab.taskId);
     }
   };
