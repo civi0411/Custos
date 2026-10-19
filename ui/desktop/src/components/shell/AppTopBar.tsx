@@ -14,7 +14,6 @@ import {
   Bot,
   Globe,
   Smartphone,
-  Folder,
 } from 'lucide-react';
 import { isMacOS, formatKeyCombo } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
@@ -113,9 +112,6 @@ export const AppTopBar: React.FC = () => {
       } else if ((e.metaKey || e.ctrlKey) && e.altKey && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent('custos:open-tab', { detail: { id: 'emulator' } }));
-      } else if ((e.metaKey || e.ctrlKey) && e.altKey && (e.key.toLowerCase() === 'e' || e.key.toLowerCase() === 'f')) {
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent('custos:open-files-sidebar'));
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -373,21 +369,9 @@ export const AppTopBar: React.FC = () => {
           minWidth: isInspectorOpen ? inspectorWidth : undefined,
         }}
       >
-        {/* Quick Preview & Explorer buttons in Engineering mode */}
+        {/* Quick Preview buttons in Engineering mode */}
         {activeWorkbench === 'engineering' && (
           <div className="flex items-center gap-1 border-r border-white/8 pr-1.5 mr-0.5">
-            <button
-              type="button"
-              onClick={() => {
-                window.dispatchEvent(new CustomEvent('custos:open-files-sidebar'));
-              }}
-              className="flex items-center gap-1 h-6.5 px-2 rounded-md border border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition text-xs cursor-pointer select-none"
-              title="File Explorer (⌥⌘E)"
-              aria-label="File Explorer"
-            >
-              <Folder className="size-3.5 text-amber-400" />
-              <span className="text-[11px] font-medium hidden md:inline">Files</span>
-            </button>
             <button
               type="button"
               onClick={() => window.dispatchEvent(new CustomEvent('custos:open-tab', { detail: { id: 'browser' } }))}

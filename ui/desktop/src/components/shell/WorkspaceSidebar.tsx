@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { useScreenContext } from '@/context/ScreenContext';
 import {
@@ -23,11 +23,23 @@ import {
   X,
   FlaskConical,
   Bot,
+  Folder,
+  FolderTree,
+  FileCode,
 } from 'lucide-react';
 import type { Session } from '@/types';
 import { sessionToWorkflowCard } from '@/lib/workflow';
 import { daemonClient } from '@/api/daemon_client';
-import type { ExecutionWorkspace, Task, WorkspaceDetectionResult } from '@/types/domain';
+import type {
+  ExecutionWorkspace,
+  Task,
+  WorkspaceDetectionResult,
+  WorkspaceFileTree,
+  WorkspaceFileEntry,
+  WorkspaceDiffSummary,
+  WorkspaceDiffEntry,
+} from '@/types/domain';
+import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 import { Tooltip } from '@/components/common';
 
 export interface SidebarTool {
@@ -90,6 +102,8 @@ export interface WorkspaceSidebarProps {
   activeWorkspaceId?: string;
   onSelectWorkspace?: (id: string) => void;
   refreshWorkspaces?: () => Promise<ExecutionWorkspace[]>;
+  onOpenFile?: (path: string, name: string) => void;
+  onOpenTab?: (id: OrcaTabId, customUrl?: string, customTitle?: string) => void;
 }
 
 export interface WorktreeItem {
@@ -150,6 +164,8 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   activeWorkspaceId: propActiveWorkspaceId,
   onSelectWorkspace: propOnSelectWorkspace,
   refreshWorkspaces: propRefreshWorkspaces,
+  onOpenFile,
+  onOpenTab,
   activeWorkbench = 'engineering',
 }) => {
   const {
@@ -177,6 +193,90 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   const [recentFilter, setRecentFilter] = useState<'all' | 'chats' | 'tasks'>('all');
   const [recentSearch, setRecentSearch] = useState('');
 
+  // Active Workspace File Tree (Left Sidebar Explorer)
+  const [fileTree, setFileTree] = useState<WorkspaceFileTree | null>(null);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [diffSummary, setDiffSummary] = useState<WorkspaceDiffSummary | null>(null);
+  const [isFileTreeOpen, setIsFileTreeOpen] = useState(true);
+
+  const loadFileTree = useCallback(async () => {
+    if (!activeWorkspaceId) {
+      setFileTree(null);
+      setDiffSummary(null);
+      return;
+    }
+    try {
+      setFilesLoading(true);
+      const [tree, diff] = await Promise.all([
+        daemonClient.getWorkspaceFileTree(activeWorkspaceId),
+        daemonClient.getWorkspaceDiff(activeWorkspaceId).catch(() => null),
+      ]);
+      setFileTree(tree);
+      setDiffSummary(diff);
+      if (tree?.entries) {
+        const topLevelDirs = new Set<string>();
+        tree.entries.forEach((f) => {
+          if (f.is_dir && f.path.split('/').length <= 1) {
+            topLevelDirs.add(f.path);
+          }
+        });
+        setExpandedFolders((prev) => (prev.size > 0 ? prev : topLevelDirs));
+      }
+    } catch {
+      setFileTree(null);
+      setDiffSummary(null);
+    } finally {
+      setFilesLoading(false);
+    }
+  }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    if (activeWorkbench === 'engineering' && activeWorkspaceId) {
+      void loadFileTree();
+    }
+  }, [activeWorkbench, activeWorkspaceId, loadFileTree]);
+
+  const toggleFolder = useCallback((path: string) => {
+    setExpandedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
+
+  const diffMap = useMemo(() => {
+    const map = new Map<string, WorkspaceDiffEntry>();
+    if (diffSummary?.files) {
+      diffSummary.files.forEach((f) => map.set(f.path, f));
+    }
+    return map;
+  }, [diffSummary]);
+
+  const isNodeVisible = useCallback((node: WorkspaceFileEntry, expanded: Set<string>) => {
+    const parts = node.path.split('/');
+    if (parts.length <= 1) return true;
+    for (let i = 1; i < parts.length; i++) {
+      const parent = parts.slice(0, i).join('/');
+      if (!expanded.has(parent)) return false;
+    }
+    return true;
+  }, []);
+
+  // Search & Filters
+  const [filterQuery, setFilterQuery] = useState('');
+  const [filterActiveOnly, setFilterActiveOnly] = useState(false);
+
+  const fileEntriesForTree = useMemo(() => {
+    if (!fileTree?.entries) return [];
+    if (!filterQuery.trim()) return fileTree.entries;
+    const q = filterQuery.toLowerCase();
+    return fileTree.entries.filter(
+      (node) => node.name.toLowerCase().includes(q) || node.path.toLowerCase().includes(q)
+    );
+  }, [fileTree, filterQuery]);
+
   // Synchronize sidebar when switched externally (e.g. ActivityRail)
   useEffect(() => {
     const handleSwitchTab = (e: Event) => {
@@ -199,10 +299,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     window.addEventListener('custos:switch-sidebar-tab', handleSwitchTab);
     return () => window.removeEventListener('custos:switch-sidebar-tab', handleSwitchTab);
   }, []);
-
-  // Search & Filters
-  const [filterQuery, setFilterQuery] = useState('');
-  const [filterActiveOnly, setFilterActiveOnly] = useState(false);
 
   // Expand / collapse states
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({ proj_agenthub: true });
@@ -1482,6 +1578,111 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                                             <span className="text-white/35 font-mono truncate max-w-[65px]">
                                               · {wt.agentActivity.model}
                                             </span>
+                                          )}
+                                        </div>
+                                      )}
+
+                                      {/* ── Active Worktree File Folder Tree ── */}
+                                      {isWtActive && (
+                                        <div
+                                          className="mt-2 pt-2 border-t border-white/8 space-y-1"
+                                          onClick={(e) => e.stopPropagation()}
+                                        >
+                                          <div
+                                            className="flex items-center justify-between px-1 py-0.5 text-white/50 hover:text-white text-[10px] uppercase font-semibold tracking-wider cursor-pointer select-none"
+                                            onClick={() => setIsFileTreeOpen((prev) => !prev)}
+                                          >
+                                            <div className="flex items-center gap-1.5">
+                                              <FolderTree className="size-3 text-amber-400" />
+                                              <span>Files</span>
+                                              {fileTree?.entries && (
+                                                <span className="font-mono text-[9px] text-white/40 font-normal">
+                                                  ({fileTree.entries.filter((e) => !e.is_dir).length})
+                                                </span>
+                                              )}
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  void loadFileTree();
+                                                }}
+                                                className="p-0.5 hover:text-white text-white/30 rounded"
+                                                title="Refresh files"
+                                              >
+                                                <RefreshCw className={`size-2.5 ${filesLoading ? 'animate-spin' : ''}`} />
+                                              </button>
+                                              {isFileTreeOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+                                            </div>
+                                          </div>
+
+                                          {isFileTreeOpen && (
+                                            <div className="space-y-0.5 max-h-[380px] overflow-y-auto no-scrollbar pt-0.5">
+                                              {filesLoading && !fileTree ? (
+                                                <div className="text-[10.5px] text-white/40 py-2 pl-2">Scanning workspace files…</div>
+                                              ) : !fileTree || fileTree.entries.length === 0 ? (
+                                                <div className="text-[10.5px] text-white/30 py-2 pl-2 italic">No files in workspace</div>
+                                              ) : (
+                                                fileEntriesForTree
+                                                  .filter((node) => isNodeVisible(node, expandedFolders))
+                                                  .map((node) => {
+                                                    const depth = Math.max(0, node.path.split('/').length - 1);
+                                                    const diffEntry = !node.is_dir ? diffMap.get(node.path) : undefined;
+                                                    return (
+                                                      <div
+                                                        key={node.path}
+                                                        onClick={(e) => {
+                                                          e.stopPropagation();
+                                                          if (node.is_dir) {
+                                                            toggleFolder(node.path);
+                                                          } else {
+                                                            onOpenFile?.(node.path, node.name);
+                                                            onOpenTab?.(
+                                                              'files',
+                                                              `custos://file?path=${encodeURIComponent(node.path)}`,
+                                                              node.name
+                                                            );
+                                                          }
+                                                        }}
+                                                        className="group flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-white/8 cursor-pointer text-white/75 hover:text-white transition"
+                                                        style={{ paddingLeft: `${Math.min(depth * 10 + 4, 36)}px` }}
+                                                        title={node.name}
+                                                      >
+                                                        {node.is_dir ? (
+                                                          <>
+                                                            {expandedFolders.has(node.path) ? (
+                                                              <ChevronDown className="size-2.5 text-white/40 shrink-0" />
+                                                            ) : (
+                                                              <ChevronRight className="size-2.5 text-white/40 shrink-0" />
+                                                            )}
+                                                            <Folder className="size-3 text-amber-400/80 shrink-0" />
+                                                          </>
+                                                        ) : (
+                                                          <>
+                                                            <div className="size-2.5 shrink-0" />
+                                                            <FileCode className="size-3 text-sky-400/70 shrink-0" />
+                                                          </>
+                                                        )}
+                                                        <span className="truncate font-mono text-[11px] flex-1">{node.name}</span>
+                                                        {diffEntry && (
+                                                          <span
+                                                            className={`font-mono text-[8.5px] font-bold px-1 rounded border leading-none ${
+                                                              diffEntry.status === 'M'
+                                                                ? 'text-amber-400 bg-amber-400/10 border-amber-400/30'
+                                                                : diffEntry.status === 'A' || diffEntry.status === '??'
+                                                                ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30'
+                                                                : 'text-rose-400 bg-rose-400/10 border-rose-400/30'
+                                                            }`}
+                                                          >
+                                                            {diffEntry.status}
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                    );
+                                                  })
+                                              )}
+                                            </div>
                                           )}
                                         </div>
                                       )}

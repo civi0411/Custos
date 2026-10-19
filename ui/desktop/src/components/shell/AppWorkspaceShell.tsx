@@ -677,6 +677,8 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           activeWorkspaceId={activeWorkspaceId}
           onSelectWorkspace={setActiveWorkspaceId}
           refreshWorkspaces={refreshWorkspaces}
+          onOpenFile={(path, name) => handleOpenTab('files', `custos://file?path=${encodeURIComponent(path)}`, name)}
+          onOpenTab={handleOpenTab}
         />
 
         {/* Central Workspace Canvas: Tiling Canvas containing all Panes (Chat, Tasks, Terminal, Editor, Research) */}
