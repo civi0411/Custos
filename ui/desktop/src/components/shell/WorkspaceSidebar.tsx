@@ -1010,6 +1010,8 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       branch: targetBranch,
       path: targetPath,
     });
+    setIsInspectorOpen(true);
+    window.dispatchEvent(new CustomEvent('custos:switch-inspector-tab', { detail: { tabId: 'files' } }));
   };
 
   const handleAddRepoToProject = async () => {

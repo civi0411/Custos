@@ -35,6 +35,7 @@ import {
   MessageSquare,
   ListTodo,
   Trash2,
+  FolderGit2,
 } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
 import { CompanionFileViewer } from '@/components/viewer';
@@ -191,7 +192,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   onSelectTask,
   onRequestCreateTask,
 }) => {
-  const effectiveWorkspaceId = activeWorkspace?.id || propActiveWorkspaceId;
+  const effectiveWorkspaceId = propActiveWorkspaceId || activeWorkspace?.id;
   const currentTabs = useMemo(() => getTabsForMode(mode), [mode]);
 
   const [activeTabId, setActiveTabId] = useState<RightSidebarTab>(() => {
@@ -352,14 +353,14 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
   // Fetch full file diff when inspecting a specific file in RightSidebar
   useEffect(() => {
-    if (!activeWorkspace?.id || !selectedDiffPath) {
+    if (!effectiveWorkspaceId || !selectedDiffPath) {
       setFileDiff(null);
       return;
     }
     let isMounted = true;
     setLoadingFileDiff(true);
     daemonClient
-      .getWorkspaceFileDiff(activeWorkspace.id, selectedDiffPath, selectedDiffIsStaged)
+      .getWorkspaceFileDiff(effectiveWorkspaceId, selectedDiffPath, selectedDiffIsStaged)
       .then((diff) => {
         if (isMounted) setFileDiff(diff);
       })
@@ -373,7 +374,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [activeWorkspace?.id, selectedDiffPath, selectedDiffIsStaged]);
+  }, [effectiveWorkspaceId, selectedDiffPath, selectedDiffIsStaged]);
 
   const openDiffInspector = useCallback(
     (path: string, isStaged: boolean) => {
@@ -389,14 +390,14 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
   // Fetch full file content & details when inspecting a specific file in RightSidebar
   useEffect(() => {
-    if (!activeWorkspace?.id || !selectedFilePath) {
+    if (!effectiveWorkspaceId || !selectedFilePath) {
       setSelectedFileContent(null);
       return;
     }
     let isMounted = true;
     setLoadingFileContent(true);
     daemonClient
-      .readWorkspaceFile(activeWorkspace.id, selectedFilePath)
+      .readWorkspaceFile(effectiveWorkspaceId, selectedFilePath)
       .then((content) => {
         if (isMounted) setSelectedFileContent(content);
       })
@@ -410,7 +411,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [activeWorkspace?.id, selectedFilePath]);
+  }, [effectiveWorkspaceId, selectedFilePath]);
 
   const openFileInspector = useCallback(
     (path: string) => {
@@ -474,10 +475,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   // Staging / Unstaging / Discard / Commit operations
   const handleStageFile = async (filePath: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (!activeWorkspace?.id) return;
+    if (!effectiveWorkspaceId) return;
     try {
       setIsStagingAction(true);
-      await daemonClient.stageWorkspaceFile(activeWorkspace.id, filePath);
+      await daemonClient.stageWorkspaceFile(effectiveWorkspaceId, filePath);
       await loadDiff();
     } catch (err) {
       console.error('Failed to stage file:', err);
@@ -488,10 +489,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
   const handleUnstageFile = async (filePath: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (!activeWorkspace?.id) return;
+    if (!effectiveWorkspaceId) return;
     try {
       setIsStagingAction(true);
-      await daemonClient.unstageWorkspaceFile(activeWorkspace.id, filePath);
+      await daemonClient.unstageWorkspaceFile(effectiveWorkspaceId, filePath);
       await loadDiff();
     } catch (err) {
       console.error('Failed to unstage file:', err);
@@ -502,11 +503,11 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
   const handleDiscardFile = async (filePath: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (!activeWorkspace?.id) return;
+    if (!effectiveWorkspaceId) return;
     if (!window.confirm(`Discard all local changes in "${filePath}"? This action cannot be undone.`)) return;
     try {
       setIsStagingAction(true);
-      await daemonClient.discardWorkspaceFile(activeWorkspace.id, filePath);
+      await daemonClient.discardWorkspaceFile(effectiveWorkspaceId, filePath);
       await Promise.allSettled([loadDiff(), loadFileTree()]);
     } catch (err) {
       console.error('Failed to discard file:', err);
@@ -517,13 +518,13 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
   const handleStageAll = async (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (!activeWorkspace?.id || !diffSummary?.files) return;
+    if (!effectiveWorkspaceId || !diffSummary?.files) return;
     const unstaged = diffSummary.files.filter((f) => !f.is_staged && !f.isStaged);
     if (!unstaged.length) return;
     try {
       setIsStagingAction(true);
       for (const f of unstaged) {
-        await daemonClient.stageWorkspaceFile(activeWorkspace.id, f.path);
+        await daemonClient.stageWorkspaceFile(effectiveWorkspaceId, f.path);
       }
       await loadDiff();
     } catch (err) {
@@ -535,13 +536,13 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
   const handleUnstageAll = async (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (!activeWorkspace?.id || !diffSummary?.files) return;
+    if (!effectiveWorkspaceId || !diffSummary?.files) return;
     const staged = diffSummary.files.filter((f) => f.is_staged || f.isStaged);
     if (!staged.length) return;
     try {
       setIsStagingAction(true);
       for (const f of staged) {
-        await daemonClient.unstageWorkspaceFile(activeWorkspace.id, f.path);
+        await daemonClient.unstageWorkspaceFile(effectiveWorkspaceId, f.path);
       }
       await loadDiff();
     } catch (err) {
@@ -553,14 +554,14 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
   const handleDiscardAll = async (e?: React.MouseEvent) => {
     e?.stopPropagation();
-    if (!activeWorkspace?.id || !diffSummary?.files) return;
+    if (!effectiveWorkspaceId || !diffSummary?.files) return;
     const unstaged = diffSummary.files.filter((f) => !f.is_staged && !f.isStaged);
     if (!unstaged.length) return;
     if (!window.confirm(`Discard all local changes across ${unstaged.length} files? This action cannot be undone.`)) return;
     try {
       setIsStagingAction(true);
       for (const f of unstaged) {
-        await daemonClient.discardWorkspaceFile(activeWorkspace.id, f.path);
+        await daemonClient.discardWorkspaceFile(effectiveWorkspaceId, f.path);
       }
       await Promise.allSettled([loadDiff(), loadFileTree()]);
     } catch (err) {
@@ -571,11 +572,11 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   };
 
   const handleCommit = async () => {
-    if (!activeWorkspace?.id || !commitMessage.trim() || isCommitting) return;
+    if (!effectiveWorkspaceId || !commitMessage.trim() || isCommitting) return;
     try {
       setIsCommitting(true);
       setCommitError(null);
-      await daemonClient.commitWorkspace(activeWorkspace.id, commitMessage.trim());
+      await daemonClient.commitWorkspace(effectiveWorkspaceId, commitMessage.trim());
       setCommitMessage('');
       setCommitSuccess('Committed successfully');
       setTimeout(() => setCommitSuccess(null), 3000);
@@ -601,7 +602,20 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     daemonClient.getSessionMetrics(activeSession.id).then(setSessionMetrics).catch(() => null);
   }, [activeSession?.id]);
 
-  // Lazy load data on tab switch or workspace change
+  // Reset and reload file tree and diff summary when effective workspace changes
+  useEffect(() => {
+    if (!effectiveWorkspaceId) return;
+    setFileTree(null);
+    setDiffSummary(null);
+    setSelectedFilePath(null);
+    setSelectedDiffPath(null);
+    setExpandedFolders(new Set(['']));
+    if (isOpen) {
+      void Promise.allSettled([loadFileTree(), loadDiff()]);
+    }
+  }, [effectiveWorkspaceId, isOpen, loadFileTree, loadDiff]);
+
+  // Lazy load data on tab switch or when panel opens
   useEffect(() => {
     if (!isOpen) return;
     if (activeTabId === 'files' || activeTabId === 'changes') {
@@ -775,14 +789,14 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     setTimeout(() => setCopiedFormat(null), 1800);
   };
 
-  // Chats & Tasks filtering based on activeWorkspace
+  // Chats & Tasks filtering based on effectiveWorkspaceId
   const [chatSearchQuery, setChatSearchQuery] = useState('');
 
   const activeWorkspaceSessions = useMemo(() => {
     const list = allSessions && allSessions.length > 0 ? allSessions : sessions;
-    if (!activeWorkspace?.id) return list;
-    return list.filter((s) => s.workspaceId === activeWorkspace.id);
-  }, [allSessions, sessions, activeWorkspace?.id]);
+    if (!effectiveWorkspaceId) return list;
+    return list.filter((s) => s.workspaceId === effectiveWorkspaceId);
+  }, [allSessions, sessions, effectiveWorkspaceId]);
 
   const filteredChats = useMemo(() => {
     if (!chatSearchQuery.trim()) return activeWorkspaceSessions;
@@ -794,9 +808,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
   const activeWorkspaceTasks = useMemo(() => {
     if (!tasks || tasks.length === 0) return [];
-    if (!activeWorkspace?.id) return tasks;
-    return tasks.filter((t) => t.metadata?.workspace_id === activeWorkspace.id);
-  }, [tasks, activeWorkspace?.id]);
+    if (!effectiveWorkspaceId) return tasks;
+    return tasks.filter((t) => t.metadata?.workspace_id === effectiveWorkspaceId);
+  }, [tasks, effectiveWorkspaceId]);
 
   if (!isOpen) return null;
 
@@ -1200,10 +1214,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        if (activeWorkspace?.id && selectedFilePath) {
+                        if (effectiveWorkspaceId && selectedFilePath) {
                           setLoadingFileContent(true);
                           daemonClient
-                            .readWorkspaceFile(activeWorkspace.id, selectedFilePath)
+                            .readWorkspaceFile(effectiveWorkspaceId, selectedFilePath)
                             .then(setSelectedFileContent)
                             .catch(() => {})
                             .finally(() => setLoadingFileContent(false));
@@ -1219,6 +1233,24 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
             </div>
           ) : (
             <div className="flex flex-col h-full space-y-2">
+              {/* Repository Title Subheader */}
+              <div className="flex items-center justify-between px-2 py-1.5 rounded-md bg-white/[0.04] border border-white/6 text-xs select-none">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <FolderGit2 className="size-3.5 text-workbench-accent shrink-0" />
+                  <span className="font-semibold text-white truncate text-[11.5px]" title={activeWorkspace?.name || effectiveWorkspaceId}>
+                    {activeWorkspace?.name || 'Workspace Files'}
+                  </span>
+                  {(activeWorkspace?.active_branch || diffSummary?.branch) && (
+                    <span className="px-1.5 py-0.5 rounded text-[9.5px] font-mono bg-white/10 text-white/70 shrink-0">
+                      {activeWorkspace?.active_branch || diffSummary?.branch}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] text-white/40 font-mono shrink-0">
+                  {fileTree?.entries?.length ?? 0} files
+                </span>
+              </div>
+
               <div className="flex items-center gap-1.5">
                 <div className="relative flex-1">
                   <Search className="size-3 absolute left-2 top-2 text-white/40" />
@@ -1486,8 +1518,11 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
               <div className="flex items-center justify-between pb-1.5 border-b border-white/8 shrink-0">
                 <div className="flex items-center gap-1.5 text-xs text-white/80 min-w-0">
                   <GitBranch className="size-3.5 text-workbench-accent shrink-0" />
-                  <span className="font-mono font-medium text-white/95 truncate">
-                    {diffSummary?.branch || activeWorkspace?.active_branch || 'HEAD'}
+                  <span className="font-medium text-white/95 truncate">
+                    {activeWorkspace?.name || 'Workspace'}
+                  </span>
+                  <span className="font-mono text-[10px] text-white/60 truncate">
+                    ({diffSummary?.branch || activeWorkspace?.active_branch || 'HEAD'})
                   </span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">

@@ -768,7 +768,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
         <RightSidebar
           isOpen={isInspectorOpen}
           onClose={() => setIsInspectorOpen(false)}
-          activeWorkspace={inspectedWorkspace}
+          activeWorkspace={activeWorkspace || inspectedWorkspace}
           activeWorkspaceId={activeWorkspaceId}
           activeSession={inspectedSession}
           activeTask={inspectedTask}

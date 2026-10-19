@@ -773,10 +773,12 @@ export const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
       const filePathFromUrl = tab.url && (tab.url.startsWith('custos://file?path=') || tab.url.startsWith('custos://diff?path='))
         ? decodeURIComponent(tab.url.replace(/^custos:\/\/(file|diff)\?path=/, ''))
         : undefined;
-      const effectiveWorkspaceId = tab.workspaceId || initialFilesWorkspaceId || activeWorkspaceId;
+      const effectiveWorkspaceId = filePathFromUrl
+        ? (tab.workspaceId || activeWorkspaceId)
+        : (activeWorkspaceId || tab.workspaceId || initialFilesWorkspaceId);
       return frameTabResource(
         <FilesChangesPane
-          key={tab.id}
+          key={`${tab.id}-${effectiveWorkspaceId}`}
           sessionId={session?.id}
           initialWorkspaceId={effectiveWorkspaceId}
           initialFilePath={filePathFromUrl}
