@@ -98,10 +98,60 @@ export const getTabsForMode = (workbenchMode: string): TabConfig[] => {
   ];
 };
 
+interface TreeNode {
+  entry?: WorkspaceFileEntry;
+  name: string;
+  path: string;
+  isDir: boolean;
+  children: Map<string, TreeNode>;
+}
+
+function checkIsDir(entry?: WorkspaceFileEntry): boolean {
+  if (!entry) return false;
+  return Boolean((entry as any).isDir ?? (entry as any).is_dir);
+}
+
+function buildFileTree(entries: WorkspaceFileEntry[]): TreeNode {
+  const root: TreeNode = {
+    name: 'root',
+    path: '',
+    isDir: true,
+    children: new Map(),
+  };
+
+  for (const entry of entries) {
+    const parts = entry.path.split('/').filter(Boolean);
+    let current = root;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const isLast = i === parts.length - 1;
+      const nodePath = parts.slice(0, i + 1).join('/');
+
+      if (!current.children.has(part)) {
+        current.children.set(part, {
+          entry: isLast ? entry : undefined,
+          name: part,
+          path: nodePath,
+          isDir: isLast ? checkIsDir(entry) : true,
+          children: new Map(),
+        });
+      } else if (isLast && entry) {
+        const existing = current.children.get(part)!;
+        existing.entry = entry;
+        existing.isDir = checkIsDir(entry);
+      }
+      current = current.children.get(part)!;
+    }
+  }
+
+  return root;
+}
+
 export interface RightSidebarProps {
   isOpen: boolean;
   onClose: () => void;
   activeWorkspace?: ExecutionWorkspace | null;
+  activeWorkspaceId?: string;
   activeSession?: Session;
   activeTask?: Task | null;
   activeTab?: OrcaTab;
@@ -124,6 +174,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   isOpen,
   onClose,
   activeWorkspace,
+  activeWorkspaceId: propActiveWorkspaceId,
   activeSession,
   activeTask,
   activeTab,
@@ -140,6 +191,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   onSelectTask,
   onRequestCreateTask,
 }) => {
+  const effectiveWorkspaceId = activeWorkspace?.id || propActiveWorkspaceId;
   const currentTabs = useMemo(() => getTabsForMode(mode), [mode]);
 
   const [activeTabId, setActiveTabId] = useState<RightSidebarTab>(() => {
@@ -231,17 +283,17 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(['']));
 
   const loadFileTree = useCallback(async () => {
-    if (!activeWorkspace?.id) return;
+    if (!effectiveWorkspaceId) return;
     try {
       setFilesLoading(true);
-      const tree = await daemonClient.getWorkspaceFileTree(activeWorkspace.id, '', 3);
+      const tree = await daemonClient.getWorkspaceFileTree(effectiveWorkspaceId);
       setFileTree(tree);
     } catch {
       // Quiet fail if workspace is uninitialized
     } finally {
       setFilesLoading(false);
     }
-  }, [activeWorkspace?.id]);
+  }, [effectiveWorkspaceId]);
 
   // Git diff state for Engineering Right Panel
   const [diffSummary, setDiffSummary] = useState<WorkspaceDiffSummary | null>(null);
@@ -270,17 +322,17 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   const [copiedFilePath, setCopiedFilePath] = useState<boolean>(false);
 
   const loadDiff = useCallback(async () => {
-    if (!activeWorkspace?.id) return;
+    if (!effectiveWorkspaceId) return;
     try {
       setDiffLoading(true);
-      const diff = await daemonClient.getWorkspaceDiff(activeWorkspace.id);
+      const diff = await daemonClient.getWorkspaceDiff(effectiveWorkspaceId);
       setDiffSummary(diff);
     } catch {
       // Non-git workspace
     } finally {
       setDiffLoading(false);
     }
-  }, [activeWorkspace?.id]);
+  }, [effectiveWorkspaceId]);
 
   // Refresh both file tree and git diff status in parallel
   const handleRefreshWorkspaceFilesAndDiff = useCallback(async () => {
@@ -567,9 +619,22 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     });
   };
 
-  // Flattened & filtered files, with optional Git changed files filter
-  const filteredEntries = useMemo(() => {
-    if (!fileTree?.entries) return [];
+  const collapseAllFolders = () => {
+    setExpandedFolders(new Set());
+  };
+
+  const expandAllFolders = () => {
+    if (!fileTree?.entries) return;
+    const allDirs = new Set<string>(['']);
+    fileTree.entries.forEach((e) => {
+      if (checkIsDir(e)) allDirs.add(e.path);
+    });
+    setExpandedFolders(allDirs);
+  };
+
+  // Hierarchical file tree built from workspace entries
+  const treeRoot = useMemo(() => {
+    if (!fileTree?.entries) return null;
     let entries = fileTree.entries;
     if (onlyChangedFiles && diffSummary?.files) {
       const changedPaths = new Set(diffSummary.files.map((f) => f.path));
@@ -581,13 +646,126 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
         return Array.from(changedPaths).some((p) => p.startsWith(dirPrefix));
       });
     }
-    if (!fileSearchQuery.trim()) return entries;
-    const query = fileSearchQuery.toLowerCase();
-    return entries.filter(
-      (node: WorkspaceFileEntry) =>
-        node.name.toLowerCase().includes(query) || node.path.toLowerCase().includes(query)
-    );
+    if (fileSearchQuery.trim()) {
+      const query = fileSearchQuery.toLowerCase();
+      entries = entries.filter(
+        (node: WorkspaceFileEntry) =>
+          node.name.toLowerCase().includes(query) || node.path.toLowerCase().includes(query)
+      );
+    }
+    return buildFileTree(entries);
   }, [fileTree, fileSearchQuery, onlyChangedFiles, diffSummary]);
+
+  const renderTreeNode = useCallback((node: TreeNode, depth = 0): React.ReactNode => {
+    if (node.isDir) {
+      const isExpanded = expandedFolders.has(node.path);
+      const sortedChildren = Array.from(node.children.values()).sort((a, b) => {
+        if (a.isDir && !b.isDir) return -1;
+        if (!a.isDir && b.isDir) return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      return (
+        <div key={node.path || 'root'}>
+          {node.path && (
+            <div
+              onClick={() => toggleFolder(node.path)}
+              className="group flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/6 cursor-pointer text-white/80 hover:text-white transition select-none"
+              style={{ paddingLeft: `${Math.min(depth * 12 + 6, 44)}px` }}
+              title={node.name}
+            >
+              {isExpanded ? (
+                <ChevronDown className="size-3 text-white/40 shrink-0" />
+              ) : (
+                <ChevronRight className="size-3 text-white/40 shrink-0" />
+              )}
+              <Folder className="size-3.5 text-amber-400/80 shrink-0" />
+              <span className="truncate font-mono text-[11px] flex-1">{node.name}</span>
+            </div>
+          )}
+          {(isExpanded || !node.path) && (
+            <div>
+              {sortedChildren.map((child) => renderTreeNode(child, node.path ? depth + 1 : 0))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const diffEntry = diffMap.get(node.path);
+    return (
+      <div
+        key={node.path}
+        onClick={(e) => {
+          if (e.altKey) {
+            openFileInspector(node.path);
+          } else {
+            // Open directly in Center Canvas (Orca/VS Code model)
+            onOpenTab?.('files', `custos://file?path=${encodeURIComponent(node.path)}`, node.name);
+          }
+        }}
+        className="group flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/6 cursor-pointer text-white/80 hover:text-white transition"
+        style={{ paddingLeft: `${Math.min(depth * 12 + 6, 44)}px` }}
+        title={`${node.name} (Click to open tab, ⌥Click to preview in panel)`}
+      >
+        <div className="size-3 shrink-0" />
+        <FileCode className="size-3.5 text-sky-400/70 shrink-0" />
+        <span className="truncate font-mono text-[11px] flex-1">{node.name}</span>
+
+        {/* Git diff status indicator badge & Diff button */}
+        {diffEntry && (
+          <div className="flex items-center gap-1 shrink-0 ml-auto pl-1">
+            {diffEntry.additions > 0 && (
+              <span className="font-mono text-[9px] text-emerald-400">+{diffEntry.additions}</span>
+            )}
+            {diffEntry.deletions > 0 && (
+              <span className="font-mono text-[9px] text-rose-400">-{diffEntry.deletions}</span>
+            )}
+            <span
+              className={`font-mono text-[9px] font-bold px-1 py-0.2 rounded border leading-none ${
+                diffEntry.status === 'M'
+                  ? 'text-amber-400 bg-amber-400/10 border-amber-400/30'
+                  : diffEntry.status === 'A' || diffEntry.status === '??'
+                  ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30'
+                  : 'text-rose-400 bg-rose-400/10 border-rose-400/30'
+              }`}
+              title={`Git Status: ${diffEntry.status}`}
+            >
+              {diffEntry.status}
+            </span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenTab?.(
+                  'files',
+                  `custos://diff?path=${encodeURIComponent(node.path)}`,
+                  `Diff: ${node.name}`
+                );
+              }}
+              className="opacity-0 group-hover:opacity-100 size-5 flex items-center justify-center rounded hover:bg-white/10 text-white/50 hover:text-white transition cursor-pointer"
+              title="Open Diff in Center Canvas"
+            >
+              <FileDiff className="size-3 text-workbench-accent" />
+            </button>
+          </div>
+        )}
+
+        {/* Quick side panel preview button on hover */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            openFileInspector(node.path);
+          }}
+          className="opacity-0 group-hover:opacity-100 size-5 flex items-center justify-center rounded hover:bg-white/10 text-white/40 hover:text-white transition cursor-pointer"
+          title="Preview file in side panel (⌥Click)"
+        >
+          <SlidersHorizontal className="size-3" />
+        </button>
+      </div>
+    );
+  }, [expandedFolders, diffMap, onOpenTab]);
 
   // Citation copy state for Research
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null);
@@ -1074,6 +1252,26 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                     <span>{diffSummary?.files?.length ?? 0}</span>
                   </button>
                 </Tooltip>
+                <Tooltip content="Expand all folders" position="bottom">
+                  <button
+                    type="button"
+                    onClick={expandAllFolders}
+                    className="size-7 flex items-center justify-center rounded bg-white/5 hover:bg-white/10 text-white/50 hover:text-white border border-white/8 transition cursor-pointer"
+                    aria-label="Expand all"
+                  >
+                    <ChevronDown className="size-3" />
+                  </button>
+                </Tooltip>
+                <Tooltip content="Collapse all folders" position="bottom">
+                  <button
+                    type="button"
+                    onClick={collapseAllFolders}
+                    className="size-7 flex items-center justify-center rounded bg-white/5 hover:bg-white/10 text-white/50 hover:text-white border border-white/8 transition cursor-pointer"
+                    aria-label="Collapse all"
+                  >
+                    <ChevronUp className="size-3" />
+                  </button>
+                </Tooltip>
                 <ActionIcon
                   icon={RefreshCw}
                   tooltip="Refresh file tree & git status"
@@ -1090,107 +1288,13 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
                   <div className="flex items-center justify-center py-8 text-white/40 text-xs">
                     <span>Scanning files…</span>
                   </div>
-                ) : filteredEntries.length === 0 ? (
+                ) : !treeRoot || treeRoot.children.size === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 text-white/40 text-center text-xs">
                     <Folder className="size-8 stroke-1 text-white/20 mb-2" />
                     <span>No matching files in workspace</span>
                   </div>
                 ) : (
-                  filteredEntries.map((node: WorkspaceFileEntry) => {
-                    const depth = Math.max(0, node.path.split('/').length - 1);
-                    const diffEntry = !node.is_dir ? diffMap.get(node.path) : undefined;
-                    return (
-                      <div
-                        key={node.path}
-                        onClick={(e) => {
-                          if (node.is_dir) {
-                            toggleFolder(node.path);
-                          } else if (e.altKey) {
-                            openFileInspector(node.path);
-                          } else {
-                            // Open directly in Center Canvas (Orca/VS Code model)
-                            onOpenTab?.('files', `custos://file?path=${encodeURIComponent(node.path)}`, node.name);
-                          }
-                        }}
-                        className="group flex items-center gap-1.5 px-2 py-1 rounded hover:bg-white/6 cursor-pointer text-white/80 hover:text-white transition"
-                        style={{ paddingLeft: `${Math.min(depth * 12 + 8, 48)}px` }}
-                        title={node.is_dir ? node.name : `${node.name} (Click to open tab, ⌥Click to preview in panel)`}
-                      >
-                        {node.is_dir ? (
-                          <>
-                            {expandedFolders.has(node.path) ? (
-                              <ChevronDown className="size-3 text-white/40 shrink-0" />
-                            ) : (
-                              <ChevronRight className="size-3 text-white/40 shrink-0" />
-                            )}
-                            <Folder className="size-3.5 text-amber-400/80 shrink-0" />
-                          </>
-                        ) : (
-                          <>
-                            <div className="size-3 shrink-0" />
-                            <FileCode className="size-3.5 text-sky-400/70 shrink-0" />
-                          </>
-                        )}
-                        <span className="truncate font-mono text-[11px] flex-1">{node.name}</span>
-
-                        {/* Git diff status indicator badge & Diff button */}
-                        {diffEntry && (
-                          <div className="flex items-center gap-1 shrink-0 ml-auto pl-1">
-                            {diffEntry.additions > 0 && (
-                              <span className="font-mono text-[9px] text-emerald-400">+{diffEntry.additions}</span>
-                            )}
-                            {diffEntry.deletions > 0 && (
-                              <span className="font-mono text-[9px] text-rose-400">-{diffEntry.deletions}</span>
-                            )}
-                            <span
-                              className={`font-mono text-[9px] font-bold px-1 py-0.2 rounded border leading-none ${
-                                diffEntry.status === 'M'
-                                  ? 'text-amber-400 bg-amber-400/10 border-amber-400/30'
-                                  : diffEntry.status === 'A' || diffEntry.status === '??'
-                                  ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30'
-                                  : diffEntry.status === 'D'
-                                  ? 'text-rose-400 bg-rose-400/10 border-rose-400/30'
-                                  : 'text-sky-400 bg-sky-400/10 border-sky-400/30'
-                              }`}
-                              title={`Git Status: ${diffEntry.status}`}
-                            >
-                              {diffEntry.status}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onOpenTab?.(
-                                  'files',
-                                  `custos://diff?path=${encodeURIComponent(node.path)}`,
-                                  `Diff: ${node.name}`
-                                );
-                              }}
-                              className="opacity-0 group-hover:opacity-100 size-5 flex items-center justify-center rounded hover:bg-white/10 text-white/50 hover:text-white transition cursor-pointer"
-                              title="Open Diff in Center Canvas"
-                            >
-                              <FileDiff className="size-3 text-workbench-accent" />
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Quick side panel preview button on hover */}
-                        {!node.is_dir && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openFileInspector(node.path);
-                            }}
-                            className="opacity-0 group-hover:opacity-100 size-5 flex items-center justify-center rounded hover:bg-white/10 text-white/40 hover:text-white transition cursor-pointer"
-                            title="Preview file in side panel (⌥Click)"
-                          >
-                            <SlidersHorizontal className="size-3" />
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })
+                  renderTreeNode(treeRoot)
                 )}
               </div>
             </div>

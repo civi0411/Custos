@@ -1011,7 +1011,7 @@ export const OrcaTabbedContainer = React.memo(function OrcaTabbedContainer(props
   }, [storageKey, tabSignature]);
   const [layouts, setLayouts] = React.useState<Record<string, CanvasState>>({});
   const restored = React.useMemo(load, [load]);
-  const state = reconcileCanvas(layouts[scope] || restored, tabIds);
+  const state = reconcileCanvas(layouts[scope] || restored, tabIds, resourceTabs.activeTabId);
   const stateRef = React.useRef(state);
   stateRef.current = state;
   const dispatch = React.useCallback((action: CanvasAction) => {
