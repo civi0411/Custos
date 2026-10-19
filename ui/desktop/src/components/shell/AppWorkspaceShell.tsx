@@ -90,7 +90,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   onShowToast,
   onOpenSettings: _onOpenSettings,
   isSidebarCollapsed,
-  onToggleSidebar: _onToggleSidebar,
+  onToggleSidebar,
   resourceTabs,
   isWebTabOpen,
   isWebTabExpanded,
@@ -350,10 +350,11 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     const effectiveWsId = targetWorkspaceId || activeWorkspaceId;
 
     // 1. Files handling:
-    // If opening 'files' without a specific file URL, reveal the Files Explorer in the Right Sidebar (Orca pattern)
+    // If opening 'files' without a specific file URL, reveal the Files Explorer in the Left Sidebar
     if (id === 'files' && (!customUrl || !customUrl.startsWith('custos://'))) {
-      setIsInspectorOpen(true);
-      window.dispatchEvent(new CustomEvent('custos:switch-inspector-tab', { detail: { tabId: 'files' } }));
+      if (isSidebarCollapsed && onToggleSidebar) {
+        onToggleSidebar();
+      }
       return;
     }
 
@@ -537,18 +538,21 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       }
     };
     const handleOpenFilesSidebar = () => {
-      setIsInspectorOpen(true);
-      window.dispatchEvent(new CustomEvent('custos:switch-inspector-tab', { detail: { tabId: 'files' } }));
+      if (isSidebarCollapsed && onToggleSidebar) {
+        onToggleSidebar();
+      }
     };
     window.addEventListener('custos:open-chat-tab', handleOpenChatEvent);
     window.addEventListener('custos:open-tab', handleOpenTabEvent);
     window.addEventListener('custos:open-files-sidebar', handleOpenFilesSidebar);
+    window.addEventListener('custos:open-file-explorer', handleOpenFilesSidebar);
     return () => {
       window.removeEventListener('custos:open-chat-tab', handleOpenChatEvent);
       window.removeEventListener('custos:open-tab', handleOpenTabEvent);
       window.removeEventListener('custos:open-files-sidebar', handleOpenFilesSidebar);
+      window.removeEventListener('custos:open-file-explorer', handleOpenFilesSidebar);
     };
-  }, [resourceTabs, handleOpenTab, setIsInspectorOpen]);
+  }, [resourceTabs, handleOpenTab, isSidebarCollapsed, onToggleSidebar]);
 
   const pickerResources = resolveResources(
     pickerCapabilities,
@@ -679,6 +683,13 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           refreshWorkspaces={refreshWorkspaces}
           onOpenFile={(path, name) => handleOpenTab('files', `custos://file?path=${encodeURIComponent(path)}`, name)}
           onOpenTab={handleOpenTab}
+          activeFilePath={(() => {
+            const activeTab = resourceTabs.tabs.find((t) => t.id === resourceTabs.activeTabId);
+            if (activeTab?.type === 'files' && activeTab?.url && activeTab.url.startsWith('custos://file?path=')) {
+              return decodeURIComponent(activeTab.url.replace(/^custos:\/\/file\?path=/, ''));
+            }
+            return undefined;
+          })()}
         />
 
         {/* Central Workspace Canvas: Tiling Canvas containing all Panes (Chat, Tasks, Terminal, Editor, Research) */}

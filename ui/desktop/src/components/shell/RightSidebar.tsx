@@ -90,9 +90,8 @@ export const getTabsForMode = (workbenchMode: string): TabConfig[] => {
       { id: 'governance', label: 'Approvals', icon: ShieldCheck, title: 'Human-in-the-Loop Safeguards & Pending Actions' },
     ];
   }
-  // Engineering mode: 3 focused tabs (Files, Changes, Context)
+  // Engineering mode: 2 focused tabs (Changes, Context)
   return [
-    { id: 'files', label: 'Files', icon: Folder, title: 'Workspace File Explorer' },
     { id: 'changes', label: 'Changes', icon: GitBranch, title: 'Source Control & Git Diff' },
     { id: 'inspector', label: 'Context', icon: SlidersHorizontal, title: 'Worktree, Branch & Session Scope' },
   ];
@@ -145,10 +144,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   const [activeTabId, setActiveTabId] = useState<RightSidebarTab>(() => {
     try {
       const stored = localStorage.getItem('custos.right-sidebar-tab') as RightSidebarTab;
-      if (stored) return stored;
-      return mode === 'engineering' ? 'files' : 'inspector';
+      if (stored && stored !== 'files') return stored;
+      return mode === 'engineering' ? 'changes' : 'inspector';
     } catch {
-      return mode === 'engineering' ? 'files' : 'inspector';
+      return mode === 'engineering' ? 'changes' : 'inspector';
     }
   });
 
@@ -164,6 +163,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     const handleSwitch = (e: Event) => {
       const custom = e as CustomEvent<{ tabId: RightSidebarTab }>;
       if (custom.detail?.tabId) {
+        if (custom.detail.tabId === 'files') {
+          window.dispatchEvent(new CustomEvent('custos:open-file-explorer'));
+          return;
+        }
         setActiveTabId(custom.detail.tabId);
         try {
           localStorage.setItem('custos.right-sidebar-tab', custom.detail.tabId);
@@ -362,13 +365,9 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
   const openFileInspector = useCallback(
     (path: string) => {
-      setSelectedFilePath(path);
-      handleSelectTab('files');
-      if (sidebarWidth < 420) {
-        setSidebarWidth(420);
-      }
+      onOpenTab?.('files', `custos://file?path=${encodeURIComponent(path)}`, path.split('/').pop() || 'File');
     },
-    [sidebarWidth]
+    [onOpenTab]
   );
 
   const handleCopyFilePath = useCallback((path: string, e?: React.MouseEvent) => {

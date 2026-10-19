@@ -237,9 +237,9 @@ export const DEFAULT_RESOURCES: ResourceDefinition[] = [
   // Coding Workbench
   {
     id: 'files',
-    title: 'Browse Files (Sidebar)',
-    description: 'Open file explorer in the right sidebar to browse & open files.',
-    icon: FolderTree,
+    title: 'Code Editor',
+    description: 'Code editor and file viewer for workspace files.',
+    icon: FileCode,
     group: 'Engineering',
     status: 'available',
     supportedOperations: ['tree', 'read', 'write', 'diff', 'stage', 'discard'],
@@ -1476,11 +1476,11 @@ export const OrcaTabbedContainer = React.memo(function OrcaTabbedContainer(props
                       type="button"
                       className="px-3.5 py-2 text-xs flex items-center gap-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.09] border border-white/10 transition text-white/80 font-medium cursor-pointer"
                       onClick={() => {
-                        window.dispatchEvent(new CustomEvent('custos:open-files-sidebar'));
+                        window.dispatchEvent(new CustomEvent('custos:open-file-explorer'));
                       }}
                     >
                       <FolderTree size={14} className="text-amber-400/80" />
-                      Browse Files (Sidebar)
+                      Open Files
                     </button>
                     <button
                       type="button"

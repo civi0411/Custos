@@ -145,7 +145,7 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [filterQuery, setFilterQuery] = useState<string>('');
   const [onlyChanged, setOnlyChanged] = useState<boolean>(false);
-  const [isExplorerOpen, setIsExplorerOpen] = useState<boolean>(!initialFilePath);
+  const [isExplorerOpen, setIsExplorerOpen] = useState<boolean>(false);
 
   // Files & Diff state
   const [fileEntries, setFileEntries] = useState<WorkspaceFileEntry[]>([]);

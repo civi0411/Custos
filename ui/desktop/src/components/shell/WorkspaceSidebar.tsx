@@ -3,16 +3,13 @@ import { useAppContext } from '@/context/AppContext';
 import { useScreenContext } from '@/context/ScreenContext';
 import {
   Boxes,
-  FolderGit2,
   FolderOpen,
   FolderPlus,
   GitBranch,
-  GitFork,
   Plus,
   ChevronDown,
   ChevronRight,
-  Check,
-  Shield,
+  ChevronUp,
   Search,
   RefreshCw,
   MessageSquare,
@@ -26,7 +23,35 @@ import {
   Folder,
   FolderTree,
   FileCode,
+  FileText,
+  File,
 } from 'lucide-react';
+
+function getSidebarFileIcon(name: string) {
+  const ext = name.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'ts':
+    case 'tsx':
+    case 'js':
+    case 'jsx':
+    case 'rs':
+    case 'py':
+    case 'go':
+    case 'c':
+    case 'cpp':
+      return <FileCode className="size-3.5 text-sky-400 shrink-0" />;
+    case 'json':
+    case 'yaml':
+    case 'yml':
+    case 'toml':
+      return <FileCode className="size-3.5 text-amber-300 shrink-0" />;
+    case 'md':
+    case 'txt':
+      return <FileText className="size-3.5 text-white/50 shrink-0" />;
+    default:
+      return <File className="size-3.5 text-white/40 shrink-0" />;
+  }
+}
 import type { Session } from '@/types';
 import { sessionToWorkflowCard } from '@/lib/workflow';
 import { daemonClient } from '@/api/daemon_client';
@@ -104,6 +129,7 @@ export interface WorkspaceSidebarProps {
   refreshWorkspaces?: () => Promise<ExecutionWorkspace[]>;
   onOpenFile?: (path: string, name: string) => void;
   onOpenTab?: (id: OrcaTabId, customUrl?: string, customTitle?: string) => void;
+  activeFilePath?: string;
 }
 
 export interface WorktreeItem {
@@ -166,6 +192,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   refreshWorkspaces: propRefreshWorkspaces,
   onOpenFile,
   onOpenTab,
+  activeFilePath,
   activeWorkbench = 'engineering',
 }) => {
   const {
@@ -198,7 +225,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
   const [filesLoading, setFilesLoading] = useState(false);
   const [diffSummary, setDiffSummary] = useState<WorkspaceDiffSummary | null>(null);
-  const [isFileTreeOpen, setIsFileTreeOpen] = useState(true);
 
   const loadFileTree = useCallback(async () => {
     if (!activeWorkspaceId) {
@@ -299,10 +325,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     window.addEventListener('custos:switch-sidebar-tab', handleSwitchTab);
     return () => window.removeEventListener('custos:switch-sidebar-tab', handleSwitchTab);
   }, []);
-
-  // Expand / collapse states
-  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({ proj_agenthub: true });
-  const [expandedWorkspaces, setExpandedWorkspaces] = useState<Record<string, boolean>>({});
 
   // Worktree creation state
   const [creatingWorktreeFor, setCreatingWorktreeFor] = useState<string | null>(null);
@@ -695,6 +717,45 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     return { totalWorktreesCount: total, activeWorktreesCount: active };
   }, [projectGroups]);
 
+  // Flattened active worktrees collection for compact branch/worktree switcher
+  const allWorktrees = useMemo(() => {
+    const list: WorktreeItem[] = [];
+    projectGroups.forEach((group) => {
+      group.workspaces.forEach((ws) => {
+        list.push(...ws.worktrees);
+      });
+    });
+    return list;
+  }, [projectGroups]);
+
+  const activeWt = useMemo(() => {
+    return (
+      allWorktrees.find(
+        (wt) => wt.id === activeWorkspaceId || (activeWorkspace && wt.path === activeWorkspace.path)
+      ) || allWorktrees[0]
+    );
+  }, [allWorktrees, activeWorkspaceId, activeWorkspace]);
+
+  const [isWorktreesExpanded, setIsWorktreesExpanded] = useState(false);
+
+  const collapseAllFolders = useCallback(() => {
+    setExpandedFolders(new Set());
+  }, []);
+
+  const folderDiffCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (!diffSummary?.files) return counts;
+    for (const diff of diffSummary.files) {
+      const parts = diff.path.split('/');
+      let prefix = '';
+      for (let i = 0; i < parts.length - 1; i++) {
+        prefix = prefix ? `${prefix}/${parts[i]}` : parts[i];
+        counts.set(prefix, (counts.get(prefix) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [diffSummary]);
+
   // Convert sessions to unified WorkflowCards for sessions view
   const workflowCards = useMemo(() => {
     const tasksById = Object.fromEntries(tasks.map((task) => [task.id, task]));
@@ -875,12 +936,12 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       };
     }
     return {
-      title: 'Workspace Explorer',
+      title: activeWorkspace?.name || 'Workspace Explorer',
       icon: Boxes,
       iconColor: 'text-white/70',
       badge: 'Git',
       badgeClass: 'bg-white/[0.06] text-white/60 border-white/10',
-      searchPlaceholder: 'Filter workspaces or branches...',
+      searchPlaceholder: 'Filter files or folders...',
       allLabel: 'All',
       activeLabel: 'Active',
       allCount: totalWorktreesCount,
@@ -1362,7 +1423,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             </div>
           )
         ) : (
-          /* ── ENGINEERING WORKSPACE EXPLORER (3-TIER TREE VIEW) ── */
+          /* ── ENGINEERING WORKSPACE EXPLORER (CLEAN VS CODE / ZED STYLE) ── */
           projectGroups.length === 0 ? (
             <div className="p-4 text-center space-y-2.5 border border-dashed border-white/10 rounded-lg my-2">
               <FolderOpen className="size-6 text-white/30 mx-auto" />
@@ -1376,385 +1437,294 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               </button>
             </div>
           ) : (
-            projectGroups.map((group) => {
-              const isGroupExpanded = expandedProjects[group.id] ?? true;
+            <div className="flex-1 min-h-0 flex flex-col -m-2 overflow-hidden">
+              {/* ── 1. Top Section: Active Branch / Worktree Selector Bar ── */}
+              <div className="px-2.5 py-1.5 border-b border-white/8 bg-white/[0.02] flex items-center justify-between shrink-0 select-none">
+                <button
+                  type="button"
+                  onClick={() => setIsWorktreesExpanded((prev) => !prev)}
+                  className="flex items-center gap-1.5 min-w-0 flex-1 text-left hover:text-white transition group/wt cursor-pointer"
+                  title={`Active branch: ${activeWt?.branch || activeWorkspace?.name || 'main'} · Click to switch worktree`}
+                >
+                  <GitBranch className="size-3.5 text-white/70 group-hover/wt:text-white shrink-0" />
+                  <span className="font-mono text-[11px] font-semibold text-white/90 group-hover/wt:text-white truncate">
+                    {activeWt?.branch || activeWorkspace?.name || 'main'}
+                  </span>
+                  {activeWt?.isMain && (
+                    <span className="px-1 py-0.2 rounded text-[8.5px] font-mono bg-white/[0.06] text-white/50 border border-white/10 shrink-0">
+                      primary
+                    </span>
+                  )}
+                  {activeWt?.dirtyCount ? (
+                    <span className="font-mono text-[9px] text-amber-400 font-bold shrink-0">
+                      {activeWt.dirtyCount}*
+                    </span>
+                  ) : null}
+                  <ChevronDown
+                    className={`size-3 text-white/40 group-hover/wt:text-white/70 transition-transform shrink-0 ${
+                      isWorktreesExpanded ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
 
-              return (
-                <div key={group.id} className="space-y-1">
-                  {/* ── Level 1: Project Group Header ── */}
-                  <div
-                    className="flex items-center justify-between px-2 py-1.5 rounded-lg select-none cursor-pointer group/proj hover:bg-white/[0.04] transition"
-                    onClick={() =>
-                      setExpandedProjects((prev) => ({
-                        ...prev,
-                        [group.id]: !isGroupExpanded,
-                      }))
-                    }
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsWorktreesExpanded(true);
+                      if (activeWorkspace) setCreatingWorktreeFor(activeWorkspace.id);
+                    }}
+                    className="p-1 rounded text-white/40 hover:text-white hover:bg-white/8 transition cursor-pointer"
+                    title="Create new worktree"
+                    aria-label="Create new worktree"
                   >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <GitFork className="size-3.5 text-white/70 shrink-0" />
-                      <span className="font-bold text-[12.5px] text-white tracking-wide truncate">
-                        {group.name}
-                      </span>
-                      {group.isMultiRepo && (
-                        <span className="font-mono text-[9px] px-1.5 py-0.2 rounded bg-white/8 text-white/60 shrink-0 border border-white/8">
-                          {group.workspaces.length} repos
-                        </span>
-                      )}
-                    </div>
+                    <Plus className="size-3" />
+                  </button>
+                </div>
+              </div>
 
-                    <div className="flex items-center gap-1 shrink-0 text-white/40 group-hover/proj:text-white/70">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenFolderDirect();
-                        }}
-                        className="p-1 rounded hover:bg-white/10 opacity-0 group-hover/proj:opacity-100 transition cursor-pointer"
-                        title="Add repository to project"
-                        aria-label="Add repository to project"
-                      >
-                        <Plus className="size-3" />
-                      </button>
-                      {isGroupExpanded ? (
-                        <ChevronDown className="size-3.5" />
-                      ) : (
-                        <ChevronRight className="size-3.5" />
-                      )}
-                    </div>
+              {/* Collapsible Worktrees Dropdown */}
+              {isWorktreesExpanded && (
+                <div className="border-b border-white/8 bg-black/40 p-2 space-y-1.5 shrink-0 max-h-56 overflow-y-auto no-scrollbar shadow-inner">
+                  <div className="flex items-center justify-between px-1 text-[10px] text-white/50 uppercase tracking-wider font-semibold">
+                    <span>Worktrees ({allWorktrees.length})</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeWorkspace) setCreatingWorktreeFor(activeWorkspace.id);
+                      }}
+                      className="text-[10px] text-white/60 hover:text-white flex items-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="size-2.5" />
+                      <span>New</span>
+                    </button>
                   </div>
 
-                  {/* ── Level 2 & 3: Workspaces & Worktrees ── */}
-                  {isGroupExpanded && (
-                    <div className="space-y-2 border-l border-white/8 ml-2.5 pl-2">
-                      {group.workspaces.map((ws) => {
-                        const isWsExpanded = expandedWorkspaces[ws.id] ?? true;
-                        const isCreating = creatingWorktreeFor === ws.id;
+                  {allWorktrees.map((wt) => {
+                    const isSelected =
+                      wt.id === activeWorkspaceId ||
+                      (activeWorkspace && wt.path === activeWorkspace.path);
+                    return (
+                      <div
+                        key={wt.id}
+                        onClick={() => {
+                          void handleSelectWorkspaceItem(wt.id, wt.path);
+                          setIsWorktreesExpanded(false);
+                        }}
+                        className={`flex items-center justify-between px-2 py-1.5 rounded-md cursor-pointer transition text-xs select-none ${
+                          isSelected
+                            ? 'bg-white/12 text-white border border-white/15'
+                            : 'hover:bg-white/[0.04] text-white/70 hover:text-white border border-transparent'
+                        }`}
+                        title={`${wt.name} (${wt.path})`}
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {wt.isDirty ? (
+                            <span className="size-1.5 rounded-full bg-amber-400 shrink-0" />
+                          ) : (
+                            <span className="size-1.5 rounded-full bg-emerald-400 shrink-0" />
+                          )}
+                          <span className="font-mono text-[11px] truncate">
+                            {wt.branch || wt.name}
+                          </span>
+                          {wt.isMain && (
+                            <span className="px-1 text-[8.5px] font-mono rounded bg-white/[0.06] text-white/50 border border-white/10 shrink-0">
+                              primary
+                            </span>
+                          )}
+                        </div>
+                        {wt.dirtyCount > 0 && (
+                          <span className="text-amber-400 font-mono text-[9.5px] font-semibold shrink-0">
+                            {wt.dirtyCount}*
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Inline Create Worktree Form */}
+                  {creatingWorktreeFor && (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        if (activeWorkspace) void handleAddWorktree(activeWorkspace.id, worktreeBranchInput);
+                      }}
+                      className="mt-1 p-2 rounded-lg bg-black/60 border border-white/10 space-y-1.5 font-sans"
+                    >
+                      <div className="text-[10px] text-white/50 font-medium">New worktree branch:</div>
+                      <input
+                        type="text"
+                        value={worktreeBranchInput}
+                        onChange={(e) => setWorktreeBranchInput(e.target.value)}
+                        placeholder="branch-name (e.g. feat-ui)"
+                        autoFocus
+                        disabled={isSubmittingWorktree}
+                        className="w-full bg-black/70 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-white/30 outline-none font-mono"
+                      />
+                      <div className="flex justify-end gap-1.5 text-[10px]">
+                        <button
+                          type="button"
+                          disabled={isSubmittingWorktree}
+                          onClick={() => {
+                            setCreatingWorktreeFor(null);
+                            setWorktreeBranchInput('');
+                          }}
+                          className="px-2 py-0.5 text-white/50 hover:text-white cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={!worktreeBranchInput.trim() || isSubmittingWorktree}
+                          className="px-2.5 py-0.5 bg-white/20 hover:bg-white/30 text-white rounded font-medium disabled:opacity-50 cursor-pointer"
+                        >
+                          {isSubmittingWorktree ? 'Creating...' : 'Create'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+              )}
+
+              {/* ── 2. Dedicated Workspace File Explorer (Primary Tree) ── */}
+              <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                {/* Explorer Sub-Header */}
+                <div className="px-2.5 py-1.5 border-b border-white/6 flex items-center justify-between shrink-0 bg-white/[0.01]">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <FolderTree className="size-3.5 text-amber-400 shrink-0" />
+                    <span className="text-[10.5px] font-semibold text-white/75 tracking-wider uppercase">
+                      Explorer
+                    </span>
+                    {fileTree?.entries && (
+                      <span className="font-mono text-[9px] text-white/40">
+                        ({fileTree.entries.filter((e) => !e.is_dir).length})
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => void loadFileTree()}
+                      className="p-1 rounded text-white/40 hover:text-white hover:bg-white/8 transition cursor-pointer"
+                      title="Refresh file tree"
+                    >
+                      <RefreshCw className={`size-3 ${filesLoading ? 'animate-spin' : ''}`} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={collapseAllFolders}
+                      className="p-1 rounded text-white/40 hover:text-white hover:bg-white/8 transition cursor-pointer"
+                      title="Collapse all folders"
+                    >
+                      <ChevronUp className="size-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* File Tree List */}
+                <div className="flex-1 overflow-y-auto no-scrollbar py-1 space-y-0.5 select-none">
+                  {filesLoading && !fileTree ? (
+                    <div className="text-[11px] text-white/40 py-4 px-3 flex items-center gap-2">
+                      <RefreshCw className="size-3 animate-spin text-white/50" />
+                      <span>Scanning workspace files…</span>
+                    </div>
+                  ) : !fileTree || fileTree.entries.length === 0 ? (
+                    <div className="text-[11px] text-white/30 py-4 px-3 italic">
+                      No files found in workspace
+                    </div>
+                  ) : (
+                    fileEntriesForTree
+                      .filter((node) => isNodeVisible(node, expandedFolders))
+                      .map((node) => {
+                        const depth = Math.max(0, node.path.split('/').length - 1);
+                        const isExpanded = expandedFolders.has(node.path);
+                        const diffEntry = !node.is_dir ? diffMap.get(node.path) : undefined;
+                        const folderChanges = node.is_dir ? folderDiffCounts.get(node.path) || 0 : 0;
+                        const isFileActive =
+                          !node.is_dir &&
+                          activeFilePath &&
+                          (node.path === activeFilePath || activeFilePath.endsWith(node.path));
 
                         return (
-                          <div key={ws.id} className="space-y-1">
-                            {/* Workspace / Repository Header */}
-                            <div
-                              className="flex items-center justify-between px-2 py-1 select-none cursor-pointer group/repo hover:bg-white/[0.03] rounded-md transition"
-                              onClick={() =>
-                                setExpandedWorkspaces((prev) => ({
-                                  ...prev,
-                                  [ws.id]: !isWsExpanded,
-                                }))
+                          <div
+                            key={node.path}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (node.is_dir) {
+                                toggleFolder(node.path);
+                              } else {
+                                onOpenFile?.(node.path, node.name);
+                                onOpenTab?.(
+                                  'files',
+                                  `custos://file?path=${encodeURIComponent(node.path)}`,
+                                  node.name
+                                );
                               }
-                            >
-                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                {ws.worktrees.length > 1 ? (
-                                  <span className="text-white/40 group-hover/repo:text-white/70 transition shrink-0">
-                                    {isWsExpanded ? (
-                                      <ChevronDown className="size-3" />
-                                    ) : (
-                                      <ChevronRight className="size-3" />
-                                    )}
-                                  </span>
-                                ) : (
-                                  <span className="w-3 shrink-0" />
-                                )}
-
-                                {ws.githubAvatarUrl ? (
-                                  <img
-                                    src={ws.githubAvatarUrl}
-                                    alt={ws.githubOwner || ''}
-                                    className="size-3.5 rounded border border-white/20 object-cover shrink-0"
-                                  />
-                                ) : (
-                                  <FolderGit2 className="size-3.5 text-white/50 shrink-0" />
-                                )}
-
-                                <span className="truncate font-medium text-[12px] text-white/90">
-                                  {ws.name}
+                            }}
+                            className={`group flex items-center gap-1.5 py-1 px-1.5 rounded cursor-pointer transition select-none ${
+                              isFileActive
+                                ? 'bg-white/12 text-white font-medium border-l-2 border-amber-400 pl-1'
+                                : 'text-white/70 hover:text-white hover:bg-white/[0.05]'
+                            }`}
+                            style={{ paddingLeft: `${Math.min(depth * 14 + (isFileActive ? 4 : 6), 56)}px` }}
+                            title={node.path}
+                          >
+                            {node.is_dir ? (
+                              <>
+                                <span className="text-white/40 group-hover:text-white/70 transition shrink-0">
+                                  {isExpanded ? (
+                                    <ChevronDown className="size-3" />
+                                  ) : (
+                                    <ChevronRight className="size-3" />
+                                  )}
                                 </span>
-
-                                {ws.worktrees.length > 1 && (
-                                  <span className="font-mono text-[9px] text-white/40">
-                                    ({ws.worktrees.length})
+                                {isExpanded ? (
+                                  <FolderOpen className="size-3.5 text-amber-400/90 shrink-0" />
+                                ) : (
+                                  <Folder className="size-3.5 text-amber-400/80 shrink-0" />
+                                )}
+                                <span className="truncate font-sans text-[11.5px] leading-tight flex-1">
+                                  {node.name}
+                                </span>
+                                {folderChanges > 0 && (
+                                  <span className="font-mono text-[9px] text-amber-400/80 bg-amber-400/10 px-1 rounded shrink-0">
+                                    {folderChanges}
                                   </span>
                                 )}
-                              </div>
-
-                              <div className="flex items-center gap-1 opacity-0 group-hover/repo:opacity-100 transition shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setCreatingWorktreeFor(ws.id);
-                                    setExpandedWorkspaces((prev) => ({ ...prev, [ws.id]: true }));
-                                  }}
-                                  className="p-1 rounded text-white/40 hover:text-white hover:bg-white/10 transition cursor-pointer"
-                                  title={`Create new worktree from ${ws.name}`}
-                                  aria-label={`New worktree for ${ws.name}`}
+                              </>
+                            ) : (
+                              <>
+                                <span className="w-3 shrink-0" />
+                                {getSidebarFileIcon(node.name)}
+                                <span
+                                  className={`truncate font-mono text-[11px] leading-tight flex-1 ${
+                                    isFileActive ? 'text-white font-medium' : ''
+                                  }`}
                                 >
-                                  <Plus className="size-3" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Worktrees List under Workspace */}
-                            {isWsExpanded && (
-                              <div className="border-l border-white/6 ml-3 pl-2 space-y-1">
-                                {ws.worktrees.map((wt) => {
-                                  const isWtActive =
-                                    wt.id === activeWorkspaceId ||
-                                    (activeWorkspace &&
-                                      (wt.path === activeWorkspace.path || wt.id === activeWorkspace.id));
-
-                                  return (
-                                    <div
-                                      key={wt.id}
-                                      onClick={() => handleSelectWorkspaceItem(wt.id, wt.path)}
-                                      className={`relative flex flex-col cursor-pointer transition select-none ${
-                                        isWtActive
-                                          ? 'bg-white/[0.08] border border-white/14 rounded-xl p-2.5 my-1 shadow-sm'
-                                          : 'hover:bg-white/[0.04] rounded-lg px-2.5 py-1.5 my-0.5 border border-transparent'
-                                      }`}
-                                      title={`${wt.name} (${wt.path})`}
-                                    >
-                                      {/* Branch Header Row */}
-                                      <div className="flex items-center justify-between gap-1.5 min-w-0">
-                                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                          {/* Status Dot: green = clean, amber = dirty, pulsing = agent active */}
-                                          {wt.isRunning ? (
-                                            <span className="size-2 rounded-full bg-white animate-pulse shrink-0" />
-                                          ) : wt.isBlocked ? (
-                                            <Shield className="size-2.5 text-amber-300 shrink-0" />
-                                          ) : wt.isDirty ? (
-                                            <span className="size-2 rounded-full bg-amber-400 shrink-0" />
-                                          ) : (
-                                            <span className="size-2 rounded-full bg-emerald-400 shrink-0" />
-                                          )}
-
-                                          {/* Branch Name */}
-                                          <span
-                                            className={`truncate font-mono text-[11.5px] leading-tight ${
-                                              isWtActive ? 'text-white font-semibold' : 'text-white/85'
-                                            }`}
-                                          >
-                                            {wt.branch || wt.name}
-                                          </span>
-
-                                          {/* Primary / Secondary Tag */}
-                                          {wt.isMain ? (
-                                            <span className="h-[15px] px-1 text-[9px] font-mono rounded shrink-0 leading-none text-white/60 border border-white/12 bg-white/[0.04]">
-                                              primary
-                                            </span>
-                                          ) : (
-                                            <GitBranch className="size-2.5 text-white/35 shrink-0" />
-                                          )}
-                                        </div>
-
-                                        {/* Status Meta: Dirty Count & Checkmark */}
-                                        <div className="flex items-center gap-1 shrink-0 font-mono text-[9.5px]">
-                                          {wt.dirtyCount > 0 && (
-                                            <span className="text-amber-400/80 font-semibold">
-                                              {wt.dirtyCount}*
-                                            </span>
-                                          )}
-                                          {isWtActive && (
-                                            <Check className="size-3 text-white/80 ml-0.5" />
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      {/* Relative Path Directory */}
-                                      <div className="flex items-center gap-1.5 pl-3.5 text-[9.5px] text-white/35 font-mono truncate leading-tight mt-0.5">
-                                        <span className="truncate">
-                                          {wt.path.split('/').pop() || wt.branch}/
-                                        </span>
-                                      </div>
-
-                                      {/* Agent Activity Line (Real Data from Session) */}
-                                      {wt.agentActivity && (
-                                        <div className="flex items-center gap-1 pl-3.5 mt-1 text-[10px] text-white/50 truncate font-sans">
-                                          <Check className="size-2.5 text-emerald-400 shrink-0" />
-                                          <span className="truncate max-w-[125px] text-white/70">
-                                            {wt.agentActivity.title}
-                                          </span>
-                                          {wt.agentActivity.model && (
-                                            <span className="text-white/35 font-mono truncate max-w-[65px]">
-                                              · {wt.agentActivity.model}
-                                            </span>
-                                          )}
-                                        </div>
-                                      )}
-
-                                      {/* ── Active Worktree File Folder Tree ── */}
-                                      {isWtActive && (
-                                        <div
-                                          className="mt-2 pt-2 border-t border-white/8 space-y-1"
-                                          onClick={(e) => e.stopPropagation()}
-                                        >
-                                          <div
-                                            className="flex items-center justify-between px-1 py-0.5 text-white/50 hover:text-white text-[10px] uppercase font-semibold tracking-wider cursor-pointer select-none"
-                                            onClick={() => setIsFileTreeOpen((prev) => !prev)}
-                                          >
-                                            <div className="flex items-center gap-1.5">
-                                              <FolderTree className="size-3 text-amber-400" />
-                                              <span>Files</span>
-                                              {fileTree?.entries && (
-                                                <span className="font-mono text-[9px] text-white/40 font-normal">
-                                                  ({fileTree.entries.filter((e) => !e.is_dir).length})
-                                                </span>
-                                              )}
-                                            </div>
-                                            <div className="flex items-center gap-1">
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  void loadFileTree();
-                                                }}
-                                                className="p-0.5 hover:text-white text-white/30 rounded"
-                                                title="Refresh files"
-                                              >
-                                                <RefreshCw className={`size-2.5 ${filesLoading ? 'animate-spin' : ''}`} />
-                                              </button>
-                                              {isFileTreeOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-                                            </div>
-                                          </div>
-
-                                          {isFileTreeOpen && (
-                                            <div className="space-y-0.5 max-h-[380px] overflow-y-auto no-scrollbar pt-0.5">
-                                              {filesLoading && !fileTree ? (
-                                                <div className="text-[10.5px] text-white/40 py-2 pl-2">Scanning workspace files…</div>
-                                              ) : !fileTree || fileTree.entries.length === 0 ? (
-                                                <div className="text-[10.5px] text-white/30 py-2 pl-2 italic">No files in workspace</div>
-                                              ) : (
-                                                fileEntriesForTree
-                                                  .filter((node) => isNodeVisible(node, expandedFolders))
-                                                  .map((node) => {
-                                                    const depth = Math.max(0, node.path.split('/').length - 1);
-                                                    const diffEntry = !node.is_dir ? diffMap.get(node.path) : undefined;
-                                                    return (
-                                                      <div
-                                                        key={node.path}
-                                                        onClick={(e) => {
-                                                          e.stopPropagation();
-                                                          if (node.is_dir) {
-                                                            toggleFolder(node.path);
-                                                          } else {
-                                                            onOpenFile?.(node.path, node.name);
-                                                            onOpenTab?.(
-                                                              'files',
-                                                              `custos://file?path=${encodeURIComponent(node.path)}`,
-                                                              node.name
-                                                            );
-                                                          }
-                                                        }}
-                                                        className="group flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-white/8 cursor-pointer text-white/75 hover:text-white transition"
-                                                        style={{ paddingLeft: `${Math.min(depth * 10 + 4, 36)}px` }}
-                                                        title={node.name}
-                                                      >
-                                                        {node.is_dir ? (
-                                                          <>
-                                                            {expandedFolders.has(node.path) ? (
-                                                              <ChevronDown className="size-2.5 text-white/40 shrink-0" />
-                                                            ) : (
-                                                              <ChevronRight className="size-2.5 text-white/40 shrink-0" />
-                                                            )}
-                                                            <Folder className="size-3 text-amber-400/80 shrink-0" />
-                                                          </>
-                                                        ) : (
-                                                          <>
-                                                            <div className="size-2.5 shrink-0" />
-                                                            <FileCode className="size-3 text-sky-400/70 shrink-0" />
-                                                          </>
-                                                        )}
-                                                        <span className="truncate font-mono text-[11px] flex-1">{node.name}</span>
-                                                        {diffEntry && (
-                                                          <span
-                                                            className={`font-mono text-[8.5px] font-bold px-1 rounded border leading-none ${
-                                                              diffEntry.status === 'M'
-                                                                ? 'text-amber-400 bg-amber-400/10 border-amber-400/30'
-                                                                : diffEntry.status === 'A' || diffEntry.status === '??'
-                                                                ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30'
-                                                                : 'text-rose-400 bg-rose-400/10 border-rose-400/30'
-                                                            }`}
-                                                          >
-                                                            {diffEntry.status}
-                                                          </span>
-                                                        )}
-                                                      </div>
-                                                    );
-                                                  })
-                                              )}
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-
-                                {/* Inline Create Worktree Form */}
-                                {isCreating && (
-                                  <form
-                                    onSubmit={(e) => {
-                                      e.preventDefault();
-                                      void handleAddWorktree(ws.id, worktreeBranchInput);
-                                    }}
-                                    className="mt-1 p-2 rounded-lg bg-white/6 border border-white/10 space-y-1.5 font-sans"
+                                  {node.name}
+                                </span>
+                                {diffEntry && (
+                                  <span
+                                    className={`font-mono text-[8.5px] font-bold px-1 rounded border leading-none shrink-0 ${
+                                      diffEntry.status === 'M'
+                                        ? 'text-amber-400 bg-amber-400/10 border-amber-400/30'
+                                        : diffEntry.status === 'A' || diffEntry.status === '??'
+                                        ? 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30'
+                                        : 'text-rose-400 bg-rose-400/10 border-rose-400/30'
+                                    }`}
                                   >
-                                    <div className="text-[10px] text-white/50 font-medium">
-                                      Create new worktree from {ws.name}:
-                                    </div>
-                                    <input
-                                      type="text"
-                                      value={worktreeBranchInput}
-                                      onChange={(e) => setWorktreeBranchInput(e.target.value)}
-                                      placeholder="new-branch (e.g. feat-auth)"
-                                      autoFocus
-                                      disabled={isSubmittingWorktree}
-                                      className="w-full bg-black/40 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-white/30 outline-none font-mono"
-                                    />
-                                    <div className="flex justify-end gap-1.5 text-[10px]">
-                                      <button
-                                        type="button"
-                                        disabled={isSubmittingWorktree}
-                                        onClick={() => {
-                                          setCreatingWorktreeFor(null);
-                                          setWorktreeBranchInput('');
-                                        }}
-                                        className="px-2 py-0.5 text-white/50 hover:text-white cursor-pointer"
-                                      >
-                                        Cancel
-                                      </button>
-                                      <button
-                                        type="submit"
-                                        disabled={!worktreeBranchInput.trim() || isSubmittingWorktree}
-                                        className="px-2.5 py-0.5 bg-white/20 hover:bg-white/30 text-white rounded font-medium disabled:opacity-50 cursor-pointer"
-                                      >
-                                        {isSubmittingWorktree ? 'Creating...' : 'Create Worktree'}
-                                      </button>
-                                    </div>
-                                  </form>
+                                    {diffEntry.status === '??' ? 'U' : diffEntry.status}
+                                  </span>
                                 )}
-
-                                {/* Inline + Worktree trigger */}
-                                {!isCreating && ws.isGit && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setCreatingWorktreeFor(ws.id)}
-                                    className="w-full flex items-center gap-1.5 px-2 py-1 text-[10.5px] text-white/40 hover:text-white transition font-sans cursor-pointer rounded hover:bg-white/[0.02]"
-                                  >
-                                    <Plus className="size-2.5 text-white/40" />
-                                    <span>Create new worktree...</span>
-                                  </button>
-                                )}
-                              </div>
+                              </>
                             )}
                           </div>
                         );
-                      })}
-                    </div>
+                      })
                   )}
                 </div>
-              );
-            })
+              </div>
+            </div>
           )
         )}
       </div>
