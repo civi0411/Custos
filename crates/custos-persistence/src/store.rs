@@ -1,14 +1,14 @@
 use crate::connection::DbConnection;
 use crate::repositories::{
-    AssistantRepository, ContinuationRepository, DecisionRepository, FleetAutomationRepository,
-    OutboxRepository, ProviderRepository, ReplanRepository, ResearchRepository, RunRepository,
-    SessionRepository, SpanRepository, TaskRepository, WorkflowRevisionRepository,
-    WorkspaceRepository,
+    AssistantRepository, CommandLedgerRepository, ContinuationRepository, DecisionRepository,
+    FleetAutomationRepository, OutboxRepository, ProviderRepository, ReplanRepository,
+    ResearchRepository, RunRepository, SessionRepository, SpanRepository, TaskRepository,
+    WorkflowRevisionRepository, WorkspaceRepository,
 };
 use async_trait::async_trait;
 use custos_core::contracts::storage::{
-    DecisionPort, EffectLedgerPort, NotebookStoragePort, OutboxEntry, OutboxPort, OutboxStatus,
-    ReplanPort, RunPort, WorkflowRevisionPort,
+    CommandLedgerEntry, CommandLedgerPort, DecisionPort, EffectLedgerPort, NotebookStoragePort,
+    OutboxEntry, OutboxPort, OutboxStatus, ReplanPort, RunPort, WorkflowRevisionPort,
 };
 use custos_core::contracts::workspace::WorkspaceRepository as WorkspaceRepoPort;
 use custos_core::kernel::{SessionStore, TaskEvent, TaskStore};
@@ -40,6 +40,7 @@ pub struct SqliteTaskStore {
     provider_repo: ProviderRepository,
     fleet_automation_repo: FleetAutomationRepository,
     assistant_repo: AssistantRepository,
+    command_ledger_repo: CommandLedgerRepository,
 }
 
 impl SqliteTaskStore {
@@ -60,6 +61,7 @@ impl SqliteTaskStore {
         let provider_repo = ProviderRepository::new(db.clone());
         let fleet_automation_repo = FleetAutomationRepository::new(db.clone());
         let assistant_repo = AssistantRepository::new(db.clone());
+        let command_ledger_repo = CommandLedgerRepository::new(db.clone());
         let store = Self {
             db,
             task_repo,
@@ -76,6 +78,7 @@ impl SqliteTaskStore {
             provider_repo,
             fleet_automation_repo,
             assistant_repo,
+            command_ledger_repo,
         };
         Ok(store)
     }
@@ -97,6 +100,7 @@ impl SqliteTaskStore {
         let provider_repo = ProviderRepository::new(db.clone());
         let fleet_automation_repo = FleetAutomationRepository::new(db.clone());
         let assistant_repo = AssistantRepository::new(db.clone());
+        let command_ledger_repo = CommandLedgerRepository::new(db.clone());
         let store = Self {
             db,
             task_repo,
@@ -113,6 +117,7 @@ impl SqliteTaskStore {
             provider_repo,
             fleet_automation_repo,
             assistant_repo,
+            command_ledger_repo,
         };
         Ok(store)
     }
@@ -179,6 +184,10 @@ impl SqliteTaskStore {
 
     pub fn fleet_automation(&self) -> &FleetAutomationRepository {
         &self.fleet_automation_repo
+    }
+
+    pub fn command_ledger(&self) -> &CommandLedgerRepository {
+        &self.command_ledger_repo
     }
 
     pub fn get_settings(&self) -> Result<std::collections::HashMap<String, String>, DomainError> {
@@ -725,6 +734,17 @@ impl ReplanPort for SqliteTaskStore {
 
     async fn list_replans_for_task(&self, task_id: &str) -> Result<Vec<ReplanRecord>, DomainError> {
         self.replan_repo.list_replans_for_task(task_id)
+    }
+}
+
+#[async_trait]
+impl CommandLedgerPort for SqliteTaskStore {
+    async fn get_command(&self, command_id: &str) -> Result<Option<CommandLedgerEntry>, DomainError> {
+        self.command_ledger_repo.get_command(command_id)
+    }
+
+    async fn record_command(&self, entry: &CommandLedgerEntry) -> Result<(), DomainError> {
+        self.command_ledger_repo.record_command(entry)
     }
 }
 

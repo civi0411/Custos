@@ -155,6 +155,25 @@ const normalizeWorkspace = (wire: any): ExecutionWorkspace => {
   } as ExecutionWorkspace;
 };
 
+const isMutationMethod = (method: string): boolean => {
+  return (
+    method.startsWith('v1.tasks.create') ||
+    method.startsWith('v1.tasks.advance') ||
+    method.startsWith('v1.tasks.block') ||
+    method.startsWith('v1.tasks.complete') ||
+    method.startsWith('v1.tasks.cancel') ||
+    method.startsWith('v1.workflow.start') ||
+    method.startsWith('v1.workflow.cancel') ||
+    method.startsWith('v1.sessions.create') ||
+    method.startsWith('v1.sessions.append') ||
+    method.startsWith('v1.workspaces.create') ||
+    method.startsWith('v1.workspaces.archive') ||
+    method.startsWith('v1.notes.save') ||
+    (method.startsWith('v1.research.') &&
+      (method.includes('save') || method.includes('execute') || method.includes('create')))
+  );
+};
+
 export class DaemonClient {
   private isTauri: boolean;
   private baseUrl: string = 'http://127.0.0.1:3000';
@@ -302,17 +321,40 @@ export class DaemonClient {
 
   /**
    * Core request dispatcher. Invokes in-process Tauri command or sends HTTP RPC to custos-daemon.
+   * Ensures mutations carry a stable logical commandId across Tauri IPC and HTTP retry/fallback paths.
    */
   async request<T>(method: string, params: Record<string, any> = {}): Promise<T> {
+    const finalParams = { ...params };
+    if (isMutationMethod(method) && !finalParams.command_id) {
+      finalParams.command_id =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? `cmd_${crypto.randomUUID()}`
+          : `cmd_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    }
+
     if (this.isTauri) {
       try {
-        return await invoke<T>('custos_request', { method, params });
+        return await invoke<T>('custos_request', { method, params: finalParams });
       } catch (err: any) {
+        const errMsg = String(err?.message || err || '');
+        const isTransportError =
+          errMsg.includes('failed to connect') ||
+          errMsg.includes('channel closed') ||
+          errMsg.includes('Broken pipe') ||
+          errMsg.includes('NetworkError') ||
+          errMsg.includes('IPC');
+
+        // Business rejections (Validation, NotFound, Conflict) must fail immediately without blind HTTP resubmission
+        if (!isTransportError && errMsg.length > 0 && !errMsg.includes('timeout')) {
+          console.warn(`[DaemonClient] Business rejection on ${method}, failing without HTTP retry:`, err);
+          throw err;
+        }
+
         console.warn(`[DaemonClient] Tauri invoke failed on ${method}, falling back to HTTP:`, err);
-        return this.requestHttp<T>(method, params);
+        return this.requestHttp<T>(method, finalParams);
       }
     } else {
-      return this.requestHttp<T>(method, params);
+      return this.requestHttp<T>(method, finalParams);
     }
   }
 
@@ -320,13 +362,14 @@ export class DaemonClient {
     const baseUrl = await this.resolveHttpEndpoint();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
+    const reqId = params.command_id || `web_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     try {
       const res = await fetch(`${baseUrl}/api/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
-          id: `web_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+          id: reqId,
           method,
           params,
         }),

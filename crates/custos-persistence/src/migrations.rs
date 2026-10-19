@@ -117,5 +117,6 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     if !execution_columns.iter().any(|column| column == "record_json") {
         conn.execute_batch(include_str!("../migrations/0035_research_execution_snapshot.sql"))?;
     }
+    conn.execute_batch(include_str!("../migrations/0036_command_ledger.sql"))?;
     Ok(())
 }

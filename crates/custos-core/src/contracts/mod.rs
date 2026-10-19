@@ -41,8 +41,9 @@ pub use memory::MemoryPort;
 pub use oi::OiPlannerPort;
 pub use sandbox::{SandboxCommand, SandboxPort};
 pub use storage::{
-    AssistantDraftPort, CasPort, DecisionPort, EffectLedgerPort, NotebookStoragePort, OutboxEntry,
-    OutboxPort, OutboxStatus, ReplanPort, RunPort, StoragePort, WorkflowRevisionPort,
+    AssistantDraftPort, CasPort, CommandLedgerEntry, CommandLedgerPort, DecisionPort,
+    EffectLedgerPort, NotebookStoragePort, OutboxEntry, OutboxPort, OutboxStatus, ReplanPort,
+    RunPort, StoragePort, WorkflowRevisionPort,
 };
 pub use terminal::TerminalPort;
 pub use workflow::WorkflowPort;

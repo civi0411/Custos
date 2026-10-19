@@ -202,3 +202,20 @@ pub trait NotebookStoragePort: Send + Sync {
         cell: &custos_domain::NotebookCell,
     ) -> Result<(), DomainError>;
 }
+
+/// Persistence Port for Command Identity, Retry Deduplication and Idempotency Ledger (R1).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CommandLedgerEntry {
+    pub command_id: String,
+    pub method: String,
+    pub payload_digest: String,
+    pub result_json: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[async_trait]
+pub trait CommandLedgerPort: Send + Sync {
+    async fn get_command(&self, command_id: &str) -> Result<Option<CommandLedgerEntry>, DomainError>;
+    async fn record_command(&self, entry: &CommandLedgerEntry) -> Result<(), DomainError>;
+}

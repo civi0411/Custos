@@ -29,8 +29,14 @@ async fn custos_request(
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     browser::authorize(&caller).map_err(|e| e.to_string())?;
+    let req_id = params
+        .get("command_id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| custos_domain::new_id("ipc"));
     let req = custos_daemon::ApiRequest {
-        id: custos_domain::new_id("ipc"),
+        id: req_id,
         method,
         params,
     };

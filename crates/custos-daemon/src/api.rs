@@ -1110,7 +1110,48 @@ impl LocalApiDispatcher {
     }
 
     pub async fn handle_request(&self, req: ApiRequest) -> ApiResponse {
-        match req.method.as_str() {
+        let command_id = req
+            .params
+            .get("command_id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+        let payload_digest = if command_id.is_some() {
+            Some(custos_domain::digest(
+                serde_json::to_string(&req.params).unwrap_or_default().as_bytes(),
+            ))
+        } else {
+            None
+        };
+
+        if let (Some(cmd_id), Some(digest), Some(store)) = (
+            command_id.as_deref(),
+            payload_digest.as_deref(),
+            self.sqlite_store.as_ref(),
+        ) {
+            match store.command_ledger().get_command(cmd_id) {
+                Ok(Some(entry)) => {
+                    if entry.payload_digest == digest {
+                        let val = serde_json::from_str(&entry.result_json)
+                            .unwrap_or(serde_json::Value::Null);
+                        return ApiResponse::success(req.id, val);
+                    } else {
+                        return ApiResponse::error(
+                            req.id,
+                            format!("Command ID conflict: '{cmd_id}' already executed with different payload"),
+                        );
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    tracing::warn!(command_id = %cmd_id, error = %e, "Failed to inspect command ledger");
+                }
+            }
+        }
+
+        let method_name = req.method.clone();
+        let resp = match req.method.as_str() {
             "v1.ping" | "v1.health" => {
                 ApiResponse::success(req.id, serde_json::json!({ "status": "ok" }))
             }
@@ -7589,7 +7630,29 @@ impl LocalApiDispatcher {
                 }
             }
             unknown => ApiResponse::error(req.id, format!("Unknown method: {unknown}")),
+        };
+
+        if let (Some(cmd_id), Some(digest), Some(store)) = (
+            command_id.as_deref(),
+            payload_digest.as_deref(),
+            self.sqlite_store.as_ref(),
+        ) {
+            if let Some(res_val) = resp.result.as_ref() {
+                let entry = custos_core::contracts::storage::CommandLedgerEntry {
+                    command_id: cmd_id.to_string(),
+                    method: method_name,
+                    payload_digest: digest.to_string(),
+                    result_json: serde_json::to_string(res_val).unwrap_or_default(),
+                    created_at: chrono::Utc::now(),
+                    expires_at: chrono::Utc::now() + chrono::Duration::days(7),
+                };
+                if let Err(e) = store.command_ledger().record_command(&entry) {
+                    tracing::warn!(command_id = %cmd_id, error = %e, "Failed to record command in ledger");
+                }
+            }
         }
+
+        resp
     }
 }
 
@@ -9782,7 +9845,7 @@ mod tests {
         let server = std::thread::spawn(move || {
             let (mut socket, _) = listener.accept().unwrap();
             let mut buf = [0; 4096];
-            socket.read(&mut buf).unwrap();
+            let _ = socket.read(&mut buf).unwrap();
             let body = r#"{"data":[{"id":"only-live-model","name":"Live Model"}]}"#;
             write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body).unwrap();
         });
@@ -10493,6 +10556,54 @@ mod git_and_github_workspace_detection_tests {
         let val2 = res2.result.unwrap();
         assert!(val2["path"].is_string());
         assert_eq!(val2["is_git"], true);
+    }
+
+    #[tokio::test]
+    async fn test_command_id_dedup_and_conflict_rejection() {
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let service = Arc::new(TaskService::new(store.clone()));
+        let sessions = Arc::new(SessionManager::with_store(store.clone()));
+        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+        let dispatcher = LocalApiDispatcher::new(service, sessions, bridge)
+            .with_sqlite_store(store.clone());
+
+        let cmd_id = "cmd_stable_12345";
+        let req1 = ApiRequest {
+            id: cmd_id.into(),
+            method: "v1.tasks.create".into(),
+            params: serde_json::json!({
+                "title": "Idempotent Task",
+                "command_id": cmd_id,
+            }),
+        };
+
+        // 1. First execution
+        let res1 = dispatcher.handle_request(req1.clone()).await;
+        assert!(res1.is_success());
+        let task1 = res1.result.unwrap();
+        let task_id1 = task1["id"].as_str().unwrap().to_string();
+
+        // 2. Exact duplicate retry with same command_id and payload
+        let res2 = dispatcher.handle_request(req1).await;
+        assert!(res2.is_success());
+        let task2 = res2.result.unwrap();
+        let task_id2 = task2["id"].as_str().unwrap().to_string();
+
+        // Must return identical task_id, NOT create a second task!
+        assert_eq!(task_id1, task_id2);
+
+        // 3. Same command_id with DIFFERENT payload -> must be rejected with Conflict error
+        let req3 = ApiRequest {
+            id: "retry_conflict".into(),
+            method: "v1.tasks.create".into(),
+            params: serde_json::json!({
+                "title": "Different Title Attack",
+                "command_id": cmd_id,
+            }),
+        };
+        let res3 = dispatcher.handle_request(req3).await;
+        assert!(!res3.is_success());
+        assert!(res3.error.unwrap().contains("Command ID conflict"));
     }
 }
 
