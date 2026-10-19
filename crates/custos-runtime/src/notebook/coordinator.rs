@@ -76,15 +76,25 @@ while True:
             sys.stdout = old_stdout
             sys.stderr = old_stderr
             
+        MAX_OUTPUT_BYTES = 4 * 1024 * 1024
+        out = s_out.getvalue()
+        err = s_err.getvalue()
+        if len(out.encode('utf-8')) > MAX_OUTPUT_BYTES:
+            out = out[:MAX_OUTPUT_BYTES] + "\n[Output truncated: exceeded 4MB limit]"
+        if len(err.encode('utf-8')) > MAX_OUTPUT_BYTES:
+            err = err[:MAX_OUTPUT_BYTES] + "\n[Stderr truncated: exceeded 4MB limit]"
         resp = {
             'status': status,
-            'stdout': s_out.getvalue(),
-            'stderr': s_err.getvalue()
+            'stdout': out,
+            'stderr': err
         }
         sys.stdout.write(json.dumps(resp) + '\n')
         sys.stdout.flush()
     except Exception as e:
-        resp = {'status': 'error', 'stdout': '', 'stderr': str(e)}
+        err_msg = str(e)
+        if len(err_msg) > 4 * 1024 * 1024:
+            err_msg = err_msg[:4 * 1024 * 1024] + "\n[Stderr truncated: exceeded 4MB limit]"
+        resp = {'status': 'error', 'stdout': '', 'stderr': err_msg}
         sys.stdout.write(json.dumps(resp) + '\n')
         sys.stdout.flush()
 "#;
@@ -395,12 +405,39 @@ impl PythonKernelCoordinator {
             CellExecutionStatus::Error
         };
 
-        // Check for plot image in work_dir
+        const MAX_OUTPUT_BYTES: usize = 4 * 1024 * 1024;
+        let mut stdout = resp.stdout;
+        if stdout.len() > MAX_OUTPUT_BYTES {
+            let mut end = MAX_OUTPUT_BYTES;
+            while !stdout.is_char_boundary(end) {
+                end = end.saturating_sub(1);
+            }
+            stdout.truncate(end);
+            stdout.push_str("\n[Output truncated: exceeded 4MB limit]");
+        }
+
+        let mut stderr = resp.stderr;
+        if stderr.len() > MAX_OUTPUT_BYTES {
+            let mut end = MAX_OUTPUT_BYTES;
+            while !stderr.is_char_boundary(end) {
+                end = end.saturating_sub(1);
+            }
+            stderr.truncate(end);
+            stderr.push_str("\n[Stderr truncated: exceeded 4MB limit]");
+        }
+
+        // Check for plot image in work_dir with size bound (8MB)
         let mut output_image: Option<String> = None;
         let possible_plot = work_dir.join("_plot.png");
         if possible_plot.exists() {
-            if let Ok(bytes) = tokio::fs::read(&possible_plot).await {
-                output_image = Some(format!("data:image/png;base64,{}", base64_encode(&bytes)));
+            if let Ok(meta) = tokio::fs::metadata(&possible_plot).await {
+                if meta.len() <= 8 * 1024 * 1024 {
+                    if let Ok(bytes) = tokio::fs::read(&possible_plot).await {
+                        output_image = Some(format!("data:image/png;base64,{}", base64_encode(&bytes)));
+                    }
+                } else {
+                    tracing::warn!(path = %possible_plot.display(), "Plot image exceeds 8MB limit; omitted from inline response");
+                }
             }
         }
 
@@ -414,11 +451,11 @@ impl PythonKernelCoordinator {
                     .find(|saved| saved.id == params.cell_id).map(|saved| saved.cell_index).unwrap_or(0),
                 execution_count: Some(execution_count),
                 status,
-                stdout: Some(resp.stdout.clone()),
-                stderr: if resp.stderr.is_empty() {
+                stdout: Some(stdout.clone()),
+                stderr: if stderr.is_empty() {
                     None
                 } else {
-                    Some(resp.stderr.clone())
+                    Some(stderr.clone())
                 },
                 output_image: output_image.clone(),
                 wall_ms: Some(wall_ms),
@@ -435,8 +472,8 @@ impl PythonKernelCoordinator {
             cell_id: params.cell_id,
             execution_count,
             status,
-            stdout: resp.stdout,
-            stderr: resp.stderr,
+            stdout,
+            stderr,
             output_image,
             wall_ms,
             epoch,

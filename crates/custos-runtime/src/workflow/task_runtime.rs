@@ -933,8 +933,13 @@ impl TaskRuntime {
                 let partial = self.live.replay(cmd.session_id.as_deref().unwrap_or(""), &run.id, 0).ok().map(|r| r.snapshot.text).unwrap_or_default();
                 run.metadata["output"] = serde_json::json!(partial);
                 if let Some(store) = &self.run_store { store.save_run(&run).await?; }
-                self.active_runs.write().await.insert(run.id.clone(), run.clone());
-                self.active_workers.write().await.insert(wrun.id.clone(), wrun.clone());
+                if self.run_store.is_some() {
+                    self.active_runs.write().await.remove(&run.id);
+                    self.active_workers.write().await.remove(&wrun.id);
+                } else {
+                    self.active_runs.write().await.insert(run.id.clone(), run.clone());
+                    self.active_workers.write().await.insert(wrun.id.clone(), wrun.clone());
+                }
                 if background { self.persist_live_journal(&cmd, &mut run, &partial).await?; }
                 self.live.emit(&run.id, "result", serde_json::json!({"status":run.status.to_string(),"text":partial,"error":e.to_string()}));
                 return Err(e);
@@ -1016,14 +1021,19 @@ impl TaskRuntime {
             output: output_text,
         };
 
-        // 5. Register active executions
-        self.active_runs.write().await.insert(run.id.clone(), run.clone());
-        self.active_workers
-            .write()
-            .await
-            .insert(wrun.id.clone(), wrun);
-
         if let Some(store)=&self.run_store {store.save_run(&run).await?;}
+
+        // 5. Evict terminal executions from active maps if durably persisted, otherwise retain
+        if run.status.is_terminal() && self.run_store.is_some() {
+            self.active_runs.write().await.remove(&run.id);
+            self.active_workers.write().await.remove(&wrun.id);
+        } else {
+            self.active_runs.write().await.insert(run.id.clone(), run.clone());
+            self.active_workers
+                .write()
+                .await
+                .insert(wrun.id.clone(), wrun);
+        }
         if background { self.persist_live_journal(&cmd, &mut run, handle.output.as_deref().unwrap_or("")).await?; }
         self.live.emit(&handle.run_id, "result", serde_json::json!({"status":handle.status.to_string(),"text":handle.output,"error":if handle.status==RunStatus::Failed {Some("Native process failed; see the captured output")} else {None}}));
         Ok(handle)
@@ -1704,5 +1714,37 @@ mod tests {
                 "/tmp/custos-native-test".to_string()
             )]
         );
+    }
+
+    #[tokio::test]
+    async fn test_terminal_run_evicts_from_active_maps_to_persistence() {
+        use custos_persistence::SqliteTaskStore;
+        use custos_core::TaskStore;
+        use custos_domain::Task;
+
+        let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+        let task = Task::new("task_evict_01".into(), "Evict test".into());
+        store.save_task(&task).await.unwrap();
+
+        let model = Arc::new(TestMockModel);
+        let runtime = TaskRuntime::new()
+            .with_model(model)
+            .with_run_store(store.clone());
+
+        let cmd = StartRunCommand::new(&task.id, "actor_user")
+            .with_preferred_mode("model")
+            .with_prompt("Help me test eviction");
+
+        let handle = runtime.start_run(cmd).await.unwrap();
+        assert_eq!(handle.status, RunStatus::Completed);
+
+        // Terminal run must be evicted from active memory
+        let active = runtime.active_runs.read().await;
+        assert!(active.get(&handle.run_id).is_none(), "Terminal run must not linger in active_runs");
+        drop(active);
+
+        // But must be durably resolvable via checkpoint/run_store
+        let checkpoint = runtime.checkpoint(&handle.run_id).await.unwrap();
+        assert_eq!(checkpoint.task_id, task.id);
     }
 }
