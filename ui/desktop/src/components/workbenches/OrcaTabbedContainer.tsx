@@ -414,7 +414,7 @@ export function resolveResources(
   capabilities: CapabilityDescriptor[],
   loaded: boolean,
   failed: boolean,
-  nativeHost = false
+  _nativeHost = false
 ): ResourceDefinition[] {
   const aliases: Partial<Record<OrcaTabId, string>> = {
     activity: 'kanban',
@@ -426,8 +426,7 @@ export function resolveResources(
     if (def.id === 'browser' || def.id === 'emulator') {
       return {
         ...def,
-        status: nativeHost ? 'available' : 'unavailable',
-        reason: nativeHost ? undefined : 'Native browser preview requires the Custos desktop host.',
+        status: 'available',
         supportedOperations: [],
       };
     }
@@ -1475,6 +1474,22 @@ export const OrcaTabbedContainer = React.memo(function OrcaTabbedContainer(props
                     >
                       <FolderTree size={14} className="text-white/60" />
                       Files & Diff
+                    </button>
+                    <button
+                      type="button"
+                      className="px-3.5 py-2 text-xs flex items-center gap-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.09] border border-white/10 transition text-white/80 font-medium cursor-pointer"
+                      onClick={() => { focus(group); props.onOpenTab?.('browser'); }}
+                    >
+                      <Globe size={14} className="text-blue-400" />
+                      Browser Preview
+                    </button>
+                    <button
+                      type="button"
+                      className="px-3.5 py-2 text-xs flex items-center gap-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.09] border border-white/10 transition text-white/80 font-medium cursor-pointer"
+                      onClick={() => { focus(group); props.onOpenTab?.('emulator'); }}
+                    >
+                      <Smartphone size={14} className="text-purple-400" />
+                      Phone Simulator
                     </button>
                     {groups.length > 1 && (
                       <button

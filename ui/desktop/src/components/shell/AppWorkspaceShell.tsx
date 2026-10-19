@@ -521,8 +521,18 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
         handleOpenTab('conversation');
       }
     };
+    const handleOpenTabEvent = (e: Event) => {
+      const custom = e as CustomEvent<{ id: OrcaTabId; url?: string; title?: string }>;
+      if (custom.detail?.id) {
+        handleOpenTab(custom.detail.id, custom.detail.url, custom.detail.title);
+      }
+    };
     window.addEventListener('custos:open-chat-tab', handleOpenChatEvent);
-    return () => window.removeEventListener('custos:open-chat-tab', handleOpenChatEvent);
+    window.addEventListener('custos:open-tab', handleOpenTabEvent);
+    return () => {
+      window.removeEventListener('custos:open-chat-tab', handleOpenChatEvent);
+      window.removeEventListener('custos:open-tab', handleOpenTabEvent);
+    };
   }, [resourceTabs, handleOpenTab]);
 
   const pickerResources = resolveResources(

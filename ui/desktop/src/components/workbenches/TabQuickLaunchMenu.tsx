@@ -160,7 +160,7 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
     }
 
     // Default: Engineering
-    const engIds: OrcaTabId[] = ['terminal', 'files', 'worktrees', 'conversation'];
+    const engIds: OrcaTabId[] = ['terminal', 'files', 'browser', 'emulator', 'worktrees', 'conversation'];
     const engResources = engIds
       .map((id) => pickerResources.find((r) => r.id === id))
       .filter(matchesSearch);
@@ -182,7 +182,7 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
   const searchPlaceholder = useMemo(() => {
     if (mode === 'research') return 'Search lab, sources, findings, methods…';
     if (mode === 'copilot') return 'Search tasks, drafts, calendar, outbox…';
-    return 'Search agents, files, terminal…';
+    return 'Search agents, files, terminal, browser, emulator…';
   }, [mode]);
 
   const footerText = useMemo(() => {
