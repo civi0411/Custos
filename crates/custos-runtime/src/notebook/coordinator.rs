@@ -12,11 +12,11 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tokio::process::Command;
 use tokio::sync::{mpsc, oneshot, RwLock};
 
+use custos_core::contracts::storage::NotebookStoragePort;
 use custos_domain::{
     CellExecutionStatus, DomainError, ExecuteCellParams, ExecuteCellResult, KernelStatus,
     NotebookCell, NotebookCellType, NotebookKernelState,
 };
-use custos_persistence::ResearchRepository;
 
 struct WorkerRequest {
     code: String,
@@ -252,7 +252,7 @@ impl PythonKernelCoordinator {
     pub async fn get_status(
         &self,
         session_id: &str,
-        repo: Option<&ResearchRepository>,
+        repo: Option<&(dyn NotebookStoragePort + Send + Sync)>,
     ) -> Result<NotebookKernelState, DomainError> {
         let mut kernels = self.kernels.write().await;
         if let Some(active) = kernels.get(session_id) {
@@ -267,18 +267,18 @@ impl PythonKernelCoordinator {
                 updated_at: chrono::Utc::now().timestamp(),
             };
             if let Some(r) = repo {
-                let _ = r.save_notebook_kernel_state(&state);
+                let _ = r.save_notebook_kernel_state(&state).await;
             }
             Ok(state)
         } else if let Some(r) = repo {
-            let mut state = r.get_notebook_kernel_state(session_id)?;
+            let mut state = r.get_notebook_kernel_state(session_id).await?;
             // A restarted daemon has no Python memory from the recorded epoch.
             if state.execution_counter > 0 || state.status != KernelStatus::Idle {
                 state.epoch += 1;
                 state.execution_counter = 0;
                 state.status = KernelStatus::Idle;
                 state.updated_at = chrono::Utc::now().timestamp();
-                r.save_notebook_kernel_state(&state)?;
+                r.save_notebook_kernel_state(&state).await?;
             }
             let py = Self::discover_python_path();
             kernels.insert(
@@ -323,7 +323,7 @@ impl PythonKernelCoordinator {
     pub async fn execute_cell(
         &self,
         params: ExecuteCellParams,
-        repo: Option<&ResearchRepository>,
+        repo: Option<&(dyn NotebookStoragePort + Send + Sync)>,
     ) -> Result<ExecuteCellResult, DomainError> {
         let python_path = Self::discover_python_path();
         let work_dir = if let Some(ref cwd) = params.cwd {
@@ -442,12 +442,13 @@ impl PythonKernelCoordinator {
         }
 
         if let Some(r) = repo {
+            let cells = r.list_notebook_cells(&params.session_id).await?;
             let cell = NotebookCell {
                 id: params.cell_id.clone(),
                 session_id: params.session_id.clone(),
                 cell_type: NotebookCellType::Code,
                 source: params.code.clone(),
-                cell_index: r.list_notebook_cells(&params.session_id)?.iter()
+                cell_index: cells.iter()
                     .find(|saved| saved.id == params.cell_id).map(|saved| saved.cell_index).unwrap_or(0),
                 execution_count: Some(execution_count),
                 status,
@@ -462,7 +463,7 @@ impl PythonKernelCoordinator {
                 epoch,
                 updated_at: chrono::Utc::now().timestamp(),
             };
-            r.save_notebook_cell(&cell)?;
+            r.save_notebook_cell(&cell).await?;
         }
 
         // No recipe execution record is fabricated for an ordinary notebook cell.
@@ -499,7 +500,7 @@ impl PythonKernelCoordinator {
     pub async fn reset(
         &self,
         session_id: &str,
-        repo: Option<&ResearchRepository>,
+        repo: Option<&(dyn NotebookStoragePort + Send + Sync)>,
     ) -> Result<NotebookKernelState, DomainError> {
         let py = Self::discover_python_path();
         let ver = Self::get_python_version(&py);
@@ -536,7 +537,7 @@ impl PythonKernelCoordinator {
         };
 
         if let Some(r) = repo {
-            let _ = r.save_notebook_kernel_state(&state);
+            let _ = r.save_notebook_kernel_state(&state).await;
         }
 
         Ok(state)
@@ -580,11 +581,11 @@ mod tests {
             status: KernelStatus::Busy, python_version: "Python".into(), execution_counter: 7,
             created_at: 0, updated_at: 0 }).unwrap();
         let coordinator = PythonKernelCoordinator::new();
-        let status = coordinator.get_status("restart", Some(repository)).await.unwrap();
+        let status = coordinator.get_status("restart", Some(repository as &dyn NotebookStoragePort)).await.unwrap();
         assert_eq!(status.epoch, 5);
         assert_eq!(status.status, KernelStatus::Idle);
         assert_eq!(status.execution_counter, 0);
-        assert_eq!(coordinator.get_status("restart", Some(repository)).await.unwrap().epoch, 5);
+        assert_eq!(coordinator.get_status("restart", Some(repository as &dyn NotebookStoragePort)).await.unwrap().epoch, 5);
     }
 
     #[tokio::test]

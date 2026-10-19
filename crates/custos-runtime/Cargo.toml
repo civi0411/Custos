@@ -11,7 +11,6 @@ description = "Custos Cognitive Orchestration & Runtime: Loop, Workflow, Context
 custos-domain = { workspace = true }
 custos-core = { workspace = true }
 custos-provider = { workspace = true }
-custos-persistence = { workspace = true }
 
 tiktoken-rs = { workspace = true }
 blake3 = { workspace = true }
@@ -45,4 +44,5 @@ libc = { workspace = true }
 tempfile = { workspace = true }
 
 [dev-dependencies]
+custos-persistence = { workspace = true }
 

@@ -201,6 +201,14 @@ pub trait NotebookStoragePort: Send + Sync {
         &self,
         cell: &custos_domain::NotebookCell,
     ) -> Result<(), DomainError>;
+    async fn get_notebook_kernel_state(
+        &self,
+        session_id: &str,
+    ) -> Result<custos_domain::NotebookKernelState, DomainError>;
+    async fn save_notebook_kernel_state(
+        &self,
+        state: &custos_domain::NotebookKernelState,
+    ) -> Result<(), DomainError>;
 }
 
 /// Persistence Port for Command Identity, Retry Deduplication and Idempotency Ledger (R1).

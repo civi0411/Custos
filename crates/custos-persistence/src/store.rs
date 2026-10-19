@@ -14,7 +14,7 @@ use custos_core::contracts::workspace::WorkspaceRepository as WorkspaceRepoPort;
 use custos_core::kernel::{SessionStore, TaskEvent, TaskStore};
 use custos_domain::{
     ContinuationPacket, DecisionRecord, DispatchClaim, DomainError, ExecutionReceipt,
-    ExecutionWorkspace, LaunchAttempt, NodePlacement, NotebookCell, ReplanRecord, Run, Session,
+    ExecutionWorkspace, LaunchAttempt, NodePlacement, NotebookCell, NotebookKernelState, ReplanRecord, Run, Session,
     SessionId, SessionJournalEntry, Span, Task, WorkerRun, WorkflowRevision, WorkspaceId,
     WorkspaceStatus,
 };
@@ -767,6 +767,20 @@ impl NotebookStoragePort for SqliteTaskStore {
 
     async fn save_notebook_cell(&self, cell: &NotebookCell) -> Result<(), DomainError> {
         self.research_repo.save_notebook_cell(cell)
+    }
+
+    async fn get_notebook_kernel_state(
+        &self,
+        session_id: &str,
+    ) -> Result<NotebookKernelState, DomainError> {
+        self.research_repo.get_notebook_kernel_state(session_id)
+    }
+
+    async fn save_notebook_kernel_state(
+        &self,
+        state: &NotebookKernelState,
+    ) -> Result<(), DomainError> {
+        self.research_repo.save_notebook_kernel_state(state)
     }
 }
 

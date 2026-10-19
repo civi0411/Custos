@@ -4,7 +4,9 @@
 //! Claims Matrix (L0-L3), Experiment Runs, and Artifact Lineage.
 
 use crate::connection::DbConnection;
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use custos_core::contracts::storage::NotebookStoragePort;
 use custos_domain::{
     AnnotationRecord, AnnotationStatus, AnnotationTarget, ArtifactLineageGraph,
     ArtifactLineageNode, ArtifactSummary, CellExecutionStatus, ClaimEvidenceLink,
@@ -1904,6 +1906,42 @@ impl ResearchRepository {
             submitted_turn_id: row.get(8)?,
             created_at: DateTime::from_timestamp(ts, 0).unwrap_or_else(Utc::now),
         })
+    }
+}
+
+#[async_trait]
+impl NotebookStoragePort for ResearchRepository {
+    async fn list_notebook_cells(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<NotebookCell>, DomainError> {
+        self.list_notebook_cells(session_id)
+    }
+
+    async fn replace_notebook_cells(
+        &self,
+        session_id: &str,
+        cells: &[NotebookCell],
+    ) -> Result<(), DomainError> {
+        self.replace_notebook_cells(session_id, cells)
+    }
+
+    async fn save_notebook_cell(&self, cell: &NotebookCell) -> Result<(), DomainError> {
+        self.save_notebook_cell(cell)
+    }
+
+    async fn get_notebook_kernel_state(
+        &self,
+        session_id: &str,
+    ) -> Result<NotebookKernelState, DomainError> {
+        self.get_notebook_kernel_state(session_id)
+    }
+
+    async fn save_notebook_kernel_state(
+        &self,
+        state: &NotebookKernelState,
+    ) -> Result<(), DomainError> {
+        self.save_notebook_kernel_state(state)
     }
 }
 
