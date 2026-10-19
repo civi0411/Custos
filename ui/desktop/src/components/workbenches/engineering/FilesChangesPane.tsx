@@ -164,6 +164,12 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
     }
   }, [initialFilePath]);
 
+  useEffect(() => {
+    if (initialViewMode) {
+      setFileViewMode(initialViewMode);
+    }
+  }, [initialViewMode]);
+
   // Actions
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);

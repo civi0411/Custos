@@ -349,7 +349,15 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   ) => {
     const effectiveWsId = targetWorkspaceId || activeWorkspaceId;
 
-    // 1. Specific file editor or diff tab
+    // 1. Files handling:
+    // If opening 'files' without a specific file URL, reveal the Files Explorer in the Right Sidebar (Orca pattern)
+    if (id === 'files' && (!customUrl || !customUrl.startsWith('custos://'))) {
+      setIsInspectorOpen(true);
+      window.dispatchEvent(new CustomEvent('custos:switch-inspector-tab', { detail: { tabId: 'files' } }));
+      return;
+    }
+
+    // Specific file editor or diff tab in center canvas
     if (id === 'files' && customUrl && (customUrl.startsWith('custos://file?') || customUrl.startsWith('custos://diff?'))) {
       const existingFile = resourceTabs.tabs.find(t => t.type === 'files' && t.url === customUrl);
       if (existingFile) {
@@ -358,7 +366,8 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
         else resourceTabs.setActiveTabId(existingFile.id);
         return;
       }
-      openTab('files', customTitle || 'File', customUrl, undefined, effectiveWsId, targetPane);
+      const parsedTitle = customTitle || decodeURIComponent(customUrl.replace(/^custos:\/\/(file|diff)\?path=/, '')).split('/').pop() || 'File';
+      openTab('files', parsedTitle, customUrl, undefined, effectiveWsId, targetPane);
       return;
     }
 
@@ -527,13 +536,19 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
         handleOpenTab(custom.detail.id, custom.detail.url, custom.detail.title);
       }
     };
+    const handleOpenFilesSidebar = () => {
+      setIsInspectorOpen(true);
+      window.dispatchEvent(new CustomEvent('custos:switch-inspector-tab', { detail: { tabId: 'files' } }));
+    };
     window.addEventListener('custos:open-chat-tab', handleOpenChatEvent);
     window.addEventListener('custos:open-tab', handleOpenTabEvent);
+    window.addEventListener('custos:open-files-sidebar', handleOpenFilesSidebar);
     return () => {
       window.removeEventListener('custos:open-chat-tab', handleOpenChatEvent);
       window.removeEventListener('custos:open-tab', handleOpenTabEvent);
+      window.removeEventListener('custos:open-files-sidebar', handleOpenFilesSidebar);
     };
-  }, [resourceTabs, handleOpenTab]);
+  }, [resourceTabs, handleOpenTab, setIsInspectorOpen]);
 
   const pickerResources = resolveResources(
     pickerCapabilities,

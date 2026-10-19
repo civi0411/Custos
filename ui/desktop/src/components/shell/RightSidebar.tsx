@@ -159,6 +159,21 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
     }
   }, [currentTabs, activeTabId]);
 
+  // Allow external triggers (TopBar, Hero, shortcuts) to switch active tab in RightSidebar
+  useEffect(() => {
+    const handleSwitch = (e: Event) => {
+      const custom = e as CustomEvent<{ tabId: RightSidebarTab }>;
+      if (custom.detail?.tabId) {
+        setActiveTabId(custom.detail.tabId);
+        try {
+          localStorage.setItem('custos.right-sidebar-tab', custom.detail.tabId);
+        } catch {}
+      }
+    };
+    window.addEventListener('custos:switch-inspector-tab', handleSwitch);
+    return () => window.removeEventListener('custos:switch-inspector-tab', handleSwitch);
+  }, []);
+
   const handleSelectTab = (tab: RightSidebarTab) => {
     setActiveTabId(tab);
     try {

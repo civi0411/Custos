@@ -5,6 +5,7 @@ import {
   BookOpen,
   Bot,
   FileCode,
+  FileDiff,
   FileText,
   FlaskConical,
   FolderTree,
@@ -236,8 +237,8 @@ export const DEFAULT_RESOURCES: ResourceDefinition[] = [
   // Coding Workbench
   {
     id: 'files',
-    title: 'Files',
-    description: 'Project files & git diffs.',
+    title: 'Browse Files (Sidebar)',
+    description: 'Open file explorer in the right sidebar to browse & open files.',
     icon: FolderTree,
     group: 'Engineering',
     status: 'available',
@@ -516,14 +517,18 @@ const UnavailableResource: React.FC<{ resource: ResourceDefinition; onRetry?: ()
   );
 };
 
-const getTabIcon = (type: OrcaTabId, active: boolean) => {
+const getTabIcon = (type: OrcaTabId, active: boolean, tab?: OrcaTab) => {
   const cls = `size-3.5 shrink-0 ${active ? 'text-white' : 'text-white/40'}`;
   switch (type) {
     case 'conversation':
     case 'chat': return <MessageSquare className={cls} />;
     case 'tasks':
     case 'task': return <CheckSquare className={cls} />;
-    case 'files': return <FolderTree className={cls} />;
+    case 'files': {
+      if (tab?.url?.startsWith('custos://diff?')) return <FileDiff className={cls} />;
+      if (tab?.url?.startsWith('custos://file?')) return <FileCode className={cls} />;
+      return <FolderTree className={cls} />;
+    }
     case 'activity': return <Activity className={cls} />;
     case 'terminal': return <Terminal className={cls} />;
     case 'worktrees': return <WorktreeIcon className={cls} />;
@@ -1284,7 +1289,7 @@ export const OrcaTabbedContainer = React.memo(function OrcaTabbedContainer(props
                           : (index + (event.key === 'ArrowRight' ? 1 : group.tabIds.length - 1)) % group.tabIds.length];
                         focus(group, next); document.getElementById(`tab-${next}`)?.focus();
                       }}>
-                      {getTabIcon(getTabType(tab), isActive)}
+                      {getTabIcon(getTabType(tab), isActive, tab)}
                       <span className={`truncate max-w-40 text-[11px] ${isActive ? 'font-semibold text-white' : 'font-normal text-white/60'}`}>{tabTitle}</span>
                       {wsBadge && (
                         <span className={`font-mono text-[9px] px-1 py-0.2 rounded shrink-0 ${isActive ? 'bg-white/10 text-white/80 border border-white/15' : 'bg-white/5 text-white/40 border border-white/5'}`}>
@@ -1470,10 +1475,12 @@ export const OrcaTabbedContainer = React.memo(function OrcaTabbedContainer(props
                     <button
                       type="button"
                       className="px-3.5 py-2 text-xs flex items-center gap-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.09] border border-white/10 transition text-white/80 font-medium cursor-pointer"
-                      onClick={() => { focus(group); props.onOpenTab?.('files'); }}
+                      onClick={() => {
+                        window.dispatchEvent(new CustomEvent('custos:open-files-sidebar'));
+                      }}
                     >
-                      <FolderTree size={14} className="text-white/60" />
-                      Files & Diff
+                      <FolderTree size={14} className="text-amber-400/80" />
+                      Browse Files (Sidebar)
                     </button>
                     <button
                       type="button"
