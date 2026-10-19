@@ -56,7 +56,6 @@ export const AppTopBar: React.FC = () => {
     closeScreen,
     togglePinScreen,
     renameScreen,
-    setScreenWorkbench,
   } = useScreenContext();
 
   // Screen history navigation (Back / Forward)
@@ -309,7 +308,12 @@ export const AppTopBar: React.FC = () => {
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveWorkbench(m.id);
-                  setScreenWorkbench(activeScreenId, m.id);
+                  const targetScreen = screens
+                    .filter((s) => s.homeWorkbench === m.id || (!s.homeWorkbench && m.id === 'engineering'))
+                    .sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0))[0];
+                  if (targetScreen) {
+                    selectScreen(targetScreen.id);
+                  }
                   window.dispatchEvent(new CustomEvent('custos:switch-workbench', { detail: m.id }));
                 }}
                 className={`flex items-center justify-center size-6 rounded-md transition cursor-pointer select-none ${isActive

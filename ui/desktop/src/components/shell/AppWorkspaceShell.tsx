@@ -143,11 +143,12 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   // Sync active screen's session, task and view state when screen switches
   useEffect(() => {
     if (!activeScreen) return;
-    if (activeScreen.activeSessionId && activeScreen.activeSessionId !== activeSessionId) {
-      onSelectSession(activeScreen.activeSessionId);
+    if (activeScreen.activeSessionId !== undefined && activeScreen.activeSessionId !== activeSessionId) {
+      onSelectSession(activeScreen.activeSessionId || '');
     }
-    if (activeScreen.selectedTaskId !== undefined && activeScreen.selectedTaskId !== selectedTaskId) {
-      if (activeScreen.selectedTaskId) onSelectTask(activeScreen.selectedTaskId);
+    const screenTaskId = activeScreen.selectedTaskId ?? null;
+    if (screenTaskId !== selectedTaskId) {
+      if (screenTaskId) onSelectTask(screenTaskId);
       else onClearTask();
     }
     if (activeScreen.sidebarView && activeScreen.sidebarView !== sidebarView) {

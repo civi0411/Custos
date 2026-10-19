@@ -84,7 +84,7 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     },
   ], [currentWb, activeWorkspace?.metadata?.project_id, activeWorkspace?.id, currentProject]);
 
-  const loadedKeyRef = React.useRef<string>(storageKey);
+  const [hydratedKey, setHydratedKey] = useState<string>(storageKey);
 
   const [screens, setScreens] = useState<Screen[]>(() => {
     try {
@@ -99,29 +99,29 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // When storageKey changes (e.g. project switch), reload stored screens safely
   useEffect(() => {
-    if (loadedKeyRef.current === storageKey) return;
+    if (hydratedKey === storageKey) return;
     try {
       const stored = localStorage.getItem(storageKey);
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
           setScreens(parsed);
-          loadedKeyRef.current = storageKey;
+          setHydratedKey(storageKey);
           return;
         }
       }
     } catch {}
     setScreens(defaultScreens);
-    loadedKeyRef.current = storageKey;
-  }, [storageKey, defaultScreens]);
+    setHydratedKey(storageKey);
+  }, [storageKey, hydratedKey, defaultScreens]);
 
   // Persist screens only after hydration for the current storageKey
   useEffect(() => {
-    if (loadedKeyRef.current !== storageKey) return;
+    if (hydratedKey !== storageKey) return;
     try {
       localStorage.setItem(storageKey, JSON.stringify(screens));
     } catch {}
-  }, [storageKey, screens]);
+  }, [storageKey, screens, hydratedKey]);
 
   // Keep activeScreenId valid and aligned with currentWorkbench
   useEffect(() => {
