@@ -30,6 +30,24 @@ import { daemonClient } from '@/api/daemon_client';
 import type { ExecutionWorkspace, Task, WorkspaceDetectionResult } from '@/types/domain';
 import { Tooltip } from '@/components/common';
 
+export const normPath = (p?: string) => (p ? p.trim().replace(/\/+$/, '') : '');
+
+export const getWorkspaceKindLocation = (kind?: import('@/types/domain').WorkspaceKind): string | undefined => {
+  if (!kind) return undefined;
+  if (kind.type === 'git') return kind.repo_path;
+  if (kind.type === 'folder') return kind.path;
+  if (kind.type === 'remote_ssh') return kind.remote_path;
+  return undefined;
+};
+
+export const matchWorkspacePath = (ws: ExecutionWorkspace, targetPath?: string): boolean => {
+  if (!targetPath) return false;
+  const targetNorm = normPath(targetPath);
+  if (ws.path && normPath(ws.path) === targetNorm) return true;
+  const kindPath = getWorkspaceKindLocation(ws.kind);
+  return Boolean(kindPath && normPath(kindPath) === targetNorm);
+};
+
 export interface SidebarTool {
   icon: React.ElementType;
   label: string;
@@ -240,6 +258,13 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     };
   }, []);
 
+  const effectiveDetection = detection || activeDetection;
+  const currentProjectPath =
+    effectiveDetection?.root_path ||
+    effectiveDetection?.path ||
+    localStorage.getItem('custos_current_project_path') ||
+    '/Users/mac/Project/AgentHub';
+
   // Research study detection state (strictly isolated from engineering code projects)
   const [researchPath, setResearchPath] = useState<string | null>(() => {
     try {
@@ -323,13 +348,8 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
   // Build the complete 3-tier hierarchy: Projects -> Workspaces (repos) -> Worktrees
   const projectGroups = useMemo<ProjectGroupItem[]>(() => {
-    const effectiveDetection = detection || activeDetection;
     const projectName = currentProject || effectiveDetection?.name || 'AgentHub';
-    const projectPath =
-      effectiveDetection?.root_path ||
-      effectiveDetection?.path ||
-      localStorage.getItem('custos_current_project_path') ||
-      '/Users/mac/Project/AgentHub';
+    const projectPath = currentProjectPath;
     const isMultiRepo = Boolean(
       effectiveDetection?.sub_repositories && effectiveDetection.sub_repositories.length > 0
     );
@@ -337,16 +357,32 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     const projectWorkspaces: WorkspaceItem[] = [];
     const otherWorkspaces: WorkspaceItem[] = [];
 
-    // Map existing daemon workspaces by path
+    // Map existing daemon workspaces by normalized path
     const wsByPath = new Map<string, ExecutionWorkspace>();
+    // Non-active workspaces first
     workspaces.forEach((ws) => {
-      if (ws.status !== 'archived') wsByPath.set(ws.path, ws);
+      if (ws.status !== 'archived' && ws.id !== activeWorkspaceId) {
+        if (ws.path) wsByPath.set(normPath(ws.path), ws);
+        const kPath = getWorkspaceKindLocation(ws.kind);
+        if (kPath) wsByPath.set(normPath(kPath), ws);
+      }
+    });
+    // Active workspace takes highest priority
+    workspaces.forEach((ws) => {
+      if (ws.status !== 'archived' && ws.id === activeWorkspaceId) {
+        if (ws.path) wsByPath.set(normPath(ws.path), ws);
+        const kPath = getWorkspaceKindLocation(ws.kind);
+        if (kPath) wsByPath.set(normPath(kPath), ws);
+      }
     });
 
     // 1. If multi-repo project detected (e.g. AgentHub with child repos)
     if (effectiveDetection?.sub_repositories && effectiveDetection.sub_repositories.length > 0) {
       effectiveDetection.sub_repositories.forEach((sub: any) => {
-        const matchedWs = wsByPath.get(sub.path);
+        const subNorm = normPath(sub.path);
+        const matchedWs =
+          wsByPath.get(subNorm) ||
+          workspaces.find((w) => w.status !== 'archived' && matchWorkspacePath(w, subNorm));
         const wsId = matchedWs?.id || `sub_${sub.name}`;
         const mainBranch = sub.branch || matchedWs?.active_branch || 'main';
         const daemonDirtyCount = matchedWs?.dirty_manifest?.modified_files?.length ?? 0;
@@ -356,7 +392,9 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         const worktrees: WorktreeItem[] = [];
 
         // 1a. Primary worktree (main checkout)
-        const primarySessions = allSessions.filter((s) => s.workspaceId === wsId || s.workspaceId === sub.path);
+        const primarySessions = allSessions.filter(
+          (s) => s.workspaceId === wsId || (matchedWs && s.workspaceId === matchedWs.id) || s.workspaceId === sub.path
+        );
         worktrees.push({
           id: wsId,
           name: mainBranch,
@@ -375,19 +413,28 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
         if (sub.worktrees) {
           sub.worktrees.forEach((wt: any) => {
             if (!wt.is_main) {
-              const wtSessions = allSessions.filter((s) => s.workspaceId === wt.path || s.workspaceId === `wt_${wt.path}`);
+              const wtNorm = normPath(wt.path);
+              const matchedWtWs =
+                wsByPath.get(wtNorm) ||
+                workspaces.find((w) => w.status !== 'archived' && matchWorkspacePath(w, wtNorm));
+              const wtId = matchedWtWs?.id || `wt_${wt.path}`;
+              const wtBranch = wt.branch || matchedWtWs?.active_branch || 'worktree';
+              const wtDirtyCount = matchedWtWs?.dirty_manifest?.modified_files?.length ?? 0;
+              const wtSessions = allSessions.filter(
+                (s) => s.workspaceId === wtId || (matchedWtWs && s.workspaceId === matchedWtWs.id) || s.workspaceId === wt.path
+              );
               worktrees.push({
-                id: `wt_${wt.path}`,
-                name: wt.branch || wt.path.split('/').pop() || 'worktree',
-                branch: wt.branch || 'worktree',
+                id: wtId,
+                name: wtBranch,
+                branch: wtBranch,
                 path: wt.path,
                 isMain: false,
-                isDirty: false,
-                dirtyCount: 0,
+                isDirty: Boolean(matchedWtWs?.dirty_manifest?.is_dirty) || wtDirtyCount > 0,
+                dirtyCount: wtDirtyCount,
                 isRunning: wtSessions.some((s) => s.taskStatus === 'running'),
                 isBlocked: wtSessions.some((s) => s.taskStatus === 'blocked'),
                 sessionCount: wtSessions.length,
-                agentActivity: getAgentActivity(`wt_${wt.path}`, wt.path),
+                agentActivity: getAgentActivity(wtId, wt.path),
               });
             }
           });
@@ -395,7 +442,11 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
         // Also attach daemon worktrees linked to this repository
         workspaces.forEach((w) => {
-          if (w.lineage?.parent_workspace_id === wsId && !worktrees.some((existing) => existing.path === w.path)) {
+          if (
+            w.status !== 'archived' &&
+            w.lineage?.parent_workspace_id === wsId &&
+            !worktrees.some((existing) => normPath(existing.path) === normPath(w.path))
+          ) {
             const wSessions = allSessions.filter((s) => s.workspaceId === w.id);
             worktrees.push({
               id: w.id,
@@ -481,6 +532,71 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       });
     }
 
+    // 1c. Include all daemon workspaces that belong to this project or were added
+    workspaces.forEach((ws) => {
+      if (ws.status === 'archived') return;
+      const wsNorm = normPath(ws.path);
+      const isAlreadyInProject = projectWorkspaces.some(
+        (pw) => normPath(pw.path) === wsNorm || pw.worktrees.some((wt) => normPath(wt.path) === wsNorm)
+      );
+      if (isAlreadyInProject) return;
+
+      const isInsideProject = Boolean(projectPath && wsNorm.startsWith(normPath(projectPath)));
+      const isAssociated = Boolean(ws.metadata?.project_path && normPath(ws.metadata.project_path) === normPath(projectPath));
+
+      if (isInsideProject || isAssociated) {
+        const wsBranch = ws.active_branch || (ws.kind?.type === 'git' ? ws.kind.branch : undefined) || 'main';
+        const dirtyCount = ws.dirty_manifest?.modified_files?.length || 0;
+        const sessions = allSessions.filter((s) => s.workspaceId === ws.id || s.workspaceId === ws.path);
+
+        projectWorkspaces.push({
+          id: ws.id,
+          name: ws.name || ws.path.split('/').pop() || 'Repository',
+          path: ws.path,
+          isGit: ws.kind?.type === 'git',
+          worktrees: [
+            {
+              id: ws.id,
+              name: wsBranch,
+              branch: wsBranch,
+              path: ws.path,
+              isMain: true,
+              isDirty: Boolean(ws.dirty_manifest?.is_dirty) || dirtyCount > 0,
+              dirtyCount,
+              isRunning: sessions.some((s) => s.taskStatus === 'running'),
+              isBlocked: sessions.some((s) => s.taskStatus === 'blocked'),
+              sessionCount: sessions.length,
+              agentActivity: getAgentActivity(ws.id, ws.path),
+            },
+          ],
+        });
+      } else {
+        const wsBranch = ws.active_branch || (ws.kind?.type === 'git' ? ws.kind.branch : undefined) || 'main';
+        const dirtyCount = ws.dirty_manifest?.modified_files?.length || 0;
+        otherWorkspaces.push({
+          id: ws.id,
+          name: ws.name || ws.path.split('/').pop() || 'Workspace',
+          path: ws.path,
+          isGit: ws.kind?.type === 'git',
+          worktrees: [
+            {
+              id: ws.id,
+              name: wsBranch,
+              branch: wsBranch,
+              path: ws.path,
+              isMain: true,
+              isDirty: Boolean(ws.dirty_manifest?.is_dirty) || dirtyCount > 0,
+              dirtyCount,
+              isRunning: false,
+              isBlocked: false,
+              sessionCount: allSessions.filter((s) => s.workspaceId === ws.id).length,
+              agentActivity: getAgentActivity(ws.id, ws.path),
+            },
+          ],
+        });
+      }
+    });
+
     // Sort: Preferred repo (Custos) first, then alphabetical
     projectWorkspaces.sort((a, b) => {
       if (a.name === 'Custos') return -1;
@@ -497,37 +613,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       path: projectPath,
       isMultiRepo,
       workspaces: projectWorkspaces,
-    });
-
-    // Check for any workspaces outside the main project (standalone folders/checkouts)
-    workspaces.forEach((ws) => {
-      if (ws.status === 'archived') return;
-      if (projectPath && ws.path.startsWith(projectPath)) return;
-      if (ws.lineage?.parent_workspace_id) return;
-
-      const wsBranch = ws.active_branch || (ws.kind?.type === 'git' ? ws.kind.branch : undefined) || 'main';
-      const dirtyCount = ws.dirty_manifest?.modified_files?.length || 0;
-      otherWorkspaces.push({
-        id: ws.id,
-        name: ws.name,
-        path: ws.path,
-        isGit: ws.kind?.type === 'git',
-        worktrees: [
-          {
-            id: ws.id,
-            name: wsBranch,
-            branch: wsBranch,
-            path: ws.path,
-            isMain: true,
-            isDirty: Boolean(ws.dirty_manifest?.is_dirty),
-            dirtyCount,
-            isRunning: false,
-            isBlocked: false,
-            sessionCount: allSessions.filter((s) => s.workspaceId === ws.id).length,
-            agentActivity: getAgentActivity(ws.id, ws.path),
-          },
-        ],
-      });
     });
 
     if (otherWorkspaces.length > 0) {
@@ -580,7 +665,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     }
 
     return result;
-  }, [workspaces, allSessions, activeDetection, currentProject, filterQuery, filterActiveOnly, activeWorkspaceId]);
+  }, [workspaces, allSessions, activeDetection, currentProject, filterQuery, filterActiveOnly, activeWorkspaceId, detection, currentProjectPath]);
 
   // Count total worktrees and active worktrees for filter chips
   const { totalWorktreesCount, activeWorktreesCount } = useMemo(() => {
@@ -878,7 +963,9 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     let targetName: string | undefined;
     let targetPath = path;
 
-    const existing = workspaces.find((w) => w.id === id || (path && w.path === path));
+    const existing = workspaces.find(
+      (w) => w.status !== 'archived' && (w.id === id || (path && matchWorkspacePath(w, path)))
+    );
     if (existing) {
       targetWorkspaceId = existing.id;
       targetBranch = existing.active_branch || (existing.kind?.type === 'git' ? existing.kind.branch : undefined);
@@ -888,22 +975,22 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     } else if (path) {
       try {
         const detected = await daemonClient.detectWorkspace(path);
-        if (!detected.is_git || !detected.branch) {
-          throw new Error('Could not detect a valid Git branch in this checkout.');
-        }
-        const checkoutPath = detected.root_path;
+        const checkoutPath = detected.root_path || path;
         const repositoryPath =
           detected.worktrees?.find((worktree) => worktree.is_main && !worktree.is_bare)?.path || checkoutPath;
+        const branch = detected.branch || 'main';
         const created = await daemonClient.createWorkspace({
-          name: path.split('/').pop() || 'workspace',
-          kind: { type: 'git', repo_path: checkoutPath, branch: detected.branch },
+          name: path.split('/').filter(Boolean).pop() || 'workspace',
+          kind: detected.is_git
+            ? { type: 'git', repo_path: checkoutPath, branch }
+            : { type: 'folder', path: checkoutPath },
           path: checkoutPath,
           metadata: { git_repository_path: repositoryPath, registered_existing_checkout: true },
         });
         await refreshWorkspaces();
         if (created?.id) {
           targetWorkspaceId = created.id;
-          targetBranch = detected.branch;
+          targetBranch = branch;
           targetName = created.name;
           targetPath = checkoutPath;
           onSelectWorkspace(created.id);
@@ -923,6 +1010,54 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       branch: targetBranch,
       path: targetPath,
     });
+  };
+
+  const handleAddRepoToProject = async () => {
+    try {
+      const chosen = await daemonClient.pickFolder();
+      if (!chosen) return;
+      const det = await daemonClient.detectWorkspace(chosen);
+      const repoName = det?.name || chosen.split('/').filter(Boolean).pop() || 'Repository';
+      const targetPath = det?.root_path || chosen;
+
+      const existing = workspaces.find(
+        (w) => w.status !== 'archived' && matchWorkspacePath(w, targetPath)
+      );
+      if (existing) {
+        await handleSelectWorkspaceItem(existing.id, existing.path);
+        setExpandedWorkspaces((prev) => ({ ...prev, [existing.id]: true }));
+        onShowToast?.(`Switched to repository "${existing.name}".`);
+        return;
+      }
+
+      const created = await daemonClient.createWorkspace({
+        name: repoName,
+        path: targetPath,
+        kind: det?.is_git
+          ? {
+              type: 'git',
+              repo_path: targetPath,
+              branch: det.branch || 'main',
+            }
+          : {
+              type: 'folder',
+              path: targetPath,
+            },
+        metadata: {
+          project_path: currentProjectPath,
+          added_at: Date.now(),
+        },
+      });
+
+      await refreshWorkspaces();
+      if (created?.id) {
+        await handleSelectWorkspaceItem(created.id, created.path);
+        setExpandedWorkspaces((prev) => ({ ...prev, [created.id]: true }));
+        onShowToast?.(`Added and activated repository "${repoName}".`);
+      }
+    } catch (err: any) {
+      onShowToast?.(`Failed to add repository: ${err?.message || err}`);
+    }
   };
 
   if (isSidebarCollapsed) return null;
@@ -1312,7 +1447,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleOpenFolderDirect();
+                          void handleAddRepoToProject();
                         }}
                         className="p-1 rounded hover:bg-white/10 opacity-0 group-hover/proj:opacity-100 transition cursor-pointer"
                         title="Add repository to project"
@@ -1334,22 +1469,53 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                       {group.workspaces.map((ws) => {
                         const isWsExpanded = expandedWorkspaces[ws.id] ?? true;
                         const isCreating = creatingWorktreeFor === ws.id;
+                        const isRepoActive =
+                          ws.id === activeWorkspaceId ||
+                          ws.worktrees.some((wt) => wt.id === activeWorkspaceId) ||
+                          (activeWorkspace &&
+                            (normPath(ws.path) === normPath(activeWorkspace.path) ||
+                              ws.worktrees.some((wt) => normPath(wt.path) === normPath(activeWorkspace.path))));
 
                         return (
                           <div key={ws.id} className="space-y-1">
                             {/* Workspace / Repository Header */}
                             <div
-                              className="flex items-center justify-between px-2 py-1 select-none cursor-pointer group/repo hover:bg-white/[0.03] rounded-md transition"
-                              onClick={() =>
-                                setExpandedWorkspaces((prev) => ({
-                                  ...prev,
-                                  [ws.id]: !isWsExpanded,
-                                }))
-                              }
+                              className={`flex items-center justify-between px-2 py-1.5 select-none cursor-pointer group/repo rounded-lg transition ${
+                                isRepoActive
+                                  ? 'bg-white/[0.08] text-white'
+                                  : 'hover:bg-white/[0.04] text-white/80'
+                              }`}
+                              onClick={() => {
+                                if (!isWsExpanded) {
+                                  setExpandedWorkspaces((prev) => ({
+                                    ...prev,
+                                    [ws.id]: true,
+                                  }));
+                                }
+                                const target =
+                                  ws.worktrees.find((wt) => wt.id === activeWorkspaceId) ||
+                                  ws.worktrees.find((wt) => wt.isMain) ||
+                                  ws.worktrees[0];
+                                if (target) {
+                                  void handleSelectWorkspaceItem(target.id, target.path);
+                                } else {
+                                  void handleSelectWorkspaceItem(ws.id, ws.path);
+                                }
+                              }}
                             >
                               <div className="flex items-center gap-1.5 min-w-0 flex-1">
                                 {ws.worktrees.length > 1 ? (
-                                  <span className="text-white/40 group-hover/repo:text-white/70 transition shrink-0">
+                                  <span
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setExpandedWorkspaces((prev) => ({
+                                        ...prev,
+                                        [ws.id]: !isWsExpanded,
+                                      }));
+                                    }}
+                                    className="text-white/40 hover:text-white transition p-0.5 rounded cursor-pointer shrink-0"
+                                    title={isWsExpanded ? 'Collapse branches' : 'Expand branches'}
+                                  >
                                     {isWsExpanded ? (
                                       <ChevronDown className="size-3" />
                                     ) : (
@@ -1367,10 +1533,10 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                                     className="size-3.5 rounded border border-white/20 object-cover shrink-0"
                                   />
                                 ) : (
-                                  <FolderGit2 className="size-3.5 text-white/50 shrink-0" />
+                                  <FolderGit2 className={`size-3.5 shrink-0 ${isRepoActive ? 'text-white' : 'text-white/50'}`} />
                                 )}
 
-                                <span className="truncate font-medium text-[12px] text-white/90">
+                                <span className={`truncate text-[12px] ${isRepoActive ? 'text-white font-semibold' : 'text-white/90 font-medium'}`}>
                                   {ws.name}
                                 </span>
 
@@ -1405,12 +1571,12 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                                   const isWtActive =
                                     wt.id === activeWorkspaceId ||
                                     (activeWorkspace &&
-                                      (wt.path === activeWorkspace.path || wt.id === activeWorkspace.id));
+                                      (normPath(wt.path) === normPath(activeWorkspace.path) || wt.id === activeWorkspace.id));
 
                                   return (
                                     <div
                                       key={wt.id}
-                                      onClick={() => handleSelectWorkspaceItem(wt.id, wt.path)}
+                                      onClick={() => void handleSelectWorkspaceItem(wt.id, wt.path)}
                                       className={`relative flex flex-col cursor-pointer transition select-none ${
                                         isWtActive
                                           ? 'bg-white/[0.08] border border-white/14 rounded-xl p-2.5 my-1 shadow-sm'
