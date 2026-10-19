@@ -1531,6 +1531,7 @@
             wall_ms: None,
             epoch: 0,
             updated_at: chrono::Utc::now().timestamp(),
+            ..Default::default()
         };
         let save_cells_req = ApiRequest {
             id: "nb_save_1".into(),

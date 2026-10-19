@@ -55,7 +55,9 @@ pub use artifact::{
     ArtifactHandoff, ArtifactKind, ArtifactLineageGraph, ArtifactRef, ArtifactSummary,
     HandoffConsent, LineageGraphEdge, LineageGraphNode,
 };
-pub use assistant::{AssistantDraft, OutboxActionItem, ResourceActionCapability};
+pub use assistant::{
+    AssistantDraft, OutboxActionItem, OutboxDeliveryState, ResourceActionCapability, StandingGrant,
+};
 pub use authority::{
     ExecutionPermit, ExecutionReceipt, Grant, Permit, PermitId, PermitV1, Receipt, ReceiptStatus,
     RiskClass,

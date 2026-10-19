@@ -110,8 +110,44 @@ impl RepoCoordinator {
         for node in &nodes {
             if let Some(rel_path) = &node.file_path {
                 let line_num = node.line_number.unwrap_or(1);
+                let abs_path = self.workspace_root.join(rel_path);
+
+                // Compute exact byte range and cryptographic digest from actual file bytes
+                let (start_byte, end_byte, end_line, source_digest) = if let Ok(bytes) = std::fs::read(&abs_path) {
+                    let mut line_starts = Vec::new();
+                    line_starts.push(0);
+                    for (i, &b) in bytes.iter().enumerate() {
+                        if b == b'\n' {
+                            line_starts.push(i + 1);
+                        }
+                    }
+                    let total_lines = line_starts.len();
+                    let s_line = line_num.max(1);
+                    let e_line = (s_line + 5).min(total_lines.max(s_line));
+
+                    let s_byte = if s_line <= total_lines {
+                        line_starts[s_line - 1]
+                    } else {
+                        bytes.len()
+                    };
+                    let e_byte = if e_line < total_lines {
+                        line_starts[e_line]
+                    } else {
+                        bytes.len()
+                    };
+                    let slice = if s_byte <= e_byte && e_byte <= bytes.len() {
+                        &bytes[s_byte..e_byte]
+                    } else {
+                        &bytes[..]
+                    };
+                    let digest = blake3::hash(slice).to_hex().to_string();
+                    (s_byte, e_byte, e_line, digest)
+                } else {
+                    (0, 0, line_num, "unavailable".to_string())
+                };
+
                 let span =
-                    SourceSpan::new(rel_path.clone(), 0, 100, line_num, line_num + 5, "digest");
+                    SourceSpan::new(rel_path.clone(), start_byte, end_byte, line_num, end_line, source_digest);
 
                 // Check security boundary
                 if let Err(e) = self.security_policy.validate_span(&span) {
@@ -196,6 +232,10 @@ mod tests {
         assert_eq!(res.data.len(), 1);
         assert_eq!(res.confidence, ConfidenceLevel::SyntacticCandidate);
         assert!(res.missing_reasons.is_empty());
+        assert_ne!(res.data[0].span.source_digest, "digest");
+        assert_ne!(res.data[0].span.source_digest, "unavailable");
+        assert_eq!(res.data[0].span.start_byte, 0);
+        assert_eq!(res.data[0].span.end_byte, 23); // "pub struct TaskWorker;\n".len() == 23
 
         // Modify file -> becomes stale
         std::fs::write(&file_path, "pub struct TaskWorkerModified;\n").unwrap();

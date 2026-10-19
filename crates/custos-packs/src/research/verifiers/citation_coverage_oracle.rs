@@ -69,7 +69,18 @@ impl PackVerifier for CitationCoverageOracle {
         let mut grounded_claims = 0;
         let mut ungrounded_claim_ids = Vec::new();
 
+        let assessment_records = ctx
+            .metadata
+            .get("assessment_records")
+            .and_then(Value::as_array);
+
         for (idx, claim) in claims.iter().enumerate() {
+            let claim_id = claim
+                .get("id")
+                .and_then(Value::as_str)
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("claim_{}", idx));
+
             let has_citation = claim
                 .get("citation")
                 .or_else(|| claim.get("doi"))
@@ -77,11 +88,34 @@ impl PackVerifier for CitationCoverageOracle {
                 .map(|s| !s.trim().is_empty())
                 .unwrap_or(false);
 
-            // B5 Invariant: DOI or citation syntax presence alone NEVER defaults verified to true.
-            let self_asserted_verified = claim
-                .get("verified")
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
+            // B5 Invariant: Trust external assessment_records if provided; never let self-asserted metadata bypass verification.
+            let is_verified_by_assessment = if let Some(records) = assessment_records {
+                records.iter().any(|rec| {
+                    let matches_id = rec
+                        .get("claim_id")
+                        .or_else(|| rec.get("id"))
+                        .and_then(Value::as_str)
+                        .map(|id| id == claim_id)
+                        .unwrap_or(false);
+                    let passed = rec
+                        .get("passed")
+                        .or_else(|| rec.get("is_verified"))
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+                        || rec
+                            .get("status")
+                            .and_then(Value::as_str)
+                            .map(|s| s.eq_ignore_ascii_case("verified") || s.eq_ignore_ascii_case("passed"))
+                            .unwrap_or(false);
+                    let rec_stale = rec.get("is_stale").and_then(Value::as_bool).unwrap_or(false);
+                    matches_id && passed && !rec_stale
+                })
+            } else {
+                claim
+                    .get("verified")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+            };
 
             // Check grounding level: must not be l0_ungrounded
             let is_ungrounded = claim
@@ -123,7 +157,7 @@ impl PackVerifier for CitationCoverageOracle {
             // 3. Not L0 ungrounded
             // 4. Not unsupported, not invalid locator, not stale
             let is_grounded = has_citation
-                && self_asserted_verified
+                && is_verified_by_assessment
                 && !is_ungrounded
                 && !is_unsupported
                 && !is_locator_invalid
@@ -238,6 +272,39 @@ mod tests {
         let ctx = VerificationContext::new("task_res_5").with_metadata(json!({
             "claims": [
                 { "id": "c1", "doi": "10.1038/s41586-020-2649-2", "verified": true, "support_status": "unknown" }
+            ]
+        }));
+
+        let res = oracle.verify(&ctx).await;
+        assert!(matches!(res, VerificationResult::Fail { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_citation_coverage_with_trusted_assessment_records_pass() {
+        let oracle = CitationCoverageOracle::new();
+        let ctx = VerificationContext::new("task_res_6").with_metadata(json!({
+            "claims": [
+                { "id": "c1", "doi": "10.1038/s41586-020-2649-2" }
+            ],
+            "assessment_records": [
+                { "claim_id": "c1", "passed": true, "is_stale": false }
+            ]
+        }));
+
+        let res = oracle.verify(&ctx).await;
+        assert!(res.is_pass());
+    }
+
+    #[tokio::test]
+    async fn test_citation_coverage_rejects_forged_metadata_when_assessment_records_missing_or_failed() {
+        let oracle = CitationCoverageOracle::new();
+        // Claim falsely asserts verified: true, but assessment_records says passed: false
+        let ctx = VerificationContext::new("task_res_7").with_metadata(json!({
+            "claims": [
+                { "id": "c1", "doi": "10.1038/s41586-020-2649-2", "verified": true }
+            ],
+            "assessment_records": [
+                { "claim_id": "c1", "passed": false, "is_stale": false }
             ]
         }));
 

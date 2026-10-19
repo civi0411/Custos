@@ -835,6 +835,7 @@ impl ResearchRepository {
                     wall_ms: wall.map(|w| w as u64),
                     epoch: ep as u32,
                     updated_at: row.get(12)?,
+                    ..Default::default()
                 })
             })
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -976,6 +977,7 @@ impl ResearchRepository {
                         execution_counter: counter as u32,
                         created_at: row.get(5)?,
                         updated_at: row.get(6)?,
+                        ..Default::default()
                     })
                 })
                 .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -999,6 +1001,7 @@ impl ResearchRepository {
                 execution_counter: 0,
                 created_at: now,
                 updated_at: now,
+                ..Default::default()
             };
             self.save_notebook_kernel_state(&default_state)?;
             Ok(default_state)
@@ -2066,7 +2069,7 @@ mod tests {
             id: id.into(), session_id: session.into(), cell_type: NotebookCellType::Code,
             source: "print(42)".into(), cell_index: 0, execution_count: None,
             status: CellExecutionStatus::Idle, stdout: None, stderr: None, output_image: None,
-            wall_ms: None, epoch: 0, updated_at: 0,
+            wall_ms: None, epoch: 0, updated_at: 0, ..Default::default()
         };
         repo.replace_notebook_cells("a", &[cell("one", "a"), cell("two", "a")]).unwrap();
         repo.replace_notebook_cells("b", &[cell("other", "b")]).unwrap();

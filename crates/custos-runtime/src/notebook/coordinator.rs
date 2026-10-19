@@ -265,6 +265,7 @@ impl PythonKernelCoordinator {
                 execution_counter: active.execution_counter,
                 created_at: chrono::Utc::now().timestamp(),
                 updated_at: chrono::Utc::now().timestamp(),
+                ..Default::default()
             };
             if let Some(r) = repo {
                 let _ = r.save_notebook_kernel_state(&state).await;
@@ -304,6 +305,7 @@ impl PythonKernelCoordinator {
                 execution_counter: 0,
                 created_at: chrono::Utc::now().timestamp(),
                 updated_at: chrono::Utc::now().timestamp(),
+                ..Default::default()
             };
             kernels.insert(
                 session_id.to_string(),
@@ -462,6 +464,8 @@ impl PythonKernelCoordinator {
                 wall_ms: Some(wall_ms),
                 epoch,
                 updated_at: chrono::Utc::now().timestamp(),
+                notebook_id: params.notebook_id.clone(),
+                cell_version: params.cell_version,
             };
             r.save_notebook_cell(&cell).await?;
         }
@@ -479,6 +483,10 @@ impl PythonKernelCoordinator {
             wall_ms,
             epoch,
             execution_record_id,
+            notebook_id: params.notebook_id,
+            kernel_id: params.kernel_id,
+            cell_version: params.cell_version,
+            execution_request_id: params.execution_request_id,
         })
     }
 
@@ -534,6 +542,7 @@ impl PythonKernelCoordinator {
             execution_counter: 0,
             created_at: chrono::Utc::now().timestamp(),
             updated_at: chrono::Utc::now().timestamp(),
+            ..Default::default()
         };
 
         if let Some(r) = repo {
@@ -579,7 +588,7 @@ mod tests {
         let repository = store.research();
         repository.save_notebook_kernel_state(&NotebookKernelState { session_id: "restart".into(), epoch: 4,
             status: KernelStatus::Busy, python_version: "Python".into(), execution_counter: 7,
-            created_at: 0, updated_at: 0 }).unwrap();
+            created_at: 0, updated_at: 0, ..Default::default() }).unwrap();
         let coordinator = PythonKernelCoordinator::new();
         let status = coordinator.get_status("restart", Some(repository as &dyn NotebookStoragePort)).await.unwrap();
         assert_eq!(status.epoch, 5);
@@ -594,7 +603,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let params = ExecuteCellParams { session_id: "interrupt-session".into(), cell_id: "cell".into(),
             code: "import time; time.sleep(30)".into(), workspace_id: None,
-            cwd: Some(temp.path().to_string_lossy().into()), task_id: None };
+            cwd: Some(temp.path().to_string_lossy().into()), task_id: None, ..Default::default() };
         let running = { let coordinator = coordinator.clone(); let params = params.clone();
             tokio::spawn(async move { coordinator.execute_cell(params, None).await }) };
         for _ in 0..100 {
@@ -631,6 +640,7 @@ mod tests {
                     workspace_id: None,
                     cwd: None,
                     task_id: None,
+                    ..Default::default()
                 },
                 None,
             )
@@ -657,6 +667,7 @@ mod tests {
                     workspace_id: None,
                     cwd: None,
                     task_id: None,
+                    ..Default::default()
                 },
                 None,
             )
@@ -678,6 +689,7 @@ mod tests {
                     workspace_id: None,
                     cwd: None,
                     task_id: None,
+                    ..Default::default()
                 },
                 None,
             )
