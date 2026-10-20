@@ -3,8 +3,6 @@ import {
   GitBranch,
   HardDrive,
   Coffee,
-  AlertTriangle,
-  Zap,
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { daemonClient } from '@/api/daemon_client';
@@ -83,49 +81,40 @@ export const AppStatusBar: React.FC = () => {
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
-  // Derive active quotas and percentages
-  const availableQuotas = quotas.filter((q) => q.status === 'available' && q.windows.length > 0);
-
-  // Check if ANY quota is exhausted or near limit
-  let hasExhaustedQuota = false;
-  let hasNearLimitQuota = false;
-  for (const q of availableQuotas) {
-    for (const w of q.windows) {
-      if (w.used_percent >= 100) hasExhaustedQuota = true;
-      else if (w.used_percent >= 90) hasNearLimitQuota = true;
-    }
-  }
-
-  // Find OpenAI quota
-  const openaiQuota = availableQuotas.find(
-    (q) => q.account_id.includes('openai') || q.account_id.includes('codex')
+  // Derive quota percentages
+  const openaiQuota = quotas.find(
+    (q) => q.status === 'available' && (q.account_id.includes('openai') || q.account_id.includes('codex'))
   );
-  let openaiUsedPercent: number | null = null;
+  const antigravityQuota = quotas.find(
+    (q) => q.status === 'available' && q.account_id.includes('antigravity')
+  );
+  const claudeQuota = quotas.find(
+    (q) => q.status === 'available' && (q.account_id.includes('claude') || q.account_id.includes('anthropic'))
+  );
+  const geminiQuota = quotas.find(
+    (q) => q.status === 'available' && (q.account_id.includes('gemini') || q.account_id.includes('google'))
+  );
+
+  let openaiPercent: number | null = null;
   if (openaiQuota && openaiQuota.windows.length > 0) {
     const activeWindow = openaiQuota.windows.find((w) => w.window_kind === 'weekly') || openaiQuota.windows[0];
-    openaiUsedPercent = Math.round(activeWindow.used_percent);
+    openaiPercent = Math.round(activeWindow.used_percent);
   }
 
-  // Find Antigravity quota
-  const antigravityQuota = availableQuotas.find((q) => q.account_id.includes('antigravity'));
-  let antigravityUsedPercent: number | null = null;
+  let antigravityPercent: number | null = null;
   if (antigravityQuota && antigravityQuota.windows.length > 0) {
     const activeWindow = antigravityQuota.windows.find((w) => w.name === '3p-weekly') || antigravityQuota.windows[0];
-    antigravityUsedPercent = Math.round(activeWindow.used_percent);
+    antigravityPercent = Math.round(activeWindow.used_percent);
   }
 
-  // Find Claude quota
-  const claudeQuota = availableQuotas.find((q) => q.account_id.includes('claude') || q.account_id.includes('anthropic'));
-  let claudeUsedPercent: number | null = null;
+  let claudePercent: number | null = null;
   if (claudeQuota && claudeQuota.windows.length > 0) {
-    claudeUsedPercent = Math.round(claudeQuota.windows[0].used_percent);
+    claudePercent = Math.round(claudeQuota.windows[0].used_percent);
   }
 
-  // Find Gemini quota
-  const geminiQuota = availableQuotas.find((q) => q.account_id.includes('gemini') || q.account_id.includes('google'));
-  let geminiUsedPercent: number | null = null;
+  let geminiPercent: number | null = null;
   if (geminiQuota && geminiQuota.windows.length > 0) {
-    geminiUsedPercent = Math.round(geminiQuota.windows[0].used_percent);
+    geminiPercent = Math.round(geminiQuota.windows[0].used_percent);
   }
 
   const memoryMb = systemMetrics?.memory_resident_mb ?? 0;
@@ -252,81 +241,67 @@ export const AppStatusBar: React.FC = () => {
           />
         </div>
 
-        <span className="text-white/15">·</span>
-
-        {/* Provider Quota Popover Toggle (Shows Exhaustion, Remaining Quota & Limits) */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsUsageOpen(!isUsageOpen);
-              setIsResourceOpen(false);
-            }}
-            className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded-md transition cursor-pointer ${
-              hasExhaustedQuota
-                ? 'bg-rose-500/15 text-rose-300 hover:bg-rose-500/25 border border-rose-500/30'
-                : hasNearLimitQuota
-                  ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 border border-amber-500/30'
-                  : 'hover:bg-white/10 text-white/70 hover:text-white'
-            }`}
-            title="Provider Rate Limits & Remaining Quota (Click to view details)"
-            aria-label="View rate limits and quota"
-          >
-            {hasExhaustedQuota ? (
-              <span className="flex items-center gap-1 text-[10px] font-semibold text-rose-400">
-                <AlertTriangle className="size-2.5 shrink-0" />
-                <span>Quota Depleted</span>
-              </span>
-            ) : availableQuotas.length > 0 ? (
-              <span className="flex items-center gap-1.5 text-[10px]">
-                {antigravityUsedPercent !== null && (
-                  <span className="flex items-center gap-0.5" title={`Antigravity: ${Math.max(0, 100 - antigravityUsedPercent)}% left`}>
-                    <AntigravityIcon className="size-2.5" />
-                    <span className={antigravityUsedPercent >= 90 ? 'text-rose-400 font-semibold' : ''}>
-                      {Math.max(0, 100 - antigravityUsedPercent)}%
-                    </span>
-                  </span>
-                )}
-                {openaiUsedPercent !== null && (
-                  <span className="flex items-center gap-0.5" title={`OpenAI: ${Math.max(0, 100 - openaiUsedPercent)}% left`}>
+        {/* Provider Quota Popover Toggle */}
+        {(openaiPercent !== null || antigravityPercent !== null || claudePercent !== null || geminiPercent !== null) && (
+          <>
+            <span className="text-white/15">·</span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsUsageOpen(!isUsageOpen);
+                  setIsResourceOpen(false);
+                }}
+                className="flex items-center gap-2 px-1.5 py-0.5 rounded hover:bg-white/10 transition cursor-pointer text-white/70 hover:text-white"
+                title="Provider Rate Limits & Quotas"
+                aria-label="View rate limits"
+              >
+                {openaiPercent !== null && (
+                  <span className="flex items-center gap-1 text-[10px]">
                     <OpenAIIcon className="size-2.5 text-white/80" />
-                    <span className={openaiUsedPercent >= 90 ? 'text-rose-400 font-semibold' : ''}>
-                      {Math.max(0, 100 - openaiUsedPercent)}%
+                    <span className={openaiPercent >= 90 ? 'text-rose-400 font-semibold' : ''}>
+                      {openaiPercent}%
                     </span>
                   </span>
                 )}
-                {claudeUsedPercent !== null && (
-                  <span className="flex items-center gap-0.5" title={`Claude: ${Math.max(0, 100 - claudeUsedPercent)}% left`}>
+                {antigravityPercent !== null && (
+                  <span className="flex items-center gap-1 text-[10px]">
+                    <AntigravityIcon className="size-2.5" />
+                    <span className={antigravityPercent >= 90 ? 'text-rose-400 font-semibold' : ''}>
+                      {antigravityPercent}%
+                    </span>
+                  </span>
+                )}
+                {claudePercent !== null && (
+                  <span className="flex items-center gap-1 text-[10px]">
                     <ClaudeIcon className="size-2.5 text-white/80" />
-                    <span>{Math.max(0, 100 - claudeUsedPercent)}%</span>
+                    <span className={claudePercent >= 90 ? 'text-rose-400 font-semibold' : ''}>
+                      {claudePercent}%
+                    </span>
                   </span>
                 )}
-                {geminiUsedPercent !== null && (
-                  <span className="flex items-center gap-0.5" title={`Gemini: ${Math.max(0, 100 - geminiUsedPercent)}% left`}>
+                {geminiPercent !== null && (
+                  <span className="flex items-center gap-1 text-[10px]">
                     <GeminiIcon className="size-2.5 text-white/80" />
-                    <span>{Math.max(0, 100 - geminiUsedPercent)}%</span>
+                    <span className={geminiPercent >= 90 ? 'text-rose-400 font-semibold' : ''}>
+                      {geminiPercent}%
+                    </span>
                   </span>
                 )}
-                <span className="text-white/35 text-[9px]">left</span>
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-[10px] text-white/50">
-                <Zap className="size-2.5 text-white/40" />
-                <span>Quotas</span>
-              </span>
-            )}
-          </button>
+              </button>
 
-          <UsagePopover
-            isOpen={isUsageOpen}
-            onClose={() => setIsUsageOpen(false)}
-            onRefresh={fetchStatus}
-            quotas={quotas}
-            position="top"
-            align="right"
-          />
-        </div>
+              <UsagePopover
+                isOpen={isUsageOpen}
+                onClose={() => setIsUsageOpen(false)}
+                onRefresh={fetchStatus}
+                quotas={quotas}
+                position="top"
+                align="right"
+              />
+            </div>
+          </>
+        )}
 
         {/* Caffeinate Host Sleep Prevention */}
         {isCaffeinated && (
