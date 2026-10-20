@@ -716,17 +716,16 @@ impl TaskRuntime {
                                 // T3: Transactional Outbox write BEFORE execution
                                 let outbox_id = new_id("outbox");
                                 if let Some(ref outbox) = self.outbox {
-                                    let outbox_entry = OutboxEntry {
-                                        id: outbox_id.clone(),
-                                        task_id: cmd.task_id.clone(),
-                                        action_id: intent.id.clone(),
-                                        permit_id: burned_permit.id.clone(),
-                                        argument_digest: intent.argument_digest(),
-                                        idempotency_key: Some(idempotency_key),
-                                        status: OutboxStatus::Pending,
-                                        created_at: Utc::now(),
-                                        receipt: None,
-                                    };
+                                    let outbox_entry = OutboxEntry::new(
+                                        outbox_id.clone(),
+                                        cmd.task_id.clone(),
+                                        intent.id.clone(),
+                                        burned_permit.id.clone(),
+                                        intent.argument_digest(),
+                                        Some(idempotency_key),
+                                        OutboxStatus::Pending,
+                                        Utc::now(),
+                                    );
                                     outbox.enqueue(outbox_entry).await?;
                                     outbox.mark_dispatching(&outbox_id).await?;
                                 }

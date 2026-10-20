@@ -40,6 +40,7 @@ async-trait = { workspace = true }
 tokio = { workspace = true, features = ["sync", "net", "io-util", "time"] }
 chrono = { workspace = true }
 uuid = { workspace = true, features = ["v4", "serde"] }
+dirs = { workspace = true }
 
 uniffi = { version = "0.32", features = ["cli"], optional = true }
 thiserror = { version = "2", optional = true }
@@ -51,6 +52,7 @@ base64 = { workspace = true, optional = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "process", "io-std", "io-util"] }
 tokio-util = { workspace = true, features = ["compat", "rt"] }
+tempfile = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = ["agent-client-protocol-schema"]

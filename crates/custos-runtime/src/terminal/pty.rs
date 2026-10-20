@@ -15,11 +15,13 @@ use tracing::debug;
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
+#[cfg(unix)]
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 /// Native PTY handle managing a spawned child process and its master PTY descriptor.
 pub struct PtyHandle {
     #[cfg(unix)]
-    master_fd: i32,
+    master_fd: OwnedFd,
     #[cfg(windows)]
     stdin: Arc<std::sync::Mutex<std::process::ChildStdin>>,
     pid: u32,
@@ -60,6 +62,14 @@ impl PtyHandle {
             if ret != 0 {
                 return Err(io::Error::last_os_error());
             }
+            // Both ends need independent ownership; process exit does not close the reader.
+            let master_owned = unsafe { OwnedFd::from_raw_fd(master) };
+            let reader_fd = master_owned.try_clone();
+            let reader_fd = match reader_fd {
+                Ok(fd) => fd,
+                Err(error) => { unsafe { libc::close(slave); } return Err(error); }
+            };
+            unsafe { libc::fcntl(master, libc::F_SETFD, libc::FD_CLOEXEC); }
 
             // Determine shell binary with macOS (/bin/zsh) and Linux (/bin/bash) fallback
             let default_shell = std::env::var("SHELL").unwrap_or_else(|_| {
@@ -120,7 +130,6 @@ impl PtyHandle {
                 Err(e) => {
                     unsafe {
                         libc::close(slave);
-                        libc::close(master);
                     }
                     return Err(e);
                 }
@@ -133,13 +142,12 @@ impl PtyHandle {
             let (exit_tx, exit_rx) = tokio::sync::oneshot::channel();
 
             // Background reader thread reading raw PTY stream
-            let master_reader = master;
             std::thread::spawn(move || {
                 let mut buf = [0u8; 4096];
                 loop {
                     let n = unsafe {
                         libc::read(
-                            master_reader,
+                            reader_fd.as_raw_fd(),
                             buf.as_mut_ptr() as *mut libc::c_void,
                             buf.len(),
                         )
@@ -171,7 +179,7 @@ impl PtyHandle {
 
             Ok((
                 PtyHandle {
-                    master_fd: master,
+                    master_fd: master_owned,
                     pid,
                     terminated,
                 },
@@ -301,7 +309,7 @@ impl PtyHandle {
                 let slice = &data[total..];
                 let n = unsafe {
                     libc::write(
-                        self.master_fd,
+                        self.master_fd.as_raw_fd(),
                         slice.as_ptr() as *const libc::c_void,
                         slice.len(),
                     )
@@ -348,7 +356,7 @@ impl PtyHandle {
                 ws_xpixel: 0,
                 ws_ypixel: 0,
             };
-            let ret = unsafe { libc::ioctl(self.master_fd, libc::TIOCSWINSZ, &ws) };
+            let ret = unsafe { libc::ioctl(self.master_fd.as_raw_fd(), libc::TIOCSWINSZ, &ws) };
             if ret != 0 {
                 return Err(io::Error::last_os_error());
             }
@@ -373,22 +381,23 @@ impl PtyHandle {
 
     /// Terminates the child process.
     pub fn terminate(&self) -> io::Result<()> {
-        self.terminated.store(true, Ordering::SeqCst);
+        if self.terminated.load(Ordering::SeqCst) { return Ok(()); }
         #[cfg(unix)]
         {
-            unsafe {
-                libc::kill(self.pid as i32, libc::SIGTERM);
-                // Also close master FD to break reader loop
-                libc::close(self.master_fd);
+            let result = unsafe { libc::kill(-(self.pid as i32), libc::SIGTERM) };
+            if result != 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() != Some(libc::ESRCH) { return Err(error); }
             }
             Ok(())
         }
 
         #[cfg(windows)]
         {
-            let _ = std::process::Command::new("taskkill")
+            let output = std::process::Command::new("taskkill")
                 .args(["/PID", &self.pid.to_string(), "/T", "/F"])
-                .output();
+                .output()?;
+            if !output.status.success() { return Err(io::Error::new(io::ErrorKind::Other, String::from_utf8_lossy(&output.stderr).to_string())); }
             Ok(())
         }
 
@@ -403,6 +412,24 @@ impl PtyHandle {
 
     pub fn pid(&self) -> u32 {
         self.pid
+    }
+
+    pub fn has_exited(&self) -> bool {
+        self.terminated.load(Ordering::SeqCst)
+    }
+
+    pub fn force_terminate(&self) -> io::Result<()> {
+        if self.has_exited() { return Ok(()); }
+        #[cfg(unix)]
+        {
+            if unsafe { libc::kill(-(self.pid as i32), libc::SIGKILL) } != 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() != Some(libc::ESRCH) { return Err(error); }
+            }
+            Ok(())
+        }
+        #[cfg(not(unix))]
+        { self.terminate() }
     }
 }
 

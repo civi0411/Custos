@@ -138,6 +138,14 @@ pub const METHOD_AUTOMATION_JOBS_LIST: &str = "v1.automation.jobs.list";
 pub const METHOD_AUTOMATION_JOBS_CREATE: &str = "v1.automation.jobs.create";
 pub const METHOD_AUTOMATION_JOBS_RUN: &str = "v1.automation.jobs.run";
 
+pub const METHOD_COMPUTE_TARGETS_LIST: &str = "v1.compute.targets.list";
+pub const METHOD_EXPERIMENT_PREFLIGHT: &str = "v1.experiment.preflight";
+pub const METHOD_EXPERIMENT_SUBMIT: &str = "v1.experiment.submit";
+pub const METHOD_EXPERIMENT_OBSERVE: &str = "v1.experiment.observe";
+pub const METHOD_EXPERIMENT_STOP: &str = "v1.experiment.stop";
+pub const METHOD_EXPERIMENT_RELEASE: &str = "v1.experiment.release";
+pub const METHOD_EXPERIMENT_COLLECT: &str = "v1.experiment.collect";
+
 pub const METHOD_PROVIDERS_LIST: &str = "v1.providers.list";
 pub const METHOD_PROVIDERS_GET: &str = "v1.providers.get";
 pub const METHOD_PROVIDERS_SAVE: &str = "v1.providers.save";

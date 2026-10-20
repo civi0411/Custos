@@ -121,6 +121,11 @@ impl DbConnection {
             .map_err(|e| DomainError::Validation(format!("Database writer mutex poisoned: {}", e)))
     }
 
+    /// Returns a clone of the sovereign writer Arc mutex handle.
+    pub fn writer_arc(&self) -> Arc<Mutex<Connection>> {
+        self.writer.clone()
+    }
+
     /// Acquires a pooled reader connection from the WAL reader pool.
     pub fn reader(&self) -> Result<PooledReader, DomainError> {
         // Try to pop from idle pool

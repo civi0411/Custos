@@ -83,6 +83,23 @@ impl TerminalPort for TerminalCoordinator {
             ))
         })?;
 
+        // Bound retained history across all tabs, including terminals whose processes exited.
+        let mut sessions = self.sessions.write().await;
+        if sessions.len() >= 128 {
+            let mut oldest: Option<(String, i64)> = None;
+            for (id, instance) in sessions.iter() {
+                let session = instance.session.read().await;
+                if !matches!(session.status, TerminalSessionStatus::Active)
+                    && instance.buffer.read().await.is_eof()
+                    && oldest.as_ref().map_or(true, |(_, created)| session.created_at < *created)
+                {
+                    oldest = Some((id.clone(), session.created_at));
+                }
+            }
+            if let Some((id, _)) = oldest { sessions.remove(&id); }
+            else { return Err(DomainError::Conflict("Terminal limit reached. Stop an unused terminal before starting another.".into())); }
+        }
+
         let session_id = format!("term_{}", uuid::Uuid::new_v4().simple());
         let command_str = command
             .filter(|c| !c.trim().is_empty())
@@ -119,10 +136,8 @@ impl TerminalPort for TerminalCoordinator {
         });
 
         // Register session
-        {
-            let mut lock = self.sessions.write().await;
-            lock.insert(session_id.clone(), instance.clone());
-        }
+        sessions.insert(session_id.clone(), instance.clone());
+        drop(sessions);
 
         // Spawn background task to collect output chunks into bounded buffer
         let instance_buf = instance.clone();
@@ -131,6 +146,7 @@ impl TerminalPort for TerminalCoordinator {
                 let mut buf = instance_buf.buffer.write().await;
                 buf.push(&chunk);
             }
+            instance_buf.buffer.write().await.mark_eof();
         });
 
         // Spawn background task to monitor process exit
@@ -141,13 +157,10 @@ impl TerminalPort for TerminalCoordinator {
             info!(session_id = %sid, ?exit_code, "Terminal process exited");
 
             {
-                let mut buf = instance_exit.buffer.write().await;
-                buf.mark_eof();
-            }
-
-            {
                 let mut sess = instance_exit.session.write().await;
-                sess.status = TerminalSessionStatus::Exited { exit_code };
+                if matches!(sess.status, TerminalSessionStatus::Active) {
+                    sess.status = TerminalSessionStatus::Exited { exit_code };
+                }
                 sess.closed_at = Some(chrono::Utc::now().timestamp());
             }
 
@@ -244,14 +257,22 @@ impl TerminalPort for TerminalCoordinator {
 
         {
             let mut pty_guard = instance.pty.write().await;
-            if let Some(pty) = pty_guard.take() {
-                let _ = pty.terminate();
+            if let Some(pty) = pty_guard.as_ref() {
+                pty.terminate().map_err(|error| DomainError::Validation(format!("failed to terminate terminal: {error}")))?;
+                for _ in 0..50 {
+                    if pty.has_exited() { break; }
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+                if !pty.has_exited() {
+                    pty.force_terminate().map_err(|error| DomainError::Validation(format!("failed to stop terminal process: {error}")))?;
+                    for _ in 0..50 {
+                        if pty.has_exited() { break; }
+                        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                    }
+                }
+                if !pty.has_exited() { return Err(DomainError::Conflict("Terminal stop requested but process exit could not be confirmed".into())); }
             }
-        }
-
-        {
-            let mut buf = instance.buffer.write().await;
-            buf.mark_eof();
+            pty_guard.take();
         }
 
         {
@@ -351,5 +372,29 @@ mod tests {
             .await;
 
         assert!(matches!(res, Err(DomainError::NotFound { .. })));
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn terminal_eof_preserves_trailing_output() {
+        let directory = tempfile::tempdir().unwrap();
+        let coordinator = TerminalCoordinator::new();
+        let session = coordinator.spawn("output-drain", directory.path(), Some("printf 'start\\n'; printf 'final-marker\\n'"), 80, 24).await.unwrap();
+        let output = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let mut cursor = 0;
+            let mut output = String::new();
+            loop {
+                let chunk = coordinator.read_output(&session.id, cursor, 4096).await.unwrap();
+                output.push_str(&chunk.data);
+                cursor = chunk.next_seq;
+                if chunk.is_eof { return output; }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        }).await.unwrap();
+        assert!(output.contains("start"));
+        assert!(output.contains("final-marker"));
+        coordinator.terminate(&session.id).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        assert_eq!(coordinator.get_session(&session.id).await.unwrap().status, TerminalSessionStatus::Terminated);
     }
 }

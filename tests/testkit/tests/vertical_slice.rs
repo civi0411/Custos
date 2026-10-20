@@ -107,17 +107,16 @@ async fn vertical_slice_links_all_ports() {
     // 6. Outbox (Trường, T3): durable record BEFORE the effect
     let entry_id = new_id("ob");
     h.outbox
-        .enqueue(OutboxEntry {
-            id: entry_id.clone(),
-            task_id: task.id.clone(),
-            action_id: intent.id.clone(),
-            permit_id: permit.id.clone(),
-            argument_digest: permit.argument_digest.clone(),
-            idempotency_key: None,
-            status: OutboxStatus::Pending,
-            created_at: chrono::Utc::now(),
-            receipt: None,
-        })
+        .enqueue(OutboxEntry::new(
+            entry_id.clone(),
+            task.id.clone(),
+            intent.id.clone(),
+            permit.id.clone(),
+            permit.argument_digest.clone(),
+            None,
+            OutboxStatus::Pending,
+            chrono::Utc::now(),
+        ))
         .await
         .unwrap();
     let burned = h.kernel.consume_permit(&permit.id, &intent).await.unwrap();

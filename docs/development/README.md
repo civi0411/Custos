@@ -8,6 +8,9 @@
 
 **Chiến dịch hiện tại:** [SADE refactor plan](workspace-restructuring-plan.md#11-quyết-định-khóa-cho-chiến-dịch-sade) — source gaps → live worker/cost ledger → native resources → Coding/Research/Assistant → coordination → measured optimization. [OrCa foundation §20](workspace-restructuring-plan.md#20-chương-trình-hấp-thụ-orca-vào-nền-custos) map toàn bộ capability families sang Custos OF0–OF7; đây là functional assimilation, không nhúng OrCa runtime. [Domain design](../architecture/domain-packs-and-workflows.md) và [evaluation contract](../../evals/oi/README.md) đi cùng; không đợi OI hoàn thiện mới đo economics.
 
+**Implementation plan (execution level):** [sade-implementation-plan.md](sade-implementation-plan.md) — PR-by-PR breakdown of F01–F12 with verified findings, UI conflict verdict, tests and rollback.
+
+
 For the concrete source refactor, read [audit and R0–R10 packets](workspace-restructuring-plan.md#6-audit-code-và-quyết-định-giữchuyểnhợp-nhất): exact current paths, keep/move/consolidate decisions, target imports, compatibility and verification gates. Package names come from Cargo metadata; folder names alone do not establish active runtime behavior.
 
 The [OrCa source study](orca-source-study.md) pins a local upstream commit and separates what OrCa already implements from the Custos SADE contracts and migration gates. Read it before designing worktree, native agent launch, worker supervision or multi-run UI.

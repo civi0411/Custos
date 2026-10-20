@@ -1,13 +1,13 @@
 use crate::connection::DbConnection;
 use crate::repositories::{
     AssistantRepository, CommandLedgerRepository, ContinuationRepository, DecisionRepository,
-    FleetAutomationRepository, OutboxRepository, ProviderRepository, ReplanRepository,
-    ResearchRepository, RunRepository, SessionRepository, SpanRepository, TaskRepository,
-    WorkflowRevisionRepository, WorkspaceRepository,
+    ExperimentAttemptRepository, FleetAutomationRepository, OutboxRepository, ProviderRepository,
+    ReplanRepository, ResearchRepository, RunRepository, SessionRepository, SpanRepository,
+    TaskRepository, WorkflowRevisionRepository, WorkspaceRepository,
 };
 use async_trait::async_trait;
 use custos_core::contracts::storage::{
-    CommandLedgerEntry, CommandLedgerPort, DecisionPort, EffectLedgerPort, NotebookStoragePort,
+    CommandAdmission, CommandLedgerEntry, CommandLedgerPort, DecisionPort, EffectLedgerPort, NotebookStoragePort,
     OutboxEntry, OutboxPort, OutboxStatus, ReplanPort, RunPort, WorkflowRevisionPort,
 };
 use custos_core::contracts::workspace::WorkspaceRepository as WorkspaceRepoPort;
@@ -41,6 +41,7 @@ pub struct SqliteTaskStore {
     fleet_automation_repo: FleetAutomationRepository,
     assistant_repo: AssistantRepository,
     command_ledger_repo: CommandLedgerRepository,
+    experiment_attempt_repo: ExperimentAttemptRepository,
 }
 
 impl SqliteTaskStore {
@@ -62,6 +63,7 @@ impl SqliteTaskStore {
         let fleet_automation_repo = FleetAutomationRepository::new(db.clone());
         let assistant_repo = AssistantRepository::new(db.clone());
         let command_ledger_repo = CommandLedgerRepository::new(db.clone());
+        let experiment_attempt_repo = ExperimentAttemptRepository::new(db.writer_arc());
         let store = Self {
             db,
             task_repo,
@@ -79,6 +81,7 @@ impl SqliteTaskStore {
             fleet_automation_repo,
             assistant_repo,
             command_ledger_repo,
+            experiment_attempt_repo,
         };
         Ok(store)
     }
@@ -101,6 +104,7 @@ impl SqliteTaskStore {
         let fleet_automation_repo = FleetAutomationRepository::new(db.clone());
         let assistant_repo = AssistantRepository::new(db.clone());
         let command_ledger_repo = CommandLedgerRepository::new(db.clone());
+        let experiment_attempt_repo = ExperimentAttemptRepository::new(db.writer_arc());
         let store = Self {
             db,
             task_repo,
@@ -118,12 +122,17 @@ impl SqliteTaskStore {
             fleet_automation_repo,
             assistant_repo,
             command_ledger_repo,
+            experiment_attempt_repo,
         };
         Ok(store)
     }
 
     pub fn db(&self) -> &DbConnection {
         &self.db
+    }
+
+    pub fn experiment_attempts(&self) -> &ExperimentAttemptRepository {
+        &self.experiment_attempt_repo
     }
 
     pub fn outbox(&self) -> &OutboxRepository {
@@ -156,6 +165,10 @@ impl SqliteTaskStore {
 
     pub fn reconcile_runs_on_startup(&self) -> Result<usize, DomainError> {
         self.run_repo.reconcile_runs_on_startup()
+    }
+
+    pub fn fence_claim(&self, claim_id: &str) -> Result<(), DomainError> {
+        self.run_repo.fence_claim(claim_id)
     }
 
     pub fn decisions(&self) -> &DecisionRepository {
@@ -542,6 +555,10 @@ impl OutboxPort for SqliteTaskStore {
         self.outbox_repo.enqueue(entry).await
     }
 
+    async fn get(&self, id: &str) -> Result<Option<OutboxEntry>, DomainError> {
+        self.outbox_repo.get(id).await
+    }
+
     async fn mark_dispatching(&self, id: &str) -> Result<(), DomainError> {
         self.outbox_repo.mark_dispatching(id).await
     }
@@ -552,6 +569,10 @@ impl OutboxPort for SqliteTaskStore {
 
     async fn mark_uncertain(&self, id: &str) -> Result<(), DomainError> {
         self.outbox_repo.mark_uncertain(id).await
+    }
+
+    async fn mark_failed(&self, id: &str, error: &str) -> Result<(), DomainError> {
+        self.outbox_repo.mark_failed(id, error).await
     }
 
     async fn list_by_status(&self, status: OutboxStatus) -> Result<Vec<OutboxEntry>, DomainError> {
@@ -667,6 +688,10 @@ impl RunPort for SqliteTaskStore {
         self.run_repo.list_active_claims()
     }
 
+    async fn fence_claim(&self, claim_id: &str) -> Result<(), DomainError> {
+        self.run_repo.fence_claim(claim_id)
+    }
+
     async fn reconcile_runs_on_startup(&self) -> Result<usize, DomainError> {
         self.run_repo.reconcile_runs_on_startup()
     }
@@ -745,6 +770,27 @@ impl CommandLedgerPort for SqliteTaskStore {
 
     async fn record_command(&self, entry: &CommandLedgerEntry) -> Result<(), DomainError> {
         self.command_ledger_repo.record_command(entry)
+    }
+
+    async fn admit(
+        &self,
+        command_id: &str,
+        method: &str,
+        payload_digest: &str,
+        scope: Option<&str>,
+        now_ms: i64,
+        ttl_ms: i64,
+    ) -> Result<CommandAdmission, DomainError> {
+        self.command_ledger_repo
+            .admit(command_id, method, payload_digest, scope, now_ms, ttl_ms)
+    }
+
+    async fn complete(&self, command_id: &str, result_json: &str) -> Result<(), DomainError> {
+        self.command_ledger_repo.complete(command_id, result_json)
+    }
+
+    async fn abandon(&self, command_id: &str) -> Result<(), DomainError> {
+        self.command_ledger_repo.abandon(command_id)
     }
 }
 

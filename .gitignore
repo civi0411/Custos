@@ -779,9 +779,8 @@ coverage.xml
 
 # Crash dumps
 crash-dumps/
-coredumps/
-core
-core.*
+/core
+/core.[0-9]*
 
 # Fuzzing artifacts
 fuzz-artifacts/

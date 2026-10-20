@@ -79,10 +79,12 @@ while True:
         MAX_OUTPUT_BYTES = 4 * 1024 * 1024
         out = s_out.getvalue()
         err = s_err.getvalue()
-        if len(out.encode('utf-8')) > MAX_OUTPUT_BYTES:
-            out = out[:MAX_OUTPUT_BYTES] + "\n[Output truncated: exceeded 4MB limit]"
-        if len(err.encode('utf-8')) > MAX_OUTPUT_BYTES:
-            err = err[:MAX_OUTPUT_BYTES] + "\n[Stderr truncated: exceeded 4MB limit]"
+        out_bytes = out.encode('utf-8')
+        if len(out_bytes) > MAX_OUTPUT_BYTES:
+            out = out_bytes[:MAX_OUTPUT_BYTES].decode('utf-8', errors='ignore') + "\n[Output truncated: exceeded 4MB limit]"
+        err_bytes = err.encode('utf-8')
+        if len(err_bytes) > MAX_OUTPUT_BYTES:
+            err = err_bytes[:MAX_OUTPUT_BYTES].decode('utf-8', errors='ignore') + "\n[Stderr truncated: exceeded 4MB limit]"
         resp = {
             'status': status,
             'stdout': out,
@@ -92,8 +94,9 @@ while True:
         sys.stdout.flush()
     except Exception as e:
         err_msg = str(e)
-        if len(err_msg) > 4 * 1024 * 1024:
-            err_msg = err_msg[:4 * 1024 * 1024] + "\n[Stderr truncated: exceeded 4MB limit]"
+        err_bytes = err_msg.encode('utf-8')
+        if len(err_bytes) > 4 * 1024 * 1024:
+            err_msg = err_bytes[:4 * 1024 * 1024].decode('utf-8', errors='ignore') + "\n[Stderr truncated: exceeded 4MB limit]"
         resp = {'status': 'error', 'stdout': '', 'stderr': err_msg}
         sys.stdout.write(json.dumps(resp) + '\n')
         sys.stdout.flush()
@@ -187,6 +190,7 @@ struct ActiveKernel {
     python_path: PathBuf,
     worker: Option<WorkerHandle>,
     work_dir: Option<PathBuf>,
+    recent_requests: HashMap<String, ExecuteCellResult>,
 }
 
 #[derive(Clone)]
@@ -249,16 +253,34 @@ impl PythonKernelCoordinator {
         "Python 3.x".to_string()
     }
 
+    pub fn kernel_key(session_id: &str, notebook_id: Option<&str>) -> String {
+        match notebook_id {
+            Some(nb) if !nb.trim().is_empty() => format!("{session_id}::{nb}"),
+            _ => session_id.to_string(),
+        }
+    }
+
     pub async fn get_status(
         &self,
         session_id: &str,
         repo: Option<&(dyn NotebookStoragePort + Send + Sync)>,
     ) -> Result<NotebookKernelState, DomainError> {
+        self.get_status_scoped(session_id, None, repo).await
+    }
+
+    pub async fn get_status_scoped(
+        &self,
+        session_id: &str,
+        notebook_id: Option<&str>,
+        repo: Option<&(dyn NotebookStoragePort + Send + Sync)>,
+    ) -> Result<NotebookKernelState, DomainError> {
+        let key = Self::kernel_key(session_id, notebook_id);
         let mut kernels = self.kernels.write().await;
-        if let Some(active) = kernels.get(session_id) {
+        if let Some(active) = kernels.get(&key) {
             let ver = Self::get_python_version(&active.python_path);
             let state = NotebookKernelState {
                 session_id: session_id.to_string(),
+                notebook_id: notebook_id.map(|s| s.to_string()),
                 epoch: active.epoch,
                 status: active.status,
                 python_version: ver,
@@ -273,6 +295,9 @@ impl PythonKernelCoordinator {
             Ok(state)
         } else if let Some(r) = repo {
             let mut state = r.get_notebook_kernel_state(session_id).await?;
+            if let Some(nb) = notebook_id {
+                state.notebook_id = Some(nb.to_string());
+            }
             // A restarted daemon has no Python memory from the recorded epoch.
             if state.execution_counter > 0 || state.status != KernelStatus::Idle {
                 state.epoch += 1;
@@ -283,7 +308,7 @@ impl PythonKernelCoordinator {
             }
             let py = Self::discover_python_path();
             kernels.insert(
-                session_id.to_string(),
+                key,
                 ActiveKernel {
                     epoch: state.epoch,
                     execution_counter: state.execution_counter,
@@ -291,6 +316,7 @@ impl PythonKernelCoordinator {
                     python_path: py,
                     worker: None,
                     work_dir: None,
+                    recent_requests: HashMap::new(),
                 },
             );
             Ok(state)
@@ -299,6 +325,7 @@ impl PythonKernelCoordinator {
             let ver = Self::get_python_version(&py);
             let state = NotebookKernelState {
                 session_id: session_id.to_string(),
+                notebook_id: notebook_id.map(|s| s.to_string()),
                 epoch: 1,
                 status: KernelStatus::Idle,
                 python_version: ver,
@@ -308,7 +335,7 @@ impl PythonKernelCoordinator {
                 ..Default::default()
             };
             kernels.insert(
-                session_id.to_string(),
+                key,
                 ActiveKernel {
                     epoch: 1,
                     execution_counter: 0,
@@ -316,6 +343,7 @@ impl PythonKernelCoordinator {
                     python_path: py,
                     worker: None,
                     work_dir: None,
+                    recent_requests: HashMap::new(),
                 },
             );
             Ok(state)
@@ -327,6 +355,19 @@ impl PythonKernelCoordinator {
         params: ExecuteCellParams,
         repo: Option<&(dyn NotebookStoragePort + Send + Sync)>,
     ) -> Result<ExecuteCellResult, DomainError> {
+        let key = Self::kernel_key(&params.session_id, params.notebook_id.as_deref());
+
+        // C3: Duplicate request ID does not run twice; return cached result immediately
+        if let Some(ref req_id) = params.execution_request_id {
+            let kernels = self.kernels.read().await;
+            if let Some(k) = kernels.get(&key) {
+                if let Some(cached) = k.recent_requests.get(req_id) {
+                    tracing::info!(%req_id, "Duplicate execution request id received; returning cached result");
+                    return Ok(cached.clone());
+                }
+            }
+        }
+
         let python_path = Self::discover_python_path();
         let work_dir = if let Some(ref cwd) = params.cwd {
             PathBuf::from(cwd)
@@ -337,7 +378,7 @@ impl PythonKernelCoordinator {
         let (epoch, execution_count, worker_sender) = {
             let mut kernels = self.kernels.write().await;
             let kernel = kernels
-                .entry(params.session_id.clone())
+                .entry(key.clone())
                 .or_insert_with(|| ActiveKernel {
                     epoch: 1,
                     execution_counter: 0,
@@ -345,6 +386,7 @@ impl PythonKernelCoordinator {
                     python_path: python_path.clone(),
                     worker: None,
                     work_dir: None,
+                    recent_requests: HashMap::new(),
                 });
 
             if kernel.status == KernelStatus::Busy {
@@ -391,7 +433,7 @@ impl PythonKernelCoordinator {
 
         {
             let mut kernels = self.kernels.write().await;
-            if let Some(k) = kernels.get_mut(&params.session_id) {
+            if let Some(k) = kernels.get_mut(&key) {
                 if k.epoch != epoch {
                     return Err(DomainError::Validation("Execution was interrupted or reset; its output is stale".into()));
                 }
@@ -473,7 +515,7 @@ impl PythonKernelCoordinator {
         // No recipe execution record is fabricated for an ordinary notebook cell.
         let execution_record_id = None;
 
-        Ok(ExecuteCellResult {
+        let result = ExecuteCellResult {
             cell_id: params.cell_id,
             execution_count,
             status,
@@ -487,12 +529,33 @@ impl PythonKernelCoordinator {
             kernel_id: params.kernel_id,
             cell_version: params.cell_version,
             execution_request_id: params.execution_request_id,
-        })
+        };
+
+        if let Some(ref req_id) = result.execution_request_id {
+            let mut kernels = self.kernels.write().await;
+            if let Some(k) = kernels.get_mut(&key) {
+                if k.recent_requests.len() >= 50 {
+                    k.recent_requests.clear();
+                }
+                k.recent_requests.insert(req_id.clone(), result.clone());
+            }
+        }
+
+        Ok(result)
     }
 
     pub async fn interrupt(&self, session_id: &str) -> Result<bool, DomainError> {
+        self.interrupt_scoped(session_id, None).await
+    }
+
+    pub async fn interrupt_scoped(
+        &self,
+        session_id: &str,
+        notebook_id: Option<&str>,
+    ) -> Result<bool, DomainError> {
+        let key = Self::kernel_key(session_id, notebook_id);
         let mut kernels = self.kernels.write().await;
-        if let Some(k) = kernels.get_mut(session_id) {
+        if let Some(k) = kernels.get_mut(&key) {
             if let Some(worker) = k.worker.take() {
                 worker.abort.abort();
                 k.epoch += 1;
@@ -510,11 +573,21 @@ impl PythonKernelCoordinator {
         session_id: &str,
         repo: Option<&(dyn NotebookStoragePort + Send + Sync)>,
     ) -> Result<NotebookKernelState, DomainError> {
+        self.reset_scoped(session_id, None, repo).await
+    }
+
+    pub async fn reset_scoped(
+        &self,
+        session_id: &str,
+        notebook_id: Option<&str>,
+        repo: Option<&(dyn NotebookStoragePort + Send + Sync)>,
+    ) -> Result<NotebookKernelState, DomainError> {
+        let key = Self::kernel_key(session_id, notebook_id);
         let py = Self::discover_python_path();
         let ver = Self::get_python_version(&py);
         let mut kernels = self.kernels.write().await;
         let entry = kernels
-            .entry(session_id.to_string())
+            .entry(key)
             .or_insert_with(|| ActiveKernel {
                 epoch: 1,
                 execution_counter: 0,
@@ -522,6 +595,7 @@ impl PythonKernelCoordinator {
                 python_path: py.clone(),
                 worker: None,
                 work_dir: None,
+                recent_requests: HashMap::new(),
             });
 
         // Terminate active worker actor process if any
@@ -529,6 +603,7 @@ impl PythonKernelCoordinator {
             worker.abort.abort();
         }
         entry.work_dir = None;
+        entry.recent_requests.clear();
 
         entry.epoch += 1;
         entry.execution_counter = 0;
@@ -536,6 +611,7 @@ impl PythonKernelCoordinator {
 
         let state = NotebookKernelState {
             session_id: session_id.to_string(),
+            notebook_id: notebook_id.map(|s| s.to_string()),
             epoch: entry.epoch,
             status: KernelStatus::Idle,
             python_version: ver,
@@ -700,5 +776,47 @@ mod tests {
         assert_eq!(res3.epoch, 2);
         assert_eq!(res3.execution_count, 2);
         assert!(res3.stdout.contains("persisted x: 84"));
+    }
+
+    #[tokio::test]
+    async fn test_multiple_notebooks_in_same_session_are_isolated() {
+        let coordinator = PythonKernelCoordinator::new();
+
+        let s1 = coordinator.get_status_scoped("sess-1", Some("nb-a"), None).await.unwrap();
+        assert_eq!(s1.notebook_id.as_deref(), Some("nb-a"));
+        assert_eq!(s1.execution_counter, 0);
+
+        let s2 = coordinator.get_status_scoped("sess-1", Some("nb-b"), None).await.unwrap();
+        assert_eq!(s2.notebook_id.as_deref(), Some("nb-b"));
+        assert_eq!(s2.execution_counter, 0);
+
+        // Reset nb-a does not affect nb-b
+        coordinator.reset_scoped("sess-1", Some("nb-a"), None).await.unwrap();
+        let s1_after = coordinator.get_status_scoped("sess-1", Some("nb-a"), None).await.unwrap();
+        let s2_after = coordinator.get_status_scoped("sess-1", Some("nb-b"), None).await.unwrap();
+        assert_eq!(s1_after.epoch, 2);
+        assert_eq!(s2_after.epoch, 1);
+    }
+
+    #[tokio::test]
+    async fn test_duplicate_execution_request_id_returns_cached_result() {
+        let coordinator = PythonKernelCoordinator::new();
+        let params = ExecuteCellParams {
+            session_id: "idempotent_sess".into(),
+            cell_id: "cell_1".into(),
+            code: "print('computed_value')".into(),
+            execution_request_id: Some("req-12345".into()),
+            ..Default::default()
+        };
+
+        let res1 = coordinator.execute_cell(params.clone(), None).await.unwrap();
+        assert_eq!(res1.execution_count, 1);
+        assert!(res1.stdout.contains("computed_value"));
+
+        // Second call with same execution_request_id returns cached result without incrementing counter
+        let res2 = coordinator.execute_cell(params, None).await.unwrap();
+        assert_eq!(res2.execution_count, 1);
+        assert_eq!(res2.execution_request_id.as_deref(), Some("req-12345"));
+        assert!(res2.stdout.contains("computed_value"));
     }
 }

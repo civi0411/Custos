@@ -87,17 +87,16 @@ mod inv03_side_effects_guardrails {
         let mut rev = WorkflowRevision::new("task-inv03-002", "prop-1", 1);
         rev.nodes = vec![make_node("node_dispatch_api", "worker")];
 
-        let outbox = vec![OutboxEntry {
-            id: "out-001".into(),
-            task_id: "task-inv03-002".into(),
-            action_id: "node_dispatch_api".into(),
-            permit_id: "permit-001".into(),
-            argument_digest: "digest-001".into(),
-            idempotency_key: None,
-            status: OutboxStatus::Uncertain,
-            created_at: chrono::Utc::now(),
-            receipt: None,
-        }];
+        let outbox = vec![OutboxEntry::new(
+            "out-001",
+            "task-inv03-002",
+            "node_dispatch_api",
+            "permit-001",
+            "digest-001",
+            None,
+            OutboxStatus::Uncertain,
+            chrono::Utc::now(),
+        )];
 
         let brief = Replanner::create_brief(
             "task-inv03-002",

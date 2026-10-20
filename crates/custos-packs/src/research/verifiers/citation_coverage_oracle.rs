@@ -65,9 +65,19 @@ impl PackVerifier for CitationCoverageOracle {
             .and_then(Value::as_f64)
             .unwrap_or(self.default_min_ratio);
 
+        if !(0.0..=1.0).contains(&min_ratio) {
+            return VerificationResult::Fail {
+                reason: format!(
+                    "invalid min_coverage_ratio {}: must be between 0.0 and 1.0",
+                    min_ratio
+                ),
+            };
+        }
+
         let total_claims = claims.len();
         let mut grounded_claims = 0;
         let mut ungrounded_claim_ids = Vec::new();
+        let mut unmet_required_claim_ids = Vec::new();
 
         let assessment_records = ctx
             .metadata
@@ -81,6 +91,11 @@ impl PackVerifier for CitationCoverageOracle {
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| format!("claim_{}", idx));
 
+            let is_required = claim
+                .get("required")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+
             let has_citation = claim
                 .get("citation")
                 .or_else(|| claim.get("doi"))
@@ -88,33 +103,33 @@ impl PackVerifier for CitationCoverageOracle {
                 .map(|s| !s.trim().is_empty())
                 .unwrap_or(false);
 
-            // B5 Invariant: Trust external assessment_records if provided; never let self-asserted metadata bypass verification.
+            // B5/C1 Invariant: Only trust external assessment_records with explicit typed status.
+            // Self-asserted booleans or missing records are strictly rejected (fail-closed).
             let is_verified_by_assessment = if let Some(records) = assessment_records {
                 records.iter().any(|rec| {
                     let matches_id = rec
                         .get("claim_id")
+                        .or_else(|| rec.get("target_id"))
                         .or_else(|| rec.get("id"))
                         .and_then(Value::as_str)
                         .map(|id| id == claim_id)
                         .unwrap_or(false);
-                    let passed = rec
-                        .get("passed")
-                        .or_else(|| rec.get("is_verified"))
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false)
-                        || rec
-                            .get("status")
-                            .and_then(Value::as_str)
-                            .map(|s| s.eq_ignore_ascii_case("verified") || s.eq_ignore_ascii_case("passed"))
-                            .unwrap_or(false);
-                    let rec_stale = rec.get("is_stale").and_then(Value::as_bool).unwrap_or(false);
-                    matches_id && passed && !rec_stale
+                    let has_valid_status = rec
+                        .get("status")
+                        .and_then(Value::as_str)
+                        .map(|s| {
+                            s.eq_ignore_ascii_case("verified")
+                                || s.eq_ignore_ascii_case("approved")
+                                || s.eq_ignore_ascii_case("passed")
+                        })
+                        .unwrap_or(false);
+                    let is_stale = rec.get("is_stale").and_then(Value::as_bool).unwrap_or(false)
+                        || rec.get("is_fresh").and_then(Value::as_bool).map(|fresh| !fresh).unwrap_or(false);
+                    matches_id && has_valid_status && !is_stale
                 })
             } else {
-                claim
-                    .get("verified")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false)
+                // FAIL-CLOSED: No assessment records means unverified. Self-asserted claim["verified"] is untrusted.
+                false
             };
 
             // Check grounding level: must not be l0_ungrounded
@@ -153,7 +168,7 @@ impl PackVerifier for CitationCoverageOracle {
 
             // Grounded & verified requires:
             // 1. Valid citation/DOI
-            // 2. Verified flag is explicitly true
+            // 2. Verified flag backed by non-stale typed assessment
             // 3. Not L0 ungrounded
             // 4. Not unsupported, not invalid locator, not stale
             let is_grounded = has_citation
@@ -171,8 +186,21 @@ impl PackVerifier for CitationCoverageOracle {
                     .and_then(Value::as_str)
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| format!("claim_{}", idx));
+                if is_required {
+                    unmet_required_claim_ids.push(id.clone());
+                }
                 ungrounded_claim_ids.push(id);
             }
+        }
+
+        // Required claims are independent of aggregate ratio: all required claims must be grounded.
+        if !unmet_required_claim_ids.is_empty() {
+            return VerificationResult::Fail {
+                reason: format!(
+                    "Mandatory required claims were not grounded: {}",
+                    unmet_required_claim_ids.join(", ")
+                ),
+            };
         }
 
         let ratio = grounded_claims as f64 / total_claims as f64;
@@ -212,8 +240,12 @@ mod tests {
         let oracle = CitationCoverageOracle::new();
         let ctx = VerificationContext::new("task_res_1").with_metadata(json!({
             "claims": [
-                { "id": "c1", "doi": "10.1038/s41586-020-2649-2", "verified": true },
-                { "id": "c2", "doi": "10.1126/science.1234567", "verified": true }
+                { "id": "c1", "doi": "10.1038/s41586-020-2649-2" },
+                { "id": "c2", "doi": "10.1126/science.1234567" }
+            ],
+            "assessment_records": [
+                { "claim_id": "c1", "status": "verified", "is_stale": false },
+                { "claim_id": "c2", "status": "approved", "is_stale": false }
             ]
         }));
 
@@ -222,12 +254,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_citation_coverage_rejects_untyped_passed_boolean() {
+        let oracle = CitationCoverageOracle::new();
+        // Assessment records provide untyped boolean without typed status -> rejected!
+        let ctx = VerificationContext::new("task_untyped").with_metadata(json!({
+            "claims": [
+                { "id": "c1", "doi": "10.1038/s41586-020-2649-2" }
+            ],
+            "assessment_records": [
+                { "claim_id": "c1", "passed": true, "is_stale": false }
+            ]
+        }));
+
+        let res = oracle.verify(&ctx).await;
+        assert!(matches!(res, VerificationResult::Fail { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_citation_coverage_rejects_self_asserted_verified_flag_without_assessment() {
+        let oracle = CitationCoverageOracle::new();
+        // Claim falsely asserts verified: true without assessment_records -> MUST FAIL (fail-closed)
+        let ctx = VerificationContext::new("task_res_forged").with_metadata(json!({
+            "claims": [
+                { "id": "c1", "doi": "10.1038/s41586-020-2649-2", "verified": true },
+                { "id": "c2", "doi": "10.1126/science.1234567", "verified": true }
+            ]
+        }));
+
+        let res = oracle.verify(&ctx).await;
+        assert!(matches!(res, VerificationResult::Fail { .. }));
+    }
+
+    #[tokio::test]
     async fn test_citation_coverage_fail_threshold() {
         let oracle = CitationCoverageOracle::new();
         let ctx = VerificationContext::new("task_res_2").with_metadata(json!({
             "claims": [
-                { "id": "c1", "doi": "10.1038/s41586-020-2649-2", "verified": true },
-                { "id": "c2", "doi": "", "verified": false }
+                { "id": "c1", "doi": "10.1038/s41586-020-2649-2" },
+                { "id": "c2", "doi": "" }
+            ],
+            "assessment_records": [
+                { "claim_id": "c1", "status": "verified", "is_stale": false }
             ]
         }));
 
@@ -287,7 +354,7 @@ mod tests {
                 { "id": "c1", "doi": "10.1038/s41586-020-2649-2" }
             ],
             "assessment_records": [
-                { "claim_id": "c1", "passed": true, "is_stale": false }
+                { "claim_id": "c1", "status": "verified", "is_stale": false }
             ]
         }));
 
@@ -298,17 +365,74 @@ mod tests {
     #[tokio::test]
     async fn test_citation_coverage_rejects_forged_metadata_when_assessment_records_missing_or_failed() {
         let oracle = CitationCoverageOracle::new();
-        // Claim falsely asserts verified: true, but assessment_records says passed: false
+        // Claim falsely asserts verified: true, but assessment_records says rejected
         let ctx = VerificationContext::new("task_res_7").with_metadata(json!({
             "claims": [
                 { "id": "c1", "doi": "10.1038/s41586-020-2649-2", "verified": true }
             ],
             "assessment_records": [
-                { "claim_id": "c1", "passed": false, "is_stale": false }
+                { "claim_id": "c1", "status": "rejected", "is_stale": false }
             ]
         }));
 
         let res = oracle.verify(&ctx).await;
         assert!(matches!(res, VerificationResult::Fail { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_citation_coverage_rejects_unmet_required_claim_even_if_ratio_high() {
+        let oracle = CitationCoverageOracle::new();
+        // 4 claims total: 3 pass, 1 required fails -> ratio = 75% which exceeds min_ratio 50%, but required fails!
+        let ctx = VerificationContext::new("task_required").with_metadata(json!({
+            "min_coverage_ratio": 0.50,
+            "claims": [
+                { "id": "c1", "doi": "10.1038/1", "required": false },
+                { "id": "c2", "doi": "10.1038/2", "required": false },
+                { "id": "c3", "doi": "10.1038/3", "required": false },
+                { "id": "c4", "doi": "10.1038/4", "required": true }
+            ],
+            "assessment_records": [
+                { "claim_id": "c1", "status": "verified", "is_stale": false },
+                { "claim_id": "c2", "status": "verified", "is_stale": false },
+                { "claim_id": "c3", "status": "verified", "is_stale": false },
+                { "claim_id": "c4", "status": "pending", "is_stale": false }
+            ]
+        }));
+
+        let res = oracle.verify(&ctx).await;
+        assert!(matches!(res, VerificationResult::Fail { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_citation_coverage_rejects_invalid_min_ratio() {
+        let oracle = CitationCoverageOracle::new();
+        let ctx = VerificationContext::new("task_ratio").with_metadata(json!({
+            "min_coverage_ratio": 1.5,
+            "claims": [
+                { "id": "c1", "doi": "10.1038/1" }
+            ],
+            "assessment_records": [
+                { "claim_id": "c1", "status": "verified", "is_stale": false }
+            ]
+        }));
+
+        let res = oracle.verify(&ctx).await;
+        assert!(matches!(res, VerificationResult::Fail { .. }));
+    }
+
+    #[tokio::test]
+    async fn test_citation_coverage_approved_status_with_target_id_passes() {
+        let oracle = CitationCoverageOracle::new();
+        let ctx = VerificationContext::new("task_target").with_metadata(json!({
+            "claims": [
+                { "id": "c1", "doi": "10.1038/s41586-020-2649-2" }
+            ],
+            "assessment_records": [
+                { "target_id": "c1", "status": "approved", "is_fresh": true }
+            ]
+        }));
+
+        let res = oracle.verify(&ctx).await;
+        assert!(res.is_pass());
     }
 }

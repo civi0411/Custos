@@ -1492,8 +1492,8 @@ dependencies = [
 name = "custos-app-desktop"
 version = "0.1.0"
 dependencies = [
- "custos-daemon",
  "custos-domain",
+ "custos-sdk",
  "serde",
  "serde_json",
  "tauri",
@@ -1701,11 +1701,13 @@ dependencies = [
  "chrono",
  "custos-core",
  "custos-domain",
+ "dirs 5.0.1",
  "futures",
  "rmcp",
  "schemars 1.2.2",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "tokio-util",
@@ -1723,6 +1725,7 @@ dependencies = [
  "custos-domain",
  "custos-persistence",
  "custos-provider",
+ "serde",
  "serde_json",
  "tokio",
 ]
@@ -1753,6 +1756,7 @@ dependencies = [
  "custos-persistence",
  "custos-provider",
  "custos-runtime",
+ "custos-testkit",
  "serde_json",
  "tempfile",
  "tokio",

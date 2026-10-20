@@ -118,5 +118,20 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         conn.execute_batch(include_str!("../migrations/0035_research_execution_snapshot.sql"))?;
     }
     conn.execute_batch(include_str!("../migrations/0036_command_ledger.sql"))?;
+    let ledger_columns = conn
+        .prepare("PRAGMA table_info(command_ledger)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    if !ledger_columns.iter().any(|column| column == "state") {
+        conn.execute_batch(include_str!("../migrations/0037_command_ledger_v2.sql"))?;
+    }
+    conn.execute_batch(include_str!("../migrations/0038_experiment_attempts.sql"))?;
+    let outbox_columns = conn
+        .prepare("PRAGMA table_info(outbox_entries)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    if !outbox_columns.iter().any(|column| column == "payload_json") {
+        conn.execute_batch(include_str!("../migrations/0039_outbox_dispatch_intent.sql"))?;
+    }
     Ok(())
 }

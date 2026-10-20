@@ -317,12 +317,12 @@ impl LocalApiDispatcher {
                     "AssistantRepository is not configured on this daemon instance.",
                 )
             },
-            if self.outbox.is_some() {
+            if self.outbox_repo().is_some() {
                 CapabilityDescriptor::available(
                     "assistant.outbox",
                     "Outbox",
                     CapabilityGroup::Personal,
-                    "Inspect, approve, and dispatch recorded external action items and receipts.",
+                    "Inspect recorded external action items, failures, uncertainties and receipts.",
                     Some("outbox"),
                     vec!["list", "create", "approve", "dispatch"],
                 )

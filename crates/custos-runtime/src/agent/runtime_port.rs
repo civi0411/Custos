@@ -25,6 +25,17 @@ pub const DEFAULT_MAX_ITERATIONS: usize = 10;
 /// Maximum bytes for tool output before truncation (64 KiB) to guard against unbounded memory consumption.
 pub const DEFAULT_MAX_TOOL_OUTPUT_BYTES: usize = 64 * 1024;
 
+/// Truncate a String to at most `max_bytes` without slicing inside a multi-byte UTF-8 char.
+pub fn truncate_to_char_boundary(s: &mut String, max_bytes: usize) {
+    if s.len() > max_bytes {
+        let mut end = max_bytes;
+        while !s.is_char_boundary(end) {
+            end = end.saturating_sub(1);
+        }
+        s.truncate(end);
+    }
+}
+
 /// Interceptor/Executor for tools invoked by the governed agent loop.
 ///
 /// Binds model tool calls to Gate 2 Policy / Authority validation and execution.
@@ -247,6 +258,7 @@ impl AgentRuntimePort for GovernedAgentRuntime {
         // Model propose tool -> authority check -> execute -> next turn continuation
         let mut conversation_history = String::new();
         let mut accumulated_intents = Vec::new();
+        let mut completed_cleanly = false;
 
         for iteration in 0..self.max_iterations {
             if self.cancelled_runs.read().await.contains(&effective_run_id) {
@@ -288,6 +300,7 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                     iteration,
                     "Model completed without additional tool calls"
                 );
+                completed_cleanly = true;
                 break;
             }
 
@@ -335,7 +348,7 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                                     .unwrap_or_else(|_| val.to_string());
                                 // 3. Output cap check & truncation
                                 if output_str.len() > self.max_tool_output_bytes {
-                                    output_str.truncate(self.max_tool_output_bytes);
+                                    truncate_to_char_boundary(&mut output_str, self.max_tool_output_bytes);
                                     output_str.push_str(
                                         "\n... [TRUNCATED: output exceeded max tool output limit]",
                                     );
@@ -368,9 +381,26 @@ impl AgentRuntimePort for GovernedAgentRuntime {
             }
         }
 
+        // Cleanup steering and cancellation handles for this run
+        {
+            let mut cancelled = self.cancelled_runs.write().await;
+            cancelled.remove(&effective_run_id);
+            let mut steer = self.steer_messages.write().await;
+            steer.remove(&effective_run_id);
+        }
+
+        // E2: Iteration exhaustion without clean completion must return BudgetExceeded (limited), never success
+        if !completed_cleanly && accumulated_intents.len() >= self.max_iterations {
+            return Err(DomainError::BudgetExceeded(format!(
+                "Agent loop iteration limit of {} exceeded without completion (status: limited)",
+                self.max_iterations
+            )));
+        }
+
         Ok(accumulated_intents)
     }
 }
+
 
 
 #[cfg(test)]
@@ -500,6 +530,10 @@ mod tests {
                     let large = "x".repeat(10_000);
                     Ok(serde_json::json!({ "data": large }))
                 }
+                "multibyte_tool" => {
+                    let text = "Tiếng Việt — Hệ thống AI Custos 🚀 🦀 ".repeat(50);
+                    Ok(serde_json::json!({ "text": text }))
+                }
                 _ => Ok(serde_json::json!({ "ok": true })),
             }
         }
@@ -621,6 +655,53 @@ mod tests {
         assert_eq!(intents[0].lifecycle_state, ActionLifecycleState::Receipt);
     }
 
+    #[test]
+    fn test_truncate_to_char_boundary_direct() {
+        let mut s = "Tiếng Việt 🚀".to_string();
+        // 'ế' starts at byte 2 and ends at byte 5 (3 bytes long)
+        truncate_to_char_boundary(&mut s, 4);
+        assert!(s.is_char_boundary(s.len()));
+        assert_eq!(s, "Ti");
+
+        let mut emoji = "🦀🚀".to_string(); // each 4 bytes
+        truncate_to_char_boundary(&mut emoji, 5); // lands inside 🚀
+        assert_eq!(emoji, "🦀");
+    }
+
+    #[tokio::test]
+    async fn test_tool_output_cap_truncation_multibyte_utf8_no_panic() {
+        let executor = Arc::new(TestToolExecutor { allow_delete: false });
+
+        for cap in [15, 17, 21, 23, 27, 33, 45, 51] {
+            let mut resp1 = ModelResponse::text("Reading multibyte...", "test-model", 20);
+            resp1.tool_calls.push(ToolCall {
+                call_id: "call_mb_1".to_string(),
+                name: "multibyte_tool".to_string(),
+                arguments: serde_json::json!({}),
+            });
+            let resp2 = ModelResponse::text("Finished.", "test-model", 10);
+            let provider = Arc::new(ScriptedMultiTurnProvider {
+                responses: std::sync::Mutex::new(vec![resp1, resp2]),
+            });
+
+            let runtime = GovernedAgentRuntime::new(
+                provider,
+                "System",
+                vec![serde_json::json!({ "name": "multibyte_tool" })],
+            )
+            .with_tool_executor(executor.clone())
+            .with_tool_output_cap(cap)
+            .with_max_iterations(2);
+
+            let worker_run = WorkerRun::new("task_mb".to_string(), "coder".to_string(), 1);
+            let context_pack = ContextPack::new("pack_mb".to_string(), vec![], 0, "sha256:0".to_string());
+
+            let intents = runtime.execute_turn(&worker_run, &context_pack).await.unwrap();
+            assert_eq!(intents.len(), 1);
+            assert_eq!(intents[0].lifecycle_state, ActionLifecycleState::Receipt);
+        }
+    }
+
     #[tokio::test]
     async fn test_cancel_run_graceful_stop() {
         let mut resp1 = ModelResponse::text("Starting tool call...", "test-model", 20);
@@ -675,4 +756,70 @@ mod tests {
         assert_eq!(enabled_runtime.profile().tool_mediation, ToolMediationLevel::CustosMediated);
         assert!(enabled_runtime.is_tool_enabled());
     }
+
+    #[tokio::test]
+    async fn test_iteration_exhaustion_returns_limited_error() {
+        // Model keeps returning tool calls without completing across all max_iterations
+        let mut resp1 = ModelResponse::text("Call 1", "test-model", 10);
+        resp1.tool_calls.push(ToolCall {
+            call_id: "call_1".to_string(),
+            name: "read_file".to_string(),
+            arguments: serde_json::json!({ "path": "1.txt" }),
+        });
+        let mut resp2 = ModelResponse::text("Call 2", "test-model", 10);
+        resp2.tool_calls.push(ToolCall {
+            call_id: "call_2".to_string(),
+            name: "read_file".to_string(),
+            arguments: serde_json::json!({ "path": "2.txt" }),
+        });
+        let mut resp3 = ModelResponse::text("Call 3", "test-model", 10);
+        resp3.tool_calls.push(ToolCall {
+            call_id: "call_3".to_string(),
+            name: "read_file".to_string(),
+            arguments: serde_json::json!({ "path": "3.txt" }),
+        });
+
+        let provider = Arc::new(ScriptedMultiTurnProvider {
+            responses: std::sync::Mutex::new(vec![resp1, resp2, resp3]),
+        });
+
+        let executor = Arc::new(TestToolExecutor { allow_delete: false });
+        let runtime = GovernedAgentRuntime::new(
+            provider,
+            "System prompt",
+            vec![serde_json::json!({ "name": "read_file" })],
+        )
+        .with_tool_executor(executor)
+        .with_max_iterations(2); // Only 2 iterations allowed
+
+        let worker_run = WorkerRun::new("task_exhaust".to_string(), "coder".to_string(), 1);
+        let context_pack = ContextPack::new("pack_ex".to_string(), vec![], 0, "sha256:0".to_string());
+
+        let err = runtime.execute_turn(&worker_run, &context_pack).await.unwrap_err();
+        assert!(matches!(err, DomainError::BudgetExceeded(_)));
+        assert!(err.to_string().contains("iteration limit"));
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_steering_handles_after_execution() {
+        let resp1 = ModelResponse::text("Finished without tools", "test-model", 10);
+        let provider = Arc::new(ScriptedMultiTurnProvider {
+            responses: std::sync::Mutex::new(vec![resp1]),
+        });
+
+        let runtime = GovernedAgentRuntime::new(provider, "System prompt", vec![]);
+        let worker_run = WorkerRun::new("task_steer_clean".to_string(), "coder".to_string(), 1);
+        let context_pack = ContextPack::new("pack_st".to_string(), vec![], 0, "sha256:0".to_string());
+
+        // Add steering guidance
+        runtime.steer_run(&worker_run.id, "Follow pattern X").await.unwrap();
+        assert!(!runtime.steer_messages.read().await.is_empty());
+
+        // Execute turn
+        let _ = runtime.execute_turn(&worker_run, &context_pack).await.unwrap();
+
+        // Steering handles for this run must be cleaned up
+        assert!(!runtime.steer_messages.read().await.contains_key(&worker_run.id));
+    }
 }
+

@@ -2,7 +2,9 @@
 
 **Ngày cập nhật kế hoạch:** 19-10-2026. **Trạng thái:** đề xuất triển khai dựa trên source; chưa phải xác nhận các thay đổi dưới đây đã được code. **Phạm vi:** desktop/headless, ba workbench, native harness, research và compute; chưa làm mobile.
 
-Snapshot khảo sát: branch `vi-rft`, HEAD `c2203b9973ce374a7f919ab062547aac91fa185d` **cộng working changes đang có**. HEAD không tái hiện đầy đủ checkout bẩn này. Trước mỗi packet phải ghi lại diff/file hashes liên quan; không reset hoặc ghi đè công việc đang dở.
+**Snapshot hiện hành:** branch `vi-rft`, HEAD `c96f414de94423bc8dcf5187f6f44b2e8c152e9d`, working tree sạch lúc audit. Chín commit refactor đã tồn tại nhưng không đồng nghĩa chín acceptance gates đã đạt. Trước mỗi packet ghi lại HEAD/dirty manifest/file hashes; không reset hoặc ghi đè thay đổi xuất hiện sau snapshot này.
+
+**Đọc để triển khai:** §2 là hiện trạng sau audit; §3–13 là kiến trúc đích; §14 giữ nhóm năng lực R0–R11; **[§17](#17-superplan-hoàn-thiện-sau-audit)** là queue công việc còn lại F01–F12, có traceability về R. Không khởi động lại các phần đã đúng, không lấy báo cáo “100%” làm nguồn sự thật. §17 ưu tiên khi thứ tự triển khai cũ chưa phản ánh gap mới.
 
 Tài liệu này cập nhật thứ tự thực hiện của [workspace plan](workspace-restructuring-plan.md), không mở kiến trúc song song. [Custos.md](../../Custos.md) giữ sản phẩm/invariants; [catalog](codebase-architecture.md) giữ vị trí vật lý; topic specs giữ hợp đồng hành vi. Đây là khảo sát các đường chạy trọng yếu, không tuyên bố đọc từng file hay audit bảo mật toàn bộ upstream.
 
@@ -16,37 +18,30 @@ Giữ kernel, authority, persistence, ports, canvas và các tích hợp đã ho
 
 Không chọn trước “nhiều agent nhất”, “mọi thứ qua MCP”, “tách mỗi subsystem một crate”, hay “rẻ nhất mọi tình huống”. Mục tiêu tối ưu là **cost per accepted outcome** dưới ràng buộc chất lượng, quyền, thời gian và pin của user; cần baseline để chứng minh.
 
-## 2. Những vấn đề hiện tại có bằng chứng
+## 2. Hiện trạng sau audit và tiêu chí còn thiếu
 
-| Hiện trạng source | Hệ quả / mức chắc chắn | Hành động |
+| Chủ đề | Đã có ở snapshot hiện hành | Chưa đạt / việc còn lại |
 |---|---|---|
-| [api.rs](../../crates/custos-daemon/src/api.rs) khoảng 10.476 dòng, chứa binary discovery, Git helpers, capability catalog và dispatch nhiều domain | Nhiều trách nhiệm chung một file; chưa suy ra mọi endpoint sai | Tách transport, application handlers và concrete adapter I/O; giữ compatibility của method hiện có |
-| [AppContext](../../ui/desktop/src/context/AppContext.tsx) khoảng 2.853 dòng; [ScreenContext](../../ui/desktop/src/context/ScreenContext.tsx) 518 dòng | Selection, backend projection và presentation liên kết chặt; vượt quy tắc kích thước component hiện tại ở một số file | Tách store theo ownership, giữ facade tương thích khi di chuyển |
-| [runtime Cargo](../../crates/custos-runtime/Cargo.toml) có production dependency persistence; [notebook coordinator](../../crates/custos-runtime/src/notebook/coordinator.rs) nhận `ResearchRepository` concrete | Ranh giới runtime→port chưa hoàn chỉnh | Đặt notebook/research storage port tối thiểu trong core; inject tại daemon; persistence chỉ còn dev-dependency khi dùng test fixtures |
-| [bridge Cargo](../../crates/custos-bridge/Cargo.toml) phụ thuộc runtime, persistence **chỉ dev-dependency** | Không được báo nhầm bridge đang ghi DB production chỉ từ cargo metadata | Giảm coupling concrete SessionManager bằng session contract khi sửa bridge; giữ ý nghĩa bridge là session↔Task, không biến thành gateway vạn năng |
-| [candidate_builder](../../crates/custos-runtime/src/oi/candidate_builder.rs) bỏ qua snapshot và tạo ba executor cố định; [estimator](../../crates/custos-runtime/src/oi/estimator.rs) gán hằng số; [selector](../../crates/custos-runtime/src/oi/selector.rs) lấy candidate admissible đầu | Đây là scaffold selection, chưa là tối ưu cost/quality có calibration | Lấy candidates từ catalog thực; unknown estimates phải rõ; baseline pinned trước; không công bố số tiết kiệm từ các hằng số |
-| [dispatcher](../../crates/custos-runtime/src/workflow/dispatcher.rs) có memory maps **và** `RunPort`; [migration 0027](../../crates/custos-persistence/migrations/0027_dispatch_claims_and_fencing.sql) có unique active claim | Đã có durable claim, DB fencing và restore/read-through; nói “chỉ HashMap” là sai | Giữ nền này; kiểm error propagation và launch/recovery xuyên caller |
-| Dispatcher hiện propagate store errors, có restore/read-through; nhưng TaskRuntime còn bỏ qua kết quả `mark_dispatched`/release/save ở một số caller | Không làm lại durable claim từ đầu; gap nằm ở error propagation xuyên caller và launch/recovery window | Fault injection từ save run/worker tới launch/mark/release; reconcile uncertain launch, không reset claim rồi chạy lặp |
-| [RepoCoordinator](../../crates/custos-runtime/src/context/repo_intelligence/coordinator.rs) gọi Git/read filesystem; `find_symbol` tạo span với offsets cố định và literal `"digest"` | Phân tách I/O chưa sạch, locator hiện không đủ tin cho evidence | Đưa scan/Git/read sang adapter; span lấy từ bytes/parser thật, thiếu coverage trả unknown |
-| [citation verifier](../../crates/custos-packs/src/research/verifiers/citation_coverage_oracle.rs) đếm metadata flags/citation, mặc định threshold 0,80 | Coverage heuristic, không tự chứng minh passage support; provenance của metadata cần kiểm ở caller | Completion dùng assessment records tin cậy gắn source revision; không cho arbitrary metadata tự tạo pass |
-| Notebook coordinator đã có persistent Python process, queue và epoch, nhưng domain [notebook.rs](../../crates/custos-domain/src/notebook.rs) neo cell/kernel vào `session_id` | Không còn là subprocess độc lập mỗi cell; tuy nhiên một chat nhiều notebook cần identity riêng | Tách notebook/kernel/execution identity, chuyển schema có compatibility; custom worker không tự thành Jupyter |
-| [AppTopBar](../../ui/desktop/src/components/shell/AppTopBar.tsx) gọi `setScreenWorkbench` khi bấm icon workbench | Hiện đổi nhãn Screen, khác hành vi chọn Screen cuối của lens | Phân biệt focus lens, đổi home của Screen, mở cùng session ở lens khác |
-| ScreenContext đọc localStorage trong initializer, persist theo `storageKey` đổi theo project; [shell](../../ui/desktop/src/components/shell/AppWorkspaceShell.tsx) chỉ restore session khi ID truthy | Có nguy cơ ghi layout project trước sang key mới hoặc kế thừa session cũ; cần test remount/scope thực tế | Hydration theo stable project ID + guard generation; restore nullable selection nhất quán |
-| [runtime lib](../../crates/custos-runtime/src/lib.rs) mount `agent`, không mount cây `engine/` | File tồn tại không có nghĩa compiled/active | Inventory reference/build-feature trước retire engine; không nối cả hai loop chỉ vì đều từ Goose |
+| R0 — CI | Architecture/Cargo check và contracts checks đã được siết một phần | Rust fmt/Clippy/Run Tests còn continue-on-error; critical regressions chưa là gates đầy đủ |
+| R1 — Commands | Client truyền command ID, ledger và sequential replay test | Check→execute→record không atomic; fail-open khi ledger lỗi; không bind method; timestamp expiry so khác định dạng |
+| R2 — Dispatch | Durable unique claims, restore, caller error propagation đã cải thiện | Claim update WHERE id không expected-state CAS; cần chứng minh cancel/launch/restart/generation fencing xuyên đường chạy |
+| R3 — Resource bounds | LiveRuns bounds, terminal map eviction khi có persistence | Python StringIO vẫn buffer trước truncate; Rust đọc line chưa có byte bound; tool output truncate có UTF-8 panic |
+| R4 — SDK/shell | Client/wire đã được extract sang SDK, có async attach helper | Host còn import daemon, startup sync attach + expect; single-flight/readiness/degraded UX chưa đầy đủ |
+| R5 — Layering | API tách transport/capabilities/tests; runtime persistence đã thành dev-dependency; NotebookStoragePort có thật | application use cases chưa được tách; notebook subprocess I/O vẫn trong runtime; adapter/tool composition cần chuẩn hóa |
+| R6 — Agent loop | Bounded multi-step implementation và mock executor tests | Daemon wire tools rỗng, không có production GovernedToolExecutor; model stream ToolCall vẫn UI-only; chưa có actual multi-step product path |
+| R7 — Desktop | Lens routing/hydration/nullable restore đã được sửa | Cần cross-lens/no-root/multi-pane/reconnect/settings behavior acceptance, không làm lại renderer từ đầu |
+| R8 — Coding | Repo spans đã lấy actual bytes/digest; có recipe outcome types/helpers | Recipe helper không chạy diagnose→patch→trusted verification; cần end-to-end evidence |
+| R8 — Research | Citation oracle có assessment metadata branch | Vẫn fallback verified:true; assessments chưa trusted/source-version-bound; source support không được xác minh chỉ từ flags |
+| R8 — Assistant | Delivery states, payload-reset/quota helpers | Chưa chứng minh helpers được enforce xuyên connector/outbox/transaction/revoke path |
+| R9 — Notebook/compute | Optional notebook/kernel fields, checkpoint validators/metadata inspection | Kernel vẫn keyed session_id; chưa production ComputePort implementation/engine runner/portable resume |
+| R10 — OI | Explain/planner/topology logic tests | CandidateBuilder bỏ snapshot, estimates hằng số, selector lấy admissible đầu; chưa paired cost-quality benchmark |
+| R11 — Legacy | c96f414 xóa 203 file unmounted engine, 89.723 dòng | Deletion không chứng minh behavior parity/license mapping/release compatibility; không chứng minh RAM giảm |
 
-Các nhận định cũ về repo spans, citation flags và Screen hydration cần revalidate trên HEAD mới trước khi sửa; chúng là checklist, không mặc định là bug hiện còn. Worktree lease hiện dùng Git worktree thật. Khảo sát gần nhất inventory 686 file Rust trong crates và 189 file TS/TSX desktop, không đọc từng dòng toàn bộ.
+Source anchors: [API command admission](../../crates/custos-daemon/src/api.rs), [ledger](../../crates/custos-persistence/src/repositories/command_ledger.rs), [claim updates](../../crates/custos-persistence/src/repositories/run.rs), [runtime composition](../../crates/custos-daemon/src/runtime.rs), [model loop](../../crates/custos-runtime/src/agent/runtime_port.rs), [notebook](../../crates/custos-runtime/src/notebook/coordinator.rs), [citation oracle](../../crates/custos-packs/src/research/verifiers/citation_coverage_oracle.rs), [CI](../../.github/workflows/rust.yml).
 
-| Gap bổ sung từ call-path audit | Packet |
-|---|---|
-| Client Tauri→HTTP fallback và host resend có thể dispatch mutation lại; Task create chưa có durable command replay chung. Controlled client fixture tạo 2 dispatch khi mất response đầu, không phải proof email/GPU thực gửi hai lần | R1 |
-| Model branch stream ToolCall thành status/input; GovernedAgentRuntime gọi ModelPort một lượt; tools profile đang rỗng: chưa đủ iterative model→tool→result→model | R6 |
-| Terminal runs/workers còn nằm trong active maps; bounded LiveRuns không tự giới hạn các map đó | R3 |
-| Notebook Python capture stdout/stderr và JSON line chưa có byte cap trước allocation | R3 |
-| Runtime engine có 183 file Rust nhưng không mount; tests compiled không kiểm được cả cây | R0/R6/R11 |
-| SDK chưa là shared Local API client đầy đủ; host dùng daemon client, startup polling đồng bộ | R4/R5 |
-| Rust/contracts CI có nhiều continue-on-error: true, nên job xanh có thể che check/test fail | R0 |
+**Giữ phần đúng:** worktree lease đã dùng Git worktree thật; dispatcher đã có persistence/read-through; GovernedAgentRuntime đã dùng ModelPort; runtime không còn persistence production edge. Không đưa các việc này vào backlog như thể chưa làm. Không restore nguyên engine đã xóa để lấp gap; recover từng behavior cần thiết có evidence.
 
-Số dòng là snapshot, không là metric chất lượng tuyệt đối. Các nhận định risk không thay thế test reproduce. `cargo metadata --no-deps --offline` xác nhận 12 product packages hiện tại: 10 crate chức năng và hai app packages trong `custos-app/`; còn testkit/test packages/xtask. Quy tắc “11 canonical crates” cần đếm theo loại và đồng bộ tài liệu, **không** thêm/xóa crate cho vừa số.
+Audit trace các đường rủi ro và diff chín commit, không đọc từng dòng toàn repo. File counts 686 Rust/189 desktop TS của snapshot trước chỉ là lịch sử, không còn là current inventory sau deletion. Workspace có 12 product packages (10 functional crates, hai app hosts) cộng test packages/xtask; không đổi package chỉ để khớp khẩu hiệu “11 crates”.
 
 ## 3. Mô hình sản phẩm: ba trục, không một cây bắt mọi thứ
 
@@ -454,7 +449,7 @@ Metrics: p50/p95 first useful output/end-to-end, CPU/RSS/event-loop stalls, queu
 
 ### Baseline và kiểm thử
 
-Audit trước packet tài liệu này: runtime **173**, domain **63**, core **61**, persistence **34** tests pass: tổng **331** trong các suites đó; canvas smoke **29** pass. Desktop build exit 0 nhưng còn large-chunk/mixed-import warnings. Không phải full workspace/OS/live provider/GPU pass, không coverage cây engine unmounted. Không rerun Rust/UI suites chỉ để sửa Markdown.
+Audit tại c96f414 đã chạy lại: runtime library **181 tests**, command replay **1 test**, citation coverage **7 tests**, canvas smoke **29 tests** đều pass; desktop build exit 0 còn large-chunk/mixed-import warnings. Đây là các suites có overlap, không cộng thành tổng unique tests. Citation tests còn chấp nhận verified flag fallback, nên pass không tự chứng minh trust gate đúng. Không phải full workspace/OS/live-provider/GPU verification. Lượt cập nhật plan chỉ kiểm tài liệu, không trình bày kết quả audit trước như tests mới chạy.
 
 Lệnh từ root Custos:
 
@@ -494,3 +489,267 @@ Packet done khi actual path composed, normal/fault/recovery tests đạt, author
 - [MCP tools specification, pinned 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18/server/tools): annotations là hints không bảo đảm behavior; host phải kiểm quyền. Đây là nguồn nguyên tắc, không chỉ định SDK/protocol version production của Custos.
 
 **Quyết định đề xuất cuối:** giữ một modular local runtime và một canonical data plane; làm sạch execution/recovery và resource identity; triển khai ba domain sâu bằng skills/recipes/verifiers; hấp thụ upstream theo behavior có tests; chỉ sau đó bật orchestration tối ưu dựa dữ liệu. Sức mạnh SADE đến từ một chuỗi công việc thật xuyên chat, code, research và action — không từ số lượng crate, hub hoặc agent.
+
+## 17. Superplan hoàn thiện sau audit
+
+### 17.1 Mục tiêu hoàn thành và cách quản lý trạng thái
+
+**Execution-level plan:** [sade-implementation-plan.md](sade-implementation-plan.md) (English) chia F01–F12 thành PR có files, tests fail-first, lệnh kiểm và rollback; có kết luận UI và findings V01–V19 đã đối chiếu code.
+
+F01–F12 dưới đây là **breakdown sửa gap của R0–R11**, không campaign kiến trúc mới và không thay tên các subsystem. Mỗi F có thể gồm vài PR nhỏ, nhưng chỉ một authority/implementation được compose ở mỗi boundary. Không auto-commit/push; không đổi dependency/schema/runtime public contract ngoài quy trình repo.
+
+Dùng trạng thái: **planned → implemented → composed → verified**; blocked ghi đúng nguyên nhân. Tests trên mock chỉ đạt một phần verification. “Verified offline”, “verified live on platform X” và “unsupported” phải phân biệt; không gộp thành phần trăm completion.
+
+| Mốc | Trải nghiệm được nghiệm thu | Chưa được claim |
+|---|---|---|
+| M0 — Safe foundation | Command identity/crash replay, claim transitions, output limits, CI thật | Agent tự chủ/training đã hoàn chỉnh |
+| M1 — Composed local SADE | Shell usable, một loop/gateway thật, canonical state qua ba lens, notebook isolation | Multi-provider GPU resume hay optimizer thắng baseline |
+| M2 — Three-domain acceptance | Coding patch verified, Research sourced notebook/report, Copilot controlled effect, cross-pack lineage | Mọi connector/upstream capability đều supported |
+| M3 — Training studio | Một engine + một target thật, logs/artifacts/eval/recovery | Zero downtime hoặc checkpoint portability mọi môi trường |
+| M4 — Portable and measured | Supported target handoff và OI/S1 đạt quality/cost gates, release matrix | Rẻ nhất mọi task hoặc isolation giống nhau mọi OS |
+
+MVP hữu ích có thể bàn giao ở M1/M2. M3/M4 là capability milestones sau đó, không lý do trì hoãn sửa correctness hiện tại.
+
+### 17.2 Dependency và ownership review
+
+```mermaid
+flowchart TD
+    F01[F01 Evidence and blocking CI] --> F02[F02 Durable command admission]
+    F01 --> F03[F03 Claim CAS and recovery]
+    F01 --> F04[F04 Bounded output and Unicode]
+    F01 --> F05[F05 Trusted evidence]
+    F03 --> F06[F06 Notebook binding]
+    F04 --> F06
+    F02 --> F07[F07 SDK application and shell]
+    F02 --> F08[F08 Production worker gateway]
+    F03 --> F08
+    F04 --> F08
+    F07 --> F08
+    F05 --> F09[F09 Desktop and domain acceptance]
+    F06 --> F09
+    F07 --> F09
+    F08 --> F09
+    F09 --> F10[F10 Training and target recovery]
+    F08 --> F11[F11 Measured OI and S1]
+    F09 --> F11
+    F10 --> F12[F12 Parity and release evidence]
+    F11 --> F12
+```
+
+Chuẩn bị theo file độc lập được; integration phải theo dependencies. Graph này không cho phép chạy paid effects hay nhiều implementers sửa chung monolith. Mỗi thay đổi command/claim/evidence/tool contract cần review cả caller, trusted policy và persistence implementation; review frontend phải xem event/cancel/reconnect chứ không chỉ screenshot.
+
+### F01 — Khóa baseline, status và critical CI
+
+**Map:** R0/R11. **Files:** .github/workflows/rust.yml, contracts.yml; existing tests/contract, tests/e2e, xtask/scripts; docs/catalog.
+
+1. Freeze HEAD/dirty manifest, package/features/OS matrix và entrypoints thật. Phân loại tests hiện có thành pure/unit, in-memory integration, process integration, UI interaction, live platform.
+2. Đưa critical command/claim/evidence/resource regression suites thành blocking. Run Tests không continue-on-error; nợ fmt/Clippy nếu còn phải có inventory/issue và migration gate rõ, không gọi toàn CI hardened.
+3. Reproduce từng audit finding trước fix; test phải fail ở implementation hiện tại đúng lý do, không chỉ verify success path mới.
+4. Bảng status gắn commit/test artifact, không gắn completed chỉ từ commit message hoặc tên phase.
+
+**Exit:** CI đỏ khi critical regression bị đưa lại; báo cáo baseline phân biệt warnings/failures/unsupported. **Không làm:** đổi hàng nghìn dòng formatting trong patch correctness.
+
+### F02 — Durable command admission, transaction và retry
+
+**Map:** R1. **Files:** daemon api.rs/application extraction sau F07; core contracts/storage.rs và Task service/TaskStore; persistence command_ledger.rs/store.rs/transaction owners; SDK wire/errors; desktop lib.rs và daemon_client.ts.
+
+**F02a — Envelope và errors:** giữ stable ID từ client qua IPC/HTTP; fingerprint method + canonical payload + trusted actor/profile/scope + semantic version khi cần. Không lấy actor đáng tin từ arbitrary params. Operation classification phải dùng chung catalog/rules đủ coverage, không danh sách startsWith bỏ sót mutations. Business errors/cancel/unsupported không trigger transport resend; timeout sau dispatch đưa command status/reconcile.
+
+**F02b — Hai transaction boundaries khác nhau:**
+
+- DB-only mutation: admit unique command, apply state/event, persist replayable result **cùng transaction**. Concurrent identical command nhận cùng kết quả; different payload/method/scope conflict.
+- Long-running/external operation: transaction admit command + durable pending work/outbox/attempt reference, trả handle ổn định. Worker dispatch sau commit; completion/result cập nhật sau observation. Không giữ SQLite transaction qua model/network/shell await, không gọi external effect trong transaction.
+- Retry đang pending trả cùng handle/status; crash không được release admission rồi khởi động external operation mới. Lỗi ledger làm fail-closed trước mutation; lỗi settlement sau effect giữ uncertain/reconciling.
+- Không dùng INSERT OR REPLACE để thay record command đã nhận. Error replay policy phải xác định deterministic rejection versus transient unavailable; replay phải qua authorization hiện tại, không leak result sau account switch/revoke.
+
+**F02c — Legacy và expiry:** chuẩn hóa timestamp dạng numeric hoặc parse/compare cùng format; query hiện so RFC3339 với SQLite datetime text không đúng trong cùng ngày. Reject corrupt dates, không default now. Expired command ID không tự thành request mới có quyền replay external mutation; giữ tombstone/explicit retry policy theo retention được chốt. Existing successful ledger entries có thể giữ replay nếu fingerprint hợp lệ; không khôi phục retroactive actor/attempt proofs bằng dữ liệu suy đoán.
+
+**Tests:** concurrent requests qua hai connections; loss sau commit trước reply; process kill trước/sau admission; method collision; payload/scope mismatch; replay từ SDK và Tauri/HTTP; ledger unavailable; same-day expiry; restart pending; malformed result; approval/account revoked.
+
+**Exit:** một logical command có một accepted durable operation; external uncertainty vẫn hiện thật. **Rollback:** preserve ledger decode/tombstones; tắt unsafe mutation fallback, không xóa ledger hoặc retry unknown effect.
+
+### F03 — Claim CAS, launch fencing và recovery barriers
+
+**Map:** R2. **Files:** workflow dispatcher.rs/task_runtime.rs, core RunPort contracts, domain run.rs nếu cần version field, persistence repositories/run.rs, daemon runtime.rs/readiness.
+
+1. Storage transition kiểm expected prior status/version/generation, kiểm affected rows. Pending→Dispatched và Pending/Dispatched→Released không được blind overwrite theo id. Version/generation do authority store cấp/kiểm, không chỉ ghi metadata tên generation.
+2. Publish cache sau commit; stale cache phải invalidate/read-through, không ghi ngược DB. Failed expected-state transition phải conflict, không success.
+3. Bind claim/run/worker/launch identifiers ở durable preparation. Fail save worker sau save run phải có terminal/recoverable record, không orphan active run. Boundary nào không atomic được phải ghi launch uncertain.
+4. Startup readiness chờ inventory/recovery barrier; không tự release mọi active claim vì process cũ chết. Query adapter/process/remote job identity trước re-admit. Old worker không được settle/mutate state cho generation mới.
+5. Cancel là durable request; observed stopped/released có receipt riêng. Cancel-vs-launch không tạo job vô chủ; stop retry chỉ nếu adapter semantics cho phép.
+
+**Tests:** deterministic barriers để interleave mark/release, hai dispatchers, DB errors từng write, stale settlement, kill trước launch/sau effect/trước receipt, restart hai lần, recovery unavailable, cache/store divergence.
+
+**Exit:** CAS và generation enforced tại write boundary; không “fencing verified” chỉ từ unique active-slot index. **Rollback:** drain/reconcile, không blanket reset claims.
+
+### F04 — Producer bounds, Unicode và cancellation responsiveness
+
+**Map:** R3/R6. **Files:** agent/runtime_port.rs, notebook/coordinator.rs, workflow live/output paths, adapter execution outputs, CAS/API projections.
+
+1. Sửa UTF-8 truncation tại character boundary; test tiếng Việt/emoji/mixed binary-to-text, 0/exact/over cap. Truncated structured data phải có typed marker, không coi JSON bị cắt là JSON hợp lệ.
+2. Replace Python StringIO capture bằng bounded sink/chunk/spool strategy từ producer. Bound Rust frame/message reader trước full allocation; child có thể ghi trực tiếp stdout/file descriptors nên consumer vẫn phải enforce cap.
+3. Giới hạn per-tool/per-cell/per-run bytes, queued bytes và history context; limit không chỉ theo item count. Ưu tiên control/error/cancel delivery khi output bị flood.
+4. Tool/model response lớn cần producer/adapter cap: cắt sau serde_json::to_string chỉ bound prompt retained, không bound peak allocation. Large artifact chỉ đưa ref/preview vào prompt/UI; retention/sensitivity rõ.
+5. Check cancel trong await boundaries qua supported cancellation; actor abort không tự chứng minh remote work stopped. Cleanup/terminal-map eviction chỉ sau durable settle; diagnostic failed-save không mất owner của resource còn sống.
+
+**Tests:** output lớn và stream không kết thúc có timeout test; slow consumer; malformed/oversized frame; disk full; spill cleanup; multi-byte boundary; cancel lúc model/tool đang await; repeated runs RSS/handles/queue bytes plateau.
+
+**Exit:** bound được producer/transport/retained state với metric, không chỉ output cuối nhỏ. **Rollback:** hạ concurrency/admission; không bật lại unbounded path.
+
+### F05 — Trusted evidence và completion thực sự fail-closed
+
+**Map:** R8 Research + shared completion. **Files:** packs research citation oracle/verifier contexts, existing source/claim/evidence contracts, persistence verifier/evidence owners, application verification assembly, core completion.
+
+1. Bỏ verified:true fallback. DOI/URL/citation presence chỉ metadata, không là assessment.
+2. Verifier nhận **references tới trusted stored assessments** hoặc trusted application-resolved records; không nhận arbitrary JSON rồi tự coi là trusted. Record bind criterion/claim digest, source version/span/hash, verifier identity/version/method, freshness và status.
+3. Tách locator validity, extraction fidelity và semantic support; missing/unknown/stale không pass. Semantic assessor có uncertainty; không giả deterministic scientific truth.
+4. Coverage policy do contract/pack profile đã được admit quyết định. Không để caller giảm min_coverage_ratio tùy ý để vượt criterion; validate threshold/range và required claims riêng.
+5. Test agent sửa assertion chỉ là proposed artifact; accepted oracle từ baseline/reviewed tests, gắn source/environment revision.
+
+**Tests:** arbitrary DOI + verified flag; forged assessment JSON; wrong claim/source hash; reused record ở revision khác; revoked/stale evidence; missing parser coverage; partial support; unsupported required claim dù aggregate coverage cao.
+
+**Exit:** user mở lại source/method chứng minh criterion, không chỉ boolean. **Rollback:** Unknown/limited thay vì legacy fallback pass; không sửa historical failed receipt thành verified.
+
+### F06 — Notebook document/binding/kernel identity và migration
+
+**Map:** R9a/R7. **Files:** domain/notebook.rs, runtime notebook coordinator, NotebookStoragePort, ResearchRepository migrations/queries, SDK/types, notebook UI callers.
+
+1. Define document identity khác conversation binding và kernel instance/epoch. session_id giữ journal association, không là kernel lookup key mặc định cho notebook mới.
+2. Execute request validate notebook ownership/binding, selected kernel/epoch, cell version, execution request ID; reject mismatch trước execution. Cell edit làm old output stale; duplicate execute command không chạy cell lần hai.
+3. Existing records chỉ có session_id migrate thành một explicit legacy notebook binding/session, preserve cells/output refs; không tự merge/split namespaces. New nullable fields phải thực sự được validate/store/use, không chỉ echo.
+4. Same notebook nhiều panes dùng cùng binding handle; hai notebooks một chat mặc định isolated kernels trừ khi user explicit share. Kernel restart/fresh target mất memory là trạng thái hiển thị rõ.
+5. I/O/process code đi adapter sau port seam; runtime coordinator giữ queue/epochs/state. Không rename custom worker thành Jupyter; thêm Jupyter adapter chỉ khi capability cần và được chấp thuận.
+
+**Tests:** two notebooks same chat, same notebook two panes, same cell ID different document, stale epoch/version/request, restore legacy DB, interrupt/reset, cwd change, kernel crash, UI reconnect không replay code.
+
+**Exit:** notebook isolation được chứng minh từ API qua worker, không chỉ serde round-trip. **Rollback:** preserve legacy mapping; nếu binary cũ không hiểu dữ liệu mới thì forward repair, không drop identity fields.
+
+### F07 — Hoàn thiện SDK, application use cases và native shell
+
+**Map:** R4/R5. **Files:** custos-sdk/local_api; daemon api/transport, profile.rs/runtime.rs, proposed application modules; custos-app desktop/CLI manifests/imports; frontend connectivity facade.
+
+**F07a — Use cases:** migrate một vertical command/query trước: Task create/status dùng F02 admission → application handler → core/store; transport chỉ decode/map error. Sau parity mới tách workspace/session/research/assistant/connections theo use case. Concrete Git/binary/process I/O sang adapters, không chỉ đổi file từ api.rs sang api/transport.rs.
+
+**F07b — Client boundary:** SDK là source wire/client/errors/cursor, daemon dùng/re-export compatibility tạm; app hosts chuyển imports và gọi SDK. Build graph chứng minh host không link server/storage qua public client surface. Không chuyển domain invariants vào SDK; không sinh DTO bản hai ở TypeScript.
+
+**F07c — Lifecycle:** shell xuất hiện trước khi attach hoàn tất; explicit connecting/ready/incompatible/degraded/recovering. Single-flight start/reconnect **theo profile**; lock tránh spawn storms và per-attempt deadline có cancel. Auth/compatibility trước replay. Không expect/panic khi daemon thiếu; UI cho retry/open diagnostics. Dừng app client khác dừng daemon/background jobs.
+
+**Tests:** startup unavailable/slow/wrong version; two windows start/reconnect; attach request cancel; daemon crash+cursor gap; shutdown with active GPU/tool; CLI path parity; exports/SDK graph; legacy method payload compatibility.
+
+**Exit:** application seams có tests không phải boot full UI; native UX không block/panic vì daemon offline. **Rollback:** facade tương thích + một composition root, không nhét backend khác vào app.
+
+### F08 — Compose loop thật, budget và gateway ownership
+
+**Map:** R6. **Files:** daemon runtime/bootstrap registration; runtime agent/task workflow; core harness/capability/effect contracts; provider adapters/tool registry/gateway; journal/usage persistence.
+
+1. Một production GovernedToolExecutor nối đúng authority/permit/outbox/receipt ports, nhận trusted task/run/attempt scope qua bound execution context, không chỉ tool name/JSON.
+2. Tools schemas/availability lấy registry; operation unsupported fail rõ. Mediation profile dựa đường effect thực sự intercept; nonempty tools không đủ để claim CustosMediated.
+3. Model branch và governed loop converge qua existing worker contract; không giữ hai implementation khác semantics. Preserve assistant text, structured tool-call IDs/results, stream/cancel/usage/source anchors và actual pinned model/account.
+4. Ranh giới executor phải phân biệt **proposal chưa dispatch** và **receipt của effect đã chạy**. TaskRuntime không dispatch lại Receipt returned từ loop; một tool call chỉ một admitted effect attempt.
+5. Per-attempt budget reserve/settle/cancel, global run call/time/context caps và bounded replan. Max iterations hết/cancel/error là explicit limited/cancelled/uncertain, không normal success. Native harness giữ loop riêng/assurance và continuation limitations.
+6. Steering/cancel handles có cleanup/retention; don't leak cancelled ID sets hoặc guidance queues. Tests kiểm long-running generate/tool bị cancel chứ không chỉ cancel trước execute.
+
+**Tests:** API → model → actual temporary-file tool → result → model → journal/outcome; rejected/edited permit; duplicate call ID; crash sau tool trước next turn; output caps; user pin/account; usage unknown; limit exceeded; one native harness conformance. Test connectors/models giữ explicit fixture, production không mock.
+
+**Exit:** one real composed multi-step path, no duplicate effects; default direct chat không bị thêm planner latency. **Rollback:** disable tool-loop admission nhưng keep observation/reconciliation, không switch executor để retry unknown action.
+
+### F09 — Ba verticals, desktop và cross-pack acceptance
+
+**Map:** R7/R8. **Files:** existing shell/canvas/contexts/api/features, engineering/research/assistant packs, application handlers, trusted evidence/effect ports; standards amendment nếu no-root semantics cần.
+
+- **Coding:** temporary real repo và bug fixture; locate exact source → failing reproducer → scoped/base-bound patch → approved apply → trusted regression → review/outcome. EngineeringRecipePipeline assemble_outcome không được coi là implementation của cả workflow; modified_files metadata phải khớp parsed diff/actual changes. Include traversal/symlink/write overlap và dirty-user files.
+- **Research:** source corpus/version/parse gap → claims/contradiction → notebook/experiment/artifact → annotation/report/export. Same chat chuyển Coding vẫn mở source refs/selected findings; không copy private corpus/grants ngầm.
+- **Copilot:** fake connector fixture có recipient ambiguity/payload edit/timeout-after-send; actual outbox ledger và transactional quota/revoke enforcement. StandingGrant helper tests không chứng minh concurrency/expiry/revoke ở dispatcher; quota consumption phải enforced cùng admission.
+- **Desktop:** same conversation ba lenses, independent drafts, screen focus/zoom, multiple resource panes, no-root Research/Copilot, Activity reachable khi đóng screen; all data thật hoặc honest unavailable. Không cần redesign canvas/token system đang hoạt động.
+- **Settings:** persisted settings round-trip, validation/version/defaults, actual connector state, expired auth, redacted secrets, no runtime knobs without implemented operation. Keyboard/pane focus/IME và tooltip/label cho icon-only nav.
+- **Cross-pack:** selected claim → engineering criterion → accepted patch summary → assistant draft; mỗi handoff schema/source/privacy/authority rõ. Không tự send vì upstream Task completed.
+
+**Exit:** ba scenario hoàn chỉnh từ UI/API tới persisted outcome, normal và fault tests; no generic “vertical complete” chỉ vì helper/unit tests. **Rollback:** presentation facade; preserve drafts/journal/artifacts and backend active work.
+
+### F10 — Training studio, remote targets và checkpoint continuity
+
+**Component implementation detail:** [GPU workload components plan](gpu-workload-components-plan.md) phân rã notebook/kernel, training/finetune, evaluation, batch/local inference và optional retrieval consumers; chốt shared resource admission, memory/queue/residency/lifecycle, actual source placement và GPU-A–GPU-G deliverables. Đây là HOW chi tiết cho F04/F06/F08/F10/F11, không campaign mới. Ưu tiên notebook + one training/eval target, reuse local inference và không thêm GPU runtime riêng cho từng workbench.
+
+**Map:** R9b–R9d. **Files:** research recipe/execution domain/core ports, runtime/research coordination, adapters compute/training/checkpoint, persistence existing records, Research/Lab controls. Placement chi tiết theo §9 và compute topic docs.
+
+**F10a — First engine/target:** immutable recipe/environment/dataset/model refs + admitted run; một supported engine/target thực; submit returns exact external account/job/attempt ID; shared observer ingests logs/metrics/status, artifacts và held-out eval. Unsloth integration chọn supported script/API path theo per-file license; UI không là engine owner.
+
+**F10b — Remote targets:** Colab/Kaggle/SSH/GPU thuê operation matrix, account/quota/deadline/network/privacy/cost constraints. Không cho batch-only Kaggle chạy execute-cell semantics. Adapter missing = unsupported, không OfflineCompute test implementation ở production.
+
+**F10c — Backup:** engine-specific checkpoint state manifest + versioned code/environment/data + integrity/completeness + remote durable commit; no tensors transit desktop nếu có remote storage transfer hợp lệ. Keep recent healthy generations, retention/release cost rõ.
+
+**F10d — Handoff:** destination preflight/reservation → source checkpoint → commit verify → attempt mới bound lineage → restore sanity/eval → source stop/release reconciliation. Single-writer output ownership/fencing; never write two active attempts to same checkpoint directory. Policy nêu rõ khi nào tự chuyển, cost ceiling và khi nào hỏi user; không tự đăng ký tài khoản/mua GPU.
+
+**Tests:** quota deadline, sudden kill trước checkpoint cuối, partial upload, engine/env mismatch, weights-only, destination unavailable, expired credentials, source still running, duplicate submit, stale observer, release failed, resume metrics/step continuity. Ít nhất một supported live target proof trước quảng bá runner; cross-target resume chỉ enable cặp đã conformance-tested.
+
+**Exit:** training có receipt/artifacts/eval/recovery; không hứa portable live RAM hoặc zero lost work. **Rollback:** stop new admissions, preserve job IDs and continue observe/collect/release; no blind resubmit.
+
+### F11 — OI/S1/S2/Meta từ scaffold thành measured optimization
+
+**Map:** R10. **Files:** runtime oi/cognitive/context; executor capability/availability catalog; policy/core filters; existing usage/cost/outcome records; evaluation harness/reports.
+
+1. Candidates từ actual configured/available executors + task/resource signals; absent executor không được suggested như available. Model pin/local-only/privacy/grants là hard filters.
+2. Unknown spend/latency/quality có explicit representation; thay constants bằng versioned observation/estimate ranges. Không dùng 0 thay unknown. Estimator xét context/cache/retries/tools/verifier/human/setup/transfer/recovery.
+3. Direct pinned baseline trước; S1 có bounded localization/ranking/triage substeps với abstain; giữ exact source/caveats để S2 không bị mất reasoning vì compression. Không buộc cheap model review mọi turn.
+4. Mở sequential → independent readers → disjoint implementers khi measured benefit; compiler checks write conflicts/dependencies/caps/joins. Replan future nodes không thay quyền/criteria đã chốt.
+5. Paired dataset theo ba pack, held-out acceptance/quality margin trước run; report raw attempts/failures/human time/cold-warm/provider-harness versions. Tests OI pass không là cost reduction measurement.
+6. Meta offline đề xuất calibration/policy revision; active runs pin policy trừ explicit revision. Automatic rollout phải có rollback trigger từ quality/safety, không chỉ cheaper.
+
+**Exit:** dữ liệu đủ kết luận quality noninferiority và cost/latency tradeoff theo từng slice; chưa đủ samples report inconclusive, giữ baseline default. **Rollback:** direct/rules trong constraints, preserve decisions/usage evidence.
+
+### F12 — Upstream parity, release và vận hành
+
+**Map:** R11 + all exit gates. **Files:** source map/catalog/topic status, workflows/build/package, existing recovery/compatibility tests; không restore hoặc delete thêm cây source mù.
+
+1. Lập capability matrix OrCa/Open Science/Goose: behavior/path/digest/license → Custos implementation → production composition → normal/fault tests → unsupported/omitted scope. Git có thể recover bytes đã xóa; chỉ lấy behavior thật cần, không phục hồi full engine để “đủ lõi”.
+2. Current inventory sau 203-file deletion; stale links/counts được sửa ở mục liên quan. Canonical doc không tiếp tục nói folder target đã có hoặc toàn R completed.
+3. Existing-data migration từ DB/layout trước R1–R11, intermediate versions, corrupted fields; startup compatibility fail rõ. DB backup không là permission để downgrade destructively.
+4. CI: targeted gates + workspace/used features; release desktop/CLI và platform matrix cho supported OS. Không claim Windows/Linux assurance từ macOS build.
+5. Diagnostics có correlation command/task/run/attempt/resource IDs, privacy redaction, last observed remote status. Process/lease cleanup và orphan reconciliation có hướng dẫn thao tác.
+6. Performance report nhiều runs/windows/notebooks, cold/warm/cache states; security/effect uncertainty metrics; known limitations và recovery playbook. No blanket 100% từ green build.
+
+**Exit:** evidence index theo từng capability, release notes có implemented/experimental/unsupported. **Rollback:** compatible binary hoặc forward repair; active effects/resources tiếp tục quản lý được; no reset DB/history.
+
+### 17.3 Golden acceptance suite
+
+Tên case dưới đây là **mô tả test cần bổ sung vào harness hiện có**, không tên file/CLI đã implemented.
+
+| ID | Scenario | Assertion quyết định |
+|---|---|---|
+| G01 | Same command qua IPC và HTTP đồng thời, lost reply/restart | Một durable logical operation, stable result/handle |
+| G02 | Same ID khác method/payload/profile; ledger error/expiry | Conflict/explicit unavailable/reconcile, không dispatch mới |
+| G03 | Cancel/release interleave mark-dispatched, stale worker settle | CAS conflict/fencing, không hồi sinh claim hoặc overwrite newer state |
+| G04 | Notebook stdout flood, slow reader, Unicode tool result | Memory/queue byte bound, no panic, cancel responsive |
+| G05 | Forged citation/assessment hoặc stale source | Unknown/fail/stale đúng, không auto criterion pass |
+| G06 | Hai notebooks cùng chat; một notebook hai panes | Isolated bindings, no duplicate execution/kernel ownership |
+| G07 | API model task → admitted tool → model result → criterion | Actual composed path, một effect/receipt, journal/usage đúng |
+| G08 | Same chat qua ba lenses, project switch, Settings reconnect | History/drafts/context scope đúng, no hidden run/permission transfer |
+| G09 | Bugfix với dirty repo/base drift/agent-edited tests | User bytes preserved, trusted acceptance không bị lách |
+| G10 | Assistant timeout-after-send + revoke/quota race | Uncertain/reconcile, no duplicate send/quota bypass |
+| G11 | Training target chết, checkpoint incomplete, destination khác | Block unsafe resume; supported continuation có lineage/one writer |
+| G12 | OI/S1 so pinned baseline, failures/human/recovery included | Không claim cheaper/quality-preserved nếu chưa đạt margin |
+| G13 | Release upgrade/restart/orphan resource recovery | Legacy data readable, active jobs discoverable, no destructive cleanup |
+
+Mỗi case ghi cấp độ thực thi: unit/in-memory/process/browser/live. Mock pass không thay process/live gate; UI screenshot không thay mutation/recovery assertions.
+
+### 17.4 Rollout theo PR và tiêu chí dừng
+
+**Batch đầu:** F01 + F02 + F03; có thể patch UTF-8 và output bounds F04 sớm vì độc lập, nhưng không trộn schema/mechanical move/UI vào cùng diff. Tiếp F05/F06/F07; chỉ bật production loop F08 khi admission/gateway/bounds đủ. F09 là product acceptance; F10 và F11 mở sau các dependencies, không lấy đồng thời cả upstream để tạo tiến độ giả.
+
+**Mỗi PR:** declare scope/files/contracts/consumers; failing regression trước fix; migration/compatibility; unit + boundary/fault test; resource impact; docs/catalog; exact known limitations. Tránh commit tên gộp nhiều R rồi coi mọi subgate completed. Nếu phải đổi schema/error contract, chốt fixtures và compatibility trước code.
+
+**Stop conditions:** uncertain external effect không reconcile được; missing trusted scope/evidence; failed CAS/storage; incompatible persisted state; output bound không enforce; target budget/capability thiếu. Dừng admission tương ứng, giữ observe/reconcile và trả trạng thái thật; không mở rộng quyền/fallback effect route để “hoàn thành”.
+
+**Gate phát hành:** release scope được tuyên bố rõ, G cases liên quan đạt ở cấp độ phù hợp, baseline/performance evidence có timestamp/versions và remaining unsupported list. Không cần mọi future capability để phát hành safe MVP; nhưng không được gọi full RFT hoàn tất khi F10/F11 vẫn scaffold.
+
+### 17.5 Việc làm ngay sau khi duyệt plan
+
+1. Reproduce G01–G05 với failing tests, lưu baseline và sửa CI critical fail-open.
+2. Chốt transaction/admission và claim expected-state contracts từ existing ports; review migrations/replay compatibility.
+3. Sửa Unicode/output capture và DB correctness trước UI feature additions.
+4. Chốt trusted verifier record resolution và notebook binding migration; giữ legacy data.
+5. Extract application path đầu tiên, hoàn thiện SDK/shell và compose một tool loop thật.
+6. Chạy G06–G10 cho ba domain, rồi mới mở paid compute/live target tests với quyền cụ thể.
+7. Chỉ sau đó nghiệm thu portability/OI bằng G11–G13 và publish capability evidence thay bảng “100%”.
+
+**Định nghĩa hoàn tất:** kiến trúc dễ mở rộng vì trách nhiệm/contract rõ; sản phẩm dùng được vì đường chạy thật; tối ưu đáng tin vì có measurement; an toàn vì lỗi/uncertainty được giữ đúng. Không phải số file đã di chuyển hay số tests xanh.

@@ -73,13 +73,25 @@ Daemon ráp implementations. Runtime quản lý run/workspace/process lifecycle 
 
 ## 4. Bố cục và điều hướng
 
+### Working resource implementation
+
+Outbox advertises read operations while its outbound connector pipeline remains unconfigured. Its ledger includes failed and uncertain attempts. Approval and dispatch controls require an advertised operation and an admissible action state; missing receipt/permit metadata remains explicitly missing.
+
+PTY process exit and stream completion are separate observations: queued output drains before EOF. File descriptors have independent ownership and close once even after the process exits. Terminal retention bounds session count as well as bytes per stream. These process-local terminals do not survive a daemon restart.
+
+Every resource resolves its own session and workspace from its tab references. A missing explicitly bound reference produces an unavailable state instead of falling back to the globally selected conversation or checkout. Files, notebook execution, research prompts and drafts use the resolved reference for both display and commands.
+
+`WorkbenchPane` supplies the shared compact toolbar, inline error/retry and honest empty state. Content remains in the centre; list/detail layouts adapt to pane width. Terminal and native-agent views use `useTerminalSession` for exact daemon-ID attachment, explicit start/stop, single-flight creation and scoped failure handling. Cached bindings never identify sessions by command substring. A restored tab does not spawn a process. PTY output reads are serialized with bounded retry delay; terminal rendering disposes subscriptions without terminating the process. Native Task runs retain their existing journal, run stream, cancellation and assurance.
+
+Resource catalogue, resource rendering and canvas layout have separate source owners under `components/workbenches`; compatibility exports retain existing imports while the implementation is decomposed. All three workbenches share typography, surfaces, list selection, toolbar density and focus states; domain-specific content and execution controls remain visible.
+
 ### Desktop canvas implementation contract
 
 The existing shell and resource host use a recursive group/split presentation tree. Each tab belongs to one group; active tabs must exist; ratios are bounded; closing the final tab preserves a usable empty group. Drag/drop, split right/down, merge, keyboard focus, resize and zoom never execute domain commands. Unknown kinds render unsupported. AppContext persists sanitized resource metadata by project/lens/workspace/session; the resource host persists the matching validated layout. Resource IDs bind scope on creation; worktree selection never retargets existing tabs. Compact desktop shows one focused group with group navigation. Coding, Research and Copilot expose distinct resource shortcuts and a contextual scope inspector. Main conversation can remain beside resources or be hidden using canvas expansion. Popout editing remains deferred until shared-window reconciliation. Scientific annotation/reproduction and external dispatch retain existing backend capability gates. Findings forwards actual handoff Task IDs to the shell, which refreshes Tasks and opens the destination Coding Task; this is not itself evidence of a verified scientific handoff. Drafts keeps unsaved edits in memory across resource navigation, offers explicit save, and local review/lock does not enqueue an Outbox action or claim scientific verification.
 
 Desktop/headless integration theo [superplan §21](../development/workspace-restructuring-plan.md#21-superplan-kết-hợp-custos-và-orca-cho-desktop-và-headless): selective port OrCa presentation components qua Custos SDK facade; projection/event store do backend IDs/version/cursor chi phối; terminal/token streams bounded riêng với persisted state events. Layout restore không tự spawn agent. Mobile app/client/push/packaging chưa nằm trong phạm vi; giao diện hẹp dưới đây chỉ là responsive desktop.
 
-Desktop dùng một shell, không làm ba ứng dụng UI rời:
+Desktop dùng một shell, không làm ba ứng dụng UI rời. Khung điều hướng có hai vai trò trái tách bạch: Activity Rail dành cho đích cấp ứng dụng; sidebar kế bên đổi nội dung theo workbench và scope hiện hành. Không lặp Conversations/Tasks ở cả rail lẫn sidebar. Header giữ lens switcher và Screen switcher; canvas trung tâm là nơi mở workflow đầy đủ; Inspector bên phải chỉ là hỗ trợ tùy chọn.
 
 **Vị trí file UI:** `components/shell` giữ khung và điều hướng; `components/workspaces/OrcaTabbedContainer.tsx` giữ danh mục resource và chọn pane; ba thư mục `workspaces/engineering`, `workspaces/research`, `workspaces/copilot` giữ màn hình theo lens; `workspaces/shared` giữ Browser/preview/fleet/notes dùng chung; `components/common` chỉ giữ control tái sử dụng. Không tạo thêm lớp re-export `views` song song. Một pane cũ tồn tại trong repo không có nghĩa đã nối vào catalog hoặc backend. Notebook Research chỉ hiển thị cell/result được lưu từ session thật; sửa source làm kết quả trước đó hết hiệu lực.
 
@@ -111,16 +123,17 @@ Giao diện hẹp chỉ có một pane tại một thời điểm, navigation b�
 
 ```mermaid
 flowchart TD
-    H["Header: one three-icon workbench switcher"] --> S["One sidebar: scope, New, search, primary list"]
-    H --> C["Canvas: conversation and opened resources"]
+    R["Activity Rail: app destinations"] --> S["Context sidebar: scope + one primary list"]
+    H["Header: three workbench lenses + scoped Screens"] --> S
+    H --> C["Central canvas: conversation and full resources"]
     S --> C
-    C --> I["Contextual details: Task, evidence, activity"]
+    C -. optional support .-> I["Inspector: context only"]
 ```
 
 - **Task anchor:** hiện một hàng gọn khi session có Task đã bind hoặc attention cần xử lý. Click mở criteria, execution, cost và authority details. Chat thường hiện execution target/model trong composer; chi tiết `No Task` có thể nằm trong context menu, không chiếm một dashboard strip thường trực.
 - **Conversation là pane bền vững, không phải toàn workspace:** có thể ghim trái/phải, thu nhỏ thành dock hoặc mở toàn canvas. Composer gửi vào session hiện hành và hiển thị Task anchor của lượt kế tiếp.
 - **Workbench switcher đổi lens:** Coding ưu tiên repo/diff/test/terminal; Research ưu tiên corpus/source/claim/experiment; Copilot ưu tiên conversation/draft/calendar/automations. Các pane khác vẫn mở được khi cần.
-- **Inspector là control plane theo ngữ cảnh:** tab `Task`, `Context`, `Evidence`, `Activity`, `Permissions`. Pending approval, uncertain effect và conflict không được ẩn chỉ vì inspector đang đóng; chúng tạo attention item ở Task strip.
+- **Inspector là hỗ trợ theo ngữ cảnh, không phải control plane:** xem scope, source refs, status và usage; hành động đầy đủ mở ở canvas. Pending approval, uncertain effect và conflict không được ẩn khi Inspector đóng; chúng tạo attention entry có identity thật và mở đúng resource trung tâm.
 - **Library chung:** source, artifact và outcome có stable ID/version. Kéo hoặc chọn một item vào pane không copy raw bytes vào chat; nó thêm reference có scope và provenance.
 
 ### 4.2. Continuity model: không mất session khi đổi miền
@@ -164,7 +177,7 @@ Mỗi turn có thể hiện Task chip nhỏ; composer có `Working on: <Task>` v
 
 ### 4.5. Điều hướng tối thiểu và tính nhất quán khi đổi ngữ cảnh
 
-**Quyết định thiết kế:** giữ header hiện có với ba icon workbench, một sidebar có thể thu gọn và canvas chứa conversation/resources. Mỗi quyết định chọn Project, session, Task, workspace và resource có identity riêng. Thiết kế này thay thế đề xuất thêm navigation rail thường trực và các danh sách đồng thời cho mọi loại đối tượng ở §4/§11. Đây là target dựa trên trace source; các bước dưới chưa được chứng minh bằng chạy ứng dụng hoặc usability study.
+**Quyết định thiết kế:** giữ header hiện có với ba icon workbench, Activity Rail gọn cho đích cấp ứng dụng, một contextual sidebar có thể thu gọn và canvas trung tâm chứa conversation/resources. Rail không lặp Chats/Tasks với sidebar. Mỗi quyết định chọn Project, workbench scope, Screen, session, Task, workspace và resource có identity riêng. Đây là target dựa trên trace source; các bước dưới chưa được chứng minh bằng chạy ứng dụng hoặc usability study.
 
 **Bằng chứng OrCa:** [`set-active-worktree.ts`](../../../orca/src/renderer/src/store/slices/worktrees/session/set-active-worktree.ts) reconcile các tab rồi cập nhật workspace/host, selected tab/file/browser và explorer view trong cùng state update; focus không được ghi thành smart-sort activity. [`active-worktree-surface.ts`](../../../orca/src/renderer/src/store/slices/worktrees/session/active-worktree-surface.ts) chọn lại surface đã nhớ. [`tab-types.ts`](../../../orca/src/shared/tab-types.ts) tách tab instance, backing entity, worktree và tab group. Đây là cơ sở để Custos khôi phục một ngữ cảnh làm việc có identity đầy đủ. OrCa activation còn có terminal preparation/generation/wake behavior; Custos chỉ khôi phục presentation hoặc attach runtime đã xác minh, còn spawn/continue phải có command lifecycle riêng.
 
@@ -174,11 +187,12 @@ Mỗi turn có thể hiện Task chip nhỏ; composer có `Working on: <Task>` v
 
 | Vị trí | Nội dung | Khi xuất hiện |
 |---|---|---|
-| Header | Bộ ba icon Copilot/Coding/Research hiện hữu, collapse button | Luôn có một vị trí chuyển lens |
-| Đầu sidebar | Project scope bằng tên rõ; picker có Personal và search | Không render Project thành thư mục giả hoặc dùng tên làm ID |
+| Activity Rail | Workspaces/Work, Supervision; Connections, Settings, Account ở cuối | Không lặp Conversations và Tasks nếu contextual sidebar đã sở hữu lịch sử |
+| Header | Ba icon Copilot/Coding/Research, Screen switcher theo lens, collapse controls | Lens switch không đổi Task binding hoặc execution target |
+| Đầu sidebar | Project scope bằng tên rõ; selector có Personal và search | Không render Project thành thư mục giả hoặc dùng tên làm ID |
 | Hàng hành động | New conversation; menu cạnh nó có New task; search dùng command palette chung | Chat thường vào composer trực tiếp; yêu cầu Task dùng intake theo nhu cầu |
-| Context selector | Coding: repo/worktree/host; Research: study/corpus hoặc experiment folder; Copilot: scope cá nhân/project | Một hàng gọn; popover mở cây khi cần đổi, không giữ nguyên cây workspace toàn cục trong cả ba lens |
-| Danh sách chính | Conversations mặc định; lựa chọn Tasks trong cùng list header/menu | Một chế độ tại một thời điểm; Tasks dựa trên Task IDs, có cả Task không có conversation |
+| Context selector | Coding: repo/worktree/host; Research: study/corpus hoặc experiment folder; Copilot: scope cá nhân/project | Một hàng gọn; popover mở cây khi cần đổi; không giả rằng Research cần Git |
+| Danh sách chính | Một chế độ mỗi lần: scope resources, Conversations hoặc Tasks | Chats/Tasks có cùng một vị trí điều hướng; Tasks dựa trên Task IDs, gồm cả Task không có conversation |
 | Attention | Một mục Needs you mở queue dùng chung | Chỉ khi backend có attention; current-item preview xuất hiện ở canvas khi đang xử lý |
 | Footer | Account/Settings/Connections | Không thêm các nhóm tính năng thường trực khác |
 
@@ -979,11 +993,15 @@ Keep Activity Rail destinations Home, Conversations, Tasks and Supervision, plus
 | Screen strip | Compact current title with one view; named Project Screen switcher when multiple; New, rename, duplicate layout, close, arrange | Switching restores layout, never creates/checks out a branch or restarts a run |
 | Focused group header | Repository, checkout label, branch/detached OID, host and freshness | Branch opens picker for this exact checkout; context change affects only newly opened resources |
 | Resource tabs | Chat, Task, Run, Files/Changes, Terminal, History, Browser/device preview | Each retains its own execution/resource reference; mixed-checkout groups show a scope label per tab |
-| Files/Changes | Existing file viewer with Explorer/Changes modes and file diff | One implementation and shared loaders; staged/unstaged/untracked/conflicts shown separately |
+| Files/Changes | Files has one hierarchical tree beside file content; Changes is a separate central resource | One implementation and shared loaders; tree is visible by default; staged/unstaged/untracked/conflicts shown in Changes |
 | Worktrees resource | Repository-scoped inventory and selected-checkout details; comparison in split groups | Overview and lifecycle controls, not a second Project tree or branch catalog |
-| Inspector/status | Exact run/operation/checkout details, errors and freshness | Details open on demand; no second global action toolbar |
+| Inspector/status | Compact, selected-resource context; exact run/operation/checkout details, errors and freshness | Details open on demand; no second global action toolbar or full workflow duplicated outside the canvas |
 
-At 1440 px: rail approximately 48 px, sidebar 240–280 px, flexible canvas, optional inspector 280–360 px. At 1280 px inspector starts closed. When two groups cannot each retain approximately 360 px, use tabs/zoom rather than squeezing unreadable columns. Keyboard actions resolve the focused resource target; no global branch selector can silently override another tab. Theme tokens and existing resize/canvas behavior remain canonical.
+**Center-first inspector contract:** the canvas is the only primary work surface for complete workflows. Full file browsing/editing, diff review and Git mutation, notebook execution, source/claim review, task management, draft editing and Outbox inspection open in central resource tabs. The right Inspector is optional support for the currently focused resource: concise scope, provenance and recorded usage, plus links to the corresponding central workflow. It does not load or render a second file list/tree or changed-file list, and must not host a second editor, full commit workflow, complete notebook/source workflow, or alternate source of truth. Opening a workflow reveals its exact workspace/resource in the canvas; it does not mutate the resource or silently change its execution binding.
+
+Inspector content is evidence-aware. Research may show source/claim anchors only when the active resource or daemon supplies them; otherwise it links to Findings and says what is unavailable. Copilot may summarize a real pending approval/effect or link to Outbox, but cannot claim policy enforcement, approve, or dispatch from a static panel. Workspace, Task, Session, model, cost and verification facts must have real provenance; missing usage is “not reported,” not zero. Loading, error, empty and stale states remain distinct. Contextual labels follow the selected workbench but do not alter resource ownership or permissions.
+
+At 1440 px: rail approximately 48 px, sidebar 240–280 px, flexible canvas, optional Inspector around 280–360 px (default 300 px; resizable within 260–480 px). At 1280 px Inspector starts closed. Larger content opens in the canvas rather than widening the Inspector into a second workspace. When two groups cannot each retain approximately 360 px, use tabs/zoom rather than squeezing unreadable columns. Resizing is also keyboard-operable; keyboard actions resolve the focused resource target; no global branch selector can silently override another tab. Theme tokens and existing resize/canvas behavior remain canonical.
 
 Example: Screen `Build` has Chat A and Terminal A bound to `feature/api`, beside Changes B bound to `feature/ui`. Selecting B in the sidebar changes the default for the next resource only. Existing Chat A and its next native run stay on A unless an explicit validated continuation changes that binding. A repository overview resource may intentionally have repository scope, but write actions still require an exact checkout.
 

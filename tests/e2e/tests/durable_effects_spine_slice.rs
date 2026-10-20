@@ -52,17 +52,16 @@ mod outbox_and_crash_reconciliation {
 
         // Enqueue Outbox entry in Pending state
         store
-            .enqueue(OutboxEntry {
-                id: outbox_entry_id.clone(),
-                task_id: task.id.clone(),
-                action_id: intent.id.clone(),
-                permit_id: permit_id.clone(),
-                argument_digest: intent.argument_digest(),
-                idempotency_key: intent.idempotency_key.clone(),
-                status: OutboxStatus::Pending,
-                created_at: chrono::Utc::now(),
-                receipt: None,
-            })
+            .enqueue(OutboxEntry::new(
+                outbox_entry_id.clone(),
+                task.id.clone(),
+                intent.id.clone(),
+                permit_id.clone(),
+                intent.argument_digest(),
+                intent.idempotency_key.clone(),
+                OutboxStatus::Pending,
+                chrono::Utc::now(),
+            ))
             .await
             .expect("enqueue outbox entry");
 
@@ -134,17 +133,16 @@ mod receipt_resolution_and_terminal_idempotency {
         let action_id = new_id("act");
 
         store
-            .enqueue(OutboxEntry {
-                id: outbox_entry_id.clone(),
-                task_id: task.id.clone(),
-                action_id: action_id.clone(),
-                permit_id: permit_id.clone(),
-                argument_digest: "sha256:digest001".into(),
-                idempotency_key: Some("idemp_key_res_001".into()),
-                status: OutboxStatus::Dispatching,
-                created_at: chrono::Utc::now(),
-                receipt: None,
-            })
+            .enqueue(OutboxEntry::new(
+                outbox_entry_id.clone(),
+                task.id.clone(),
+                action_id.clone(),
+                permit_id.clone(),
+                "sha256:digest001",
+                Some("idemp_key_res_001".into()),
+                OutboxStatus::Dispatching,
+                chrono::Utc::now(),
+            ))
             .await
             .expect("enqueue outbox");
 

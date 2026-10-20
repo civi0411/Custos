@@ -285,22 +285,80 @@ impl RunRepository {
 
     pub fn update_claim(&self, claim: &DispatchClaim) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
-        conn.execute(
-            "UPDATE dispatch_claims SET
-                status = ?2,
-                dispatched_at = ?3,
-                released_at = ?4,
-                worker_run_id = ?5
-             WHERE id = ?1",
-            params![
-                claim.id,
-                claim.status.to_string(),
-                claim.dispatched_at.map(|dt| dt.to_rfc3339()),
-                claim.released_at.map(|dt| dt.to_rfc3339()),
-                claim.worker_run_id,
-            ],
-        )
+        let affected = match claim.status {
+            ClaimStatus::Dispatched => conn.execute(
+                "UPDATE dispatch_claims SET
+                    status = ?2,
+                    dispatched_at = ?3,
+                    released_at = ?4,
+                    worker_run_id = ?5
+                 WHERE id = ?1 AND status = 'pending'",
+                params![
+                    claim.id,
+                    claim.status.to_string(),
+                    claim.dispatched_at.map(|dt| dt.to_rfc3339()),
+                    claim.released_at.map(|dt| dt.to_rfc3339()),
+                    claim.worker_run_id,
+                ],
+            ),
+            ClaimStatus::Released => conn.execute(
+                "UPDATE dispatch_claims SET
+                    status = ?2,
+                    dispatched_at = ?3,
+                    released_at = ?4,
+                    worker_run_id = ?5
+                 WHERE id = ?1 AND status IN ('pending', 'dispatched')",
+                params![
+                    claim.id,
+                    claim.status.to_string(),
+                    claim.dispatched_at.map(|dt| dt.to_rfc3339()),
+                    claim.released_at.map(|dt| dt.to_rfc3339()),
+                    claim.worker_run_id,
+                ],
+            ),
+            _ => conn.execute(
+                "UPDATE dispatch_claims SET
+                    status = ?2,
+                    dispatched_at = ?3,
+                    released_at = ?4,
+                    worker_run_id = ?5
+                 WHERE id = ?1",
+                params![
+                    claim.id,
+                    claim.status.to_string(),
+                    claim.dispatched_at.map(|dt| dt.to_rfc3339()),
+                    claim.released_at.map(|dt| dt.to_rfc3339()),
+                    claim.worker_run_id,
+                ],
+            ),
+        }
         .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        if affected == 0 {
+            let existing: Option<String> = conn
+                .query_row(
+                    "SELECT status FROM dispatch_claims WHERE id = ?1",
+                    params![claim.id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+            if let Some(current_status) = existing {
+                if current_status == claim.status.to_string() {
+                    return Ok(());
+                }
+                return Err(DomainError::Conflict(format!(
+                    "DispatchClaim '{}' CAS conflict: cannot transition from status '{}' to '{}'",
+                    claim.id, current_status, claim.status
+                )));
+            } else {
+                return Err(DomainError::NotFound {
+                    kind: "DispatchClaim".into(),
+                    id: claim.id.clone(),
+                });
+            }
+        }
 
         Ok(())
     }
@@ -435,7 +493,8 @@ impl RunRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         conn.execute(
-            "UPDATE dispatch_claims SET status = 'released', released_at = ?1 WHERE status IN ('pending', 'dispatched')",
+            "UPDATE dispatch_claims SET status = 'released', released_at = ?1 
+             WHERE status IN ('pending', 'dispatched') AND (node_id IS NULL OR node_id = '')",
             params![now],
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -447,6 +506,17 @@ impl RunRepository {
         .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         Ok(updated_wruns + updated_runs)
+    }
+
+    pub fn fence_claim(&self, claim_id: &str) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "UPDATE dispatch_claims SET status = 'released', released_at = ?1 WHERE id = ?2 AND status IN ('pending', 'dispatched')",
+            params![now, claim_id],
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+        Ok(())
     }
 
     fn parse_claim_status(s: &str) -> ClaimStatus {
@@ -583,6 +653,16 @@ mod tests {
             .expect("Claim must succeed after release");
         let active2 = repo.get_active_claim(&task.id, None).unwrap().unwrap();
         assert_eq!(active2.assignee, "worker_2");
+
+        // 4. CAS: Attempting to mark a released claim as dispatched fails with Conflict
+        let mut stale_dispatch = released_claim1.clone();
+        stale_dispatch.status = ClaimStatus::Dispatched;
+        stale_dispatch.worker_run_id = Some("wrun_stale".to_string());
+        let cas_err = repo.update_claim(&stale_dispatch).expect_err("Stale dispatch must fail with CAS conflict");
+        assert!(matches!(cas_err, DomainError::Conflict(_)));
+
+        // 5. Idempotent release succeeds
+        repo.update_claim(&released_claim1).expect("Idempotent release must succeed");
     }
 
     #[test]
@@ -642,6 +722,10 @@ mod tests {
                 "INSERT INTO dispatch_claims (id, task_id, node_id, assignee, depth, status, claimed_at) VALUES ('claim_stale', 'task_rec_test', '', 'worker_alpha', 1, 'dispatched', 'now')",
                 [],
             ).unwrap();
+            c.execute(
+                "INSERT INTO dispatch_claims (id, task_id, node_id, assignee, depth, status, claimed_at) VALUES ('claim_remote', 'task_rec_test', 'node_ext_1', 'worker_beta', 1, 'dispatched', 'now')",
+                [],
+            ).unwrap();
         }
 
         let repo = RunRepository::new(db);
@@ -656,7 +740,17 @@ mod tests {
         let run = repo.get_run("run_stale").unwrap().unwrap();
         assert_eq!(run.status, RunStatus::Failed);
 
+        // Local in-process claim was released
         let claim = repo.get_claim("claim_stale").unwrap().unwrap();
         assert_eq!(claim.status, ClaimStatus::Released);
+
+        // External node claim was preserved until probed
+        let remote_claim = repo.get_claim("claim_remote").unwrap().unwrap();
+        assert_eq!(remote_claim.status, ClaimStatus::Dispatched);
+
+        // Explicit fencing transitions external claim to released
+        repo.fence_claim("claim_remote").unwrap();
+        let fenced_claim = repo.get_claim("claim_remote").unwrap().unwrap();
+        assert_eq!(fenced_claim.status, ClaimStatus::Released);
     }
 }
