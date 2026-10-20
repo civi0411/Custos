@@ -27,6 +27,12 @@ interface SystemMetrics {
   process_groups?: SystemProcessMetric[];
   active_runs: number;
   active_ports: number[];
+  listening_ports?: Array<{
+    port: number;
+    pid: number;
+    command: string;
+    public: boolean;
+  }>;
   caffeinate?: {
     mode: 'off' | 'agent' | 'always';
     active: boolean;
@@ -234,8 +240,10 @@ export const AppStatusBar: React.FC = () => {
             systemTotalMemoryMb={systemMetrics?.system_total_memory_mb}
             processGroups={systemMetrics?.process_groups}
             activePorts={systemMetrics?.active_ports}
+            listeningPorts={systemMetrics?.listening_ports}
             activeRuns={activeRuns}
             caffeinateActive={Boolean(isCaffeinated)}
+            caffeinateMode={systemMetrics?.caffeinate?.mode}
             position="top"
             align="right"
           />
@@ -296,6 +304,8 @@ export const AppStatusBar: React.FC = () => {
                 onClose={() => setIsUsageOpen(false)}
                 onRefresh={fetchStatus}
                 quotas={quotas}
+                totalTokens={totalTokens}
+                costUsd={costUsd}
                 position="top"
                 align="right"
               />

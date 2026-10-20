@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { RotateCw, ChevronRight, AlertTriangle, Clock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { RotateCw, ChevronRight, AlertTriangle, Clock, Coins } from 'lucide-react';
 import { OpenAIIcon, AntigravityIcon, ClaudeIcon, GeminiIcon } from '@/components/common/AgentIcons';
 import { useAppContext } from '@/context/AppContext';
 import type { ProviderQuotaSnapshot } from '@/types/provider_types';
@@ -9,11 +9,16 @@ export interface UsagePopoverProps {
   onClose: () => void;
   onRefresh?: () => void;
   quotas?: ProviderQuotaSnapshot[];
+  totalTokens?: number;
+  costUsd?: number;
   position?: 'top' | 'bottom';
   align?: 'left' | 'right' | 'center';
 }
 
-function formatResetTime(reset: string | number | null | undefined): string | null {
+const MODE_KEY = 'custos.usage.mode.v1';
+const DISPLAY_KEY = 'custos.usage.display.v1';
+
+function formatResetDuration(reset: string | number | null | undefined): string | null {
   if (!reset) return null;
   try {
     let resetDate: Date;
@@ -45,13 +50,37 @@ export const UsagePopover: React.FC<UsagePopoverProps> = ({
   onClose,
   onRefresh,
   quotas = [],
+  totalTokens = 0,
+  costUsd = 0,
   position = 'top',
   align = 'right',
 }) => {
   const { openAiSetup, openSettings } = useAppContext();
-  const [viewMode, setViewMode] = useState<'detailed' | 'compact'>('detailed');
-  const [displayMode, setDisplayMode] = useState<'remaining' | 'used'>('remaining');
+  const [viewMode, setViewMode] = useState<'detailed' | 'compact'>(() => {
+    try {
+      return window.localStorage.getItem(MODE_KEY) === 'compact' ? 'compact' : 'detailed';
+    } catch {
+      return 'detailed';
+    }
+  });
+
+  const [displayMode, setDisplayMode] = useState<'remaining' | 'used'>(() => {
+    try {
+      return window.localStorage.getItem(DISPLAY_KEY) === 'used' ? 'used' : 'remaining';
+    } catch {
+      return 'remaining';
+    }
+  });
+
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [, setTick] = useState(0);
+
+  // Minute countdown tick (Orca useResetCountdownClock)
+  useEffect(() => {
+    if (!isOpen) return;
+    const timer = setInterval(() => setTick((t) => t + 1), 60000);
+    return () => clearInterval(timer);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -60,6 +89,24 @@ export const UsagePopover: React.FC<UsagePopoverProps> = ({
     setIsRefreshing(true);
     onRefresh?.();
     setTimeout(() => setIsRefreshing(false), 600);
+  };
+
+  const handleModeChange = (next: 'detailed' | 'compact') => {
+    setViewMode(next);
+    try {
+      window.localStorage.setItem(MODE_KEY, next);
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleDisplayChange = (next: 'remaining' | 'used') => {
+    setDisplayMode(next);
+    try {
+      window.localStorage.setItem(DISPLAY_KEY, next);
+    } catch {
+      // Ignore
+    }
   };
 
   const handleOpenQuotas = (e: React.MouseEvent) => {
@@ -74,13 +121,14 @@ export const UsagePopover: React.FC<UsagePopoverProps> = ({
     openAiSetup('cloud');
   };
 
-  // Filter only available provider quotas
+  // Filter available provider quotas
   const activeQuotas = quotas.filter((q) => q.status === 'available' && q.windows.length > 0);
 
-  // Group quotas by provider type to avoid duplicating same provider with multiple tokens
+  // Group quotas by provider type
   const providerGroups: {
     key: string;
     name: string;
+    tier: string;
     icon: React.ElementType;
     quota: ProviderQuotaSnapshot;
   }[] = [];
@@ -90,29 +138,44 @@ export const UsagePopover: React.FC<UsagePopoverProps> = ({
     const id = q.account_id.toLowerCase();
     let key = 'other';
     let name = 'Provider';
+    let tier = 'API Plan';
     let icon = OpenAIIcon;
 
     if (id.includes('antigravity')) {
       key = 'antigravity';
       name = 'Antigravity';
+      tier = 'Multi-Model Pool';
       icon = AntigravityIcon;
     } else if (id.includes('openai') || id.includes('codex')) {
       key = 'openai';
       name = 'OpenAI';
+      tier = 'Tier Account';
       icon = OpenAIIcon;
     } else if (id.includes('claude') || id.includes('anthropic')) {
       key = 'claude';
       name = 'Anthropic Claude';
+      tier = 'Build / Max Plan';
       icon = ClaudeIcon;
     } else if (id.includes('gemini') || id.includes('google')) {
       key = 'gemini';
       name = 'Google Gemini';
+      tier = 'Vertex / Studio';
       icon = GeminiIcon;
     }
 
     if (!seenProviders.has(key)) {
       seenProviders.add(key);
-      providerGroups.push({ key, name, icon, quota: q });
+      providerGroups.push({ key, name, tier, icon, quota: q });
+    }
+  }
+
+  // Check overall exhaustion
+  let hasExhaustedAny = false;
+  let hasNearLimitAny = false;
+  for (const q of activeQuotas) {
+    for (const w of q.windows) {
+      if (w.used_percent >= 100) hasExhaustedAny = true;
+      else if (w.used_percent >= 90) hasNearLimitAny = true;
     }
   }
 
@@ -133,7 +196,7 @@ export const UsagePopover: React.FC<UsagePopoverProps> = ({
 
       {/* Floating Usage Card */}
       <div
-        className={`${positionClasses} w-[360px] sm:w-[410px] bg-[#141518] border border-white/12 rounded-2xl shadow-2xl z-[100] p-4 text-white/90 select-none animate-in fade-in zoom-in-95 duration-150`}
+        className={`${positionClasses} w-[370px] sm:w-[420px] bg-[#141518] border border-white/12 rounded-2xl shadow-2xl z-[100] p-4 text-white/90 select-none animate-in fade-in zoom-in-95 duration-150`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label="Provider Quotas & Rate Limits"
@@ -141,33 +204,35 @@ export const UsagePopover: React.FC<UsagePopoverProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-white/8">
           <div>
-            <h2 className="text-[14px] font-semibold tracking-tight text-white">Rate Limits & Quota</h2>
-            <p className="text-[10.5px] text-white/40">Real vendor allowance tracking</p>
+            <h2 className="text-[14px] font-semibold tracking-tight text-white flex items-center gap-1.5">
+              <span>Rate Limits & Vendor Quotas</span>
+            </h2>
+            <p className="text-[10.5px] text-white/40">Real allowance tracking & reset schedules</p>
           </div>
           <div className="flex items-center gap-1.5">
-            {/* Display Mode Toggle: Remaining vs Used (Orca pattern) */}
+            {/* Display Mode Toggle: % Left vs % Used (Orca / OpenScience) */}
             <div className="flex items-center p-0.5 rounded-lg bg-black/40 border border-white/8 text-[10px] font-mono">
               <button
                 type="button"
-                onClick={() => setDisplayMode('remaining')}
+                onClick={() => handleDisplayChange('remaining')}
                 className={`px-2 py-0.5 rounded transition cursor-pointer ${
                   displayMode === 'remaining'
-                    ? 'bg-emerald-500/20 text-emerald-300 font-semibold'
+                    ? 'bg-emerald-500/20 text-emerald-300 font-semibold shadow-xs'
                     : 'text-white/40 hover:text-white/70'
                 }`}
-                title="Show quota remaining"
+                title="Show remaining allowance percentage"
               >
                 % Left
               </button>
               <button
                 type="button"
-                onClick={() => setDisplayMode('used')}
+                onClick={() => handleDisplayChange('used')}
                 className={`px-2 py-0.5 rounded transition cursor-pointer ${
                   displayMode === 'used'
-                    ? 'bg-white/15 text-white font-semibold'
+                    ? 'bg-white/15 text-white font-semibold shadow-xs'
                     : 'text-white/40 hover:text-white/70'
                 }`}
-                title="Show quota consumed"
+                title="Show consumed quota percentage"
               >
                 % Used
               </button>
@@ -185,11 +250,50 @@ export const UsagePopover: React.FC<UsagePopoverProps> = ({
           </div>
         </div>
 
-        {/* View Mode Segmented Switch: Detailed vs Compact */}
-        <div className="flex items-center p-0.5 rounded-xl bg-black/40 border border-white/8 my-3">
+        {/* Status Alert Banner if Quota is Depleted or Near Limit */}
+        {hasExhaustedAny ? (
+          <div className="my-2.5 p-2 rounded-xl bg-rose-500/15 border border-rose-500/30 flex items-start gap-2 text-rose-300 text-[11px]">
+            <AlertTriangle className="size-3.5 shrink-0 text-rose-400 mt-0.5" />
+            <div>
+              <span className="font-semibold text-rose-200">Quota Depleted: </span>
+              <span>1 or more vendor rate windows have reached 100%. Throttling or model fallbacks may apply.</span>
+            </div>
+          </div>
+        ) : hasNearLimitAny ? (
+          <div className="my-2.5 p-2 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-start gap-2 text-amber-200 text-[11px]">
+            <AlertTriangle className="size-3.5 shrink-0 text-amber-400 mt-0.5" />
+            <div>
+              <span className="font-semibold">Approaching Limit: </span>
+              <span>Active window has exceeded 90% consumption.</span>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Session Spend & Token Summary (OpenScience / Orca SpendMetrics) */}
+        {totalTokens > 0 && (
+          <div className="my-2 p-2 rounded-xl bg-white/[0.03] border border-white/6 flex items-center justify-between text-[11px]">
+            <span className="flex items-center gap-1.5 text-white/50">
+              <Coins className="size-3.5 text-amber-300/80" />
+              <span>Session Spend</span>
+            </span>
+            <div className="flex items-center gap-2 font-mono">
+              <span className="text-white/80">
+                {totalTokens >= 1000 ? `${(totalTokens / 1000).toFixed(1)}k` : totalTokens} tokens
+              </span>
+              {costUsd > 0 && (
+                <span className="text-emerald-400 font-medium">
+                  (${costUsd.toFixed(3)})
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* View Mode Switch: Detailed Windows vs Compact Roster */}
+        <div className="flex items-center p-0.5 rounded-xl bg-black/40 border border-white/8 my-2.5">
           <button
             type="button"
-            onClick={() => setViewMode('detailed')}
+            onClick={() => handleModeChange('detailed')}
             className={`flex-1 py-1 text-xs font-medium rounded-lg transition cursor-pointer text-center ${
               viewMode === 'detailed'
                 ? 'bg-white/12 text-white shadow-xs'
@@ -200,7 +304,7 @@ export const UsagePopover: React.FC<UsagePopoverProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setViewMode('compact')}
+            onClick={() => handleModeChange('compact')}
             className={`flex-1 py-1 text-xs font-medium rounded-lg transition cursor-pointer text-center ${
               viewMode === 'compact'
                 ? 'bg-white/12 text-white shadow-xs'
@@ -213,12 +317,12 @@ export const UsagePopover: React.FC<UsagePopoverProps> = ({
 
         {/* Dynamic Provider Cards from live quotas */}
         {providerGroups.length > 0 ? (
-          <div className="space-y-2.5 max-h-[340px] overflow-y-auto scrollbar-none pr-0.5">
-            {providerGroups.map(({ key, name, icon: Icon, quota }) => {
+          <div className="space-y-2.5 max-h-[320px] overflow-y-auto scrollbar-none pr-0.5">
+            {providerGroups.map(({ key, name, tier, icon: Icon, quota }) => {
               const resetWindow = quota.windows.find((w) => w.resets_at);
-              const resetStr = resetWindow ? formatResetTime(resetWindow.resets_at) : null;
+              const resetStr = resetWindow ? formatResetDuration(resetWindow.resets_at) : null;
 
-              // Check max used across all windows to determine provider health status
+              // Check max used across all windows
               const maxUsed = Math.max(...quota.windows.map((w) => w.used_percent || 0));
               const isExhausted = maxUsed >= 100;
               const isCritical = maxUsed >= 90 && maxUsed < 100;
@@ -231,14 +335,17 @@ export const UsagePopover: React.FC<UsagePopoverProps> = ({
                       <div className="size-6 rounded-md bg-white/10 flex items-center justify-center p-1 shrink-0">
                         <Icon className="size-3.5 text-white/90" />
                       </div>
-                      <span className="text-xs font-semibold text-white">{name}</span>
+                      <div>
+                        <div className="text-xs font-semibold text-white leading-tight">{name}</div>
+                        <div className="text-[9.5px] text-white/35">{tier}</div>
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-1.5">
                       {isExhausted ? (
                         <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold text-rose-400 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded">
                           <AlertTriangle className="size-2.5 shrink-0" />
-                          Exhausted
+                          Depleted
                         </span>
                       ) : isCritical ? (
                         <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold text-rose-300 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.5 rounded">
@@ -299,7 +406,7 @@ export const UsagePopover: React.FC<UsagePopoverProps> = ({
                                 />
                               </div>
                               <span
-                                className={`font-mono text-[11px] w-12 text-right tabular-nums ${
+                                className={`font-mono text-[11px] w-14 text-right tabular-nums ${
                                   isWinExhausted
                                     ? 'text-rose-400 font-bold'
                                     : isWinHigh
@@ -324,12 +431,12 @@ export const UsagePopover: React.FC<UsagePopoverProps> = ({
                         const isWinExhausted = usedPct >= 100;
                         const isWinHigh = usedPct >= 90;
 
-                        let shortName = w.name.includes('5h') || w.name === 'Session' ? 'Session' : 'Weekly';
+                        let shortName = w.name.includes('5h') || w.name === 'Session' ? '5h Window' : 'Weekly';
                         if (w.name.includes('gemini')) shortName = 'Gemini';
                         if (w.name.includes('3p')) shortName = 'Claude/GPT';
 
                         return (
-                          <div key={idx} className="flex items-center justify-between px-2 py-1 rounded-lg bg-black/25 border border-white/5">
+                          <div key={idx} className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-black/25 border border-white/5">
                             <span className="text-white/50 truncate pr-1">{shortName}</span>
                             <span
                               className={`font-mono text-[11px] tabular-nums ${
@@ -353,7 +460,7 @@ export const UsagePopover: React.FC<UsagePopoverProps> = ({
           </div>
         ) : (
           <div className="py-6 px-4 text-center rounded-xl bg-white/[0.02] border border-white/6 my-2">
-            <p className="text-xs text-white/60 mb-1">No active vendor quotas reported</p>
+            <p className="text-xs text-white/60 mb-1">No vendor quotas reported</p>
             <p className="text-[11px] text-white/35">
               Connect a Claude, OpenAI, Antigravity or Gemini provider in Settings to track live rate limits.
             </p>

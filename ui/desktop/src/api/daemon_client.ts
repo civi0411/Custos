@@ -331,6 +331,12 @@ export class DaemonClient {
     }>;
     active_runs: number;
     active_ports: number[];
+    listening_ports?: Array<{
+      port: number;
+      pid: number;
+      command: string;
+      public: boolean;
+    }>;
     caffeinate: {
       mode: 'off' | 'agent' | 'always';
       active: boolean;
