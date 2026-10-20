@@ -80,7 +80,7 @@ impl SovereignDeveloperAdapter {
         Ok(normalized)
     }
 
-    async fn handle_read(
+    pub async fn handle_read(
         &self,
         params: &serde_json::Value,
     ) -> Result<serde_json::Value, DomainError> {
@@ -107,7 +107,7 @@ impl SovereignDeveloperAdapter {
         }))
     }
 
-    async fn handle_write(
+    pub async fn handle_write(
         &self,
         params: &serde_json::Value,
     ) -> Result<serde_json::Value, DomainError> {
@@ -152,7 +152,7 @@ impl SovereignDeveloperAdapter {
         }))
     }
 
-    async fn handle_list(
+    pub async fn handle_list(
         &self,
         params: &serde_json::Value,
     ) -> Result<serde_json::Value, DomainError> {
@@ -188,7 +188,7 @@ impl SovereignDeveloperAdapter {
         }))
     }
 
-    async fn handle_bash(
+    pub async fn handle_bash(
         &self,
         params: &serde_json::Value,
     ) -> Result<serde_json::Value, DomainError> {

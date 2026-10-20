@@ -56,6 +56,8 @@ impl RunStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Run {
     pub id: String,
+    #[serde(default)]
+    pub state_version: u64,
     pub task_id: String,
     #[serde(default)]
     pub workflow_revision: Option<String>,
@@ -71,6 +73,7 @@ impl Run {
     pub fn new(task_id: String, attempt: u32) -> Self {
         Self {
             id: new_id("run"),
+            state_version: 0,
             task_id,
             workflow_revision: None,
             status: RunStatus::Pending,
@@ -106,6 +109,8 @@ impl Run {
 pub struct WorkerRun {
     pub id: String,
     #[serde(default)]
+    pub state_version: u64,
+    #[serde(default)]
     pub run_id: Option<String>,
     pub task_id: String,
     pub worker_id: String,
@@ -121,6 +126,7 @@ impl WorkerRun {
     pub fn new(task_id: String, worker_id: String, max_attempts: u32) -> Self {
         Self {
             id: new_id("wrun"),
+            state_version: 0,
             run_id: None,
             task_id,
             worker_id,

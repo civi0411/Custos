@@ -75,27 +75,30 @@ fn is_authorized_ipc_client(
     origin: Option<&str>,
     auth_header: Option<&str>,
     custom_token_header: Option<&str>,
+    query_token: Option<&str>,
 ) -> bool {
-    // If a trusted Origin is present (e.g. Tauri Desktop UI), it is trusted
+    // 1. Strict Origin check: if an Origin header is present, it MUST be an allowed local/tauri origin
     if let Some(org) = origin {
-        if is_allowed_origin(org) {
-            return true;
+        if !is_allowed_origin(org) {
+            return false;
         }
     }
 
-    // Check environment token if mandated
+    // 2. Token enforcement: if CUSTOS_IPC_TOKEN is mandated, origin cannot bypass it
     if let Ok(expected_token) = std::env::var("CUSTOS_IPC_TOKEN") {
-        if !expected_token.trim().is_empty() {
+        let expected = expected_token.trim();
+        if !expected.is_empty() {
             let provided = auth_header
                 .and_then(|h| h.strip_prefix("Bearer ").or_else(|| h.strip_prefix("bearer ")))
                 .map(|s| s.trim())
-                .or_else(|| custom_token_header.map(|s| s.trim()));
+                .or_else(|| custom_token_header.map(|s| s.trim()))
+                .or_else(|| query_token.map(|s| s.trim()));
 
-            return provided == Some(expected_token.trim());
+            return provided == Some(expected);
         }
     }
 
-    // Default loopback allowance when CUSTOS_IPC_TOKEN is not strictly enforced
+    // 3. Default loopback allowance when CUSTOS_IPC_TOKEN is not strictly enforced
     true
 }
 
@@ -203,8 +206,16 @@ Connection: close\r\n\r\n",
         return Ok(());
     }
 
+    let query_token = path.split_once('?')
+        .and_then(|(_, q)| {
+            q.split('&')
+                .filter_map(|p| p.split_once('='))
+                .find(|(k, _)| *k == "token")
+                .map(|(_, v)| v)
+        });
+
     // IPC Token gate: verify token if mandated by CUSTOS_IPC_TOKEN
-    if !is_authorized_ipc_client(req_origin.as_deref(), auth_header.as_deref(), token_header.as_deref()) {
+    if !is_authorized_ipc_client(req_origin.as_deref(), auth_header.as_deref(), token_header.as_deref(), query_token) {
         let unauth = r#"{"error":"Unauthorized: valid IPC token required"}"#;
         let resp = format!(
             "HTTP/1.1 401 Unauthorized\r\n\
@@ -384,7 +395,7 @@ fn find_header_end(buf: &[u8]) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::is_allowed_origin;
+    use super::*;
 
     #[tokio::test]
     async fn slow_subscriber_writer_times_out() {
@@ -447,6 +458,39 @@ mod tests {
                 "expected rejected: {rejected}"
             );
         }
+    }
+
+    #[test]
+    fn ipc_token_enforcement_cannot_be_bypassed_by_origin() {
+        std::env::set_var("CUSTOS_IPC_TOKEN", "secret-token-123");
+
+        // Allowed origin without token MUST be rejected
+        assert!(!is_authorized_ipc_client(Some("http://localhost:1420"), None, None, None));
+
+        // Allowed origin with wrong token MUST be rejected
+        assert!(!is_authorized_ipc_client(Some("http://localhost:1420"), Some("Bearer wrong"), None, None));
+
+        // Untrusted origin even with valid token MUST be rejected
+        assert!(!is_authorized_ipc_client(Some("http://evil.com"), Some("Bearer secret-token-123"), None, None));
+
+        // Allowed origin with valid Bearer token MUST be accepted
+        assert!(is_authorized_ipc_client(Some("http://localhost:1420"), Some("Bearer secret-token-123"), None, None));
+
+        // Allowed origin with valid X-Custos-Token header MUST be accepted
+        assert!(is_authorized_ipc_client(Some("http://localhost:1420"), None, Some("secret-token-123"), None));
+
+        // Allowed origin with valid query token MUST be accepted
+        assert!(is_authorized_ipc_client(Some("http://localhost:1420"), None, None, Some("secret-token-123")));
+
+        // Direct client without origin with valid token MUST be accepted
+        assert!(is_authorized_ipc_client(None, Some("Bearer secret-token-123"), None, None));
+
+        std::env::remove_var("CUSTOS_IPC_TOKEN");
+
+        // Without CUSTOS_IPC_TOKEN, untrusted origin MUST still be rejected
+        assert!(!is_authorized_ipc_client(Some("http://evil.com"), None, None, None));
+        // Without CUSTOS_IPC_TOKEN, allowed origin is accepted
+        assert!(is_authorized_ipc_client(Some("http://localhost:1420"), None, None, None));
     }
 }
 

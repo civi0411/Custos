@@ -1,5 +1,11 @@
 # CUSTOS
 
+**Application refactor in progress:** daemon use cases are being extracted into `src/application/` without changing Local API methods or creating a new crate/runtime. The dispatcher retains command admission and response settlement; feature modules own scoped use cases. Run generation and optimistic state revision must not be conflated. Legacy import keys and third-party attribution remain readable; unused internal aliases may be retired after caller checks. Governed tools must remain unavailable until a production authority/execution path is actually composed.
+
+Run persistence uses an independent `state_version` for optimistic writes, not the run/worker attempt counter. New records start at version zero; successful inserts/updates return the incremented version through a mutable record. Updates must match the previous version and immutable identity/generation. Startup reconciliation increments versions so stale in-process snapshots cannot overwrite recovered state.
+
+Outbox approval is a durable transition: `Pending → Approved → Dispatching`. Pending entries cannot dispatch directly; internal mediated effects may approve only after Kernel authorization, while Assistant approval persists the existing entry before returning. This state gate does not replace payload-bound permits, authenticated actors, grant checks or connector reconciliation. Existing legacy wire/import metadata and upstream attribution are retained; unused crate-root compatibility aliases are removed only after migrating verified callers.
+
 **As-built UI ↔ core reading entry:** [Desktop/core interaction map](docs/architecture/desktop-core-interaction-map.md) traces the pushed `vi-rft` snapshot `25cf689` from each workbench and resource through host, Local API, application handlers, runtime, adapters and persistence. It distinguishes current wiring from target authority/recovery guarantees, records fresh validation, and identifies remaining Outbox, HTTP authentication, MCP and compute gaps. Earlier implementation-status statements must be read against this SHA-scoped evidence rather than interpreted as completed capabilities.
 
 ### Desktop resource identity and interaction

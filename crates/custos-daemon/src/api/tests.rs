@@ -1357,6 +1357,8 @@
         let sessions = Arc::new(SessionManager::new());
         let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
         let dispatcher = LocalApiDispatcher::new(service, sessions, bridge).with_outbox(outbox);
+        let client = Arc::new(custos_adapters::mcp::CustosMcpClient::new("notifier"));
+        dispatcher.mcp_hub().register_server("notifications", client).await.unwrap();
         let request = |method: &str, params| ApiRequest {
             id: "outbox-test".into(),
             method: method.into(),
@@ -1370,7 +1372,7 @@
                 serde_json::json!({
                     "task_id": task.id,
                     "action_type": "email_dispatch",
-                    "recipient": "researcher@example.com",
+                    "recipient": "mcp://notifications/email_dispatch",
                     "payload": { "subject": "Artifact Ready", "body": "Experiment completed successfully." }
                 }),
             ))
@@ -1379,7 +1381,13 @@
         let created_item = create_resp.result.unwrap();
         let entry_id = created_item["id"].as_str().unwrap().to_string();
         assert_eq!(created_item["status"], "pending_approval");
-        assert_eq!(created_item["recipient"], "researcher@example.com");
+        assert_eq!(created_item["recipient"], "mcp://notifications/email_dispatch");
+
+        let denied = dispatcher.handle_request(request(
+            METHOD_ASSISTANT_OUTBOX_DISPATCH,
+            serde_json::json!({"id":entry_id}),
+        )).await;
+        assert!(denied.error.unwrap().contains("requires durable approval"));
 
         // 2. Approve Outbox entry
         let approve_resp = dispatcher
@@ -2265,7 +2273,7 @@
         let id = response.result.as_ref().unwrap()["id"].as_str().unwrap().to_string();
         let mut run = custos_domain::Run::new(id,1);
         run.metadata=serde_json::json!({"actual_mode":"model","provider_account_id":"account-A","requested_model":"ollama/test","usage":{"input_tokens":7,"output_tokens":3,"total_tokens":10},"secret":"never-export"});
-        store.save_run(&run).await.unwrap();
+        store.save_run(&mut run).await.unwrap();
         for _ in 0..2 {
             let report=dispatcher.handle_request(ApiRequest::new("usage", "v1.providers.usage",serde_json::json!({}))).await;
             assert!(report.is_success());
@@ -2277,7 +2285,7 @@
         }
         run.metadata["usage"]=serde_json::Value::Null;
         run.metadata["failure_reason"]=serde_json::json!("429 RESOURCE_EXHAUSTED");
-        store.save_run(&run).await.unwrap();
+        store.save_run(&mut run).await.unwrap();
         let value=dispatcher.handle_request(ApiRequest::new("usage", "v1.providers.usage",serde_json::json!({}))).await.result.unwrap();
         assert!(value["records"][0]["total_tokens"].is_null());
         assert_eq!(value["records"][0]["rate_limited"],true);
@@ -3052,6 +3060,29 @@ mod git_and_github_workspace_detection_tests {
     }
 
     #[tokio::test]
+    async fn command_admission_failure_denies_mutation_and_errors_are_replayed() {
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let service = Arc::new(TaskService::new(store.clone()));
+        let sessions = Arc::new(SessionManager::with_store(store.clone()));
+        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+        let dispatcher = LocalApiDispatcher::new(service, sessions, bridge).with_sqlite_store(store.clone());
+        let request = ApiRequest::new("first", "v1.tasks.create", serde_json::json!({"command_id":"error_once"}));
+        let first = dispatcher.handle_request(request.clone()).await;
+        assert!(first.error.is_some());
+        let mut retry = request;
+        retry.id = "retry".into();
+        let replay = dispatcher.handle_request(retry).await;
+        assert_eq!(first.error, replay.error);
+        assert_eq!(replay.id, "retry");
+        assert_eq!(store.command_ledger().get_command("error_once").unwrap().unwrap().result_json.contains("custos_command_response"), true);
+
+        store.db().lock().unwrap().execute("DROP TABLE command_ledger", []).unwrap();
+        let denied = dispatcher.handle_request(ApiRequest::new("denied", "v1.tasks.create", serde_json::json!({"title":"Must not exist","command_id":"deny_me"}))).await;
+        assert!(denied.error.unwrap().contains("Command admission failed"));
+        assert!(store.list_tasks().unwrap().is_empty());
+    }
+
+    #[tokio::test]
     async fn test_compute_targets_and_experiment_lifecycle() {
         let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
         let service = Arc::new(TaskService::new(store.clone()));
@@ -3184,6 +3215,13 @@ mod git_and_github_workspace_detection_tests {
             .await;
         assert!(create_outbox_resp.is_success(), "{:?}", create_outbox_resp.error);
         let outbox_entry_id = create_outbox_resp.result.unwrap()["id"].as_str().unwrap().to_string();
+
+        let approved = dispatcher.handle_request(ApiRequest {
+            id: "ob_approve_1".into(),
+            method: METHOD_ASSISTANT_OUTBOX_APPROVE.into(),
+            params: serde_json::json!({"id":outbox_entry_id}),
+        }).await;
+        assert!(approved.is_success(), "{:?}", approved.error);
 
         // 3. Dispatch outbox item
         let dispatch_resp = dispatcher

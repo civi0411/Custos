@@ -35,6 +35,14 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         "../migrations/0010_harden_outbox_and_effects.sql"
     ))?;
     conn.execute_batch(include_str!("../migrations/0011_runs_and_worker_runs.sql"))?;
+    let has_run_version = conn.prepare("PRAGMA table_info(runs)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?.iter().any(|column| column == "state_version");
+    if !has_run_version {
+        let transaction = conn.unchecked_transaction()?;
+        transaction.execute_batch(include_str!("../migrations/0040_run_state_versions.sql"))?;
+        transaction.commit()?;
+    }
     conn.execute_batch(include_str!("../migrations/0012_decision_records.sql"))?;
     conn.execute_batch(include_str!("../migrations/0013_workflow_revisions.sql"))?;
     conn.execute_batch(include_str!("../migrations/0014_node_placements.sql"))?;

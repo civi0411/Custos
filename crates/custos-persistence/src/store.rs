@@ -563,6 +563,10 @@ impl OutboxPort for SqliteTaskStore {
         self.outbox_repo.mark_dispatching(id).await
     }
 
+    async fn mark_approved(&self, id: &str) -> Result<(), DomainError> {
+        self.outbox_repo.mark_approved(id).await
+    }
+
     async fn mark_receipted(&self, id: &str, receipt: ExecutionReceipt) -> Result<(), DomainError> {
         self.outbox_repo.mark_receipted(id, receipt).await
     }
@@ -622,7 +626,7 @@ impl EffectLedgerPort for SqliteTaskStore {
 
 #[async_trait]
 impl RunPort for SqliteTaskStore {
-    async fn save_run(&self, run: &Run) -> Result<(), DomainError> {
+    async fn save_run(&self, run: &mut Run) -> Result<(), DomainError> {
         self.run_repo.save_run(run)
     }
 
@@ -634,7 +638,7 @@ impl RunPort for SqliteTaskStore {
         self.run_repo.list_runs_for_task(task_id)
     }
 
-    async fn save_worker_run(&self, wrun: &WorkerRun) -> Result<(), DomainError> {
+    async fn save_worker_run(&self, wrun: &mut WorkerRun) -> Result<(), DomainError> {
         self.run_repo.save_worker_run(wrun)
     }
 
@@ -1123,7 +1127,7 @@ mod tests {
         let mut run = Run::new(task.id.clone(), 1);
         run.workflow_revision = Some("rev-1".into());
         run.transition(RunStatus::Active).unwrap();
-        store.save_run(&run).await.unwrap();
+        store.save_run(&mut run).await.unwrap();
 
         // 2. Query Run
         let loaded = store.get_run(&run.id).await.unwrap().unwrap();
@@ -1136,7 +1140,7 @@ mod tests {
         let mut wrun = WorkerRun::new(task.id.clone(), "worker_alpha".into(), 3);
         wrun.run_id = Some(run.id.clone());
         wrun.transition(RunStatus::Active).unwrap();
-        store.save_worker_run(&wrun).await.unwrap();
+        store.save_worker_run(&mut wrun).await.unwrap();
 
         // 4. Query WorkerRun
         let loaded_wrun = store.get_worker_run(&wrun.id).await.unwrap().unwrap();
@@ -1147,7 +1151,7 @@ mod tests {
 
         // 5. Update Run status to Completed
         run.transition(RunStatus::Completed).unwrap();
-        store.save_run(&run).await.unwrap();
+        store.save_run(&mut run).await.unwrap();
         let updated_run = store.get_run(&run.id).await.unwrap().unwrap();
         assert_eq!(updated_run.status, RunStatus::Completed);
         assert!(updated_run.ended_at.is_some());

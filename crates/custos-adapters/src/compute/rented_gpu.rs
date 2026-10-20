@@ -87,17 +87,27 @@ impl RentedGpuTargetAdapter {
         *self.mock_released.lock().await
     }
 
+    fn is_safe_host(&self) -> bool {
+        !self.host.is_empty() && !self.host.starts_with('-') && self.host.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == ':')
+    }
+
+    fn is_safe_user(&self) -> bool {
+        !self.user.is_empty() && !self.user.starts_with('-') && self.user.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    }
+
     fn build_ssh_command(&self, remote_cmd: &str) -> tokio::process::Command {
         let mut cmd = tokio::process::Command::new("ssh");
         cmd.arg("-p").arg(self.port.to_string());
-        cmd.arg("-o").arg("StrictHostKeyChecking=no");
-        cmd.arg("-o").arg("UserKnownHostsFile=/dev/null");
         cmd.arg("-o").arg("ConnectTimeout=10");
+        // Pin host key automatically on first contact without disabling verification
+        cmd.arg("-o").arg("StrictHostKeyChecking=accept-new");
 
         if let Some(ref key) = self.ssh_key_path {
             cmd.arg("-i").arg(key);
         }
 
+        // Prevent flag injection via -- delimiter
+        cmd.arg("--");
         cmd.arg(format!("{}@{}", self.user, self.host));
         cmd.arg(remote_cmd);
         cmd
@@ -122,6 +132,14 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
                 allowed: true,
                 blockers: Vec::new(),
                 warnings: vec!["Mock NVIDIA A100-SXM4-80GB verified".to_string()],
+            });
+        }
+
+        if !self.is_safe_host() || !self.is_safe_user() {
+            return Ok(PreflightReport {
+                allowed: false,
+                blockers: vec!["Invalid characters detected in remote SSH host or username".into()],
+                warnings: Vec::new(),
             });
         }
 
@@ -175,6 +193,13 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
 
         if self.mock_mode {
             return ExternalJobRef::new(&self.host, &attempt.id, "pid_41920");
+        }
+
+        if !self.is_safe_host() || !self.is_safe_user() {
+            return Err(DomainError::Validation("Invalid characters in remote SSH host or username".into()));
+        }
+        if !attempt.id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+            return Err(DomainError::Validation("Invalid characters in execution attempt id".into()));
         }
 
         // 1. Create run directory
@@ -289,10 +314,19 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
         }
 
         let pid = &external_ref.version_id;
-        let run_dir = format!("/tmp/custos/runs/{}", external_ref.job_id);
+        let job_id = &external_ref.job_id;
+        if !pid.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') ||
+           !job_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+            return Err(DomainError::Validation("Invalid characters in external ref identifiers".into()));
+        }
+
+        let run_dir = format!("/tmp/custos/runs/{job_id}");
         let trigger_cmd = format!("touch {run_dir}/checkpoint.trigger; kill -USR1 {pid} 2>/dev/null || true");
         let mut cmd = self.build_ssh_command(&trigger_cmd);
-        let _ = cmd.output().await;
+        let out = cmd.output().await.map_err(|e| DomainError::Validation(format!("SSH checkpoint trigger failed: {e}")))?;
+        if !out.status.success() {
+            return Err(DomainError::Validation(format!("Remote checkpoint trigger exited with error: {}", String::from_utf8_lossy(&out.stderr))));
+        }
         Ok(())
     }
 
@@ -304,9 +338,16 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
         }
 
         let pid = &external_ref.version_id;
+        if !pid.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+            return Err(DomainError::Validation("Invalid characters in PID".into()));
+        }
+
         let stop_cmd = format!("kill -TERM {pid} 2>/dev/null || kill -9 {pid} 2>/dev/null || true");
         let mut cmd = self.build_ssh_command(&stop_cmd);
-        let _ = cmd.output().await;
+        let out = cmd.output().await.map_err(|e| DomainError::Validation(format!("SSH stop command failed: {e}")))?;
+        if !out.status.success() {
+            return Err(DomainError::Validation(format!("Remote stop command exited with error: {}", String::from_utf8_lossy(&out.stderr))));
+        }
         Ok(())
     }
 
@@ -317,9 +358,14 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
             return Ok(());
         }
 
-        // Clean remote staging
-        let run_dir = format!("/tmp/custos/runs/{}", external_ref.job_id);
-        let cleanup_cmd = format!("rm -rf {run_dir}");
+        let job_id = &external_ref.job_id;
+        if !job_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+            return Err(DomainError::Validation("Invalid characters in job_id".into()));
+        }
+
+        // Clean remote staging with explicit safe path
+        let run_dir = format!("/tmp/custos/runs/{job_id}");
+        let cleanup_cmd = format!("rm -rf -- '{run_dir}'");
         let mut cmd = self.build_ssh_command(&cleanup_cmd);
         let _ = cmd.output().await;
 
@@ -331,18 +377,25 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
                     let query = json!({
                         "query": format!("mutation {{ podStop(input: {{ podId: \"{pod}\" }}) {{ id }} }}")
                     });
-                    let _ = client
+                    let resp = client
                         .post("https://api.runpod.io/graphql")
                         .header("Authorization", format!("Bearer {key}"))
                         .json(&query)
                         .send()
-                        .await;
+                        .await
+                        .map_err(|e| DomainError::Validation(format!("Failed to deallocate RunPod instance: {e}")))?;
+                    if !resp.status().is_success() {
+                        return Err(DomainError::Validation(format!("RunPod deallocation returned HTTP status {}", resp.status())));
+                    }
                 }
                 ComputeBackendKind::VastAi => {
                     let mut vast_cmd = tokio::process::Command::new("vastai");
                     vast_cmd.arg("destroy").arg("instance").arg(pod);
                     vast_cmd.env("VAST_API_KEY", key);
-                    let _ = vast_cmd.output().await;
+                    let out = vast_cmd.output().await.map_err(|e| DomainError::Validation(format!("Failed to invoke vastai destroy: {e}")))?;
+                    if !out.status.success() {
+                        return Err(DomainError::Validation(format!("vastai destroy failed: {}", String::from_utf8_lossy(&out.stderr))));
+                    }
                 }
                 _ => {}
             }

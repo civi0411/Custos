@@ -226,6 +226,10 @@ impl OutboxPort for InMemoryOutbox {
         self.with_entry(id, |e| e.status = OutboxStatus::Dispatching)
     }
 
+    async fn mark_approved(&self, id: &str) -> Result<(), DomainError> {
+        self.with_entry(id, |e| e.status = OutboxStatus::Approved)
+    }
+
     async fn mark_receipted(&self, id: &str, receipt: ExecutionReceipt) -> Result<(), DomainError> {
         self.with_entry(id, |e| {
             e.status = OutboxStatus::Receipted;

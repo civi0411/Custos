@@ -265,8 +265,8 @@ impl TaskRuntime {
                         serde_json::json!("recovered_stale_active_turn");
                     worker.transition(RunStatus::Failed)?;
                 }
-                store.save_run(&run).await?;
-                store.save_worker_run(&worker).await?;
+                store.save_run(&mut run).await?;
+                store.save_worker_run(&mut worker).await?;
                 recovered_any = true;
             }
         }
@@ -419,7 +419,7 @@ impl TaskRuntime {
         run.metadata["executor_id"] = serde_json::json!(cmd.actor);
 
         if let Some(ref store) = self.run_store {
-            if let Err(e) = store.save_run(&run).await {
+            if let Err(e) = store.save_run(&mut run).await {
                 if let Err(rel_err) = self.dispatcher.release_claim(&claim.id).await {
                     tracing::error!(claim_id = %claim.id, error = %rel_err, "Failed to release claim after save_run error");
                 }
@@ -438,7 +438,7 @@ impl TaskRuntime {
         }
 
         if let Some(ref store) = self.run_store {
-            if let Err(e) = store.save_worker_run(&wrun).await {
+            if let Err(e) = store.save_worker_run(&mut wrun).await {
                 if let Err(rel_err) = self.dispatcher.release_claim(&claim.id).await {
                     tracing::error!(claim_id = %claim.id, error = %rel_err, "Failed to release claim after save_worker_run error");
                 }
@@ -470,7 +470,7 @@ impl TaskRuntime {
             run.metadata["lease_id"] = serde_json::json!(l.lease_id());
             run.metadata["lease_path"] = serde_json::json!(l.lease_path().display().to_string());
             if let Some(ref store) = self.run_store {
-                store.save_run(&run).await?;
+                store.save_run(&mut run).await?;
             }
         }
 
@@ -488,7 +488,7 @@ impl TaskRuntime {
                 self.dispatcher.release_claim(&claim.id).await?;
                 run.transition(RunStatus::Failed)?;wrun.transition(RunStatus::Failed)?;
                 run.metadata["failure_reason"]=serde_json::json!(error.to_string());
-                if let Some(store)=&self.run_store {store.save_run(&run).await?;store.save_worker_run(&wrun).await?;}
+                if let Some(store)=&self.run_store {store.save_run(&mut run).await?;store.save_worker_run(&mut wrun).await?;}
                 return Err(error);
             }
         };
@@ -727,6 +727,7 @@ impl TaskRuntime {
                                         Utc::now(),
                                     );
                                     outbox.enqueue(outbox_entry).await?;
+                                    outbox.mark_approved(&outbox_id).await?;
                                     outbox.mark_dispatching(&outbox_id).await?;
                                 }
 
@@ -887,8 +888,8 @@ impl TaskRuntime {
                     run.metadata["model_id"] = serde_json::json!(resp.model_id);
                     turn_output = Some(resp.content);
                     if let Some(ref store) = self.run_store {
-                        store.save_run(&run).await?;
-                        store.save_worker_run(&wrun).await?;
+                        store.save_run(&mut run).await?;
+                        store.save_worker_run(&mut wrun).await?;
                     }
                 }
             }
@@ -925,13 +926,13 @@ impl TaskRuntime {
                 let _ = wrun.transition(terminal);
                 run.metadata["failure_reason"] = serde_json::json!(e.to_string());
                 if let Some(ref store) = self.run_store {
-                    let _ = store.save_run(&run).await;
-                    let _ = store.save_worker_run(&wrun).await;
+                    let _ = store.save_run(&mut run).await;
+                    let _ = store.save_worker_run(&mut wrun).await;
                 }
                 let _ = self.dispatcher.release_claim(&claim_id).await;
                 let partial = self.live.replay(cmd.session_id.as_deref().unwrap_or(""), &run.id, 0).ok().map(|r| r.snapshot.text).unwrap_or_default();
                 run.metadata["output"] = serde_json::json!(partial);
-                if let Some(store) = &self.run_store { store.save_run(&run).await?; }
+                if let Some(store) = &self.run_store { store.save_run(&mut run).await?; }
                 if self.run_store.is_some() {
                     self.active_runs.write().await.remove(&run.id);
                     self.active_workers.write().await.remove(&wrun.id);
@@ -955,8 +956,8 @@ impl TaskRuntime {
             wrun.transition(RunStatus::Completed)?;
             run.metadata["completion_reason"] = serde_json::json!("model_turn_completed");
             if let Some(ref store) = self.run_store {
-                store.save_run(&run).await?;
-                store.save_worker_run(&wrun).await?;
+                store.save_run(&mut run).await?;
+                store.save_worker_run(&mut wrun).await?;
             }
         }
 
@@ -998,8 +999,8 @@ impl TaskRuntime {
                 }
 
                 if let Some(ref store) = self.run_store {
-                    store.save_run(&run).await?;
-                    store.save_worker_run(&wrun).await?;
+                    store.save_run(&mut run).await?;
+                    store.save_worker_run(&mut wrun).await?;
                 }
             }
         }
@@ -1020,7 +1021,7 @@ impl TaskRuntime {
             output: output_text,
         };
 
-        if let Some(store)=&self.run_store {store.save_run(&run).await?;}
+        if let Some(store)=&self.run_store {store.save_run(&mut run).await?;}
 
         // 5. Evict terminal executions from active maps if durably persisted, otherwise retain
         if run.status.is_terminal() && self.run_store.is_some() {
@@ -1076,20 +1077,18 @@ impl WorkflowPort for TaskRuntime {
             } else { 0 };
             return Ok(CancelReceipt { run_id: run_id.into(), cancelled_at: Utc::now(), reason: reason.into(), uncertain_effects_count });
         }
-        let run = {
-            let mut runs = self.active_runs.write().await;
-            if let Some(r) = runs.get_mut(run_id) {
-                r.transition(RunStatus::Cancelled)?;
+        let mut run = {
+            let runs = self.active_runs.read().await;
+            if let Some(r) = runs.get(run_id) {
                 r.clone()
             } else if let Some(ref store) = self.run_store {
-                let mut r = store
+                let r = store
                     .get_run(run_id)
                     .await?
                     .ok_or_else(|| DomainError::NotFound {
                         kind: "Run".into(),
                         id: run_id.to_string(),
                     })?;
-                r.transition(RunStatus::Cancelled)?;
                 r
             } else {
                 return Err(DomainError::NotFound {
@@ -1099,16 +1098,17 @@ impl WorkflowPort for TaskRuntime {
             }
         };
 
+        run.transition(RunStatus::Cancelled)?;
         if let Some(ref store) = self.run_store {
-            let _ = store.save_run(&run).await;
-            if let Ok(wruns) = store.list_worker_runs_for_task(&run.task_id).await {
-                for mut w in wruns.into_iter().filter(|w| w.status == RunStatus::Active) {
-                    if w.transition(RunStatus::Cancelled).is_ok() {
-                        let _ = store.save_worker_run(&w).await;
-                    }
-                }
+            store.save_run(&mut run).await?;
+            for mut w in store.list_worker_runs_for_run(run_id).await?
+                .into_iter().filter(|w| w.status == RunStatus::Active) {
+                w.transition(RunStatus::Cancelled)?;
+                store.save_worker_run(&mut w).await?;
+                self.active_workers.write().await.remove(&w.id);
             }
         }
+        self.active_runs.write().await.remove(run_id);
 
         let selected_harness = run
             .metadata
@@ -1161,24 +1161,18 @@ impl WorkflowPort for TaskRuntime {
     }
 
     async fn resume(&self, run_id: &str) -> Result<RunHandle, DomainError> {
-        let run = {
-            let mut runs = self.active_runs.write().await;
-            if let Some(r) = runs.get_mut(run_id) {
-                if r.status == RunStatus::Suspended {
-                    r.transition(RunStatus::Active)?;
-                }
+        let mut run = {
+            let runs = self.active_runs.read().await;
+            if let Some(r) = runs.get(run_id) {
                 r.clone()
             } else if let Some(ref store) = self.run_store {
-                let mut r = store
+                let r = store
                     .get_run(run_id)
                     .await?
                     .ok_or_else(|| DomainError::NotFound {
                         kind: "Run".into(),
                         id: run_id.to_string(),
                     })?;
-                if r.status == RunStatus::Suspended {
-                    r.transition(RunStatus::Active)?;
-                }
                 r
             } else {
                 return Err(DomainError::NotFound {
@@ -1188,8 +1182,12 @@ impl WorkflowPort for TaskRuntime {
             }
         };
 
-        if let Some(ref store) = self.run_store {
-            let _ = store.save_run(&run).await;
+        if run.status == RunStatus::Suspended {
+            run.transition(RunStatus::Active)?;
+            if let Some(ref store) = self.run_store {
+                store.save_run(&mut run).await?;
+            }
+            self.active_runs.write().await.insert(run.id.clone(), run.clone());
         }
 
         let handle_output = run
@@ -1245,6 +1243,29 @@ impl WorkflowPort for TaskRuntime {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn cancel_only_changes_workers_of_the_selected_run() {
+        use custos_core::contracts::storage::RunPort;
+        let store = std::sync::Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let task = custos_core::TaskService::new(store.clone()).create_task("Cancel scope".into()).await.unwrap();
+        let mut first = custos_domain::Run::new(task.id.clone(), 1);
+        let mut second = custos_domain::Run::new(task.id.clone(), 2);
+        first.transition(custos_domain::RunStatus::Active).unwrap();
+        second.transition(custos_domain::RunStatus::Active).unwrap();
+        store.save_run(&mut first).await.unwrap();
+        store.save_run(&mut second).await.unwrap();
+        let mut worker = custos_domain::WorkerRun::new(task.id.clone(), "first".into(), 3).with_run_id(&first.id);
+        let mut peer = custos_domain::WorkerRun::new(task.id, "second".into(), 3).with_run_id(&second.id);
+        worker.transition(custos_domain::RunStatus::Active).unwrap();
+        peer.transition(custos_domain::RunStatus::Active).unwrap();
+        store.save_worker_run(&mut worker).await.unwrap();
+        store.save_worker_run(&mut peer).await.unwrap();
+        let runtime = super::TaskRuntime::new().with_run_store(store.clone());
+        custos_core::contracts::workflow::WorkflowPort::request_cancel(&runtime, &first.id, "user stop").await.unwrap();
+        assert_eq!(store.get_worker_run(&worker.id).await.unwrap().unwrap().status, custos_domain::RunStatus::Cancelled);
+        assert_eq!(store.get_worker_run(&peer.id).await.unwrap().unwrap().status, custos_domain::RunStatus::Active);
+        assert_eq!(store.get_run(&second.id).await.unwrap().unwrap().state_version, second.state_version);
+    }
     use super::*;
     use custos_core::contracts::harness::{
         HarnessExecutionResult, HarnessProfile, ToolMediationLevel,
@@ -1411,7 +1432,7 @@ mod tests {
         let restarted=TaskRuntime::new().with_run_store(store.clone());
         let snapshot=restarted.live_run(&session.id.to_string(),&handle.run_id,99).await.unwrap();assert!(snapshot.gap);assert_eq!(snapshot.snapshot.status,"completed");assert!(snapshot.snapshot.text.contains("Completed turn response"));
         assert_eq!(sessions.get_journal(&session.id).await.unwrap().entries.iter().filter(|e|e.entry_type=="assistant_message").count(),1);
-        let mut interrupted=custos_domain::Run::new(task.id.clone(),2);interrupted.transition(RunStatus::Active).unwrap();interrupted.metadata=serde_json::json!({"session_id":session.id,"background":true});store.save_run(&interrupted).await.unwrap();
+        let mut interrupted=custos_domain::Run::new(task.id.clone(),2);interrupted.transition(RunStatus::Active).unwrap();interrupted.metadata=serde_json::json!({"session_id":session.id,"background":true});store.save_run(&mut interrupted).await.unwrap();
         assert_eq!(restarted.live_run(&session.id.to_string(),&interrupted.id,0).await.unwrap().snapshot.status,"interrupted");
     }
 
@@ -1523,12 +1544,12 @@ mod tests {
         stale_run.transition(RunStatus::Active).unwrap();
         stale_run.metadata["actual_mode"] = serde_json::json!("model");
         stale_run.metadata["output"] = serde_json::json!("already completed output");
-        store.save_run(&stale_run).await.unwrap();
+        store.save_run(&mut stale_run).await.unwrap();
 
         let mut stale_worker = WorkerRun::new(task.id.clone(), "daemon_user".into(), 3);
         stale_worker.run_id = Some(stale_run.id.clone());
         stale_worker.transition(RunStatus::Active).unwrap();
-        store.save_worker_run(&stale_worker).await.unwrap();
+        store.save_worker_run(&mut stale_worker).await.unwrap();
 
         let mut stale_claim = DispatchClaim::new(&task.id, "daemon_user", 1);
         stale_claim.mark_dispatched(&stale_worker.id).unwrap();

@@ -120,6 +120,7 @@ async fn vertical_slice_links_all_ports() {
         .await
         .unwrap();
     let burned = h.kernel.consume_permit(&permit.id, &intent).await.unwrap();
+    h.outbox.mark_approved(&entry_id).await.unwrap();
     h.outbox.mark_dispatching(&entry_id).await.unwrap();
 
     // 7. SandboxPort (Vinh): effect executes only with the burned, bound permit

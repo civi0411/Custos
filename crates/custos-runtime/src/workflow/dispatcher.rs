@@ -452,7 +452,7 @@ mod tests {
 
     #[async_trait::async_trait]
     impl RunPort for MockRunStore {
-        async fn save_run(&self, _: &custos_domain::Run) -> Result<(), DomainError> {
+        async fn save_run(&self, _: &mut custos_domain::Run) -> Result<(), DomainError> {
             Ok(())
         }
         async fn get_run(&self, _: &str) -> Result<Option<custos_domain::Run>, DomainError> {
@@ -464,7 +464,7 @@ mod tests {
         ) -> Result<Vec<custos_domain::Run>, DomainError> {
             Ok(Vec::new())
         }
-        async fn save_worker_run(&self, _: &custos_domain::WorkerRun) -> Result<(), DomainError> {
+        async fn save_worker_run(&self, _: &mut custos_domain::WorkerRun) -> Result<(), DomainError> {
             Ok(())
         }
         async fn get_worker_run(

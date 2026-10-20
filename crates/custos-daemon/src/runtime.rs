@@ -173,12 +173,75 @@ impl CustosRuntime {
         ));
 
         let mut harness_reg = HarnessRegistry::default_with_workspace(workspace_root.clone());
+        let default_tools = vec![
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "description": "Read contents of a file within the workspace",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "Relative or absolute path within workspace" }
+                        },
+                        "required": ["path"]
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "write_file",
+                    "description": "Write content to a file within the workspace",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "Relative or absolute path within workspace" },
+                            "content": { "type": "string", "description": "File text content" }
+                        },
+                        "required": ["path", "content"]
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "list_dir",
+                    "description": "List files and directories in a workspace folder",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "Directory path (defaults to '.')" }
+                        }
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "bash",
+                    "description": "Run a shell command safely inside the sandbox",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "command": { "type": "string", "description": "Shell command to execute" },
+                            "timeout_secs": { "type": "integer", "description": "Execution timeout in seconds" }
+                        },
+                        "required": ["command"]
+                    }
+                }
+            }),
+        ];
+
+        let developer_sandbox = Arc::new(SovereignDeveloperAdapter::new(workspace_root.clone()));
+        let tool_executor = Arc::new(DaemonGovernedToolExecutor::new(developer_sandbox.clone()));
         let governed = Arc::new(
             custos_runtime::agent::runtime_port::GovernedAgentRuntime::new(
                 model.clone(),
                 "Custos Governed Agent Runtime",
-                vec![],
-            ),
+                default_tools,
+            )
+            .with_tool_executor(tool_executor),
         );
         harness_reg.register(
             governed,
@@ -572,3 +635,66 @@ pub(crate) fn provider_catalog_scope(repo: &custos_persistence::ProviderReposito
     });
     Ok(custos_adapters::providers::probe::verified_catalog_key(account, endpoint, oauth, metadata.as_ref().map(|m| m.created_at).unwrap_or(0), &record.service_type))
 }
+
+/// Concrete tool executor for GovernedAgentRuntime wiring SovereignDeveloperAdapter and McpFederationHub.
+pub struct DaemonGovernedToolExecutor {
+    developer_adapter: Arc<SovereignDeveloperAdapter>,
+    mcp_hub: Option<Arc<custos_adapters::mcp::McpFederationHub>>,
+}
+
+impl DaemonGovernedToolExecutor {
+    pub fn new(developer_adapter: Arc<SovereignDeveloperAdapter>) -> Self {
+        Self {
+            developer_adapter,
+            mcp_hub: None,
+        }
+    }
+
+    pub fn with_mcp_hub(mut self, hub: Arc<custos_adapters::mcp::McpFederationHub>) -> Self {
+        self.mcp_hub = Some(hub);
+        self
+    }
+}
+
+#[async_trait::async_trait]
+impl custos_runtime::agent::runtime_port::GovernedToolExecutor for DaemonGovernedToolExecutor {
+    async fn authorize(&self, name: &str, _params: &serde_json::Value) -> Result<(), DomainError> {
+        if name.starts_with("dangerous_") || name.contains("format_disk") {
+            return Err(DomainError::Unauthorized(format!("Tool '{name}' is forbidden by kernel policy")));
+        }
+        Ok(())
+    }
+
+    async fn execute(
+        &self,
+        name: &str,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, DomainError> {
+        match name {
+            "read_file" | "read" => self.developer_adapter.handle_read(params).await,
+            "write_file" | "write" => self.developer_adapter.handle_write(params).await,
+            "list_dir" | "list" => self.developer_adapter.handle_list(params).await,
+            "bash" | "shell" | "exec" => self.developer_adapter.handle_bash(params).await,
+            mcp_tool if mcp_tool.contains("__") => {
+                if let Some(ref hub) = self.mcp_hub {
+                    let ctx = custos_adapters::mcp::ToolCallContext::new(
+                        &custos_domain::new_id("perm"),
+                        &custos_domain::new_id("act"),
+                    );
+                    let res = hub.dispatch_call(mcp_tool, Some(params.clone()), &ctx).await?;
+                    if res.is_error == Some(true) {
+                        return Err(DomainError::Validation(format!(
+                            "MCP tool '{mcp_tool}' returned error: {:?}",
+                            res.content
+                        )));
+                    }
+                    Ok(serde_json::to_value(&res).unwrap_or_else(|_| serde_json::json!({"success": true})))
+                } else {
+                    Err(DomainError::Validation("MCP federation hub is not configured on this tool executor".into()))
+                }
+            }
+            unknown => Err(DomainError::Validation(format!("Unknown or unmapped tool: '{unknown}'"))),
+        }
+    }
+}
+

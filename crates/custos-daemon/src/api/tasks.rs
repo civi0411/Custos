@@ -1,23 +1,20 @@
 //! Task application handler for local API dispatch.
 //!
-//! Encapsulates task CRUD and state transitions with atomic command ledger completion.
+//! Encapsulates task CRUD; the dispatcher owns command admission and settlement.
 
 use crate::custos_local_api::{
     AdvanceTaskRequest, ApiResponse, CancelTaskRequest, CompleteTaskRequest, CreateTaskRequest,
 };
 use custos_core::{AdvanceTask, CancelTask, CompleteTask, CreateTask, TaskService};
 use custos_domain::TaskStatus;
-use custos_persistence::SqliteTaskStore;
 
 pub struct TaskApiHandler;
 
 impl TaskApiHandler {
     pub async fn create_task(
         task_service: &TaskService,
-        store: Option<&SqliteTaskStore>,
         req_id: &str,
         params_val: serde_json::Value,
-        command_id: Option<&str>,
     ) -> ApiResponse {
         let params: CreateTaskRequest = match serde_json::from_value(params_val.clone()) {
             Ok(p) => p,
@@ -38,23 +35,11 @@ impl TaskApiHandler {
         };
 
         match task_service.execute_create(cmd).await {
-            Ok((task, event)) => {
+            Ok((task, _event)) => {
                 let val = match serde_json::to_value(&task) {
                     Ok(v) => v,
                     Err(e) => return ApiResponse::error(req_id, e.to_string()),
                 };
-
-                // Single transaction ledger completion if store and command_id are present
-                if let (Some(s), Some(cid)) = (store, command_id) {
-                    let res_json = serde_json::to_string(&val).unwrap_or_default();
-                    if let Err(e) = s.tasks().save_task_with_event_and_command(
-                        &task,
-                        &custos_core::kernel::TaskEvent::Created(event),
-                        Some((cid, &res_json)),
-                    ) {
-                        tracing::warn!(command_id = %cid, error = %e, "Failed atomic ledger completion on task create");
-                    }
-                }
 
                 ApiResponse::success(req_id, val)
             }

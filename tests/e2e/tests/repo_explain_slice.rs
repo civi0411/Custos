@@ -6,7 +6,7 @@
 //! -> Context Compiler -> FakeProvider -> Citation Verifier -> Artifact Store
 //! -> Evidence Engine -> Crash Recovery.
 
-use custos_adapters::custos_adapter_provider_fake::FakeProvider;
+use custos_adapters::providers::fake::FakeProvider;
 use custos_core::evidence::{EvidenceBundle, EvidencePipeline};
 use custos_core::{AdvanceTask, CompleteTask, CreateTask, TaskService, TaskStore};
 use custos_domain::{ContinuationPacket, Span, SpanState, TaskStatus};

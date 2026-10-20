@@ -34,10 +34,10 @@ impl<
 /// Persistence Port for sovereign Runs and bounded WorkerRuns.
 #[async_trait]
 pub trait RunPort: Send + Sync {
-    async fn save_run(&self, run: &Run) -> Result<(), DomainError>;
+    async fn save_run(&self, run: &mut Run) -> Result<(), DomainError>;
     async fn get_run(&self, run_id: &str) -> Result<Option<Run>, DomainError>;
     async fn list_runs_for_task(&self, task_id: &str) -> Result<Vec<Run>, DomainError>;
-    async fn save_worker_run(&self, wrun: &WorkerRun) -> Result<(), DomainError>;
+    async fn save_worker_run(&self, wrun: &mut WorkerRun) -> Result<(), DomainError>;
     async fn get_worker_run(&self, wrun_id: &str) -> Result<Option<WorkerRun>, DomainError>;
     async fn list_worker_runs_for_task(&self, task_id: &str)
         -> Result<Vec<WorkerRun>, DomainError>;
@@ -120,6 +120,7 @@ pub trait CasPort: Send + Sync {
 #[serde(rename_all = "snake_case")]
 pub enum OutboxStatus {
     Pending,
+    Approved,
     Dispatching,
     Receipted,
     Uncertain,
@@ -179,6 +180,7 @@ impl OutboxEntry {
 pub trait OutboxPort: Send + Sync {
     async fn enqueue(&self, entry: OutboxEntry) -> Result<(), DomainError>;
     async fn get(&self, id: &str) -> Result<Option<OutboxEntry>, DomainError>;
+    async fn mark_approved(&self, id: &str) -> Result<(), DomainError>;
     async fn mark_dispatching(&self, id: &str) -> Result<(), DomainError>;
     async fn mark_receipted(&self, id: &str, receipt: ExecutionReceipt) -> Result<(), DomainError>;
     async fn mark_uncertain(&self, id: &str) -> Result<(), DomainError>;

@@ -14,23 +14,34 @@ impl RunRepository {
         Self { db }
     }
 
-    pub fn save_run(&self, run: &Run) -> Result<(), DomainError> {
+    pub fn save_run(&self, run: &mut Run) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
-        let meta_str = serde_json::to_string(&run.metadata).unwrap_or_else(|_| "{}".to_string());
+        let next_version = run.state_version.checked_add(1)
+            .filter(|v| *v <= i64::MAX as u64)
+            .ok_or_else(|| DomainError::Validation("Run state version exhausted".into()))?;
+        let meta_str = serde_json::to_string(&run.metadata)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         let ended_at_str = run.ended_at.map(|dt| dt.to_rfc3339());
 
-        conn.execute(
-            "INSERT INTO runs (id, task_id, workflow_revision, status, attempt, current_span_num, started_at, ended_at, metadata_json)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+        let changed = conn.execute(
+            "INSERT INTO runs (id, task_id, workflow_revision, status, attempt, current_span_num, started_at, ended_at, metadata_json, state_version)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10
+             WHERE ?11 = 0 OR EXISTS (SELECT 1 FROM runs WHERE id = ?1)
              ON CONFLICT(id) DO UPDATE SET
-                task_id = excluded.task_id,
-                workflow_revision = excluded.workflow_revision,
                 status = excluded.status,
                 attempt = excluded.attempt,
                 current_span_num = excluded.current_span_num,
-                started_at = excluded.started_at,
                 ended_at = excluded.ended_at,
-                metadata_json = excluded.metadata_json",
+                metadata_json = excluded.metadata_json,
+                state_version = excluded.state_version
+             WHERE runs.state_version = ?11 AND runs.task_id = excluded.task_id
+               AND runs.workflow_revision IS excluded.workflow_revision
+               AND runs.started_at = excluded.started_at
+               AND excluded.attempt >= runs.attempt
+               AND (runs.status = excluded.status
+                 OR (runs.status = 'pending' AND excluded.status IN ('active', 'cancelled'))
+                 OR (runs.status = 'active' AND excluded.status IN ('suspended', 'completed', 'failed', 'cancelled'))
+                 OR (runs.status = 'suspended' AND excluded.status IN ('active', 'cancelled')))",
             params![
                 run.id,
                 run.task_id,
@@ -41,10 +52,15 @@ impl RunRepository {
                 run.started_at.to_rfc3339(),
                 ended_at_str,
                 meta_str,
+                next_version as i64,
+                run.state_version as i64,
             ],
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
-
+        if changed != 1 {
+            return Err(DomainError::Conflict(format!("Stale or invalid run update: {}", run.id)));
+        }
+        run.state_version = next_version;
         Ok(())
     }
 
@@ -52,7 +68,7 @@ impl RunRepository {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, task_id, workflow_revision, status, attempt, current_span_num, started_at, ended_at, metadata_json
+                "SELECT id, task_id, workflow_revision, status, attempt, current_span_num, started_at, ended_at, metadata_json, state_version
                  FROM runs WHERE id = ?1",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -69,7 +85,7 @@ impl RunRepository {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, task_id, workflow_revision, status, attempt, current_span_num, started_at, ended_at, metadata_json
+                "SELECT id, task_id, workflow_revision, status, attempt, current_span_num, started_at, ended_at, metadata_json, state_version
                  FROM runs WHERE task_id = ?1 ORDER BY started_at ASC",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -85,23 +101,32 @@ impl RunRepository {
         Ok(runs)
     }
 
-    pub fn save_worker_run(&self, wrun: &WorkerRun) -> Result<(), DomainError> {
+    pub fn save_worker_run(&self, wrun: &mut WorkerRun) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
+        let next_version = wrun.state_version.checked_add(1)
+            .filter(|v| *v <= i64::MAX as u64)
+            .ok_or_else(|| DomainError::Validation("Worker state version exhausted".into()))?;
         let ended_at_str = wrun.ended_at.map(|dt| dt.to_rfc3339());
 
-        conn.execute(
-            "INSERT INTO worker_runs (id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+        let changed = conn.execute(
+            "INSERT INTO worker_runs (id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11
+             WHERE ?12 = 0 OR EXISTS (SELECT 1 FROM worker_runs WHERE id = ?1)
              ON CONFLICT(id) DO UPDATE SET
-                run_id = excluded.run_id,
-                task_id = excluded.task_id,
-                worker_id = excluded.worker_id,
                 attempt_id = excluded.attempt_id,
                 max_attempts = excluded.max_attempts,
                 status = excluded.status,
-                started_at = excluded.started_at,
                 ended_at = excluded.ended_at,
-                continuation_packet_ref = excluded.continuation_packet_ref",
+                continuation_packet_ref = excluded.continuation_packet_ref,
+                state_version = excluded.state_version
+             WHERE worker_runs.state_version = ?12
+               AND worker_runs.run_id IS excluded.run_id AND worker_runs.task_id = excluded.task_id
+               AND worker_runs.worker_id = excluded.worker_id AND worker_runs.started_at = excluded.started_at
+               AND excluded.attempt_id >= worker_runs.attempt_id
+               AND (worker_runs.status = excluded.status
+                 OR (worker_runs.status = 'pending' AND excluded.status IN ('active', 'cancelled'))
+                 OR (worker_runs.status = 'active' AND excluded.status IN ('suspended', 'completed', 'failed', 'cancelled'))
+                 OR (worker_runs.status = 'suspended' AND excluded.status IN ('active', 'cancelled')))",
             params![
                 wrun.id,
                 wrun.run_id,
@@ -113,10 +138,15 @@ impl RunRepository {
                 wrun.started_at.to_rfc3339(),
                 ended_at_str,
                 wrun.continuation_packet_ref,
+                next_version as i64,
+                wrun.state_version as i64,
             ],
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
-
+        if changed != 1 {
+            return Err(DomainError::Conflict(format!("Stale or invalid worker update: {}", wrun.id)));
+        }
+        wrun.state_version = next_version;
         Ok(())
     }
 
@@ -124,7 +154,7 @@ impl RunRepository {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref
+                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version
                  FROM worker_runs WHERE id = ?1",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -141,7 +171,7 @@ impl RunRepository {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref
+                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version
                  FROM worker_runs WHERE task_id = ?1 ORDER BY started_at ASC",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -161,7 +191,7 @@ impl RunRepository {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref
+                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version
                  FROM worker_runs WHERE run_id = ?1 ORDER BY started_at ASC",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -210,6 +240,7 @@ impl RunRepository {
 
         Ok(Run {
             id: row.get(0)?,
+            state_version: row.get(9)?,
             task_id: row.get(1)?,
             workflow_revision: row.get(2)?,
             status: Self::parse_status(&status_str),
@@ -238,6 +269,7 @@ impl RunRepository {
 
         Ok(WorkerRun {
             id: row.get(0)?,
+            state_version: row.get(10)?,
             run_id: row.get(1)?,
             task_id: row.get(2)?,
             worker_id: row.get(3)?,
@@ -480,14 +512,14 @@ impl RunRepository {
 
         let updated_wruns = conn
             .execute(
-                "UPDATE worker_runs SET status = 'failed', ended_at = ?1 WHERE status = 'active'",
+                "UPDATE worker_runs SET status = 'failed', ended_at = ?1, state_version = state_version + 1 WHERE status = 'active'",
                 params![now],
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let updated_runs = conn
             .execute(
-                "UPDATE runs SET status = 'failed', ended_at = ?1 WHERE status = 'active'",
+                "UPDATE runs SET status = 'failed', ended_at = ?1, state_version = state_version + 1 WHERE status = 'active'",
                 params![now],
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -609,6 +641,48 @@ mod tests {
     use super::*;
     use crate::migrations::run_migrations;
     use custos_domain::Task;
+
+    #[test]
+    fn run_and_worker_updates_reject_stale_writers_and_restart_revival() {
+        let db = DbConnection::open_in_memory().unwrap();
+        {
+            let conn = db.lock().unwrap();
+            run_migrations(&conn).unwrap();
+            run_migrations(&conn).unwrap();
+            conn.execute("INSERT INTO tasks (id, title, status, created_at, updated_at) VALUES ('cas_task', 'CAS', 'running', 'now', 'now')", []).unwrap();
+        }
+        let repo = RunRepository::new(db);
+        let mut run = Run::new("cas_task".into(), 1);
+        run.transition(RunStatus::Active).unwrap();
+        repo.save_run(&mut run).unwrap();
+        assert_eq!(run.state_version, 1);
+        let mut stale = repo.get_run(&run.id).unwrap().unwrap();
+        run.metadata["output"] = serde_json::json!("new");
+        repo.save_run(&mut run).unwrap();
+        assert_eq!(run.state_version, 2);
+        stale.attempt = 2;
+        assert!(matches!(repo.save_run(&mut stale), Err(DomainError::Conflict(_))));
+        assert_eq!(stale.state_version, 1);
+        assert_eq!(repo.get_run(&run.id).unwrap().unwrap().metadata["output"], "new");
+
+        let mut worker = WorkerRun::new("cas_task".into(), "actor".into(), 3).with_run_id(&run.id);
+        worker.transition(RunStatus::Active).unwrap();
+        repo.save_worker_run(&mut worker).unwrap();
+        let mut stale_worker = repo.get_worker_run(&worker.id).unwrap().unwrap();
+        worker.record_attempt().unwrap();
+        repo.save_worker_run(&mut worker).unwrap();
+        assert!(matches!(repo.save_worker_run(&mut stale_worker), Err(DomainError::Conflict(_))));
+
+        repo.reconcile_runs_on_startup().unwrap();
+        assert!(matches!(repo.save_run(&mut run), Err(DomainError::Conflict(_))));
+        assert!(matches!(repo.save_worker_run(&mut worker), Err(DomainError::Conflict(_))));
+        let mut terminal = repo.get_run(&run.id).unwrap().unwrap();
+        terminal.status = RunStatus::Active;
+        assert!(matches!(repo.save_run(&mut terminal), Err(DomainError::Conflict(_))));
+        let mut forged = Run::new("cas_task".into(), 1);
+        forged.state_version = 1;
+        assert!(matches!(repo.save_run(&mut forged), Err(DomainError::Conflict(_))));
+    }
 
     #[test]
     fn test_durable_dispatch_claim_and_fencing() {

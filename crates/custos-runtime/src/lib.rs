@@ -22,12 +22,7 @@ pub use integration::{
     MediationLevel,
 };
 
-// Compatibility shims for intra-crate modules and engine integration
-pub use cognitive as custos_cognitive;
-pub use context as custos_context;
-pub use context_management as custos_context_management;
 pub use context_management::*;
-pub use custos_provider as custos_providers;
 
 // Re-exports
 #[allow(ambiguous_glob_reexports)]

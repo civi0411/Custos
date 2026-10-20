@@ -4,7 +4,7 @@
 //! 1. `start_and_checkpoint_lifecycle`: Task creation, start_run, Running transition, and integrity checkpointing.
 //! 2. `graceful_cancellation_lifecycle`: Cancellation request, zero uncertain side effects, and terminal cancellation transition.
 
-use custos_adapters::custos_adapter_provider_fake::FakeProvider;
+use custos_adapters::providers::fake::FakeProvider;
 use custos_core::contracts::kernel::{KernelPort, TrustedKernel};
 use custos_core::contracts::workflow::WorkflowPort;
 use custos_domain::{

@@ -2,6 +2,10 @@
 
 **Phạm vi:** kiến trúc đang có trong source, hợp đồng tương tác mục tiêu và các khoảng trống phải đóng. Đây không phải tuyên bố mọi subsystem đã production-ready.
 
+**Working-tree refactor:** the SHA snapshot below remains historical evidence. Application handlers are being extracted into daemon `application/{tasks,sessions,workspaces,research,compute,assistant,providers,execution,integrations,packs,system}.rs`; `application/mod.rs` owns dispatch grouping, not an independent service/container. Existing `LocalApiDispatcher` dependencies remain composition inputs and existing API DTOs remain unchanged. Command admission must fail closed on storage failure. An extraction is not itself proof that all filesystem/network I/O has moved behind adapter ports. Run persistence hardening must preserve generation identity and reject stale/terminal overwrites before claiming full CAS. No external jobs or sending effects are authorized by this refactor.
+
+Outbox approval is being completed as a durable `Pending → Approved → Dispatching` gate, preserving concurrent edits discovered during this refactor. Runtime-mediated approval follows Kernel authorization; Assistant approval persists before reporting success. Pending-to-dispatch is rejected. This closes the missing durable approval state, not the remaining exact-payload/actor/Kernel authority gaps documented below.
+
 **Mốc đối chiếu:** `vi-rft`, commit `25cf6896abcecf5e093ba83826fc1c08207cd48f`. Remote `refs/heads/vi-rft` được đọc trực tiếp ngày 20-10-2026 và khớp HEAD; working tree sạch trước khi viết tài liệu này. Các thay đổi tài liệu của lượt này chưa thuộc commit đó.
 
 **Cách đọc:** `source` = thấy implementation; `composed` = có wiring trong bootstrap/đường API; `checked` = có phép kiểm cụ thể trong mục 19; `target` = điều kiện kiến trúc cần đạt. Không cộng các nhãn này thành “hoàn thiện 100%”. File/symbol bên dưới là mốc truy source, không phải bằng chứng hành vi external.
@@ -51,7 +55,7 @@ flowchart TD
     DC --> HTTP[Local HTTP và SSE]
     HOST --> API[Daemon LocalApiDispatcher]
     HTTP --> API
-    API --> APP[Application use cases: hiện còn nhiều handler trong api.rs]
+    API --> APP[Application: handlers theo chủ đề trong daemon]
     APP --> BR[Bridge và SessionManager]
     APP --> RT[TaskRuntime và resource coordinators]
     APP --> PACK[Domain packs]
@@ -393,7 +397,7 @@ Metrics cần đo: p50/p95 first useful output, startup/restore, idle/active RSS
 
 | Ưu tiên | Khoảng trống source-backed | Gate trước khi đóng |
 |---|---|---|
-| P0 | Outbox approval không bền vững; synthetic delivered; permit ID không là authorization | Không approval/invalid digest không dispatch; unsupported recipient fail closed; receipt gắn actual observation |
+| P0 | Outbox đã có durable Approved gate trong working tree; synthetic delivered và permit ID không là authorization vẫn còn | Không approval/invalid digest không dispatch; unsupported recipient fail closed; receipt gắn actual observation |
 | P0 | HTTP Origin có thể bypass token; no-token allowance | Wrong/missing token không gọi được protected RPC/SSE; native và browser auth nhất quán |
 | P0 | Compute auto mock/placeholder, stop/release confirmed khi bỏ lỗi | Missing adapter unavailable; real recipe digest; uncertain được giữ; post-read release |
 | P0 | SSH host verification/command input/cleanup | Host-key pinning, validated escaped args, không cleanup dữ liệu chưa bảo vệ |
@@ -402,7 +406,7 @@ Metrics cần đo: p50/p95 first useful output, startup/restore, idle/active RSS
 | P1 | Notebook response cap không là peak memory cap | Long-output/infinite-cell/process failure tests và resource limits thực |
 | P1 | Sandbox code chưa chứng minh default call-path | File/network/child escape tests trên từng OS/path |
 | P1 | OI/S1 topology source chưa là end-to-end UI execution | Actual decision record → graph → workers → evidence; pinned baseline ablation |
-| P2 | api.rs 7.319 dòng, client contexts lớn, CLI host khác Desktop | Extract theo use case và giữ contract/error/idempotency, không tách crate theo số dòng |
+| P2 | API đã tách theo chủ đề; các handler vẫn dùng shared context và còn direct I/O; client contexts lớn | Tách concrete I/O qua adapters/ports theo use case, giữ contract/error/idempotency; không chỉ đổi tên file |
 
 Không cần refactor toàn bộ lần nữa để sửa các lỗi P0. Đầu tiên đóng đường hiệu ứng nguy hiểm, sau đó tách handler theo những use case đã ổn định: conversation/workspace/research/assistant/compute/connections. `api/tasks.rs`, `api/commands.rs`, `api/transport.rs` hiện không có nghĩa toàn bộ application layer đã tách.
 

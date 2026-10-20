@@ -66,6 +66,7 @@ mod outbox_and_crash_reconciliation {
             .expect("enqueue outbox entry");
 
         // Mark Outbox entry as Dispatching
+        store.mark_approved(&outbox_entry_id).await.expect("mark approved");
         store
             .mark_dispatching(&outbox_entry_id)
             .await

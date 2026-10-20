@@ -100,11 +100,14 @@ impl CommandLedgerRepository {
 
     pub fn complete(&self, command_id: &str, result_json: &str) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
-        conn.execute(
+        let changed = conn.execute(
             "UPDATE command_ledger SET state = 'completed', result_json = ?2 WHERE command_id = ?1 AND state = 'pending'",
             params![command_id, result_json],
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
+        if changed != 1 {
+            return Err(DomainError::Conflict(format!("Command '{command_id}' is not pending")));
+        }
         Ok(())
     }
 
