@@ -91,21 +91,21 @@ export const ActivityPane: React.FC<ActivityPaneProps> = ({ sessionId, initialRu
   };
 
   return <div className="flex h-full min-h-0 flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
-    <header className="wb-pane-toolbar flex h-11 shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]/50 px-3">
+    <header className="wb-pane-toolbar flex h-9 shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]/50 px-3">
       <div className="flex min-w-0 items-center gap-2"><Activity className="h-4 w-4 shrink-0 text-[var(--color-fg-muted)]" /><span className="text-xs font-semibold">Run activity</span>
         {selectedRun && <span className={`truncate text-[10px] ${isActive ? 'text-white/80 font-medium' : 'text-[var(--color-fg-subtle)]'}`}>{snapshot?.status ?? selectedRun.status}</span>}
       </div>
       <div className="flex items-center gap-1.5">
-        <button type="button" onClick={() => void refresh()} disabled={loading} aria-label="Refresh run activity" title="Refresh run activity" className="rounded border border-[var(--color-border-subtle)] p-1.5 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /></button>
+        <button type="button" onClick={() => void refresh()} disabled={loading} aria-label="Refresh run activity" title="Refresh run activity" className="rounded border border-[var(--color-border-subtle)] p-1.5 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] disabled:opacity-50"><RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} /></button>
         {isActive && canCancel && <button type="button" onClick={() => void stop()} disabled={stopping || cancelRequested} className="flex items-center gap-1 rounded bg-white/10 hover:bg-white/15 px-2.5 py-1 text-[11px] font-medium text-white border border-white/20 disabled:opacity-50"><Square className="h-3 w-3 fill-current" />{stopping ? 'Requesting…' : cancelRequested ? 'Cancel requested' : 'Cancel run'}</button>}
       </div>
     </header>
 
-    {snapshot?.reconnecting && <p role="status" className="border-b border-border-muted px-4 py-2 text-xs text-white/70">Reconnecting. Last observed state may be stale.</p>}
+    {snapshot?.reconnecting && <p role="status" className="border-b border-border-muted px-4 py-1.5 text-xs text-white/70">Reconnecting…</p>}
     {error && <p role="alert" className="border-b border-rose-500/20 px-4 py-2 text-xs text-rose-400">Could not load live activity: {error}</p>}
     <div className="wb-split flex min-h-0 flex-1">
       <nav aria-label="Session runs" className="wb-master w-64 shrink-0 space-y-1 overflow-y-auto border-r border-[var(--color-border-subtle)] p-2">
-        {runs.length === 0 && !loading && !error && <p className="p-3 text-xs text-[var(--color-fg-subtle)]">{sessionId ? 'No recorded runs for this session.' : 'Choose a session to inspect its runs.'}</p>}
+        {runs.length === 0 && !loading && !error && <p className="p-3 text-xs text-[var(--color-fg-subtle)]">{sessionId ? 'No runs recorded for this session.' : 'Select a session.'}</p>}
         {runs.map((run) => <button key={run.run_id} type="button" onClick={() => setSelectedRunId(run.run_id)} aria-current={selectedRunId === run.run_id ? 'true' : undefined} className={`w-full rounded-lg border p-2.5 text-left ${selectedRunId === run.run_id ? 'border-[var(--color-border-focus)] bg-[var(--color-surface-2)]' : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-2)]'}`}>
           <span className="block truncate font-mono text-[10px]">{run.run_id}</span><span className="mt-1 block truncate text-[10px] text-[var(--color-fg-muted)]">{run.model || 'Runtime not reported'} · {run.status}</span>
         </button>)}

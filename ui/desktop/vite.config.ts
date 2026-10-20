@@ -16,6 +16,21 @@ export default defineConfig(() => ({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: 'settings', test: /\/src\/(?:features\/ai-setup|components\/modals)\//, maxSize: 250_000 },
+            { name: 'syntax', test: /node_modules\/(?:highlight\.js|prism-react-renderer)\//, maxSize: 300_000 },
+            { name: 'math', test: /node_modules\/(?:katex|rehype-katex|remark-math)\//, maxSize: 300_000 },
+            { name: 'react', test: /node_modules\/(?:react|react-dom|scheduler)\//, maxSize: 300_000 },
+            { name: 'vendor', test: /node_modules\//, priority: -1, maxSize: 300_000 },
+          ],
+        },
+      },
+    },
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

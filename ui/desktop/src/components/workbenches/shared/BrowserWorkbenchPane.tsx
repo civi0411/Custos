@@ -339,9 +339,6 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
             <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-[var(--color-fg-muted)] gap-2">
               <Globe className="h-8 w-8 text-white/40" />
               <p className="text-sm font-semibold text-white">Browser Preview</p>
-              <p className="text-xs text-white/50 text-center max-w-xs">
-                Enter a URL above or choose a local development server.
-              </p>
             </div>
           )
         ) : error ? (

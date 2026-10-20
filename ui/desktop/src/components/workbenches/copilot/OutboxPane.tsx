@@ -1,212 +1,238 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { RefreshCw, Send, ShieldCheck, Check } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, Check, Copy, RefreshCw, Search, Send, ShieldAlert } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
+import { WorkbenchPane, WorkbenchEmptyState, WorkbenchError } from '@/components/common/WorkbenchPane';
 import type { OutboxActionItem } from '@/types/domain';
 
 export interface OutboxPaneProps {
-  onShowToast?: (msg: string) => void;
+  taskId?: string;
+  supportedOperations?: string[];
+  onShowToast?: (message: string) => void;
 }
 
-export const OutboxPane: React.FC<OutboxPaneProps> = ({ onShowToast }) => {
+export function outboxActions(status: string, operations: string[]) {
+  return {
+    approve: ['pending', 'pending_approval'].includes(status) && (operations.includes('outbox.approve') || operations.includes('approve')),
+    dispatch: status === 'approved' && (operations.includes('outbox.dispatch') || operations.includes('dispatch')),
+  };
+}
+
+/** Detects protocol kind from recipient URI or action identifier */
+function detectProtocol(recipient: string, actionType: string): { label: string; tag: string } {
+  const target = (recipient + ' ' + actionType).toLowerCase();
+  if (target.includes('mcp:') || target.includes('__') || target.includes('mcp')) {
+    return { label: 'MCP Tool', tag: 'mcp' };
+  }
+  if (target.includes('a2a:') || target.includes('a2a')) {
+    return { label: 'A2A Task', tag: 'a2a' };
+  }
+  if (target.includes('native') || target.includes('cmd') || target.includes('shell')) {
+    return { label: 'Native Cmd', tag: 'native' };
+  }
+  return { label: 'Outbox', tag: 'dispatch' };
+}
+
+/** Extracts readable human text from MCP parts, A2A artifacts, or structured payload */
+function extractHumanText(rawJson?: string | null): string | null {
+  if (!rawJson) return null;
+  try {
+    const data = JSON.parse(rawJson);
+    if (typeof data !== 'object' || data === null) return String(data);
+
+    // A2A artifacts format: { artifacts: [{ parts: [{ text: "..." }] }] }
+    if (Array.isArray(data.artifacts)) {
+      const parts: string[] = [];
+      for (const art of data.artifacts) {
+        if (Array.isArray(art.parts)) {
+          for (const p of art.parts) {
+            if (p && typeof p.text === 'string') parts.push(p.text);
+          }
+        }
+      }
+      if (parts.length) return parts.join('\n');
+    }
+
+    // Direct message / prompt / content
+    if (typeof data.message === 'string') return data.message;
+    if (typeof data.prompt === 'string') return data.prompt;
+    if (typeof data.instruction === 'string') return data.instruction;
+    if (typeof data.body === 'string') return data.body;
+    if (typeof data.command === 'string') return `$ ${data.command}`;
+
+    // MCP Call parameters
+    const params = data.parameters || data.arguments || data.params;
+    if (params && typeof params === 'object') {
+      const entries = Object.entries(params);
+      if (entries.length) {
+        return entries.map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join('\n');
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function OutboxPane({ taskId, supportedOperations = [], onShowToast }: OutboxPaneProps) {
   const [items, setItems] = useState<OutboxActionItem[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState('');
+  const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
-  const [error, setError] = useState('');
-  const active = items.find((item) => item.id === selectedId) ?? items[0];
+  const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'extracted' | 'json'>('extracted');
+  const epoch = useRef(0);
+  const actionPending = useRef(false);
 
   const refresh = useCallback(async () => {
+    const current = ++epoch.current;
     setLoading(true);
-    setError('');
     try {
-      const current = await daemonClient.listOutbox();
-      const effective = Array.isArray(current) ? current : [];
-      setItems(effective);
-      setSelectedId((previous) =>
-        previous && effective.some((item) => item.id === previous) ? previous : effective[0]?.id ?? null
-      );
-    } catch (cause) {
-      const message = cause instanceof Error ? cause.message : String(cause);
-      setError(message);
-      setItems([]);
-      setSelectedId(null);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      const records = await daemonClient.listOutbox(taskId);
+      if (current !== epoch.current) return;
+      const scoped = taskId ? records.filter(item => item.task_id === taskId) : records;
+      setItems(scoped);
+      setSelectedId(previous => scoped.some(item => item.id === previous) ? previous : scoped[0]?.id || '');
+      setError(null);
+    } catch (reason) { if (current === epoch.current) setError(String(reason)); }
+    finally { if (current === epoch.current) setLoading(false); }
+  }, [taskId]);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  useEffect(() => { void refresh(); return () => { epoch.current++; }; }, [refresh]);
 
-  const handleApprove = async () => {
-    if (!active) return;
-    setActing(true);
+  const active = items.find(item => item.id === selectedId);
+  const filtered = items.filter(item => (item.title + ' ' + item.recipient + ' ' + item.status).toLowerCase().includes(query.toLowerCase()));
+  const actions = outboxActions(active?.status || '', supportedOperations);
+
+  const protocol = useMemo(() => {
+    if (!active) return { label: 'Outbox', tag: 'dispatch' };
+    return detectProtocol(active.recipient || '', active.action_type || '');
+  }, [active]);
+
+  const rawJson = active?.payload_json || null;
+  const humanText = useMemo(() => extractHumanText(rawJson), [rawJson]);
+  const formattedJson = useMemo(() => {
+    if (!rawJson) return active?.payload_summary || '';
+    try { return JSON.stringify(JSON.parse(rawJson), null, 2); }
+    catch { return rawJson; }
+  }, [rawJson, active?.payload_summary]);
+
+  const act = async (kind: 'approve' | 'dispatch') => {
+    if (!active || actionPending.current || !actions[kind]) return;
+    actionPending.current = true; setActing(true);
     try {
-      await daemonClient.approveOutbox(active.id);
-      onShowToast?.(`Action item approved for dispatch.`);
+      if (kind === 'approve') { await daemonClient.approveOutbox(active.id); onShowToast?.('Approval recorded.'); }
+      else { await daemonClient.dispatchOutbox(active.id); onShowToast?.('Dispatch requested. Check the recorded outcome.'); }
       await refresh();
-    } catch (err: any) {
-      onShowToast?.(`Approval failed: ${err?.message || err}`);
-    } finally {
-      setActing(false);
-    }
+    } catch (reason) { setError(String(reason)); }
+    finally { actionPending.current = false; setActing(false); }
   };
 
-  const handleDispatch = async () => {
-    if (!active) return;
-    setActing(true);
-    try {
-      const res = await daemonClient.dispatchOutbox(active.id);
-      onShowToast?.(`Dispatched! Recorded execution receipt ${res?.receipt_id || active.id}`);
-      await refresh();
-    } catch (err: any) {
-      onShowToast?.(`Dispatch failed: ${err?.message || err}`);
-    } finally {
-      setActing(false);
-    }
+  const copyPayload = () => {
+    const content = rawJson || active?.payload_summary || '';
+    if (!content) return;
+    navigator.clipboard.writeText(content).then(() => {
+      onShowToast?.('Payload copied to clipboard.');
+    }).catch(() => {});
   };
 
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
-      <header className="wb-pane-toolbar flex h-11 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]/50 px-3">
-        <div className="flex items-center gap-2">
-          <Send className="h-4 w-4 text-[var(--color-fg-muted)]" />
-          <span className="text-xs font-semibold">Outbox Ledger</span>
-          <span className="font-mono text-[10px] text-[var(--color-fg-subtle)]">
-            {items.length} records
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          disabled={loading}
-          className="flex items-center gap-1.5 rounded border border-[var(--color-border-subtle)] px-2.5 py-1 text-xs text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] disabled:opacity-50"
-        >
-          <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </header>
-
-      {error && <p role="alert" className="px-4 py-2 text-xs text-white/60">Outbox: {error}</p>}
-
-      <div className="wb-split flex min-h-0 flex-1">
-        {/* Left List */}
-        <nav aria-label="Outbox records" className="wb-master w-64 shrink-0 space-y-1 overflow-y-auto border-r border-[var(--color-border-subtle)] p-2">
-          {loading && items.length === 0 && (
-            <p role="status" className="p-3 text-xs text-[var(--color-fg-subtle)]">Loading outbox…</p>
-          )}
-          {!loading && !error && items.length === 0 && (
-            <div className="p-4 text-center text-xs text-[var(--color-fg-subtle)]">
-              No pending outbox actions. Actions generated by assistants will appear here for review.
-            </div>
-          )}
-          {items.map((item) => {
-            const isSelected = active?.id === item.id;
+  return <WorkbenchPane toolbar={<>
+    <span className="wb-meta">{items.length} recorded actions{taskId ? ' · selected Task' : ''}</span>
+    <span className="wb-toolbar-spacer" />
+    <button type="button" className="wb-icon-button" title="Refresh" aria-label="Refresh outbox" disabled={loading || acting} onClick={() => void refresh()}><RefreshCw size={14} /></button>
+  </>}>
+    <WorkbenchError message={error} onRetry={() => void refresh()} />
+    <div className="wb-split flex flex-1 min-h-0">
+      <aside className="wb-master min-h-0 flex flex-col border-r border-border-subtle">
+        <label className="wb-search"><Search size={13} aria-hidden="true" /><input aria-label="Find an outbox action" placeholder="Find an action…" value={query} onChange={event => setQuery(event.target.value)} /></label>
+        <nav aria-label="Outbox actions" className="flex-1 overflow-auto">
+          {loading && !items.length ? <WorkbenchEmptyState title="Loading outbox…" busy /> : !filtered.length ? <WorkbenchEmptyState title={query ? 'No matching actions' : 'No recorded actions'} /> : filtered.map(item => {
+            const proto = detectProtocol(item.recipient || '', item.action_type || '');
             return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setSelectedId(item.id)}
-                aria-current={isSelected ? 'true' : undefined}
-                className={`w-full rounded-lg border p-2.5 text-left text-xs transition ${
-                  isSelected
-                    ? 'border-[var(--color-border-focus)] bg-[var(--color-surface-2)] shadow-xs'
-                    : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-2)]'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-1 mb-1">
-                  <span className="block truncate font-medium">{item.action_type || item.title}</span>
-                  <span className="rounded px-1.5 py-0.2 text-[9px] font-semibold uppercase bg-white/[0.06] text-white/70 border border-white/10">
-                    {item.status}
-                  </span>
-                </div>
-                <span className="block font-mono text-[10px] text-[var(--color-fg-subtle)] truncate">
-                  ID: {item.id.slice(0, 16)} · {item.created_at ? new Date(item.created_at).toLocaleTimeString() : 'Recent'}
-                </span>
-              </button>
+              <div className={'wb-source-row ' + (selectedId === item.id ? 'is-selected' : '')} key={item.id}>
+                <button type="button" disabled={acting} aria-current={selectedId === item.id ? 'true' : undefined} onClick={() => setSelectedId(item.id)}>
+                  <div className="flex items-center gap-1.5 w-full">
+                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-surface-2 text-fg-muted uppercase tracking-wider">{proto.label}</span>
+                    <span className="truncate flex-1 text-left">{item.title || item.action_type}</span>
+                  </div>
+                  <small>{item.status.replace(/_/g, ' ')}{item.created_at ? ' · ' + new Date(item.created_at).toLocaleString() : ''}</small>
+                </button>
+              </div>
             );
           })}
         </nav>
+      </aside>
+      <main className="min-w-0 min-h-0 flex-1 overflow-auto">
+        {active ? <article className="wb-document select-text">
+          <div className="wb-document-actions">
+            {actions.approve && <button type="button" className="canvas-open-button" disabled={acting} onClick={() => void act('approve')}><Check size={12} />Approve action</button>}
+            {actions.dispatch && <button type="button" className="canvas-open-button" disabled={acting} onClick={() => void act('dispatch')}><Send size={12} />Dispatch approved action</button>}
+          </div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-fg-muted font-medium uppercase">{protocol.label}</span>
+            <span className="wb-document-byline font-mono text-xs">{active.status.replace(/_/g, ' ')}</span>
+          </div>
+          <h1>{active.title || active.action_type}</h1>
 
-        {/* Right Detail Pane */}
-        <main className="min-w-0 flex-1 overflow-y-auto p-4">
-          {active ? (
-            <section className="space-y-4 rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-5">
-              <div className="flex items-start justify-between gap-3 border-b border-[var(--color-border-subtle)] pb-3">
-                <div>
-                  <h2 className="text-sm font-semibold">{active.title || active.action_type}</h2>
-                  <p className="mt-1 text-[11px] text-[var(--color-fg-muted)]">
-                    Task: <span className="font-mono text-fg-editor">{active.task_id}</span> · Status:{' '}
-                    <span className="font-semibold text-fg-editor uppercase">{active.status}</span>
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {active.status !== 'receipted' && active.status !== 'succeeded' && (
-                    <>
-                      {active.status === 'pending_approval' || active.status === 'pending' ? (
-                        <button
-                          type="button"
-                          onClick={handleApprove}
-                          disabled={acting}
-                          className="flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/15 border border-white/10 disabled:opacity-50"
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                          Approve Action
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={handleDispatch}
-                        disabled={acting}
-                        className="flex items-center gap-1.5 rounded-md bg-white/15 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20 border border-white/10 disabled:opacity-50"
-                      >
-                        <Send className="h-3.5 w-3.5" />
-                        Dispatch Now
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
+          {active.status === 'uncertain' && (
+            <div className="flex items-start gap-2 p-3 my-3 rounded border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs">
+              <ShieldAlert size={16} className="shrink-0 mt-0.5 text-amber-400" />
               <div>
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fg-subtle)]">
-                  Payload Summary
-                </label>
-                <div className="mt-1.5 rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] p-3 font-mono text-xs text-[var(--color-fg-editor)] whitespace-pre-wrap">
-                  {active.payload_summary || 'No payload details provided.'}
-                </div>
+                <strong>Uncertain Delivery:</strong> Delivery has not been confirmed. Reconcile the existing attempt before sending again. Blind re-dispatch is forbidden.
               </div>
-
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] p-2.5">
-                  <div className="text-[10px] text-[var(--color-fg-subtle)] uppercase">Payload Digest</div>
-                  <div className="font-mono text-[11px] text-[var(--color-fg-muted)] break-all mt-0.5">
-                    {active.payload_digest || 'none'}
-                  </div>
-                </div>
-                <div className="rounded-lg border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] p-2.5">
-                  <div className="text-[10px] text-[var(--color-fg-subtle)] uppercase">Permit ID</div>
-                  <div className="font-mono text-[11px] text-[var(--color-fg-muted)] break-all mt-0.5">
-                    {active.permit_id || 'unconstrained'}
-                  </div>
-                </div>
-              </div>
-
-              {active.receipt_id && (
-                <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/70 font-mono">
-                  <ShieldCheck className="h-4 w-4 shrink-0" />
-                  <span>Execution Receipt Recorded: {active.receipt_id}</span>
-                </div>
-              )}
-            </section>
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-[var(--color-fg-subtle)]">
-              No outbox action items recorded.
             </div>
           )}
-        </main>
-      </div>
+
+          {(active.status === 'failed' || active.error_message) && (
+            <div className="flex items-start gap-2 p-3 my-3 rounded border border-rose-500/30 bg-rose-500/10 text-rose-300 text-xs">
+              <AlertTriangle size={16} className="shrink-0 mt-0.5 text-rose-400" />
+              <div>
+                <strong>Execution Failure:</strong> {active.error_message || 'The external target rejected or failed to acknowledge execution.'}
+              </div>
+            </div>
+          )}
+
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h2>Recorded Payload</h2>
+              <div className="flex items-center gap-1.5">
+                {humanText && (
+                  <div className="wb-segmented" role="group" aria-label="Payload format">
+                    <button type="button" aria-pressed={viewMode === 'extracted'} onClick={() => setViewMode('extracted')}>Readable</button>
+                    <button type="button" aria-pressed={viewMode === 'json'} onClick={() => setViewMode('json')}>JSON</button>
+                  </div>
+                )}
+                <button type="button" className="wb-icon-button" title="Copy payload" aria-label="Copy payload" onClick={copyPayload}><Copy size={12} /></button>
+              </div>
+            </div>
+
+            {viewMode === 'extracted' && humanText ? (
+              <div className="p-3 rounded bg-surface-1 border border-border-subtle font-mono text-xs whitespace-pre-wrap leading-relaxed text-fg-default">
+                {humanText}
+              </div>
+            ) : (
+              <pre className="p-3 rounded bg-surface-1 border border-border-subtle font-mono text-xs overflow-auto max-h-72 whitespace-pre text-fg-muted">
+                {formattedJson || 'Payload contents were not recorded.'}
+              </pre>
+            )}
+          </section>
+
+          <section>
+            <h2>Delivery Details</h2>
+            <dl className="wb-property-list">
+              <dt>Recipient</dt><dd className="font-mono">{active.recipient || 'Not recorded'}</dd>
+              <dt>Task</dt><dd className="font-mono">{active.task_id || 'Not recorded'}</dd>
+              <dt>Payload digest</dt><dd className="font-mono">{active.payload_digest || 'Not recorded'}</dd>
+              <dt>Permit</dt><dd className="font-mono">{active.permit_id || 'Not recorded'}</dd>
+              <dt>Receipt</dt><dd className="font-mono">{active.receipt_id || 'No receipt recorded'}</dd>
+            </dl>
+          </section>
+
+          {!actions.approve && !actions.dispatch && (
+            <p className="wb-meta">This view shows the stored action and receipt. Available controls follow the daemon's supported operations and the action's current state.</p>
+          )}
+        </article> : <WorkbenchEmptyState title="Outbound actions" description="Messages and other external actions appear here with their actual delivery status and receipts." />}
+      </main>
     </div>
-  );
-};
+  </WorkbenchPane>;
+}

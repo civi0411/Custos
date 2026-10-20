@@ -110,13 +110,13 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
       case 'L3_SEALED':
         return (
           <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20 font-mono text-[10px] font-semibold">
-            <Lock size={10} /> L3 SEALED
+            <Lock size={10} /> Sealed record
           </span>
         );
       case 'L2_VERIFIED':
         return (
           <span className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono text-[10px] font-semibold">
-            <CheckCircle2 size={10} /> L2 VERIFIED
+            <CheckCircle2 size={10} /> Verified record
           </span>
         );
       case 'L1_CITED':
@@ -169,7 +169,7 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
         <section className="w-full max-w-xl max-h-[80vh] overflow-auto rounded-xl border border-border-default bg-canvas p-4 space-y-3">
           <div className="flex items-center justify-between gap-3"><h2 className="text-sm font-semibold">Claim review records</h2><button type="button" autoFocus aria-label="Close reviews" className="canvas-icon" onClick={() => setReviewClaim(null)}><X size={16} /></button></div>
           <p className="text-xs text-fg-muted">{reviewClaim.statement}</p>
-          {validating ? <p role="status" className="text-xs">Loading records…</p> : reviewError ? <p role="alert" className="text-xs text-rose-400">{reviewError}</p> : reviews.length === 0 ? <p className="text-xs text-fg-muted">No review records are attached. Opening this view does not validate or seal the claim.</p> : reviews.map(review => <article key={review.id} className="rounded border border-border-default p-3 text-xs space-y-2">
+          {validating ? <p role="status" className="text-xs">Loading records…</p> : reviewError ? <p role="alert" className="text-xs text-rose-400">{reviewError}</p> : reviews.length === 0 ? <p className="text-xs text-fg-muted">No review records attached.</p> : reviews.map(review => <article key={review.id} className="rounded border border-border-default p-3 text-xs space-y-2">
             <div className="flex justify-between gap-2"><strong>{review.reviewer}</strong><span>{review.status} · {review.is_fresh ? 'Current' : 'Stale'}</span></div>
             <p>{review.evidence_summary}</p><p className="text-fg-muted">{review.method} · {review.id}</p>
             {review.evidence_digest && <code className="block break-all text-[11px]">{review.evidence_digest}</code>}
@@ -471,9 +471,6 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
             <div className="flex h-64 flex-col items-center justify-center text-center text-[var(--color-fg-subtle)] space-y-2">
               <ShieldCheck className="h-8 w-8 text-[var(--color-border-default)]" />
               <div className="text-xs font-medium text-[var(--color-editor-fg)]">No claim selected</div>
-              <p className="text-[11px] text-[var(--color-fg-muted)] max-w-sm">
-                Select an existing claim from the matrix on the left or create a new claim to inspect evidence.
-              </p>
             </div>
           )}
         </div>
@@ -511,7 +508,7 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
                 />
               </div>
 
-              <p className="text-xs text-fg-muted">New claims are ungrounded drafts. Citations and review records must be inspected before using them as verified evidence.</p>
+              <p className="text-[10px] text-fg-muted">Created as an ungrounded draft (L0).</p>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--color-border-muted)]">

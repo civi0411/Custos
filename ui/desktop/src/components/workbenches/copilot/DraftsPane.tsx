@@ -50,6 +50,7 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
       setSelectedDraftId((prev) => (prev && effective.some((d) => d.id === prev) ? prev : effective[0]?.id || null));
     } catch (err: any) {
       if (epoch === loadEpoch.current) {
+        setLoadError(err instanceof Error ? err.message : String(err));
         setDrafts([]);
         setSelectedDraftId(null);
       }
@@ -174,7 +175,7 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
   return (
     <div className="flex h-full flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
       {/* Header */}
-      <div className="wb-pane-toolbar flex h-11 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-3 bg-[var(--color-surface-1)]/50">
+      <div className="wb-pane-toolbar flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-3 bg-[var(--color-surface-1)]/50">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-[var(--color-fg-muted)] shrink-0" />
           <span className="text-xs font-semibold">Drafts</span>
@@ -184,13 +185,14 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          <button type="button" className="canvas-open-button" disabled={!sessionId || saving || loading} onClick={handleCreateDraft}><Plus size={12} />New draft</button>
           {activeDraft && <button type="button" disabled={!isModified || saving || isLocked} onClick={handleSaveDraft} className="canvas-open-button disabled:opacity-40">{saving ? 'Saving…' : isModified ? 'Save changes' : 'Saved'}</button>}
           {/* Local draft review; outbound action is a separate governed flow. */}
           <button
             type="button"
             disabled={!activeDraft || saving || isLocked}
             onClick={handlePrimaryAction}
-            className="flex items-center gap-1.5 rounded bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-emerald-500 disabled:opacity-50"
+            className="canvas-open-button"
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
             <span>Review & lock</span>
@@ -203,6 +205,8 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
               onClick={() => setShowSecondaryMenu(!showSecondaryMenu)}
               className="flex h-7 w-7 items-center justify-center rounded border border-[var(--color-border-subtle)] hover:bg-[var(--color-surface-2)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] transition"
               title="More actions"
+              aria-label="More draft actions"
+              aria-expanded={showSecondaryMenu}
             >
               <MoreVertical className="h-3.5 w-3.5" />
             </button>
@@ -212,15 +216,6 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
                 className="absolute right-0 top-8 z-50 w-44 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-1)] py-1 shadow-lg text-xs"
                 onMouseLeave={() => setShowSecondaryMenu(false)}
               >
-                <button
-                  type="button"
-                  disabled={!sessionId || saving || loading}
-                  onClick={handleCreateDraft}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-emerald-400 hover:bg-[var(--color-surface-2)]"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>New Draft</span>
-                </button>
                 <button
                   type="button"
                   disabled={!activeDraft || saving || loading || isLocked || !isModified}
@@ -260,7 +255,7 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
           {loadError && <div role="alert" className="p-3 text-xs text-rose-400">Could not load drafts: {loadError}</div>}
           {drafts.length === 0 && !loading && !loadError && (
             <div className="p-4 text-center text-xs text-[var(--color-fg-subtle)]">
-              No drafts yet. Create one from the menu above.
+              No drafts recorded.
             </div>
           )}
 
@@ -313,7 +308,8 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
                 value={editingTitle}
                 disabled={isLocked || saving || loading}
                 onChange={(e) => { setEditingTitle(e.target.value); draftEdits.set(activeDraft.id, { title: e.target.value, content: editingContent }); }}
-                className="w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] px-3 py-1.5 text-sm font-semibold text-[var(--color-editor-fg)] focus:outline-none focus:border-emerald-500"
+                aria-label="Draft title"
+                className="wb-draft-title"
                 placeholder="Draft Title"
               />
 
@@ -322,7 +318,8 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
                 value={editingContent}
                 disabled={isLocked || saving || loading}
                 onChange={(e) => { setEditingContent(e.target.value); draftEdits.set(activeDraft.id, { title: editingTitle, content: e.target.value }); }}
-                className="flex-1 resize-none rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-3 text-xs leading-relaxed text-[var(--color-editor-fg)] focus:outline-none focus:border-emerald-500"
+                aria-label="Draft content"
+                className="wb-draft-content"
                 placeholder="Draft content..."
               />
 

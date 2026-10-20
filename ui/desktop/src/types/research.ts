@@ -303,3 +303,32 @@ export interface SourceProposal {
   createdAt: number;
 }
 
+// ---------------------------------------------------------
+// Compute Targets & GPU Experiment Lifecycle Types
+// ---------------------------------------------------------
+
+export interface ComputeTargetInfo {
+  backend: 'colab' | 'kaggle' | 'runpod' | 'vast_ai' | 'dedicated_ssh';
+  name: string;
+  description: string;
+  supportsInteractive: boolean;
+  decoupledRelease: boolean;
+}
+
+export interface PreflightReport {
+  allowed: boolean;
+  blockers: string[];
+  warnings: string[];
+}
+
+export interface ExecutionAttemptRecord {
+  id: string;
+  experimentId: string;
+  recipeId: string;
+  backend: string;
+  execState: string;
+  resourceState: string;
+  externalRef?: { accountRef: string; jobId: string; versionId: string };
+  parentCheckpointId?: string;
+}
+

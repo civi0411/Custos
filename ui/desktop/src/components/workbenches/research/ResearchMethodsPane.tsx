@@ -1,159 +1,78 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Clock3, FileOutput, FlaskConical, TerminalSquare } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { RefreshCw, Search } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
+import { WorkbenchPane, WorkbenchEmptyState, WorkbenchError } from '@/components/common/WorkbenchPane';
 import type { ResearchExecutionRecord, ResearchRecipe } from '@/types/research';
 
-const statusTone: Record<ResearchExecutionRecord['status'], string> = {
-  pending: 'text-white/60',
-  running: 'text-white/90 font-bold',
-  completed: 'text-white/80',
-  failed: 'text-red-400',
-  cancelled: 'text-[var(--color-fg-subtle)]',
-  preempted: 'text-[var(--color-fg-subtle)]',
-};
-
-export const ResearchMethodsPane: React.FC = () => {
+export function ResearchMethodsPane() {
   const [recipes, setRecipes] = useState<ResearchRecipe[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [executions, setExecutions] = useState<ResearchExecutionRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-
+  const [executionsLoading, setExecutionsLoading] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [query, setQuery] = useState('');
   useEffect(() => {
-    daemonClient.listResearchRecipes()
-      .then((records) => {
-        setRecipes(records);
-        setSelectedId(records[0]?.id ?? '');
-      })
-      .catch((reason) => setError(String(reason)))
-      .finally(() => setLoading(false));
-  }, []);
-
+    let active = true;
+    setLoading(true);
+    daemonClient.listResearchRecipes().then(records => {
+      if (!active) return;
+      setRecipes(records);
+      setSelectedId(previous => records.some(record => record.id === previous) ? previous : records[0]?.id || '');
+      setError(null);
+    }).catch(reason => { if (active) setError(String(reason)); }).finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [attempt]);
   useEffect(() => {
-    if (!selectedId) {
-      setExecutions([]);
-      return;
-    }
-    daemonClient.listResearchExecutions(selectedId)
-      .then(setExecutions)
-      .catch((reason) => setError(String(reason)));
-  }, [selectedId]);
+    let active = true;
+    setExecutions([]);
+    if (!selectedId) { setExecutionsLoading(false); return; }
+    setExecutionsLoading(true);
+    daemonClient.listResearchExecutions(selectedId).then(records => { if (active) setExecutions(records); })
+      .catch(reason => { if (active) setError(String(reason)); }).finally(() => { if (active) setExecutionsLoading(false); });
+    return () => { active = false; };
+  }, [selectedId, attempt]);
+  const selected = recipes.find(recipe => recipe.id === selectedId);
+  const filtered = recipes.filter(recipe => (recipe.name + ' ' + (recipe.description || '')).toLowerCase().includes(query.toLowerCase()));
 
-  const selected = useMemo(
-    () => recipes.find((recipe) => recipe.id === selectedId) ?? null,
-    [recipes, selectedId]
-  );
-
-  if (loading) {
-    return <div className="p-6 text-xs text-[var(--color-fg-muted)]">Loading method ledger…</div>;
-  }
-
-  if (error && recipes.length === 0) {
-    return <div className="p-6 text-xs text-[var(--color-fg-muted)]">Method ledger unavailable: {error}</div>;
-  }
-
-  if (!selected) {
-    return (
-      <div className="flex h-full items-center justify-center bg-[var(--color-canvas)] p-8 text-center">
-        <div className="max-w-sm">
-          <FlaskConical className="mx-auto h-5 w-5 text-[var(--color-fg-subtle)]" />
-          <h2 className="mt-3 text-sm font-semibold">No research methods yet</h2>
-          <p className="mt-2 text-xs leading-5 text-[var(--color-fg-muted)]">
-            A method recipe describes intended procedure and environment. It is not evidence that
-            the command ran. Recipes are created through an authorized Research workflow.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="wb-split wb-split-grid grid h-full min-h-0 grid-cols-[260px_minmax(0,1fr)] bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
-      <aside className="wb-master min-h-0 overflow-y-auto border-r border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3">
-        <div className="px-2 pb-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--color-fg-subtle)]">Methods</div>
-        <div className="space-y-1">
-          {recipes.map((recipe) => (
-            <button
-              key={recipe.id}
-              type="button"
-              onClick={() => setSelectedId(recipe.id)}
-              className={`w-full rounded-lg px-3 py-2.5 text-left ${recipe.id === selectedId ? 'bg-[var(--color-surface-3)]' : 'hover:bg-[var(--color-surface-2)]'}`}
-            >
-              <div className="truncate text-xs font-medium">{recipe.name}</div>
-              <div className="mt-1 truncate font-mono text-[10px] text-[var(--color-fg-subtle)]">{recipe.id}</div>
-            </button>
-          ))}
+  return <WorkbenchPane toolbar={<>
+    <span className="wb-meta">{recipes.length} recorded methods</span>
+    <span className="wb-toolbar-spacer" />
+    <button type="button" className="wb-icon-button" aria-label="Refresh research methods" title="Refresh" disabled={loading} onClick={() => setAttempt(value => value + 1)}><RefreshCw size={14} /></button>
+  </>}>
+    <WorkbenchError message={error} onRetry={() => setAttempt(value => value + 1)} />
+    <div className="wb-split flex flex-1 min-h-0">
+      <aside className="wb-master flex flex-col min-h-0 border-r border-border-subtle">
+        <label className="wb-search"><Search size={13} aria-hidden="true" /><input aria-label="Find a research method" placeholder="Find a method…" value={query} onChange={event => setQuery(event.target.value)} /></label>
+        <div className="flex-1 overflow-auto">
+          {loading && !recipes.length ? <WorkbenchEmptyState title="Loading methods…" busy /> : filtered.map(recipe => <div key={recipe.id} className={'wb-source-row ' + (recipe.id === selectedId ? 'is-selected' : '')}>
+            <button type="button" aria-current={recipe.id === selectedId ? 'true' : undefined} onClick={() => setSelectedId(recipe.id)}><span>{recipe.name}</span>{recipe.description && <small className="line-clamp-2">{recipe.description}</small>}</button>
+          </div>)}
+          {!loading && !filtered.length && <WorkbenchEmptyState title={query ? 'No matching methods' : 'No methods recorded'} />}
         </div>
       </aside>
-
-      <main className="min-h-0 overflow-y-auto p-6">
-        <div className="mx-auto max-w-4xl">
-          <div className="workbench-kicker">reproduction method</div>
-          <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">{selected.name}</h1>
-          {selected.description && <p className="mt-2 text-xs leading-5 text-[var(--color-fg-muted)]">{selected.description}</p>}
-
-          <section className="mt-5 rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-4">
-            <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--color-fg-subtle)]">
-              <TerminalSquare className="h-3.5 w-3.5" /> Intended command
-            </div>
-            <pre className="mt-3 overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-5">{selected.command}</pre>
-            <p className="mt-3 text-[10px] leading-4 text-[var(--color-fg-subtle)]">
-              Display only. Opening this pane never dispatches the command.
-            </p>
+      <main className="min-h-0 min-w-0 flex-1 overflow-auto">
+        {selected ? <article className="wb-document select-text">
+          <h1>{selected.name}</h1>
+          {selected.description && <p className="wb-document-byline">{selected.description}</p>}
+          <section><h2>Command</h2><pre className="wb-code-block">{selected.command}</pre><p className="wb-meta">Recorded recipe · opening this view does not execute it.</p></section>
+          <section><h2>Environment</h2><dl className="wb-property-list">
+            <dt>Python</dt><dd>{selected.environmentSpec.pythonVersion || 'Not recorded'}</dd>
+            <dt>Hardware</dt><dd>{selected.environmentSpec.hardware || 'Not recorded'}</dd>
+            <dt>Container</dt><dd>{selected.environmentSpec.containerImage || 'Not specified'}</dd>
+            <dt>Requirements</dt><dd>{selected.environmentSpec.requirements.length ? <pre className="whitespace-pre-wrap">{selected.environmentSpec.requirements.join('\n')}</pre> : 'Not recorded'}</dd>
+            <dt>Inputs</dt><dd>{selected.inputs.length} versioned references</dd>
+            <dt>Outputs</dt><dd>{selected.outputs.length} expected paths</dd>
+          </dl></section>
+          <section><h2>Observed executions</h2>
+            {executionsLoading ? <p role="status" className="wb-meta">Loading executions…</p> : !executions.length ? <p className="wb-meta">No execution records for this method.</p> : executions.map(record => <details className="wb-disclosure" key={record.id}>
+              <summary><span>{record.startedAt}</span><span className="ml-3">{record.status}</span>{record.exitCode != null && <span className="ml-3">exit {record.exitCode}</span>}</summary>
+              <dl className="wb-property-list"><dt>Execution</dt><dd className="font-mono">{record.id}</dd><dt>Artifacts</dt><dd>{record.artifacts.length} recorded references</dd><dt>Output log</dt><dd>{record.stdoutCasUri || 'Not recorded'}</dd></dl>
+            </details>)}
           </section>
-
-          <div className="mt-4 grid gap-4 md:grid-cols-2">
-            <section className="rounded-xl border border-[var(--color-border-muted)] p-4">
-              <div className="flex items-center gap-2 text-xs font-semibold"><Box className="h-3.5 w-3.5" /> Environment</div>
-              <dl className="mt-3 space-y-2 text-[11px] text-[var(--color-fg-muted)]">
-                <div className="flex justify-between gap-4"><dt>Python</dt><dd>{selected.environmentSpec.pythonVersion ?? 'unspecified'}</dd></div>
-                <div className="flex justify-between gap-4"><dt>Hardware</dt><dd>{selected.environmentSpec.hardware ?? 'unspecified'}</dd></div>
-                <div className="flex justify-between gap-4"><dt>Container</dt><dd className="truncate">{selected.environmentSpec.containerImage ?? 'none'}</dd></div>
-                <div className="flex justify-between gap-4"><dt>Requirements</dt><dd>{selected.environmentSpec.requirements.length}</dd></div>
-              </dl>
-            </section>
-            <section className="rounded-xl border border-[var(--color-border-muted)] p-4">
-              <div className="flex items-center gap-2 text-xs font-semibold"><FileOutput className="h-3.5 w-3.5" /> Contract</div>
-              <div className="mt-3 text-[11px] leading-5 text-[var(--color-fg-muted)]">
-                <div>{selected.inputs.length} versioned input reference(s)</div>
-                <div>{selected.outputs.length} expected output path(s)</div>
-              </div>
-            </section>
-          </div>
-
-          <section className="mt-6">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-xs font-semibold">Observed executions</h2>
-              <span className="text-[10px] text-[var(--color-fg-subtle)]">{executions.length} records</span>
-            </div>
-            <div className="space-y-2">
-              {executions.map((record) => (
-                <article key={record.id} className="rounded-xl border border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="truncate font-mono text-[11px]">{record.id}</div>
-                      <div className="mt-1 flex items-center gap-2 text-[10px] text-[var(--color-fg-subtle)]">
-                        <Clock3 className="h-3 w-3" /> {record.startedAt}
-                        {record.exitCode != null && <span>exit {record.exitCode}</span>}
-                      </div>
-                    </div>
-                    <span className={`text-[10px] font-semibold uppercase tracking-[0.08em] ${statusTone[record.status]}`}>{record.status}</span>
-                  </div>
-                  <div className="mt-3 text-[10px] text-[var(--color-fg-muted)]">
-                    {record.artifacts.length} artifact reference(s)
-                    {record.stdoutCasUri ? ` · stdout ${record.stdoutCasUri}` : ''}
-                  </div>
-                </article>
-              ))}
-              {executions.length === 0 && (
-                <div className="rounded-xl border border-dashed border-[var(--color-border-muted)] p-5 text-center text-xs text-[var(--color-fg-muted)]">
-                  This method has no observed execution records.
-                </div>
-              )}
-            </div>
-          </section>
-        </div>
+        </article> : <WorkbenchEmptyState title="Reproduction methods" description="Recorded recipes keep commands, environment requirements and observed runs together. Choose a method to inspect its history." />}
       </main>
     </div>
-  );
-};
+  </WorkbenchPane>;
+}

@@ -219,7 +219,7 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
   return (
     <div className="flex flex-col h-full w-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)] text-xs overflow-hidden select-none font-sans relative">
       {/* Standard Pane Header */}
-      <header className="flex h-11 shrink-0 items-center justify-between border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-4 z-10">
+      <header className="wb-pane-toolbar flex h-11 shrink-0 items-center justify-between border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-4 z-10">
         <div className="flex items-center gap-2">
           <Server className="w-4 h-4 text-white/70" />
           <span className="text-xs font-semibold text-[var(--color-editor-fg)]">

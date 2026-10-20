@@ -1,3 +1,4 @@
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   PanelLeft,
@@ -21,6 +22,7 @@ import { useScreenContext } from '@/context/ScreenContext';
 import { ActionIcon } from '@/components/common/ActionIcon';
 import { ScreenSwitcherBar } from '@/components/workbenches/ScreenSwitcherBar';
 import { daemonClient } from '@/api/daemon_client';
+import { screensForWorkbench } from '@/types/screen';
 
 interface SessionMetrics {
   session_id?: string;
@@ -134,9 +136,9 @@ export const AppTopBar: React.FC = () => {
   const [inspectorWidth, setInspectorWidth] = useState<number>(() => {
     try {
       const saved = Number(localStorage.getItem('custos.right-sidebar-width'));
-      return saved >= 260 && saved <= 760 ? saved : 320;
+      return saved >= 260 && saved <= 480 ? saved : 300;
     } catch {
-      return 320;
+      return 300;
     }
   });
 
@@ -181,7 +183,6 @@ export const AppTopBar: React.FC = () => {
     let unlisten: (() => void) | undefined;
     const initTauriWindow = async () => {
       try {
-        const { getCurrentWindow } = await import('@tauri-apps/api/window');
         const appWindow = getCurrentWindow();
         setIsWindowMaximized(await appWindow.isMaximized());
         unlisten = await appWindow.onResized(async () => {
@@ -198,21 +199,18 @@ export const AppTopBar: React.FC = () => {
 
   const handleMinimize = async () => {
     try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().minimize();
     } catch { }
   };
 
   const handleToggleMaximize = async () => {
     try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().toggleMaximize();
     } catch { }
   };
 
   const handleClose = async () => {
     try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().close();
     } catch { }
   };
@@ -308,8 +306,7 @@ export const AppTopBar: React.FC = () => {
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveWorkbench(m.id);
-                  const targetScreen = screens
-                    .filter((s) => s.homeWorkbench === m.id || (!s.homeWorkbench && m.id === 'engineering'))
+                  const targetScreen = screensForWorkbench(screens, m.id)
                     .sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0))[0];
                   if (targetScreen) {
                     selectScreen(targetScreen.id);

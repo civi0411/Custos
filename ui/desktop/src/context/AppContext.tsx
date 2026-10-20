@@ -1,3 +1,4 @@
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { APPEARANCE_KEY, readAppearance, applyAppearance, type AppearancePreferences } from '@/lib/appearance';
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
@@ -419,39 +420,10 @@ const AI_LOCAL_ENDPOINT = 'http://localhost:11434';
 const isTransientAiLocalAccount = (account?: ConnectedAccount): boolean =>
   account?.id === AI_LOCAL_ACCOUNT_ID;
 
-export const getDefaultTabForMode = (m: ActiveWorkbench): { tabs: OrcaTab[]; activeTabId: string } => {
-  if (m === 'engineering') {
-    return {
-      tabs: [
-        { id: 'conversation', type: 'conversation', title: 'AI Assistant', url: 'custos://chat' },
-        { id: 'terminal', type: 'terminal', title: 'Terminal', url: 'custos://resource/terminal' },
-      ],
-      activeTabId: 'conversation',
-    };
-  }
-  if (m === 'research') {
-    return {
-      tabs: [
-        { id: 'conversation', type: 'conversation', title: 'AI Assistant', url: 'custos://chat' },
-        { id: 'lab', type: 'lab', title: 'Lab', url: 'custos://resource/lab' },
-        { id: 'literature', type: 'literature', title: 'Sources', url: 'custos://resource/literature' },
-        { id: 'findings', type: 'findings', title: 'Findings', url: 'custos://resource/findings' },
-        { id: 'artifacts', type: 'artifacts', title: 'Artifacts', url: 'custos://resource/artifacts' },
-      ],
-      activeTabId: 'conversation',
-    };
-  }
-  return {
-    tabs: [
-      { id: 'conversation', type: 'conversation', title: 'AI Assistant', url: 'custos://chat' },
-      { id: 'drafts', type: 'drafts', title: 'Drafts', url: 'custos://resource/drafts' },
-      { id: 'outbox', type: 'outbox', title: 'Outbox', url: 'custos://resource/outbox' },
-      { id: 'contacts', type: 'contacts', title: 'Contacts', url: 'custos://resource/contacts' },
-      { id: 'calendar', type: 'calendar', title: 'Calendar', url: 'custos://resource/calendar' },
-    ],
-    activeTabId: 'conversation',
-  };
-};
+export const getDefaultTabForMode = (_mode: ActiveWorkbench): { tabs: OrcaTab[]; activeTabId: string } => ({
+  tabs: [{ id: 'conversation', type: 'conversation', title: 'Conversation', url: 'custos://chat' }],
+  activeTabId: 'conversation',
+});
 
 const AppContext = createContext<AppContextType | null>(null);
 
@@ -796,8 +768,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [activeScreenId, setActiveScreenId] = useState<string>('screen-default');
   const tabScope = useMemo(
-    () => JSON.stringify([currentProject, activeScreenId, activeWorkbench, activeWorkspaceId || null]),
-    [currentProject, activeScreenId, activeWorkbench, activeWorkspaceId]
+    () => JSON.stringify([currentProject, activeScreenId]),
+    [currentProject, activeScreenId]
   );
   const [canvasViews, setCanvasViews] = useState<Record<string, { open: boolean; expanded: boolean }>>(() => {
     try {
@@ -875,28 +847,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [tabStates]);
 
   const currentTabState = useMemo(() => {
-    const state = tabStates[tabScope] ?? getDefaultTabForMode(activeWorkbench);
+    const legacyPrefix = JSON.stringify([currentProject, activeScreenId]).slice(0, -1);
+    const state = tabStates[tabScope] ??
+      Object.entries(tabStates).find(([k]) => k.startsWith(legacyPrefix))?.[1] ??
+      getDefaultTabForMode(activeWorkbench);
     return { ...state, tabs: state.tabs.map(tab => ({ ...tab, workspaceId: tab.workspaceId || activeWorkspaceId || undefined, sessionId: tab.sessionId || activeSessionId || undefined })) };
-  }, [tabStates, tabScope, activeWorkbench, activeWorkspaceId, activeSessionId]);
+  }, [tabStates, tabScope, currentProject, activeScreenId, activeWorkbench, activeWorkspaceId, activeSessionId]);
 
   const setTabs = useCallback((update: React.SetStateAction<OrcaTab[]>) => {
     setTabStates((previous) => {
-      const current = previous[tabScope] ?? getDefaultTabForMode(activeWorkbench);
+      const legacyPrefix = JSON.stringify([currentProject, activeScreenId]).slice(0, -1);
+      const current = previous[tabScope] ??
+        Object.entries(previous).find(([k]) => k.startsWith(legacyPrefix))?.[1] ??
+        getDefaultTabForMode(activeWorkbench);
       const tabs = typeof update === 'function' ? update(current.tabs) : update;
       return { ...previous, [tabScope]: { ...current, tabs } };
     });
-  }, [tabScope, activeWorkbench]);
+  }, [tabScope, currentProject, activeScreenId, activeWorkbench]);
 
   const setActiveTabId = useCallback((update: React.SetStateAction<string>) => {
     setTabStates((previous) => {
-      const current = previous[tabScope] ?? getDefaultTabForMode(activeWorkbench);
+      const legacyPrefix = JSON.stringify([currentProject, activeScreenId]).slice(0, -1);
+      const current = previous[tabScope] ??
+        Object.entries(previous).find(([k]) => k.startsWith(legacyPrefix))?.[1] ??
+        getDefaultTabForMode(activeWorkbench);
       const activeTabId = typeof update === 'function' ? update(current.activeTabId) : update;
       return { ...previous, [tabScope]: { ...current, activeTabId } };
     });
-  }, [tabScope, activeWorkbench]);
+  }, [tabScope, currentProject, activeScreenId, activeWorkbench]);
 
   const initScreenTabs = useCallback((screenId: string, initialTabs: OrcaTab[], initialActiveTabId?: string) => {
-    const scope = JSON.stringify([currentProject, screenId, activeWorkbench, activeWorkspaceId || null]);
+    const scope = JSON.stringify([currentProject, screenId]);
     setTabStates((prev) => ({
       ...prev,
       [scope]: {
@@ -904,7 +885,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         activeTabId: initialActiveTabId || initialTabs[0]?.id || '',
       },
     }));
-  }, [currentProject, activeWorkbench, activeWorkspaceId]);
+  }, [currentProject]);
 
   const [splitPercent, setSplitPercent] = useState<number>(() => {
     try {
@@ -1254,7 +1235,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const theme = appearance.theme === 'system' ? null : resolvedTheme;
     themeQueue.current = themeQueue.current
       .then(async () => {
-        const { getCurrentWindow } = await import('@tauri-apps/api/window');
         await getCurrentWindow().setTheme(theme);
       })
       .catch(error => console.warn('Native window theme could not be applied', error));

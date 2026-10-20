@@ -62,6 +62,13 @@ export interface Screen {
   lastUsedAt: number;
 }
 
+export type WorkbenchId = Screen['homeWorkbench'];
+
+/** Return only layouts owned by this workbench; legacy unscoped layouts belong to Engineering. */
+export function screensForWorkbench(screens: Screen[], workbench: WorkbenchId): Screen[] {
+  return screens.filter((screen) => screen.homeWorkbench === workbench || (!screen.homeWorkbench && workbench === 'engineering'));
+}
+
 /**
  * Standard layout presets for each workbench lens.
  */

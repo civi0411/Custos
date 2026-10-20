@@ -1,20 +1,20 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Monitor,
-  Plus,
-  X,
-  Pin,
-  ChevronDown,
-  Layers,
-  LayoutGrid,
-  GitCompare,
-  Code,
   BookOpen,
+  Check,
+  ChevronDown,
+  Code,
   Cpu,
+  GitCompare,
+  Layers,
+  Monitor,
+  Pin,
+  Plus,
   Terminal,
+  X,
 } from 'lucide-react';
 import type { Screen, ScreenPreset } from '@/types/screen';
-import { WORKBENCH_SCREEN_PRESETS } from '@/types/screen';
+import { screensForWorkbench, WORKBENCH_SCREEN_PRESETS } from '@/types/screen';
 
 export interface ScreenSwitcherBarProps {
   screens: Screen[];
@@ -28,6 +28,14 @@ export interface ScreenSwitcherBarProps {
   className?: string;
 }
 
+const screenIcons: Record<string, React.ElementType> = {
+  GitCompare,
+  Code,
+  BookOpen,
+  Cpu,
+  Terminal,
+};
+
 export const ScreenSwitcherBar: React.FC<ScreenSwitcherBarProps> = ({
   screens,
   activeScreenId,
@@ -37,203 +45,204 @@ export const ScreenSwitcherBar: React.FC<ScreenSwitcherBarProps> = ({
   onTogglePinScreen,
   onRenameScreen,
   currentWorkbench,
-  className = 'h-8 px-2 flex items-center justify-between bg-[#141417] border-b border-white/8 shrink-0 select-none z-10 text-xs',
+  className = 'flex h-8 min-w-0 items-center gap-1 px-2 text-xs',
 }) => {
   const [isPresetDropdownOpen, setIsPresetDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
   const [editingScreenId, setEditingScreenId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const cancelRenameOnBlur = useRef(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const visibleScreens = useMemo(() => screensForWorkbench(screens, currentWorkbench), [screens, currentWorkbench]);
+  const relevantPresets = useMemo(
+    () => WORKBENCH_SCREEN_PRESETS.filter((preset) => preset.workbench === currentWorkbench),
+    [currentWorkbench],
+  );
 
-  // Close dropdown on outside click
   useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+    if (!isPresetDropdownOpen) return;
+    const closeOnPointerDown = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsPresetDropdownOpen(false);
       }
     };
-    window.addEventListener('mousedown', handleOutsideClick);
-    return () => window.removeEventListener('mousedown', handleOutsideClick);
-  }, []);
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsPresetDropdownOpen(false);
+    };
+    window.addEventListener('mousedown', closeOnPointerDown);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      window.removeEventListener('mousedown', closeOnPointerDown);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isPresetDropdownOpen]);
 
-  const relevantPresets = WORKBENCH_SCREEN_PRESETS.filter(
-    (p) => p.workbench === currentWorkbench
-  );
+  const rename = (screenId: string) => {
+    if (cancelRenameOnBlur.current) {
+      cancelRenameOnBlur.current = false;
+      setEditingScreenId(null);
+      return;
+    }
+    const nextName = editingName.trim();
+    if (nextName && onRenameScreen) onRenameScreen(screenId, nextName);
+    cancelRenameOnBlur.current = true;
+    setEditingScreenId(null);
+  };
 
-  const visibleScreens = useMemo<Screen[]>(() => {
-    const filtered = screens.filter(
-      (s) => s.homeWorkbench === currentWorkbench || (!s.homeWorkbench && currentWorkbench === 'engineering')
-    );
-    return filtered.length > 0 ? filtered : screens.slice(0, 1);
-  }, [screens, currentWorkbench]);
-
-  const getScreenIcon = (screen: Screen) => {
-    if (screen.icon === 'GitCompare') return GitCompare;
-    if (screen.icon === 'Code') return Code;
-    if (screen.icon === 'BookOpen') return BookOpen;
-    if (screen.icon === 'Cpu') return Cpu;
-    if (screen.icon === 'Terminal') return Terminal;
-    return Monitor;
+  const focusAdjacentTab = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft' && event.key !== 'Home' && event.key !== 'End') return;
+    event.preventDefault();
+    const tabs = Array.from(event.currentTarget.closest('[data-screen-switcher]')?.querySelectorAll<HTMLButtonElement>('[data-screen-switch]') || []);
+    const currentIndex = tabs.indexOf(event.currentTarget);
+    if (currentIndex < 0 || tabs.length === 0) return;
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? tabs.length - 1
+        : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+    tabs[nextIndex]?.focus();
+    tabs[nextIndex]?.click();
   };
 
   return (
     <div className={className}>
-      {/* ── Screen Tabs List (Adaptive: Single Work Context Pill when 1 screen, Browser Tabs when > 1 screen) ── */}
-      <div className="flex items-center justify-start gap-1 overflow-x-auto no-scrollbar flex-1 min-w-0 h-full">
-        {visibleScreens.length === 1 ? (
-          <div
-            className="flex items-center gap-1.5 h-6.5 px-2 rounded bg-white/4 border border-white/8 text-white/80 select-none text-xs shrink-0 font-sans cursor-default"
-            title={`Active Working View: ${visibleScreens[0].name}${visibleScreens[0].anchor?.branch ? ` (${visibleScreens[0].anchor.branch})` : ''}`}
-          >
-            {(() => {
-              const SingleIcon = getScreenIcon(visibleScreens[0]);
-              return <SingleIcon className="size-3.5 text-white/50 shrink-0" />;
-            })()}
-            <span className="font-medium text-[11px] truncate max-w-[200px] text-white/90">
-              {visibleScreens[0].name}
-            </span>
-            {visibleScreens[0].anchor?.branch && visibleScreens[0].anchor.branch !== visibleScreens[0].name && (
-              <span className="px-1 py-0.2 rounded bg-white/6 font-mono text-[9px] text-white/50">
-                {visibleScreens[0].anchor.branch}
-              </span>
-            )}
-          </div>
-        ) : (
-          visibleScreens.map((screen) => {
-            const isActive = screen.id === activeScreenId;
-            const Icon = getScreenIcon(screen);
-            const isEditing = editingScreenId === screen.id;
-
-            return (
-              <div
-                key={screen.id}
-                onClick={() => onSelectScreen(screen.id)}
-                onDoubleClick={() => {
-                  setEditingScreenId(screen.id);
-                  setEditingName(screen.name);
-                }}
-                className={`group relative flex items-center gap-1.5 h-6.5 px-2 rounded cursor-pointer transition select-none text-xs shrink-0 border ${
-                  isActive
-                    ? 'bg-white/10 text-white border-white/15 font-medium'
-                    : 'text-white/50 hover:text-white/80 hover:bg-white/4 border-transparent'
+      <div role="group" aria-label={`${currentWorkbench} screens`} data-screen-switcher className="flex h-full min-w-0 flex-1 items-center gap-1 overflow-x-auto no-scrollbar">
+        {visibleScreens.length === 0 ? (
+          <span className="px-2 text-[11px] text-fg-subtle">No screen yet</span>
+        ) : visibleScreens.map((screen) => {
+          const isActive = screen.id === activeScreenId;
+          const isEditing = editingScreenId === screen.id;
+          const Icon = screenIcons[screen.icon || ''] || Monitor;
+          return (
+            <div
+              key={screen.id}
+              className={`group flex h-7 shrink-0 items-center rounded-md border transition-colors ${isActive
+                ? 'border-border-emphasis bg-surface-2 text-fg-editor'
+                : 'border-transparent text-fg-muted hover:bg-surface-1 hover:text-fg-editor'
                 }`}
-              >
-                <Icon className={`size-3.5 shrink-0 ${isActive ? 'text-white' : 'text-white/40'}`} />
-
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={editingName}
-                    onChange={(e) => setEditingName(e.target.value)}
-                    onBlur={() => {
-                      if (editingName.trim() && onRenameScreen) {
-                        onRenameScreen(screen.id, editingName.trim());
-                      }
+            >
+              {isEditing ? (
+                <input
+                  aria-label={`Rename ${screen.name}`}
+                  autoFocus
+                  value={editingName}
+                  onChange={(event) => setEditingName(event.target.value)}
+                  onBlur={() => rename(screen.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      rename(screen.id);
+                    }
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      cancelRenameOnBlur.current = true;
                       setEditingScreenId(null);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        if (editingName.trim() && onRenameScreen) {
-                          onRenameScreen(screen.id, editingName.trim());
-                        }
-                        setEditingScreenId(null);
-                      } else if (e.key === 'Escape') {
-                        setEditingScreenId(null);
-                      }
-                    }}
-                    autoFocus
-                    className="bg-black/60 border border-white/20 rounded px-1 text-xs text-white outline-none w-24"
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                ) : (
-                  <span className="truncate max-w-[130px] font-medium text-[11px]">{screen.name}</span>
-                )}
-
-                {/* Pin indicator / toggle button */}
+                    }
+                  }}
+                  className="h-6 w-28 rounded border border-border-emphasis bg-surface-0 px-1.5 text-[11px] text-fg-editor outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                />
+              ) : (
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onTogglePinScreen?.(screen.id);
+                  data-screen-switch
+                  aria-pressed={isActive}
+                  tabIndex={isActive ? 0 : -1}
+                  onClick={() => onSelectScreen(screen.id)}
+                  onDoubleClick={() => {
+                    cancelRenameOnBlur.current = false;
+                    setEditingScreenId(screen.id);
+                    setEditingName(screen.name);
                   }}
-                  className={`p-0.5 rounded hover:bg-white/10 transition shrink-0 ${
-                    screen.isPinned
-                      ? 'text-white/80'
-                      : 'opacity-0 group-hover:opacity-100 text-white/30 hover:text-white/70'
-                  }`}
-                  title={screen.isPinned ? "Unpin screen" : "Pin screen"}
-                  aria-label={screen.isPinned ? "Unpin screen" : "Pin screen"}
+                  onKeyDown={(event) => {
+                    focusAdjacentTab(event);
+                    if (event.key === 'F2') {
+                      event.preventDefault();
+                      cancelRenameOnBlur.current = false;
+                      setEditingScreenId(screen.id);
+                      setEditingName(screen.name);
+                    }
+                  }}
+                  className="flex h-full min-w-0 items-center gap-1.5 rounded-l-md px-2 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+                  title={`${screen.name}${screen.anchor?.branch ? ` · ${screen.anchor.branch}` : ''}`}
                 >
-                  <Pin className={`size-2.5 ${screen.isPinned ? 'rotate-45 fill-white/20' : ''}`} />
+                  <Icon aria-hidden="true" className="size-3.5 shrink-0 opacity-70" />
+                  <span className="max-w-40 truncate text-[11px] font-medium">{screen.name}</span>
+                  {screen.anchor?.branch && screen.anchor.branch !== screen.name && (
+                    <span className="max-w-24 truncate rounded bg-surface-3 px-1 font-mono text-[9px] text-fg-muted">{screen.anchor.branch}</span>
+                  )}
                 </button>
-
-                {/* Close Screen button (when > 1 screen) */}
-                {screens.length > 1 && !screen.isPinned && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onCloseScreen(screen.id);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-white/30 hover:text-white hover:bg-white/10 transition shrink-0 ml-0.5"
-                    title="Close Screen"
-                    aria-label="Close Screen"
-                  >
-                    <X className="size-2.5" />
-                  </button>
-                )}
-              </div>
-            );
-          })
-        )}
-
-        {/* ── Browser-style '+' New Screen Button ── */}
-        <div className="relative shrink-0 flex items-center ml-0.5" ref={dropdownRef}>
-          <button
-            type="button"
-            className="flex items-center justify-center size-6 rounded text-white/40 hover:text-white hover:bg-white/8 transition cursor-pointer"
-            title="New Screen (⌘T)"
-            aria-label="New Screen"
-            onClick={() => onCreateScreen()}
-          >
-            <Plus size={13} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setIsPresetDropdownOpen((prev) => !prev)}
-            className="flex items-center justify-center size-6 rounded text-white/30 hover:text-white hover:bg-white/8 transition cursor-pointer -ml-0.5"
-            title="Screen Layout Presets"
-            aria-label="Screen Layout Presets"
-          >
-            <ChevronDown size={10} />
-          </button>
-
-          {/* Preset Selection Popover */}
-          {isPresetDropdownOpen && (
-            <div className="absolute top-full left-0 mt-1 w-64 rounded bg-[#18181b] border border-white/10 shadow-xl p-1 z-50 text-xs">
-              <div className="px-2 py-1 text-[10px] font-semibold text-white/40 uppercase tracking-wider flex items-center gap-1 border-b border-white/6 mb-1 pb-1">
-                <Layers className="size-3 text-white/40" />
-                <span>Screen Layout Presets</span>
-              </div>
-              {relevantPresets.map((preset) => (
+              )}
+              {onTogglePinScreen && (
                 <button
-                  key={preset.id}
                   type="button"
-                  onClick={() => {
-                    onCreateScreen(preset);
-                    setIsPresetDropdownOpen(false);
-                  }}
-                  className="w-full flex items-start gap-2 px-2 py-1.5 rounded text-left text-white/70 hover:text-white hover:bg-white/6 transition cursor-pointer"
+                  onClick={() => onTogglePinScreen(screen.id)}
+                  className={`mx-0.5 flex size-5 items-center justify-center rounded text-fg-subtle hover:bg-surface-3 hover:text-fg-editor focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent ${screen.isPinned ? 'text-fg-editor' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}
+                  title={screen.isPinned ? 'Unpin screen' : 'Pin screen'}
+                  aria-label={screen.isPinned ? `Unpin ${screen.name}` : `Pin ${screen.name}`}
                 >
-                  <LayoutGrid className="size-3.5 text-white/40 shrink-0 mt-0.5" />
-                  <div>
-                    <div className="font-medium text-[11px] text-white/85">{preset.name}</div>
-                    <div className="text-[10px] text-white/40 leading-tight">{preset.description}</div>
-                  </div>
+                  <Pin aria-hidden="true" className={`size-3 ${screen.isPinned ? 'rotate-45' : ''}`} />
                 </button>
-              ))}
+              )}
+              {visibleScreens.length > 1 && !screen.isPinned && (
+                <button
+                  type="button"
+                  onClick={() => onCloseScreen(screen.id)}
+                  className="mr-1 flex size-5 items-center justify-center rounded text-fg-subtle opacity-0 hover:bg-surface-3 hover:text-fg-editor focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent group-hover:opacity-100 group-focus-within:opacity-100"
+                  title={`Close ${screen.name}`}
+                  aria-label={`Close ${screen.name}`}
+                >
+                  <X aria-hidden="true" className="size-3" />
+                </button>
+              )}
             </div>
-          )}
-        </div>
+          );
+        })}
+      </div>
+
+      <div ref={dropdownRef} className="relative flex shrink-0 items-center gap-0.5">
+        <button
+          type="button"
+          onClick={() => onCreateScreen()}
+          className="flex size-7 items-center justify-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg-editor focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          title="New screen"
+          aria-label="New screen"
+        >
+          <Plus aria-hidden="true" className="size-4" />
+        </button>
+        <button
+          type="button"
+          aria-expanded={isPresetDropdownOpen}
+          onClick={() => setIsPresetDropdownOpen((open) => !open)}
+          className="flex size-7 items-center justify-center rounded-md text-fg-subtle hover:bg-surface-2 hover:text-fg-editor focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          title="Screen layouts"
+          aria-label="Screen layout presets"
+        >
+          <ChevronDown aria-hidden="true" className="size-3.5" />
+        </button>
+        {isPresetDropdownOpen && (
+          <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-border-default bg-surface-overlay p-1.5 text-xs shadow-xl">
+            <div className="flex items-center gap-1.5 border-b border-border-muted px-2 pb-1.5 pt-1 text-[10px] font-semibold uppercase tracking-wide text-fg-subtle">
+              <Layers aria-hidden="true" className="size-3.5" />
+              <span>Start with a layout</span>
+            </div>
+            {relevantPresets.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => {
+                  onCreateScreen(preset);
+                  setIsPresetDropdownOpen(false);
+                }}
+                className="flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-fg-muted hover:bg-surface-2 hover:text-fg-editor focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              >
+                <Check aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 opacity-50" />
+                <span className="min-w-0">
+                  <span className="block text-[11px] font-medium">{preset.name}</span>
+                  <span className="mt-0.5 block text-[10px] leading-snug text-fg-subtle">{preset.description}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

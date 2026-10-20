@@ -185,11 +185,7 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
     return 'Search agents, files, terminal, browser, emulator…';
   }, [mode]);
 
-  const footerText = useMemo(() => {
-    if (mode === 'research') return 'Scientific tools execute in your local Python/R environment';
-    if (mode === 'copilot') return 'Executive surfaces enforce human-in-the-loop review';
-    return 'Each launched agent or tool runs in its own tab';
-  }, [mode]);
+  const footerText = 'Quick launch';
 
   const renderResourceButton = (resource: ResourceDefinition) => {
     const Icon = resource.icon;

@@ -89,6 +89,23 @@ const boundedRatio = (ratio: number) => Number.isFinite(ratio) ? Math.max(20, Ma
 export function createCanvas(tabIds: string[] = [], activeTabId = tabIds[0] || ''): CanvasState {
   return { version: 1, root: { kind: 'group', id: 'root', tabIds, activeTabId }, focusedGroupId: 'root', zoomedGroupId: null };
 }
+export function createCanvasFromPreset(
+  tabIds: string[] = [],
+  splitConfig?: { axis: SplitOrientation; ratio: number }
+): CanvasState {
+  if (!splitConfig || tabIds.length < 2) return createCanvas(tabIds);
+  const mid = Math.max(1, Math.floor(tabIds.length / 2));
+  const firstTabs = tabIds.slice(0, mid);
+  const secondTabs = tabIds.slice(mid);
+  const g1: CanvasGroup = { kind: 'group', id: 'group:primary', tabIds: firstTabs, activeTabId: firstTabs[0] || '' };
+  const g2: CanvasGroup = { kind: 'group', id: 'group:secondary', tabIds: secondTabs, activeTabId: secondTabs[0] || '' };
+  return {
+    version: 1,
+    root: { kind: 'split', id: 'split:preset', axis: splitConfig.axis, ratio: boundedRatio(splitConfig.ratio), first: g1, second: g2 },
+    focusedGroupId: g1.id,
+    zoomedGroupId: null,
+  };
+}
 // Reconcile stale/duplicate refs and attach new tabs to the focused group.
 export function reconcileCanvas(state: CanvasState, tabIds: string[], activeTabId?: string): CanvasState {
   const valid = new Set(tabIds);

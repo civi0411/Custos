@@ -630,9 +630,6 @@ export const ChangesWorkbenchPane: React.FC<ChangesWorkbenchPaneProps> = ({
               <h3 className="text-xs font-semibold text-[var(--color-editor-fg)]">
                 No File Selected
               </h3>
-              <p className="mt-1 text-[11px] max-w-sm">
-                Select a modified, staged, or untracked file on the left to review unified diffs.
-              </p>
             </div>
           )}
         </div>

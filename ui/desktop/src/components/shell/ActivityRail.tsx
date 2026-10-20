@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { FolderTree, MessageSquare, CheckSquare, Activity, Plug, Settings, UserRound } from 'lucide-react';
+import { FolderTree, Activity, Plug, Settings, UserRound } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { UserProfileMenu } from './UserProfileMenu';
 
@@ -37,30 +37,6 @@ export const ActivityRail: React.FC = () => {
     }
   };
 
-  const handleOpenConversations = () => {
-    closeManagement();
-    if (!studio) {
-      navigate('/studio?view=chats');
-    }
-    window.dispatchEvent(new CustomEvent('custos:switch-sidebar-tab', { detail: 'sessions' }));
-    window.dispatchEvent(new CustomEvent('custos:switch-sidebar-view', { detail: 'chats' }));
-    if (app.isSidebarCollapsed) {
-      app.setIsSidebarCollapsed(false);
-    }
-  };
-
-  const handleOpenTasks = () => {
-    closeManagement();
-    if (!studio) {
-      navigate('/studio?view=tasks');
-    }
-    window.dispatchEvent(new CustomEvent('custos:switch-sidebar-tab', { detail: 'sessions' }));
-    window.dispatchEvent(new CustomEvent('custos:switch-sidebar-view', { detail: 'tasks' }));
-    if (app.isSidebarCollapsed) {
-      app.setIsSidebarCollapsed(false);
-    }
-  };
-
   const handleOpenSupervision = () => {
     closeManagement();
     navigate('/dashboard');
@@ -92,10 +68,7 @@ export const ActivityRail: React.FC = () => {
       className="flex w-12 shrink-0 flex-col items-center justify-between border-r border-border-muted bg-surface-0 py-3 z-30 select-none"
     >
       <nav aria-label="Work" className="flex flex-col items-center gap-2">
-        {button('Explorer & Worktrees', FolderTree, handleOpenExplorer, studio && !managementOpen && !app.isSidebarCollapsed)}
-        <div role="separator" className="my-1 h-px w-6 bg-border-muted" />
-        {button('Conversations', MessageSquare, handleOpenConversations, false)}
-        {button('Tasks', CheckSquare, handleOpenTasks, false)}
+        {button('Workspaces', FolderTree, handleOpenExplorer, studio && !managementOpen && !app.isSidebarCollapsed)}
         {button('Supervision', Activity, handleOpenSupervision, location.pathname.startsWith('/dashboard') && !managementOpen)}
       </nav>
       <nav aria-label="Application preferences and account" className="flex flex-col items-center gap-2">

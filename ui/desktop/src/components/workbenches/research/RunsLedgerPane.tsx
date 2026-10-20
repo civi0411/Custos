@@ -79,7 +79,7 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
   return (
     <div className="flex flex-col h-full w-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)] overflow-hidden select-none font-sans relative">
       {/* 48px Standard Pane Header */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-5 z-10">
+      <header className="wb-pane-toolbar flex h-12 shrink-0 items-center justify-between border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-5 z-10">
         <div className="flex items-center gap-2.5">
           <FlaskConical className="w-4 h-4 workbench-accent" />
           <span className="text-xs font-semibold text-[var(--color-editor-fg)]">
@@ -406,6 +406,12 @@ export const RunsLedgerPane: React.FC<RunsLedgerPaneProps> = ({
             </div>
           );
         })}
+        {filteredRuns.length === 0 && (
+          <div className="flex flex-col items-center justify-center p-8 text-center text-xs text-[var(--color-fg-muted)]">
+            <FlaskConical className="h-6 w-6 text-[var(--color-fg-subtle)] mb-1.5" />
+            <span>No experiment runs recorded</span>
+          </div>
+        )}
       </div>
     </div>
   );

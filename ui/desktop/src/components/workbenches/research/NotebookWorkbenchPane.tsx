@@ -5,6 +5,7 @@ import type { NotebookCell, NotebookKernelState, ExecutionWorkspace } from '@/ty
 import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 import { MarkdownViewer } from '@/components/viewer/MarkdownViewer';
 import { WorkflowStarters } from './WorkflowStarters';
+import { WorkbenchEmptyState } from '@/components/common/WorkbenchPane';
 
 export interface NotebookWorkbenchPaneProps {
   sessionId?: string;
@@ -24,6 +25,7 @@ export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({ se
   const [cells, setCells] = useState<NotebookCell[]>([]);
   const [kernel, setKernel] = useState<NotebookKernelState | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadStatus, setLoadStatus] = useState<'idle' | 'loading' | 'loaded' | 'failed'>('idle');
   const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState<string | null>(null);
   const [previewCellId, setPreviewCellId] = useState<string | null>(null);
@@ -38,29 +40,43 @@ export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({ se
       setCells([]);
       setKernel(null);
       setDirty(false);
+      setLoadStatus('idle');
       return;
     }
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setLoadStatus('loading');
     try {
       const [saved, state] = await Promise.all([
-        daemonClient.listNotebookCells(sessionId).catch(() => []),
+        daemonClient.listNotebookCells(sessionId),
         daemonClient.getNotebookKernelStatus(sessionId).catch(() => null),
       ]);
       if (epoch !== generation.current) return;
       const edits = notebookEdits.get(sessionId);
-      const effective = edits || (saved && saved.length > 0 ? saved : []);
+      const effective = edits || saved || [];
       setCells(effective);
       setDirty(!!edits);
       setKernel(state || null);
+      setLoadStatus('loaded');
     } catch (reason) {
       if (epoch === generation.current) {
-        setCells([]);
-        setKernel(null);
+        setLoadStatus('failed');
+        setError(reason instanceof Error ? reason.message : String(reason));
       }
     }
     finally { if (epoch === generation.current) setLoading(false); }
   }, [sessionId]);
   useEffect(() => { void load(); return () => { generation.current++; }; }, [load]);
+  useEffect(() => {
+    if (!sessionId) return;
+    const onRemoteChange = (e: Event) => {
+      const ev = e as CustomEvent<{ sessionId: string; cells: NotebookCell[] }>;
+      if (ev.detail?.sessionId === sessionId && ev.detail.cells) {
+        setCells(ev.detail.cells);
+        setDirty(true);
+      }
+    };
+    window.addEventListener('custos:notebook-cells-change', onRemoteChange);
+    return () => window.removeEventListener('custos:notebook-cells-change', onRemoteChange);
+  }, [sessionId]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
@@ -68,18 +84,31 @@ export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({ se
     return () => window.removeEventListener('beforeunload', warn);
   }, [dirty]);
   const change = (next: NotebookCell[]) => {
+    if (loadStatus === 'failed') return;
     const indexed = next.map((cell, index) => ({ ...cell, cell_index: index }));
-    notebookEdits.set(key, indexed); setCells(indexed); setDirty(true);
+    notebookEdits.set(key, indexed);
+    setCells(indexed);
+    setDirty(true);
+    window.dispatchEvent(new CustomEvent('custos:notebook-cells-change', { detail: { sessionId: key, cells: indexed } }));
   };
   const save = async () => {
-    if (!sessionId) return false;
-    setSaving(true); setError(null);
-    try { await daemonClient.saveNotebookCells(sessionId, cells); notebookEdits.delete(key); setDirty(false); return true; }
-    catch (reason) { setError(String(reason)); return false; }
-    finally { setSaving(false); }
+    if (!sessionId || loadStatus === 'failed') return false;
+    setSaving(true);
+    setError(null);
+    try {
+      await daemonClient.saveNotebookCells(sessionId, cells);
+      notebookEdits.delete(key);
+      setDirty(false);
+      return true;
+    } catch (reason) {
+      setError(String(reason));
+      return false;
+    } finally {
+      setSaving(false);
+    }
   };
   const add = (cellType: NotebookCell['cell_type'] = 'code') => {
-    if (!sessionId || busy.current) return;
+    if (!sessionId || busy.current || loadStatus === 'failed') return;
     change([...cells, { id: crypto.randomUUID(), session_id: sessionId, cell_index: cells.length, cell_type: cellType, source: '', execution_count: null, status: 'idle', epoch: kernel?.epoch || 0, updated_at: Math.floor(Date.now() / 1000) }]);
   };
   const run = async () => {
@@ -105,50 +134,65 @@ export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({ se
     catch (reason) { setError(String(reason)); }
   };
   const preview = cells.find(cell => cell.id === previewCellId);
-  const disabled = !sessionId || loading || saving || !!running;
+  const disabled = !sessionId || loading || saving || !!running || loadStatus === 'failed';
   return <div className="h-full flex flex-col min-h-0 bg-canvas text-fg-default">
-    <header className="shrink-0 flex flex-wrap items-center gap-2 px-3 py-2 border-b border-border-default text-xs">
+    <header className="wb-pane-toolbar shrink-0 flex items-center gap-1.5 px-3 py-1.5 border-b border-border-default bg-surface-1 text-xs">
       {toolbarNavigation}
-      <span className="font-medium flex-1">{toolbarNavigation ? '' : 'Notebook'} <span className="text-fg-muted font-normal">· persistent local Python · {kernel?.status || 'status unknown'}{kernel ? ` · epoch ${kernel.epoch}` : ''}</span></span>
       <button type="button" className="canvas-open-button" disabled={disabled} onClick={() => add()}><Plus size={12} />Code</button>
       <button type="button" className="canvas-open-button" disabled={disabled} onClick={() => add('markdown')}><Plus size={12} />Markdown</button>
-      <button type="button" className="canvas-open-button" disabled={disabled || !dirty} onClick={() => void save()}><Save size={12} />{saving ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}</button>
+      <div className="wb-toolbar-spacer" />
+      <span className="wb-meta whitespace-nowrap">{saving ? 'Saving…' : dirty ? 'Unsaved' : 'Saved'}</span>
+      <button type="button" className="wb-icon-button" aria-label="Save notebook" title="Save notebook" disabled={disabled || !dirty} onClick={() => void save()}><Save size={13} /></button>
       <button type="button" className="canvas-icon" aria-label="Refresh notebook" disabled={disabled || dirty} onClick={() => void load()}><RefreshCw size={13} /></button>
       <button type="button" className="canvas-icon" aria-label="Reset Python worker" disabled={disabled} onClick={() => void reset()}><RotateCcw size={13} /></button>
-      <button type="button" className="canvas-open-button" disabled={!running} onClick={async () => { try { const result = await daemonClient.interruptNotebookKernel(key); onShowToast?.(result.interrupted ? 'Worker interrupted. Its in-memory variables were cleared.' : 'No running worker to interrupt.'); } catch (reason) { setError(String(reason)); } }}><Square size={11} />Interrupt</button>
+      <button type="button" className="wb-icon-button" aria-label="Interrupt notebook execution" title="Interrupt execution" disabled={!running} onClick={async () => { try { const result = await daemonClient.interruptNotebookKernel(key); onShowToast?.(result.interrupted ? 'Worker interrupted.' : 'No running worker.'); } catch (reason) { setError(String(reason)); } }}><Square size={13} /></button>
     </header>
-    <p className="shrink-0 px-3 py-2 text-[11px] text-fg-muted border-b border-border-default">{workspace ? `Execution workspace: ${workspace.name}` : 'Choose an execution workspace to run code.'} Worker memory is temporary; saved output is not proof of reproducibility or an OS sandbox.</p>
-    {error && <div role="alert" className="p-3 text-xs text-rose-500 border-b border-border-default break-words">{error}</div>}
-    <div className="flex-1 overflow-auto p-4 space-y-4">
+    <div className="wb-context-line">
+      <span className="truncate" title={workspace?.path}>{workspace ? workspace.name : 'No execution workspace'}</span>
+      <span className="wb-toolbar-spacer" />
+      {kernel && <span className="whitespace-nowrap">Python · {kernel.status} · epoch {kernel.epoch}</span>}
+    </div>
+    {error && <div role="alert" className="p-2 text-xs text-rose-400 bg-rose-500/10 border-b border-rose-500/20 flex items-center justify-between">
+      <span className="truncate">{error}</span>
+      {loadStatus === 'failed' && (
+        <button type="button" className="canvas-open-button ml-2 shrink-0" onClick={() => void load()}>
+          <RefreshCw size={11} /> Retry
+        </button>
+      )}
+    </div>}
+    <div className="wb-notebook-body flex-1 min-h-0 overflow-auto">
       {!sessionId ? (
-        <p className="text-xs text-fg-muted">Open a conversation to use its notebook.</p>
+        <p className="text-xs text-fg-muted p-4">Select a session to view notebook.</p>
       ) : loading ? (
-        <p role="status" className="text-xs text-fg-muted">Loading notebook…</p>
+        <p role="status" className="text-xs text-fg-muted p-4">Loading notebook…</p>
+      ) : loadStatus === 'failed' ? (
+        <div className="text-center p-6 space-y-2">
+          <p className="text-xs text-rose-400 font-medium">Notebook failed to load</p>
+          <p className="text-[11px] text-fg-muted">Edits locked to prevent overwriting server state.</p>
+          <button type="button" className="canvas-open-button mx-auto" onClick={() => void load()}>
+            <RefreshCw size={12} /> Reload
+          </button>
+        </div>
       ) : cells.length === 0 ? (
-        <div className="space-y-6 max-w-2xl mx-auto py-4">
-          <div className="canvas-empty text-center p-6 space-y-3 border border-border-default rounded-xl bg-surface-1">
-            <p className="text-sm font-medium">No notebook cells yet</p>
-            <p className="text-xs text-fg-muted">Start by adding a blank cell or selecting a scientific workflow starter below.</p>
-            <button type="button" className="canvas-open-button mx-auto" onClick={() => add()}>
-              <Plus size={12} /> Add a code cell
-            </button>
-          </div>
+        <div className="space-y-3 max-w-lg mx-auto py-6">
+          <WorkbenchEmptyState title="Your notebook" description="Add code or a note. Results stay linked to the code and execution epoch." action={<button type="button" className="canvas-open-button" onClick={() => add()}><Plus size={12} />Add a code cell</button>} />
           {onAskAgent && (
-            <div>
-              <p className="text-[11px] font-semibold text-fg-muted uppercase tracking-wider mb-2">Scientific Workflow Starters</p>
+            <div className="pt-1">
               <WorkflowStarters onPick={(prompt: string) => onAskAgent(prompt)} />
             </div>
           )}
         </div>
-      ) : cells.map((cell, index) => <section key={cell.id} className="rounded-lg border border-border-default overflow-hidden">
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-surface-1 text-[11px]">
-          <span className="font-mono flex-1">{running === cell.id ? 'Running…' : `In [${cell.execution_count ?? ' '}]:`} {cell.wall_ms != null ? `${cell.wall_ms} ms` : ''}</span>
+      ) : cells.map((cell, index) => <section key={cell.id} className="wb-notebook-cell">
+        <div className="wb-notebook-cell-header">
+          <span className="wb-notebook-count">{running === cell.id ? 'Running…' : `In [${cell.execution_count ?? ' '}]`}</span>
+          {cell.wall_ms != null && <span className="wb-meta whitespace-nowrap">{cell.wall_ms} ms</span>}
+          <div className="wb-toolbar-spacer" />
           <select aria-label={`Cell ${index + 1} type`} value={cell.cell_type} disabled={disabled}
-            className="rounded border border-border-default bg-canvas text-fg-default p-1"
+            className="wb-inline-select"
             onChange={event => change(cells.map(item => item.id === cell.id ? editNotebookCell(item, item.source, event.target.value as NotebookCell['cell_type']) : item))}>
             <option value="code">Python</option><option value="markdown">Markdown</option>
           </select>
-          <button type="button" className="canvas-open-button" disabled={disabled || !workspace || !cell.source.trim() || cell.cell_type !== 'code'} onClick={() => setPreviewCellId(cell.id)}><Play size={11} />Run</button>
+          <button type="button" className="wb-icon-button" aria-label={`Run cell ${index + 1}`} title="Run cell" disabled={disabled || !workspace || !cell.source.trim() || cell.cell_type !== 'code'} onClick={() => setPreviewCellId(cell.id)}><Play size={13} /></button>
           {onAskAgent && <button type="button" className="canvas-icon" aria-label="Ask about this cell" onClick={() => onAskAgent(`Explain notebook cell ${cell.id} in session ${key}:\n\n${cell.source}`)}>?</button>}
           <button type="button" className="canvas-icon" aria-label="Move cell up" disabled={disabled || index === 0} onClick={() => { const next = [...cells]; [next[index-1], next[index]] = [next[index], next[index-1]]; change(next); }}><ChevronUp size={12} /></button>
           <button type="button" className="canvas-icon" aria-label="Move cell down" disabled={disabled || index === cells.length-1} onClick={() => { const next = [...cells]; [next[index+1], next[index]] = [next[index], next[index+1]]; change(next); }}><ChevronDown size={12} /></button>
@@ -166,7 +210,7 @@ export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({ se
     {preview && <div className="absolute inset-0 z-40 bg-canvas/95 p-5 overflow-auto" role="dialog" aria-modal="true" aria-label="Review notebook execution">
       <h3 className="text-sm font-medium mb-3">Run this code locally?</h3><p className="text-xs text-fg-muted mb-3 break-all">Workspace: {workspace?.name} · {workspace?.path}</p>
       <pre className="rounded border border-border-default bg-surface-1 p-3 text-xs whitespace-pre-wrap select-text">{preview.source}</pre>
-      <p className="text-xs text-fg-muted my-3">This uses the session’s Python worker and can modify files in its environment. Review the exact code before running.</p>
+      <p className="text-[11px] text-fg-muted my-2">Runs in session Python worker; can modify workspace files.</p>
       <div className="flex gap-2"><button type="button" autoFocus className="canvas-open-button" onClick={() => setPreviewCellId(null)}>Cancel</button><button type="button" className="canvas-open-button" onClick={() => void run()}>Run cell</button></div>
     </div>}
   </div>;

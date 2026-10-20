@@ -19,6 +19,9 @@ import {
 import { daemonClient } from '@/api/daemon_client';
 import type { NoteRecord, NoteVersionRecord } from '@/types/domain';
 
+// Module-level draft cache to prevent data loss on tab close or screen switch
+const noteDrafts = new Map<string, { title: string; content: string; tagsInput: string }>();
+
 interface NotesWorkbenchPaneProps {
   sessionId?: string;
   onShowToast?: (msg: string) => void;
@@ -64,12 +67,53 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
     }
   };
 
+  const latestStateRef = useRef({ title, content, tagsInput, selectedNoteId, isDirty, sessionId });
+  useEffect(() => {
+    latestStateRef.current = { title, content, tagsInput, selectedNoteId, isDirty, sessionId };
+  }, [title, content, tagsInput, selectedNoteId, isDirty, sessionId]);
+
+  useEffect(() => {
+    return () => {
+      const state = latestStateRef.current;
+      if (state.isDirty && state.title.trim()) {
+        const tags = state.tagsInput
+          .split(',')
+          .map((t) => t.trim())
+          .filter((t) => t.length > 0);
+        void daemonClient.saveNote({
+          id: state.selectedNoteId || undefined,
+          title: state.title.trim(),
+          content: state.content,
+          session_id: state.sessionId,
+          tags,
+        });
+      }
+    };
+  }, []);
+
   const selectNote = (note: NoteRecord) => {
+    const current = latestStateRef.current;
+    if (current.isDirty && current.selectedNoteId) {
+      noteDrafts.set(current.selectedNoteId, {
+        title: current.title,
+        content: current.content,
+        tagsInput: current.tagsInput,
+      });
+    }
+
     setSelectedNoteId(note.id);
-    setTitle(note.title);
-    setContent(note.content);
-    setTagsInput((note.tags || []).join(', '));
-    setIsDirty(false);
+    const draft = noteDrafts.get(note.id);
+    if (draft) {
+      setTitle(draft.title);
+      setContent(draft.content);
+      setTagsInput(draft.tagsInput);
+      setIsDirty(true);
+    } else {
+      setTitle(note.title);
+      setContent(note.content);
+      setTagsInput((note.tags || []).join(', '));
+      setIsDirty(false);
+    }
     setShowHistory(false);
   };
 
@@ -128,6 +172,7 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
 
         setIsDirty(false);
         setSelectedNoteId(saved.id);
+        noteDrafts.delete(saved.id);
         setJustSaved(true);
         setTimeout(() => setJustSaved(false), 2000);
 
@@ -152,7 +197,7 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
 
   // Debounced auto-save effect
   useEffect(() => {
-    if (!isDirty || !selectedNoteId) return;
+    if (!isDirty) return;
 
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
@@ -167,7 +212,7 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [isDirty, selectedNoteId, executeSave]);
+  }, [isDirty, executeSave]);
 
   const handleInsertToChat = () => {
     if (!content.trim()) {
@@ -199,8 +244,8 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
 
   return (
     <div className="flex h-full w-full flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
-      {/* Sleek 44px (h-11) Top Bar */}
-      <div className="flex h-11 flex-shrink-0 items-center justify-between border-b border-[var(--color-border-default)] px-3.5 bg-[var(--color-surface-1)]">
+      {/* Compact Top Bar */}
+      <div className="flex h-9 flex-shrink-0 items-center justify-between border-b border-[var(--color-border-default)] px-3 bg-[var(--color-surface-1)]">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <FileText className="h-4 w-4 text-white/70" />
@@ -506,7 +551,7 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
             <div className="mt-3 space-y-3">
               {versions.length === 0 ? (
                 <p className="text-xs text-[var(--color-fg-muted)]">
-                  No previous versions recorded. This is the initial version (v1).
+                  No previous versions recorded.
                 </p>
               ) : (
                 versions.map((ver) => (

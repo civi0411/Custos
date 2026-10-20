@@ -365,6 +365,10 @@ export interface OutboxActionItem {
   permitId?: string | null;
   receipt_id?: string | null;
   receiptId?: string | null;
+  payload_json?: string | null;
+  payloadJson?: string | null;
+  error_message?: string | null;
+  errorMessage?: string | null;
   created_at: string;
   createdAt?: string;
 }
@@ -517,6 +521,7 @@ export interface TerminalOutputChunk {
 }
 
 export interface SpawnTerminalParams {
+  command_id?: string;
   workspace_id: string;
   workspaceId?: string;
   command?: string;

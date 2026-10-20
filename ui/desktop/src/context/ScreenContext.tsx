@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import type { Screen, ScreenPreset } from '@/types/screen';
-import { createCanvas, type CanvasState } from '@/types/canvas';
+import { screensForWorkbench, type Screen, type ScreenPreset } from '@/types/screen';
+import { createCanvas, createCanvasFromPreset, type CanvasState } from '@/types/canvas';
 import type { OrcaTab } from '@/components/workbenches/OrcaTabbedContainer';
 import { useAppContext } from './AppContext';
 
@@ -57,6 +57,7 @@ const ScreenContext = createContext<ScreenContextType | undefined>(undefined);
 export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const {
     activeWorkbench,
+    setActiveWorkbench,
     activeWorkspace,
     currentProject,
     activeScreenId,
@@ -125,6 +126,7 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Keep activeScreenId valid and aligned with currentWorkbench
   useEffect(() => {
+    if (hydratedKey !== storageKey) return;
     if (screens.length === 0) return;
 
     // Check if the current active screen belongs to currentWb
@@ -137,8 +139,7 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (activeBelongsToCurrentWb) return;
 
     // Look for existing screens belonging to currentWb, sorted by lastUsedAt
-    const wbScreens = screens
-      .filter((s) => s.homeWorkbench === currentWb || (!s.homeWorkbench && currentWb === 'engineering'))
+    const wbScreens = screensForWorkbench(screens, currentWb)
       .sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0));
 
     if (wbScreens.length > 0) {
@@ -185,10 +186,14 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const selectScreen = useCallback((screenId: string) => {
     setActiveScreenId(screenId);
-    setScreens((prev) =>
-      prev.map((s) => (s.id === screenId ? { ...s, lastUsedAt: Date.now() } : s))
-    );
-  }, [setActiveScreenId]);
+    setScreens((prev) => {
+      const found = prev.find((s) => s.id === screenId);
+      if (found?.homeWorkbench) {
+        setActiveWorkbench(found.homeWorkbench);
+      }
+      return prev.map((s) => (s.id === screenId ? { ...s, lastUsedAt: Date.now() } : s));
+    });
+  }, [setActiveScreenId, setActiveWorkbench]);
 
   const createScreen = useCallback((preset?: ScreenPreset) => {
     const newId = `screen-${Date.now()}`;
@@ -225,7 +230,7 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       projectId: activeWorkspace?.metadata?.project_id || currentProject || 'default',
       homeWorkbench: currentWb,
       defaultWorkspaceId: activeWorkspace?.id,
-      canvasState: createCanvas(initialTabIds),
+      canvasState: createCanvasFromPreset(initialTabIds, preset?.splitConfig),
       tabRegistry: {},
       isPinned: false,
       createdAt: Date.now(),
@@ -233,17 +238,21 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
     setScreens((prev) => [...prev, newScreen]);
     setActiveScreenId(newId);
-  }, [screens.length, activeWorkspace?.metadata?.project_id, activeWorkspace?.id, currentProject, currentWb, initScreenTabs, setActiveScreenId]);
+    if (newScreen.homeWorkbench) {
+      setActiveWorkbench(newScreen.homeWorkbench);
+    }
+  }, [screens.length, activeWorkspace?.metadata?.project_id, activeWorkspace?.id, currentProject, currentWb, initScreenTabs, setActiveScreenId, setActiveWorkbench]);
 
   const closeScreen = useCallback((screenId: string) => {
     setScreens((prev) => {
-      if (prev.length <= 1) return prev;
+      if (screensForWorkbench(prev, currentWb).length <= 1) return prev;
       const filtered = prev.filter((s) => s.id !== screenId);
       if (activeScreenId === screenId) {
-        const sameWb = filtered.find(
-          (s) => s.homeWorkbench === currentWb || (!s.homeWorkbench && currentWb === 'engineering')
-        );
-        setActiveScreenId(sameWb?.id || filtered[0]?.id || 'screen-default');
+        const nextScreen = screensForWorkbench(filtered, currentWb)
+          .sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0))[0];
+        if (nextScreen) {
+          setActiveScreenId(nextScreen.id);
+        }
       }
       return filtered;
     });
@@ -447,18 +456,12 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       setScreens((prev) => [...prev, newScreen]);
       setActiveScreenId(newId);
+      if (newScreen.homeWorkbench) {
+        setActiveWorkbench(newScreen.homeWorkbench);
+      }
     },
-    [screens, selectScreen, initScreenTabs, currentProject, setActiveScreenId]
+    [screens, selectScreen, initScreenTabs, currentProject, setActiveScreenId, setActiveWorkbench]
   );
-
-  // Sync active workbench lens from active screen
-  const { setActiveWorkbench } = useAppContext();
-  useEffect(() => {
-    const current = screens.find((s) => s.id === activeScreenId);
-    if (current?.homeWorkbench) {
-      setActiveWorkbench(current.homeWorkbench);
-    }
-  }, [screens, activeScreenId, setActiveWorkbench]);
 
   // Canvas actions
   const [canvasActions, setCanvasActions] = useState<{

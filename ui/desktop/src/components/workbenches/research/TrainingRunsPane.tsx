@@ -75,7 +75,7 @@ export function TrainingRunsPane({ sessionId }: { sessionId?: string }) {
         event.preventDefault(); searchRef.current?.focus();
       }
     }}>
-    <header className="px-4 py-3 border-b border-border-default flex items-center justify-between gap-3">
+    <header className="wb-pane-toolbar px-4 py-3 border-b border-border-default flex items-center justify-between gap-3">
       <div><h2 className="text-sm font-medium">Training</h2><p className="text-xs text-fg-muted mt-1">Recorded attempts · refresh reads metadata, not GPU state</p></div>
       <button type="button" className="workbench-tool" disabled={isLoading || !sessionId} onClick={() => setRevision(value => value + 1)} aria-label="Refresh training metadata"><RefreshCw size={14} aria-hidden="true" /> Refresh</button>
     </header>

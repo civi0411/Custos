@@ -285,7 +285,10 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           return;
         }
       } else if (isSpecificFile) {
-        const existingFile = resourceTabs.tabs.find((t) => t.type === 'files' && t.url === url);
+        const resolvedWorkspaceId = workspaceId || activeWorkspaceId || undefined;
+        const existingFile = resourceTabs.tabs.find((t) =>
+          t.type === 'files' && t.url === url && t.workspaceId === resolvedWorkspaceId
+        );
         if (existingFile) {
           if (targetPane === 'split') {
             resourceTabs.setSplitTabId?.(existingFile.id);
@@ -350,17 +353,24 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   ) => {
     const effectiveWsId = targetWorkspaceId || activeWorkspaceId;
 
-    // 1. Files handling:
-    // If opening 'files' without a specific file URL, reveal the Files Explorer in the Right Sidebar (Orca pattern)
-    if (id === 'files' && (!customUrl || !customUrl.startsWith('custos://'))) {
-      setIsInspectorOpen(true);
-      window.dispatchEvent(new CustomEvent('custos:switch-inspector-tab', { detail: { tabId: 'files' } }));
+    // Full file and change workflows belong in the center work area. The Inspector only quick-opens them.
+    if ((id === 'files' || id === 'changes') && !customUrl) {
+      const existing = resourceTabs.tabs.find((tab) =>
+        (getTabType(tab) === 'files' || getTabType(tab) === 'changes') && tab.workspaceId === effectiveWsId
+      );
+      if (existing) {
+        if (!isWebTabOpen) onToggleWebTab();
+        if (targetPane === 'split') resourceTabs.setSplitTabId?.(existing.id);
+        else resourceTabs.setActiveTabId(existing.id);
+      } else {
+        openTab(id, customTitle || (id === 'changes' ? 'Changes' : 'Files'), `custos://resource/${id}`, undefined, effectiveWsId, targetPane);
+      }
       return;
     }
 
     // Specific file editor or diff tab in center canvas
     if (id === 'files' && customUrl && (customUrl.startsWith('custos://file?') || customUrl.startsWith('custos://diff?'))) {
-      const existingFile = resourceTabs.tabs.find(t => t.type === 'files' && t.url === customUrl);
+      const existingFile = resourceTabs.tabs.find(t => t.type === 'files' && t.url === customUrl && t.workspaceId === effectiveWsId);
       if (existingFile) {
         if (!isWebTabOpen) onToggleWebTab();
         if (targetPane === 'split') resourceTabs.setSplitTabId?.(existingFile.id);
@@ -532,14 +542,13 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       }
     };
     const handleOpenTabEvent = (e: Event) => {
-      const custom = e as CustomEvent<{ id: OrcaTabId; url?: string; title?: string }>;
+      const custom = e as CustomEvent<{ id: OrcaTabId; url?: string; title?: string; workspaceId?: string }>;
       if (custom.detail?.id) {
-        handleOpenTab(custom.detail.id, custom.detail.url, custom.detail.title);
+        handleOpenTab(custom.detail.id, custom.detail.url, custom.detail.title, 'primary', custom.detail.workspaceId);
       }
     };
     const handleOpenFilesSidebar = () => {
-      setIsInspectorOpen(true);
-      window.dispatchEvent(new CustomEvent('custos:switch-inspector-tab', { detail: { tabId: 'files' } }));
+      handleOpenTab('files');
     };
     window.addEventListener('custos:open-chat-tab', handleOpenChatEvent);
     window.addEventListener('custos:open-tab', handleOpenTabEvent);
@@ -551,7 +560,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
       window.removeEventListener('custos:open-files-sidebar', handleOpenFilesSidebar);
       window.removeEventListener('custos:open-file-explorer', handleOpenFilesSidebar);
     };
-  }, [resourceTabs, handleOpenTab, setIsInspectorOpen]);
+  }, [resourceTabs, handleOpenTab]);
 
   const pickerResources = resolveResources(
     pickerCapabilities,
@@ -703,6 +712,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
               splitPercent={splitPercent}
               onOpenTab={handleOpenTab}
               onOpenResourcePicker={handleOpenResourcePicker}
+              onNewConversation={handleNewSession}
               onAskAgent={handleResourceAskAgent}
               onHandoffToCoding={async (_claims, result) => {
                 const targetId = result.task_ids[0];
@@ -770,28 +780,11 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
           isOpen={isInspectorOpen}
           onClose={() => setIsInspectorOpen(false)}
           activeWorkspace={activeWorkspace || inspectedWorkspace}
-          activeWorkspaceId={activeWorkspaceId}
           activeSession={inspectedSession}
           activeTask={inspectedTask}
           activeTab={inspectedTab}
           onOpenTab={handleOpenTab}
           mode={mode}
-          sessions={sessions}
-          allSessions={allSessions}
-          activeSessionId={activeSessionId}
-          onSelectSession={handleSelectSessionWithScreen}
-          onNewSession={handleNewSession}
-          onDeleteSession={onDeleteConversation}
-          tasks={workbenchTasks}
-          selectedTaskId={selectedTaskId}
-          onSelectTask={handleSelectTaskWithScreen}
-          onRequestCreateTask={() => {
-            setCreateTaskPrefill({
-              workspaceId: activeWorkspaceId,
-              packId: mode === 'engineering' ? 'code' : mode === 'research' ? 'research' : 'copilot',
-            });
-            setIsGlobalCreateTaskOpen(true);
-          }}
         />
       </div>
 

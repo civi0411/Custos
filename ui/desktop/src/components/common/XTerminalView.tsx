@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
@@ -8,11 +8,8 @@ export type ClientPlatform = 'macos' | 'linux' | 'windows';
 
 export function getClientPlatform(): ClientPlatform {
   if (typeof navigator === 'undefined') return 'macos';
-  const ua = (navigator.userAgent || '').toLowerCase();
-  const platform = (navigator.platform || '').toLowerCase();
-  if (ua.includes('mac') || platform.includes('mac')) return 'macos';
-  if (ua.includes('win') || platform.includes('win')) return 'windows';
-  return 'linux';
+  const platform = ((navigator.userAgent || '') + ' ' + (navigator.platform || '')).toLowerCase();
+  return platform.includes('mac') ? 'macos' : platform.includes('win') ? 'windows' : 'linux';
 }
 
 export interface XTerminalViewProps {
@@ -20,166 +17,126 @@ export interface XTerminalViewProps {
   onSessionTerminated?: () => void;
   className?: string;
   autoFocus?: boolean;
+  visible?: boolean;
+  clearToken?: number;
 }
 
-export const XTerminalView: React.FC<XTerminalViewProps> = ({
-  sessionId,
-  onSessionTerminated,
-  className = '',
-  autoFocus = true,
-}) => {
+export const XTerminalView = ({ sessionId, onSessionTerminated, className = '', autoFocus = true, visible = true, clearToken = 0 }: XTerminalViewProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
-  const seqRef = useRef<number>(0);
-  const lastColsRowsRef = useRef<{ cols: number; rows: number }>({ cols: 80, rows: 24 });
-
+  const fitRef = useRef<FitAddon | null>(null);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const exitRef = useRef(onSessionTerminated);
+  exitRef.current = onSessionTerminated;
+  const [error, setError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
   const platform = getClientPlatform();
-  const isMac = platform === 'macos';
-  const isWindows = platform === 'windows';
+  const fontFamily = platform === 'macos' ? 'Menlo, Monaco, monospace' : platform === 'windows' ? '"Cascadia Code", Consolas, monospace' : '"DejaVu Sans Mono", monospace';
 
-  // Font family based on operating system
-  const fontFamily = isMac
-    ? 'Menlo, Monaco, "Courier New", monospace'
-    : isWindows
-    ? '"Cascadia Code", Consolas, "Courier New", monospace'
-    : '"DejaVu Sans Mono", "Ubuntu Mono", "Liberation Mono", monospace';
-
-  const handleResize = useCallback(() => {
-    if (!fitAddonRef.current || !termRef.current || !sessionId) return;
+  const fit = useCallback(() => {
+    const term = termRef.current, container = containerRef.current;
+    if (!term || !fitRef.current || !container || !visibleRef.current || container.clientWidth < 20 || container.clientHeight < 20) return;
     try {
-      fitAddonRef.current.fit();
-      const cols = termRef.current.cols;
-      const rows = termRef.current.rows;
-      if (
-        cols > 0 &&
-        rows > 0 &&
-        (cols !== lastColsRowsRef.current.cols || rows !== lastColsRowsRef.current.rows)
-      ) {
-        lastColsRowsRef.current = { cols, rows };
-        daemonClient.resizeTerminal(sessionId, cols, rows).catch(() => {});
+      const before = [term.cols, term.rows];
+      fitRef.current.fit();
+      if (before[0] !== term.cols || before[1] !== term.rows) {
+        void daemonClient.resizeTerminal(sessionId, term.cols, term.rows).catch(reason => setError('Could not resize terminal: ' + String(reason)));
       }
-    } catch {
-      // Ignore fit layout errors when container is hidden
-    }
+    } catch (reason) { setError('Could not fit terminal: ' + String(reason)); }
   }, [sessionId]);
 
   useEffect(() => {
     if (!containerRef.current || !sessionId) return;
-
-    // 1. Initialize xterm instance with clean JetBlack palette
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let resizeFrame = 0;
+    let cursor = 0;
+    let failures = 0;
+    setError(null);
     const term = new Terminal({
-      cursorBlink: true,
-      cursorStyle: 'block',
-      fontFamily,
-      fontSize: 12.5,
-      lineHeight: 1.45,
-      letterSpacing: 0,
-      macOptionIsMeta: isMac,
-      macOptionClickForcesSelection: isMac,
-      rightClickSelectsWord: true,
-      allowTransparency: true,
-      theme: {
-        background: '#0a0a0c',
-        foreground: '#e6edf3',
-        cursor: '#38bdf8',
-        cursorAccent: '#0a0a0c',
-        selectionBackground: 'rgba(56, 189, 248, 0.28)',
-        selectionForeground: '#ffffff',
-        black: '#0a0a0c',
-        red: '#f87171',
-        green: '#4ade80',
-        yellow: '#facc15',
-        blue: '#60a5fa',
-        magenta: '#c084fc',
-        cyan: '#38bdf8',
-        white: '#f1f5f9',
-        brightBlack: '#64748b',
-        brightRed: '#fca5a5',
-        brightGreen: '#86efac',
-        brightYellow: '#fde047',
-        brightBlue: '#93c5fd',
-        brightMagenta: '#d8b4fe',
-        brightCyan: '#67e8f9',
-        brightWhite: '#ffffff',
-      },
+      fontFamily, fontSize: 13, lineHeight: 1.35, scrollback: 5000,
+      cursorBlink: true, cursorStyle: 'bar', macOptionIsMeta: platform === 'macos',
+      rightClickSelectsWord: true, allowTransparency: false,
     });
-
-    const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
-
+    const addon = new FitAddon();
+    term.loadAddon(addon);
     term.open(containerRef.current);
     termRef.current = term;
-    fitAddonRef.current = fitAddon;
-
-    // Initial sizing
-    requestAnimationFrame(() => {
-      handleResize();
-      if (autoFocus) {
-        term.focus();
-      }
-    });
-
-    // 2. Keystrokes -> PTY stdin write
-    const onDataDisposable = term.onData((data) => {
-      daemonClient.writeTerminal(sessionId, data).catch((err) => {
-        console.warn('Failed to send terminal data:', err);
+    fitRef.current = addon;
+    const theme = () => {
+      const style = getComputedStyle(document.documentElement);
+      const token = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
+      term.options.theme = {
+        background: token('--color-canvas', '#101113'),
+        foreground: token('--color-fg-default', '#e7e7e7'),
+        cursor: token('--color-fg-default', '#e7e7e7'),
+        selectionBackground: token('--color-surface-3', '#45464a'),
+      };
+    };
+    theme();
+    const themeObserver = new MutationObserver(theme);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme', 'style'] });
+    const scheduleFit = () => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => { if (!disposed) fit(); });
+    };
+    scheduleFit();
+    if (autoFocus && visibleRef.current) term.focus();
+    const input = term.onData(data => {
+      if (!visibleRef.current) return;
+      void daemonClient.writeTerminal(sessionId, data).catch(reason => {
+        if (!disposed) setError('Terminal input was not confirmed: ' + String(reason));
       });
     });
-
-    // 3. PTY stdout/stderr polling stream -> term.write()
-    let isSubscribed = true;
-    seqRef.current = 0;
-
-    const pollStream = async () => {
-      if (!isSubscribed) return;
+    const poll = async () => {
+      if (disposed) return;
+      let eof = false;
       try {
-        const chunk = await daemonClient.readTerminal(sessionId, seqRef.current, 65536);
-        if (!isSubscribed) return;
-
-        if (chunk.data && chunk.data.length > 0) {
-          term.write(chunk.data);
-          seqRef.current = chunk.nextSeq ?? chunk.next_seq ?? seqRef.current;
-        }
-
-        if (chunk.isEof ?? chunk.is_eof) {
-          onSessionTerminated?.();
-        }
-      } catch {
-        // Stream polling error
+        const chunk = await daemonClient.readTerminal(sessionId, cursor, 65536);
+        if (disposed) return;
+        const next = chunk.next_seq ?? chunk.nextSeq ?? cursor;
+        const start = chunk.start_seq ?? chunk.startSeq ?? cursor;
+        if (start > cursor) term.writeln('\r\n[Earlier output is no longer retained]\r\n');
+        if (chunk.data) await new Promise<void>(resolve => term.write(chunk.data, resolve));
+        if (disposed) return;
+        cursor = next;
+        failures = 0;
+        setError(null);
+        eof = chunk.is_eof ?? chunk.isEof ?? false;
+        if (eof) exitRef.current?.();
+      } catch (reason) {
+        if (disposed) return;
+        failures++;
+        setError('Terminal connection interrupted. Reconnecting… ' + String(reason));
       }
+      if (!disposed && !eof) timer = setTimeout(() => void poll(), failures ? Math.min(5000, 500 * 2 ** Math.min(failures, 4)) : visibleRef.current ? 80 : 500);
     };
-
-    void pollStream();
-    const pollInterval = setInterval(pollStream, 25);
-
-    // 4. ResizeObserver for responsive layout changes
-    const resizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(handleResize);
-    });
+    void poll();
+    const resizeObserver = new ResizeObserver(scheduleFit);
     resizeObserver.observe(containerRef.current);
-
-    // 5. Window resize listener
-    window.addEventListener('resize', handleResize);
-
+    window.addEventListener('resize', scheduleFit);
     return () => {
-      isSubscribed = false;
-      clearInterval(pollInterval);
-      window.removeEventListener('resize', handleResize);
+      disposed = true;
+      clearTimeout(timer);
+      cancelAnimationFrame(resizeFrame);
+      window.removeEventListener('resize', scheduleFit);
       resizeObserver.disconnect();
-      onDataDisposable.dispose();
+      themeObserver.disconnect();
+      input.dispose();
       term.dispose();
-      termRef.current = null;
-      fitAddonRef.current = null;
+      if (termRef.current === term) { termRef.current = null; fitRef.current = null; }
     };
-  }, [sessionId, autoFocus, fontFamily, isMac, handleResize, onSessionTerminated]);
+  }, [sessionId, fontFamily, platform, fit, retry, autoFocus]);
 
-  return (
-    <div
-      ref={containerRef}
-      onClick={() => termRef.current?.focus()}
-      className={`h-full w-full bg-[#0a0a0c] overflow-hidden ${className}`}
-      style={{ padding: '8px 10px' }}
-    />
-  );
+  useEffect(() => { if (visible) fit(); }, [visible, fit]);
+  useEffect(() => { if (clearToken) termRef.current?.clear(); }, [clearToken]);
+
+  return <div className={'flex h-full min-h-0 flex-col bg-canvas ' + className}>
+    {error && <div role="alert" className="wb-error">
+      <span className="min-w-0 flex-1">{error}</span>
+      <button type="button" className="canvas-open-button" onClick={() => setRetry(value => value + 1)}>Reconnect</button>
+    </div>}
+    <div ref={containerRef} className="min-h-0 flex-1 overflow-hidden p-2" onClick={() => termRef.current?.focus()} />
+  </div>;
 };

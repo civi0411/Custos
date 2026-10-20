@@ -302,9 +302,6 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
                 <h3 className="text-sm font-semibold text-[var(--color-editor-fg)]">
                   Select an Artifact
                 </h3>
-                <p className="mt-1 max-w-sm text-xs text-[var(--color-fg-muted)]">
-                  Choose an artifact from the list to preview code, inspect execution logs, and insert into chat.
-                </p>
               </div>
             )
           ) : (
@@ -315,9 +312,6 @@ export const ArtifactsWorkbenchPane: React.FC<ArtifactsWorkbenchPaneProps> = ({
                   <GitBranch className="h-4 w-4 text-white/70" />
                   Provenance & Lineage Graph
                 </h2>
-                <p className="text-xs text-[var(--color-fg-muted)] mt-0.5">
-                  Visual graph of dependencies, parent versions, and execution runs.
-                </p>
               </div>
 
               {lineageGraph && lineageGraph.nodes.length > 0 ? (

@@ -176,7 +176,6 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
     activeWorkspaceId: ctxActiveWorkspaceId,
     setActiveWorkspaceId: ctxSetActiveWorkspaceId,
     refreshWorkspaces: ctxRefreshWorkspaces,
-    setIsInspectorOpen,
     activeDetection,
     tasks: ctxTasks,
   } = useAppContext();
@@ -946,7 +945,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       await refreshWorkspaces();
       if (created?.id) {
         onSelectWorkspace?.(created.id);
-        setIsInspectorOpen(true);
+        window.dispatchEvent(new CustomEvent('custos:open-tab', { detail: { id: 'files', workspaceId: created.id } }));
       }
       setCreatingWorktreeFor(null);
       setWorktreeBranchInput('');
@@ -1010,8 +1009,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
       branch: targetBranch,
       path: targetPath,
     });
-    setIsInspectorOpen(true);
-    window.dispatchEvent(new CustomEvent('custos:switch-inspector-tab', { detail: { tabId: 'files' } }));
+    window.dispatchEvent(new CustomEvent('custos:open-tab', { detail: { id: 'files', workspaceId: targetWorkspaceId } }));
   };
 
   const handleAddRepoToProject = async () => {

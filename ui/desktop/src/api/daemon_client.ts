@@ -87,6 +87,9 @@ import {
   ResearchExecutionRecord,
   CheckpointResumeAssessment,
   AnnotationRecord,
+  ComputeTargetInfo,
+  PreflightReport,
+  ExecutionAttemptRecord,
 } from '../types/research';
 
 const camelKey = (key: string) => key.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase());
@@ -107,6 +110,31 @@ const mapKeysDeep = (value: unknown, transform: (key: string) => string): any =>
 
 const fromDaemon = <T,>(value: unknown): T => mapKeysDeep(value, camelKey) as T;
 const toDaemon = (value: unknown): Record<string, any> => mapKeysDeep(value, snakeKey);
+
+export function normalizeTerminalSession(value: TerminalSession): TerminalSession {
+  return { ...value,
+    workspace_id: value.workspace_id ?? value.workspaceId ?? '',
+    working_dir: value.working_dir ?? value.workingDir ?? '',
+    created_at: value.created_at ?? value.createdAt ?? 0,
+    closed_at: value.closed_at ?? value.closedAt,
+  };
+}
+
+export function normalizeHarness(value: HarnessDescriptor): HarnessDescriptor {
+  const profile = value.profile;
+  return { ...value, binary_path: value.binary_path ?? value.binaryPath ?? '',
+    is_available: value.is_available ?? value.isAvailable ?? false,
+    launch_cmd: value.launch_cmd ?? value.launchCmd,
+    profile: { ...profile,
+      harness_id: profile.harness_id ?? profile.harnessId ?? value.id,
+      tool_mediation: profile.tool_mediation ?? profile.toolMediation,
+      worktree_ownership: profile.worktree_ownership ?? profile.worktreeOwnership,
+      supports_cancel: profile.supports_cancel ?? profile.supportsCancel ?? false,
+      supports_steer: profile.supports_steer ?? profile.supportsSteer ?? false,
+      cost_visibility: profile.cost_visibility ?? profile.costVisibility,
+    },
+  };
+}
 export function annotationFromWire(value: unknown): AnnotationRecord {
   const normalized = fromDaemon<AnnotationRecord>(value);
   const created = normalized.createdAt as unknown;
@@ -155,22 +183,27 @@ const normalizeWorkspace = (wire: any): ExecutionWorkspace => {
   } as ExecutionWorkspace;
 };
 
-const isMutationMethod = (method: string): boolean => {
+const isReadMethod = (method: string): boolean => {
+  const m = method.toLowerCase();
   return (
-    method.startsWith('v1.tasks.create') ||
-    method.startsWith('v1.tasks.advance') ||
-    method.startsWith('v1.tasks.block') ||
-    method.startsWith('v1.tasks.complete') ||
-    method.startsWith('v1.tasks.cancel') ||
-    method.startsWith('v1.workflow.start') ||
-    method.startsWith('v1.workflow.cancel') ||
-    method.startsWith('v1.sessions.create') ||
-    method.startsWith('v1.sessions.append') ||
-    method.startsWith('v1.workspaces.create') ||
-    method.startsWith('v1.workspaces.archive') ||
-    method.startsWith('v1.notes.save') ||
-    (method.startsWith('v1.research.') &&
-      (method.includes('save') || method.includes('execute') || method.includes('create')))
+    m === 'v1.ping' ||
+    m === 'v1.health' ||
+    m.endsWith('.get') ||
+    m.endsWith('.list') ||
+    m.endsWith('.read') ||
+    m.endsWith('.tree') ||
+    m.endsWith('.diff') ||
+    m.endsWith('.status') ||
+    m.endsWith('.history') ||
+    m.endsWith('.inspect_dirty') ||
+    m.endsWith('.detect') ||
+    m.endsWith('.pick_folder') ||
+    m.endsWith('.compare') ||
+    m.endsWith('.pricing') ||
+    m.endsWith('.probe') ||
+    m.endsWith('.catalog') ||
+    m.endsWith('.snapshot') ||
+    m.endsWith('.screenshot')
   );
 };
 
@@ -325,7 +358,7 @@ export class DaemonClient {
    */
   async request<T>(method: string, params: Record<string, any> = {}): Promise<T> {
     const finalParams = { ...params };
-    if (isMutationMethod(method) && !finalParams.command_id) {
+    if (!isReadMethod(method) && !finalParams.command_id) {
       finalParams.command_id =
         typeof crypto !== 'undefined' && crypto.randomUUID
           ? `cmd_${crypto.randomUUID()}`
@@ -1042,9 +1075,9 @@ export class DaemonClient {
   // ---------------------------------------------------------
 
   async spawnTerminal(params: SpawnTerminalParams): Promise<TerminalSession> {
-    return fromDaemon<TerminalSession>(
+    return normalizeTerminalSession(fromDaemon<TerminalSession>(
       await this.request<unknown>('v1.terminal.spawn', toDaemon(params))
-    );
+    ));
   }
 
   async writeTerminal(sessionId: string, data: string): Promise<{ written: number }> {
@@ -1081,13 +1114,13 @@ export class DaemonClient {
   async listTerminals(workspaceId?: string): Promise<TerminalSession[]> {
     return fromDaemon<TerminalSession[]>(
       await this.request<unknown>('v1.terminal.list', { workspace_id: workspaceId })
-    );
+    ).map(normalizeTerminalSession);
   }
 
   async getTerminal(sessionId: string): Promise<TerminalSession> {
-    return fromDaemon<TerminalSession>(
+    return normalizeTerminalSession(fromDaemon<TerminalSession>(
       await this.request<unknown>('v1.terminal.get', { session_id: sessionId })
-    );
+    ));
   }
 
   // ---------------------------------------------------------
@@ -1192,11 +1225,11 @@ export class DaemonClient {
   }
 
   async listHarnesses(): Promise<HarnessDescriptor[]> {
-    return this.request<HarnessDescriptor[]>('v1.harness.list', {});
+    return (await this.request<HarnessDescriptor[]>('v1.harness.list', {})).map(normalizeHarness);
   }
 
   async getHarness(harnessId: string): Promise<HarnessDescriptor> {
-    return this.request<HarnessDescriptor>('v1.harness.get', { harness_id: harnessId });
+    return normalizeHarness(await this.request<HarnessDescriptor>('v1.harness.get', { harness_id: harnessId }));
   }
 
   async runNativeHarness(params: RunNativeHarnessParams): Promise<HarnessExecutionResult> {
@@ -1554,7 +1587,12 @@ export class DaemonClient {
 
   async listOutbox(taskId?: string): Promise<OutboxActionItem[]> {
     const items = await this.request<unknown[]>('v1.assistant.outbox.list', { task_id: taskId });
-    return items.map((i) => fromDaemon<OutboxActionItem>(i));
+    return items.map((i) => {
+      const value = fromDaemon<OutboxActionItem>(i);
+      return { ...value, task_id: value.task_id ?? value.taskId ?? '', action_type: value.action_type ?? value.actionType ?? '',
+        payload_summary: value.payload_summary ?? value.payloadSummary ?? '', payload_digest: value.payload_digest ?? value.payloadDigest ?? '',
+        permit_id: value.permit_id ?? value.permitId, receipt_id: value.receipt_id ?? value.receiptId, created_at: value.created_at ?? value.createdAt ?? '' };
+    });
   }
 
   async approveOutbox(id: string): Promise<any> {
@@ -1586,6 +1624,92 @@ export class DaemonClient {
       workspace_id: workspaceId,
     });
     return list.map((c) => fromDaemon<ResourceActionCapability>(c));
+  }
+
+  // ---------------------------------------------------------
+  // Compute Targets & GPU Experiment Lifecycle API
+  // ---------------------------------------------------------
+
+  async listComputeTargets(): Promise<ComputeTargetInfo[]> {
+    const res = await this.request<unknown[]>('v1.compute.targets.list', {});
+    return (res || []).map((t) => fromDaemon<ComputeTargetInfo>(t));
+  }
+
+  async preflightExperiment(params: {
+    backend: string;
+    recipe_id?: string;
+    ssh_host?: string;
+    ssh_port?: number;
+    ssh_user?: string;
+    pod_id?: string;
+    cloud_api_key?: string;
+    mock?: boolean;
+  }): Promise<PreflightReport> {
+    const res = await this.request<unknown>('v1.experiment.preflight', params);
+    return fromDaemon<PreflightReport>(res);
+  }
+
+  async submitExperiment(params: {
+    experiment_id: string;
+    recipe_id: string;
+    backend: string;
+    parent_checkpoint_id?: string;
+    ssh_host?: string;
+    ssh_port?: number;
+    ssh_user?: string;
+    pod_id?: string;
+    cloud_api_key?: string;
+    mock?: boolean;
+  }): Promise<{ attempt: ExecutionAttemptRecord; externalRef: any }> {
+    const res = await this.request<{ attempt: unknown; external_ref: unknown }>('v1.experiment.submit', params);
+    return {
+      attempt: fromDaemon<ExecutionAttemptRecord>(res.attempt),
+      externalRef: fromDaemon<any>(res.external_ref),
+    };
+  }
+
+  async observeExperiment(attemptId: string, mock?: boolean): Promise<{ attempt: ExecutionAttemptRecord; observation: any }> {
+    const res = await this.request<{ attempt: unknown; observation: unknown }>('v1.experiment.observe', {
+      attempt_id: attemptId,
+      mock,
+    });
+    return {
+      attempt: fromDaemon<ExecutionAttemptRecord>(res.attempt),
+      observation: fromDaemon<any>(res.observation),
+    };
+  }
+
+  async stopExperiment(attemptId: string, mock?: boolean): Promise<{ stopped: boolean; attempt: ExecutionAttemptRecord }> {
+    const res = await this.request<{ stopped: boolean; attempt: unknown }>('v1.experiment.stop', {
+      attempt_id: attemptId,
+      mock,
+    });
+    return {
+      stopped: res.stopped,
+      attempt: fromDaemon<ExecutionAttemptRecord>(res.attempt),
+    };
+  }
+
+  async releaseExperiment(attemptId: string, mock?: boolean): Promise<{ released: boolean; attempt: ExecutionAttemptRecord }> {
+    const res = await this.request<{ released: boolean; attempt: unknown }>('v1.experiment.release', {
+      attempt_id: attemptId,
+      mock,
+    });
+    return {
+      released: res.released,
+      attempt: fromDaemon<ExecutionAttemptRecord>(res.attempt),
+    };
+  }
+
+  async collectExperimentArtifacts(attemptId: string, mock?: boolean): Promise<{ artifacts: any[]; attempt: ExecutionAttemptRecord }> {
+    const res = await this.request<{ artifacts: any[]; attempt: unknown }>('v1.experiment.collect', {
+      attempt_id: attemptId,
+      mock,
+    });
+    return {
+      artifacts: res.artifacts || [],
+      attempt: fromDaemon<ExecutionAttemptRecord>(res.attempt),
+    };
   }
 }
 

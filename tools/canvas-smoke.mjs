@@ -9,7 +9,7 @@ const source = fs.readFileSync(new URL('../ui/desktop/src/types/canvas.ts', impo
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
 const exports = {};
 vm.runInNewContext(compiled, { exports });
-const { createCanvas, canvasGroups, canvasReducer: reduce, reconcileCanvas, restoreCanvas } = exports;
+const { createCanvas, createCanvasFromPreset, canvasGroups, canvasReducer: reduce, reconcileCanvas, restoreCanvas } = exports;
 const plain = value => JSON.parse(JSON.stringify(value));
 function invariant(state, expected) {
   const groups = canvasGroups(state.root);
@@ -151,7 +151,7 @@ test('workspace file normalization retains binary metadata used by shared viewer
 });
 
 test('resource opening reuses only the exact workspace, session, Task and agent scope', () => {
-  const { findScopedResourceTab } = helpers('components/workbenches/OrcaTabbedContainer.tsx', ['getTabType', 'findScopedResourceTab'], {
+  const { findScopedResourceTab } = helpers('components/workbenches/workbenchResources.tsx', ['getTabType', 'findScopedResourceTab'], {
     DEFAULT_RESOURCES: [{ id: 'files' }, { id: 'agents' }],
   });
   const tab = { id: 'files-a', type: 'files', title: 'Files', workspaceId: 'w1', sessionId: 's1', taskId: 't1' };
@@ -165,7 +165,7 @@ test('resource opening reuses only the exact workspace, session, Task and agent 
 });
 
 test('synthesis navigation accepts only a bounded claim locator in its resource URL', () => {
-  const { synthesisClaimFromUrl } = helpers('components/workbenches/OrcaTabbedContainer.tsx', ['synthesisClaimFromUrl'], { URL });
+  const { synthesisClaimFromUrl } = helpers('components/workbenches/workbenchResources.tsx', ['synthesisClaimFromUrl'], { URL });
   assert.equal(synthesisClaimFromUrl('custos://synthesis?claim=claim-42'), 'claim-42');
   for (const value of ['invalid', 'https://synthesis?claim=a', 'custos://other?claim=a', 'custos://synthesis', 'custos://synthesis?claim=%00', `custos://synthesis?claim=${'a'.repeat(129)}`]) {
     assert.equal(synthesisClaimFromUrl(value), undefined);
@@ -202,7 +202,7 @@ test('desk arrangement rejects unknown or duplicate resources without losing tab
   assert.equal(canvasGroups(arranged.root).length, 2);
 });
 test('picker and desk use one resource membership registry per workbench', () => {
-  const { workbenchResourceIds } = helpers('components/workbenches/OrcaTabbedContainer.tsx', ['workbenchResourceIds']);
+  const { workbenchResourceIds } = helpers('components/workbenches/workbenchResources.tsx', ['workbenchResourceIds']);
   for (const [mode, expected] of [['engineering', ['files', 'agents', 'terminal']], ['research', ['literature', 'lab', 'artifacts']], ['copilot', ['drafts', 'notes', 'calendar']]]) {
     const ids = workbenchResourceIds(mode);
     assert.equal(ids.length, new Set(ids).size);
@@ -212,6 +212,18 @@ test('picker and desk use one resource membership registry per workbench', () =>
   assert.ok(!workbenchResourceIds('copilot').includes('lab'));
   assert.deepEqual(plain(workbenchResourceIds('copilot', false)), ['drafts', 'outbox', 'contacts', 'calendar']);
   assert.ok(!workbenchResourceIds('research', false).includes('conversation'));
+});
+test('screen navigation never borrows a layout from another workbench', () => {
+  const { screensForWorkbench } = helpers('types/screen.ts', ['screensForWorkbench']);
+  const screens = [
+    { id: 'code', homeWorkbench: 'engineering' },
+    { id: 'study', homeWorkbench: 'research' },
+    { id: 'assistant', homeWorkbench: 'copilot' },
+    { id: 'legacy' },
+  ];
+  assert.deepEqual(plain(screensForWorkbench(screens, 'research').map((screen) => screen.id)), ['study']);
+  assert.deepEqual(plain(screensForWorkbench(screens, 'engineering').map((screen) => screen.id)), ['code', 'legacy']);
+  assert.deepEqual(plain(screensForWorkbench(screens, 'copilot').map((screen) => screen.id)), ['assistant']);
 });
 
 test('composer drafts stay with their session across navigation and shared renderers', () => {
@@ -346,22 +358,57 @@ test('focusing a peer Lab tab does not reopen its already-selected conversation 
   assert.deepEqual(calls, [['canvas', 'lab'], ['tab', 'lab'], ['session', 's'], ['task', 't']]);
 });
 
-test('Lab keyboard navigation wraps, retains focus and leaves modified shortcuts alone', () => {
-  let selected, focused, prevented = 0;
-  const views = ['notebook', 'runs', 'training'];
-  const buttons = views.map((_, index) => ({ focus: () => { focused = index; } }));
-  const handler = nestedHandler('components/workbenches/research/LabPane.tsx', node => ts.isJsxAttribute(node) && node.name.getText() === 'onKeyDown', {
-    views, setView: value => { selected = value; },
-  });
-  const event = key => ({ key, target: buttons[0], currentTarget: { querySelectorAll: () => buttons }, preventDefault: () => { prevented++; } });
-  handler(event('End')); assert.equal(selected, 'training'); assert.equal(focused, 2);
-  handler(event('ArrowLeft')); assert.equal(selected, 'training'); assert.equal(focused, 2);
-  handler(event('ArrowRight')); assert.equal(selected, 'runs'); assert.equal(focused, 1);
-  handler(event('Home')); assert.equal(selected, 'notebook'); assert.equal(focused, 0);
-  handler({ ...event('End'), ctrlKey: true });
-  handler({ ...event('End'), defaultPrevented: true });
-  assert.equal(prevented, 4);
-  assert.equal(selected, 'notebook');
+test('Research notebook, runs and training are peer resources with independent tab identities', () => {
+  const { workbenchResourceIds } = helpers('components/workbenches/workbenchResources.tsx', ['workbenchResourceIds']);
+  const resources = workbenchResourceIds('research');
+  for (const id of ['lab', 'runs', 'training', 'terminal', 'files']) assert.ok(resources.includes(id));
+  let state = createCanvas(['notebook', 'runs', 'training']);
+  state = reduce(state, { type: 'split', groupId: 'root', newGroupId: 'runs-pane', axis: 'horizontal', tabId: 'runs' });
+  state = reduce(state, { type: 'split', groupId: 'runs-pane', newGroupId: 'training-pane', axis: 'vertical', tabId: 'training' });
+  invariant(state, ['notebook', 'runs', 'training']);
+  assert.equal(canvasGroups(state.root).length, 3);
+});
+
+test('terminal wire normalization retains workspace identity through camelCase transport', () => {
+  const { normalizeTerminalSession } = helpers('api/daemon_client.ts', ['normalizeTerminalSession']);
+  const normalized = normalizeTerminalSession({ id: 'term-1', workspaceId: 'worktree-a', workingDir: '/repo/a', createdAt: 123, closedAt: null });
+  assert.equal(normalized.workspace_id, 'worktree-a');
+  assert.equal(normalized.working_dir, '/repo/a');
+  assert.equal(normalized.created_at, 123);
+  assert.equal(normalized.closed_at, null);
+});
+
+test('terminal attachment requires an exact workspace and tab binding never aliases another command', () => {
+  const { terminalBindingKey, terminalMatchesWorkspace } = helpers('hooks/useTerminalSession.ts', ['terminalBindingKey', 'terminalMatchesWorkspace']);
+  assert.notEqual(terminalBindingKey('a', 'workspace', 'claude'), terminalBindingKey('b', 'workspace', 'claude'));
+  assert.notEqual(terminalBindingKey('a', 'workspace', 'claude'), terminalBindingKey('a', 'other', 'claude'));
+  assert.notEqual(terminalBindingKey('a', 'workspace', 'claude'), terminalBindingKey('a', 'workspace', 'codex'));
+  assert.equal(terminalMatchesWorkspace({ workspace_id: 'a' }, 'a'), true);
+  assert.equal(terminalMatchesWorkspace({ workspace_id: 'a' }, 'b'), false);
+  assert.equal(terminalMatchesWorkspace({ workspace_id: '' }, ''), false);
+});
+
+test('harness wire normalization retains availability, cancellation and assurance', () => {
+  const { normalizeHarness } = helpers('api/daemon_client.ts', ['normalizeHarness']);
+  const normalized = normalizeHarness({ id: 'agent', binaryPath: '/bin/agent', isAvailable: true, launchCmd: 'agent', profile: {
+    toolMediation: 'provider_governed', worktreeOwnership: 'shared_live', supportsCancel: true, supportsSteer: false, costVisibility: 'none',
+  } });
+  assert.equal(normalized.binary_path, '/bin/agent');
+  assert.equal(normalized.is_available, true);
+  assert.equal(normalized.profile.supports_cancel, true);
+  assert.equal(normalized.profile.tool_mediation, 'provider_governed');
+});
+
+test('Outbox never dispatches a pending, uncertain or already-dispatched action', () => {
+  const { outboxActions } = helpers('components/workbenches/copilot/OutboxPane.tsx', ['outboxActions']);
+  const operations = ['outbox.approve', 'outbox.dispatch'];
+  assert.equal(outboxActions('pending_approval', operations).approve, true);
+  assert.equal(outboxActions('pending_approval', operations).dispatch, false);
+  assert.equal(outboxActions('approved', operations).dispatch, true);
+  assert.equal(outboxActions('approved', []).dispatch, false);
+  for (const status of ['uncertain', 'failed', 'dispatching', 'receipted', 'succeeded']) {
+    assert.deepEqual(plain(outboxActions(status, operations)), { approve: false, dispatch: false });
+  }
 });
 
 test('Training search shortcut stays pane-local and does not capture typing or IME', () => {
@@ -375,4 +422,23 @@ test('Training search shortcut stays pane-local and does not capture typing or I
   handler({ ...event(false), metaKey: true });
   handler({ ...event(false), nativeEvent: { isComposing: true } });
   assert.equal(focused, 1); assert.equal(prevented, 1);
+});
+
+test('createCanvasFromPreset creates split canvas matching preset splitConfig', () => {
+  const horizontal = createCanvasFromPreset(['conversation', 'files'], { axis: 'horizontal', ratio: 45 });
+  invariant(horizontal, ['conversation', 'files']);
+  assert.equal(horizontal.root.kind, 'split');
+  assert.equal(horizontal.root.axis, 'horizontal');
+  assert.equal(horizontal.root.ratio, 45);
+  assert.equal(canvasGroups(horizontal.root).length, 2);
+
+  const vertical = createCanvasFromPreset(['files', 'terminal'], { axis: 'vertical', ratio: 65 });
+  invariant(vertical, ['files', 'terminal']);
+  assert.equal(vertical.root.kind, 'split');
+  assert.equal(vertical.root.axis, 'vertical');
+  assert.equal(vertical.root.ratio, 65);
+
+  const fallback = createCanvasFromPreset(['single']);
+  invariant(fallback, ['single']);
+  assert.equal(fallback.root.kind, 'group');
 });

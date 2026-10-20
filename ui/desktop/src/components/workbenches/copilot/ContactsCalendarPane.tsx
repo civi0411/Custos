@@ -117,7 +117,7 @@ export const ContactsCalendarPane: React.FC<ContactsCalendarPaneProps> = ({
   return (
     <div className="flex h-full flex-col bg-canvas text-editor-fg">
       {/* Header Bar */}
-      <div className="wb-pane-toolbar flex h-10 shrink-0 items-center justify-between border-b border-border-muted px-4 bg-surface-1/50">
+      <div className="wb-pane-toolbar flex h-9 shrink-0 items-center justify-between border-b border-border-muted px-3 bg-surface-1/50">
         <div className="flex items-center gap-2">
           {isContacts ? (
             <Users className="h-4 w-4 text-fg-muted shrink-0" />
@@ -134,7 +134,7 @@ export const ContactsCalendarPane: React.FC<ContactsCalendarPaneProps> = ({
           <button
             type="button"
             onClick={handleOpenAddModal}
-            className="flex items-center gap-1.5 rounded-md bg-surface-2 hover:bg-surface-3 border border-border-default px-2.5 py-1 text-xs font-medium text-fg-editor transition cursor-pointer"
+            className="flex items-center gap-1.5 rounded-md bg-surface-2 hover:bg-surface-3 border border-border-default px-2 py-0.5 text-xs font-medium text-fg-editor transition cursor-pointer"
           >
             <Plus className="h-3.5 w-3.5 text-fg-subtle" />
             <span>Add {isContacts ? 'Contact' : 'Milestone'}</span>
@@ -143,13 +143,13 @@ export const ContactsCalendarPane: React.FC<ContactsCalendarPaneProps> = ({
       </div>
 
       {/* Governed Boundary Notice Banner */}
-      <div className="shrink-0 border-b border-border-subtle bg-surface-1/30 px-4 py-2 flex items-center justify-between text-[11px] text-fg-muted">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+      <div className="shrink-0 border-b border-border-subtle bg-surface-1/30 px-3 py-1 flex items-center justify-between text-[10px] text-fg-muted">
+        <div className="flex items-center gap-1.5">
+          <ShieldCheck className="h-3 w-3 text-emerald-400 shrink-0" />
           <span>
             {isContacts
-              ? 'Local contact notes. Saving a contact does not authorize messages or verify its identity.'
-              : 'Local milestones only. External calendar sync and invitations are not configured.'}
+              ? 'Local contact notes · No external auth'
+              : 'Local milestones · No external sync'}
           </span>
         </div>
       </div>
@@ -170,24 +170,19 @@ export const ContactsCalendarPane: React.FC<ContactsCalendarPaneProps> = ({
       {/* List or Empty State */}
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
         {visibleItems.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center text-center text-fg-subtle p-8 select-none">
+          <div className="flex h-full flex-col items-center justify-center text-center text-fg-subtle p-6 select-none">
             {isContacts ? (
-              <Users className="w-10 h-10 mb-3 opacity-30 text-fg-muted" />
+              <Users className="w-8 h-8 mb-2 opacity-30 text-fg-muted" />
             ) : (
-              <Calendar className="w-10 h-10 mb-3 opacity-30 text-fg-muted" />
+              <Calendar className="w-8 h-8 mb-2 opacity-30 text-fg-muted" />
             )}
             <p className="text-xs font-semibold text-fg-editor">
               {items.length > 0 ? 'No matching entries' : isContacts ? 'No contacts yet' : 'No milestones yet'}
             </p>
-            <p className="text-[11px] text-fg-subtle mt-1.5 max-w-sm leading-relaxed">
-              {isContacts
-                ? 'Keep recipient names, endpoints and context here. These notes do not verify identity or authorize messages.'
-                : 'Define deadline targets, benchmark evaluations, or review checkpoints. External CalDAV sync requires configured connector.'}
-            </p>
             <button
               type="button"
               onClick={handleOpenAddModal}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-border-default bg-surface-2 px-3 py-1.5 text-xs font-medium text-fg-editor hover:bg-surface-3 transition"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-border-default bg-surface-2 px-3 py-1.5 text-xs font-medium text-fg-editor hover:bg-surface-3 transition"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>Register First {isContacts ? 'Contact' : 'Milestone'}</span>

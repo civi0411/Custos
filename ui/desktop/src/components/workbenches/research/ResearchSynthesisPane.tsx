@@ -366,7 +366,7 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
   return (
     <div className="flex flex-col h-full bg-[var(--color-surface-0)] text-[var(--color-editor-fg)] overflow-hidden font-sans select-none">
       {/* ─── Top Header Toolbar ─── */}
-      <header className="h-12 border-b border-[var(--color-border-muted)] px-4 flex items-center justify-between bg-[var(--color-surface-1)] shrink-0">
+      <header className="wb-pane-toolbar h-12 border-b border-[var(--color-border-muted)] px-4 flex items-center justify-between bg-[var(--color-surface-1)] shrink-0">
         <div className="flex items-center gap-3">
           <div className="p-1.5 rounded-lg bg-[var(--color-surface-2)] border border-[var(--color-border-subtle)] text-[var(--workbench-accent)]">
             <Layers size={16} />
@@ -374,15 +374,12 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-xs font-semibold tracking-wide text-[var(--color-editor-fg)]">
-                Research Synthesis & Coding Handoff
+                Research handoff
               </h2>
               <span className="px-2 py-0.2 rounded-full text-[9px] font-mono font-medium uppercase tracking-wider border border-white/10 text-white/70 bg-white/[0.04]">
-                Gate 4 Fail-Closed
+                Review before implementation
               </span>
             </div>
-            <p className="text-[10px] text-[var(--color-fg-muted)]">
-              Synthesize empirical claims, verified recipes, and artifact lineage into invariant-governed Coding tasks.
-            </p>
           </div>
         </div>
 
@@ -528,9 +525,8 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
                   Handoff ID: {lastHandoffResult.handoff_id}
                 </span>
               </div>
-              <p className="text-xs text-white/70 leading-relaxed">
-                Created {lastHandoffResult.task_ids.length} Coding Task(s).
-                Target branch <code className="font-mono px-1 py-0.5 rounded bg-white/10">{lastHandoffResult.target_branch || 'Not specified'}</code>. Open a Task to inspect its workspace and start work.
+              <p className="text-[11px] text-white/70">
+                Created {lastHandoffResult.task_ids.length} task(s) on branch <code className="font-mono px-1 py-0.5 rounded bg-white/10">{lastHandoffResult.target_branch || 'default'}</code>.
               </p>
               <div className="flex flex-wrap gap-1.5 pt-1">
                 {lastHandoffResult.task_ids.map((tid) => (
@@ -885,8 +881,8 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
                     <ShieldCheck size={14} className="text-white/70" />
                     <span>Enforce Verification Pre-conditions (Gate 4 Fail-Closed Posture)</span>
                   </div>
-                  <p className="text-[11px] text-[var(--color-fg-muted)] mt-0.5 leading-relaxed">
-                    When active, the daemon API strictly rejects handoff of claims lacking L2+ reproducible verifier records or cryptographic proof anchors.
+                  <p className="text-[10px] text-[var(--color-fg-muted)] mt-0.5">
+                    Requires reproducible verifier records (L2+) or cryptographic proof anchors.
                   </p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer shrink-0">
@@ -901,10 +897,10 @@ export const ResearchSynthesisPane: React.FC<ResearchSynthesisPaneProps> = ({
               </div>
 
               {enforceVerification && verificationViolations.length > 0 && (
-                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/25 text-rose-300 text-xs flex items-start gap-2">
+                <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/25 text-rose-300 text-xs flex items-start gap-2">
                   <ShieldAlert size={14} className="text-rose-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="font-semibold">Handoff Blocked by Fail-Closed Gate:</span> {verificationViolations.length} selected claim(s) are ungrounded (L0) and have no verifier record. Uncheck ungrounded claims or supply verification evidence to proceed.
+                    <span className="font-semibold">Blocked:</span> {verificationViolations.length} claim(s) lack required L2+ verifier records.
                   </div>
                 </div>
               )}

@@ -134,7 +134,7 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
   return (
     <div className="flex flex-col h-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)] overflow-hidden select-none font-sans relative">
       {/* 48px Standard Pane Header */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-5 z-10">
+      <header className="wb-pane-toolbar flex h-12 shrink-0 items-center justify-between border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-5 z-10">
         <div className="flex items-center gap-3 min-w-0">
           <FileCode2 className="w-4 h-4 workbench-accent shrink-0" />
           <span className="truncate text-xs font-semibold text-[var(--color-editor-fg)]">

@@ -145,7 +145,7 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [filterQuery, setFilterQuery] = useState<string>('');
   const [onlyChanged, setOnlyChanged] = useState<boolean>(false);
-  const [isExplorerOpen, setIsExplorerOpen] = useState<boolean>(false);
+  const [isExplorerOpen, setIsExplorerOpen] = useState<boolean>(true);
 
   // Files & Diff state
   const [fileEntries, setFileEntries] = useState<WorkspaceFileEntry[]>([]);
@@ -234,12 +234,13 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
       setFileEntries(files);
       setDiffSummary(diff || null);
 
-      // Expand top-level dirs
+      // Keep the first two directory levels visible, including inferred parents from flat path listings.
       const initialExpanded = new Set<string>();
       files.forEach((f: WorkspaceFileEntry) => {
-        if (checkIsDir(f)) {
-          const depth = f.path.split('/').length;
-          if (depth <= 2) initialExpanded.add(f.path);
+        const parts = f.path.split('/').filter(Boolean);
+        const directoryParts = checkIsDir(f) ? parts : parts.slice(0, -1);
+        for (let depth = 1; depth <= Math.min(2, directoryParts.length); depth++) {
+          initialExpanded.add(directoryParts.slice(0, depth).join('/'));
         }
       });
       setExpandedDirs(initialExpanded);
@@ -471,18 +472,12 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
 
       return (
         <div key={node.path}>
-          <div
-            role="button"
-            tabIndex={0}
+          <button
+            type="button"
+            aria-expanded={isExpanded}
             onClick={() => toggleDir(node.path)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                toggleDir(node.path);
-              }
-            }}
             style={{ paddingLeft: `${depth * 12 + 6}px` }}
-            className="flex w-full items-center justify-between py-1 px-1.5 text-left text-xs transition-colors rounded cursor-pointer select-none text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-editor-fg)] group"
+            className="flex w-full items-center justify-between py-1 px-1.5 text-left text-xs transition-colors rounded cursor-pointer select-none text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-editor-fg)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent group"
           >
             <div className="flex items-center gap-1.5 min-w-0 pr-2">
               <span className="p-0.5 text-[var(--color-fg-subtle)]">
@@ -504,7 +499,7 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
                 {folderChangeCount}
               </span>
             )}
-          </div>
+          </button>
           {isExpanded && (
             <div>
               {sortedChildren.map((child) => renderTree(child, depth + 1))}
@@ -953,9 +948,6 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
                   <h3 className="text-sm font-semibold text-[var(--color-editor-fg)]">
                     Workspace Editor Canvas
                   </h3>
-                  <p className="text-xs text-[var(--color-fg-muted)] max-w-sm">
-                    Select any file to inspect code with full syntax highlighting, line numbers, and git diff.
-                  </p>
                 </div>
 
                 <div className="flex items-center gap-2 pt-2">

@@ -2199,6 +2199,115 @@ body.canvas-resizing::after {
 }
 
 /* Internal workbench surfaces follow their pane width, including split desks. */
+.wb-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--color-canvas);
+  color: var(--color-editor-fg);
+  font-size: 13px;
+}
+
+.wb-pane-toolbar {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
+  min-height: 36px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-1);
+  font-size: 12px;
+}
+
+.wb-toolbar-spacer { flex: 1; min-width: 8px; }
+.wb-scope { min-width: 0; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.wb-meta { color: var(--color-fg-muted); font-size: 11px; font-weight: 400; }
+.wb-icon-button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; width: 28px; height: 28px; border-radius: 5px; color: var(--color-fg-muted); }
+.wb-icon-button:hover { background: var(--color-surface-2); color: var(--color-editor-fg); }
+.wb-context-line { display: flex; align-items: center; flex-shrink: 0; flex-wrap: wrap; gap: 8px; min-height: 31px; padding: 3px 10px; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-fg-muted); font-size: 11px; }
+.wb-inline-select { min-width: 0; max-width: 100%; border-radius: 5px; border: 1px solid var(--color-border-subtle); padding: 4px 6px; background: var(--color-surface-1); color: var(--color-editor-fg); font-size: 12px; }
+.wb-segmented { display: inline-flex; flex-shrink: 0; gap: 2px; padding: 2px; border: 1px solid var(--color-border-subtle); border-radius: 6px; }
+.wb-segmented button { padding: 3px 7px; border-radius: 4px; font-size: 11px; color: var(--color-fg-muted); }
+.wb-segmented button[aria-pressed="true"] { color: var(--color-editor-fg); background: var(--color-surface-3); }
+.wb-error { display: flex; align-items: flex-start; gap: 8px; flex-shrink: 0; padding: 8px 12px; color: var(--color-task-failed); background: color-mix(in srgb, var(--color-task-failed) 5%, var(--color-canvas)); border-bottom: 1px solid var(--color-border-subtle); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.wb-empty { display: flex; flex: 1; min-height: 140px; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 28px 20px; text-align: center; }
+.wb-empty h2 { font-size: 14px; font-weight: 500; color: var(--color-editor-fg); }
+.wb-empty p { max-width: 390px; color: var(--color-fg-muted); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.wb-empty code { font-size: 11px; }
+.wb-empty-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 4px; }
+.wb-agent-output { flex: 1; min-height: 0; overflow: auto; padding: 12px; }
+.wb-agent-output > .wb-empty { height: 100%; }
+.wb-agent-composer { flex-shrink: 0; margin: 0 12px 12px; padding: 10px; border: 1px solid var(--color-border-default); border-radius: 9px; background: var(--color-canvas); }
+.wb-agent-composer textarea { display: block; width: 100%; resize: vertical; min-height: 65px; max-height: 220px; padding: 2px; margin-bottom: 8px; background: transparent; color: var(--color-editor-fg); outline: none; font-size: 13px; line-height: 1.6; }
+.wb-disclosure { margin: 14px 0; border-top: 1px solid var(--color-border-subtle); padding-top: 10px; color: var(--color-fg-muted); font-size: 12px; }
+.wb-disclosure summary { cursor: pointer; }
+.wb-code-block { overflow: auto; margin-top: 8px; padding: 10px; border: 1px solid var(--color-border-subtle); border-radius: 5px; font-size: 11px; line-height: 1.6; color: var(--color-editor-fg); }
+.wb-search { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 12px; color: var(--color-fg-muted); border-bottom: 1px solid var(--color-border-subtle); }
+.wb-search input { width: 100%; min-width: 0; padding: 2px 0; border: 0; outline: 0; background: transparent; color: var(--color-editor-fg); font-size: 12px; }
+.wb-source-row { display: flex; align-items: flex-start; gap: 8px; margin: 3px 5px; border-radius: 5px; padding: 8px; }
+.wb-source-row:hover, .wb-source-row.is-selected { background: var(--color-surface-2); }
+.wb-source-row input[type="checkbox"] { margin-top: 3px; flex-shrink: 0; accent-color: var(--color-accent); }
+.wb-source-row > button { display: flex; min-width: 0; width: 100%; flex-direction: column; gap: 4px; text-align: left; color: var(--color-editor-fg); font-size: 12px; line-height: 1.55; }
+.wb-source-row small { color: var(--color-fg-muted); font-size: 11px; }
+.wb-document { max-width: 800px; margin: 0 auto; padding: 24px clamp(16px, 4cqw, 36px); font-size: 13px; line-height: 1.7; }
+.wb-document h1 { font-size: 20px; line-height: 1.4; letter-spacing: -.025em; font-weight: 550; text-wrap: balance; }
+.wb-document h2 { margin-bottom: 8px; font-size: 13px; font-weight: 600; }
+.wb-document section { margin-top: 26px; }
+.wb-document-byline { margin-top: 10px; color: var(--color-fg-muted); font-size: 12px; }
+.wb-document-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.wb-reader-text { margin-top: 12px; white-space: pre-wrap; line-height: 1.85; }
+.wb-property-list { display: grid; grid-template-columns: minmax(70px, 100px) minmax(0, 1fr); gap: 8px 16px; margin: 12px 0; font-size: 12px; line-height: 1.65; }
+.wb-property-list dt { color: var(--color-fg-muted); }
+.wb-property-list dd { min-width: 0; overflow-wrap: anywhere; }
+.wb-passage { margin-top: 12px; padding: 2px 0 2px 14px; border-left: 2px solid var(--color-border-default); }
+.wb-passage footer { margin-top: 6px; color: var(--color-fg-muted); font-size: 11px; }
+.wb-passage-selection { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; border-left: 2px solid var(--color-accent); padding: 8px 12px; background: var(--color-surface-1); font-size: 12px; }
+.wb-notebook-body { padding: 16px clamp(8px, 2cqw, 24px) 28px; }
+.wb-notebook-cell { margin: 0 auto 18px; max-width: 960px; border: 1px solid var(--color-border-subtle); border-radius: 6px; overflow: hidden; }
+.wb-notebook-cell:focus-within { border-color: var(--color-border-emphasis); }
+.wb-notebook-cell-header { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; min-height: 34px; padding: 3px 8px; background: var(--color-surface-1); font-size: 11px; }
+.wb-notebook-count { flex-shrink: 0; white-space: nowrap; font-family: var(--font-mono); font-size: 11px; color: var(--color-fg-muted); }
+.wb-dialog { position: fixed; inset: 0; width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); margin: auto; padding: 0; overflow: auto; border: 1px solid var(--color-border-default); border-radius: 10px; background: var(--color-canvas); color: var(--color-editor-fg); }
+.wb-dialog::backdrop { background: rgb(0 0 0 / .45); }
+.wb-dialog header, .wb-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; }
+.wb-dialog header { border-bottom: 1px solid var(--color-border-subtle); }
+.wb-dialog header h2 { font-size: 14px; font-weight: 550; }
+.wb-dialog footer { justify-content: flex-end; border-top: 1px solid var(--color-border-subtle); }
+.wb-form-fields { display: flex; flex-direction: column; gap: 14px; padding: 18px; }
+.wb-form-fields label { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 6px; font-size: 12px; }
+.wb-form-fields :is(input, textarea) { width: 100%; min-width: 0; padding: 7px 9px; border: 1px solid var(--color-border-default); border-radius: 5px; background: var(--color-surface-1); color: var(--color-editor-fg); font-size: 13px; }
+.wb-form-row { display: flex; gap: 12px; }
+.wb-draft-title { width: 100%; padding: 10px 0; border: 0; border-bottom: 1px solid var(--color-border-subtle); background: transparent; color: var(--color-editor-fg); font-size: 18px; font-weight: 500; line-height: 1.5; }
+.wb-draft-content { flex: 1; width: 100%; min-height: 180px; padding: 10px 0; border: 0; resize: none; background: transparent; color: var(--color-editor-fg); font-size: 14px; line-height: 1.8; }
+
+/* Resource content shares a readable scale in both application themes. */
+.workbench-resource :where([class~="text-white"], [class~="text-white/90"], [class~="text-white/95"], [class~="text-white/80"]) { color: var(--color-editor-fg); }
+.workbench-resource :where([class~="text-white/70"], [class~="text-white/60"], [class~="text-white/50"], [class~="text-white/40"]) { color: var(--color-fg-muted); }
+.workbench-resource .wb-master { background: var(--color-canvas-subtle); border-color: var(--color-border-subtle); }
+.workbench-resource .wb-master :where(button, [role="button"]) { box-shadow: none; }
+.workbench-resource .wb-master :where(button[aria-selected="true"], button[aria-current="true"]) { background: var(--color-surface-2); border-color: transparent; }
+.workbench-resource :where(.uppercase[class*="tracking-"]) { text-transform: none; letter-spacing: normal; font-weight: 500; }
+.workbench-resource :where([class~="text-[9px]"], [class~="text-[9.5px]"]) { font-size: 11px; }
+.workbench-resource .wb-pane-toolbar :where(button, a) { box-shadow: none; }
+.workbench-resource .wb-pane-toolbar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+.workbench-resource .wb-pane-toolbar > :not(.wb-toolbar-spacer) { flex-shrink: 0; }
+.workbench-resource .wb-pane-toolbar > .wb-scope { flex-shrink: 1; }
+.workbench-resource .wb-pane-toolbar > div { min-width: max-content; }
+.workbench-resource .wb-resource-body :where(main) { scrollbar-width: thin; }
+
+@container resource-pane (max-width: 440px) {
+  .workbench-resource .wb-pane-toolbar { flex-wrap: nowrap; }
+  .workbench-resource .wb-pane-toolbar > div { flex-wrap: nowrap; }
+  .wb-document { padding: 18px 14px; }
+  .wb-document h1 { font-size: 18px; }
+  .wb-property-list { grid-template-columns: 80px minmax(0, 1fr); gap: 8px; }
+  .wb-source-list.wb-master { max-height: 180px; }
+}
+
 .workbench-resource {
   container-type: inline-size;
   container-name: resource-pane;
@@ -2332,15 +2441,26 @@ body.canvas-resizing::after {
 
 .workbench-resource .wb-pane-toolbar {
   height: auto;
-  min-height: 40px;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 7px 12px;
+  min-height: 36px;
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 6px 10px;
+  background-color: var(--color-surface-1);
+  border-color: var(--color-border-subtle);
 }
 
 .workbench-resource .wb-pane-toolbar>div {
   min-width: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+/* Keep workbench chrome quiet and consistent; dialogs retain their elevation. */
+.workbench-resource :where([class*="rounded-xl"], [class*="rounded-2xl"]):not(.fixed *):not([role="dialog"] *) {
+  border-radius: 8px;
+}
+
+.workbench-resource :where([class*="shadow-"]):not(.fixed *):not([role="dialog"] *) {
+  box-shadow: none !important;
 }
 
 .wb-split-grid>.wb-master {
@@ -2355,6 +2475,10 @@ body.canvas-resizing::after {
   .workbench-resource .wb-pane-toolbar {
     padding: 6px 8px;
     gap: 5px;
+  }
+
+  .workbench-resource .wb-pane-toolbar>div {
+    flex-wrap: nowrap;
   }
 
   .workbench-resource .wb-pane-toolbar button {

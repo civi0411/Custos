@@ -253,13 +253,12 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
     <div className="flex h-full flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
       {integrationPreview && <div role="dialog" aria-modal="true" aria-label="Review integration" className="absolute inset-0 z-50 bg-canvas/95 p-6 flex flex-col gap-4 overflow-auto">
         <h3 className="text-sm font-semibold">Review integration</h3>
-        <p className="text-xs text-fg-muted">Merge the reviewed candidate into the target checkout. Other worktrees are retained.</p>
+        <p className="text-xs text-fg-muted">Merge candidate into target checkout. Pre-checked before applying; conflicts stay in target.</p>
         <dl className="text-xs space-y-2 break-all"><dt>Candidate</dt><dd>{integrationPreview.winner_branch}</dd><dt>Candidate commit</dt><dd className="font-mono">{integrationPreview.winner_head}</dd><dt>Target</dt><dd>{integrationPreview.target_branch}</dd><dt>Target commit</dt><dd className="font-mono">{integrationPreview.current_target_head}</dd></dl>
-        <p className="text-xs text-fg-muted">The daemon checks these commits again immediately before applying. Conflicts stay in the target checkout for resolution.</p>
         <div className="flex gap-2"><button type="button" autoFocus className="canvas-open-button" disabled={!!integratingId} onClick={() => setIntegrationPreview(null)}>Cancel</button><button type="button" className="canvas-open-button" disabled={!!integratingId} onClick={() => void applyIntegration()}>{integratingId ? 'Integrating…' : 'Integrate reviewed commits'}</button></div>
       </div>}
       {/* Header */}
-      <div className="flex h-11 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-3 bg-[var(--color-surface-1)]/50">
+      <div className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-3 bg-[var(--color-surface-1)]/50">
         <div className="flex items-center gap-2">
           <GitBranch className="h-4 w-4 text-white/70 shrink-0" />
           <span className="text-xs font-semibold text-white">Git Worktrees</span>
