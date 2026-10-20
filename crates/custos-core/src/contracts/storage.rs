@@ -58,6 +58,9 @@ pub trait RunPort: Send + Sync {
     async fn list_active_claims(&self) -> Result<Vec<DispatchClaim>, DomainError> {
         Ok(Vec::new())
     }
+    async fn fence_claim(&self, _claim_id: &str) -> Result<(), DomainError> {
+        Ok(())
+    }
     async fn reconcile_runs_on_startup(&self) -> Result<usize, DomainError> {
         Ok(0)
     }
@@ -135,15 +138,51 @@ pub struct OutboxEntry {
     pub status: OutboxStatus,
     pub created_at: DateTime<Utc>,
     pub receipt: Option<ExecutionReceipt>,
+    #[serde(default)]
+    pub recipient: Option<String>,
+    #[serde(default)]
+    pub payload_json: Option<String>,
+    #[serde(default)]
+    pub error_message: Option<String>,
+}
+
+impl OutboxEntry {
+    pub fn new(
+        id: impl Into<String>,
+        task_id: impl Into<String>,
+        action_id: impl Into<String>,
+        permit_id: impl Into<String>,
+        argument_digest: impl Into<String>,
+        idempotency_key: Option<String>,
+        status: OutboxStatus,
+        created_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            task_id: task_id.into(),
+            action_id: action_id.into(),
+            permit_id: permit_id.into(),
+            argument_digest: argument_digest.into(),
+            idempotency_key,
+            status,
+            created_at,
+            receipt: None,
+            recipient: None,
+            payload_json: None,
+            error_message: None,
+        }
+    }
 }
 
 /// Transactional outbox: the durable record written in T3 BEFORE any external effect.
 #[async_trait]
 pub trait OutboxPort: Send + Sync {
     async fn enqueue(&self, entry: OutboxEntry) -> Result<(), DomainError>;
+    async fn get(&self, id: &str) -> Result<Option<OutboxEntry>, DomainError>;
     async fn mark_dispatching(&self, id: &str) -> Result<(), DomainError>;
     async fn mark_receipted(&self, id: &str, receipt: ExecutionReceipt) -> Result<(), DomainError>;
     async fn mark_uncertain(&self, id: &str) -> Result<(), DomainError>;
+    async fn mark_failed(&self, id: &str, error: &str) -> Result<(), DomainError>;
     /// Used by the reconciliation protocol on daemon restart.
     async fn list_by_status(&self, status: OutboxStatus) -> Result<Vec<OutboxEntry>, DomainError>;
     /// List outbox entries filtered by task_id and status (Fix G6).
@@ -222,8 +261,31 @@ pub struct CommandLedgerEntry {
     pub expires_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CommandAdmission {
+    /// Newly admitted command, caller may proceed with execution
+    New,
+    /// Already completed with the same method and fingerprint, caller should return cached result
+    Replay(String),
+    /// Currently executing in flight
+    InFlight,
+    /// Same command_id attempted with a different method or payload/scope
+    Conflict(String),
+}
+
 #[async_trait]
 pub trait CommandLedgerPort: Send + Sync {
     async fn get_command(&self, command_id: &str) -> Result<Option<CommandLedgerEntry>, DomainError>;
     async fn record_command(&self, entry: &CommandLedgerEntry) -> Result<(), DomainError>;
+    async fn admit(
+        &self,
+        command_id: &str,
+        method: &str,
+        payload_digest: &str,
+        scope: Option<&str>,
+        now_ms: i64,
+        ttl_ms: i64,
+    ) -> Result<CommandAdmission, DomainError>;
+    async fn complete(&self, command_id: &str, result_json: &str) -> Result<(), DomainError>;
+    async fn abandon(&self, command_id: &str) -> Result<(), DomainError>;
 }

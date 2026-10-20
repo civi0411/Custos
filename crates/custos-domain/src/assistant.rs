@@ -110,6 +110,10 @@ pub struct OutboxActionItem {
     pub permit_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub receipt_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload_json: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
     pub created_at: String,
 }
 
@@ -222,6 +226,8 @@ mod tests {
             status: "pending_approval".into(),
             permit_id: None,
             receipt_id: None,
+            payload_json: None,
+            error_message: None,
             created_at: Utc::now().to_rfc3339(),
         };
 

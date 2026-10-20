@@ -12,6 +12,7 @@
 //! backed by conformance evidence.
 
 pub mod a2a;
+pub mod compute;
 pub mod download_manager;
 pub mod harness;
 pub mod local_inference;
@@ -42,6 +43,7 @@ pub use local_inference::tool_emulation;
 pub use local_inference::tool_parsing;
 
 pub use a2a::*;
+pub use compute::*;
 pub use download_manager::*;
 pub use harness::*;
 pub use local_inference::*;

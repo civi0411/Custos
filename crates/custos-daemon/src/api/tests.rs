@@ -3,7 +3,7 @@
     use custos_core::{TaskEvent, TaskStore};
     use custos_domain::{
         ContinuationPacket, DomainError, ExecuteCellResult, NotebookKernelState, Session, Span,
-        Task,
+        Task, TaskStatus,
     };
     use std::sync::Mutex;
 
@@ -1301,6 +1301,118 @@
         let tasks = dispatcher.handle_request(request("v1.tasks.list", serde_json::json!({}))).await.result.unwrap();
         assert_eq!(tasks.as_array().unwrap().len(), 1);
         assert_eq!(tasks[0]["id"], task.id);
+    }
+
+    #[tokio::test]
+    async fn outbox_preserves_failure_uncertainty_and_task_scope() {
+        use custos_core::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let outbox = Arc::new(store.outbox().clone());
+        let service = Arc::new(TaskService::new(store));
+        let task = service.execute_create(CreateTask { title: "Outbox inspection".into(), metadata: None, contract: None }).await.unwrap().0;
+        for (index, status) in [OutboxStatus::Failed, OutboxStatus::Uncertain].into_iter().enumerate() {
+            outbox.enqueue(OutboxEntry::new(
+                format!("entry-{index}"),
+                task.id.clone(),
+                "send_message",
+                "permit",
+                "sha256:payload",
+                None,
+                status,
+                chrono::Utc::now() + chrono::Duration::seconds(index as i64),
+            )).await.unwrap();
+        }
+        let sessions = Arc::new(SessionManager::new());
+        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+        let dispatcher = LocalApiDispatcher::new(service, sessions, bridge).with_outbox(outbox);
+        let request = |method: &str, params| ApiRequest { id: "outbox-inspect".into(), method: method.into(), params };
+        let response = dispatcher.handle_request(request(METHOD_ASSISTANT_OUTBOX_LIST, serde_json::json!({"task_id": task.id}))).await;
+        assert!(response.is_success(), "{:?}", response.error);
+        let items = response.result.unwrap();
+        assert_eq!(items.as_array().unwrap().len(), 2);
+        assert_eq!(items[0]["status"], "uncertain");
+        assert_eq!(items[1]["status"], "failed");
+        let empty = dispatcher.handle_request(request(METHOD_ASSISTANT_OUTBOX_LIST, serde_json::json!({"task_id": "other-task"}))).await;
+        assert_eq!(empty.result.unwrap(), serde_json::json!([]));
+        let capabilities = dispatcher.handle_request(request(METHOD_CAPABILITIES_LIST, serde_json::json!({}))).await.result.unwrap();
+        let capability = capabilities.as_array().unwrap().iter().find(|item| item["resource_id"] == "outbox").unwrap();
+        assert_eq!(capability["supported_operations"], serde_json::json!(["list", "create", "approve", "dispatch"]));
+        assert!(!dispatcher.handle_request(request(METHOD_ASSISTANT_OUTBOX_DISPATCH, serde_json::json!({"id": "entry-1"}))).await.is_success());
+    }
+
+    #[tokio::test]
+    async fn outbox_create_approve_and_dispatch_lifecycle() {
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let outbox = Arc::new(store.outbox().clone());
+        let service = Arc::new(TaskService::new(store));
+        let task = service
+            .execute_create(CreateTask {
+                title: "Outbox Full Pipeline".into(),
+                metadata: None,
+                contract: None,
+            })
+            .await
+            .unwrap()
+            .0;
+        let sessions = Arc::new(SessionManager::new());
+        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+        let dispatcher = LocalApiDispatcher::new(service, sessions, bridge).with_outbox(outbox);
+        let request = |method: &str, params| ApiRequest {
+            id: "outbox-test".into(),
+            method: method.into(),
+            params,
+        };
+
+        // 1. Create Outbox entry
+        let create_resp = dispatcher
+            .handle_request(request(
+                METHOD_ASSISTANT_OUTBOX_CREATE,
+                serde_json::json!({
+                    "task_id": task.id,
+                    "action_type": "email_dispatch",
+                    "recipient": "researcher@example.com",
+                    "payload": { "subject": "Artifact Ready", "body": "Experiment completed successfully." }
+                }),
+            ))
+            .await;
+        assert!(create_resp.is_success(), "{:?}", create_resp.error);
+        let created_item = create_resp.result.unwrap();
+        let entry_id = created_item["id"].as_str().unwrap().to_string();
+        assert_eq!(created_item["status"], "pending_approval");
+        assert_eq!(created_item["recipient"], "researcher@example.com");
+
+        // 2. Approve Outbox entry
+        let approve_resp = dispatcher
+            .handle_request(request(
+                METHOD_ASSISTANT_OUTBOX_APPROVE,
+                serde_json::json!({ "id": entry_id }),
+            ))
+            .await;
+        assert!(approve_resp.is_success(), "{:?}", approve_resp.error);
+        assert_eq!(approve_resp.result.unwrap()["status"], "approved");
+
+        // 3. Dispatch Outbox entry
+        let dispatch_resp = dispatcher
+            .handle_request(request(
+                METHOD_ASSISTANT_OUTBOX_DISPATCH,
+                serde_json::json!({ "id": entry_id }),
+            ))
+            .await;
+        assert!(dispatch_resp.is_success(), "{:?}", dispatch_resp.error);
+        let dispatch_res = dispatch_resp.result.unwrap();
+        assert_eq!(dispatch_res["status"], "receipted");
+        let receipt = &dispatch_res["receipt"];
+        assert_eq!(receipt["status"], "success");
+        assert!(receipt["output_digest"].as_str().unwrap().starts_with("sha256:"));
+
+        // 4. Double dispatch must fail CAS fencing
+        let double_dispatch = dispatcher
+            .handle_request(request(
+                METHOD_ASSISTANT_OUTBOX_DISPATCH,
+                serde_json::json!({ "id": entry_id }),
+            ))
+            .await;
+        assert!(!double_dispatch.is_success());
     }
 
     #[tokio::test]
@@ -2937,6 +3049,154 @@ mod git_and_github_workspace_detection_tests {
         let res3 = dispatcher.handle_request(req3).await;
         assert!(!res3.is_success());
         assert!(res3.error.unwrap().contains("Command ID conflict"));
+    }
+
+    #[tokio::test]
+    async fn test_compute_targets_and_experiment_lifecycle() {
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let service = Arc::new(TaskService::new(store.clone()));
+        let sessions = Arc::new(SessionManager::new());
+        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+        let dispatcher = LocalApiDispatcher::new(service, sessions, bridge)
+            .with_sqlite_store(store.clone());
+
+        // 1. List compute targets -> must return Colab, Kaggle, Rented GPU / SSH
+        let targets_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "targets_1".into(),
+                method: METHOD_COMPUTE_TARGETS_LIST.into(),
+                params: serde_json::json!({}),
+            })
+            .await;
+        assert!(targets_resp.is_success());
+        let targets = targets_resp.result.unwrap();
+        let target_arr = targets.as_array().unwrap();
+        assert!(target_arr.iter().any(|t| t["backend"] == "colab"));
+        assert!(target_arr.iter().any(|t| t["backend"] == "kaggle"));
+        assert!(target_arr.iter().any(|t| t["backend"] == "runpod"));
+
+        // 2. Preflight on Colab
+        let preflight_colab = dispatcher
+            .handle_request(ApiRequest {
+                id: "preflight_1".into(),
+                method: METHOD_EXPERIMENT_PREFLIGHT.into(),
+                params: serde_json::json!({ "backend": "colab", "recipe_id": "test_recipe" }),
+            })
+            .await;
+        assert!(preflight_colab.is_success());
+
+        // 3. Submit experiment attempt
+        let submit_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "submit_1".into(),
+                method: METHOD_EXPERIMENT_SUBMIT.into(),
+                params: serde_json::json!({
+                    "experiment_id": "exp_research_1",
+                    "recipe_id": "recipe_finetune",
+                    "backend": "colab",
+                    "mock": true,
+                }),
+            })
+            .await;
+        assert!(submit_resp.is_success(), "{:?}", submit_resp.error);
+        let submit_res = submit_resp.result.unwrap();
+        let attempt_id = submit_res["attempt"]["id"].as_str().unwrap().to_string();
+
+        // 4. Observe attempt
+        let observe_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "obs_1".into(),
+                method: METHOD_EXPERIMENT_OBSERVE.into(),
+                params: serde_json::json!({ "attempt_id": attempt_id, "mock": true }),
+            })
+            .await;
+        assert!(observe_resp.is_success(), "{:?}", observe_resp.error);
+
+        // 5. Stop attempt
+        let stop_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "stop_1".into(),
+                method: METHOD_EXPERIMENT_STOP.into(),
+                params: serde_json::json!({ "attempt_id": attempt_id, "mock": true }),
+            })
+            .await;
+        assert!(stop_resp.is_success(), "{:?}", stop_resp.error);
+
+        // 6. Release compute
+        let release_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "release_1".into(),
+                method: METHOD_EXPERIMENT_RELEASE.into(),
+                params: serde_json::json!({ "attempt_id": attempt_id, "mock": true }),
+            })
+            .await;
+        assert!(release_resp.is_success(), "{:?}", release_resp.error);
+
+        // 7. Collect artifacts
+        let collect_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "collect_1".into(),
+                method: METHOD_EXPERIMENT_COLLECT.into(),
+                params: serde_json::json!({ "attempt_id": attempt_id, "mock": true }),
+            })
+            .await;
+        assert!(collect_resp.is_success(), "{:?}", collect_resp.error);
+    }
+
+    #[tokio::test]
+    async fn test_outbox_mcp_dispatch_flow() {
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let service = Arc::new(TaskService::new(store.clone()));
+        let sessions = Arc::new(SessionManager::new());
+        let bridge = Arc::new(BridgeService::new(sessions.clone(), service.clone()));
+        let outbox_repo = Arc::new(store.outbox().clone());
+        let dispatcher = LocalApiDispatcher::new(service, sessions, bridge)
+            .with_sqlite_store(store.clone())
+            .with_outbox(outbox_repo);
+
+        // Register MCP server in federation hub
+        let client = Arc::new(custos_adapters::mcp::CustosMcpClient::new("kaggle-cluster"));
+        dispatcher.mcp_hub().register_server("kaggle", client).await.unwrap();
+
+        // 1. Create task first
+        let create_task_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "task_create_mcp".into(),
+                method: "v1.tasks.create".into(),
+                params: serde_json::json!({ "title": "Run Kaggle Job" }),
+            })
+            .await;
+        assert!(create_task_resp.is_success());
+        let task_id = create_task_resp.result.unwrap()["id"].as_str().unwrap().to_string();
+
+        // 2. Enqueue outbox item targeting mcp://kaggle/run_notebook
+        let create_outbox_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "ob_create_1".into(),
+                method: METHOD_ASSISTANT_OUTBOX_CREATE.into(),
+                params: serde_json::json!({
+                    "task_id": task_id,
+                    "action_type": "run_notebook",
+                    "recipient": "mcp://kaggle/run_notebook",
+                    "payload": { "notebook_id": "kernel_123", "gpu": "t4" },
+                }),
+            })
+            .await;
+        assert!(create_outbox_resp.is_success(), "{:?}", create_outbox_resp.error);
+        let outbox_entry_id = create_outbox_resp.result.unwrap()["id"].as_str().unwrap().to_string();
+
+        // 3. Dispatch outbox item
+        let dispatch_resp = dispatcher
+            .handle_request(ApiRequest {
+                id: "ob_dispatch_1".into(),
+                method: METHOD_ASSISTANT_OUTBOX_DISPATCH.into(),
+                params: serde_json::json!({ "id": outbox_entry_id }),
+            })
+            .await;
+        assert!(dispatch_resp.is_success(), "{:?}", dispatch_resp.error);
+        let dispatch_val = dispatch_resp.result.unwrap();
+        assert_eq!(dispatch_val["status"], "receipted");
+        assert!(dispatch_val["receipt"]["receipt_id"].is_string());
     }
 }
 

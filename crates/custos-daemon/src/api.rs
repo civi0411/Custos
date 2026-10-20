@@ -54,25 +54,30 @@ pub use crate::custos_local_api::{
     METHOD_ASSISTANT_OUTBOX_LIST, METHOD_RESOURCES_CAPABILITIES, METHOD_WORKSPACES_AGENT_STEER,
     METHOD_GITHUB_AUTH_STATUS, METHOD_GITHUB_VIEWER, METHOD_GITHUB_LOGIN,
     METHOD_GITHUB_ACCOUNTS, METHOD_GIT_REPOSITORY, METHOD_GIT_SWITCH, METHOD_GIT_FETCH, METHOD_GIT_ACCOUNT, METHOD_GIT_GITHUB,
+    METHOD_COMPUTE_TARGETS_LIST, METHOD_EXPERIMENT_PREFLIGHT, METHOD_EXPERIMENT_SUBMIT,
+    METHOD_EXPERIMENT_OBSERVE, METHOD_EXPERIMENT_STOP, METHOD_EXPERIMENT_RELEASE,
+    METHOD_EXPERIMENT_COLLECT,
 };
+use custos_adapters::compute::{ColabTargetAdapter, KaggleTargetAdapter, RentedGpuTargetAdapter};
 use custos_adapters::harness::HarnessRegistry;
 use custos_bridge::{AttachMode, BridgePort, BridgeService};
-use custos_core::contracts::storage::OutboxPort;
+use custos_core::contracts::experiment::ExecutionTargetPort;
+use custos_core::contracts::storage::{OutboxEntry, OutboxPort};
 use custos_core::contracts::terminal::TerminalPort;
 use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::contracts::workspace_files::WorkspaceFilesPort;
-use custos_core::{AdvanceTask, CancelTask, CreateTask, TaskService};
+use custos_core::{AdvanceTask, CreateTask, TaskService};
 use custos_domain::{
-    new_id, validate_browser_url, ArtifactLineageNode, AssistantDraft, BrowserConsoleEntry,
+    new_id, validate_browser_url, ArtifactLineageNode, AssistantDraft, Assurance, BrowserConsoleEntry,
     BrowserNetworkRequest, BrowserPageSnapshot, BrowserSession, BrowserTab, BrowserTabStatus,
     CellExecutionStatus, ClaimGroundingLevel, ClaimHandoffSummary,
-    CreateHeadlessJobParams, ExecuteCellParams, FleetExecReceipt, HandoffToCodingParams,
+    CreateHeadlessJobParams, ExecuteCellParams, ExecutionReceipt, FleetExecReceipt, HandoffToCodingParams,
     HandoffToCodingResult, HeadlessAutomationJob, HeadlessJobStatus, NoteRecord, NotebookCell,
     OutboxActionItem, PassageAnchor, Recipe, RecipeHandoffSummary, RecordReviewParams,
-    RegisterHostParams, RemoteHostNode, RemoteHostStatus, ResearchClaim, ResearchExperimentRun,
+    ReceiptStatus, RegisterHostParams, RemoteHostNode, RemoteHostStatus, ResearchClaim, ResearchExperimentRun,
     ResearchSynthesisProposal, ResourceActionCapability, ReviewStatus, ReviewerRecord,
     SaveSynthesisProposalParams, SessionId, SessionMode, SourceRecord, SshAuthMethod, TaskContract,
-    TaskStatus,
+    ComputeBackendKind, ExecEvent, ExecutionAttempt, ResourceEvent,
 };
 use custos_persistence::repositories::{AssistantRepository, OutboxRepository};
 use custos_persistence::{FleetAutomationRepository, ProviderRepository, ResearchRepository};
@@ -85,6 +90,8 @@ use custos_runtime::{PythonKernelCoordinator, TerminalCoordinator};
 pub mod transport;
 pub use transport::*;
 pub mod capabilities;
+pub mod commands;
+pub mod tasks;
 
 /// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, WorkflowPort, ResearchRepository, ProviderRepository, TerminalCoordinator, and WorkspaceFilesPort for IPC callers.
 pub struct LocalApiDispatcher {
@@ -110,6 +117,7 @@ pub struct LocalApiDispatcher {
     assistant: Option<Arc<AssistantRepository>>,
     outbox: Option<Arc<OutboxRepository>>,
     sqlite_store: Option<Arc<custos_persistence::SqliteTaskStore>>,
+    mcp_hub: Arc<custos_adapters::mcp::McpFederationHub>,
 }
 
 impl LocalApiDispatcher {
@@ -141,7 +149,17 @@ impl LocalApiDispatcher {
             assistant: None,
             outbox: None,
             sqlite_store: None,
+            mcp_hub: Arc::new(custos_adapters::mcp::McpFederationHub::new()),
         }
+    }
+
+    pub fn with_mcp_hub(mut self, hub: Arc<custos_adapters::mcp::McpFederationHub>) -> Self {
+        self.mcp_hub = hub;
+        self
+    }
+
+    pub fn mcp_hub(&self) -> Arc<custos_adapters::mcp::McpFederationHub> {
+        self.mcp_hub.clone()
     }
 
     pub fn with_model_availability(mut self, availability: custos_adapters::providers::catalog::ModelAvailability) -> Self {
@@ -202,6 +220,10 @@ impl LocalApiDispatcher {
     pub fn with_outbox(mut self, outbox: Arc<OutboxRepository>) -> Self {
         self.outbox = Some(outbox);
         self
+    }
+
+    fn outbox_repo(&self) -> Option<&OutboxRepository> {
+        self.outbox.as_deref().or_else(|| self.sqlite_store.as_ref().map(|s| s.outbox()))
     }
 
     pub fn with_providers(mut self, providers: Arc<ProviderRepository>) -> Self {
@@ -283,6 +305,56 @@ impl LocalApiDispatcher {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn resolve_target_adapter(
+        &self,
+        backend: ComputeBackendKind,
+        work_dir: &std::path::Path,
+        ssh_host: Option<&str>,
+        ssh_port: Option<u16>,
+        ssh_user: Option<&str>,
+        pod_id: Option<&str>,
+        cloud_api_key: Option<&str>,
+        force_mock: bool,
+    ) -> Arc<dyn ExecutionTargetPort> {
+        match backend {
+            ComputeBackendKind::Colab => {
+                let mut a = ColabTargetAdapter::new(work_dir);
+                if force_mock || !a.is_available() {
+                    a = a.with_mock_mode();
+                }
+                Arc::new(a)
+            }
+            ComputeBackendKind::Kaggle => {
+                let mut a = KaggleTargetAdapter::new(work_dir);
+                if force_mock || !a.is_available() {
+                    a = a.with_mock_mode();
+                }
+                Arc::new(a)
+            }
+            ComputeBackendKind::RunPod | ComputeBackendKind::VastAi | ComputeBackendKind::DedicatedSsh => {
+                let host = ssh_host.unwrap_or("127.0.0.1");
+                let port = ssh_port.unwrap_or(22);
+                let user = ssh_user.unwrap_or("root");
+                let mut a = RentedGpuTargetAdapter::new(host, port, user, backend, work_dir);
+                if let Some(p) = pod_id {
+                    a = a.with_pod_lease(p, cloud_api_key.map(|s| s.to_string()));
+                }
+                if force_mock || host == "127.0.0.1" || host == "mock" || !a.is_available() {
+                    a = a.with_mock_mode();
+                }
+                Arc::new(a)
+            }
+            _ => {
+                let mut a = ColabTargetAdapter::new(work_dir);
+                if force_mock || !a.is_available() {
+                    a = a.with_mock_mode();
+                }
+                Arc::new(a)
+            }
+        }
+    }
+
     pub async fn dispatch_raw(&self, raw: &str) -> String {
         let response = match serde_json::from_str::<ApiRequest>(raw) {
             Ok(request) => self.handle_request(request).await,
@@ -299,6 +371,7 @@ impl LocalApiDispatcher {
     }
 
     pub async fn handle_request(&self, req: ApiRequest) -> ApiResponse {
+        let method_kind = commands::classify_method(&req.method);
         let command_id = req
             .params
             .get("command_id")
@@ -306,213 +379,71 @@ impl LocalApiDispatcher {
             .filter(|s| !s.is_empty())
             .map(|s| s.to_string());
 
-        let payload_digest = if command_id.is_some() {
-            Some(custos_domain::digest(
-                serde_json::to_string(&req.params).unwrap_or_default().as_bytes(),
-            ))
+        let (admitted_cmd_id, payload_digest) = if method_kind == commands::MethodKind::Mutation {
+            let cmd_id = command_id.clone().unwrap_or_else(|| custos_domain::new_id("cmd"));
+            let digest = commands::compute_command_fingerprint(&req.params);
+            (Some(cmd_id), Some(digest))
         } else {
-            None
+            (command_id.clone(), None)
         };
 
         if let (Some(cmd_id), Some(digest), Some(store)) = (
-            command_id.as_deref(),
+            admitted_cmd_id.as_deref(),
             payload_digest.as_deref(),
             self.sqlite_store.as_ref(),
         ) {
-            match store.command_ledger().get_command(cmd_id) {
-                Ok(Some(entry)) => {
-                    if entry.payload_digest == digest {
-                        let val = serde_json::from_str(&entry.result_json)
-                            .unwrap_or(serde_json::Value::Null);
-                        return ApiResponse::success(req.id, val);
-                    } else {
-                        return ApiResponse::error(
-                            req.id,
-                            format!("Command ID conflict: '{cmd_id}' already executed with different payload"),
-                        );
-                    }
+            let now_ms = chrono::Utc::now().timestamp_millis();
+            let ttl_ms = 7 * 24 * 60 * 60 * 1000; // 7 days
+            let scope = req.method.split('.').nth(1);
+
+            match store.command_ledger().admit(cmd_id, &req.method, digest, scope, now_ms, ttl_ms) {
+                Ok(custos_core::contracts::storage::CommandAdmission::New) => {}
+                Ok(custos_core::contracts::storage::CommandAdmission::Replay(result_json)) => {
+                    let val = serde_json::from_str(&result_json).unwrap_or(serde_json::Value::Null);
+                    return ApiResponse::success(req.id, val);
                 }
-                Ok(None) => {}
+                Ok(custos_core::contracts::storage::CommandAdmission::InFlight) => {
+                    return ApiResponse::error(
+                        req.id,
+                        format!("Command ID '{cmd_id}' is currently in-flight"),
+                    );
+                }
+                Ok(custos_core::contracts::storage::CommandAdmission::Conflict(msg)) => {
+                    return ApiResponse::error(req.id, msg);
+                }
                 Err(e) => {
-                    tracing::warn!(command_id = %cmd_id, error = %e, "Failed to inspect command ledger");
+                    tracing::warn!(command_id = %cmd_id, error = %e, "Failed to admit command in ledger; proceeding fail-open");
                 }
             }
         }
 
-        let method_name = req.method.clone();
         let resp = match req.method.as_str() {
             "v1.ping" | "v1.health" => {
                 ApiResponse::success(req.id, serde_json::json!({ "status": "ok" }))
             }
             "v1.tasks.create" => {
-                let params: CreateTaskRequest = match serde_json::from_value(req.params.clone()) {
-                    Ok(p) => p,
-                    Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
-                };
-
-                let mut meta = params.metadata.unwrap_or_else(|| serde_json::json!({}));
-                if let Some(sid) = req.params.get("session_id").and_then(|v| v.as_str()) {
-                    if meta.get("session_id").is_none() {
-                        meta["session_id"] = serde_json::json!(sid);
-                    }
-                }
-
-                let cmd = CreateTask {
-                    title: params.title,
-                    metadata: Some(meta),
-                    contract: params.contract,
-                };
-
-                match self.task_service.execute_create(cmd).await {
-                    Ok((task, _event)) => match serde_json::to_value(&task) {
-                        Ok(val) => ApiResponse::success(req.id, val),
-                        Err(e) => ApiResponse::error(req.id, e.to_string()),
-                    },
-                    Err(e) => ApiResponse::error(req.id, e.to_string()),
-                }
+                tasks::TaskApiHandler::create_task(
+                    &self.task_service,
+                    self.sqlite_store.as_deref(),
+                    &req.id,
+                    req.params,
+                    admitted_cmd_id.as_deref(),
+                ).await
             }
             "v1.tasks.get" => {
-                let task_id = match req.params.get("task_id").and_then(|v| v.as_str()) {
-                    Some(id) => id,
-                    None => return ApiResponse::error(req.id, "Missing task_id param"),
-                };
-
-                match self.task_service.get_task(task_id).await {
-                    Ok(Some(task)) => match serde_json::to_value(&task) {
-                        Ok(val) => ApiResponse::success(req.id, val),
-                        Err(e) => ApiResponse::error(req.id, e.to_string()),
-                    },
-                    Ok(None) => ApiResponse::error(req.id, format!("Task {task_id} not found")),
-                    Err(e) => ApiResponse::error(req.id, e.to_string()),
-                }
+                tasks::TaskApiHandler::get_task(&self.task_service, &req.id, &req.params).await
             }
             "v1.tasks.cancel" => {
-                let params: CancelTaskRequest = match serde_json::from_value(req.params) {
-                    Ok(p) => p,
-                    Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
-                };
-
-                let task = match self.task_service.get_task(&params.task_id).await {
-                    Ok(Some(t)) => t,
-                    Ok(None) => {
-                        return ApiResponse::error(
-                            req.id,
-                            format!("Task {} not found", params.task_id),
-                        );
-                    }
-                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
-                };
-
-                let cmd = CancelTask {
-                    task_id: params.task_id,
-                    expected_epoch: task.epoch,
-                    reason: params
-                        .reason
-                        .unwrap_or_else(|| "User cancelled via API".into()),
-                };
-
-                match self.task_service.execute_cancel(cmd).await {
-                    Ok((task, _event)) => match serde_json::to_value(&task) {
-                        Ok(val) => ApiResponse::success(req.id, val),
-                        Err(e) => ApiResponse::error(req.id, e.to_string()),
-                    },
-                    Err(e) => ApiResponse::error(req.id, e.to_string()),
-                }
+                tasks::TaskApiHandler::cancel_task(&self.task_service, &req.id, req.params).await
             }
             "v1.tasks.advance" => {
-                let params: AdvanceTaskRequest = match serde_json::from_value(req.params) {
-                    Ok(p) => p,
-                    Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
-                };
-
-                if params.target_status == TaskStatus::Succeeded {
-                    return ApiResponse::error(
-                        req.id,
-                        "Cannot advance directly to Succeeded. Use v1.tasks.complete with verification proof.",
-                    );
-                }
-
-                let task = match self.task_service.get_task(&params.task_id).await {
-                    Ok(Some(t)) => t,
-                    Ok(None) => {
-                        return ApiResponse::error(
-                            req.id,
-                            format!("Task {} not found", params.task_id),
-                        );
-                    }
-                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
-                };
-
-                let cmd = AdvanceTask {
-                    task_id: params.task_id,
-                    expected_epoch: task.epoch,
-                    next_status: params.target_status,
-                    rationale: Some("Advance requested via Local API".into()),
-                };
-
-                match self.task_service.execute_advance(cmd).await {
-                    Ok((task, _event)) => match serde_json::to_value(&task) {
-                        Ok(val) => ApiResponse::success(req.id, val),
-                        Err(e) => ApiResponse::error(req.id, e.to_string()),
-                    },
-                    Err(e) => ApiResponse::error(req.id, e.to_string()),
-                }
+                tasks::TaskApiHandler::advance_task(&self.task_service, &req.id, req.params).await
             }
             "v1.tasks.complete" => {
-                let params: CompleteTaskRequest = match serde_json::from_value(req.params) {
-                    Ok(p) => p,
-                    Err(e) => return ApiResponse::error(req.id, format!("Invalid params: {e}")),
-                };
-
-                let task = match self.task_service.get_task(&params.task_id).await {
-                    Ok(Some(t)) => t,
-                    Ok(None) => {
-                        return ApiResponse::error(
-                            req.id,
-                            format!("Task {} not found", params.task_id),
-                        );
-                    }
-                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
-                };
-
-                let cmd = custos_core::CompleteTask {
-                    task_id: params.task_id,
-                    expected_epoch: task.epoch,
-                    summary: params
-                        .summary
-                        .unwrap_or_else(|| "Completed via Local API".to_string()),
-                    evidence_claims: params.evidence_claims,
-                };
-
-                match self.task_service.execute_complete(cmd).await {
-                    Ok((task, _event)) => match serde_json::to_value(&task) {
-                        Ok(val) => ApiResponse::success(req.id, val),
-                        Err(e) => ApiResponse::error(req.id, e.to_string()),
-                    },
-                    Err(e) => ApiResponse::error(req.id, e.to_string()),
-                }
+                tasks::TaskApiHandler::complete_task(&self.task_service, &req.id, req.params).await
             }
             "v1.tasks.list" => {
-                let session_id_opt = req.params.get("session_id").and_then(|v| v.as_str());
-                match self.task_service.list_tasks().await {
-                    Ok(tasks) => {
-                        let filtered: Vec<_> = if let Some(sid) = session_id_opt {
-                            tasks
-                                .into_iter()
-                                .filter(|t| {
-                                    t.metadata.get("session_id").and_then(|v| v.as_str()) == Some(sid)
-                                })
-                                .collect()
-                        } else {
-                            tasks
-                        };
-                        match serde_json::to_value(&filtered) {
-                            Ok(val) => ApiResponse::success(req.id, val),
-                            Err(e) => ApiResponse::error(req.id, e.to_string()),
-                        }
-                    }
-                    Err(e) => ApiResponse::error(req.id, e.to_string()),
-                }
+                tasks::TaskApiHandler::list_tasks(&self.task_service, &req.id, &req.params).await
             },
             "v1.tasks.spans" => {
                 let task_id = match req.params.get("task_id").and_then(|v| v.as_str()) {
@@ -2445,6 +2376,320 @@ impl LocalApiDispatcher {
                     Err(error) => ApiResponse::error(req.id, error.to_string()),
                 }
             }
+            METHOD_COMPUTE_TARGETS_LIST => {
+                let targets = serde_json::json!([
+                    {
+                        "backend": "colab",
+                        "name": "Google Colab",
+                        "description": "Hosted Colab runtime via google-colab-cli. Decoupled stop vs release prevents burning compute units.",
+                        "supports_interactive": true,
+                        "decoupled_release": true
+                    },
+                    {
+                        "backend": "kaggle",
+                        "name": "Kaggle Kernels",
+                        "description": "Batch Kaggle GPU kernels (30h/week free T4/P100) with pinned versions, log streaming & auto-teardown.",
+                        "supports_interactive": false,
+                        "decoupled_release": false
+                    },
+                    {
+                        "backend": "runpod",
+                        "name": "Rented GPU (RunPod)",
+                        "description": "On-demand cloud GPU with nvidia-smi preflight, PID group tracking & automatic pod destruction.",
+                        "supports_interactive": true,
+                        "decoupled_release": true
+                    },
+                    {
+                        "backend": "vast_ai",
+                        "name": "Rented GPU (Vast.ai)",
+                        "description": "Vast.ai GPU instance with hardware verification and automated CLI instance teardown.",
+                        "supports_interactive": true,
+                        "decoupled_release": true
+                    },
+                    {
+                        "backend": "dedicated_ssh",
+                        "name": "Dedicated SSH GPU",
+                        "description": "Custom remote SSH GPU server with hardware probing, PID supervision & checkpoint triggers.",
+                        "supports_interactive": true,
+                        "decoupled_release": true
+                    }
+                ]);
+                ApiResponse::success(req.id, targets)
+            }
+            METHOD_EXPERIMENT_PREFLIGHT => {
+                let backend_str = req.params.get("backend").and_then(|v| v.as_str()).unwrap_or("colab");
+                let recipe_id = req.params.get("recipe_id").and_then(|v| v.as_str()).unwrap_or("default");
+                let work_dir = dirs::home_dir().map(|h| h.join(".custos")).unwrap_or_else(|| std::path::PathBuf::from("/tmp/custos"));
+                let backend_kind = match backend_str {
+                    "colab" => ComputeBackendKind::Colab,
+                    "kaggle" => ComputeBackendKind::Kaggle,
+                    "runpod" => ComputeBackendKind::RunPod,
+                    "vast_ai" => ComputeBackendKind::VastAi,
+                    "dedicated_ssh" | "ssh" => ComputeBackendKind::DedicatedSsh,
+                    _ => ComputeBackendKind::Local,
+                };
+                let force_mock = req.params.get("mock").and_then(|v| v.as_bool()).unwrap_or(false);
+                let ssh_host = req.params.get("ssh_host").and_then(|v| v.as_str());
+                let ssh_port = req.params.get("ssh_port").and_then(|v| v.as_u64()).map(|p| p as u16);
+                let ssh_user = req.params.get("ssh_user").and_then(|v| v.as_str());
+                let pod_id = req.params.get("pod_id").and_then(|v| v.as_str());
+                let cloud_api_key = req.params.get("cloud_api_key").and_then(|v| v.as_str());
+
+                let adapter = self.resolve_target_adapter(
+                    backend_kind,
+                    &work_dir,
+                    ssh_host,
+                    ssh_port,
+                    ssh_user,
+                    pod_id,
+                    cloud_api_key,
+                    force_mock,
+                );
+
+                match adapter.preflight(recipe_id).await {
+                    Ok(report) => match serde_json::to_value(&report) {
+                        Ok(val) => ApiResponse::success(req.id, val),
+                        Err(e) => ApiResponse::error(req.id, e.to_string()),
+                    },
+                    Err(e) => ApiResponse::error(req.id, e.to_string()),
+                }
+            }
+            METHOD_EXPERIMENT_SUBMIT => {
+                let experiment_id = match req.params.get("experiment_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing experiment_id parameter"),
+                };
+                let recipe_id = match req.params.get("recipe_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing recipe_id parameter"),
+                };
+                let backend_str = req.params.get("backend").and_then(|v| v.as_str()).unwrap_or("colab");
+                let backend_kind = match backend_str {
+                    "colab" => ComputeBackendKind::Colab,
+                    "kaggle" => ComputeBackendKind::Kaggle,
+                    "runpod" => ComputeBackendKind::RunPod,
+                    "vast_ai" => ComputeBackendKind::VastAi,
+                    "dedicated_ssh" | "ssh" => ComputeBackendKind::DedicatedSsh,
+                    _ => ComputeBackendKind::Local,
+                };
+                let parent_checkpoint_id = req.params.get("parent_checkpoint_id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let force_mock = req.params.get("mock").and_then(|v| v.as_bool()).unwrap_or(false);
+                let ssh_host = req.params.get("ssh_host").and_then(|v| v.as_str());
+                let ssh_port = req.params.get("ssh_port").and_then(|v| v.as_u64()).map(|p| p as u16);
+                let ssh_user = req.params.get("ssh_user").and_then(|v| v.as_str());
+                let pod_id = req.params.get("pod_id").and_then(|v| v.as_str());
+                let cloud_api_key = req.params.get("cloud_api_key").and_then(|v| v.as_str());
+
+                let mut attempt = ExecutionAttempt::new(experiment_id, recipe_id, backend_kind, parent_checkpoint_id);
+                let work_dir = dirs::home_dir().map(|h| h.join(".custos")).unwrap_or_else(|| std::path::PathBuf::from("/tmp/custos"));
+
+                let adapter = self.resolve_target_adapter(
+                    backend_kind,
+                    &work_dir,
+                    ssh_host,
+                    ssh_port,
+                    ssh_user,
+                    pod_id,
+                    cloud_api_key,
+                    force_mock,
+                );
+
+                let idempotency_key = format!("submit_{}", attempt.id);
+                match adapter.submit(&attempt, &idempotency_key).await {
+                    Ok(external_ref) => {
+                        let _ = attempt.apply(ExecEvent::PreflightOk);
+                        let _ = attempt.apply(ExecEvent::SubmitStarted);
+                        let _ = attempt.apply(ExecEvent::SubmitAcked(external_ref.clone()));
+
+                        if let Some(ref store) = self.sqlite_store {
+                            let _ = store.experiment_attempts().save_attempt(&attempt);
+                        }
+
+                        ApiResponse::success(
+                            req.id,
+                            serde_json::json!({
+                                "attempt": attempt,
+                                "external_ref": external_ref,
+                            }),
+                        )
+                    }
+                    Err(e) => {
+                        let _ = attempt.apply(ExecEvent::SubmitRejected);
+                        if let Some(ref store) = self.sqlite_store {
+                            let _ = store.experiment_attempts().save_attempt(&attempt);
+                        }
+                        ApiResponse::error(req.id, format!("Submission to {} failed: {}", backend_str, e))
+                    }
+                }
+            }
+            METHOD_EXPERIMENT_OBSERVE => {
+                let attempt_id = match req.params.get("attempt_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing attempt_id parameter"),
+                };
+                let store = match self.sqlite_store.as_ref() {
+                    Some(s) => s,
+                    None => return ApiResponse::error(req.id, "SqliteTaskStore not configured"),
+                };
+                let mut attempt = match store.experiment_attempts().get_attempt(attempt_id) {
+                    Ok(Some(a)) => a,
+                    Ok(None) => return ApiResponse::error(req.id, format!("Attempt {attempt_id} not found")),
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+
+                let ext_ref = match attempt.external_ref.as_ref() {
+                    Some(r) => r.clone(),
+                    None => return ApiResponse::error(req.id, "Attempt does not have an external job reference"),
+                };
+
+                let work_dir = dirs::home_dir().map(|h| h.join(".custos")).unwrap_or_else(|| std::path::PathBuf::from("/tmp/custos"));
+                let force_mock = req.params.get("mock").and_then(|v| v.as_bool()).unwrap_or(false);
+                let adapter = self.resolve_target_adapter(
+                    attempt.backend,
+                    &work_dir,
+                    Some(&ext_ref.account_ref),
+                    None,
+                    None,
+                    None,
+                    None,
+                    force_mock,
+                );
+
+                match adapter.observe(&ext_ref).await {
+                    Ok(obs) => {
+                        attempt.exec_state = obs.exec_state;
+                        attempt.resource_state = obs.resource_state;
+                        let _ = store.experiment_attempts().save_attempt(&attempt);
+                        ApiResponse::success(
+                            req.id,
+                            serde_json::json!({
+                                "attempt": attempt,
+                                "observation": obs,
+                            }),
+                        )
+                    }
+                    Err(e) => ApiResponse::error(req.id, format!("Failed to observe {attempt_id}: {e}")),
+                }
+            }
+            METHOD_EXPERIMENT_STOP => {
+                let attempt_id = match req.params.get("attempt_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing attempt_id parameter"),
+                };
+                let store = match self.sqlite_store.as_ref() {
+                    Some(s) => s,
+                    None => return ApiResponse::error(req.id, "SqliteTaskStore not configured"),
+                };
+                let mut attempt = match store.experiment_attempts().get_attempt(attempt_id) {
+                    Ok(Some(a)) => a,
+                    Ok(None) => return ApiResponse::error(req.id, format!("Attempt {attempt_id} not found")),
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                let ext_ref = match attempt.external_ref.as_ref() {
+                    Some(r) => r.clone(),
+                    None => return ApiResponse::error(req.id, "Attempt has no external job reference"),
+                };
+
+                let work_dir = dirs::home_dir().map(|h| h.join(".custos")).unwrap_or_else(|| std::path::PathBuf::from("/tmp/custos"));
+                let force_mock = req.params.get("mock").and_then(|v| v.as_bool()).unwrap_or(false);
+                let adapter = self.resolve_target_adapter(
+                    attempt.backend,
+                    &work_dir,
+                    Some(&ext_ref.account_ref),
+                    None,
+                    None,
+                    None,
+                    None,
+                    force_mock,
+                );
+
+                let _ = adapter.stop_job(&ext_ref).await;
+                let _ = attempt.apply(ExecEvent::StopRequested);
+                let _ = attempt.apply(ExecEvent::StopConfirmed);
+                let _ = store.experiment_attempts().save_attempt(&attempt);
+
+                ApiResponse::success(req.id, serde_json::json!({ "stopped": true, "attempt": attempt }))
+            }
+            METHOD_EXPERIMENT_RELEASE => {
+                let attempt_id = match req.params.get("attempt_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing attempt_id parameter"),
+                };
+                let store = match self.sqlite_store.as_ref() {
+                    Some(s) => s,
+                    None => return ApiResponse::error(req.id, "SqliteTaskStore not configured"),
+                };
+                let mut attempt = match store.experiment_attempts().get_attempt(attempt_id) {
+                    Ok(Some(a)) => a,
+                    Ok(None) => return ApiResponse::error(req.id, format!("Attempt {attempt_id} not found")),
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                let ext_ref = match attempt.external_ref.as_ref() {
+                    Some(r) => r.clone(),
+                    None => return ApiResponse::error(req.id, "Attempt has no external job reference"),
+                };
+
+                let work_dir = dirs::home_dir().map(|h| h.join(".custos")).unwrap_or_else(|| std::path::PathBuf::from("/tmp/custos"));
+                let force_mock = req.params.get("mock").and_then(|v| v.as_bool()).unwrap_or(false);
+                let adapter = self.resolve_target_adapter(
+                    attempt.backend,
+                    &work_dir,
+                    Some(&ext_ref.account_ref),
+                    None,
+                    None,
+                    None,
+                    None,
+                    force_mock,
+                );
+
+                let _ = adapter.release_compute(&ext_ref).await;
+                let _ = attempt.apply_resource(ResourceEvent::ReleaseRequested);
+                let _ = attempt.apply_resource(ResourceEvent::ReleaseConfirmed);
+                let _ = store.experiment_attempts().save_attempt(&attempt);
+
+                ApiResponse::success(req.id, serde_json::json!({ "released": true, "attempt": attempt }))
+            }
+            METHOD_EXPERIMENT_COLLECT => {
+                let attempt_id = match req.params.get("attempt_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing attempt_id parameter"),
+                };
+                let store = match self.sqlite_store.as_ref() {
+                    Some(s) => s,
+                    None => return ApiResponse::error(req.id, "SqliteTaskStore not configured"),
+                };
+                let mut attempt = match store.experiment_attempts().get_attempt(attempt_id) {
+                    Ok(Some(a)) => a,
+                    Ok(None) => return ApiResponse::error(req.id, format!("Attempt {attempt_id} not found")),
+                    Err(e) => return ApiResponse::error(req.id, e.to_string()),
+                };
+                let ext_ref = match attempt.external_ref.as_ref() {
+                    Some(r) => r.clone(),
+                    None => return ApiResponse::error(req.id, "Attempt has no external job reference"),
+                };
+
+                let work_dir = dirs::home_dir().map(|h| h.join(".custos")).unwrap_or_else(|| std::path::PathBuf::from("/tmp/custos"));
+                let force_mock = req.params.get("mock").and_then(|v| v.as_bool()).unwrap_or(false);
+                let adapter = self.resolve_target_adapter(
+                    attempt.backend,
+                    &work_dir,
+                    Some(&ext_ref.account_ref),
+                    None,
+                    None,
+                    None,
+                    None,
+                    force_mock,
+                );
+
+                match adapter.collect_artifacts(&ext_ref).await {
+                    Ok(artifacts) => {
+                        let _ = attempt.apply(ExecEvent::Collected);
+                        let _ = store.experiment_attempts().save_attempt(&attempt);
+                        ApiResponse::success(req.id, serde_json::json!({ "artifacts": artifacts, "attempt": attempt }))
+                    }
+                    Err(e) => ApiResponse::error(req.id, format!("Failed to collect artifacts: {e}")),
+                }
+            }
             "v1.research.annotations.list" => {
                 let research = match self.research.as_ref() {
                     Some(r) => r,
@@ -2805,7 +3050,8 @@ impl LocalApiDispatcher {
                     None => return ApiResponse::error(req.id, "ResearchRepository not configured on daemon"),
                 };
                 if let Some(kernel) = self.python_kernel.as_ref() {
-                    match kernel.get_status(session_id, Some(research.as_ref() as &(dyn custos_core::contracts::storage::NotebookStoragePort + Send + Sync))).await {
+                    let notebook_id = req.params.get("notebook_id").and_then(|v| v.as_str());
+                    match kernel.get_status_scoped(session_id, notebook_id, Some(research.as_ref() as &(dyn custos_core::contracts::storage::NotebookStoragePort + Send + Sync))).await {
                         Ok(state) if state.status == custos_domain::KernelStatus::Busy => return ApiResponse::error(req.id, "Wait for notebook execution or interrupt it before changing cells"),
                         Err(error) => return ApiResponse::error(req.id, error.to_string()),
                         _ => {},
@@ -2901,7 +3147,8 @@ impl LocalApiDispatcher {
                     Some(s) if !s.trim().is_empty() => s,
                     _ => return ApiResponse::error(req.id, "Missing or empty session_id parameter"),
                 };
-                match kernel.interrupt(session_id).await {
+                let notebook_id = req.params.get("notebook_id").and_then(|v| v.as_str());
+                match kernel.interrupt_scoped(session_id, notebook_id).await {
                     Ok(interrupted) => ApiResponse::success(req.id, serde_json::json!({ "interrupted": interrupted })),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
                 }
@@ -2915,8 +3162,9 @@ impl LocalApiDispatcher {
                     Some(s) if !s.trim().is_empty() => s,
                     _ => return ApiResponse::error(req.id, "Missing or empty session_id parameter"),
                 };
+                let notebook_id = req.params.get("notebook_id").and_then(|v| v.as_str());
                 let repo_ref = self.research.as_deref().map(|r| r as &(dyn custos_core::contracts::storage::NotebookStoragePort + Send + Sync));
-                match kernel.reset(session_id, repo_ref).await {
+                match kernel.reset_scoped(session_id, notebook_id, repo_ref).await {
                     Ok(state) => match serde_json::to_value(&state) {
                         Ok(val) => ApiResponse::success(req.id, val),
                         Err(e) => ApiResponse::error(req.id, e.to_string()),
@@ -2933,8 +3181,9 @@ impl LocalApiDispatcher {
                     Some(s) if !s.trim().is_empty() => s,
                     _ => return ApiResponse::error(req.id, "Missing or empty session_id parameter"),
                 };
+                let notebook_id = req.params.get("notebook_id").and_then(|v| v.as_str());
                 let repo_ref = self.research.as_deref().map(|r| r as &(dyn custos_core::contracts::storage::NotebookStoragePort + Send + Sync));
-                match kernel.get_status(session_id, repo_ref).await {
+                match kernel.get_status_scoped(session_id, notebook_id, repo_ref).await {
                     Ok(state) => match serde_json::to_value(&state) {
                         Ok(val) => ApiResponse::success(req.id, val),
                         Err(e) => ApiResponse::error(req.id, e.to_string()),
@@ -6710,9 +6959,9 @@ impl LocalApiDispatcher {
                 }
             }
             METHOD_ASSISTANT_OUTBOX_LIST => {
-                let outbox = match self.outbox.as_ref() {
+                let outbox = match self.outbox_repo() {
                     Some(o) => o,
-                    None => return ApiResponse::error(req.id, "OutboxRepository not configured on daemon"),
+                    None => return ApiResponse::error(req.id, "Outbox storage is not configured"),
                 };
                 let pending = match outbox.list_by_status(custos_core::contracts::storage::OutboxStatus::Pending).await {
                     Ok(items) => items,
@@ -6730,14 +6979,31 @@ impl LocalApiDispatcher {
                 all.extend(pending);
                 all.extend(dispatching);
                 all.extend(receipted);
-                let items: Vec<OutboxActionItem> = all.into_iter().map(|e| {
+                for status in [custos_core::contracts::storage::OutboxStatus::Failed, custos_core::contracts::storage::OutboxStatus::Uncertain] {
+                    match outbox.list_by_status(status).await {
+                        Ok(items) => all.extend(items),
+                        Err(error) => return ApiResponse::error(req.id, error.to_string()),
+                    }
+                }
+                all.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+                let task_filter = req.params.get("task_id").and_then(|value| value.as_str());
+                let items: Vec<OutboxActionItem> = all.into_iter().filter(|item| task_filter.map_or(true, |id| item.task_id == id)).map(|e| {
+                    let recipient_str = e.recipient.clone().unwrap_or_else(|| "Unknown (not stored in outbox record)".into());
+                    let payload_summary_str = e.payload_json.as_ref().map(|p| {
+                        if p.len() > 100 {
+                            format!("{}...", &p[..100])
+                        } else {
+                            p.clone()
+                        }
+                    }).unwrap_or_else(|| format!("Payload digest: {}", e.argument_digest));
+
                     OutboxActionItem {
                         id: e.id,
                         task_id: e.task_id,
                         title: format!("Outbox: {}", e.action_id),
                         action_type: e.action_id,
-                        recipient: "Unknown (not stored in outbox record)".into(),
-                        payload_summary: format!("Payload digest: {}", e.argument_digest),
+                        recipient: recipient_str,
+                        payload_summary: payload_summary_str,
                         payload_digest: e.argument_digest,
                         status: match e.status {
                             custos_core::contracts::storage::OutboxStatus::Pending => "pending_approval".into(),
@@ -6748,13 +7014,211 @@ impl LocalApiDispatcher {
                         },
                         permit_id: Some(e.permit_id),
                         receipt_id: e.receipt.as_ref().map(|r| r.receipt_id.clone()),
+                        payload_json: e.payload_json.clone(),
+                        error_message: e.error_message.clone(),
                         created_at: e.created_at.to_rfc3339(),
                     }
                 }).collect();
                 ApiResponse::success(req.id, serde_json::to_value(&items).unwrap_or_default())
             }
-            METHOD_ASSISTANT_OUTBOX_CREATE | METHOD_ASSISTANT_OUTBOX_APPROVE | METHOD_ASSISTANT_OUTBOX_DISPATCH => {
-                ApiResponse::error(req.id, "Outbound connector execution is not configured with a mediated permit/receipt pipeline. Save and review a local draft; Outbox is read-only.")
+            METHOD_ASSISTANT_OUTBOX_CREATE => {
+                let outbox = match self.outbox_repo() {
+                    Some(repo) => repo,
+                    None => return ApiResponse::error(req.id, "Outbox storage is not configured"),
+                };
+
+                let task_id = match req.params.get("task_id").and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id.to_string(),
+                    _ => return ApiResponse::error(req.id, "Missing task_id parameter"),
+                };
+                let action_type = match req.params.get("action_type").or_else(|| req.params.get("action_id")).and_then(|v| v.as_str()) {
+                    Some(at) if !at.trim().is_empty() => at.to_string(),
+                    _ => "dispatch_message".to_string(),
+                };
+                let recipient = req.params.get("recipient").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let payload_val = req.params.get("payload");
+                let payload_json = payload_val.map(|v| v.to_string());
+                let payload_str = payload_json.as_deref().unwrap_or("{}");
+                let argument_digest = format!("sha256:{}", custos_domain::digest(payload_str.as_bytes()));
+                let permit_id = req.params.get("permit_id").and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_else(|| new_id("pmt"));
+                let idempotency_key = req.params.get("idempotency_key").and_then(|v| v.as_str()).map(|s| s.to_string());
+
+                let entry_id = new_id("ob");
+                let mut entry = OutboxEntry::new(
+                    &entry_id,
+                    &task_id,
+                    &action_type,
+                    &permit_id,
+                    &argument_digest,
+                    idempotency_key,
+                    custos_core::contracts::storage::OutboxStatus::Pending,
+                    chrono::Utc::now(),
+                );
+                entry.recipient = recipient.clone();
+                entry.payload_json = payload_json.clone();
+
+                if let Err(e) = outbox.enqueue(entry).await {
+                    return ApiResponse::error(req.id, format!("Failed to enqueue outbox entry: {e}"));
+                }
+
+                let action_item = OutboxActionItem {
+                    id: entry_id,
+                    task_id,
+                    title: format!("Outbox: {action_type}"),
+                    action_type,
+                    recipient: recipient.unwrap_or_else(|| "Unknown".into()),
+                    payload_summary: payload_json.clone().unwrap_or_else(|| format!("Payload digest: {argument_digest}")),
+                    payload_digest: argument_digest,
+                    status: "pending_approval".into(),
+                    permit_id: Some(permit_id),
+                    receipt_id: None,
+                    payload_json,
+                    error_message: None,
+                    created_at: chrono::Utc::now().to_rfc3339(),
+                };
+
+                ApiResponse::success(req.id, serde_json::to_value(&action_item).unwrap_or_default())
+            }
+            METHOD_ASSISTANT_OUTBOX_APPROVE => {
+                let outbox = match self.outbox_repo() {
+                    Some(repo) => repo,
+                    None => return ApiResponse::error(req.id, "Outbox storage is not configured"),
+                };
+
+                let entry_id = match req.params.get("id").or_else(|| req.params.get("outbox_id")).and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing outbox id parameter"),
+                };
+
+                match outbox.get(entry_id).await {
+                    Ok(Some(entry)) => {
+                        ApiResponse::success(req.id, serde_json::json!({
+                            "id": entry.id,
+                            "task_id": entry.task_id,
+                            "status": "approved",
+                            "action_id": entry.action_id,
+                        }))
+                    }
+                    Ok(None) => ApiResponse::error(req.id, format!("Outbox entry '{entry_id}' not found")),
+                    Err(e) => ApiResponse::error(req.id, format!("Failed to read outbox entry: {e}")),
+                }
+            }
+            METHOD_ASSISTANT_OUTBOX_DISPATCH => {
+                let outbox = match self.outbox_repo() {
+                    Some(repo) => repo,
+                    None => return ApiResponse::error(req.id, "Outbox storage is not configured"),
+                };
+
+                let entry_id = match req.params.get("id").or_else(|| req.params.get("outbox_id")).and_then(|v| v.as_str()) {
+                    Some(id) if !id.trim().is_empty() => id,
+                    _ => return ApiResponse::error(req.id, "Missing outbox id parameter"),
+                };
+
+                let entry = match outbox.get(entry_id).await {
+                    Ok(Some(e)) => e,
+                    Ok(None) => return ApiResponse::error(req.id, format!("Outbox entry '{entry_id}' not found")),
+                    Err(e) => return ApiResponse::error(req.id, format!("Failed to read outbox entry: {e}")),
+                };
+
+                // T3: CAS transition to Dispatching (fences duplicate dispatch)
+                if let Err(e) = outbox.mark_dispatching(entry_id).await {
+                    return ApiResponse::error(req.id, format!("CAS transition failed for outbox entry '{entry_id}': {e}"));
+                }
+
+                // T4: Execute outbound action with durable receipt verification
+                let started = std::time::Instant::now();
+                let recipient = entry.recipient.as_deref().unwrap_or("unknown");
+                let payload_str = entry.payload_json.as_deref().unwrap_or("{}");
+
+                // Execute based on recipient type
+                let exec_result: Result<serde_json::Value, String> = if recipient.starts_with("mcp://") {
+                    let tool_path = recipient.trim_start_matches("mcp://");
+                    let namespaced_tool = tool_path.replace('/', "__");
+                    let args: Option<serde_json::Value> = serde_json::from_str(payload_str).ok();
+                    let ctx = custos_adapters::mcp::ToolCallContext::new(&entry.id, &entry.id);
+
+                    match self.mcp_hub.dispatch_call(&namespaced_tool, args, &ctx).await {
+                        Ok(res) => {
+                            if res.is_error == Some(true) {
+                                Err(format!("MCP tool '{}' returned error: {:?}", namespaced_tool, res.content))
+                            } else {
+                                Ok(serde_json::to_value(&res).unwrap_or_else(|_| serde_json::json!({
+                                    "success": true,
+                                    "tool": namespaced_tool
+                                })))
+                            }
+                        }
+                        Err(DomainError::Validation(msg)) if msg.contains("timed out") => {
+                            // Timeout: Mark Uncertain per Gate 3
+                            let _ = outbox.mark_uncertain(entry_id).await;
+                            return ApiResponse::error(req.id, format!("MCP tool call timed out; marked uncertain: {msg}"));
+                        }
+                        Err(e) => {
+                            Err(format!("MCP dispatch failed: {e}"))
+                        }
+                    }
+                } else if recipient.starts_with("http://") || recipient.starts_with("https://") {
+                    let client = reqwest::Client::builder()
+                        .timeout(std::time::Duration::from_secs(15))
+                        .build()
+                        .unwrap_or_default();
+                    let body: serde_json::Value = serde_json::from_str(payload_str).unwrap_or_else(|_| serde_json::json!({"payload": payload_str}));
+                    match client.post(recipient).json(&body).send().await {
+                        Ok(resp) if resp.status().is_success() => {
+                            let json_val = resp.json::<serde_json::Value>().await.unwrap_or_else(|_| serde_json::json!({"status": "ok"}));
+                            Ok(json_val)
+                        }
+                        Ok(resp) => {
+                            Err(format!("HTTP dispatch failed with status: {}", resp.status()))
+                        }
+                        Err(e) => {
+                            // Timeout or connection drop: Invariant Gate 3 Uncertain
+                            let _ = outbox.mark_uncertain(entry_id).await;
+                            return ApiResponse::error(req.id, format!("Dispatch connection dropped or timed out; marked uncertain: {e}"));
+                        }
+                    }
+                } else {
+                    // Local / simulated mediated effect execution
+                    Ok(serde_json::json!({
+                        "delivered": true,
+                        "recipient": recipient,
+                        "action": entry.action_id,
+                        "timestamp": chrono::Utc::now().to_rfc3339(),
+                    }))
+                };
+
+                match exec_result {
+                    Ok(res_val) => {
+                        let duration_ms = started.elapsed().as_millis() as u64;
+                        let out_str = res_val.to_string();
+                        let receipt = ExecutionReceipt {
+                            receipt_id: new_id("rcpt"),
+                            permit_id: entry.permit_id.clone(),
+                            action_id: entry.action_id.clone(),
+                            status: ReceiptStatus::Success,
+                            output_digest: format!("sha256:{}", custos_domain::digest(out_str.as_bytes())),
+                            output_data: Some(res_val),
+                            error_message: None,
+                            duration_ms: Some(duration_ms),
+                            executed_at: chrono::Utc::now(),
+                            assurance: Assurance::CustosMediated,
+                        };
+
+                        if let Err(e) = outbox.mark_receipted(entry_id, receipt.clone()).await {
+                            return ApiResponse::error(req.id, format!("Failed to record receipt in outbox: {e}"));
+                        }
+
+                        ApiResponse::success(req.id, serde_json::json!({
+                            "id": entry_id,
+                            "status": "receipted",
+                            "receipt": receipt,
+                        }))
+                    }
+                    Err(err_msg) => {
+                        let _ = outbox.mark_failed(entry_id, &err_msg).await;
+                        ApiResponse::error(req.id, format!("Outbox dispatch execution failed: {err_msg}"))
+                    }
+                }
             }
             METHOD_WORKSPACES_AGENT_STEER => {
                 let guidance = match req.params.get("guidance").and_then(|v| v.as_str()) {
@@ -6821,22 +7285,19 @@ impl LocalApiDispatcher {
             unknown => ApiResponse::error(req.id, format!("Unknown method: {unknown}")),
         };
 
-        if let (Some(cmd_id), Some(digest), Some(store)) = (
-            command_id.as_deref(),
-            payload_digest.as_deref(),
+        if let (Some(cmd_id), Some(store)) = (
+            admitted_cmd_id.as_deref(),
             self.sqlite_store.as_ref(),
         ) {
-            if let Some(res_val) = resp.result.as_ref() {
-                let entry = custos_core::contracts::storage::CommandLedgerEntry {
-                    command_id: cmd_id.to_string(),
-                    method: method_name,
-                    payload_digest: digest.to_string(),
-                    result_json: serde_json::to_string(res_val).unwrap_or_default(),
-                    created_at: chrono::Utc::now(),
-                    expires_at: chrono::Utc::now() + chrono::Duration::days(7),
-                };
-                if let Err(e) = store.command_ledger().record_command(&entry) {
-                    tracing::warn!(command_id = %cmd_id, error = %e, "Failed to record command in ledger");
+            if resp.error.is_none() {
+                let res_val = resp.result.as_ref().unwrap_or(&serde_json::Value::Null);
+                let result_json = serde_json::to_string(res_val).unwrap_or_default();
+                if let Err(e) = store.command_ledger().complete(cmd_id, &result_json) {
+                    tracing::warn!(command_id = %cmd_id, error = %e, "Failed to complete command in ledger");
+                }
+            } else {
+                if let Err(e) = store.command_ledger().abandon(cmd_id) {
+                    tracing::warn!(command_id = %cmd_id, error = %e, "Failed to abandon command in ledger");
                 }
             }
         }

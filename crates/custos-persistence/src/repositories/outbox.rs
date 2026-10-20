@@ -209,6 +209,9 @@ impl OutboxRepository {
             .unwrap_or_else(|_| chrono::Utc::now());
 
         let receipt = receipt_json.and_then(|s| serde_json::from_str(&s).ok());
+        let recipient: Option<String> = row.get(9).ok();
+        let payload_json: Option<String> = row.get(10).ok();
+        let error_message: Option<String> = row.get(11).ok();
 
         Ok(OutboxEntry {
             id,
@@ -220,6 +223,9 @@ impl OutboxRepository {
             status,
             created_at,
             receipt,
+            recipient,
+            payload_json,
+            error_message,
         })
     }
 }
@@ -262,8 +268,8 @@ impl OutboxPort for OutboxRepository {
             .transpose()?;
 
         conn.execute(
-            "INSERT INTO outbox_entries (id, task_id, action_id, permit_id, argument_digest, idempotency_key, status, created_at, receipt_json)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO outbox_entries (id, task_id, action_id, permit_id, argument_digest, idempotency_key, status, created_at, receipt_json, recipient, payload_json, error_message)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 entry.id,
                 entry.task_id,
@@ -274,11 +280,28 @@ impl OutboxPort for OutboxRepository {
                 Self::outbox_status_as_str(entry.status),
                 entry.created_at.to_rfc3339(),
                 receipt_json,
+                entry.recipient,
+                entry.payload_json,
+                entry.error_message,
             ],
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         Ok(())
+    }
+
+    async fn get(&self, id: &str) -> Result<Option<OutboxEntry>, DomainError> {
+        let conn = self.db.lock()?;
+        let entry = conn
+            .query_row(
+                "SELECT id, task_id, action_id, permit_id, argument_digest, idempotency_key, status, created_at, receipt_json, recipient, payload_json, error_message
+                 FROM outbox_entries WHERE id = ?1",
+                params![id],
+                Self::row_to_outbox_entry,
+            )
+            .optional()
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        Ok(entry)
     }
 
     /// CAS state transition: Pending -> Dispatching
@@ -402,11 +425,51 @@ impl OutboxPort for OutboxRepository {
         Ok(())
     }
 
+    /// CAS state transition: Pending | Dispatching | Uncertain -> Failed
+    async fn mark_failed(&self, id: &str, error: &str) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        let rows = conn
+            .execute(
+                "UPDATE outbox_entries SET status = 'failed', error_message = ?1 WHERE id = ?2 AND status IN ('pending', 'dispatching', 'uncertain')",
+                params![error, id],
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        if rows == 0 {
+            let current: Option<String> = conn
+                .query_row(
+                    "SELECT status FROM outbox_entries WHERE id = ?1",
+                    params![id],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+            match current {
+                Some(status) if status == "failed" => return Ok(()),
+                Some(status) => {
+                    return Err(DomainError::InvalidStateTransition {
+                        from: status,
+                        to: "failed".into(),
+                    })
+                }
+                None => {
+                    return Err(DomainError::NotFound {
+                        kind: "OutboxEntry".into(),
+                        id: id.to_string(),
+                    })
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     async fn list_by_status(&self, status: OutboxStatus) -> Result<Vec<OutboxEntry>, DomainError> {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, task_id, action_id, permit_id, argument_digest, idempotency_key, status, created_at, receipt_json
+                "SELECT id, task_id, action_id, permit_id, argument_digest, idempotency_key, status, created_at, receipt_json, recipient, payload_json, error_message
                  FROM outbox_entries WHERE status = ?1 ORDER BY created_at ASC",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -431,7 +494,7 @@ impl OutboxPort for OutboxRepository {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, task_id, action_id, permit_id, argument_digest, idempotency_key, status, created_at, receipt_json
+                "SELECT id, task_id, action_id, permit_id, argument_digest, idempotency_key, status, created_at, receipt_json, recipient, payload_json, error_message
                  FROM outbox_entries WHERE task_id = ?1 AND status = ?2 ORDER BY created_at ASC",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -510,17 +573,16 @@ mod tests {
         }
 
         let entry_id = "outbox_entry_cas_01";
-        let entry = OutboxEntry {
-            id: entry_id.into(),
-            task_id: "task_cas_01".into(),
-            action_id: "act_01".into(),
-            permit_id: "pmt_01".into(),
-            argument_digest: "sha256:test_digest".into(),
-            idempotency_key: Some("idemp_cas_01".into()),
-            status: OutboxStatus::Pending,
-            created_at: Utc::now(),
-            receipt: None,
-        };
+        let entry = OutboxEntry::new(
+            entry_id,
+            "task_cas_01",
+            "act_01",
+            "pmt_01",
+            "sha256:test_digest",
+            Some("idemp_cas_01".into()),
+            OutboxStatus::Pending,
+            Utc::now(),
+        );
 
         repo.enqueue(entry).await.expect("enqueue succeeds");
 
@@ -562,5 +624,48 @@ mod tests {
             "Invalid CAS transition: {}",
             err_uncertain_on_receipted
         );
+    }
+
+    #[tokio::test]
+    async fn test_outbox_mark_failed_and_get() {
+        let db = DbConnection::open_in_memory().unwrap();
+        let repo = OutboxRepository::new(db);
+
+        {
+            let conn = repo.db.lock().unwrap();
+            conn.execute(
+                "INSERT INTO tasks (id, title, status, created_at, updated_at) VALUES ('task_fail_01', 'Fail Task', 'running', datetime('now'), datetime('now'))",
+                [],
+            ).unwrap();
+        }
+
+        let entry_id = "outbox_entry_fail_01";
+        let mut entry = OutboxEntry::new(
+            entry_id,
+            "task_fail_01",
+            "act_fail",
+            "pmt_fail",
+            "sha256:fail_digest",
+            Some("idemp_fail_01".into()),
+            OutboxStatus::Pending,
+            Utc::now(),
+        );
+        entry.recipient = Some("mcp://test-server/tool".into());
+        entry.payload_json = Some("{\"param\":\"val\"}".into());
+
+        repo.enqueue(entry).await.expect("enqueue succeeds");
+
+        // Test get
+        let retrieved = repo.get(entry_id).await.expect("get succeeds").expect("entry found");
+        assert_eq!(retrieved.recipient.as_deref(), Some("mcp://test-server/tool"));
+        assert_eq!(retrieved.payload_json.as_deref(), Some("{\"param\":\"val\"}"));
+        assert_eq!(retrieved.status, OutboxStatus::Pending);
+
+        // Mark failed
+        repo.mark_failed(entry_id, "connection timeout").await.expect("mark_failed succeeds");
+
+        let failed_entry = repo.get(entry_id).await.expect("get succeeds").expect("entry found");
+        assert_eq!(failed_entry.status, OutboxStatus::Failed);
+        assert_eq!(failed_entry.error_message.as_deref(), Some("connection timeout"));
     }
 }
