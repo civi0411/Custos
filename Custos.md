@@ -1,5 +1,7 @@
 # CUSTOS
 
+**As-built UI ↔ core reading entry:** [Desktop/core interaction map](docs/architecture/desktop-core-interaction-map.md) traces the pushed `vi-rft` snapshot `25cf689` from each workbench and resource through host, Local API, application handlers, runtime, adapters and persistence. It distinguishes current wiring from target authority/recovery guarantees, records fresh validation, and identifies remaining Outbox, HTTP authentication, MCP and compute gaps. Earlier implementation-status statements must be read against this SHA-scoped evidence rather than interpreted as completed capabilities.
+
 ### Desktop resource identity and interaction
 
 Each working tab retains its creation-time conversation, Task and execution workspace references. Switching the sidebar or workbench changes navigation; it does not retarget an existing editor, notebook, terminal, draft or agent. Resource presentation uses one compact action toolbar, a bounded list when selection is necessary, and a primary working area. Research sources, notebooks, runs and artifacts remain peer resources beside conversations. The right Inspector provides contextual information.

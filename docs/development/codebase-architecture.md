@@ -84,6 +84,12 @@ This adds one research tool and three evidence documents; no production file, cr
 
 ### Desktop canvas presentation ownership
 
+Snapshot reading guide: [`docs/architecture/desktop-core-interaction-map.md`](../architecture/desktop-core-interaction-map.md) is a documentation-only UI-to-core trace for pushed `vi-rft` commit `25cf689`. It maps host/client, resource identity, all three workbenches, notebook/compute, MCP, Outbox, cognition and recovery to existing source and separates implemented code from missing production wiring. No runtime file, schema, API or crate is introduced by this document. Its current-state qualifications supersede older unqualified implementation claims in this catalogue.
+
+| Documentation file | Lines | Role | Runtime exports |
+|---|---:|---|---|
+| [`docs/architecture/desktop-core-interaction-map.md`](../architecture/desktop-core-interaction-map.md) | 457 | SHA-scoped Desktop/API/core interaction map, source ownership, observed gaps and acceptance gates | None; documentation only |
+
 Broader daemon validation: 61/62 tests pass when loopback/staging permissions are available. `test_compute_targets_and_experiment_lifecycle` invokes the installed Colab CLI and fails awaiting Google authorization; this is an external-auth dependency in that test, not a passing offline compute acceptance gate. No authorization or remote job was completed. Native visual QA is still required before calling the UI finished.
 
 Outbox projection uses existing `custos-daemon/src/api/capabilities.rs` to advertise implemented operations and `api.rs` to include negative/uncertain records and Task filtering. `OutboxPane.tsx` uses those capabilities and canonical action state; it never infers delivery from a request completing.

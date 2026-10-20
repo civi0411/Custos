@@ -73,6 +73,8 @@ Daemon ráp implementations. Runtime quản lý run/workspace/process lifecycle 
 
 ## 4. Bố cục và điều hướng
 
+**Current implementation trace:** [Desktop/core interaction map](desktop-core-interaction-map.md) documents Screen/Tab identity, the three workbench paths, shared daemon wiring, persistent Python workers, model streams and the new MCP/Outbox implementations at `25cf689`. Its explicit gaps qualify older status descriptions below; UI availability and receipt labels are not proof of complete authority enforcement.
+
 ### Working resource implementation
 
 Outbox advertises read operations while its outbound connector pipeline remains unconfigured. Its ledger includes failed and uncertain attempts. Approval and dispatch controls require an advertised operation and an admissible action state; missing receipt/permit metadata remains explicitly missing.
