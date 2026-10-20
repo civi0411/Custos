@@ -51,6 +51,12 @@ pub trait McpClientTrait: Send + Sync {
         name: &str,
         arguments: Option<Value>,
     ) -> Result<CallToolResult>;
+    async fn list_resources(&self, _next_cursor: Option<String>) -> Result<Vec<Value>> {
+        Ok(Vec::new())
+    }
+    async fn read_resource(&self, _uri: &str) -> Result<Value> {
+        anyhow::bail!("read_resource is not supported by this client")
+    }
 }
 
 /// Stdio connection managing a live child process communicating via JSON-RPC 2.0 lines.
@@ -481,6 +487,37 @@ impl McpClientTrait for CustosMcpClient {
                 let res_val = self.send_request("tools/call", params).await?;
                 let result: CallToolResult = serde_json::from_value(res_val)?;
                 Ok(result)
+            }
+        }
+    }
+
+    async fn list_resources(&self, next_cursor: Option<String>) -> Result<Vec<Value>> {
+        match &self.state {
+            TransportState::Mock { .. } => Ok(Vec::new()),
+            _ => {
+                let params = match next_cursor {
+                    Some(cursor) => serde_json::json!({ "cursor": cursor }),
+                    None => serde_json::json!({}),
+                };
+                let res_val = self.send_request("resources/list", params).await?;
+                let list = res_val
+                    .get("resources")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                Ok(list)
+            }
+        }
+    }
+
+    async fn read_resource(&self, uri: &str) -> Result<Value> {
+        match &self.state {
+            TransportState::Mock { .. } => {
+                Ok(serde_json::json!({ "contents": [] }))
+            }
+            _ => {
+                let params = serde_json::json!({ "uri": uri });
+                self.send_request("resources/read", params).await
             }
         }
     }

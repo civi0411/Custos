@@ -71,6 +71,34 @@ fn is_allowed_origin(origin: &str) -> bool {
         .is_some_and(|port| !port.is_empty() && port.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
+fn is_authorized_ipc_client(
+    origin: Option<&str>,
+    auth_header: Option<&str>,
+    custom_token_header: Option<&str>,
+) -> bool {
+    // If a trusted Origin is present (e.g. Tauri Desktop UI), it is trusted
+    if let Some(org) = origin {
+        if is_allowed_origin(org) {
+            return true;
+        }
+    }
+
+    // Check environment token if mandated
+    if let Ok(expected_token) = std::env::var("CUSTOS_IPC_TOKEN") {
+        if !expected_token.trim().is_empty() {
+            let provided = auth_header
+                .and_then(|h| h.strip_prefix("Bearer ").or_else(|| h.strip_prefix("bearer ")))
+                .map(|s| s.trim())
+                .or_else(|| custom_token_header.map(|s| s.trim()));
+
+            return provided == Some(expected_token.trim());
+        }
+    }
+
+    // Default loopback allowance when CUSTOS_IPC_TOKEN is not strictly enforced
+    true
+}
+
 async fn handle_http_client(
     mut stream: TcpStream,
     api: Arc<LocalApiDispatcher>,
@@ -117,13 +145,20 @@ async fn handle_http_client(
     let path = parts[1];
 
     // Extract Origin header
+    // Extract headers
     let mut req_origin: Option<String> = None;
+    let mut auth_header: Option<String> = None;
+    let mut token_header: Option<String> = None;
     let mut content_length = 0;
     let mut last_event_id = None;
     for line in lines {
         let lower = line.to_lowercase();
         if let Some(val) = lower.strip_prefix("origin:") {
             req_origin = Some(val.trim().to_string());
+        } else if let Some(val) = lower.strip_prefix("authorization:") {
+            auth_header = Some(val.trim().to_string());
+        } else if let Some(val) = lower.strip_prefix("x-custos-token:") {
+            token_header = Some(val.trim().to_string());
         } else if let Some(val) = lower.strip_prefix("last-event-id:") {
             last_event_id = val.trim().parse::<u64>().ok();
         } else if let Some(val) = lower.strip_prefix("content-length:") {
@@ -157,11 +192,28 @@ Connection: close\r\n\r\n{}",
         let resp = format!(
             "HTTP/1.1 204 No Content\r\n\
 {}Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n\
-Access-Control-Allow-Headers: Content-Type, Authorization, Last-Event-ID\r\n\
+Access-Control-Allow-Headers: Content-Type, Authorization, X-Custos-Token, Last-Event-ID\r\n\
 Access-Control-Max-Age: 86400\r\n\
 Content-Length: 0\r\n\
 Connection: close\r\n\r\n",
             cors_origin_header
+        );
+        stream.write_all(resp.as_bytes()).await?;
+        stream.flush().await?;
+        return Ok(());
+    }
+
+    // IPC Token gate: verify token if mandated by CUSTOS_IPC_TOKEN
+    if !is_authorized_ipc_client(req_origin.as_deref(), auth_header.as_deref(), token_header.as_deref()) {
+        let unauth = r#"{"error":"Unauthorized: valid IPC token required"}"#;
+        let resp = format!(
+            "HTTP/1.1 401 Unauthorized\r\n\
+Content-Type: application/json; charset=utf-8\r\n\
+Content-Length: {}\r\n\
+{}Connection: close\r\n\r\n{}",
+            unauth.len(),
+            cors_origin_header,
+            unauth
         );
         stream.write_all(resp.as_bytes()).await?;
         stream.flush().await?;

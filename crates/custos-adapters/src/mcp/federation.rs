@@ -117,6 +117,36 @@ impl McpFederationHub {
         Ok(federated_tools)
     }
 
+    /// List all federated resources across registered MCP servers.
+    pub async fn list_federated_resources(&self) -> Result<Vec<Value>> {
+        let guard = self.servers.read().await;
+        let mut federated_resources = Vec::new();
+
+        for (prefix, client) in guard.iter() {
+            if let Ok(Ok(resources)) = tokio::time::timeout(Duration::from_secs(10), client.list_resources(None)).await {
+                for mut res in resources {
+                    if let Some(obj) = res.as_object_mut() {
+                        obj.insert("server_prefix".into(), Value::String(prefix.clone()));
+                    }
+                    federated_resources.push(res);
+                }
+            }
+        }
+
+        Ok(federated_resources)
+    }
+
+    /// Read a resource from a specific federated server prefix.
+    pub async fn read_federated_resource(&self, prefix: &str, uri: &str) -> Result<Value, DomainError> {
+        let guard = self.servers.read().await;
+        let client = guard.get(prefix).cloned().ok_or_else(|| DomainError::NotFound {
+            kind: "McpServer".into(),
+            id: prefix.to_string(),
+        })?;
+
+        client.read_resource(uri).await.map_err(|e| DomainError::Validation(format!("Failed to read resource '{uri}': {e}")))
+    }
+
     /// Dispatch a namespaced tool call (`prefix__tool_name`) to the correct MCP server
     /// Enforces a 30-second timeout on tool execution.
     pub async fn dispatch_call(

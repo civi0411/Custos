@@ -674,16 +674,13 @@ impl RouterModelProvider {
         Ok(ModelResponse::text(content, resolved_model, tokens_used).with_usage(input, output, None))
     }
 
-    async fn dispatch_stream_attempt(&self, req: &ProviderRequest) -> Result<tokio::sync::mpsc::Receiver<custos_provider::ProviderEvent>, DomainError> {
-        use super::streaming::{Wire, stream_response_observed};
+    pub(crate) async fn send_stream_request(&self, req: &ProviderRequest) -> Result<(reqwest::Response, super::streaming::Wire, String, String), DomainError> {
+        use super::streaming::Wire;
         if let Some(account) = &req.provider_account_id { self.resolver.validate_model(account, &req.model, req.reasoning_effort.as_deref()).await?; }
         let model = req.model.trim();
         let service = Self::classify_provider(model);
         if service == "native-local" {
-            let local = self.native_local.as_ref().ok_or_else(|| {
-                DomainError::Validation("Native local inference runtime is not configured".to_string())
-            })?;
-            return local.stream(req).await;
+            return Err(DomainError::Validation("Native local does not use HTTP stream request".into()));
         }
         let service_override = match req.provider_account_id.as_deref() { Some(account) => self.resolver.service_for_account(account).await?, None => None };
         let service = if model.starts_with("gemini-oauth/") { "gemini-oauth" } else { service_override.as_deref().unwrap_or_else(|| Self::classify_provider(model)) };
@@ -694,20 +691,20 @@ impl RouterModelProvider {
             let base = self.resolver.get_endpoint_url(account).await?.unwrap_or_else(||"https://cloudcode-pa.googleapis.com".into());
             let codeassist_mode = if model.starts_with("gemini-oauth/") || service == "gemini" { "gemini" } else { "antigravity" };
             let response = self.observe_adapter_error(super::antigravity::stream_codeassist(codeassist_mode, &base, &token, req).await, req).await?;
-            return Ok(stream_response_observed(response,req.clone(),Wire::Google,self.resolver.clone()));
+            return Ok((response, Wire::Google, service.to_string(), model.to_string()));
         }
         let local_base = if service == "local" { self.resolver.get_endpoint_url(account).await?.unwrap_or_else(||"http://localhost:11434".into()) } else {String::new()};
         if service == "local" && (model.starts_with("ollama/") || local_base.contains(":11434")) {
             let root=super::probe::ollama_root(&local_base)?;
-            let model=model.strip_prefix("ollama/").unwrap_or(model);
-            if model.is_empty() || matches!(model,"default"|"local"|"ollama") { return Err(DomainError::Validation("Select an installed Ollama model".into())); }
+            let clean_model=model.strip_prefix("ollama/").unwrap_or(model);
+            if clean_model.is_empty() || matches!(clean_model,"default"|"local"|"ollama") { return Err(DomainError::Validation("Select an installed Ollama model".into())); }
             let mut options=serde_json::Map::new();
             if let Some(v)=req.temperature { options.insert("temperature".into(),serde_json::json!(v)); }
             if let Some(v)=req.max_tokens { options.insert("num_predict".into(),serde_json::json!(v)); }
-            let request=self.http_client.post(format!("{root}/api/chat")).json(&serde_json::json!({"model":model,"messages":[{"role":"user","content":req.prompt}],"stream":true,"options":options}));
+            let request=self.http_client.post(format!("{root}/api/chat")).json(&serde_json::json!({"model":clean_model,"messages":[{"role":"user","content":req.prompt}],"stream":true,"options":options}));
             let response=self.checked_response(request.send().await, req).await?;
             if !response.status().is_success() { return Err(DomainError::Validation(format!("Ollama chat returned {}",response.status()))); }
-            return Ok(stream_response_observed(response,req.clone(),Wire::Ollama,self.resolver.clone()));
+            return Ok((response, Wire::Ollama, "ollama".to_string(), clean_model.to_string()));
         }
         let oauth=service=="openai" && self.resolver.uses_oauth(account).await?;
         let token=if req.provider_account_id.is_some() || oauth || service=="copilot" { self.resolver.get_token(account).await? } else { self.resolve_token_with_fallback(account).await? };
@@ -717,26 +714,30 @@ impl RouterModelProvider {
         let custom=self.resolver.get_endpoint_url(account).await?;
         let mut request;
         let wire;
+        let effective_model;
         if service=="openai" && oauth {
             wire=Wire::Codex;
-            let model=if matches!(model,""|"default"|"openai"|"codex"|"openai-codex") {"gpt-5.6-sol"} else {model};
-            request=self.http_client.post(&self.codex_endpoint).bearer_auth(token.as_deref().unwrap_or("")).header("User-Agent",super::probe::codex_user_agent()).header("Originator","codex_cli_rs").header("Accept","text/event-stream").json(&Self::responses_payload(req, model));
+            let m=if matches!(model,""|"default"|"openai"|"codex"|"openai-codex") {"gpt-5.6-sol"} else {model};
+            effective_model = m.to_string();
+            request=self.http_client.post(&self.codex_endpoint).bearer_auth(token.as_deref().unwrap_or("")).header("User-Agent",super::probe::codex_user_agent()).header("Originator","codex_cli_rs").header("Accept","text/event-stream").json(&Self::responses_payload(req, m));
             if let Some(id)=super::oauth_pkce::extract_chatgpt_account_id(token.as_deref().unwrap_or("")) { request=request.header("ChatGPT-Account-ID",id); }
         } else if service=="openai" && custos_provider::formats::openai::is_openai_responses_model(model) {
             wire=Wire::Codex;
+            effective_model = model.to_string();
             let base=custom.unwrap_or_else(|| "https://api.openai.com/v1".into());
             request=self.http_client.post(format!("{}/responses",base.trim_end_matches('/'))).bearer_auth(token.as_deref().unwrap_or("")).json(&Self::responses_payload(req,model));
         } else if service=="anthropic" {
             wire=Wire::Claude;
             let base=custom.unwrap_or_else(||"https://api.anthropic.com/v1".into());
             let target=if matches!(model,""|"default"|"anthropic") {"claude-3-7-sonnet-20250219"} else {model};
+            effective_model = target.to_string();
             let mut payload=serde_json::json!({"model":target,"messages":[{"role":"user","content":req.prompt}],"max_tokens":req.max_tokens.unwrap_or(4096),"stream":true});
             if let Some(temperature)=req.temperature {payload["temperature"]=serde_json::json!(temperature);}
             request=self.http_client.post(format!("{}/messages",base.trim_end_matches('/'))).header("anthropic-version","2023-06-01").json(&payload);
             if self.resolver.uses_oauth(account).await? { request=request.bearer_auth(token.as_deref().unwrap_or("")).header("anthropic-beta","oauth-2025-04-20").header("User-Agent","claude-cli/2.1.280 (external, cli)").header("X-App","cli"); } else { request=request.header("x-api-key",token.as_deref().unwrap_or("")); }
         } else {
             wire=Wire::OpenAi;
-            let (base, model, bearer)=match service {
+            let (base, m, bearer)=match service {
                 "copilot" => ("https://api.githubcopilot.com".into(),model.strip_prefix("copilot/").unwrap_or(model).to_string(),Some(super::oauth_pkce::copilot_session_token(token.as_deref().unwrap_or("")).await?)),
                 "openai" => (custom.unwrap_or_else(||"https://api.openai.com/v1".into()),if matches!(model,""|"default"|"openai") {"gpt-4o".into()} else {model.into()},token),
                 "gemini" => (custom.unwrap_or_else(||"https://generativelanguage.googleapis.com/v1beta/openai".into()),model.into(),token),
@@ -775,7 +776,8 @@ impl RouterModelProvider {
                 }
                 _ => return Err(DomainError::Validation(format!("Unsupported streaming provider '{service}'"))),
             };
-            let mut payload=serde_json::json!({"model":model,"messages":[{"role":"user","content":req.prompt}],"stream":true,"stream_options":{"include_usage":true}});
+            effective_model = m.clone();
+            let mut payload=serde_json::json!({"model":m,"messages":[{"role":"user","content":req.prompt}],"stream":true,"stream_options":{"include_usage":true}});
             if let Some(effort)=&req.reasoning_effort {payload["reasoning_effort"]=serde_json::json!(effort);}
             if let Some(v)=req.temperature {payload["temperature"]=serde_json::json!(v);}
             if let Some(v)=req.max_tokens {payload["max_tokens"]=serde_json::json!(v);}
@@ -788,7 +790,19 @@ impl RouterModelProvider {
         tracing::debug!(task_id = %req.task_id, request_id = %req.request_id, service, "Starting provider stream");
         let response=self.checked_response(request.send().await, req).await?;
         if !response.status().is_success() { return Err(DomainError::Validation(format!("Provider stream returned {}",response.status()))); }
-        Ok(stream_response_observed(response,req.clone(),wire,self.resolver.clone()))
+        Ok((response, wire, service.to_string(), effective_model))
+    }
+
+    async fn dispatch_stream_attempt(&self, req: &ProviderRequest) -> Result<tokio::sync::mpsc::Receiver<custos_provider::ProviderEvent>, DomainError> {
+        let service = Self::classify_provider(&req.model);
+        if service == "native-local" {
+            let local = self.native_local.as_ref().ok_or_else(|| {
+                DomainError::Validation("Native local inference runtime is not configured".to_string())
+            })?;
+            return local.stream(req).await;
+        }
+        let (response, wire, _, _) = self.send_stream_request(req).await?;
+        Ok(super::streaming::stream_response_observed(response, req.clone(), wire, self.resolver.clone()))
     }
 
     async fn dispatch_generate_attempt(&self, req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
@@ -1191,11 +1205,6 @@ impl ModelProvider for RouterModelProvider {
             return local.execute_turn(req).await;
         }
 
-        let (tx, rx) = tokio::sync::mpsc::channel(16);
-        let attempt_id = req.attempt_id;
-        let provider_id = self.provider_id().to_string();
-        let requested_model = req.requested_model.clone();
-
         let flat_prompt = req
             .structured_messages
             .iter()
@@ -1214,63 +1223,33 @@ impl ModelProvider for RouterModelProvider {
             .collect::<Vec<_>>()
             .join("\n\n");
 
-        let legacy_req = custos_provider::request::ProviderRequest::new(
+        let mut provider_req = custos_provider::request::ProviderRequest::new(
             req.attempt_id.to_string(),
             req.task_id.to_string(),
             1,
             flat_prompt,
             req.requested_model.clone(),
         );
+        let candidate_service = if service == "gemini-oauth" { "gemini" } else { service };
+        provider_req.provider_account_id = self.resolver.select_account(candidate_service, &provider_req.model).await?;
 
-        let resp_res = self.generate(&legacy_req).await;
-        tokio::spawn(async move {
-            match resp_res {
-                Ok(resp) => {
-                    let _ = tx
-                        .send(custos_provider::turn::ModelTurnEvent {
-                            attempt_id,
-                            sequence: 1,
-                            actual_provider: Some(provider_id.clone()),
-                            actual_model: Some(requested_model),
-                            actual_transport: Some("router_bridge".to_string()),
-                            delta: custos_provider::turn::TurnDelta::Text { text: resp.content },
-                            usage_certainty: Some("estimated".to_string()),
-                            provider_response_id: None,
-                        })
-                        .await;
-                    let _ = tx
-                        .send(custos_provider::turn::ModelTurnEvent {
-                            attempt_id,
-                            sequence: 2,
-                            actual_provider: Some(provider_id),
-                            actual_model: None,
-                            actual_transport: None,
-                            delta: custos_provider::turn::TurnDelta::Usage {
-                                input_tokens: resp.input_tokens.unwrap_or(0) as u64,
-                                output_tokens: resp.output_tokens.unwrap_or(resp.tokens_used) as u64,
-                                cache_read_tokens: None,
-                                cache_write_tokens: None,
-                            },
-                            usage_certainty: Some("estimated".to_string()),
-                            provider_response_id: None,
-                        })
-                        .await;
-                    let _ = tx
-                        .send(custos_provider::turn::ModelTurnEvent {
-                            attempt_id,
-                            sequence: 3,
-                            actual_provider: None,
-                            actual_model: None,
-                            actual_transport: None,
-                            delta: custos_provider::turn::TurnDelta::Completed {
-                                finish_reason: Some("stop".to_string()),
-                            },
-                            usage_certainty: None,
-                            provider_response_id: None,
-                        })
-                        .await;
-                }
-                Err(err) => {
+        match self.send_stream_request(&provider_req).await {
+            Ok((resp, wire, actual_provider, actual_model)) => {
+                Ok(super::streaming::stream_turn_response_observed(
+                    resp,
+                    req.attempt_id,
+                    actual_provider,
+                    actual_model,
+                    wire,
+                    std::time::Duration::from_secs(45),
+                ))
+            }
+            Err(err) => {
+                let (tx, rx) = tokio::sync::mpsc::channel(2);
+                let attempt_id = req.attempt_id;
+                let provider_id = self.provider_id().to_string();
+                let requested_model = req.requested_model.clone();
+                tokio::spawn(async move {
                     let _ = tx
                         .send(custos_provider::turn::ModelTurnEvent {
                             attempt_id,
@@ -1286,11 +1265,10 @@ impl ModelProvider for RouterModelProvider {
                             provider_response_id: None,
                         })
                         .await;
-                }
+                });
+                Ok(rx)
             }
-        });
-
-        Ok(rx)
+        }
     }
 }
 
