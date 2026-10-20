@@ -21,6 +21,7 @@ pub mod decision;
 pub mod error;
 pub mod evidence;
 pub mod execution_record;
+pub mod experiment_attempt;
 pub mod fact;
 pub mod ids;
 pub mod memory;
@@ -102,6 +103,12 @@ pub use evidence::{
     EvidenceStatus, OutcomeStatus, TaskOutcome, VerificationClaim,
 };
 pub use execution_record::{ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus};
+pub use experiment_attempt::{
+    classify, protection_status, Check, CheckGroup, CheckStatus, ExecEvent, ExecState,
+    ExecutionAttempt, ExternalJobRef, Invocation, InvocationOutcome, ProgressTriplet,
+    ProtectionPolicy, ProtectionStatus, ResourceEvent, ResourceState, ResumeVerdict, TargetCaps,
+    VerificationReport,
+};
 pub use fact::Fact;
 pub use ids::{canonical_json, digest, new_id, TaskId};
 pub use memory::{
