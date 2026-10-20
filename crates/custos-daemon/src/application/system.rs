@@ -9,38 +9,102 @@ impl LocalApiDispatcher {
                 ApiResponse::success(req.id, serde_json::json!({ "status": "ok" }))
             }
             "v1.system.metrics" | "v1.system.telemetry" => {
-                let memory_resident_mb = if let Some(out) = std::process::Command::new("ps")
-                    .args(["-A", "-o", "rss=,comm="])
+                let mut process_groups: Vec<serde_json::Value> = Vec::new();
+                let mut total_kb: f64 = 0.0;
+
+                if let Some(out) = std::process::Command::new("ps")
+                    .args(["-A", "-o", "pid=,rss=,%cpu=,comm="])
                     .output()
                     .ok()
                     .and_then(|out| String::from_utf8(out.stdout).ok())
                 {
-                    let mut total_kb: f64 = 0.0;
                     for line in out.lines() {
-                        let lower = line.to_lowercase();
-                        if lower.contains("custos") {
-                            if let Some(rss_str) = line.split_whitespace().next() {
-                                if let Ok(rss) = rss_str.parse::<f64>() {
+                        let trimmed = line.trim();
+                        if trimmed.is_empty() {
+                            continue;
+                        }
+                        let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                        if parts.len() >= 4 {
+                            let pid_str = parts[0];
+                            let rss_str = parts[1];
+                            let cpu_str = parts[2];
+                            let comm = parts[3..].join(" ");
+                            let lower_comm = comm.to_lowercase();
+
+                            if lower_comm.contains("custos") {
+                                if let (Ok(pid), Ok(rss), Ok(cpu)) = (
+                                    pid_str.parse::<u32>(),
+                                    rss_str.parse::<f64>(),
+                                    cpu_str.parse::<f64>(),
+                                ) {
                                     total_kb += rss;
+                                    let mb = ((rss / 1024.0) * 10.0).round() / 10.0;
+                                    let (id, name, kind) = if lower_comm.contains("custos-daemon") {
+                                        ("daemon", "Custos Daemon (Core Engine)", "daemon")
+                                    } else if lower_comm.contains("custos-app-desktop") {
+                                        ("desktop", "Custos Desktop (GUI Studio)", "app")
+                                    } else {
+                                        ("runner", "Custos Worker Process", "worker")
+                                    };
+
+                                    process_groups.push(serde_json::json!({
+                                        "id": id,
+                                        "name": name,
+                                        "kind": kind,
+                                        "pid": pid,
+                                        "memory_mb": mb,
+                                        "cpu_percent": cpu,
+                                    }));
                                 }
                             }
                         }
                     }
-                    if total_kb == 0.0 {
-                        let pid = std::process::id();
-                        let rss_kb: f64 = std::process::Command::new("ps")
-                            .args(["-o", "rss=", "-p", &pid.to_string()])
+                }
+
+                let memory_resident_mb = if total_kb == 0.0 {
+                    let pid = std::process::id();
+                    let rss_kb: f64 = std::process::Command::new("ps")
+                        .args(["-o", "rss=", "-p", &pid.to_string()])
+                        .output()
+                        .ok()
+                        .and_then(|out| String::from_utf8(out.stdout).ok())
+                        .and_then(|s| s.trim().parse::<f64>().ok())
+                        .unwrap_or(0.0);
+                    let mb = ((rss_kb / 1024.0) * 10.0).round() / 10.0;
+                    process_groups.push(serde_json::json!({
+                        "id": "daemon",
+                        "name": "Custos Daemon (Core Engine)",
+                        "kind": "daemon",
+                        "pid": pid,
+                        "memory_mb": mb,
+                        "cpu_percent": 0.0,
+                    }));
+                    mb
+                } else {
+                    ((total_kb / 1024.0) * 10.0).round() / 10.0
+                };
+
+                process_groups.sort_by(|a, b| {
+                    let mb_b = b["memory_mb"].as_f64().unwrap_or(0.0);
+                    let mb_a = a["memory_mb"].as_f64().unwrap_or(0.0);
+                    mb_b.partial_cmp(&mb_a).unwrap_or(std::cmp::Ordering::Equal)
+                });
+
+                let system_total_memory_mb: Option<u64> = {
+                    #[cfg(target_os = "macos")]
+                    {
+                        std::process::Command::new("sysctl")
+                            .args(["-n", "hw.memsize"])
                             .output()
                             .ok()
                             .and_then(|out| String::from_utf8(out.stdout).ok())
-                            .and_then(|s| s.trim().parse::<f64>().ok())
-                            .unwrap_or(0.0);
-                        ((rss_kb / 1024.0) * 10.0).round() / 10.0
-                    } else {
-                        ((total_kb / 1024.0) * 10.0).round() / 10.0
+                            .and_then(|s| s.trim().parse::<u64>().ok())
+                            .map(|bytes| bytes / (1024 * 1024))
                     }
-                } else {
-                    0.0
+                    #[cfg(not(target_os = "macos"))]
+                    {
+                        None
+                    }
                 };
 
                 let mut active_runs: u64 = 0;
@@ -100,6 +164,8 @@ impl LocalApiDispatcher {
                     req.id,
                     serde_json::json!({
                         "memory_resident_mb": memory_resident_mb,
+                        "system_total_memory_mb": system_total_memory_mb,
+                        "process_groups": process_groups,
                         "active_runs": active_runs,
                         "active_ports": active_ports,
                         "caffeinate": caffeinate_status

@@ -320,6 +320,15 @@ export class DaemonClient {
 
   async getSystemMetrics(): Promise<{
     memory_resident_mb: number;
+    system_total_memory_mb?: number | null;
+    process_groups?: Array<{
+      id: string;
+      name: string;
+      kind: string;
+      pid: number;
+      memory_mb: number;
+      cpu_percent: number;
+    }>;
     active_runs: number;
     active_ports: number[];
     caffeinate: {

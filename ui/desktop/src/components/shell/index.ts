@@ -11,3 +11,5 @@ export * from './UserProfileMenu';
 export * from './AppTopBar';
 export * from './AppStatusBar';
 export * from './RightSidebar';
+export * from './UsagePopover';
+export * from './ResourceUsagePopover';

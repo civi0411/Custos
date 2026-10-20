@@ -13,8 +13,6 @@ import {
   Code2,
   FlaskConical,
   Bot,
-  Globe,
-  Smartphone,
 } from 'lucide-react';
 import { isMacOS, formatKeyCombo } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
@@ -107,12 +105,6 @@ export const AppTopBar: React.FC = () => {
       } else if ((e.metaKey || e.ctrlKey) && e.key === ']') {
         e.preventDefault();
         handleGoForward();
-      } else if ((e.metaKey || e.ctrlKey) && e.altKey && e.key.toLowerCase() === 'b') {
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent('custos:open-tab', { detail: { id: 'browser' } }));
-      } else if ((e.metaKey || e.ctrlKey) && e.altKey && e.key.toLowerCase() === 'p') {
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent('custos:open-tab', { detail: { id: 'emulator' } }));
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -370,31 +362,6 @@ export const AppTopBar: React.FC = () => {
           minWidth: isInspectorOpen ? inspectorWidth : undefined,
         }}
       >
-        {/* Quick Preview buttons in Engineering mode */}
-        {activeWorkbench === 'engineering' && (
-          <div className="flex items-center gap-1 border-r border-white/8 pr-1.5 mr-0.5">
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('custos:open-tab', { detail: { id: 'browser' } }))}
-              className="flex items-center gap-1 h-6.5 px-2 rounded-md border border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition text-xs cursor-pointer select-none"
-              title="Browser Preview (⌥⌘B)"
-              aria-label="Browser Preview"
-            >
-              <Globe className="size-3.5 text-blue-400" />
-              <span className="text-[11px] font-medium hidden md:inline">Browser</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('custos:open-tab', { detail: { id: 'emulator' } }))}
-              className="flex items-center gap-1 h-6.5 px-2 rounded-md border border-white/10 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition text-xs cursor-pointer select-none"
-              title="Phone Simulator (⌥⌘P)"
-              aria-label="Phone Simulator"
-            >
-              <Smartphone className="size-3.5 text-purple-400" />
-              <span className="text-[11px] font-medium hidden md:inline">Phone</span>
-            </button>
-          </div>
-        )}
 
         {/* Quick Open Search Button (Compact & clean) */}
         <button
