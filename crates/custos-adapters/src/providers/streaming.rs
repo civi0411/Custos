@@ -523,12 +523,16 @@ impl ModelTurnStreamDecoder {
                 } else if kind == "message_delta" || kind == "message_stop" {
                     let input = count(&value, "/message/usage/input_tokens").or_else(|| count(&value, "/usage/input_tokens"));
                     let output = count(&value, "/usage/output_tokens").or_else(|| count(&value, "/message/usage/output_tokens"));
-                    if input.is_some() || output.is_some() {
+                    let cache_read = count(&value, "/message/usage/cache_read_input_tokens")
+                        .or_else(|| count(&value, "/usage/cache_read_input_tokens"));
+                    let cache_write = count(&value, "/message/usage/cache_creation_input_tokens")
+                        .or_else(|| count(&value, "/usage/cache_creation_input_tokens"));
+                    if input.is_some() || output.is_some() || cache_read.is_some() || cache_write.is_some() {
                         events.push(self.make_event(attempt_id, actual_provider, &model, TurnDelta::Usage {
                             input_tokens: input.unwrap_or(0) as u64,
                             output_tokens: output.unwrap_or(0) as u64,
-                            cache_read_tokens: None,
-                            cache_write_tokens: None,
+                            cache_read_tokens: cache_read.map(|c| c as u64),
+                            cache_write_tokens: cache_write.map(|c| c as u64),
                         }));
                     }
                     if kind == "message_stop" {
@@ -567,10 +571,11 @@ impl ModelTurnStreamDecoder {
                     }
                 }
                 if let (Some(input), Some(output)) = (count(&value, "/usage/prompt_tokens"), count(&value, "/usage/completion_tokens")) {
+                    let cache_read = count(&value, "/usage/prompt_tokens_details/cached_tokens");
                     events.push(self.make_event(attempt_id, actual_provider, &model, TurnDelta::Usage {
                         input_tokens: input as u64,
                         output_tokens: output as u64,
-                        cache_read_tokens: None,
+                        cache_read_tokens: cache_read.map(|c| c as u64),
                         cache_write_tokens: None,
                     }));
                 }
@@ -608,10 +613,11 @@ impl ModelTurnStreamDecoder {
                     count(v, "/usageMetadata/promptTokenCount"),
                     count(v, "/usageMetadata/candidatesTokenCount"),
                 ) {
+                    let cache_read = count(v, "/usageMetadata/cachedContentTokenCount");
                     events.push(self.make_event(attempt_id, actual_provider, &model, TurnDelta::Usage {
                         input_tokens: input as u64,
                         output_tokens: output as u64,
-                        cache_read_tokens: None,
+                        cache_read_tokens: cache_read.map(|c| c as u64),
                         cache_write_tokens: None,
                     }));
                 }

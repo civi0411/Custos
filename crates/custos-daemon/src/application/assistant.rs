@@ -491,8 +491,48 @@ impl LocalApiDispatcher {
                             return ApiResponse::error(req.id, format!("Dispatch connection dropped or timed out; marked uncertain: {e}"));
                         }
                     }
+                } else if recipient.starts_with("a2a://") {
+                    let target_url = recipient.trim_start_matches("a2a://");
+                    let endpoint = if target_url.starts_with("http://") || target_url.starts_with("https://") {
+                        target_url.to_string()
+                    } else {
+                        format!("http://{target_url}")
+                    };
+
+                    let a2a_client = custos_adapters::a2a::A2aClient::new();
+                    let task_payload: custos_adapters::a2a::A2aTaskPayload = serde_json::from_str(payload_str)
+                        .unwrap_or_else(|_| custos_adapters::a2a::A2aTaskPayload {
+                            task_id: entry.action_id.clone(),
+                            context_id: None,
+                            state: custos_adapters::a2a::A2aTaskState::Submitted,
+                            artifacts: vec![serde_json::json!({ "raw": payload_str })],
+                            parent_task_id: None,
+                            parent_run_id: None,
+                            generation: None,
+                            budget: None,
+                            error_message: None,
+                        });
+
+                    match a2a_client.delegate_task(&endpoint, &task_payload, None).await {
+                        Ok(res) => {
+                            if res.state == custos_adapters::a2a::A2aTaskState::Failed {
+                                Err(res.error_message.unwrap_or_else(|| "A2A sub-task reported failure".to_string()))
+                            } else {
+                                Ok(serde_json::to_value(&res).unwrap_or_else(|_| serde_json::json!({
+                                    "success": true,
+                                    "task_id": res.task_id,
+                                    "state": res.state.as_str()
+                                })))
+                            }
+                        }
+                        Err(DomainError::Validation(msg)) if msg.contains("timed out") => {
+                            let _ = outbox.mark_uncertain(entry_id).await;
+                            return ApiResponse::error(req.id, format!("A2A delegation timed out; marked uncertain: {msg}"));
+                        }
+                        Err(e) => Err(format!("A2A dispatch failed: {e}")),
+                    }
                 } else {
-                    let err = format!("Unsupported outbox recipient protocol '{recipient}'. Fail-closed: mediated dispatch only supports mcp:// and http(s):// destinations");
+                    let err = format!("Unsupported outbox recipient protocol '{recipient}'. Fail-closed: mediated dispatch only supports mcp://, a2a://, and http(s):// destinations");
                     let _ = outbox.mark_failed(entry_id, &err).await;
                     return ApiResponse::error(req.id, err);
                 };
