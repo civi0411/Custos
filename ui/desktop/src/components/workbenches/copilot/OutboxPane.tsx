@@ -18,18 +18,76 @@ export function outboxActions(status: string, operations: string[]) {
 }
 
 /** Detects protocol kind from recipient URI or action identifier */
-function detectProtocol(recipient: string, actionType: string): { label: string; tag: string } {
+function detectProtocol(recipient: string, actionType: string): { label: string; tag: string; badgeClass: string } {
   const target = (recipient + ' ' + actionType).toLowerCase();
   if (target.includes('mcp:') || target.includes('__') || target.includes('mcp')) {
-    return { label: 'MCP Tool', tag: 'mcp' };
+    return {
+      label: 'MCP Tool',
+      tag: 'mcp',
+      badgeClass: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25',
+    };
   }
   if (target.includes('a2a:') || target.includes('a2a')) {
-    return { label: 'A2A Task', tag: 'a2a' };
+    return {
+      label: 'A2A Task',
+      tag: 'a2a',
+      badgeClass: 'bg-sky-500/10 text-sky-400 border border-sky-500/25',
+    };
   }
-  if (target.includes('native') || target.includes('cmd') || target.includes('shell')) {
-    return { label: 'Native Cmd', tag: 'native' };
+  if (target.includes('native') || target.includes('cmd') || target.includes('shell') || target.includes('bash')) {
+    return {
+      label: 'Native Cmd',
+      tag: 'native',
+      badgeClass: 'bg-purple-500/10 text-purple-400 border border-purple-500/25',
+    };
   }
-  return { label: 'Outbox', tag: 'dispatch' };
+  return {
+    label: 'Outbox',
+    tag: 'dispatch',
+    badgeClass: 'bg-zinc-800 text-zinc-300 border border-white/10',
+  };
+}
+
+/** Human-readable status badge styling */
+function getStatusBadge(status: string): { label: string; className: string } {
+  switch (status.toLowerCase()) {
+    case 'pending':
+    case 'pending_approval':
+      return {
+        label: 'Pending Approval',
+        className: 'bg-amber-500/15 text-amber-300 border border-amber-500/30',
+      };
+    case 'approved':
+      return {
+        label: 'Approved',
+        className: 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30',
+      };
+    case 'dispatching':
+      return {
+        label: 'Dispatching…',
+        className: 'bg-sky-500/15 text-sky-300 border border-sky-500/30 animate-pulse',
+      };
+    case 'receipted':
+      return {
+        label: 'Receipted',
+        className: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30',
+      };
+    case 'uncertain':
+      return {
+        label: 'Uncertain Delivery',
+        className: 'bg-orange-500/20 text-orange-300 border border-orange-500/40',
+      };
+    case 'failed':
+      return {
+        label: 'Failed',
+        className: 'bg-rose-500/15 text-rose-300 border border-rose-500/30',
+      };
+    default:
+      return {
+        label: status.replace(/_/g, ' '),
+        className: 'bg-surface-2 text-fg-muted border border-white/5',
+      };
+  }
 }
 
 /** Extracts readable human text from MCP parts, A2A artifacts, or structured payload */
@@ -105,7 +163,7 @@ export function OutboxPane({ taskId, supportedOperations = [], onShowToast }: Ou
   const actions = outboxActions(active?.status || '', supportedOperations);
 
   const protocol = useMemo(() => {
-    if (!active) return { label: 'Outbox', tag: 'dispatch' };
+    if (!active) return { label: 'Outbox', tag: 'dispatch', badgeClass: 'bg-zinc-800 text-zinc-300 border border-white/10' };
     return detectProtocol(active.recipient || '', active.action_type || '');
   }, [active]);
 
@@ -148,14 +206,20 @@ export function OutboxPane({ taskId, supportedOperations = [], onShowToast }: Ou
         <nav aria-label="Outbox actions" className="flex-1 overflow-auto">
           {loading && !items.length ? <WorkbenchEmptyState title="Loading outbox…" busy /> : !filtered.length ? <WorkbenchEmptyState title={query ? 'No matching actions' : 'No recorded actions'} /> : filtered.map(item => {
             const proto = detectProtocol(item.recipient || '', item.action_type || '');
+            const statusInfo = getStatusBadge(item.status);
             return (
               <div className={'wb-source-row ' + (selectedId === item.id ? 'is-selected' : '')} key={item.id}>
                 <button type="button" disabled={acting} aria-current={selectedId === item.id ? 'true' : undefined} onClick={() => setSelectedId(item.id)}>
                   <div className="flex items-center gap-1.5 w-full">
-                    <span className="font-mono text-[9px] px-1 py-0.2 rounded bg-surface-2 text-fg-muted uppercase tracking-wider">{proto.label}</span>
-                    <span className="truncate flex-1 text-left">{item.title || item.action_type}</span>
+                    <span className={`font-mono text-[9px] px-1 py-0.5 rounded uppercase tracking-wider font-medium ${proto.badgeClass}`}>{proto.label}</span>
+                    <span className="truncate flex-1 text-left font-medium">{item.title || item.action_type}</span>
                   </div>
-                  <small>{item.status.replace(/_/g, ' ')}{item.created_at ? ' · ' + new Date(item.created_at).toLocaleString() : ''}</small>
+                  <small className="flex items-center gap-1.5 mt-0.5">
+                    <span className={`text-[9.5px] px-1 py-0.2 rounded font-mono ${statusInfo.className}`}>
+                      {statusInfo.label}
+                    </span>
+                    {item.created_at ? <span className="text-fg-subtle truncate">· {new Date(item.created_at).toLocaleTimeString()}</span> : null}
+                  </small>
                 </button>
               </div>
             );
@@ -165,12 +229,36 @@ export function OutboxPane({ taskId, supportedOperations = [], onShowToast }: Ou
       <main className="min-w-0 min-h-0 flex-1 overflow-auto">
         {active ? <article className="wb-document select-text">
           <div className="wb-document-actions">
-            {actions.approve && <button type="button" className="canvas-open-button" disabled={acting} onClick={() => void act('approve')}><Check size={12} />Approve action</button>}
-            {actions.dispatch && <button type="button" className="canvas-open-button" disabled={acting} onClick={() => void act('dispatch')}><Send size={12} />Dispatch approved action</button>}
+            {actions.approve && (
+              <button
+                type="button"
+                className="canvas-open-button bg-emerald-600/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-600/30 hover:border-emerald-500/50"
+                disabled={acting}
+                onClick={() => void act('approve')}
+              >
+                <Check size={12} />
+                Approve Action
+              </button>
+            )}
+            {actions.dispatch && (
+              <button
+                type="button"
+                className="canvas-open-button bg-sky-600/20 text-sky-300 border-sky-500/30 hover:bg-sky-600/30 hover:border-sky-500/50"
+                disabled={acting}
+                onClick={() => void act('dispatch')}
+              >
+                <Send size={12} />
+                Dispatch Action
+              </button>
+            )}
           </div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-fg-muted font-medium uppercase">{protocol.label}</span>
-            <span className="wb-document-byline font-mono text-xs">{active.status.replace(/_/g, ' ')}</span>
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className={`font-mono text-[10px] px-2 py-0.5 rounded font-medium uppercase tracking-wide ${protocol.badgeClass}`}>
+              {protocol.label}
+            </span>
+            <span className={`font-mono text-[10px] px-2 py-0.5 rounded font-medium ${getStatusBadge(active.status).className}`}>
+              {getStatusBadge(active.status).label}
+            </span>
           </div>
           <h1>{active.title || active.action_type}</h1>
 
