@@ -1,5 +1,7 @@
 # Kế hoạch refactor Custos SADE và tối ưu chi phí
 
+**Bổ sung khảo sát crates hiện tại để duyệt:** [Crates topic refactor plan](crates-topic-refactor-plan.md) đối chiếu snapshot `d25c27b`, xác định các execution/authority gaps và phân loại giữ/chuyển/cô lập/retire. Packet A–L trong bản bổ sung là breakdown của cùng chương trình refactor bên dưới, không một backend hoặc campaign song song. Các nhận định theo SHA cũ phải kiểm lại; production executor hiện đã có code nhưng chưa đồng nghĩa đầy đủ authority theo Task/Run.
+
 **Queue triển khai hiện hành:** [Superplan sau audit §17](sade-core-refactor-plan.md#17-superplan-hoàn-thiện-sau-audit) cập nhật checkout `vi-rft` / `c96f414`. R0–R11 đã có partial implementation, chưa hoàn tất 100%; F01–F12 là breakdown hoàn thiện các gap, không kiến trúc/campaign song song. Queue gồm atomic commands, claim CAS/recovery, producer bounds/Unicode, trusted evidence, notebook binding, SDK/application/shell, composed worker, desktop/domain acceptance, training targets, measured OI và release parity. Có dependency graph, files/contracts, golden G01–G13, migration/rollback và mốc M0–M4. §14 giữ capability map; §17 ưu tiên thứ tự sau audit, không đồng nghĩa nhãn R lịch sử bên dưới.
 
 **Queue lịch sử:** [Backend–desktop convergence §2/§7](sade-frontend-backend-convergence-plan.md#2-những-vấn-đề-hiện-tại-phải-xử-lý-theo-thứ-tự-rủi-ro) chốt thứ tự cấp tốc trên checkout `4b73cce`. Các nhãn R/P/OF trong tài liệu dài này là backlog capability và dependency map; kiểm lại source tại từng packet, không coi snapshot cũ là hiện trạng mới.

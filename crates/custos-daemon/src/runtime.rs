@@ -36,6 +36,8 @@ pub struct CustosRuntime {
     pub terminal_coordinator: Arc<custos_runtime::TerminalCoordinator>,
     pub python_coordinator: Arc<custos_runtime::PythonKernelCoordinator>,
     pub pack_registry: Arc<custos_packs::DomainPackRegistry>,
+    pub gateway: Arc<custos_runtime::gateway::CustosGateway>,
+    pub memory_store: Arc<dyn custos_runtime::memory_service::MemoryStore>,
 }
 
 impl CustosRuntime {
@@ -286,6 +288,9 @@ impl CustosRuntime {
         );
 
         let pack_registry = Arc::new(custos_packs::create_default_pack_registry());
+        let gateway = Arc::new(custos_runtime::gateway::CustosGateway::default());
+        let memory_store = Arc::new(custos_runtime::memory_service::InMemoryMemoryStore::new())
+            as Arc<dyn custos_runtime::memory_service::MemoryStore>;
 
         let local_api = Arc::new(
             LocalApiDispatcher::new(
@@ -329,6 +334,8 @@ impl CustosRuntime {
             terminal_coordinator,
             python_coordinator,
             pack_registry,
+            gateway,
+            memory_store,
         })
     }
 }

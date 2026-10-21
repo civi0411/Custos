@@ -12,7 +12,7 @@ impl Estimator {
                     cand.est_tokens = 5000;
                     cand.est_latency_ms = 8000;
                 }
-                "goose" => {
+                "goose" | "custos-agent" => {
                     cand.est_cost_usd_min = 0.01;
                     cand.est_cost_usd_max = 0.10;
                     cand.est_tokens = 4000;

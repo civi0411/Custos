@@ -1,5 +1,7 @@
 # Monorepo Topology, Crate Boundaries & Deep Codebase Map
 
+**Current crates inventory and proposed cleanup:** [Topic-based refactor plan](crates-topic-refactor-plan.md) records snapshot `d25c27b`, 544 Rust files / 172,422 source lines under `crates/`, current Cargo package/dependency facts and compiled-versus-dormant module distinctions. Its ownership tables and migration packets are proposals, not new physical modules. No crate, production interface or source file was moved by this audit. Historical line counts below are not substituted for fresh source inventory.
+
 ### Active application refactor
 
 Outbox continuation: existing core `OutboxStatus::Approved`/`OutboxPort::mark_approved` are completed in persistence `repositories/outbox.rs` and `store.rs`, daemon `application/assistant.rs`, runtime `workflow/task_runtime.rs`, and the existing testkit/e2e fixtures. The existing text status column supports this state without a new table. Approval and dispatch each use conditional updates; restart decoding/listing preserves approved entries. This is a durable state barrier, not a claim that Assistant already has complete Kernel authority. Adapter root aliases are retired with FakeProvider test imports moved to `providers::fake`; canonical underlying modules remain.

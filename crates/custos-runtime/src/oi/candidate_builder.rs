@@ -16,7 +16,7 @@ impl CandidateBuilder {
             },
             Candidate {
                 topology: ExecutionTopology::NativeBaseline,
-                harness_id: "goose".into(),
+                harness_id: "custos-agent".into(),
                 est_cost_usd_min: 0.0,
                 est_cost_usd_max: 0.0,
                 est_tokens: 0,
