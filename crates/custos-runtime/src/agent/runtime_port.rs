@@ -15,6 +15,7 @@ use custos_domain::{
     Action, ActionIntent, ActionLifecycleState, ContextPack, DomainError, RiskLevel, WorkerRun,
 };
 use custos_provider::{ModelPort, ProviderRequest};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -36,6 +37,23 @@ pub fn truncate_to_char_boundary(s: &mut String, max_bytes: usize) {
     }
 }
 
+/// Invocation context resolved by the backend (never trusted from model payload).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InvocationContext {
+    pub task_id: String,
+    pub run_id: String,
+    pub actor: String,
+    pub scope: Option<String>,
+}
+
+/// Result of executing a governed tool.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum ToolResult {
+    Success(serde_json::Value),
+    PendingApproval { attempt_id: String },
+    Error(String),
+}
+
 /// Interceptor/Executor for tools invoked by the governed agent loop.
 ///
 /// Binds model tool calls to Gate 2 Policy / Authority validation and execution.
@@ -43,14 +61,20 @@ pub fn truncate_to_char_boundary(s: &mut String, max_bytes: usize) {
 pub trait GovernedToolExecutor: Send + Sync {
     /// Authority / policy / gateway check before tool execution.
     /// If authorization fails, returns DomainError explaining rejection.
-    async fn authorize(&self, name: &str, params: &serde_json::Value) -> Result<(), DomainError>;
-
-    /// Executes the tool call and returns result Value.
-    async fn execute(
+    async fn authorize(
         &self,
+        ctx: &InvocationContext,
         name: &str,
         params: &serde_json::Value,
-    ) -> Result<serde_json::Value, DomainError>;
+    ) -> Result<(), DomainError>;
+
+    /// Executes the tool call and returns ToolResult.
+    async fn execute(
+        &self,
+        ctx: &InvocationContext,
+        name: &str,
+        params: &serde_json::Value,
+    ) -> Result<ToolResult, DomainError>;
 }
 
 pub struct GovernedAgentRuntime {
@@ -331,8 +355,15 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                     call.call_id, call.name, call.arguments
                 ));
 
+                let invocation_ctx = InvocationContext {
+                    task_id: worker_run.task_id.clone(),
+                    run_id: effective_run_id.clone(),
+                    actor: worker_run.worker_id.clone(),
+                    scope: None,
+                };
+
                 // 1. Authority / Gateway check
-                match executor.authorize(&call.name, &call.arguments).await {
+                match executor.authorize(&invocation_ctx, &call.name, &call.arguments).await {
                     Ok(()) => {
                         if self.cancelled_runs.read().await.contains(&effective_run_id) {
                             intent.lifecycle_state = ActionLifecycleState::Failed;
@@ -341,8 +372,8 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                         }
 
                         // 2. Execute tool
-                        match executor.execute(&call.name, &call.arguments).await {
-                            Ok(val) => {
+                        match executor.execute(&invocation_ctx, &call.name, &call.arguments).await {
+                            Ok(ToolResult::Success(val)) => {
                                 intent.lifecycle_state = ActionLifecycleState::Receipt;
                                 let mut output_str = serde_json::to_string(&val)
                                     .unwrap_or_else(|_| val.to_string());
@@ -356,6 +387,20 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                                 conversation_history.push_str(&format!(
                                     "Tool Result [{}]: {}\n",
                                     call.call_id, output_str
+                                ));
+                            }
+                            Ok(ToolResult::PendingApproval { attempt_id }) => {
+                                intent.lifecycle_state = ActionLifecycleState::Permitted;
+                                conversation_history.push_str(&format!(
+                                    "Tool Pending Approval [{}]: Attempt ID '{}' requires human authorization before execution.\n",
+                                    call.call_id, attempt_id
+                                ));
+                            }
+                            Ok(ToolResult::Error(err_msg)) => {
+                                intent.lifecycle_state = ActionLifecycleState::Failed;
+                                conversation_history.push_str(&format!(
+                                    "Tool Error [{}]: {}\n",
+                                    call.call_id, err_msg
                                 ));
                             }
                             Err(err) => {
@@ -511,7 +556,12 @@ mod tests {
 
     #[async_trait]
     impl GovernedToolExecutor for TestToolExecutor {
-        async fn authorize(&self, name: &str, _params: &serde_json::Value) -> Result<(), DomainError> {
+        async fn authorize(
+            &self,
+            _ctx: &InvocationContext,
+            name: &str,
+            _params: &serde_json::Value,
+        ) -> Result<(), DomainError> {
             if name == "delete_file" && !self.allow_delete {
                 return Err(DomainError::Validation("Permission denied: delete_file is disallowed".into()));
             }
@@ -520,21 +570,22 @@ mod tests {
 
         async fn execute(
             &self,
+            _ctx: &InvocationContext,
             name: &str,
             params: &serde_json::Value,
-        ) -> Result<serde_json::Value, DomainError> {
+        ) -> Result<ToolResult, DomainError> {
             match name {
-                "read_file" => Ok(serde_json::json!({ "content": "fn main() {}" })),
-                "write_file" => Ok(serde_json::json!({ "written": true, "path": params["path"] })),
+                "read_file" => Ok(ToolResult::Success(serde_json::json!({ "content": "fn main() {}" }))),
+                "write_file" => Ok(ToolResult::Success(serde_json::json!({ "written": true, "path": params["path"] }))),
                 "large_output_tool" => {
                     let large = "x".repeat(10_000);
-                    Ok(serde_json::json!({ "data": large }))
+                    Ok(ToolResult::Success(serde_json::json!({ "data": large })))
                 }
                 "multibyte_tool" => {
                     let text = "Tiếng Việt — Hệ thống AI Custos 🚀 🦀 ".repeat(50);
-                    Ok(serde_json::json!({ "text": text }))
+                    Ok(ToolResult::Success(serde_json::json!({ "text": text })))
                 }
-                _ => Ok(serde_json::json!({ "ok": true })),
+                _ => Ok(ToolResult::Success(serde_json::json!({ "ok": true }))),
             }
         }
     }
@@ -820,6 +871,129 @@ mod tests {
 
         // Steering handles for this run must be cleaned up
         assert!(!runtime.steer_messages.read().await.contains_key(&worker_run.id));
+    }
+
+    struct ApprovalPendingToolExecutor;
+
+    #[async_trait]
+    impl GovernedToolExecutor for ApprovalPendingToolExecutor {
+        async fn authorize(
+            &self,
+            _ctx: &InvocationContext,
+            _name: &str,
+            _params: &serde_json::Value,
+        ) -> Result<(), DomainError> {
+            Ok(())
+        }
+
+        async fn execute(
+            &self,
+            _ctx: &InvocationContext,
+            _name: &str,
+            _params: &serde_json::Value,
+        ) -> Result<ToolResult, DomainError> {
+            Ok(ToolResult::PendingApproval {
+                attempt_id: "att_gate_b1".to_string(),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn pending_approval_does_not_retry_as_failure() {
+        let mut resp1 = ModelResponse::text("I want to update the file", "test-model", 20);
+        resp1.tool_calls.push(ToolCall {
+            call_id: "call_write_approval".to_string(),
+            name: "write_file".to_string(),
+            arguments: serde_json::json!({ "path": "sensitive.txt", "content": "secret" }),
+        });
+
+        let resp2 = ModelResponse::text("Action is awaiting approval from operator.", "test-model", 10);
+
+        let provider = Arc::new(ScriptedMultiTurnProvider {
+            responses: std::sync::Mutex::new(vec![resp1, resp2]),
+        });
+
+        let executor = Arc::new(ApprovalPendingToolExecutor);
+        let runtime = GovernedAgentRuntime::new(
+            provider,
+            "You are a test agent",
+            vec![serde_json::json!({ "name": "write_file" })],
+        )
+        .with_tool_executor(executor)
+        .with_max_iterations(5);
+
+        let worker_run = WorkerRun::new("task_approval".to_string(), "coder".to_string(), 1);
+        let context_pack = ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
+
+        let intents = runtime
+            .execute_turn(&worker_run, &context_pack)
+            .await
+            .expect("Pending approval turn should not abort or error");
+
+        assert_eq!(intents.len(), 1);
+        assert_eq!(intents[0].lifecycle_state, ActionLifecycleState::Permitted);
+    }
+
+    struct RejectingToolExecutor;
+
+    #[async_trait]
+    impl GovernedToolExecutor for RejectingToolExecutor {
+        async fn authorize(
+            &self,
+            _ctx: &InvocationContext,
+            name: &str,
+            _params: &serde_json::Value,
+        ) -> Result<(), DomainError> {
+            if name == "write_file" {
+                return Err(DomainError::Unauthorized("Write not authorized by policy".into()));
+            }
+            Ok(())
+        }
+
+        async fn execute(
+            &self,
+            _ctx: &InvocationContext,
+            _name: &str,
+            _params: &serde_json::Value,
+        ) -> Result<ToolResult, DomainError> {
+            panic!("Execute should NOT be called for unauthorized tool");
+        }
+    }
+
+    #[tokio::test]
+    async fn unauthorized_write_is_rejected_not_executed() {
+        let mut resp1 = ModelResponse::text("I want to write a file", "test-model", 20);
+        resp1.tool_calls.push(ToolCall {
+            call_id: "call_unauth_write".to_string(),
+            name: "write_file".to_string(),
+            arguments: serde_json::json!({ "path": "unauthorized.txt", "content": "malicious" }),
+        });
+
+        let resp2 = ModelResponse::text("I understand the write request was denied.", "test-model", 10);
+
+        let provider = Arc::new(ScriptedMultiTurnProvider {
+            responses: std::sync::Mutex::new(vec![resp1, resp2]),
+        });
+
+        let executor = Arc::new(RejectingToolExecutor);
+        let runtime = GovernedAgentRuntime::new(
+            provider,
+            "You are a test agent",
+            vec![serde_json::json!({ "name": "write_file" })],
+        )
+        .with_tool_executor(executor)
+        .with_max_iterations(5);
+
+        let worker_run = WorkerRun::new("task_unauth".to_string(), "coder".to_string(), 1);
+        let context_pack = ContextPack::new("pack_unauth".to_string(), vec![], 0, "sha256:0".to_string());
+
+        let intents = runtime
+            .execute_turn(&worker_run, &context_pack)
+            .await
+            .expect("Turn should complete recording the denial");
+
+        assert_eq!(intents.len(), 1);
+        assert_eq!(intents[0].lifecycle_state, ActionLifecycleState::Failed);
     }
 }
 

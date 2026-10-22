@@ -36,8 +36,6 @@ pub struct CustosRuntime {
     pub terminal_coordinator: Arc<custos_runtime::TerminalCoordinator>,
     pub python_coordinator: Arc<custos_runtime::PythonKernelCoordinator>,
     pub pack_registry: Arc<custos_packs::DomainPackRegistry>,
-    pub gateway: Arc<custos_runtime::gateway::CustosGateway>,
-    pub memory_store: Arc<dyn custos_runtime::memory_service::MemoryStore>,
 }
 
 impl CustosRuntime {
@@ -129,9 +127,9 @@ impl CustosRuntime {
             task_service.clone(),
         ));
 
-        let kernel = Arc::new(TrustedKernel::new(store.clone()));
-
         let workspace_root = std::env::current_dir().unwrap_or_else(|_| ".".into());
+        let source_acq = Arc::new(custos_adapters::tools::source_fetch::SourceFetchAdapter::with_base_dir(&workspace_root));
+        let kernel = Arc::new(TrustedKernel::with_source_acquisition(store.clone(), source_acq));
         let sandbox = Arc::new(SovereignDeveloperAdapter::new(workspace_root.clone()));
 
         // Background OAuth Token Sweeper Job: runs every 5 minutes and refreshes expiring tokens
@@ -236,7 +234,11 @@ impl CustosRuntime {
         ];
 
         let developer_sandbox = Arc::new(SovereignDeveloperAdapter::new(workspace_root.clone()));
-        let tool_executor = Arc::new(DaemonGovernedToolExecutor::new(developer_sandbox.clone()));
+        let tool_executor = Arc::new(DaemonGovernedToolExecutor::new(
+            developer_sandbox.clone(),
+            kernel.clone(),
+            store.outbox().clone(),
+        ));
         let governed = Arc::new(
             custos_runtime::agent::runtime_port::GovernedAgentRuntime::new(
                 model.clone(),
@@ -280,17 +282,20 @@ impl CustosRuntime {
         );
         let active_claims = store.runs().list_active_claims()?;
         workflow.dispatcher().restore_from_active_claims(active_claims);
-        let terminal_coordinator = Arc::new(custos_runtime::TerminalCoordinator::new());
-        let python_coordinator = Arc::new(custos_runtime::PythonKernelCoordinator::new());
+        let terminal_coordinator = Arc::new(custos_runtime::TerminalCoordinator::new(Arc::new(
+            custos_adapters::terminal::NativePtyDriver,
+        )));
+        let python_coordinator = Arc::new(custos_runtime::PythonKernelCoordinator::new(Arc::new(
+            custos_adapters::notebook::LocalPythonDriver,
+        )));
 
         let oauth_callback_server = Arc::new(
             crate::oauth_callback_server::OAuthCallbackServer::with_credentials(credentials.clone()),
         );
 
         let pack_registry = Arc::new(custos_packs::create_default_pack_registry());
-        let gateway = Arc::new(custos_runtime::gateway::CustosGateway::default());
-        let memory_store = Arc::new(custos_runtime::memory_service::InMemoryMemoryStore::new())
-            as Arc<dyn custos_runtime::memory_service::MemoryStore>;
+        // not-integrated: gateway awaits product caller and lifecycle test (F4)
+        // not-integrated: in-memory memory store awaits product caller (F3)
 
         let local_api = Arc::new(
             LocalApiDispatcher::new(
@@ -334,8 +339,6 @@ impl CustosRuntime {
             terminal_coordinator,
             python_coordinator,
             pack_registry,
-            gateway,
-            memory_store,
         })
     }
 }
@@ -646,13 +649,21 @@ pub(crate) fn provider_catalog_scope(repo: &custos_persistence::ProviderReposito
 /// Concrete tool executor for GovernedAgentRuntime wiring SovereignDeveloperAdapter and McpFederationHub.
 pub struct DaemonGovernedToolExecutor {
     developer_adapter: Arc<SovereignDeveloperAdapter>,
+    kernel: Arc<dyn custos_core::contracts::kernel::KernelPort>,
+    outbox: custos_persistence::repositories::outbox::OutboxRepository,
     mcp_hub: Option<Arc<custos_adapters::mcp::McpFederationHub>>,
 }
 
 impl DaemonGovernedToolExecutor {
-    pub fn new(developer_adapter: Arc<SovereignDeveloperAdapter>) -> Self {
+    pub fn new(
+        developer_adapter: Arc<SovereignDeveloperAdapter>,
+        kernel: Arc<dyn custos_core::contracts::kernel::KernelPort>,
+        outbox: custos_persistence::repositories::outbox::OutboxRepository,
+    ) -> Self {
         Self {
             developer_adapter,
+            kernel,
+            outbox,
             mcp_hub: None,
         }
     }
@@ -665,42 +676,293 @@ impl DaemonGovernedToolExecutor {
 
 #[async_trait::async_trait]
 impl custos_runtime::agent::runtime_port::GovernedToolExecutor for DaemonGovernedToolExecutor {
-    async fn authorize(&self, name: &str, _params: &serde_json::Value) -> Result<(), DomainError> {
+    async fn authorize(
+        &self,
+        ctx: &custos_runtime::agent::runtime_port::InvocationContext,
+        name: &str,
+        _params: &serde_json::Value,
+    ) -> Result<(), DomainError> {
         if name.starts_with("dangerous_") || name.contains("format_disk") {
             return Err(DomainError::Unauthorized(format!("Tool '{name}' is forbidden by kernel policy")));
+        }
+        if name.contains("__") && custos_adapters::mcp::security::is_dangerous_tool_pattern(name) {
+            let grant = self.kernel.find_active_grant(&ctx.task_id, name).await?;
+            if grant.is_none() {
+                return Err(DomainError::Unauthorized(format!("Tool '{name}' requires explicit capability grant")));
+            }
         }
         Ok(())
     }
 
     async fn execute(
         &self,
+        ctx: &custos_runtime::agent::runtime_port::InvocationContext,
         name: &str,
         params: &serde_json::Value,
-    ) -> Result<serde_json::Value, DomainError> {
-        match name {
-            "read_file" | "read" => self.developer_adapter.handle_read(params).await,
-            "write_file" | "write" => self.developer_adapter.handle_write(params).await,
-            "list_dir" | "list" => self.developer_adapter.handle_list(params).await,
-            "bash" | "shell" | "exec" => self.developer_adapter.handle_bash(params).await,
-            mcp_tool if mcp_tool.contains("__") => {
-                if let Some(ref hub) = self.mcp_hub {
-                    let ctx = custos_adapters::mcp::ToolCallContext::new(
-                        &custos_domain::new_id("perm"),
-                        &custos_domain::new_id("act"),
-                    );
-                    let res = hub.dispatch_call(mcp_tool, Some(params.clone()), &ctx).await?;
-                    if res.is_error == Some(true) {
-                        return Err(DomainError::Validation(format!(
-                            "MCP tool '{mcp_tool}' returned error: {:?}",
-                            res.content
-                        )));
+    ) -> Result<custos_runtime::agent::runtime_port::ToolResult, DomainError> {
+        let (action_name, risk_level, target) = if name.contains("__") {
+            let risk = if custos_adapters::mcp::security::is_dangerous_tool_pattern(name) {
+                custos_domain::RiskLevel::High
+            } else {
+                custos_domain::RiskLevel::Medium
+            };
+            let tgt = params
+                .get("target")
+                .or_else(|| params.get("path"))
+                .or_else(|| params.get("url"))
+                .and_then(|v| v.as_str())
+                .unwrap_or(name);
+            (name, risk, tgt.to_string())
+        } else {
+            let act = match name {
+                "read_file" | "read" => "read_file",
+                "write_file" | "write" => "write_file",
+                "list_dir" | "list" | "list_files" => "list_dir",
+                "bash" | "shell" | "exec" => "bash",
+                "patch_preview" => "patch_preview",
+                unknown => {
+                    return Err(DomainError::Validation(format!(
+                        "Unknown or unmapped tool: '{unknown}'"
+                    )))
+                }
+            };
+            let risk = match act {
+                "write_file" => custos_domain::RiskLevel::Medium,
+                "bash" => custos_domain::RiskLevel::High,
+                _ => custos_domain::RiskLevel::Low,
+            };
+            let tgt = params
+                .get("path")
+                .or_else(|| params.get("file"))
+                .or_else(|| params.get("target_file"))
+                .or_else(|| params.get("command"))
+                .or_else(|| params.get("cmd"))
+                .or_else(|| params.get("target"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("workspace");
+            (act, risk, tgt.to_string())
+        };
+
+        let action_id = custos_domain::new_id("act");
+        let mut action_intent = custos_domain::ActionIntent::new(
+            action_id.clone(),
+            action_name.to_string(),
+            target,
+            params.clone(),
+            risk_level,
+        )
+        .with_task_id(ctx.task_id.clone());
+        action_intent.assurance = custos_domain::Assurance::CustosMediated;
+
+        // 1. Authorize action and obtain permit via Kernel
+        let permit = match self
+            .kernel
+            .request_permit(&ctx.task_id, &action_intent, &ctx.actor)
+            .await
+        {
+            Ok(p) => p,
+            Err(DomainError::Conflict(reason)) => {
+                let attempt_id = custos_domain::new_id("att");
+                let entry = custos_core::contracts::storage::OutboxEntry {
+                    id: attempt_id.clone(),
+                    task_id: ctx.task_id.clone(),
+                    action_id: action_id.clone(),
+                    permit_id: "".to_string(),
+                    argument_digest: action_intent.argument_digest(),
+                    idempotency_key: Some(format!("{}:{}", ctx.task_id, action_id)),
+                    status: custos_core::contracts::storage::OutboxStatus::Pending,
+                    created_at: chrono::Utc::now(),
+                    receipt: None,
+                    recipient: None,
+                    payload_json: Some(params.to_string()),
+                    error_message: Some(reason),
+                };
+                custos_core::contracts::storage::OutboxPort::enqueue(&self.outbox, entry).await?;
+                return Ok(
+                    custos_runtime::agent::runtime_port::ToolResult::PendingApproval {
+                        attempt_id,
+                    },
+                );
+            }
+            Err(e) => return Err(e),
+        };
+
+        // 2. Consume permit atomically (INV-04)
+        let permit = self
+            .kernel
+            .consume_permit(&permit.id, &action_intent)
+            .await?;
+
+        // 3. Durable ledger admission: MUST succeed before dispatching side-effect
+        let attempt_id = custos_domain::new_id("att");
+        let idempotency_key = action_intent
+            .idempotency_key
+            .clone()
+            .unwrap_or_else(|| format!("{}:{}", ctx.task_id, action_id));
+        let attempt = custos_domain::EffectAttempt {
+            id: attempt_id.clone(),
+            node_attempt_id: ctx.run_id.clone(),
+            permit_id: permit.id.clone(),
+            idempotency_key: idempotency_key.clone(),
+            status: custos_domain::EffectStatus::InFlight,
+            started_at: chrono::Utc::now(),
+            ended_at: None,
+            receipt: None,
+        };
+        self.outbox.record_effect(&attempt)?;
+
+        let outbox_entry = custos_core::contracts::storage::OutboxEntry {
+            id: attempt_id.clone(),
+            task_id: ctx.task_id.clone(),
+            action_id: action_id.clone(),
+            permit_id: permit.id.clone(),
+            argument_digest: action_intent.argument_digest(),
+            idempotency_key: Some(idempotency_key),
+            status: custos_core::contracts::storage::OutboxStatus::Dispatching,
+            created_at: chrono::Utc::now(),
+            receipt: None,
+            recipient: None,
+            payload_json: Some(params.to_string()),
+            error_message: None,
+        };
+        custos_core::contracts::storage::OutboxPort::enqueue(&self.outbox, outbox_entry).await?;
+
+        // 4. Physical / Remote dispatch
+        if name.contains("__") {
+            let hub = self.mcp_hub.as_ref().ok_or_else(|| {
+                DomainError::Validation(
+                    "MCP federation hub is not configured on this tool executor".into(),
+                )
+            })?;
+            let tool_ctx = custos_adapters::mcp::ToolCallContext::new(&permit.id, &ctx.run_id);
+            match hub.dispatch_call(name, Some(params.clone()), &tool_ctx).await {
+                Ok(res) => {
+                    let is_error = res.is_error.unwrap_or(false);
+                    let val = serde_json::to_value(&res)
+                        .unwrap_or_else(|_| serde_json::json!({"success": !is_error}));
+                    let receipt = custos_domain::ExecutionReceipt {
+                        receipt_id: custos_domain::new_id("rcpt"),
+                        permit_id: permit.id.clone(),
+                        action_id: action_intent.id.clone(),
+                        status: if is_error {
+                            custos_domain::ReceiptStatus::Failure
+                        } else {
+                            custos_domain::ReceiptStatus::Success
+                        },
+                        output_digest: format!(
+                            "sha256:{}",
+                            custos_domain::digest(val.to_string().as_bytes())
+                        ),
+                        output_data: Some(val.clone()),
+                        error_message: if is_error {
+                            Some(format!("{:?}", res.content))
+                        } else {
+                            None
+                        },
+                        duration_ms: None,
+                        executed_at: chrono::Utc::now(),
+                        assurance: custos_domain::Assurance::CustosMediated,
+                    };
+                    let status = custos_domain::EffectStatus::from(receipt.status);
+                    self.outbox
+                        .update_effect_status(&attempt_id, status, Some(&receipt))?;
+                    if let Err(settle_err) = custos_core::contracts::storage::OutboxPort::mark_receipted(
+                        &self.outbox,
+                        &attempt_id,
+                        receipt.clone(),
+                    )
+                    .await {
+                        let _ = self.outbox.update_effect_status(
+                            &attempt_id,
+                            custos_domain::EffectStatus::Uncertain,
+                            Some(&receipt),
+                        );
+                        let _ = custos_core::contracts::storage::OutboxPort::mark_uncertain(
+                            &self.outbox,
+                            &attempt_id,
+                        ).await;
+                        return Err(DomainError::Validation(format!("Outbox settlement failed: {settle_err}")));
                     }
-                    Ok(serde_json::to_value(&res).unwrap_or_else(|_| serde_json::json!({"success": true})))
-                } else {
-                    Err(DomainError::Validation("MCP federation hub is not configured on this tool executor".into()))
+                    if is_error {
+                        Ok(custos_runtime::agent::runtime_port::ToolResult::Error(
+                            format!("{:?}", res.content),
+                        ))
+                    } else {
+                        Ok(custos_runtime::agent::runtime_port::ToolResult::Success(val))
+                    }
+                }
+                Err(err) => {
+                    let _ = self.outbox.update_effect_status(
+                        &attempt_id,
+                        custos_domain::EffectStatus::Uncertain,
+                        None,
+                    );
+                    let _ = custos_core::contracts::storage::OutboxPort::mark_uncertain(
+                        &self.outbox,
+                        &attempt_id,
+                    )
+                    .await;
+                    Err(err)
                 }
             }
-            unknown => Err(DomainError::Validation(format!("Unknown or unmapped tool: '{unknown}'"))),
+        } else {
+            let receipt_res = custos_core::contracts::sandbox::SandboxPort::execute(
+                self.developer_adapter.as_ref(),
+                &action_intent,
+                &permit,
+            )
+            .await;
+
+            match receipt_res {
+                Ok(receipt) => {
+                    let status = custos_domain::EffectStatus::from(receipt.status);
+                    self.outbox
+                        .update_effect_status(&attempt_id, status, Some(&receipt))?;
+                    if let Err(settle_err) = custos_core::contracts::storage::OutboxPort::mark_receipted(
+                        &self.outbox,
+                        &attempt_id,
+                        receipt.clone(),
+                    )
+                    .await {
+                        let _ = self.outbox.update_effect_status(
+                            &attempt_id,
+                            custos_domain::EffectStatus::Uncertain,
+                            Some(&receipt),
+                        );
+                        let _ = custos_core::contracts::storage::OutboxPort::mark_uncertain(
+                            &self.outbox,
+                            &attempt_id,
+                        ).await;
+                        return Err(DomainError::Validation(format!("Outbox settlement failed: {settle_err}")));
+                    }
+                    if receipt.status == custos_domain::ReceiptStatus::Success {
+                        Ok(custos_runtime::agent::runtime_port::ToolResult::Success(
+                            receipt
+                                .output_data
+                                .unwrap_or(serde_json::json!({ "success": true })),
+                        ))
+                    } else {
+                        Ok(custos_runtime::agent::runtime_port::ToolResult::Error(
+                            receipt
+                                .error_message
+                                .unwrap_or_else(|| "Execution failed".into()),
+                        ))
+                    }
+                }
+                Err(err) => {
+                    let _ = self.outbox.update_effect_status(
+                        &attempt_id,
+                        custos_domain::EffectStatus::Uncertain,
+                        None,
+                    );
+                    let _ = custos_core::contracts::storage::OutboxPort::mark_uncertain(
+                        &self.outbox,
+                        &attempt_id,
+                    )
+                    .await;
+                    Err(err)
+                }
+            }
         }
     }
 }

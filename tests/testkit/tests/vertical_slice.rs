@@ -54,7 +54,9 @@ async fn vertical_slice_links_all_ports() {
     assert!(h.kernel.get_task(&task.id).await.unwrap().is_some());
 
     // 3. Context Compiler (Vĩ): 8-step pipeline produces a sealed ContextPack
-    let pack = ContextCompiler::new(&h.workspace)
+    let mut files = std::collections::HashMap::new();
+    files.insert("src/lib.rs".into(), "pub fn add(a: i32, b: i32) -> i32 { a + b }\n".into());
+    let pack = ContextCompiler::with_memory_files(&h.workspace, files)
         .unwrap()
         .compile(&CompileContextRequest {
             task_id: task.id.clone(),
@@ -63,6 +65,7 @@ async fn vertical_slice_links_all_ports() {
             max_tokens: 500,
             untrusted_sources: vec![],
         })
+        .await
         .unwrap();
     assert_eq!(
         pack.items.len(),

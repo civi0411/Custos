@@ -9,6 +9,7 @@ impl RevisionLoader {
     pub fn load_into_dag(revision: &WorkflowRevision) -> Result<DagGraph, DomainError> {
         let mut graph = DagGraph::new(format!("DAG for task {}", revision.task_id));
         graph.id = revision.revision_id.clone();
+        graph.task_id = Some(revision.task_id.clone());
 
         let mut deps: HashMap<String, Vec<String>> = HashMap::new();
         for (from, to) in &revision.dependencies {

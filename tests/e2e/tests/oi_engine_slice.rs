@@ -125,7 +125,7 @@ mod graph_runtime_execution {
     use custos_runtime::workflow::worker_executor::WorkerExecutor;
 
     #[tokio::test]
-    async fn test_full_graph_runtime_execution_slice() {
+    async fn planning_without_a_bound_worker_cannot_claim_execution_success() {
         let (snapshot, task_id) = setup_task_and_snapshot("Execute Test Task").await;
         let engine = OiEngine::new();
         let proposal = engine
@@ -153,7 +153,11 @@ mod graph_runtime_execution {
             .execute_all()
             .await
             .expect("graph execution failed");
-        assert!(report.success, "Graph execution must succeed");
-        assert_eq!(report.completed_nodes, 1);
+        assert!(
+            !report.success,
+            "Planning a worker is not executing a worker"
+        );
+        assert_eq!(report.completed_nodes, 0);
+        assert_eq!(report.failed_nodes, 1);
     }
 }

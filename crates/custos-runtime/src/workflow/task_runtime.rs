@@ -218,6 +218,41 @@ impl TaskRuntime {
         &self.dispatcher
     }
 
+    /// C2: Ingress funnel for native harness events into the sovereign observer stream
+    pub fn observe_harness_event(&self, run_id: &str, kind: &str, payload: serde_json::Value) {
+        self.live.emit(run_id, kind, payload);
+    }
+
+    /// Checks if there is currently an active, running worker for a given task
+    pub async fn has_active_worker_for_task(&self, task_id: &str) -> bool {
+        let workers = self.active_workers.read().await;
+        workers.values().any(|w| w.task_id == task_id)
+    }
+
+    /// Checks if there is currently an active worker for a specific run ID
+    pub async fn has_active_worker_for_run(&self, run_id: &str) -> bool {
+        let workers = self.active_workers.read().await;
+        workers.values().any(|w| w.run_id.as_deref() == Some(run_id) || w.id == run_id)
+    }
+
+    /// Delivers mid-flight steering guidance to the active worker for a task
+    pub async fn steer_task(&self, task_id: &str, message: &str) -> Result<bool, DomainError> {
+        let active_run = {
+            let runs = self.active_runs.read().await;
+            runs.values().find(|r| r.task_id == task_id).cloned()
+        };
+
+        if let Some(run) = active_run {
+            if let Some(ref harness) = self.harness {
+                if harness.profile().supports_steer {
+                    harness.steer_run(&run.id, message).await?;
+                    return Ok(true);
+                }
+            }
+        }
+        Ok(false)
+    }
+
     async fn recover_completed_model_chat_turn(&self, task_id: &str) -> Result<(), DomainError> {
         let Some(ref store) = self.run_store else {
             return Ok(());
@@ -681,6 +716,11 @@ impl TaskRuntime {
                         // Gate 4: Validate intent assurance against harness profile
                         harness.profile().validate_intent_assurance(&intent)?;
 
+                        // C1 Invariant: If already executed under GovernedToolExecutor, receipt is complete; skip re-execution
+                        if intent.lifecycle_state == custos_domain::ActionLifecycleState::Receipt {
+                            continue;
+                        }
+
                         // If intent is custos-mediated and we have kernel and sandbox:
                         if intent.assurance == Assurance::CustosMediated {
                             if let Some(ref kernel) = self.kernel {
@@ -688,9 +728,50 @@ impl TaskRuntime {
                                 intent.task_id = Some(cmd.task_id.clone());
 
                                 // Request permit (Gate 1 Budget, Gate 2 Policy, Gate 3 Idempotency)
-                                let permit = kernel
+                                let permit = match kernel
                                     .request_permit(&cmd.task_id, &intent, &cmd.actor)
-                                    .await?;
+                                    .await
+                                {
+                                    Ok(p) => p,
+                                    Err(DomainError::Conflict(reason)) => {
+                                        let attempt_id = new_id("att");
+                                        if let Some(ref outbox) = self.outbox {
+                                            let outbox_entry = OutboxEntry {
+                                                id: attempt_id.clone(),
+                                                task_id: cmd.task_id.clone(),
+                                                action_id: intent.id.clone(),
+                                                permit_id: "".to_string(),
+                                                argument_digest: intent.argument_digest(),
+                                                idempotency_key: Some(intent.idempotency_key.clone().unwrap_or_else(|| intent.id.clone())),
+                                                status: OutboxStatus::Pending,
+                                                created_at: Utc::now(),
+                                                receipt: None,
+                                                recipient: None,
+                                                payload_json: Some(intent.parameters.to_string()),
+                                                error_message: Some(reason.clone()),
+                                            };
+                                            outbox.enqueue(outbox_entry).await?;
+                                        }
+                                        run.metadata["pending_approval_attempt_id"] = serde_json::json!(attempt_id);
+                                        run.metadata["pending_approval_reason"] = serde_json::json!(reason);
+                                        run.transition(RunStatus::Suspended)?;
+                                        wrun.transition(RunStatus::Suspended)?;
+                                        if let Some(ref kernel) = self.kernel {
+                                            let _ = kernel.transition_task(&cmd.task_id, TaskStatus::Blocked).await;
+                                        }
+                                        self.live.emit(&run.id, "status", serde_json::json!({
+                                            "status": "suspended",
+                                            "reason": reason,
+                                            "attempt_id": attempt_id,
+                                        }));
+                                        if let Some(ref store) = self.run_store {
+                                            store.save_run(&mut run).await?;
+                                            store.save_worker_run(&mut wrun).await?;
+                                        }
+                                        break;
+                                    }
+                                    Err(e) => return Err(e),
+                                };
                                 let burned_permit =
                                     kernel.consume_permit(&permit.id, &intent).await?;
 
@@ -733,21 +814,39 @@ impl TaskRuntime {
 
                                 // T4: Execute in Sandbox
                                 if let Some(ref sandbox) = self.sandbox {
-                                    let receipt = sandbox.execute(&intent, &burned_permit).await?;
-
-                                    // Update Outbox and EffectLedger with verified receipt
-                                    if let Some(ref outbox) = self.outbox {
-                                        outbox.mark_receipted(&outbox_id, receipt.clone()).await?;
-                                    }
-                                    if let Some(ref ledger) = self.effect_ledger {
-                                        if let Some(eff_id) = effect_id {
-                                            ledger
-                                                .update_effect_status(
-                                                    &eff_id,
-                                                    custos_domain::EffectStatus::Succeeded,
-                                                    Some(&receipt),
-                                                )
-                                                .await?;
+                                    match sandbox.execute(&intent, &burned_permit).await {
+                                        Ok(receipt) => {
+                                            let status = custos_domain::EffectStatus::from(receipt.status);
+                                            // Update Outbox and EffectLedger with verified receipt
+                                            if let Some(ref outbox) = self.outbox {
+                                                outbox.mark_receipted(&outbox_id, receipt.clone()).await?;
+                                            }
+                                            if let Some(ref ledger) = self.effect_ledger {
+                                                if let Some(eff_id) = effect_id {
+                                                    ledger
+                                                        .update_effect_status(
+                                                            &eff_id,
+                                                            status,
+                                                            Some(&receipt),
+                                                        )
+                                                        .await?;
+                                                }
+                                            }
+                                        }
+                                        Err(err) => {
+                                            if let Some(ref outbox) = self.outbox {
+                                                let _ = outbox.mark_uncertain(&outbox_id).await;
+                                            }
+                                            if let Some(ref ledger) = self.effect_ledger {
+                                                if let Some(eff_id) = effect_id {
+                                                    let _ = ledger.update_effect_status(
+                                                        &eff_id,
+                                                        custos_domain::EffectStatus::Uncertain,
+                                                        None,
+                                                    ).await;
+                                                }
+                                            }
+                                            return Err(err);
                                         }
                                     }
                                 }
@@ -765,7 +864,9 @@ impl TaskRuntime {
                             idempotency_key,
                         );
                         effect.status = custos_domain::EffectStatus::Uncertain;
-                        let _ = ledger.record_effect(&effect).await;
+                        if let Err(e) = ledger.record_effect(&effect).await {
+                            tracing::warn!(error = %e, "Failed to record unmediated effect attempt in ledger");
+                        }
                     }
                 }
             } else if actual_mode == "model" {
@@ -961,11 +1062,12 @@ impl TaskRuntime {
             }
         }
 
-        if actual_mode == "native" && run.status == RunStatus::Active {
-            if let Some(native_succeeded) = run
+        if is_chat_turn && actual_mode == "native" && run.status == RunStatus::Active {
+            let native_succeeded = run
                 .metadata
                 .get("native_success")
                 .and_then(|value| value.as_bool())
+                .unwrap_or(true);
             {
                 if !native_succeeded {
                     run.metadata["failure_reason"] =
@@ -1766,5 +1868,185 @@ mod tests {
         // But must be durably resolvable via checkpoint/run_store
         let checkpoint = runtime.checkpoint(&handle.run_id).await.unwrap();
         assert_eq!(checkpoint.task_id, task.id);
+    }
+
+    #[tokio::test]
+    async fn test_tool_receipt_not_reexecuted_double_execution_prevention() {
+        use custos_core::contracts::harness::{AgentRuntimePort, HarnessProfile, ToolMediationLevel};
+        use custos_domain::{Action, ActionLifecycleState, Assurance, ContextPack, RiskLevel, WorkerRun};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let execution_count = Arc::new(AtomicUsize::new(0));
+        let exec_count_clone = execution_count.clone();
+
+        struct ReceiptEmittingHarness {
+            exec_count: Arc<AtomicUsize>,
+        }
+
+        #[async_trait::async_trait]
+        impl AgentRuntimePort for ReceiptEmittingHarness {
+            fn harness_id(&self) -> &str {
+                "receipt-harness"
+            }
+            fn profile(&self) -> HarnessProfile {
+                HarnessProfile::new("receipt-harness", ToolMediationLevel::CustosMediated)
+            }
+            async fn execute_turn(
+                &self,
+                worker_run: &WorkerRun,
+                _ctx: &ContextPack,
+            ) -> Result<Vec<custos_domain::ActionIntent>, DomainError> {
+                self.exec_count.fetch_add(1, Ordering::SeqCst);
+                let mut intent = Action::new(
+                    "act_executed".into(),
+                    "write_file".into(),
+                    "target.txt".into(),
+                    serde_json::json!({}),
+                    RiskLevel::Low,
+                );
+                intent.task_id = Some(worker_run.task_id.clone());
+                intent.assurance = Assurance::CustosMediated;
+                // Pre-mark as Receipt (already executed by GovernedToolExecutor in agent loop)
+                intent.lifecycle_state = ActionLifecycleState::Receipt;
+                Ok(vec![intent])
+            }
+        }
+
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let task = custos_domain::Task::new("task_receipt_01".into(), "Receipt Test".into());
+        custos_core::TaskStore::save_task(&*store, &task).await.unwrap();
+
+        let harness = Arc::new(ReceiptEmittingHarness {
+            exec_count: exec_count_clone,
+        });
+        let runtime = TaskRuntime::new()
+            .with_harness(harness)
+            .with_run_store(store);
+
+        let cmd = StartRunCommand::new(&task.id, "actor_user")
+            .with_preferred_mode("native")
+            .with_harness_id("receipt-harness")
+            .with_workspace_root("/tmp/custos-receipt-test");
+
+        let handle = runtime.start_run(cmd).await.unwrap();
+        assert_eq!(handle.status, RunStatus::Completed);
+        // Harness executed once in loop
+        assert_eq!(execution_count.load(Ordering::SeqCst), 1);
+        // Intent had lifecycle_state = Receipt so it was NOT double-executed outside loop
+    }
+
+    #[tokio::test]
+    async fn test_native_turn_approval_conflict_suspends_run_and_blocks_task() {
+        use custos_core::contracts::harness::{AgentRuntimePort, HarnessProfile, ToolMediationLevel};
+        use custos_core::contracts::kernel::KernelPort;
+        use custos_core::contracts::storage::{OutboxEntry, OutboxPort, OutboxStatus};
+        use custos_domain::{Action, ActionLifecycleState, Assurance, ContextPack, RiskLevel, TaskStatus, WorkerRun};
+        use tokio::sync::Mutex;
+
+        struct ConflictHarness;
+        #[async_trait::async_trait]
+        impl AgentRuntimePort for ConflictHarness {
+            fn harness_id(&self) -> &str { "conflict-harness" }
+            fn profile(&self) -> HarnessProfile {
+                HarnessProfile::new("conflict-harness", ToolMediationLevel::CustosMediated)
+            }
+            async fn execute_turn(&self, worker_run: &WorkerRun, _ctx: &ContextPack) -> Result<Vec<custos_domain::ActionIntent>, DomainError> {
+                let mut intent = Action::new(
+                    "act_delete".into(),
+                    "delete_database".into(),
+                    "prod.db".into(),
+                    serde_json::json!({}),
+                    RiskLevel::High,
+                );
+                intent.task_id = Some(worker_run.task_id.clone());
+                intent.assurance = Assurance::CustosMediated;
+                intent.lifecycle_state = ActionLifecycleState::Intent;
+                Ok(vec![intent])
+            }
+        }
+
+        struct TaskStatusKernel {
+            task_status: Arc<Mutex<TaskStatus>>,
+        }
+        #[async_trait::async_trait]
+        impl KernelPort for TaskStatusKernel {
+            async fn create_task(&self, _: String) -> Result<custos_domain::Task, DomainError> { unreachable!() }
+            async fn create_task_with_contract(&self, _: String, _: custos_domain::TaskContract) -> Result<custos_domain::Task, DomainError> { unreachable!() }
+            async fn get_task(&self, task_id: &str) -> Result<Option<custos_domain::Task>, DomainError> {
+                let status = *self.task_status.lock().await;
+                let mut t = custos_domain::Task::new(task_id.into(), "Conflict".into());
+                t.status = status;
+                Ok(Some(t))
+            }
+            async fn transition_task(&self, _: &str, next: TaskStatus) -> Result<custos_domain::Task, DomainError> {
+                let mut status = self.task_status.lock().await;
+                *status = next;
+                let mut t = custos_domain::Task::new("task_conflict_02".into(), "Conflict".into());
+                t.status = next;
+                Ok(t)
+            }
+            async fn request_permit(&self, _: &str, _: &custos_domain::ActionIntent, _: &str) -> Result<custos_domain::Permit, DomainError> {
+                Err(DomainError::Conflict("Approval required for high risk delete".into()))
+            }
+            async fn consume_permit(&self, _: &str, _: &custos_domain::ActionIntent) -> Result<custos_domain::Permit, DomainError> { unreachable!() }
+            async fn verify_evidence(&self, _: &custos_core::evidence::EvidenceBundle) -> Result<custos_domain::VerificationClaim, DomainError> { unreachable!() }
+            async fn grant_capability(&self, _: &str, _: &str, _: &str) -> Result<custos_domain::Grant, DomainError> { unreachable!() }
+            async fn find_active_grant(&self, _: &str, _: &str) -> Result<Option<custos_domain::Grant>, DomainError> { unreachable!() }
+            async fn complete_task(&self, _: &str, _: String, _: Vec<custos_domain::VerificationClaim>) -> Result<custos_domain::Task, DomainError> { unreachable!() }
+        }
+
+        struct InMemoryOutbox {
+            entries: Arc<Mutex<Vec<OutboxEntry>>>,
+        }
+        #[async_trait::async_trait]
+        impl OutboxPort for InMemoryOutbox {
+            async fn enqueue(&self, entry: OutboxEntry) -> Result<(), DomainError> {
+                self.entries.lock().await.push(entry);
+                Ok(())
+            }
+            async fn get(&self, id: &str) -> Result<Option<OutboxEntry>, DomainError> {
+                Ok(self.entries.lock().await.iter().find(|e| e.id == id).cloned())
+            }
+            async fn list_by_status(&self, status: OutboxStatus) -> Result<Vec<OutboxEntry>, DomainError> {
+                Ok(self.entries.lock().await.iter().filter(|e| e.status == status).cloned().collect())
+            }
+            async fn list_by_task_and_status(&self, task_id: &str, status: OutboxStatus) -> Result<Vec<OutboxEntry>, DomainError> {
+                Ok(self.entries.lock().await.iter().filter(|e| e.task_id == task_id && e.status == status).cloned().collect())
+            }
+            async fn mark_approved(&self, _: &str) -> Result<(), DomainError> { Ok(()) }
+            async fn mark_dispatching(&self, _: &str) -> Result<(), DomainError> { Ok(()) }
+            async fn mark_receipted(&self, _: &str, _: custos_domain::Receipt) -> Result<(), DomainError> { Ok(()) }
+            async fn mark_uncertain(&self, _: &str) -> Result<(), DomainError> { Ok(()) }
+            async fn mark_failed(&self, _: &str, _: &str) -> Result<(), DomainError> { Ok(()) }
+        }
+
+        let store = Arc::new(custos_persistence::SqliteTaskStore::new_in_memory().unwrap());
+        let task = custos_domain::Task::new("task_conflict_02".into(), "Conflict Test".into());
+        custos_core::TaskStore::save_task(&*store, &task).await.unwrap();
+
+        let task_status = Arc::new(Mutex::new(TaskStatus::Running));
+        let kernel = Arc::new(TaskStatusKernel { task_status: task_status.clone() });
+        let outbox_entries = Arc::new(Mutex::new(Vec::new()));
+        let outbox = Arc::new(InMemoryOutbox { entries: outbox_entries.clone() });
+
+        let runtime = TaskRuntime::new()
+            .with_harness(Arc::new(ConflictHarness))
+            .with_kernel(kernel)
+            .with_outbox(outbox)
+            .with_run_store(store);
+
+        let cmd = StartRunCommand::new(&task.id, "actor_user")
+            .with_preferred_mode("native")
+            .with_harness_id("conflict-harness")
+            .with_workspace_root("/tmp/custos-conflict-test");
+
+        let handle = runtime.start_run(cmd).await.unwrap();
+        // Crucial regression assert: MUST NOT be Completed!
+        assert_eq!(handle.status, RunStatus::Suspended, "Pending approval must suspend run, not complete it");
+        assert_eq!(*task_status.lock().await, TaskStatus::Blocked, "Task must transition to Blocked");
+
+        let entries = outbox_entries.lock().await;
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].status, OutboxStatus::Pending);
     }
 }

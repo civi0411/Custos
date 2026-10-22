@@ -68,23 +68,22 @@ use custos_core::contracts::workflow::WorkflowPort;
 use custos_core::contracts::workspace_files::WorkspaceFilesPort;
 use custos_core::{AdvanceTask, CreateTask, TaskService};
 use custos_domain::{
-    new_id, validate_browser_url, ArtifactLineageNode, AssistantDraft, Assurance, BrowserConsoleEntry,
+    new_id, validate_browser_url, AssistantDraft, Assurance, BrowserConsoleEntry,
     BrowserNetworkRequest, BrowserPageSnapshot, BrowserSession, BrowserTab, BrowserTabStatus,
-    CellExecutionStatus, ClaimGroundingLevel, ClaimHandoffSummary,
-    CreateHeadlessJobParams, ExecuteCellParams, ExecutionReceipt, FleetExecReceipt, HandoffToCodingParams,
-    HandoffToCodingResult, HeadlessAutomationJob, HeadlessJobStatus, NoteRecord, NotebookCell,
-    OutboxActionItem, PassageAnchor, Recipe, RecipeHandoffSummary, RecordReviewParams,
-    ReceiptStatus, RegisterHostParams, RemoteHostNode, RemoteHostStatus, ResearchClaim, ResearchExperimentRun,
-    ResearchSynthesisProposal, ResourceActionCapability, ReviewStatus, ReviewerRecord,
-    SaveSynthesisProposalParams, SessionId, SessionMode, SourceRecord, SshAuthMethod, TaskContract,
+    CreateHeadlessJobParams, ExecuteCellParams, ExecutionReceipt, FleetExecReceipt,
+    HeadlessAutomationJob, HeadlessJobStatus, OutboxActionItem,
+    ReceiptStatus, RegisterHostParams, RemoteHostNode, RemoteHostStatus,
+    ResourceActionCapability, SessionId, SessionMode, SshAuthMethod, TaskContract,
     ComputeBackendKind, ExecEvent, ExecutionAttempt, ResourceEvent,
 };
 use custos_persistence::repositories::{AssistantRepository, OutboxRepository};
 use custos_persistence::{FleetAutomationRepository, ProviderRepository, ResearchRepository};
 use custos_runtime::session::SessionManager;
 use custos_runtime::workspace::{
-    CreateWorkspaceRequest, WorkspaceCoordinator, WorkspaceFilesCoordinator,
+    WorkspaceCoordinator, WorkspaceFilesCoordinator,
 };
+#[cfg(test)]
+pub(crate) use custos_runtime::workspace::CreateWorkspaceRequest;
 use custos_runtime::{PythonKernelCoordinator, TerminalCoordinator};
 
 pub mod transport;
@@ -139,10 +138,14 @@ impl LocalApiDispatcher {
             research: None,
             providers: None,
             credentials: None,
-            terminal: Arc::new(TerminalCoordinator::new()),
+            terminal: Arc::new(TerminalCoordinator::new(Arc::new(
+                custos_adapters::terminal::NativePtyDriver,
+            ))),
             files: Arc::new(WorkspaceFilesCoordinator::new()),
             harnesses: Arc::new(HarnessRegistry::new()),
-            python_kernel: Some(Arc::new(PythonKernelCoordinator::new())),
+            python_kernel: Some(Arc::new(PythonKernelCoordinator::new(Arc::new(
+                custos_adapters::notebook::LocalPythonDriver,
+            )))),
             fleet_automation: None,
             model_availability: Default::default(),
             model_catalog: custos_adapters::providers::catalog::ModelCatalogService::new(),
@@ -456,5 +459,5 @@ impl crate::custos_local_api::ApiTransport for LocalApiDispatcher {
 
 
 #[cfg(test)]
-#[path = "api/tests.rs"]
+#[path = "api/tests/mod.rs"]
 mod tests;

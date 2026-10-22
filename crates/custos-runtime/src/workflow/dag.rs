@@ -13,6 +13,8 @@ pub enum NodeStatus {
     Pending,
     Ready,
     Running,
+    WaitingApproval,
+    Uncertain,
     Completed,
     Failed,
     Skipped,
@@ -68,6 +70,8 @@ pub struct ExecutionWave {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DagGraph {
     pub id: String,
+    #[serde(default)]
+    pub task_id: Option<String>,
     pub title: String,
     nodes: HashMap<String, DagNode>,
 }
@@ -76,6 +80,7 @@ impl DagGraph {
     pub fn new(title: impl Into<String>) -> Self {
         Self {
             id: new_id("dag"),
+            task_id: None,
             title: title.into(),
             nodes: HashMap::new(),
         }
@@ -84,6 +89,7 @@ impl DagGraph {
     pub fn from_plan(plan: &WorkflowPlan) -> Result<Self, DomainError> {
         let mut graph = Self::new(&plan.title);
         graph.id = plan.id.clone();
+        graph.task_id = Some(plan.task_id.clone());
 
         for step in &plan.steps {
             graph.add_node(DagNode::new(
@@ -281,6 +287,30 @@ impl DagGraph {
                 id: node_id.into(),
             })?;
         node.status = NodeStatus::Running;
+        Ok(())
+    }
+
+    /// Holds a node without releasing dependents or making it eligible for automatic retry.
+    pub fn mark_blocked(
+        &mut self,
+        node_id: &str,
+        status: NodeStatus,
+        output: serde_json::Value,
+    ) -> Result<(), DomainError> {
+        if !matches!(status, NodeStatus::WaitingApproval | NodeStatus::Uncertain) {
+            return Err(DomainError::Validation(
+                "Invalid blocked node status".into(),
+            ));
+        }
+        let node = self
+            .nodes
+            .get_mut(node_id)
+            .ok_or_else(|| DomainError::NotFound {
+                kind: "DagNode".into(),
+                id: node_id.into(),
+            })?;
+        node.status = status;
+        node.output = Some(output);
         Ok(())
     }
 

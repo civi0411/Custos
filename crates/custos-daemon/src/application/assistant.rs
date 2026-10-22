@@ -349,6 +349,22 @@ impl LocalApiDispatcher {
 
                 match outbox.get(entry_id).await {
                     Ok(Some(entry)) => {
+                        let payload_str = entry.payload_json.as_deref().unwrap_or("{}");
+                        let actual_digest = format!("sha256:{}", custos_domain::digest(payload_str.as_bytes()));
+                        if entry.argument_digest != actual_digest {
+                            return ApiResponse::error(
+                                req.id,
+                                format!("Outbox approval rejected: recorded digest '{}' differs from payload digest '{}' (tampered payload)", entry.argument_digest, actual_digest),
+                            );
+                        }
+                        if let Some(expected) = req.params.get("expected_digest").or_else(|| req.params.get("payload_digest")).and_then(|v| v.as_str()) {
+                            if expected != entry.argument_digest {
+                                return ApiResponse::error(
+                                    req.id,
+                                    format!("Outbox approval rejected: expected digest '{expected}' does not match entry digest '{}'", entry.argument_digest),
+                                );
+                            }
+                        }
                         if let Err(error) = outbox.mark_approved(entry_id).await {
                             return ApiResponse::error(req.id, format!("Outbox approval failed: {error}"));
                         }
@@ -357,6 +373,7 @@ impl LocalApiDispatcher {
                             "task_id": entry.task_id,
                             "status": "approved",
                             "action_id": entry.action_id,
+                            "payload_digest": entry.argument_digest,
                         }))
                     },
                     Ok(None) => {

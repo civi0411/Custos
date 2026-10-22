@@ -5,208 +5,37 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
-use tokio::process::Command;
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::RwLock;
 
+use custos_core::contracts::notebook::{NotebookDriverPort, NotebookWorkerSession};
 use custos_core::contracts::storage::NotebookStoragePort;
 use custos_domain::{
     CellExecutionStatus, DomainError, ExecuteCellParams, ExecuteCellResult, KernelStatus,
     NotebookCell, NotebookCellType, NotebookKernelState,
 };
 
-struct WorkerRequest {
-    code: String,
-    cwd: Option<String>,
-    resp_tx: oneshot::Sender<Result<WorkerResponse, DomainError>>,
-}
-
-#[derive(serde::Deserialize)]
-struct WorkerResponse {
-    status: String,
-    stdout: String,
-    stderr: String,
-}
-
-struct WorkerHandle {
-    sender: mpsc::Sender<WorkerRequest>,
-    abort: tokio::task::AbortHandle,
-}
-
-const PYTHON_RUNNER_SCRIPT: &str = r#"
-import sys, json, traceback, io, os
-
-__globals__ = {
-    '__name__': '__main__',
-    '__builtins__': __builtins__,
-}
-
-while True:
-    line = sys.stdin.readline()
-    if not line:
-        break
-    try:
-        req = json.loads(line)
-        code = req.get('code', '')
-        cwd = req.get('cwd')
-        if cwd and os.path.isdir(cwd):
-            try:
-                os.chdir(cwd)
-            except Exception:
-                pass
-        
-        old_stdout = sys.stdout
-        old_stderr = sys.stderr
-        s_out = io.StringIO()
-        s_err = io.StringIO()
-        sys.stdout = s_out
-        sys.stderr = s_err
-        
-        status = 'success'
-        try:
-            compiled = compile(code, '<notebook_cell>', 'exec')
-            exec(compiled, __globals__)
-        except Exception:
-            status = 'error'
-            traceback.print_exc(file=s_err)
-        finally:
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
-            
-        MAX_OUTPUT_BYTES = 4 * 1024 * 1024
-        out = s_out.getvalue()
-        err = s_err.getvalue()
-        out_bytes = out.encode('utf-8')
-        if len(out_bytes) > MAX_OUTPUT_BYTES:
-            out = out_bytes[:MAX_OUTPUT_BYTES].decode('utf-8', errors='ignore') + "\n[Output truncated: exceeded 4MB limit]"
-        err_bytes = err.encode('utf-8')
-        if len(err_bytes) > MAX_OUTPUT_BYTES:
-            err = err_bytes[:MAX_OUTPUT_BYTES].decode('utf-8', errors='ignore') + "\n[Stderr truncated: exceeded 4MB limit]"
-        resp = {
-            'status': status,
-            'stdout': out,
-            'stderr': err
-        }
-        sys.stdout.write(json.dumps(resp) + '\n')
-        sys.stdout.flush()
-    except Exception as e:
-        err_msg = str(e)
-        err_bytes = err_msg.encode('utf-8')
-        if len(err_bytes) > 4 * 1024 * 1024:
-            err_msg = err_bytes[:4 * 1024 * 1024].decode('utf-8', errors='ignore') + "\n[Stderr truncated: exceeded 4MB limit]"
-        resp = {'status': 'error', 'stdout': '', 'stderr': err_msg}
-        sys.stdout.write(json.dumps(resp) + '\n')
-        sys.stdout.flush()
-"#;
-
-async fn spawn_worker_actor(
-    python_path: PathBuf,
-    work_dir: PathBuf,
-) -> Result<WorkerHandle, DomainError> {
-    let (tx, mut rx) = mpsc::channel::<WorkerRequest>(32);
-
-    let mut cmd = Command::new(&python_path);
-    cmd.arg("-u")
-        .arg("-c")
-        .arg(PYTHON_RUNNER_SCRIPT)
-        .current_dir(&work_dir)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .kill_on_drop(true);
-
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| DomainError::Validation(format!("Failed to launch Python worker: {e}")))?;
-
-    let mut stdin = child.stdin.take().ok_or_else(|| {
-        DomainError::Validation("Failed to acquire stdin for Python worker".into())
-    })?;
-    let stdout = child.stdout.take().ok_or_else(|| {
-        DomainError::Validation("Failed to acquire stdout for Python worker".into())
-    })?;
-    let mut reader = tokio::io::BufReader::new(stdout).lines();
-
-    let actor = tokio::spawn(async move {
-        while let Some(req) = rx.recv().await {
-            let payload = serde_json::json!({
-                "code": req.code,
-                "cwd": req.cwd
-            });
-            let mut line = serde_json::to_string(&payload).unwrap_or_default();
-            line.push('\n');
-
-            if let Err(e) = stdin.write_all(line.as_bytes()).await {
-                let _ = req.resp_tx.send(Err(DomainError::Validation(format!(
-                    "Failed to write to Python kernel stdin: {e}"
-                ))));
-                break;
-            }
-            if let Err(e) = stdin.flush().await {
-                let _ = req.resp_tx.send(Err(DomainError::Validation(format!(
-                    "Failed to flush Python kernel stdin: {e}"
-                ))));
-                break;
-            }
-
-            match reader.next_line().await {
-                Ok(Some(resp_line)) => match serde_json::from_str::<WorkerResponse>(&resp_line) {
-                    Ok(resp) => {
-                        let _ = req.resp_tx.send(Ok(resp));
-                    }
-                    Err(e) => {
-                        let _ = req.resp_tx.send(Err(DomainError::Validation(format!(
-                            "Failed to parse Python kernel response: {e}; raw: {resp_line}"
-                        ))));
-                    }
-                },
-                Ok(None) => {
-                    let _ = req.resp_tx.send(Err(DomainError::Validation(
-                        "Python kernel process terminated unexpectedly".into(),
-                    )));
-                    break;
-                }
-                Err(e) => {
-                    let _ = req.resp_tx.send(Err(DomainError::Validation(format!(
-                        "Error reading from Python kernel: {e}"
-                    ))));
-                    break;
-                }
-            }
-        }
-        let _ = child.kill().await;
-    });
-
-    Ok(WorkerHandle { sender: tx, abort: actor.abort_handle() })
-}
-
 struct ActiveKernel {
     epoch: u32,
     execution_counter: u32,
     status: KernelStatus,
     python_path: PathBuf,
-    worker: Option<WorkerHandle>,
+    worker: Option<Arc<dyn NotebookWorkerSession>>,
     work_dir: Option<PathBuf>,
     recent_requests: HashMap<String, ExecuteCellResult>,
 }
 
 #[derive(Clone)]
 pub struct PythonKernelCoordinator {
+    driver: Arc<dyn NotebookDriverPort>,
     kernels: Arc<RwLock<HashMap<String, ActiveKernel>>>,
 }
 
-impl Default for PythonKernelCoordinator {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl PythonKernelCoordinator {
-    pub fn new() -> Self {
+    pub fn new(driver: Arc<dyn NotebookDriverPort>) -> Self {
         Self {
+            driver,
             kernels: Arc::new(RwLock::new(HashMap::new())),
         }
     }
@@ -375,7 +204,7 @@ impl PythonKernelCoordinator {
             std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
         };
 
-        let (epoch, execution_count, worker_sender) = {
+        let (epoch, execution_count, worker_session) = {
             let mut kernels = self.kernels.write().await;
             let kernel = kernels
                 .entry(key.clone())
@@ -396,39 +225,29 @@ impl PythonKernelCoordinator {
                 return Err(DomainError::Validation("Reset this session's Python worker before changing execution workspace".into()));
             }
 
-            let sender = match &kernel.worker {
-                Some(w) if !w.sender.is_closed() => w.sender.clone(),
-                _ => {
-                    let handle = spawn_worker_actor(python_path.clone(), work_dir.clone()).await?;
-                    let tx = handle.sender.clone();
-                    kernel.worker = Some(handle);
-                    tx
+            let session = match &kernel.worker {
+                Some(w) => w.clone(),
+                None => {
+                    let w = self
+                        .driver
+                        .spawn_worker(python_path.clone(), work_dir.clone())
+                        .await?;
+                    let session_arc: Arc<dyn NotebookWorkerSession> = Arc::from(w);
+                    kernel.worker = Some(session_arc.clone());
+                    session_arc
                 }
             };
 
             kernel.work_dir = Some(work_dir.clone());
             kernel.execution_counter += 1;
             kernel.status = KernelStatus::Busy;
-            (kernel.epoch, kernel.execution_counter, sender)
+            (kernel.epoch, kernel.execution_counter, session)
         };
 
         let start = Instant::now();
-        let (resp_tx, resp_rx) = oneshot::channel();
-        let worker_req = WorkerRequest {
-            code: params.code.clone(),
-            cwd: params.cwd.clone(),
-            resp_tx,
-        };
-
-        // A failed write/response has an uncertain effect: never replay code automatically.
-        let worker_res = match worker_sender.send(worker_req).await {
-            Ok(()) => match resp_rx.await {
-                Ok(response) => response,
-                Err(_) => Err(DomainError::Validation("Python worker stopped before returning output; execution was not replayed".into())),
-            },
-            Err(_) => Err(DomainError::Validation("Python worker is unavailable; reset it before retrying".into())),
-        };
-
+        let worker_res = worker_session
+            .execute(params.code.clone(), params.cwd.clone())
+            .await;
         let wall_ms = start.elapsed().as_millis() as u64;
 
         {
@@ -557,7 +376,7 @@ impl PythonKernelCoordinator {
         let mut kernels = self.kernels.write().await;
         if let Some(k) = kernels.get_mut(&key) {
             if let Some(worker) = k.worker.take() {
-                worker.abort.abort();
+                worker.interrupt();
                 k.epoch += 1;
                 k.execution_counter = 0;
                 k.work_dir = None;
@@ -600,7 +419,7 @@ impl PythonKernelCoordinator {
 
         // Terminate active worker actor process if any
         if let Some(worker) = entry.worker.take() {
-            worker.abort.abort();
+            worker.interrupt();
         }
         entry.work_dir = None;
         entry.recent_requests.clear();
@@ -658,6 +477,10 @@ fn base64_encode(data: &[u8]) -> String {
 mod tests {
     use super::*;
 
+    fn test_coordinator() -> PythonKernelCoordinator {
+        PythonKernelCoordinator::new(Arc::new(custos_adapters::notebook::LocalPythonDriver))
+    }
+
     #[tokio::test]
     async fn restarting_coordinator_advances_persisted_worker_epoch() {
         let store = custos_persistence::SqliteTaskStore::new_in_memory().unwrap();
@@ -665,7 +488,7 @@ mod tests {
         repository.save_notebook_kernel_state(&NotebookKernelState { session_id: "restart".into(), epoch: 4,
             status: KernelStatus::Busy, python_version: "Python".into(), execution_counter: 7,
             created_at: 0, updated_at: 0, ..Default::default() }).unwrap();
-        let coordinator = PythonKernelCoordinator::new();
+        let coordinator = test_coordinator();
         let status = coordinator.get_status("restart", Some(repository as &dyn NotebookStoragePort)).await.unwrap();
         assert_eq!(status.epoch, 5);
         assert_eq!(status.status, KernelStatus::Idle);
@@ -675,7 +498,7 @@ mod tests {
 
     #[tokio::test]
     async fn interrupt_releases_busy_worker_and_rejects_stale_result() {
-        let coordinator = PythonKernelCoordinator::new();
+        let coordinator = test_coordinator();
         let temp = tempfile::tempdir().unwrap();
         let params = ExecuteCellParams { session_id: "interrupt-session".into(), cell_id: "cell".into(),
             code: "import time; time.sleep(30)".into(), workspace_id: None,
@@ -699,7 +522,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_python_kernel_execution_and_epoch_reset() {
-        let coordinator = PythonKernelCoordinator::new();
+        let coordinator = test_coordinator();
 
         // 1. Initial status
         let initial_state = coordinator.get_status("test_sess", None).await.unwrap();
@@ -780,7 +603,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_multiple_notebooks_in_same_session_are_isolated() {
-        let coordinator = PythonKernelCoordinator::new();
+        let coordinator = test_coordinator();
 
         let s1 = coordinator.get_status_scoped("sess-1", Some("nb-a"), None).await.unwrap();
         assert_eq!(s1.notebook_id.as_deref(), Some("nb-a"));
@@ -800,7 +623,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_duplicate_execution_request_id_returns_cached_result() {
-        let coordinator = PythonKernelCoordinator::new();
+        let coordinator = test_coordinator();
         let params = ExecuteCellParams {
             session_id: "idempotent_sess".into(),
             cell_id: "cell_1".into(),
