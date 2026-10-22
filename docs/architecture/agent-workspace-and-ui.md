@@ -300,7 +300,7 @@ Agent controls follow the same rule at harness scope. A discovered OpenCode/Code
 
 **Luồng launch phải hiển thị sự thật:** `requested_mode → actual_mode` (model worker, native structured session, native terminal), host, prompt-delivery status và lý do downgrade. Khi structured create có kết quả chưa rõ, UI hiện `start_unknown`/reconcile, không âm thầm mở terminal thứ hai. Terminal sống không chứng minh agent còn làm việc; agent hoàn thành không chứng minh Task accepted. Mất liên lạc remote hiện `unverifiable`, không `exited`. Những phân biệt này lấy từ source OrCa, nhưng kết quả/authority Custos vẫn do backend của mình sở hữu.
 
-[Git worktree](https://git-scm.com/docs/git-worktree) quản lý nhiều checkout của cùng repo; đây là cách tách nhánh làm việc, không là bảo đảm file/network isolation. Repo Intelligence phải gắn worktree/snapshot/index generation, không dùng index của checkout A để chứng minh patch B. Xem [thiết kế Repo Intelligence](repo-intelligence-subsystem.md).
+[Git worktree](https://git-scm.com/docs/git-worktree) quản lý nhiều checkout, không bảo đảm file/network isolation. Source/diff/test artifacts phải gắn đúng checkout và base; không có subsystem Repo Intelligence riêng.
 
 ### Browser và Design mode
 

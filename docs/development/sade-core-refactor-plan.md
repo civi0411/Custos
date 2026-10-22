@@ -1,5 +1,7 @@
 # Custos SADE — kế hoạch refactor thống nhất sản phẩm, execution và tài nguyên
 
+**Repo Intelligence removal:** subsystem scanner/graph/query/coordinator riêng đã được bỏ theo quyết định sản phẩm. Không triển khai hoặc phục hồi các placement Repo Intelligence trong những snapshot/kế hoạch lịch sử bên dưới. Giữ file/search/Git/worktree, context compiler và SourceSpan của Engineering; Nexus vẫn là development utility độc lập.
+
 **Ngày cập nhật kế hoạch:** 19-10-2026. **Trạng thái:** đề xuất triển khai dựa trên source; chưa phải xác nhận các thay đổi dưới đây đã được code. **Phạm vi:** desktop/headless, ba workbench, native harness, research và compute; chưa làm mobile.
 
 **Snapshot hiện hành:** branch `vi-rft`, HEAD `c96f414de94423bc8dcf5187f6f44b2e8c152e9d`, working tree sạch lúc audit. Chín commit refactor đã tồn tại nhưng không đồng nghĩa chín acceptance gates đã đạt. Trước mỗi packet ghi lại HEAD/dirty manifest/file hashes; không reset hoặc ghi đè thay đổi xuất hiện sau snapshot này.

@@ -1,5 +1,26 @@
 # Monorepo Topology, Crate Boundaries & Deep Codebase Map
 
+**Current crates + UI planning entry:** [convergence §12](sade-frontend-backend-convergence-plan.md#12-refactor-crates-và-desktop-theo-ownership) maps AppContext, ScreenContext, shell, resources, settings, API and the 11 crate groups into implementation packets; its 195-file count is the earlier planning baseline, not a refreshed inventory. [Closure §13](sade-frontend-backend-convergence-plan.md#13-đóng-các-đường-refactor-đang-chuyển-tiếp) maps the remaining work to `runtime/workflow/task_runtime.rs`, domain Run FSM, ScreenContext/AppContext, `context/app/`, API helpers and shell consumers. Topic hook/helper files now exist in the dirty checkout, but existence does not mean their production callers have migrated. This documentation update adds no production files or symbols. Keep canonical component homes from UI rules; retire replaced state, effects and writers only after caller and restore tests pass.
+
+**Repo Intelligence removal:** subsystem scanner/graph/query/coordinator riêng đã được bỏ theo quyết định sản phẩm. Không triển khai hoặc phục hồi các placement Repo Intelligence trong những snapshot/kế hoạch lịch sử bên dưới. Giữ file/search/Git/worktree, context compiler và SourceSpan của Engineering; Nexus vẫn là development utility độc lập.
+
+**Removal file map:** retire `runtime/src/context/repo_intelligence/{lib,scanner,graph,llm_view,coordinator}.rs`, `core/src/repo/{mod,security}.rs`, and `domain/src/repo/{query,snapshot}.rs`. Keep `domain/src/repo/{mod,span}.rs` as the source locator used by Engineering recipes. Remove retired module exports; `repo_explain_slice.rs` uses explicit fixture files to test context/evidence/restart without a scanner. No API, migration, frontend or Nexus deletion is required.
+
+Current inventory after removal: **794 files under crates/, including 552 Rust files**. Existing historical per-file tables below are not a regenerated full inventory.
+
+| Retained file | Lines | Responsibility / exports |
+|---|---:|---|
+| [`domain repo/mod.rs`](../../crates/custos-domain/src/repo/mod.rs) | 5 | Source locator module only; exports `SourceSpan`, no index/query/snapshot subsystem |
+| [`domain repo/span.rs`](../../crates/custos-domain/src/repo/span.rs) | 50 | Pure path/byte/line/digest locator used by `EngineeringRecipePipeline` artifacts |
+
+**Active implementation scope:** [crates plan §22](crates-topic-refactor-plan.md#22-implementation-wave-grants-graph-outcomes-and-source-acquisition) changes existing files only. `core/authority/grants.rs` owns matching a grant to actor/action/constraints; `authority/mod.rs` retains policy precedence and permit issuance. `runtime/workflow/contracts.rs` owns normalized step observations, `graph_runtime.rs` consumes them through StepExecutor, and `dag.rs` owns Task binding and blocked node states; `revision_loader.rs` binds persisted revisions. `worker_executor.rs` no longer keeps a separate unused observation decoder. `adapters/tools/source_fetch.rs` remains the scoped filesystem acquisition implementation, not a new source store. No new crate, source file, port or migration is introduced; final file metrics and test results are recorded after verification.
+
+Existing OI test files retain their scope: `tests/e2e/tests/oi_engine_slice.rs` verifies that an unbound production worker cannot fabricate successful execution; `oi_persistence_crash.rs` uses an explicit local fixture executor for graph recovery, not a simulated production WorkerExecutor branch.
+
+`custos-adapters/src/sandbox/developer.rs` retains the physical file driver and delegates lexical containment policy to core PathSandbox. Its asynchronous path resolver checks the nearest existing ancestor of new targets, including symlinks, before directory/file creation; it does not claim to replace platform isolation or eliminate all filesystem races.
+
+**Pre-implementation physical review:** [plan §§17–21](crates-topic-refactor-plan.md#17-tái-kiểm-checkout-sau-đợt-tách-module) records the earlier dirty-tree inventory and findings. [§22 verification](crates-topic-refactor-plan.md#implemented-scope-and-verification) supersedes its current-status claims for the files changed in this implementation wave. Current metrics for core/runtime/adapters and the touched file rows are updated below; older catalogue rows and the [file disposition ledger](crates-file-disposition-ledger.md) still need full regeneration after the remaining moves. Neither inventory is line-by-line semantic certification.
+
 **Current crates inventory and proposed cleanup:** [Topic-based refactor plan](crates-topic-refactor-plan.md) records snapshot `d25c27b`, 544 Rust files / 172,422 source lines under `crates/`, current Cargo package/dependency facts and compiled-versus-dormant module distinctions. Its ownership tables and migration packets are proposals, not new physical modules. No crate, production interface or source file was moved by this audit. Historical line counts below are not substituted for fresh source inventory.
 
 ### Active application refactor
@@ -368,7 +389,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-domain`
 - **Chủ sở hữu chính (Owner):** **Vĩ (Chief Architect)**
 - **Quy tắc ranh giới:** Bất biến Zero-I/O tuyệt đối. Không tokio, rusqlite, reqwest, std::fs.
-- **Tổng số file:** 52 tracked and added files | **Tổng số dòng mã:** 7,890 lines (Rust sources and Cargo manifests; 52 files)
+- **Tổng số file:** 53 non-ignored files, 52 Rust files | **Tổng số dòng mã:** 9,715 (Rust sources and Cargo manifest; after subsystem removal).
 - **Mô tả chức năng:** Trái tim của hệ thống: Chứa toàn bộ thực thể thuần khiết, định danh (TaskId, SessionId), các bất biến miền, máy trạng thái tác vụ thuần túy và các khế ước sự kiện (Event Sourcing).
 
 #### Danh mục các file bên trong `crates/custos-domain/`:
@@ -416,7 +437,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-core`
 - **Chủ sở hữu chính (Owner):** **Vĩ (Chief Architect)**
 - **Quy tắc ranh giới:** Logic nghiệp vụ thuần túy; phụ thuộc độc quyền vào custos-domain.
-- **Tổng số file:** 62 tracked and added files | **Tổng số dòng mã:** 6,877 lines (Rust sources and Cargo manifests; 62 files)
+- **Tổng số file:** 65 non-ignored files, 64 Rust files | **Tổng số dòng mã:** 7,984 (Rust sources and Cargo manifest; after subsystem removal).
 - **Mô tả chức năng:** Bộ hạt nhân điều phối: Quản lý TaskStateMachine, AuthorityEngine, CompletionGate thẩm định bằng chứng, và cơ chế sandbox policy logic.
 
 #### Danh mục các file bên trong `crates/custos-core/`:
@@ -430,8 +451,8 @@ Custos/
 | [Credential vault contract](../../crates/custos-core/src/contracts/credentials.rs) | 90 | Pure vault and metadata contracts (Owner: Vĩ) | CredentialLocation, CredentialVault, CredentialVaultError, CredentialMetadata, CredentialOperation |
 | [`src/authority/approvals.rs`](../../crates/custos-core/src/authority/approvals.rs) | 51 | Quản lý yêu cầu phê duyệt người dùng (ApprovalManager) | `struct ApprovalManager`, `fn new`, `fn request_approval`, `fn get` |
 | [`src/authority/audit.rs`](../../crates/custos-core/src/authority/audit.rs) | 82 | Ghi nhật ký kiểm toán hành vi an toàn (AuditLog, AuditEntry) | `struct AuditEntry`, `struct AuditLog`, `fn new`, `fn record` |
-| [`src/authority/grants.rs`](../../crates/custos-core/src/authority/grants.rs) | 37 | Kho lưu trữ quyền được cấp phát (GrantStore) | `struct GrantStore`, `fn new`, `fn insert`, `fn get` |
-| [`src/authority/mod.rs`](../../crates/custos-core/src/authority/mod.rs) | 149 | AuthorityEngine acts as the central authority enforcement point for tasks | `struct AuthorityEngine`, `fn default`, `fn new` |
+| [`src/authority/grants.rs`](../../crates/custos-core/src/authority/grants.rs) | 89 | Grant lookup and fail-closed actor/action/constraint matching; capability discovery is not authorization | `GrantStore`, `find_grant_for_action`, `constraints_match` |
+| [`src/authority/mod.rs`](../../crates/custos-core/src/authority/mod.rs) | 336 | Hard policy precedence, task/actor identity checks, approval exceptions and permit issuance | `AuthorityEngine`, `authorize_action` |
 | [`src/authority/permits.rs`](../../crates/custos-core/src/authority/permits.rs) | 104 | Phát hành, ràng buộc tham số và tiêu thụ một lần vé thực thi (PermitIssuer) | `struct PermitIssuer`, `fn issue_permit_with_digest`, `fn consume_permit` |
 | [`src/authority/policy.rs`](../../crates/custos-core/src/authority/policy.rs) | 50 | Default policy evaluator based on action risk level | `enum PolicyDecision`, `trait PolicyEvaluator`, `struct DefaultPolicyEvaluator` |
 | [`src/authority/risk.rs`](../../crates/custos-core/src/authority/risk.rs) | 43 | Classifies an action into a RiskClass | `struct RiskEvaluator`, `fn classify_action`, `fn requires_human_approval` |
@@ -602,14 +623,14 @@ Custos/
 
 ### 3.6. Crate `custos-runtime` — Layer 2: Execution & Orchestration
 
-**Đường triển khai SADE:** [agent system and three-workbench interaction contract](../architecture/sade-agent-system-design.md) map `src/agent/` thành Custos-owned model worker, `src/workflow/` thành parent/child WorkerRun và scheduler, `src/oi/` thành lựa chọn topology, `src/context/` thành shared retrieval/context service và Repo Intelligence thành recipe Coding. `src/engine/` có mã Goose-derived nhưng không được export từ `src/lib.rs`; không tính là agent loop production. Pack recipes nằm trong `custos-packs`, external agent loops trong `custos-adapters/src/harness/`, Task/authority/evidence trong core, và UI chỉ dùng daemon projections. Đây là mapping trách nhiệm đích lên các file hiện có, không chứng nhận từng đường chạy đã hoàn thành.
+**Đường triển khai SADE:** [agent system and three-workbench interaction contract](../architecture/sade-agent-system-design.md) map `src/agent/` thành Custos-owned model worker, `src/workflow/` thành parent/child WorkerRun và scheduler, `src/oi/` thành lựa chọn topology, `src/context/` thành shared retrieval/context service ; Coding dùng capabilities đọc/tìm file hiện hữu. `src/engine/` có mã Goose-derived nhưng không được export từ `src/lib.rs`; không tính là agent loop production. Pack recipes nằm trong `custos-packs`, external agent loops trong `custos-adapters/src/harness/`, Task/authority/evidence trong core, và UI chỉ dùng daemon projections. Đây là mapping trách nhiệm đích lên các file hiện có, không chứng nhận từng đường chạy đã hoàn thành.
 
-**Repo Intelligence và session placement:** Rust `src/context/repo_intelligence/` là product home; Python `tools/repo_intelligent/` là development utility/MCP facade với index dẫn xuất, không là memory kernel hoặc một agent riêng. Desktop `StudioPage` phải giữ danh sách và active session theo lens; một session có thể được user gắn thêm lens đích mà vẫn giữ một journal. Backend hiện chưa có transaction `Continue as linked chat` hoặc ContextReceipt cho full-history model delivery, nên UI không được đồng nhất việc mở transcript với việc model đã đọc toàn bộ transcript.
+**Session placement:** Desktop giữ active session theo lens; mở lens không tự cấp quyền hoặc tạo một source-analysis subsystem. Repo Intelligence Rust đã được gỡ; Nexus không là backend sản phẩm.
 
 - **Đường dẫn thư mục:** `crates/custos-runtime`
 - **Chủ sở hữu chính (Owner):** **Vinh (Runtime & Client Lead) & Vĩ (Cognitive Lead)**
 - **Quy tắc ranh giới:** Quản lý vòng lặp thực thi, nhận thức S1/S2, và context compiler.
-- **Tổng số file:** 336 tracked and added files | **Tổng số dòng mã:** 110,261 lines (Rust sources and Cargo manifests; 312 files)
+- **Tổng số file:** 115 non-ignored files, 112 Rust files | **Tổng số dòng mã:** 21,772 (Rust sources and Cargo manifest; after subsystem removal).
 - **Mô tả chức năng:** Động cơ vận hành tác vụ: Agent execution loop, code hiện có cho routing S1/S2, context và workflow. OI đích chọn direct/one-worker/bounded graph theo policy và outcome; hiện diện của `routing.rs`/`workflow/` **không** xác nhận compiler, semantic preflight, calibrated utility hoặc evidence-triggered replan đã hoàn tất.
 
 #### Danh mục các file bên trong `crates/custos-runtime/`:
@@ -617,6 +638,11 @@ Custos/
 | Tập tin | Số dòng | Vai trò & Trách nhiệm kiến trúc | Các Struct / Trait / Hàm cốt lõi |
 |---|:---:|---|---|
 | [`Cargo.toml`](../../crates/custos-runtime/Cargo.toml) | 42 | Module Cargo: phục vụ các cấu trúc và chức năng liên quan | None |
+| [`src/workflow/contracts.rs`](../../crates/custos-runtime/src/workflow/contracts.rs) | 115 | Canonical internal step observation decoding without cloning whole JSON payloads; preserves failed, rejected, pending and uncertain outcomes | `ExecutionContext`, `StepObservation`, `from_output` |
+| [`src/workflow/dag.rs`](../../crates/custos-runtime/src/workflow/dag.rs) | 597 | Task-bound graph, dependency readiness, non-retryable blocked states and failure cascade | `DagGraph`, `NodeStatus`, `mark_blocked` |
+| [`src/workflow/graph_runtime.rs`](../../crates/custos-runtime/src/workflow/graph_runtime.rs) | 465 | Single-flight graph execution consumes typed step outcomes; reports waits/uncertainty without false success | `StepExecutor`, `GraphRuntime`, `GraphExecutionReport` |
+| [`src/workflow/revision_loader.rs`](../../crates/custos-runtime/src/workflow/revision_loader.rs) | 45 | Binds graph Task identity from persisted workflow revision, not node arguments | `RevisionLoader` |
+| [`src/workflow/worker_executor.rs`](../../crates/custos-runtime/src/workflow/worker_executor.rs) | 554 | Model/harness/tool dispatch with required Kernel for tools; no simulated worker success or usage | `WorkerExecutor` |
 | [`src/agent/events.rs`](../../crates/custos-runtime/src/agent/events.rs) | 18 | Các sự kiện phát sinh từ Model: ToolCall, TokenUsage, Chunk | `enum AgentEvent` |
 | [`src/agent/execution.rs`](../../crates/custos-runtime/src/agent/execution.rs) | 127 | Context passed through the tool execution pipeline. | `struct ToolCallNotificationEmitter`, `fn new`, `fn emit_best_effort`, `struct ToolCallContext` |
 | [`src/agent/inference.rs`](../../crates/custos-runtime/src/agent/inference.rs) | 587 | The agent-visible conversation as the provider sees it: tool requests left | `struct PreparedInferenceRequest`, `trait InferenceRequestPreparer`, `struct IdentityInferenceRequestPreparer`, `trait InferenceEffect` |
@@ -656,10 +682,6 @@ Custos/
 | [`src/context/memory/lib.rs`](../../crates/custos-runtime/src/context/memory/lib.rs) | 2 | Module lib: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/context/memory/traits.rs`](../../crates/custos-runtime/src/context/memory/traits.rs) | 17 | Module traits: phục vụ các cấu trúc và chức năng liên quan | `enum MemoryTier`, `trait MemoryStore` |
 | [`src/context/mod.rs`](../../crates/custos-runtime/src/context/mod.rs) | 10 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
-| [`src/context/repo_intelligence/graph.rs`](../../crates/custos-runtime/src/context/repo_intelligence/graph.rs) | 323 | Canonical identifier for any node in the codebase. | `struct SymbolId`, `fn crate_node`, `fn file_node`, `fn symbol_node` |
-| [`src/context/repo_intelligence/lib.rs`](../../crates/custos-runtime/src/context/repo_intelligence/lib.rs) | 23 | Module lib: phục vụ các cấu trúc và chức năng liên quan | `struct RepoAnalyzer`, `fn new`, `fn default` |
-| [`src/context/repo_intelligence/llm_view.rs`](../../crates/custos-runtime/src/context/repo_intelligence/llm_view.rs) | 232 | Formatting modes for LLM prompts. | `enum LlmViewFormat`, `struct LlmContextBuilder`, `fn new`, `fn build_repo_skeleton` |
-| [`src/context/repo_intelligence/scanner.rs`](../../crates/custos-runtime/src/context/repo_intelligence/scanner.rs) | 241 | Recursively scans root directory and returns list of source files. | `struct FileEntry`, `struct SymbolRef`, `struct WorkspaceScanner`, `fn new` |
 | [`src/context/token_counter.rs`](../../crates/custos-runtime/src/context/token_counter.rs) | 326 | Module token_counter: phục vụ các cấu trúc và chức năng liên quan | `struct TokenCounter`, `struct TokenCacheKey`, `fn from_text`, `fn count_tokens` |
 | [`src/context/traits.rs`](../../crates/custos-runtime/src/context/traits.rs) | 13 | Module traits: phục vụ các cấu trúc và chức năng liên quan | `struct ContextSlice`, `trait ContextBuilder` |
 | [`src/context_management/format.rs`](../../crates/custos-runtime/src/context_management/format.rs) | 83 | Module format: phục vụ các cấu trúc và chức năng liên quan | `fn format_message_for_compacting` |
@@ -916,7 +938,7 @@ Custos/
 - **Đường dẫn thư mục:** `crates/custos-adapters`
 - **Chủ sở hữu chính (Owner):** **Trường (Sandbox) & Vinh (MCP/Harnesses) & Vĩ (Providers)**
 - **Quy tắc ranh giới:** Mọi dữ liệu ngoại vi đều là untrusted; cô lập an toàn trong sandbox.
-- **Tổng số file:** 180 tracked and added files | **Tổng số dòng mã:** 48,296 lines (Rust sources and Cargo manifests; 112 files)
+- **Tổng số file:** 179 non-ignored inventory files | **Tổng số dòng mã:** 50,927 lines (Rust sources and Cargo manifest; 113 files, current implementation wave)
 - **Mô tả chức năng:** Bộ điều hợp thế giới thực: OS Sandbox (Seatbelt macOS, Bubblewrap Linux), MCP Client STDIO/SSE, inference cục bộ (llama.cpp/MLX) và external harnesses.
 
 #### Danh mục các file bên trong `crates/custos-adapters/`:
@@ -1089,7 +1111,8 @@ Custos/
 | [`src/roaming/relay.rs`](../../crates/custos-adapters/src/roaming/relay.rs) | 139 | How the roaming endpoint reaches relays. | `enum RelaySettings`, `struct RelayEntry`, `fn new`, `fn with_auth` |
 | [`src/roaming/trust.rs`](../../crates/custos-adapters/src/roaming/trust.rs) | 232 | Persisted trust state: the inbound allowlist plus revocations. | `struct TrustBook`, `fn new`, `fn accept`, `fn revoke_key` |
 | [`src/sandbox/bubblewrap/mod.rs`](../../crates/custos-adapters/src/sandbox/bubblewrap/mod.rs) | 13 | Module mod: phục vụ các cấu trúc và chức năng liên quan | `struct BubblewrapSandbox`, `fn new`, `fn default` |
-| [`src/sandbox/developer.rs`](../../crates/custos-adapters/src/sandbox/developer.rs) | 403 | Validates that a requested file path does not escape the workspace root. | `struct SovereignDeveloperAdapter`, `fn new`, `fn with_timeout`, `fn canonicalize_safe_path` |
+| [`src/tools/source_fetch.rs`](../../crates/custos-adapters/src/tools/source_fetch.rs) | 261 | Trusted-root local source acquisition; bounded complete UTF-8 read, no silent evidence truncation | `SourceFetchAdapter`, `fetch_source_text` |
+| [`src/sandbox/developer.rs`](../../crates/custos-adapters/src/sandbox/developer.rs) | 567 | Physical developer operations with existing-ancestor containment for new targets; not a substitute for OS isolation | `SovereignDeveloperAdapter`, `canonicalize_safe_path` |
 | [`src/sandbox/mod.rs`](../../crates/custos-adapters/src/sandbox/mod.rs) | 7 | Module mod: phục vụ các cấu trúc và chức năng liên quan | None |
 | [`src/sandbox/seatbelt/mod.rs`](../../crates/custos-adapters/src/sandbox/seatbelt/mod.rs) | 13 | Module mod: phục vụ các cấu trúc và chức năng liên quan | `struct SeatbeltSandbox`, `fn new`, `fn default` |
 | [`src/a2a/mod.rs`](../../crates/custos-adapters/src/a2a/mod.rs) | 212 | Agent-to-Agent protocol, Agent Card discovery, and JSON-RPC task delegation | `struct AgentCard`, `struct AgentInterface`, `struct A2aJsonRpcRequest`, `struct A2aDispatcher` |
@@ -1244,7 +1267,7 @@ Custos/
 | [`ui/desktop/src/components/modals/NewSessionModal.tsx`](../../ui/desktop/src/components/modals/NewSessionModal.tsx) | 104 | Explicit Chat session versus Task choice in the current workbench | `NewSessionModal` |
 | [`ui/desktop/src/context/AppContext.tsx`](../../ui/desktop/src/context/AppContext.tsx) | 2343 | Daemon session/journal projection, separate Task records and account-free native GGUF chat dispatch; no Task-as-Session shim | `AppProvider`, `useAppContext` |
 
-Nexus remains a development utility: [`tools/repo_intelligent/README.md`](../../tools/repo_intelligent/README.md) (62 lines) describes its derived SQLite index and optional MCP export. The product-facing Repo Intelligence location is `custos-runtime/src/context/repo_intelligence/`; do not treat the Python utility as an agent, canonical memory or mandatory runtime dependency.
+Nexus remains a development utility in `tools/repo_intelligent/`, not a product dependency. Dedicated Rust Repo Intelligence modules have been removed; the retained `SourceSpan` locator serves Engineering artifacts.
 
 **Session model-context slice:** [`src/context/compiler.rs`](../../crates/custos-runtime/src/context/compiler.rs) compiles a bounded journal projection; [`src/workflow/task_runtime.rs`](../../crates/custos-runtime/src/workflow/task_runtime.rs) obtains it through `SessionStore` and records included/omitted entry IDs in Run metadata before model dispatch; [`src/runtime.rs`](../../crates/custos-daemon/src/runtime.rs) wires the durable store. `SessionManager::open_in_lens` persists `workbench_opened` journal events through `v1.sessions.open_in_lens`; desktop projects those events into lens membership, while last-selected conversation is device-local. This is chat continuity only, not a full privacy-filtered cross-pack `ContextReceipt` or native-agent hidden-state transfer. The UI chat-turn Task records the destination lens pack.
 

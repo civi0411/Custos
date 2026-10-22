@@ -16,7 +16,7 @@ Ba miền cùng dùng Task/run/workspace, source/context, authority, usage và e
 | Economics / eval | Task features, quality constraints, fixtures | Shared reservations/attempt ledger, paired evaluation |
 | Product views | Artifact và domain decisions | SDK/event projections, panes/attention |
 
-`Pack ≠ skill ≠ capability ≠ worker ≠ model ≠ transport`. Repo Intelligence là subsystem snapshot/query; `repo_explain` là Engineering job; MCP là export adapter. [Capability/skill ownership](capability-catalog-and-skills.md) quyết định nơi đặt feature mới.
+`Pack ≠ skill ≠ capability ≠ worker ≠ model ≠ transport`. Không có Repo Intelligence subsystem; `repo_explain` là Engineering job đọc/giải thích thông thường; MCP là export adapter. [Capability/skill ownership](capability-catalog-and-skills.md) quyết định nơi đặt feature mới.
 
 Artifact generation, authorization, operational receipt, semantic assessment và accepted outcome giữ riêng. Criterion pass/fail/unknown/stale dựa record có source/method/version; waiver là quyết định riêng. Worker report/citation/approval metadata/exit code không đủ cho mọi criterion.
 
@@ -36,11 +36,9 @@ Artifact generation, authorization, operational receipt, semantic assessment và
 
 Native strong agent làm trọn refactor lớn và local/API model dùng Custos worker loop đều hợp lệ. Tool/environment capability và criterion quyết định route, không provider label.
 
-### 2.2 Repo Intelligence và context
+### 2.2 Đọc source và context
 
-`inventory/hash → lexical/symbol query → capped structure/test expansion → source spans → ContextPack`. Index gắn HEAD, selected dirty bytes, parser/index generation và coverage của ignored/generated/untracked/unresolved files. Syntax relation không tự là compiler-resolved call graph.
-
-Exact identifier/trace ưu tiên lexical; AST/LSP/test map khi có; embedding/rerank thêm khi có giá trị. Output giữ locator/version/method/omissions, pagination và raw-source retrieval. S1 scout tìm test/log/caller candidates; S2 vẫn đọc source trong scope. Compaction không bỏ assertion/invariant để làm đẹp token count.
+Coding dùng file/search/Git capabilities hiện hữu trong scope đã cấp. Worker chọn source theo câu hỏi và context budget; giữ locator và bytes/hash khi tạo evidence. Không xây scanner/index/graph/coordinator riêng hoặc coi lexical match là semantic resolution.
 
 ### 2.3 Workspace và patch lifecycle
 
@@ -137,7 +135,7 @@ Economical default scoped retrieval, deterministic time/identity, stable persona
 
 | Chủ đề | Pack semantics | Shared/runtime | Concrete edge |
 |---|---|---|---|
-| Coding | engineering skills/profile/verifiers/declarative | context/repo_intelligence, agent, workflow/workspace | adapters Git/fs/parser/LSP/process/browser; persistence index |
+| Coding | engineering skills/profile/verifiers/declarative | context compiler, agent, workflow/workspace | adapters Git/fs/parser/LSP/process/browser; persistence index |
 | Research | research skills/profile/verifiers/export, experiment services khi cần | context/memory/source refs/run/compute | adapters PDF/OCR/web/data/kernel/job; persistence artifacts |
 | Assistant | assistant skills/profile/verifiers/trigger semantics | workflow/continuation/budget/effects | adapters contacts/mail/calendar/notes/notifications; outbox |
 | Economics | Pack features/quality/fixtures | runtime OI/context/judgment, core budget | provider usage/cache profiles; persistence attempt ledger |

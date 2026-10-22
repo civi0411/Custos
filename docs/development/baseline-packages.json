@@ -1,0 +1,82 @@
+[
+  {
+    "name": "custos-domain",
+    "version": "0.1.0",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/crates/custos-domain#0.1.0"
+  },
+  {
+    "name": "custos-core",
+    "version": "0.1.0",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/crates/custos-core#0.1.0"
+  },
+  {
+    "name": "custos-provider",
+    "version": "0.1.0",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/crates/custos-provider#0.1.0"
+  },
+  {
+    "name": "custos-persistence",
+    "version": "0.1.0",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/crates/custos-persistence#0.1.0"
+  },
+  {
+    "name": "custos-bridge",
+    "version": "0.1.0",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/crates/custos-bridge#0.1.0"
+  },
+  {
+    "name": "custos-runtime",
+    "version": "0.1.0",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/crates/custos-runtime#0.1.0"
+  },
+  {
+    "name": "custos-adapters",
+    "version": "0.1.0",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/crates/custos-adapters#0.1.0"
+  },
+  {
+    "name": "custos-daemon",
+    "version": "0.1.0",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/crates/custos-daemon#0.1.0"
+  },
+  {
+    "name": "custos-packs",
+    "version": "0.1.0",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/crates/custos-packs#0.1.0"
+  },
+  {
+    "name": "custos-sdk",
+    "version": "0.1.0-alpha.10",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/crates/custos-sdk#0.1.0-alpha.10"
+  },
+  {
+    "name": "custos-app-cli",
+    "version": "0.1.0",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/crates/custos-app/cli#custos-app-cli@0.1.0"
+  },
+  {
+    "name": "custos-app-desktop",
+    "version": "0.1.0",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/crates/custos-app/desktop#custos-app-desktop@0.1.0"
+  },
+  {
+    "name": "custos-tests-contract",
+    "version": "0.1.0",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/tests/contract#custos-tests-contract@0.1.0"
+  },
+  {
+    "name": "custos-tests-e2e",
+    "version": "0.1.0",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/tests/e2e#custos-tests-e2e@0.1.0"
+  },
+  {
+    "name": "custos-testkit",
+    "version": "0.1.0",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/tests/testkit#custos-testkit@0.1.0"
+  },
+  {
+    "name": "xtask",
+    "version": "0.1.0",
+    "id": "path+file:///Users/mac/Project/AgentHub/Custos/xtask#0.1.0"
+  }
+]

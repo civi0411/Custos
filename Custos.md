@@ -1,5 +1,13 @@
 # CUSTOS
 
+**Crates + desktop refactor plan for review:** [convergence §12](docs/development/sade-frontend-backend-convergence-plan.md#12-refactor-crates-và-desktop-theo-ownership) defines the source-backed implementation queue. [Migration closure §13](docs/development/sade-frontend-backend-convergence-plan.md#13-đóng-các-đường-refactor-đang-chuyển-tiếp) details the remaining approval lifecycle, initial Screen restore, single layout/tab owner, wired AppContext extraction, one client and retirement gates. Preserve crate boundaries; separate central work from supporting inspection; then complete Coding/Research/Copilot acceptance. These are implementation plans, not certification that the dirty checkout has shipped every change. Existing AGENTS/UI rules remain binding; no new dependency, crate, store or Repo Intelligence subsystem is authorized by the plan.
+
+**Current correctness implementation:** this wave retains the existing crates and contracts. Grant resolution matches a non-empty actor and all supported constraints before granting an approval exception; a target is exact, not a string prefix. Runtime graph execution consumes one normalized step outcome, distinguishes approval waits and uncertain effects from success, and does not retry either state automatically. Source acquisition requires an explicit trusted root and bounded, complete UTF-8 content; oversized input is an error, not silently truncated evidence. See [implemented scope and verification](docs/development/crates-topic-refactor-plan.md#implemented-scope-and-verification). This is a verified subset of the refactor campaign, not completion of the entire execution spine or all workbenches.
+
+Unbound OI worker nodes must return unsupported/failure, never a fabricated Sufficient outcome or static token/USD usage. Deterministic workflow execution fixtures belong in tests, not a production executor's fallback branch.
+
+**Pre-implementation crates audit:** [Crates plan §§17–21](docs/development/crates-topic-refactor-plan.md#17-tái-kiểm-checkout-sau-đợt-tách-module) records the earlier dirty-tree inventory, test placement and findings. The physical-read regression reported there now passes its selected integration test; §22 records the newer implementation and remaining limits. The [per-file ledger](docs/development/crates-file-disposition-ledger.md) remains the earlier clean-snapshot inventory, not a current per-line audit or deletion instruction.
+
 **Crates refactor proposal for review:** [Topic-based crates audit and migration plan](docs/development/crates-topic-refactor-plan.md) checks snapshot `d25c27b` against the current dependency/composition graph. It proposes retaining the canonical crate groups while converging scoped effect execution, Run ownership, context/skills, three-workbench use cases and optional infrastructure. It corrects blanket-deletion and unmeasured performance claims. This is a proposed refinement of the existing refactor campaign, not implemented architecture or a replacement product specification.
 
 **Application refactor in progress:** daemon use cases are being extracted into `src/application/` without changing Local API methods or creating a new crate/runtime. The dispatcher retains command admission and response settlement; feature modules own scoped use cases. Run generation and optimistic state revision must not be conflated. Legacy import keys and third-party attribution remain readable; unused internal aliases may be retired after caller checks. Governed tools must remain unavailable until a production authority/execution path is actually composed.
@@ -144,7 +152,7 @@ Research exposes Notebook, Runs and Training as independent central resource tab
   - [10.5 Thiết Kế Giao Diện Công Cụ Chuẩn SWE-agent (ACI)](#105-thiết-kế-giao-diện-công-cụ-chuẩn-swe-agent-aci)
   - [10.6 Chiến Lược Định Vị Lỗi và Tích Hợp Đa Worker](#106-chiến-lược-định-vị-lỗi-và-tích-hợp-đa-worker)
   - [10.7 Luồng Gỡ Lỗi Điển Hình (Bugfix Flow)](#107-luồng-gỡ-lỗi-điển-hình-bugfix-flow)
-  - [10.8 Repo Intelligence Ba Tầng](#108-repo-intelligence-ba-tầng)
+  - [10.8 Đọc mã nguồn theo phạm vi](#108-đọc-mã-nguồn-theo-phạm-vi)
   - [10.9 Research Foundation](#109-research-foundation)
   - [10.10 Ranh giới](#1010-ranh-giới)
 - [PHẦN 11 — RESEARCH PACK](#phần-11-research-pack)
@@ -1376,7 +1384,7 @@ Trong quá trình vận hành cường độ cao với nhiều luồng đọc gh
 
 ## 6.6 Phân Tách RAG Pipeline Cho 3 Cụm Đóng Gói (Packs)
 
-**Hợp đồng SADE cho agent và RAG:** ba pack dùng chung một dịch vụ logic truy hồi/ngữ cảnh trong `custos-runtime/src/context/`, nhưng mỗi pack sở hữu source scope, recipe và nghĩa của evidence. Dịch vụ xuất `ContextPack` cùng receipt về nguồn được chọn, bỏ qua, che, stale và egress; nó không tự thành agent, MCP server hay nguồn cấp quyền. Repo Intelligence là nhánh Coding của dịch vụ này. Model API/local model được chạy bởi Custos worker loop để thành coding/research/assistant agent; Codex, Claude Code, OpenCode và harness tương tự có loop riêng qua `AgentRuntimePort`. Subagent nội bộ là `WorkerRun` con với scope/budget/tool/output hẹp; A2A chỉ dùng khi giao cho agent ở trust boundary từ xa. Đổi Copilot/Coding/Research lens giữ Task và session; thêm pack step/fork là command riêng với manifest nguồn được chọn. Thiết kế đầy đủ, trạng thái code thật và các journey UI nằm ở [SADE agent system and three-workbench interaction contract](docs/architecture/sade-agent-system-design.md).
+**Hợp đồng SADE cho agent và RAG:** ba pack dùng chung một dịch vụ logic truy hồi/ngữ cảnh trong `custos-runtime/src/context/`, nhưng mỗi pack sở hữu source scope, recipe và nghĩa của evidence. Dịch vụ xuất `ContextPack` cùng receipt về nguồn được chọn, bỏ qua, che, stale và egress; nó không tự thành agent, MCP server hay nguồn cấp quyền. Coding dùng capabilities đọc/tìm file và Git hiện hữu, không có subsystem phân tích repo riêng. Model API/local model được chạy bởi Custos worker loop để thành coding/research/assistant agent; Codex, Claude Code, OpenCode và harness tương tự có loop riêng qua `AgentRuntimePort`. Subagent nội bộ là `WorkerRun` con với scope/budget/tool/output hẹp; A2A chỉ dùng khi giao cho agent ở trust boundary từ xa. Đổi Copilot/Coding/Research lens giữ Task và session; thêm pack step/fork là command riêng với manifest nguồn được chọn. Thiết kế đầy đủ, trạng thái code thật và các journey UI nằm ở [SADE agent system and three-workbench interaction contract](docs/architecture/sade-agent-system-design.md).
 
 **Hiệu đính về lịch sử chat:** mỗi workbench có danh sách session riêng theo `home_lens` và các lens được người dùng gắn thêm. Mở một lens khác mặc định khôi phục session đang chọn của lens ấy, không tự kéo chat vừa rời đi. Người dùng có thể chọn **Open full chat in…** để hiển thị cùng canonical journal ở lens đích, hoặc **Continue as linked chat** để tạo session mới có lineage đến toàn bộ timeline nguồn. `Full` mô tả phạm vi lịch sử **hiển thị và có thể truy xuất**; nó không hứa nhét vô hạn turn vào một lần inference. Model chỉ nhận transcript/summary/source refs sau privacy check và context budget, với receipt ghi rõ phần nào thực sự được gửi, bị cắt hoặc không chuyển được. Research notebook phục vụ khám phá, demo và phân tích dữ liệu; code trong notebook không tự là patch vào Coding repo.
 
@@ -2044,16 +2052,11 @@ flowchart LR
     REV --> DEL["Delivery"]
 ```
 
-## 10.8 Repo Intelligence Ba Tầng
-```mermaid
-flowchart TB
-    L1["LEXICAL: Paths, hash, config (rg, FTS5)"]
-    L2["STRUCTURAL: AST, symbols, refs (tree-sitter, LSP)"]
-    L3["SEMANTIC: Embedding, rerank (Optional)"]
+## 10.8 Đọc mã nguồn theo phạm vi
 
-    L1 --> L2
-    L2 --> L3
-```
+Custos không xây subsystem Repo Intelligence riêng: không có scanner/index/graph/coordinator hoặc LLM view chuyên biệt. Coding dùng capabilities đọc/tìm file và Git hiện hữu trong scope đã cấp; worker dùng model hoặc native harness để giải thích và sửa code. `repo_explain` là job đọc/giải thích thông thường, không là lời hứa có semantic index hay call graph.
+
+Giữ `SourceSpan` như locator thuần cho artifact chẩn đoán Engineering, cùng context compiler, source verification, cây file, diff và worktree hiện hữu. Bỏ query/snapshot contracts chỉ phục vụ subsystem đã gỡ. Không chuyển scanner sang một folder khác hoặc thay bằng một agent/index/database mới. Nexus trong `tools/repo_intelligent/` là utility phát triển độc lập, không thuộc backend sản phẩm.
 
 ## 10.9 Research Foundation
 
@@ -2366,7 +2369,7 @@ flowchart LR
 
 ## 13.3 Hợp Đồng Pack Đủ Để Code Và Review
 Mỗi `PackManifest` chỉ có một registry trong `custos-packs`: task kinds, versioned input/output, source/context policy, candidate workflow, required capability, effect classes, criterion/verifier profile, UI projection.
-- **Engineering:** Giao tiếp qua `RepoExplanation` hoặc `PatchProposal`. Thiếu reproducer, flaky test -> `unknown/stale`.
+- **Engineering:** Giao tiếp qua source anchors hoặc `PatchProposal`. Thiếu reproducer, flaky test -> `unknown/stale`.
 - **Research:** Giao tiếp qua `SourceRecord`. Trích dẫn không khớp passage, data leakage -> `unknown`.
 - **Assistant:** Giao tiếp qua `ActionIntent` và Outbox. Chờ approval, timeout sau send -> `uncertain`.
 
@@ -2607,11 +2610,11 @@ OpenAI/Codex and Anthropic use their provider-specific PKCE endpoints and refres
 Copilot uses real GitHub Device Authorization, explicitly authorized as the exception to PKCE, with client `Iv1.b507a08c87ecfe98`. The daemon polls at the server interval, observes expiry/cancellation, fetches GitHub identity, and stores the GitHub credential. Discovery and inference acquire transient Copilot session tokens and use `https://api.githubcopilot.com`; selectable models carry `copilot/`. Device codes and lifecycle states come from the real authorization response, never simulated success.
 
 Adapter network transport remains in `custos-adapters`; the daemon composes OAuth and credentials; desktop projects accounts through IPC. PKCE callbacks require matching state, verifier, provider, redirect and an unexpired, single-use authorization. `v1.oauth.cancel` aborts temporary authorization without deleting saved accounts. `ProviderRepository::save_oauth_connection` commits credentials, identity and a redacted outbox event atomically. OAuth API responses and events omit credential values. The desktop shows fetched identity, provider-specific flow badges, visible action buttons and the existing `github-copilot.jpg` asset.
-**Skill ownership:** Repo Intelligence là subsystem dùng source snapshot/index/query/context; `repo_explain` là skill Engineering tiêu thụ nó. Instruction recipe ở declarative pack, domain behavior ở pack Rust, shared coordination ở runtime, I/O ở adapters/persistence, scope/permission ở core. MCP chỉ là exposure; RAG là context consumer. Research và Assistant dùng cùng phân tách. Cost/context/cache optimization đặt ở shared runtime/core với source coverage obligations của pack.
+**Skill ownership:** Không có subsystem Repo Intelligence riêng; `repo_explain` dùng capabilities đọc/tìm file hiện hữu. Instruction recipe ở declarative pack, domain behavior ở pack Rust, shared coordination ở runtime, I/O ở adapters/persistence, scope/permission ở core. MCP chỉ là exposure; RAG là context consumer. Research và Assistant dùng cùng phân tách. Cost/context/cache optimization đặt ở shared runtime/core với source coverage obligations của pack.
 
 **Frontend ownership:** `app/` giữ shell/routes; feature modules `workspace`, `tasks`, `engineering`, `research`, `assistant`, `connections` giữ views; `shared/api` giữ client/event synchronization và `shared/ui` giữ accessible components. Backend state không nằm trong layout store hay mock fixtures.
 
-Hiện có Python `tools/repo_intelligent` và Rust repo modules đang thay đổi: giữ compatibility đến khi conformance chứng minh replacement. Không xóa folder chỉ vì bảng đích đổi nơi. [Skills/capabilities](docs/architecture/capability-catalog-and-skills.md) quy định cách thêm feature; [restructuring plan](docs/development/workspace-restructuring-plan.md) ghi current→target, gates và migration; [workspace/UI](docs/architecture/agent-workspace-and-ui.md) chốt behavior. §7 giữ protocol boundaries, §14 giữ OI decision boundaries.
+Nexus trong `tools/repo_intelligent/` chỉ phục vụ phát triển. Subsystem Repo Intelligence của sản phẩm đã được gỡ theo §10.8; không đặt parity với utility này làm điều kiện tiếp tục phát triển Coding. Các thay đổi khác vẫn theo [restructuring plan](docs/development/workspace-restructuring-plan.md).
 
 **Code migration cụ thể:** [plan §6–10](docs/development/workspace-restructuring-plan.md#6-audit-code-và-quyết-định-giữchuyểnhợp-nhất) ghi source audit, import graph và R0–R10. Thứ tự ưu tiên: baseline → SDK/client-server split → UI state/transport → capability I/O boundary → worker path → context/memory và OI consolidation → execution resources/domain features → compatibility retirement. Mỗi packet có consumers/parity/golden fixtures và integration gate, không một rename toàn repo không kiểm.
 

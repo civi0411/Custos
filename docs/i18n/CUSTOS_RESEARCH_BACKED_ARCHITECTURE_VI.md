@@ -1,5 +1,7 @@
 # CUSTOS — KIẾN TRÚC DỰA TRÊN RESEARCH VÀ CODEBASE THỰC
 
+**Current scope:** dedicated product Repo Intelligence has been removed. Earlier index/scanner/graph placements in this translation are superseded by master §10.8; scoped file/search/Git and Nexus development tooling remain.
+
 **Loại:** Bản diễn giải tiếng Việt
 
 **Canonical:** [`../../Custos.md`](../../Custos.md)  

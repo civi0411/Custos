@@ -15,22 +15,11 @@
 
 Không dùng từ “skill” để gom mọi thứ. Một file `SKILL.md` không cấp grant; một MCP tool không nhất thiết là agent; một local worker không cần A2A. [Agent Skills specification](https://agentskills.io/specification) mô tả package instructions/resources theo progressive disclosure. [MCP tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools) mô tả bề mặt invocation; tool annotations không được tin như policy security.
 
-## 2. Repo Intelligence là subsystem; repo_explain là skill
+## 2. Coding dùng capabilities hiện hữu, không có Repo Intelligence riêng
 
-Repo Intelligence sở hữu snapshot-aware inventory/query/relations/coverage. `repo_explain`, `impact_analysis`, `diagnose` là consumers. RAG là retrieval/context consumer; MCP là export adapter. Không nhúng LLM loop bắt buộc trong indexer.
+`repo_explain` là job Engineering đọc/giải thích code qua capabilities file/search/Git đã có. Bỏ subsystem scanner/graph/query/coordinator chuyên biệt cùng query/snapshot types chỉ phục vụ nó; không dựng index, graph database, MCP server hoặc agent thay thế.
 
-| Trách nhiệm | Vị trí đích trong cấu trúc đang có |
-|---|---|
-| Snapshot/span/query metadata thuần | `custos-domain/src/repo/` |
-| Scope/preconditions/ports | `custos-core/src/repo/` và contracts hiện hữu |
-| Snapshot→query→bounded ContextPack coordination | `custos-runtime/src/context/repo_intelligence/` |
-| DB/index/CAS implementation | `custos-persistence` |
-| Git/fs/parser/LSP/optional sidecar I/O | `custos-adapters` |
-| Engineering diagnosis/skill semantics | `custos-packs/src/engineering/` |
-| Recipes/rubrics/skill instructions | `custos-packs/declarative/engineering/` |
-| Python indexer đang tồn tại | `tools/repo_intelligent/`: compatibility implementation, chưa xóa |
-
-Giữ source anchors và omissions thay vì chỉ trả summary mất nguồn. Syntax match không là compiler-resolved call graph. Query cap/pagination/token budget xử lý nhiều kết quả; không cần agent hóa chỉ vì trả nhiều files. Index writes là derived infrastructure activity với scope/lifecycle, không đồng nghĩa mutation source repo. Canonical Task/effect DB không được sidecar ghi trực tiếp. Xem [Repo Intelligence](repo-intelligence-subsystem.md).
+`custos-domain/src/repo/span.rs` giữ locator `SourceSpan` cho artifact chẩn đoán; Engineering giữ recipe/rubric; runtime giữ context compiler chung; adapters giữ concrete capabilities; core giữ scope/authority hiện hữu. Các capability đọc/tìm file, cây thư mục, diff và worktree không bị gỡ. `tools/repo_intelligent/` (Nexus) chỉ là development utility, không là dependency sản phẩm.
 
 ## 3. Mở rộng cả ba miền
 

@@ -241,7 +241,7 @@ Bootstrap đăng ký governed runtime nhưng hiện truyền danh sách tools r�
 | Tasks | `v1.tasks.*`, bridge attach/promote | Goal, criteria, spans, continuation; không hoàn thành chỉ vì harness exit 0 |
 | Evidence/review | Reviewer/evidence APIs và core completion | Receipt/claim/reviewer method còn phải nối criterion/source freshness |
 
-Repo intelligence là capability phục vụ snapshot/search/context của Coding, không là protocol MCP/RAG duy nhất và không mặc định thành subagent. Concrete index/search I/O thuộc đúng adapter/service owner; OI có thể chọn specialist worker nhưng không tạo graph/DB độc lập chỉ vì gọi là intelligence.
+Coding dùng capabilities đọc/tìm file, Git và context compiler hiện hữu; không có subsystem Repo Intelligence hoặc index/graph service riêng. Model và native harness tiếp tục dùng capability được phép.
 
 Browser/emulator/fleet là peer resources dùng khi capability thực có; cài binary hoặc có list metadata không chứng minh remote execution đã verified. Browser native rendering và headless backend automation là hai integration path cần hiển thị assurance riêng.
 

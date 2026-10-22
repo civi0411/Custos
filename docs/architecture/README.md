@@ -11,7 +11,6 @@ Kiến trúc đích là một Agent Workspace local-first với Coding, Research
 | [Agent Workspace và UI](agent-workspace-and-ui.md) | Người dùng mở/chạy/xem/so/duyệt/tiếp tục công việc thế nào? |
 | [Capabilities và skills](capability-catalog-and-skills.md) | Feature mới nằm đâu và dùng lại giữa pack/model/harness thế nào? |
 | [Domain packs](domain-packs-and-workflows.md) | Coding, Research, Assistant có contracts và verifier obligations gì? |
-| [Repo Intelligence](repo-intelligence-subsystem.md) | Snapshot/index/query/context/source coverage thuộc subsystem nào? |
 
 ## Execution, trust và data
 
