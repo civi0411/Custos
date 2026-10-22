@@ -7,7 +7,15 @@ use serde::{Deserialize, Serialize};
 pub enum AttachMode {
     Observe,
     Steer,
+    SteerEnabled,
     ApproveOnly,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum SteerResult {
+    Recorded,
+    Delivered { worker_ack: bool },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,8 +23,28 @@ pub struct SteerReceipt {
     pub task_id: TaskId,
     pub session_id: SessionId,
     pub accepted: bool,
+    pub delivery: SteerResult,
     pub message: String,
     pub timestamp: String,
+}
+
+#[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
+pub enum BridgeError {
+    #[error("BridgeError::SteerNotSupported: harness does not support steering")]
+    SteerNotSupported,
+    #[error("Domain error: {0}")]
+    Domain(DomainError),
+}
+
+impl From<BridgeError> for DomainError {
+    fn from(err: BridgeError) -> Self {
+        match err {
+            BridgeError::SteerNotSupported => DomainError::Validation(
+                "BridgeError::SteerNotSupported: harness does not support steering".into(),
+            ),
+            BridgeError::Domain(e) => e,
+        }
+    }
 }
 
 #[async_trait]

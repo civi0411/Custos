@@ -1445,6 +1445,7 @@ dependencies = [
  "iroh",
  "iroh-relay",
  "keyring",
+ "libc",
  "llama-cpp-2",
  "llama-cpp-sys-2",
  "minijinja",
@@ -1478,8 +1479,8 @@ name = "custos-app-cli"
 version = "0.1.0"
 dependencies = [
  "custos-core",
- "custos-daemon",
  "custos-domain",
+ "custos-sdk",
  "serde",
  "serde_json",
  "tauri",
@@ -1660,6 +1661,7 @@ dependencies = [
  "blake3",
  "bytes",
  "chrono",
+ "custos-adapters",
  "custos-core",
  "custos-domain",
  "custos-persistence",
@@ -7928,9 +7930,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76407f5f396a2c949a069eff4a9fca9ce462410eb872bffef4c2b7b89804a77a"
 dependencies = [
  "anyhow",
- "camino",
  "cargo_metadata 0.23.1",
- "clap",
  "uniffi_bindgen",
  "uniffi_core",
  "uniffi_macros",
