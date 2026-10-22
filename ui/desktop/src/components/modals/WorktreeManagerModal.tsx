@@ -85,6 +85,8 @@ export const WorktreeManagerModal: React.FC<WorktreeManagerModalProps> = ({
     setIsLoading(true);
     setErrorMsg(null);
 
+    const defaultMainPath =
+      (typeof window !== 'undefined' ? localStorage.getItem('custos_current_project_path') : '') || '.';
     daemonClient
       .listWorkspaces()
       .then((records) => {
@@ -93,8 +95,8 @@ export const WorktreeManagerModal: React.FC<WorktreeManagerModalProps> = ({
           mapped.unshift({
             id: 'ws-main',
             branch: 'main',
-            path: '/Users/mac/Project/AgentHub/Custos',
-            baseCommit: 'a3f2d1e',
+            path: defaultMainPath,
+            baseCommit: 'HEAD',
             host: 'local',
             status: 'work',
             modifiedFilesCount: 0,
@@ -111,8 +113,8 @@ export const WorktreeManagerModal: React.FC<WorktreeManagerModalProps> = ({
           {
             id: 'ws-main',
             branch: 'main',
-            path: '/Users/mac/Project/AgentHub/Custos',
-            baseCommit: 'a3f2d1e',
+            path: defaultMainPath,
+            baseCommit: 'HEAD',
             host: 'local',
             status: 'work',
             modifiedFilesCount: 0,
@@ -136,6 +138,11 @@ export const WorktreeManagerModal: React.FC<WorktreeManagerModalProps> = ({
 
     try {
       const sanitizedBranch = newBranch.trim();
+      const mainRepoPath =
+        worktrees.find((w) => w.isMain)?.path ||
+        (typeof window !== 'undefined' ? localStorage.getItem('custos_current_project_path') : '') ||
+        '.';
+
       const created = await daemonClient.createWorkspace({
         name: sanitizedBranch,
         kind:
@@ -147,7 +154,7 @@ export const WorktreeManagerModal: React.FC<WorktreeManagerModalProps> = ({
               }
             : {
                 type: 'git',
-                repo_path: '/Users/mac/Project/AgentHub/Custos',
+                repo_path: mainRepoPath,
                 branch: sanitizedBranch,
                 base_commit: newBaseCommit.trim() || undefined,
               },

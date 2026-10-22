@@ -101,9 +101,18 @@ test('changing focused resources while zoomed shows the destination group', () =
 
 // Isolate pure presentation/wire helpers with the repository's existing compiler.
 function helpers(path, names, globals = {}) {
-  const source = fs.readFileSync(new URL(`../ui/desktop/src/${path}`, import.meta.url), 'utf8');
+  let source = fs.readFileSync(new URL(`../ui/desktop/src/${path}`, import.meta.url), 'utf8');
+  if (source.includes("from './normalizers'")) {
+    const normSource = fs.readFileSync(new URL('../ui/desktop/src/api/normalizers.ts', import.meta.url), 'utf8');
+    source = normSource + '\n' + source;
+  }
+  if (source.includes("from './transport'")) {
+    const transSource = fs.readFileSync(new URL('../ui/desktop/src/api/transport.ts', import.meta.url), 'utf8');
+    source = transSource + '\n' + source;
+  }
   const parsed = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const selected = parsed.statements.filter(statement => {
+    if (ts.isClassDeclaration(statement)) return names.includes(statement.name?.text) || true;
     if (ts.isFunctionDeclaration(statement)) return names.includes(statement.name?.text);
     if (ts.isVariableStatement(statement)) return statement.declarationList.declarations.some(declaration => names.includes(declaration.name.getText(parsed)));
     return false;
@@ -441,4 +450,203 @@ test('createCanvasFromPreset creates split canvas matching preset splitConfig', 
   const fallback = createCanvasFromPreset(['single']);
   invariant(fallback, ['single']);
   assert.equal(fallback.root.kind, 'group');
+});
+
+test('scoped resource tabs allow distinct papers, files and terminals in same session without deduplication', () => {
+  const { findScopedResourceTab } = helpers('components/workbenches/workbenchResources.tsx', ['findScopedResourceTab', 'getTabType'], {
+    DEFAULT_RESOURCES: [{ id: 'conversation' }, { id: 'literature' }, { id: 'files' }, { id: 'terminal' }],
+    MessageSquare: () => null,
+  });
+  const tabs = [
+    { id: 'lit-1', type: 'literature', title: 'Paper A', url: 'custos://resource/literature?doc=paperA', workspaceId: 'ws-1', sessionId: 's-1', sourceId: 'src-paperA' },
+    { id: 'lit-2', type: 'literature', title: 'Paper B', url: 'custos://resource/literature?doc=paperB', workspaceId: 'ws-1', sessionId: 's-1', sourceId: 'src-paperB' },
+    { id: 'file-1', type: 'files', title: 'main.rs', url: 'custos://file?path=main.rs', workspaceId: 'ws-1', sessionId: 's-1' },
+    { id: 'file-2', type: 'files', title: 'lib.rs', url: 'custos://file?path=lib.rs', workspaceId: 'ws-1', sessionId: 's-1' },
+  ];
+  const foundPaperA = findScopedResourceTab(tabs, 'literature', { workspaceId: 'ws-1', sessionId: 's-1', sourceId: 'src-paperA' });
+  const foundPaperB = findScopedResourceTab(tabs, 'literature', { workspaceId: 'ws-1', sessionId: 's-1', sourceId: 'src-paperB' });
+  assert.equal(foundPaperA?.id, 'lit-1');
+  assert.equal(foundPaperB?.id, 'lit-2');
+  assert.notEqual(foundPaperA?.id, foundPaperB?.id);
+
+  const foundFile1 = findScopedResourceTab(tabs, 'files', { workspaceId: 'ws-1', sessionId: 's-1', url: 'custos://file?path=main.rs' });
+  const foundFile2 = findScopedResourceTab(tabs, 'files', { workspaceId: 'ws-1', sessionId: 's-1', url: 'custos://file?path=lib.rs' });
+  assert.equal(foundFile1?.id, 'file-1');
+  assert.equal(foundFile2?.id, 'file-2');
+  assert.notEqual(foundFile1?.id, foundFile2?.id);
+});
+
+test('ScreenLayoutSnapshotV2 migration reads legacy screen and canvas keys and validates write-back', () => {
+  const store = new Map();
+  const mockLocalStorage = {
+    getItem: key => store.get(key) || null,
+    setItem: (key, val) => store.set(key, String(val)),
+  };
+  const { loadAndMigrateScreens } = helpers('context/ScreenContext.tsx', ['loadAndMigrateScreens'], { localStorage: mockLocalStorage });
+  const legacyScreens = [{ id: 's-1', name: 'Legacy Screen', homeWorkbench: 'engineering', canvasState: null }];
+  mockLocalStorage.setItem('custos.screens.default', JSON.stringify(legacyScreens));
+  const canvasKey = `custos.canvas.v1:${JSON.stringify(['default', 's-1'])}`;
+  mockLocalStorage.setItem(canvasKey, JSON.stringify({ version: 1, root: { kind: 'group', id: 'root', tabIds: ['a'], activeTabId: 'a' } }));
+
+  const defaultScreens = [{ id: 'screen-default', name: 'Default', homeWorkbench: 'engineering' }];
+  const migrated = loadAndMigrateScreens('default', 'default', defaultScreens);
+  assert.equal(migrated.screens.length, 1);
+  assert.equal(migrated.screens[0].id, 's-1');
+  assert.equal(migrated.screens[0].canvasState?.root?.kind, 'group');
+  assert.ok(mockLocalStorage.getItem('custos.screen_layout.v2.default'));
+});
+
+test('scoped live run observer buffers active tokens and notifies run subscribers without global store churn', () => {
+  const { scopedLiveRunStore } = helpers('context/app/scopedLiveRun.ts', ['scopedLiveRunStore', 'ScopedLiveRunRegistry'], { console });
+  const runId = 'run-test-123';
+  const received = [];
+
+  const unsubscribe = scopedLiveRunStore.subscribe(runId, (snapshot) => {
+    received.push(snapshot.text);
+  });
+
+  scopedLiveRunStore.emit(runId, { run_id: runId, status: 'running', text: 'Hello' });
+  scopedLiveRunStore.emit(runId, { run_id: runId, status: 'running', text: 'Hello world' });
+
+  assert.equal(received.length, 2);
+  assert.equal(received[0], 'Hello');
+  assert.equal(received[1], 'Hello world');
+  assert.equal(scopedLiveRunStore.get(runId)?.text, 'Hello world');
+
+  unsubscribe();
+  scopedLiveRunStore.emit(runId, { run_id: runId, status: 'completed', text: 'Hello world finished' });
+  assert.equal(received.length, 2); // Unsubscribed, does not receive further updates
+
+  scopedLiveRunStore.clear(runId);
+  assert.equal(scopedLiveRunStore.get(runId), undefined);
+});
+
+test('Screen restore preserves saved selection between multiple screens on same workbench without default overwrite', () => {
+  const store = new Map();
+  const mockLocalStorage = {
+    getItem: key => store.get(key) || null,
+    setItem: (key, val) => store.set(key, String(val)),
+  };
+  const { loadAndMigrateScreens } = helpers('context/ScreenContext.tsx', ['loadAndMigrateScreens'], { localStorage: mockLocalStorage });
+  const screens = [
+    { id: 'screen-default', name: 'Main Dev', homeWorkbench: 'engineering', canvasState: null },
+    { id: 'screen-second', name: 'Second Dev Screen', homeWorkbench: 'engineering', canvasState: null },
+  ];
+  const snapshot = {
+    version: 2,
+    scope: 'default',
+    screens,
+    activeScreenId: 'screen-second',
+    timestamp: Date.now(),
+  };
+  mockLocalStorage.setItem('custos.screen_layout.v2.default', JSON.stringify(snapshot));
+
+  const defaultScreens = [{ id: 'screen-default', name: 'Default', homeWorkbench: 'engineering' }];
+  const restored = loadAndMigrateScreens('default', 'default', defaultScreens);
+  assert.equal(restored.screens.length, 2);
+  assert.equal(restored.activeScreenId, 'screen-second');
+  assert.notEqual(restored.activeScreenId, 'screen-default');
+});
+
+test('Screen tab isolation ensures new and existing screens do not leak tabs across workbenches or screens', () => {
+  // Screen A: Engineering Dev Screen
+  const tabsA = [
+    { id: 'conv-a', type: 'conversation', title: 'Chat A' },
+    { id: 'term-a', type: 'terminal', title: 'Terminal A' },
+  ];
+  let canvasA = createCanvas(tabsA.map(t => t.id));
+
+  // Screen B: Research Lab Screen
+  const tabsB = [
+    { id: 'conv-b', type: 'conversation', title: 'Chat B' },
+    { id: 'lab-b', type: 'lab', title: 'Lab B' },
+  ];
+  let canvasB = createCanvas(tabsB.map(t => t.id));
+
+  // Invariant 1: Canvas A groups contain ONLY tabs from Screen A
+  const groupsA = canvasGroups(canvasA.root);
+  const tabIdsA = groupsA.flatMap(g => g.tabIds);
+  assert.deepEqual(plain(tabIdsA).sort(), ['conv-a', 'term-a'].sort());
+  assert.ok(!tabIdsA.includes('conv-b'));
+  assert.ok(!tabIdsA.includes('lab-b'));
+
+  // Invariant 2: Canvas B groups contain ONLY tabs from Screen B
+  const groupsB = canvasGroups(canvasB.root);
+  const tabIdsB = groupsB.flatMap(g => g.tabIds);
+  assert.deepEqual(plain(tabIdsB).sort(), ['conv-b', 'lab-b'].sort());
+  assert.ok(!tabIdsB.includes('conv-a'));
+  assert.ok(!tabIdsB.includes('term-a'));
+
+  // Invariant 3: Reconcile Canvas B with its own tabs MUST NOT inject tabs from Screen A
+  const reconciledB = reconcileCanvas(canvasB, tabsB.map(t => t.id), 'conv-b');
+  const reconciledTabIdsB = canvasGroups(reconciledB.root).flatMap(g => g.tabIds);
+  assert.deepEqual(plain(reconciledTabIdsB).sort(), ['conv-b', 'lab-b'].sort());
+  assert.ok(!reconciledTabIdsB.includes('conv-a'));
+  assert.ok(!reconciledTabIdsB.includes('term-a'));
+
+  // Invariant 4: Modifying Screen B (opening new tab 'lit-b') never pollutes Screen A
+  const updatedTabsB = [...tabsB, { id: 'lit-b', type: 'literature', title: 'Paper B' }];
+  const updatedCanvasB = reconcileCanvas(canvasB, updatedTabsB.map(t => t.id), 'lit-b');
+  const finalIdsB = canvasGroups(updatedCanvasB.root).flatMap(g => g.tabIds);
+  assert.deepEqual(plain(finalIdsB).sort(), ['conv-b', 'lab-b', 'lit-b'].sort());
+
+  // Screen A remains strictly isolated
+  const finalIdsA = canvasGroups(canvasA.root).flatMap(g => g.tabIds);
+  assert.deepEqual(plain(finalIdsA).sort(), ['conv-a', 'term-a'].sort());
+  assert.ok(!finalIdsA.includes('lit-b'));
+});
+
+test('Transport semantics: command ID preservation on retry, conservative effectful rejection, and normalizer parity', () => {
+  const transport = helpers('api/transport.ts', [
+    'isReadMethod',
+    'isRetrySafeMethod',
+    'isTransportError',
+    'generateCommandId',
+    'prepareRequestParams',
+    'evaluateRetry',
+  ]);
+  const normalizers = helpers('api/normalizers.ts', [
+    'normalizeWorkspace',
+  ]);
+
+  // Invariant 1: Pure read method gets no command_id and is retry safe
+  const readParams = transport.prepareRequestParams('v1.tasks.list', { session_id: 's-1' });
+  assert.equal(readParams.command_id, undefined);
+  const readRetry = transport.evaluateRetry('v1.tasks.list', readParams, new Error('channel closed'));
+  assert.equal(readRetry.shouldRetry, true);
+  assert.equal(readRetry.reason, 'idempotent_read');
+
+  // Invariant 2: Mutation method generates command_id and preserves exact command_id across retries
+  const initialParams = { title: 'Do work' };
+  const preparedParams = transport.prepareRequestParams('v1.tasks.create', initialParams);
+  assert.ok(typeof preparedParams.command_id === 'string' && preparedParams.command_id.startsWith('cmd_'));
+
+  // Replaying with already assigned command_id MUST preserve it
+  const replayParams = transport.prepareRequestParams('v1.tasks.create', preparedParams);
+  assert.equal(replayParams.command_id, preparedParams.command_id);
+
+  // Invariant 3: Mutation retry evaluation on transport error allows retry with preserved command_id
+  const mutationRetry = transport.evaluateRetry('v1.tasks.create', preparedParams, new Error('IPC timeout'));
+  assert.equal(mutationRetry.shouldRetry, true);
+  assert.equal(mutationRetry.preserveCommandId, true);
+  assert.equal(mutationRetry.reason, 'idempotent_command_id');
+
+  // Invariant 4: Business rejection (e.g. Validation error, Conflict) is NEVER retried
+  const businessError = new Error('Task title cannot be empty');
+  const businessRetry = transport.evaluateRetry('v1.tasks.create', preparedParams, businessError);
+  assert.equal(businessRetry.shouldRetry, false);
+  assert.equal(businessRetry.reason, 'business_rejection');
+
+  // Invariant 5: Effectful or interactive methods (e.g. pick_folder, probe) without command ID are not blindly retried
+  const effectfulRetry = transport.evaluateRetry('v1.workspaces.pick_folder', {}, new Error('IPC timeout'));
+  assert.equal(effectfulRetry.shouldRetry, false);
+  assert.equal(effectfulRetry.reason, 'effectful_no_retry');
+
+  // Invariant 6: normalizeWorkspace correctly handles setup_failed wire format without crashing
+  const failedWs = normalizers.normalizeWorkspace({
+    id: 'ws-failed',
+    status: { setup_failed: { reason: 'git clone failed' } },
+  });
+  assert.equal(failedWs.status, 'setup_failed');
+  assert.equal(failedWs.status_reason, 'git clone failed');
 });

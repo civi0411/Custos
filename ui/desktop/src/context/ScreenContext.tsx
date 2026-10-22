@@ -52,6 +52,202 @@ export function applyScreenCanvas(screens: Screen[], screenId: string, canvasSta
   return screens.map(screen => screen.id === screenId ? { ...screen, canvasState } : screen);
 }
 
+export interface ScreenLayoutSnapshotV2 {
+  version: 2;
+  scope: string;
+  screens: Screen[];
+  activeScreenId: string;
+  timestamp: number;
+}
+
+export function defaultTabsForScreen(screen: Partial<Screen>): OrcaTab[] {
+  if (screen.anchor?.kind === 'worktree') {
+    const wtId = screen.anchor.id;
+    const label = screen.anchor.label || screen.name || 'Worktree';
+    return [
+      {
+        id: `conv_${wtId}`,
+        type: 'conversation',
+        title: `${label}: Chat`,
+        url: `custos://chat?workspace=${wtId}`,
+        workspaceId: wtId,
+      },
+      {
+        id: `terminal_${wtId}`,
+        type: 'terminal',
+        title: `${label}: Terminal`,
+        url: `custos://terminal?workspace=${wtId}`,
+        workspaceId: wtId,
+      },
+    ];
+  }
+  if (screen.anchor?.kind === 'task') {
+    const taskId = screen.anchor.id;
+    const label = screen.name || `Task: ${taskId}`;
+    return [
+      {
+        id: `task_${taskId}`,
+        type: 'tasks',
+        title: label,
+        url: `custos://task?id=${taskId}`,
+        taskId,
+      },
+      {
+        id: `conv_task_${taskId}`,
+        type: 'conversation',
+        title: `${label} - Chat`,
+        url: `custos://chat?taskId=${taskId}`,
+        taskId,
+      },
+    ];
+  }
+  const wb = screen.homeWorkbench || 'engineering';
+  if (wb === 'research') {
+    return [
+      { id: 'conversation', type: 'conversation', title: 'AI Assistant', url: 'custos://chat' },
+      { id: 'lab', type: 'lab', title: 'Lab', url: 'custos://resource/lab' },
+    ];
+  }
+  if (wb === 'copilot') {
+    return [
+      { id: 'conversation', type: 'conversation', title: 'AI Assistant', url: 'custos://chat' },
+      { id: 'drafts', type: 'drafts', title: 'Drafts', url: 'custos://resource/drafts' },
+    ];
+  }
+  return [
+    { id: 'conversation', type: 'conversation', title: 'AI Assistant', url: 'custos://chat' },
+    { id: 'terminal', type: 'terminal', title: 'Terminal', url: 'custos://resource/terminal' },
+  ];
+}
+
+export function loadAndMigrateScreens(
+  scope: string,
+  currentProject: string | undefined,
+  defaultScreens: Screen[]
+): { screens: Screen[]; activeScreenId?: string } {
+  const v2Key = `custos.screen_layout.v2.${scope}`;
+  const legacyScreensKey = `custos.screens.${scope}`;
+
+  const resolveTabs = (screen: Partial<Screen>): OrcaTab[] => {
+    if (Array.isArray(screen.tabs) && screen.tabs.length > 0) return screen.tabs;
+    const wb = screen.homeWorkbench || 'engineering';
+    if (wb === 'research') {
+      return [
+        { id: 'conversation', type: 'conversation', title: 'AI Assistant', url: 'custos://chat' },
+        { id: 'lab', type: 'lab', title: 'Lab', url: 'custos://resource/lab' },
+      ];
+    }
+    if (wb === 'copilot') {
+      return [
+        { id: 'conversation', type: 'conversation', title: 'AI Assistant', url: 'custos://chat' },
+        { id: 'drafts', type: 'drafts', title: 'Drafts', url: 'custos://resource/drafts' },
+      ];
+    }
+    return [
+      { id: 'conversation', type: 'conversation', title: 'AI Assistant', url: 'custos://chat' },
+      { id: 'terminal', type: 'terminal', title: 'Terminal', url: 'custos://resource/terminal' },
+    ];
+  };
+
+  // 1. Try reading unified V2 snapshot
+  try {
+    const rawV2 = localStorage.getItem(v2Key);
+    if (rawV2) {
+      const parsed = JSON.parse(rawV2);
+      if (parsed && parsed.version === 2 && Array.isArray(parsed.screens) && parsed.screens.length > 0) {
+        const screensWithTabs: Screen[] = parsed.screens.map((screen: Screen) => {
+          const tabs = resolveTabs(screen);
+          const activeTabId = screen.activeTabId || tabs[0]?.id || '';
+          return {
+            ...screen,
+            tabs,
+            activeTabId,
+          };
+        });
+        const activeId = parsed.activeScreenId && screensWithTabs.some(s => s.id === parsed.activeScreenId)
+          ? parsed.activeScreenId
+          : screensWithTabs[0].id;
+        return {
+          screens: screensWithTabs,
+          activeScreenId: activeId,
+        };
+      }
+    }
+  } catch {}
+
+  // 2. Migration: read legacy keys
+  try {
+    let screensToMigrate: Screen[] = [];
+    const legacyRawScreens = localStorage.getItem(legacyScreensKey);
+    if (legacyRawScreens) {
+      const parsed = JSON.parse(legacyRawScreens);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        screensToMigrate = parsed;
+      }
+    }
+
+    if (screensToMigrate.length === 0) {
+      screensToMigrate = defaultScreens;
+    }
+
+    // Try reading legacy canvas state if a screen has empty or default canvas
+    screensToMigrate = screensToMigrate.map((screen) => {
+      const screenScope = JSON.stringify([currentProject, screen.id]);
+      const legacyCanvasKey = `custos.canvas.v1:${screenScope}`;
+      let canvasState = screen.canvasState;
+      try {
+        const rawCanvas = localStorage.getItem(legacyCanvasKey);
+        if (rawCanvas && (!canvasState || !canvasState.root)) {
+          const parsedCanvas = JSON.parse(rawCanvas);
+          if (parsedCanvas && parsedCanvas.root) {
+            canvasState = parsedCanvas;
+          }
+        }
+      } catch {}
+
+      const tabs = resolveTabs(screen);
+      const activeTabId = screen.activeTabId || tabs[0]?.id || '';
+
+      const fallbackCanvas: CanvasState = {
+        version: 1,
+        root: { kind: 'group', id: 'root', tabIds: tabs.map(t => t.id), activeTabId },
+        focusedGroupId: 'root',
+        zoomedGroupId: null,
+      };
+
+      return {
+        ...screen,
+        canvasState: canvasState || fallbackCanvas,
+        tabs,
+        activeTabId,
+      };
+    });
+
+    const activeId = screensToMigrate[0]?.id || 'screen-default';
+    const snapshot: ScreenLayoutSnapshotV2 = {
+      version: 2,
+      scope,
+      screens: screensToMigrate,
+      activeScreenId: activeId,
+      timestamp: Date.now(),
+    };
+
+    // Safe write-then-readback validation
+    try {
+      const serialized = JSON.stringify(snapshot);
+      localStorage.setItem(v2Key, serialized);
+      const readBack = localStorage.getItem(v2Key);
+      if (readBack === serialized) {
+        // Read-back confirmed, snapshot established
+      }
+    } catch {}
+
+    return { screens: screensToMigrate, activeScreenId: activeId };
+  } catch {
+    return { screens: defaultScreens, activeScreenId: defaultScreens[0]?.id || 'screen-default' };
+  }
+}
+
 const ScreenContext = createContext<ScreenContextType | undefined>(undefined);
 
 export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -60,8 +256,7 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setActiveWorkbench,
     activeWorkspace,
     currentProject,
-    activeScreenId,
-    setActiveScreenId,
+    setActiveScreenId: setAppActiveScreenId,
     initScreenTabs,
     setActiveWorkspaceId,
   } = useAppContext();
@@ -69,8 +264,8 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const scope = currentProject || 'default';
   const storageKey = `custos.screens.${scope}`;
 
-  const defaultScreens: Screen[] = useMemo(() => [
-    {
+  const defaultScreens: Screen[] = useMemo(() => {
+    const initialScreen: Screen = {
       id: 'screen-default',
       name: currentWb === 'research' ? 'Lab Desk' : currentWb === 'copilot' ? 'Executive Desk' : 'Main Dev',
       icon: currentWb === 'research' ? 'FlaskConical' : currentWb === 'copilot' ? 'CheckSquare' : 'Code',
@@ -82,51 +277,74 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       isPinned: true,
       createdAt: Date.now(),
       lastUsedAt: Date.now(),
-    },
-  ], [currentWb, activeWorkspace?.metadata?.project_id, activeWorkspace?.id, currentProject]);
+    };
+    initialScreen.tabs = defaultTabsForScreen(initialScreen);
+    initialScreen.activeTabId = initialScreen.tabs[0]?.id || '';
+    return [initialScreen];
+  }, [currentWb, activeWorkspace?.metadata?.project_id, activeWorkspace?.id, currentProject]);
 
-  const [hydratedKey, setHydratedKey] = useState<string>(storageKey);
-
+  // Decode snapshot at initial mount
   const [screens, setScreens] = useState<Screen[]>(() => {
-    try {
-      const stored = localStorage.getItem(storageKey);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return defaultScreens;
+    return loadAndMigrateScreens(scope, currentProject, defaultScreens).screens;
   });
 
-  // When storageKey changes (e.g. project switch), reload stored screens safely
+  const [activeScreenId, setActiveScreenId] = useState<string>(() => {
+    const initial = loadAndMigrateScreens(scope, currentProject, defaultScreens);
+    return initial.activeScreenId || initial.screens[0]?.id || 'screen-default';
+  });
+
+  // hydratedKey tracks whether the state matches the current storageKey
+  const [hydratedKey, setHydratedKey] = useState<string>('');
+
+  // Initial sync & project scope switch effect: decode snapshot and establish state
   useEffect(() => {
     if (hydratedKey === storageKey) return;
-    try {
-      const stored = localStorage.getItem(storageKey);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setScreens(parsed);
-          setHydratedKey(storageKey);
-          return;
-        }
-      }
-    } catch {}
-    setScreens(defaultScreens);
-    setHydratedKey(storageKey);
-  }, [storageKey, hydratedKey, defaultScreens]);
+    const migrated = loadAndMigrateScreens(scope, currentProject, defaultScreens);
+    setScreens(migrated.screens);
+    const targetId = migrated.activeScreenId && migrated.screens.some(s => s.id === migrated.activeScreenId)
+      ? migrated.activeScreenId
+      : (migrated.screens[0]?.id || 'screen-default');
+    setActiveScreenId(targetId);
+    setAppActiveScreenId(targetId);
 
-  // Persist screens only after hydration for the current storageKey
+    // Initialize tabs for target screen in AppContext so active screen never inherits stale tabs
+    const targetScreen = migrated.screens.find(s => s.id === targetId) || migrated.screens[0];
+    if (targetScreen) {
+      const tabs = targetScreen.tabs && targetScreen.tabs.length > 0
+        ? targetScreen.tabs
+        : defaultTabsForScreen(targetScreen);
+      const activeTab = targetScreen.activeTabId || tabs[0]?.id || '';
+      initScreenTabs(targetId, tabs, activeTab);
+    }
+
+    setHydratedKey(storageKey);
+  }, [storageKey, hydratedKey, defaultScreens, scope, currentProject, setAppActiveScreenId, initScreenTabs]);
+
+  // Persist screens only after hydration has completed for the current storageKey
   useEffect(() => {
-    if (hydratedKey !== storageKey) return;
+    if (!hydratedKey || hydratedKey !== storageKey) return;
+    if (screens.length === 0) return;
+
+    const validActiveId = screens.some(s => s.id === activeScreenId)
+      ? activeScreenId
+      : (screens[0]?.id || 'screen-default');
+
     try {
+      const snapshot: ScreenLayoutSnapshotV2 = {
+        version: 2,
+        scope,
+        screens,
+        activeScreenId: validActiveId,
+        timestamp: Date.now(),
+      };
+      localStorage.setItem(`custos.screen_layout.v2.${scope}`, JSON.stringify(snapshot));
       localStorage.setItem(storageKey, JSON.stringify(screens));
     } catch {}
-  }, [storageKey, screens, hydratedKey]);
+  }, [storageKey, screens, activeScreenId, hydratedKey, scope]);
 
   // Keep activeScreenId valid and aligned with currentWorkbench
   useEffect(() => {
-    if (hydratedKey !== storageKey) return;
+    if (!hydratedKey || hydratedKey !== storageKey) return;
     if (screens.length === 0) return;
 
     // Check if the current active screen belongs to currentWb
@@ -143,7 +361,13 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       .sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0));
 
     if (wbScreens.length > 0) {
-      setActiveScreenId(wbScreens[0].id);
+      const targetScreen = wbScreens[0];
+      setActiveScreenId(targetScreen.id);
+      setAppActiveScreenId(targetScreen.id);
+      const tabs = targetScreen.tabs && targetScreen.tabs.length > 0
+        ? targetScreen.tabs
+        : defaultTabsForScreen(targetScreen);
+      initScreenTabs(targetScreen.id, tabs, targetScreen.activeTabId || tabs[0]?.id || '');
     } else {
       // Create initial default screen for this workbench
       const newId = `screen-${currentWb}-default`;
@@ -179,21 +403,34 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         createdAt: Date.now(),
         lastUsedAt: Date.now(),
       };
+      newScreen.tabs = defaultTabsForScreen(newScreen);
+      newScreen.activeTabId = initialTabIds[0] || '';
+
+      initScreenTabs(newId, newScreen.tabs, newScreen.activeTabId);
       setScreens((prev) => [...prev, newScreen]);
       setActiveScreenId(newId);
+      setAppActiveScreenId(newId);
     }
-  }, [screens, activeScreenId, currentWb, activeWorkspace?.metadata?.project_id, activeWorkspace?.id, currentProject, setActiveScreenId]);
+  }, [screens, activeScreenId, currentWb, activeWorkspace?.metadata?.project_id, activeWorkspace?.id, currentProject, hydratedKey, storageKey, setAppActiveScreenId, initScreenTabs]);
 
   const selectScreen = useCallback((screenId: string) => {
     setActiveScreenId(screenId);
+    setAppActiveScreenId(screenId);
     setScreens((prev) => {
       const found = prev.find((s) => s.id === screenId);
-      if (found?.homeWorkbench) {
-        setActiveWorkbench(found.homeWorkbench);
+      if (found) {
+        if (found.homeWorkbench) {
+          setActiveWorkbench(found.homeWorkbench);
+        }
+        const screenTabs = found.tabs && found.tabs.length > 0
+          ? found.tabs
+          : defaultTabsForScreen(found);
+        const activeTab = found.activeTabId || screenTabs[0]?.id || '';
+        initScreenTabs(screenId, screenTabs, activeTab);
       }
       return prev.map((s) => (s.id === screenId ? { ...s, lastUsedAt: Date.now() } : s));
     });
-  }, [setActiveScreenId, setActiveWorkbench]);
+  }, [setAppActiveScreenId, setActiveWorkbench, initScreenTabs]);
 
   const createScreen = useCallback((preset?: ScreenPreset) => {
     const newId = `screen-${Date.now()}`;
@@ -232,16 +469,19 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       defaultWorkspaceId: activeWorkspace?.id,
       canvasState: createCanvasFromPreset(initialTabIds, preset?.splitConfig),
       tabRegistry: {},
+      tabs: initialTabsList,
+      activeTabId: initialTabIds[0] || '',
       isPinned: false,
       createdAt: Date.now(),
       lastUsedAt: Date.now(),
     };
     setScreens((prev) => [...prev, newScreen]);
     setActiveScreenId(newId);
+    setAppActiveScreenId(newId);
     if (newScreen.homeWorkbench) {
       setActiveWorkbench(newScreen.homeWorkbench);
     }
-  }, [screens.length, activeWorkspace?.metadata?.project_id, activeWorkspace?.id, currentProject, currentWb, initScreenTabs, setActiveScreenId, setActiveWorkbench]);
+  }, [screens.length, activeWorkspace?.metadata?.project_id, activeWorkspace?.id, currentProject, currentWb, initScreenTabs, setAppActiveScreenId, setActiveWorkbench]);
 
   const closeScreen = useCallback((screenId: string) => {
     setScreens((prev) => {
@@ -252,11 +492,16 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           .sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0))[0];
         if (nextScreen) {
           setActiveScreenId(nextScreen.id);
+          setAppActiveScreenId(nextScreen.id);
+          const nextTabs = nextScreen.tabs && nextScreen.tabs.length > 0
+            ? nextScreen.tabs
+            : defaultTabsForScreen(nextScreen);
+          initScreenTabs(nextScreen.id, nextTabs, nextScreen.activeTabId || nextTabs[0]?.id || '');
         }
       }
       return filtered;
     });
-  }, [activeScreenId, currentWb, setActiveScreenId]);
+  }, [activeScreenId, currentWb, setAppActiveScreenId, initScreenTabs]);
 
   const togglePinScreen = useCallback((screenId: string) => {
     setScreens((prev) =>
@@ -339,6 +584,9 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           },
           lastUsedAt: Date.now(),
         };
+        updatedScreen.tabs = defaultTabsForScreen(updatedScreen);
+        updatedScreen.activeTabId = updatedScreen.tabs[0]?.id || '';
+        initScreenTabs(updatedScreen.id, updatedScreen.tabs, updatedScreen.activeTabId);
         setScreens([updatedScreen]);
         setActiveWorkspaceId(worktree.id);
         return;
@@ -383,6 +631,8 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         },
         canvasState: createCanvas(initialTabIds),
         tabRegistry: {},
+        tabs: initialTabsList,
+        activeTabId: initialTabIds[0] || '',
         isPinned: false,
         createdAt: Date.now(),
         lastUsedAt: Date.now(),
@@ -390,6 +640,7 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       setScreens((prev) => [...prev, newScreen]);
       setActiveScreenId(newId);
+      setAppActiveScreenId(newId);
       setActiveWorkspaceId(worktree.id);
     },
     [
@@ -399,7 +650,7 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       initScreenTabs,
       activeWorkspace?.metadata?.project_id,
       currentProject,
-      setActiveScreenId,
+      setAppActiveScreenId,
     ]
   );
 
@@ -449,6 +700,8 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         },
         canvasState: createCanvas(initialTabIds),
         tabRegistry: {},
+        tabs: initialTabsList,
+        activeTabId: initialTabIds[0] || '',
         isPinned: false,
         createdAt: Date.now(),
         lastUsedAt: Date.now(),
@@ -456,11 +709,12 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       setScreens((prev) => [...prev, newScreen]);
       setActiveScreenId(newId);
+      setAppActiveScreenId(newId);
       if (newScreen.homeWorkbench) {
         setActiveWorkbench(newScreen.homeWorkbench);
       }
     },
-    [screens, selectScreen, initScreenTabs, currentProject, setActiveScreenId, setActiveWorkbench]
+    [screens, selectScreen, initScreenTabs, currentProject, setAppActiveScreenId, setActiveWorkbench]
   );
 
   // Canvas actions

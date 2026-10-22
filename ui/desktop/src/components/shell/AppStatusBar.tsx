@@ -63,6 +63,7 @@ export const AppStatusBar: React.FC = () => {
   const [isResourceOpen, setIsResourceOpen] = useState(false);
 
   const fetchStatus = useCallback(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
     try {
       const online = await daemonClient.checkHealth();
       setIsDaemonOnline(online);

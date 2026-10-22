@@ -92,119 +92,46 @@ import {
   ExecutionAttemptRecord,
 } from '../types/research';
 
-const camelKey = (key: string) => key.replace(/_([a-z])/g, (_, char: string) => char.toUpperCase());
-const snakeKey = (key: string) => key.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`);
+import {
+  camelKey,
+  snakeKey,
+  mapKeysDeep,
+  fromDaemon,
+  toDaemon,
+  normalizeTerminalSession,
+  normalizeHarness,
+  annotationFromWire,
+  annotationToWire,
+  normalizeWorkspaceFile,
+  normalizeWorkspace,
+} from './normalizers';
+import {
+  isReadMethod,
+  isRetrySafeMethod,
+  isTransportError,
+  generateCommandId,
+  prepareRequestParams,
+  evaluateRetry,
+} from './transport';
 
-const mapKeysDeep = (value: unknown, transform: (key: string) => string): any => {
-  if (Array.isArray(value)) return value.map((item) => mapKeysDeep(item, transform));
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
-        transform(key),
-        mapKeysDeep(entry, transform),
-      ])
-    );
-  }
-  return value;
-};
-
-const fromDaemon = <T,>(value: unknown): T => mapKeysDeep(value, camelKey) as T;
-const toDaemon = (value: unknown): Record<string, any> => mapKeysDeep(value, snakeKey);
-
-export function normalizeTerminalSession(value: TerminalSession): TerminalSession {
-  return { ...value,
-    workspace_id: value.workspace_id ?? value.workspaceId ?? '',
-    working_dir: value.working_dir ?? value.workingDir ?? '',
-    created_at: value.created_at ?? value.createdAt ?? 0,
-    closed_at: value.closed_at ?? value.closedAt,
-  };
-}
-
-export function normalizeHarness(value: HarnessDescriptor): HarnessDescriptor {
-  const profile = value.profile;
-  return { ...value, binary_path: value.binary_path ?? value.binaryPath ?? '',
-    is_available: value.is_available ?? value.isAvailable ?? false,
-    launch_cmd: value.launch_cmd ?? value.launchCmd,
-    profile: { ...profile,
-      harness_id: profile.harness_id ?? profile.harnessId ?? value.id,
-      tool_mediation: profile.tool_mediation ?? profile.toolMediation,
-      worktree_ownership: profile.worktree_ownership ?? profile.worktreeOwnership,
-      supports_cancel: profile.supports_cancel ?? profile.supportsCancel ?? false,
-      supports_steer: profile.supports_steer ?? profile.supportsSteer ?? false,
-      cost_visibility: profile.cost_visibility ?? profile.costVisibility,
-    },
-  };
-}
-export function annotationFromWire(value: unknown): AnnotationRecord {
-  const normalized = fromDaemon<AnnotationRecord>(value);
-  const created = normalized.createdAt as unknown;
-  return { ...normalized, createdAt: typeof created === 'string' ? Date.parse(created) : Number(created) };
-}
-export function annotationToWire(annotation: AnnotationRecord): Record<string, unknown> {
-  if (!Number.isFinite(annotation.createdAt)) throw new Error('Annotation timestamp is invalid');
-  return { ...toDaemon(annotation), created_at: new Date(annotation.createdAt).toISOString() };
-}
-
-
-export function normalizeWorkspaceFile(wire: WorkspaceFileContent): WorkspaceFileContent {
-  return { ...wire, workspace_id: wire.workspace_id ?? wire.workspaceId ?? '',
-    is_binary: wire.is_binary ?? wire.isBinary ?? false,
-    size_bytes: wire.size_bytes ?? wire.sizeBytes ?? 0,
-    line_count: wire.line_count ?? wire.lineCount ?? 0 };
-}
-
-const normalizeWorkspace = (wire: any): ExecutionWorkspace => {
-  const failure = wire.status && typeof wire.status === 'object' ? wire.status.setup_failed : null;
-  const dirtyManifest = wire.dirty_manifest
-    ? (fromDaemon(wire.dirty_manifest) as DirtyManifest)
-    : wire.dirtyManifest ?? null;
-  const ownerTaskId = wire.owner_task_id ?? wire.ownerTaskId ?? null;
-  const baseCommitHash = wire.base_commit_hash ?? wire.baseCommitHash ?? null;
-  const runningAgentId = wire.running_agent_id ?? wire.runningAgentId ?? null;
-  const agentStatus = wire.agent_status ?? wire.agentStatus ?? null;
-  const activeBranch = wire.active_branch ?? wire.activeBranch ?? null;
-
-  return {
-    ...wire,
-    status: failure ? 'setup_failed' : wire.status,
-    status_reason: failure?.reason,
-    owner_task_id: ownerTaskId,
-    ownerTaskId,
-    base_commit_hash: baseCommitHash,
-    baseCommitHash,
-    dirty_manifest: dirtyManifest,
-    dirtyManifest,
-    running_agent_id: runningAgentId,
-    runningAgentId,
-    agent_status: agentStatus,
-    agentStatus,
-    active_branch: activeBranch,
-    activeBranch,
-  } as ExecutionWorkspace;
-};
-
-const isReadMethod = (method: string): boolean => {
-  const m = method.toLowerCase();
-  return (
-    m === 'v1.ping' ||
-    m === 'v1.health' ||
-    m.endsWith('.get') ||
-    m.endsWith('.list') ||
-    m.endsWith('.read') ||
-    m.endsWith('.tree') ||
-    m.endsWith('.diff') ||
-    m.endsWith('.status') ||
-    m.endsWith('.history') ||
-    m.endsWith('.inspect_dirty') ||
-    m.endsWith('.detect') ||
-    m.endsWith('.pick_folder') ||
-    m.endsWith('.compare') ||
-    m.endsWith('.pricing') ||
-    m.endsWith('.probe') ||
-    m.endsWith('.catalog') ||
-    m.endsWith('.snapshot') ||
-    m.endsWith('.screenshot')
-  );
+export {
+  camelKey,
+  snakeKey,
+  mapKeysDeep,
+  fromDaemon,
+  toDaemon,
+  normalizeTerminalSession,
+  normalizeHarness,
+  annotationFromWire,
+  annotationToWire,
+  normalizeWorkspaceFile,
+  normalizeWorkspace,
+  isReadMethod,
+  isRetrySafeMethod,
+  isTransportError,
+  generateCommandId,
+  prepareRequestParams,
+  evaluateRetry,
 };
 
 export class DaemonClient {
@@ -372,33 +299,19 @@ export class DaemonClient {
    * Ensures mutations carry a stable logical commandId across Tauri IPC and HTTP retry/fallback paths.
    */
   async request<T>(method: string, params: Record<string, any> = {}): Promise<T> {
-    const finalParams = { ...params };
-    if (!isReadMethod(method) && !finalParams.command_id) {
-      finalParams.command_id =
-        typeof crypto !== 'undefined' && crypto.randomUUID
-          ? `cmd_${crypto.randomUUID()}`
-          : `cmd_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    }
+    const finalParams = prepareRequestParams(method, params);
 
     if (this.isTauri) {
       try {
         return await invoke<T>('custos_request', { method, params: finalParams });
       } catch (err: any) {
-        const errMsg = String(err?.message || err || '');
-        const isTransportError =
-          errMsg.includes('failed to connect') ||
-          errMsg.includes('channel closed') ||
-          errMsg.includes('Broken pipe') ||
-          errMsg.includes('NetworkError') ||
-          errMsg.includes('IPC');
-
-        // Business rejections (Validation, NotFound, Conflict) must fail immediately without blind HTTP resubmission
-        if (!isTransportError && errMsg.length > 0 && !errMsg.includes('timeout')) {
-          console.warn(`[DaemonClient] Business rejection on ${method}, failing without HTTP retry:`, err);
+        const decision = evaluateRetry(method, finalParams, err);
+        if (!decision.shouldRetry) {
+          console.warn(`[DaemonClient] Rejection on ${method} (${decision.reason}), failing without HTTP retry:`, err);
           throw err;
         }
 
-        console.warn(`[DaemonClient] Tauri invoke failed on ${method}, falling back to HTTP:`, err);
+        console.warn(`[DaemonClient] Tauri invoke failed on ${method} (${decision.reason}), retrying over HTTP:`, err);
         return this.requestHttp<T>(method, finalParams);
       }
     } else {

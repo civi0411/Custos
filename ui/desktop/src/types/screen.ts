@@ -1,4 +1,5 @@
 import type { CanvasState, ResourceRef } from './canvas';
+import type { OrcaTab } from '@/components/workbenches/workbenchResources';
 
 /**
  * Descriptor of a tab inside a Screen pane (Tab Group).
@@ -47,6 +48,10 @@ export interface Screen {
   // Registry of all tabs active in this screen
   tabRegistry: Record<string, TabDescriptor>;
   
+  // Isolated tab instances and focused tab for this screen
+  tabs?: OrcaTab[];
+  activeTabId?: string;
+
   // Screen-level workspace state
   defaultWorkspaceId?: string; // Default worktree/workspace context for newly opened tabs
   activeSessionId?: string;

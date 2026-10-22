@@ -111,14 +111,17 @@ export const DraftsPane: React.FC<DraftsPaneProps> = ({
     setShowSecondaryMenu(false);
     setSaving(true);
     try {
+      // Invariant: Editing payload revokes any prior approval and removes lock
+      const shouldRevokeApproval = isModified && activeDraft.status === 'approved';
       const updated = await daemonClient.saveDraft({
         ...activeDraft,
         title: editingTitle,
         content: editingContent,
+        ...(shouldRevokeApproval ? { status: 'draft', payload_lock: undefined } : {}),
       });
       setDrafts((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
       draftEdits.delete(activeDraft.id);
-      onShowToast?.('Draft saved.');
+      onShowToast?.(shouldRevokeApproval ? 'Draft saved. Prior approval revoked due to edits.' : 'Draft saved.');
     } catch (err: any) {
       onShowToast?.(`Save failed: ${err?.message || err}`);
     } finally {

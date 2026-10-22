@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Copy,
   Check,
+  X,
 } from 'lucide-react';
 import { ProviderBrandIcon } from '@/components/common/AgentIcons';
 import { CustomSelect, CustomSelectOption } from '@/components/common/CustomSelect';
@@ -1083,14 +1084,31 @@ export const CloudProvidersUnifiedPane: React.FC<CloudProvidersUnifiedPaneProps>
                         ? 'Listening for browser callback authorization…'
                         : 'Exchanging token with provider…'}
                     </span>
-                    <button
-                      type="button"
-                      onClick={handleCopyLink}
-                      className="flex items-center gap-1 text-[11px] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] cursor-pointer"
-                    >
-                      {copiedLink ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
-                      <span>{copiedLink ? 'Copied Link' : 'Copy Auth Link'}</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyLink}
+                        className="flex items-center gap-1 text-[11px] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] cursor-pointer"
+                      >
+                        {copiedLink ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}
+                        <span>{copiedLink ? 'Copied Link' : 'Copy Auth Link'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          stopPolling();
+                          try { await daemonClient.cancelOAuth(); } catch {}
+                          setCallbackStatus('idle');
+                          setAuthUrlResult(null);
+                          setCallbackInput('');
+                          setExchangeError(null);
+                        }}
+                        className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition cursor-pointer"
+                      >
+                        <X className="size-3" />
+                        <span>Cancel</span>
+                      </button>
+                    </div>
                   </div>
 
                   {/* Manual callback input */}
@@ -1127,9 +1145,18 @@ export const CloudProvidersUnifiedPane: React.FC<CloudProvidersUnifiedPaneProps>
               )}
 
               {exchangeError && (
-                <div className="flex items-center gap-1.5 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/25 p-2.5 rounded-lg font-mono">
-                  <AlertCircle className="size-3.5 shrink-0" />
-                  <span>{exchangeError}</span>
+                <div className="flex items-center justify-between gap-2 text-xs text-rose-400 bg-rose-500/10 border border-rose-500/25 p-2.5 rounded-lg font-mono">
+                  <div className="flex items-center gap-1.5">
+                    <AlertCircle className="size-3.5 shrink-0" />
+                    <span>{exchangeError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleGenerateAuthorizeUrl(true)}
+                    className="shrink-0 text-[11px] font-semibold text-rose-300 hover:underline cursor-pointer"
+                  >
+                    Retry
+                  </button>
                 </div>
               )}
             </div>

@@ -149,6 +149,7 @@ export const AppTopBar: React.FC = () => {
   const [metrics, setMetrics] = useState<SessionMetrics | null>(null);
 
   const fetchLiveData = useCallback(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
     try {
       const isOnline = await daemonClient.checkHealth();
       if (isOnline) {
@@ -303,7 +304,6 @@ export const AppTopBar: React.FC = () => {
                   if (targetScreen) {
                     selectScreen(targetScreen.id);
                   }
-                  window.dispatchEvent(new CustomEvent('custos:switch-workbench', { detail: m.id }));
                 }}
                 className={`flex items-center justify-center size-6 rounded-md transition cursor-pointer select-none ${isActive
                     ? 'bg-white/18 text-white shadow-xs'

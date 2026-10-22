@@ -31,7 +31,7 @@ export const ActivityRail: React.FC = () => {
     if (!studio) {
       navigate('/studio');
     }
-    window.dispatchEvent(new CustomEvent('custos:switch-sidebar-tab', { detail: 'worktrees' }));
+    app.setIsRecentActivityOpen(false);
     if (app.isSidebarCollapsed) {
       app.setIsSidebarCollapsed(false);
     }

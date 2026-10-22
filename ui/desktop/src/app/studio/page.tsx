@@ -80,7 +80,6 @@ export function StudioPage() {
     } catch { return {}; }
   });
   const sidebarView = sidebarViewByLens[mode] || 'chats';
-  useEffect(() => { window.dispatchEvent(new CustomEvent('custos:sidebar-view-changed', { detail: sidebarView })); }, [sidebarView]);
   const setSidebarView = (lens: ActiveWorkbench, view: 'chats' | 'tasks') => {
     const next = { ...sidebarViewByLens, [lens]: view };
     setSidebarViewByLens(next);
@@ -112,20 +111,6 @@ export function StudioPage() {
     }
   }, [location.key]);
 
-  // Handle sidebar view switching from ActivityRail or other triggers
-  useEffect(() => {
-    const handleSwitchSidebar = (e: Event) => {
-      const customEvent = e as CustomEvent<'chats' | 'tasks'>;
-      if (customEvent.detail) {
-        setSidebarView(mode, customEvent.detail);
-        if (isSidebarCollapsed) {
-          setIsSidebarCollapsed(false);
-        }
-      }
-    };
-    window.addEventListener('custos:switch-sidebar-view', handleSwitchSidebar);
-    return () => window.removeEventListener('custos:switch-sidebar-view', handleSwitchSidebar);
-  }, [mode, isSidebarCollapsed, isSidebarCollapsed, setIsSidebarCollapsed]);
 
   const sessionsForMode = (targetMode: ActiveWorkbench) => currentSessions.filter((session) =>
     homeMode(session) === targetMode || session.openedLenses?.includes(targetMode as any) || sessionLenses[session.id]?.includes(targetMode)
@@ -233,19 +218,19 @@ export function StudioPage() {
         setIsWebTabOpen(true);
       }
     };
-    const onSwitchWorkbenchEvent = (e: Event) => {
-      const customEvent = e as CustomEvent<ActiveWorkbench>;
-      if (customEvent.detail && customEvent.detail !== mode) {
-        switchMode(customEvent.detail);
-      }
-    };
     window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('custos:switch-workbench', onSwitchWorkbenchEvent);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('custos:switch-workbench', onSwitchWorkbenchEvent);
     };
-  }, [showToast, currentProject, currentSessions, sessionLenses, lastSessionByLens, setIsWebTabOpen, setIsWebTabExpanded, mode]);
+  }, [showToast, currentProject, currentSessions, sessionLenses, lastSessionByLens, setIsWebTabOpen, setIsWebTabExpanded]);
+
+  const previousMode = useRef(mode);
+  useEffect(() => {
+    if (previousMode.current !== mode) {
+      previousMode.current = mode;
+      switchMode(mode);
+    }
+  }, [mode]);
 
   const activeModeSessions = sessionsForMode(mode);
   const displaySessions = activeModeSessions;

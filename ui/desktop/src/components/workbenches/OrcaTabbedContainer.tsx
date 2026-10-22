@@ -11,25 +11,33 @@ export { ResourceContent } from './ResourceContent';
 
 export const OrcaTabbedContainer = React.memo(function OrcaTabbedContainer(props: OrcaTabbedContainerProps) {
   const { resourceTabs } = props;
+  const {
+    activeScreen,
+    updateActiveScreenLayout,
+    registerCanvasActions,
+  } = useScreenContext();
   const catalog = useResourceCatalog();
   const scope = resourceTabs.scopeKey || 'default';
   const storageKey = `custos.canvas.v1:${scope}`;
   const tabIds = resourceTabs.tabs.map(tab => tab.id);
   const tabSignature = JSON.stringify(tabIds);
-  const load = React.useCallback(() => {
+  const loadFallback = React.useCallback(() => {
     try { return restoreCanvas(JSON.parse(localStorage.getItem(storageKey) || 'null'), tabIds, resourceTabs.activeTabId); }
     catch { return createCanvas(tabIds, resourceTabs.activeTabId); }
-  }, [storageKey, tabSignature]);
+  }, [storageKey, tabSignature, resourceTabs.activeTabId]);
   const [layouts, setLayouts] = React.useState<Record<string, CanvasState>>({});
-  const restored = React.useMemo(load, [load]);
-  const state = reconcileCanvas(layouts[scope] || restored, tabIds, resourceTabs.activeTabId);
+  const activeCanvas = activeScreen?.canvasState || layouts[scope] || loadFallback();
+  const state = reconcileCanvas(activeCanvas, tabIds, resourceTabs.activeTabId);
   const stateRef = React.useRef(state);
   stateRef.current = state;
   const dispatch = React.useCallback((action: CanvasAction) => {
     const next = canvasReducer(stateRef.current, action);
-    setLayouts(previous => ({ ...previous, [scope]: next }));
-    try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {}
-  }, [scope, storageKey]);
+    if (activeScreen) {
+      updateActiveScreenLayout(next);
+    } else {
+      setLayouts(previous => ({ ...previous, [scope]: next }));
+    }
+  }, [activeScreen, updateActiveScreenLayout, scope]);
   const resize = React.useRef<{ id: string; axis: 'horizontal' | 'vertical'; rect: DOMRect } | null>(null);
   const [dragTarget, setDragTarget] = React.useState<string | null>(null);
   const rootRef = React.useRef<HTMLDivElement>(null);
@@ -129,7 +137,15 @@ export const OrcaTabbedContainer = React.memo(function OrcaTabbedContainer(props
       nextTabs.push(tab); return tab.id;
     });
     resourceTabs.setTabs(nextTabs);
-    setLayouts(previous => ({ ...previous, [scope]: canvasReducer(reconcileCanvas(previous[scope] || restored, nextTabs.map(tab => tab.id)), { type: 'arrange', tabIds: selected, layout: 'review' }) }));
+    const arranged = canvasReducer(
+      reconcileCanvas(activeScreen?.canvasState || layouts[scope] || loadFallback(), nextTabs.map(tab => tab.id)),
+      { type: 'arrange', tabIds: selected, layout: 'review' }
+    );
+    if (activeScreen) {
+      updateActiveScreenLayout(arranged);
+    } else {
+      setLayouts(previous => ({ ...previous, [scope]: arranged }));
+    }
     resourceTabs.setActiveTabId(selected[0]);
   };
   const close = (tabId: string) => {
@@ -191,37 +207,6 @@ export const OrcaTabbedContainer = React.memo(function OrcaTabbedContainer(props
     root?.addEventListener('keydown', onKey);
     return () => root?.removeEventListener('keydown', onKey);
   }, [dispatch, resourceTabs.setActiveTabId, props.onOpenResourcePicker]);
-
-  const {
-    activeScreenId,
-    activeScreen,
-    updateActiveScreenLayout,
-    registerCanvasActions,
-  } = useScreenContext();
-
-  const prevLayoutRef = React.useRef<string | null>(null);
-  // Sync canvas layout when screen changes
-  React.useEffect(() => {
-    if (activeScreen?.canvasState) {
-      const serialized = JSON.stringify(activeScreen.canvasState);
-      if (serialized !== prevLayoutRef.current) {
-        prevLayoutRef.current = serialized;
-        setLayouts((previous) => ({
-          ...previous,
-          [scope]: reconcileCanvas(activeScreen.canvasState, tabIds),
-        }));
-      }
-    }
-  }, [activeScreenId, scope, tabSignature, activeScreen?.canvasState]);
-
-  // Sync active canvas state back into screen model
-  React.useEffect(() => {
-    const serialized = JSON.stringify(state);
-    if (serialized !== prevLayoutRef.current) {
-      prevLayoutRef.current = serialized;
-      updateActiveScreenLayout(state);
-    }
-  }, [activeScreenId, state, updateActiveScreenLayout]);
 
   // Expose focused pane operations to AppTopBar ScreenSwitcherBar
   React.useEffect(() => {

@@ -1,7 +1,7 @@
-import { getCurrentWindow } from '@tauri-apps/api/window';
-import { APPEARANCE_KEY, readAppearance, applyAppearance, type AppearancePreferences } from '@/lib/appearance';
-import { isTauri } from '@tauri-apps/api/core';
-import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { type AppearancePreferences } from '@/lib/appearance';
+import { useAppearanceSlice } from './app/appearance';
+import { useTasksSlice } from './app/tasks';
+import { useWorkspacesSlice } from './app/workspaces';
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   MainTab,
@@ -14,6 +14,7 @@ import {
   ProviderServiceId,
 } from '../types';
 import { daemonClient } from '../api/daemon_client';
+import { scopedLiveRunStore } from './app/scopedLiveRun';
 import {
   ExecutionWorkspace,
   ModelCatalogOption,
@@ -137,6 +138,8 @@ interface AppContextType {
   isSidebarCollapsed: boolean;
   setIsSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   toggleSidebar: () => void;
+  isRecentActivityOpen: boolean;
+  setIsRecentActivityOpen: React.Dispatch<React.SetStateAction<boolean>>;
   isWebTabOpen: boolean;
   setIsWebTabOpen: React.Dispatch<React.SetStateAction<boolean>>;
   toggleWebTab: () => void;
@@ -431,70 +434,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Projects & Sessions state
   const [projectData, setProjectData] = useState<ProjectData>({ 'AgentHub': [] });
   const [currentProject, setCurrentProject] = useState<string>('AgentHub');
-  const [activeDetection, setActiveDetection] = useState<WorkspaceDetectionResult | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string>('');
-  const [tasks, setTasks] = useState<Task[]>([]);
-
-  // Workspaces SSOT state (Authoritative execution context matching Left and Right)
-  const [workspaces, setWorkspaces] = useState<ExecutionWorkspace[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<string>(() => {
-    try {
-      return localStorage.getItem('custos.active_workspace_id') || '';
-    } catch {
-      return '';
-    }
-  });
-
-  const setActiveWorkspaceId = useCallback((id: string) => {
-    setActiveWorkspaceIdState(id);
-    try {
-      if (id) {
-        localStorage.setItem('custos.active_workspace_id', id);
-        const worktreeModel = localStorage.getItem(`custos.worktree_model.${id}`);
-        if (worktreeModel) {
-          setSelectedModel(worktreeModel);
-          localStorage.setItem('custos_selected_model', worktreeModel);
-        }
-      }
-    } catch {}
-  }, []);
-
-  const refreshWorkspaces = useCallback(async () => {
-    try {
-      const list = await daemonClient.listWorkspaces();
-      const valid = list.filter((w) => {
-        const s = typeof w.status === 'string' ? w.status : (w.status as any)?.setup_failed ? 'failed' : 'unknown';
-        return s !== 'archived';
-      });
-      // Live sync dirty manifest for active workspace so left badge, header, and diff are always synchronized
-      const currentActive = localStorage.getItem('custos.active_workspace_id') || '';
-      if (currentActive && valid.some((w) => w.id === currentActive)) {
-        try {
-          const dirty = await daemonClient.inspectWorkspaceDirty(currentActive);
-          const idx = valid.findIndex((w) => w.id === currentActive);
-          if (idx >= 0) {
-            valid[idx] = { ...valid[idx], dirty_manifest: dirty, dirtyManifest: dirty };
-          }
-        } catch {}
-      }
-      setWorkspaces(valid);
-      if (valid.length > 0) {
-        setActiveWorkspaceIdState((prev) => {
-          if (prev && valid.some((w) => w.id === prev)) return prev;
-          const ready = valid.find((w) => w.status === 'ready') || valid[0];
-          return ready.id;
-        });
-      }
-      return valid;
-    } catch (e) {
-      console.warn('Failed to load workspaces:', e);
-      return [];
-    }
-  }, []);
-
-  const activeWorkspace = React.useMemo(() => {
-    return workspaces.find((w) => w.id === activeWorkspaceId) || null;
-  }, [workspaces, activeWorkspaceId]);
 
   // Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -511,166 +451,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 2500);
   }, []);
 
-  const refreshTasks = useCallback(async () => {
-    const fetchedTasks = await daemonClient.listTasks();
-    setTasks(fetchedTasks);
-    return fetchedTasks;
-  }, []);
 
-  const refreshAfterTaskMutation = useCallback(async (successMessage: string) => {
-    try {
-      await refreshTasks();
-      showToast(successMessage);
-    } catch (error) {
-      showToast(`${successMessage}, but the Task list could not refresh: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }, [refreshTasks, showToast]);
-
-  const handleCreateTask = useCallback(
-    async (params: CreateTaskParams) => {
-      const created = await daemonClient.createTask(params);
-      await refreshAfterTaskMutation(`Task "${created.title}" created`);
-      return created;
-    },
-    [refreshAfterTaskMutation]
-  );
-
-  const handleAdvanceTask = useCallback(
-    async (taskId: string, status: TaskStatus) => {
-      const advanced = await daemonClient.advanceTask(taskId, status);
-      await refreshAfterTaskMutation('Task status updated');
-      return advanced;
-    },
-    [refreshAfterTaskMutation]
-  );
-
-  const handleCompleteTask = useCallback(
-    async (taskId: string, summary?: string) => {
-      const completed = await daemonClient.completeTask(taskId, summary);
-      await refreshAfterTaskMutation('Task marked as complete');
-      return completed;
-    },
-    [refreshAfterTaskMutation]
-  );
-
-  const handleCancelTask = useCallback(
-    async (taskId: string, reason?: string) => {
-      const cancelled = await daemonClient.cancelTask(taskId, reason);
-      await refreshAfterTaskMutation('Task cancelled');
-      return cancelled;
-    },
-    [refreshAfterTaskMutation]
-  );
-
-  useEffect(() => {
-    void refreshWorkspaces();
-    const interval = setInterval(() => {
-      void refreshWorkspaces();
-    }, 4000);
-    const onFocus = () => {
-      void refreshWorkspaces();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refreshWorkspaces]);
-
-  const refreshWorkspaceDetection = useCallback(async () => {
-    const currentPath = localStorage.getItem('custos_current_project_path') || '/Users/mac/Project/AgentHub';
-    try {
-      const det = await daemonClient.detectWorkspace(currentPath);
-      setActiveDetection(det);
-      if (det.name && det.name !== 'Project') {
-        setCurrentProject(det.name);
-      }
-    } catch (e) {
-      console.warn('Failed to detect workspace:', e);
-    }
-  }, []);
-
-  useEffect(() => {
-    const initWorkspace = async () => {
-      const currentPath = localStorage.getItem('custos_current_project_path');
-      const candidates = [
-        '/Users/mac/Project/AgentHub',
-        currentPath,
-        '..',
-        '.',
-      ].filter(Boolean) as string[];
-
-      for (const probePath of candidates) {
-        try {
-          const det = await daemonClient.detectWorkspace(probePath);
-          if (det && ((det.sub_repositories && det.sub_repositories.length > 0) || det.is_git)) {
-            setActiveDetection(det);
-            const detectedPath = det.root_path || det.path || probePath;
-            localStorage.setItem('custos_current_project_path', detectedPath);
-            const projName = (det.name && det.name !== 'Project') ? det.name : 'AgentHub';
-            setCurrentProject(projName);
-            setProjectData((prev) => {
-              if (prev[projName]) return prev;
-              const fallbackSessions = prev['Custos Workspace'] || prev['AgentHub'] || [];
-              const next = { ...prev, [projName]: fallbackSessions };
-              if (projName !== 'Custos Workspace') delete next['Custos Workspace'];
-              return next;
-            });
-
-            // Auto-register sub-repositories as workspaces if multi-repo project container
-            if (det.sub_repositories && det.sub_repositories.length > 0) {
-              const existingList = await daemonClient.listWorkspaces().catch(() => []);
-              let firstId: string | null = null;
-              for (const sub of det.sub_repositories) {
-                const found = existingList.find((w) => w.path === sub.path);
-                if (!found) {
-                  const ws = await daemonClient.createWorkspace({
-                    name: sub.name,
-                    path: sub.path,
-                    kind: {
-                      type: 'git',
-                      repo_path: sub.path,
-                      branch: sub.branch || 'main',
-                    },
-                  }).catch(() => null);
-                  if (!firstId && ws?.id) firstId = ws.id;
-                }
-              }
-              const refreshed = await refreshWorkspaces();
-              if (!activeWorkspaceId) {
-                const preferred = refreshed.find((w) => w.name === 'Custos') || refreshed[0];
-                if (preferred) setActiveWorkspaceId(preferred.id);
-              }
-            } else {
-              // Single git repo or folder
-              const existingList = await daemonClient.listWorkspaces().catch(() => []);
-              if (existingList.length === 0 && detectedPath) {
-                const ws = await daemonClient.createWorkspace({
-                  name: det.name || 'Workspace',
-                  path: detectedPath,
-                  kind: det.is_git ? {
-                    type: 'git',
-                    repo_path: detectedPath,
-                    branch: det.branch || 'main',
-                  } : {
-                    type: 'folder',
-                    path: detectedPath,
-                  },
-                }).catch(() => null);
-                if (ws?.id) {
-                  setActiveWorkspaceId(ws.id);
-                  await refreshWorkspaces();
-                }
-              }
-            }
-            return;
-          }
-        } catch {}
-      }
-    };
-
-    void initWorkspace();
-  }, [refreshWorkspaces, setActiveWorkspaceId]);
 
   // Navigation & Layout state
   const [currentTab, setCurrentTab] = useState<MainTab>('studio');
@@ -744,11 +525,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [settingsTab, setSettingsTab] = useState<string>('general');
   const [isAiSetupOpen, setIsAiSetupOpen] = useState<boolean>(false);
   const [aiSetupTab, setAiSetupTab] = useState<'local' | 'cloud' | 'routing' | 'subagents' | 'quotas' | 'tools' | 'environments' | 'diagnostics'>('local');
-  const openAiSetup = useCallback((tab?: 'local' | 'cloud' | 'routing' | 'subagents' | 'quotas' | 'tools' | 'environments' | 'diagnostics') => {
-    if (tab) setAiSetupTab(tab);
-    setIsSettingsOpen(false);
-    setIsAiSetupOpen(true);
-  }, []);
   const [isNewSessionOpen, setIsNewSessionOpen] = useState<boolean>(false);
   const [isOpenProjectOpen, setIsOpenProjectOpen] = useState<boolean>(false);
   const [isAddProviderOpen, setIsAddProviderOpen] = useState<boolean>(false);
@@ -765,6 +541,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const toggleSidebar = useCallback(() => setIsSidebarCollapsed((prev) => !prev), []);
+  const [isRecentActivityOpen, setIsRecentActivityOpen] = useState<boolean>(false);
+
+  // Selected Model state: default empty string means "No model selected"
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    return localStorage.getItem('custos_selected_model') || '';
+  });
+  const [selectedModelAccountId, setSelectedModelAccountId] = useState(() => localStorage.getItem('custos_selected_model_account') || '');
+  const [selectedReasoningEffort, setSelectedReasoningEffort] = useState(() => localStorage.getItem('custos_selected_reasoning_effort') || '');
+
+  const {
+    tasks,
+    setTasks,
+    refreshTasks,
+    createTask,
+    advanceTask,
+    completeTask,
+    cancelTask,
+  } = useTasksSlice(showToast);
+
+  const {
+    workspaces,
+    activeWorkspaceId,
+    setActiveWorkspaceId,
+    activeWorkspace,
+    refreshWorkspaces,
+    activeDetection,
+    refreshWorkspaceDetection,
+    handleProjectOpened,
+    handleOpenFolderDirect,
+  } = useWorkspacesSlice({
+    currentProject,
+    setCurrentProject,
+    onProjectRegistered: useCallback((projectName: string) => {
+      setProjectData((prev) => {
+        if (prev[projectName]) return prev;
+        return {
+          ...prev,
+          [projectName]: [],
+        };
+      });
+    }, []),
+    onModelSelect: setSelectedModel,
+    onOpenProjectFallback: useCallback(() => {
+      setIsOpenProjectOpen(true);
+    }, []),
+    showToast,
+  });
 
   const [activeScreenId, setActiveScreenId] = useState<string>('screen-default');
   const tabScope = useMemo(
@@ -793,7 +616,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { ...previous, [tabScope]: { ...view, expanded: typeof update === 'function' ? update(view.expanded) : update } };
     });
   }, [tabScope]);
-  useEffect(() => { try { localStorage.setItem('custos.canvas-views.v1', JSON.stringify(Object.fromEntries(Object.entries(canvasViews).slice(-50)))); } catch {} }, [canvasViews]);
   const toggleWebTab = useCallback(() => setIsWebTabOpen(previous => !previous), [setIsWebTabOpen]);
   const toggleExpandWebTab = useCallback(() => setIsWebTabExpanded(previous => !previous), [setIsWebTabExpanded]);
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(() => {
@@ -832,49 +654,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }));
     } catch { return {}; }
   });
-  useEffect(() => {
-    try {
-      // Store locators only; never persist provider state, grants or conversation text.
-      const scopes = Object.fromEntries(Object.entries(tabStates).slice(-50).map(([key, value]) => [key, {
-        activeTabId: value.activeTabId,
-        tabs: value.tabs.slice(0, 100).map(tab => ({ id: tab.id, type: tab.type, title: tab.title,
-          url: tab.url.startsWith('custos:') ? tab.url : 'about:blank',
-          workspaceId: tab.workspaceId, sessionId: tab.sessionId, taskId: tab.taskId,
-          agentId: tab.agentId, runId: tab.runId, sourceId: tab.sourceId, artifactId: tab.artifactId, revision: tab.revision })),
-      }]));
-      localStorage.setItem('custos.resource-tabs.v1', JSON.stringify({ version: 1, scopes }));
-    } catch { /* Storage quota or privacy mode must not prevent working. */ }
-  }, [tabStates]);
 
   const currentTabState = useMemo(() => {
-    const legacyPrefix = JSON.stringify([currentProject, activeScreenId]).slice(0, -1);
-    const state = tabStates[tabScope] ??
-      Object.entries(tabStates).find(([k]) => k.startsWith(legacyPrefix))?.[1] ??
-      getDefaultTabForMode(activeWorkbench);
-    return { ...state, tabs: state.tabs.map(tab => ({ ...tab, workspaceId: tab.workspaceId || activeWorkspaceId || undefined, sessionId: tab.sessionId || activeSessionId || undefined })) };
-  }, [tabStates, tabScope, currentProject, activeScreenId, activeWorkbench, activeWorkspaceId, activeSessionId]);
+    const state = tabStates[tabScope] ?? getDefaultTabForMode(activeWorkbench);
+    return {
+      ...state,
+      tabs: state.tabs.map(tab => ({
+        ...tab,
+        workspaceId: tab.workspaceId || activeWorkspaceId || undefined,
+        sessionId: tab.sessionId || activeSessionId || undefined,
+      })),
+    };
+  }, [tabStates, tabScope, activeWorkbench, activeWorkspaceId, activeSessionId]);
 
   const setTabs = useCallback((update: React.SetStateAction<OrcaTab[]>) => {
     setTabStates((previous) => {
-      const legacyPrefix = JSON.stringify([currentProject, activeScreenId]).slice(0, -1);
-      const current = previous[tabScope] ??
-        Object.entries(previous).find(([k]) => k.startsWith(legacyPrefix))?.[1] ??
-        getDefaultTabForMode(activeWorkbench);
+      const current = previous[tabScope] ?? getDefaultTabForMode(activeWorkbench);
       const tabs = typeof update === 'function' ? update(current.tabs) : update;
       return { ...previous, [tabScope]: { ...current, tabs } };
     });
-  }, [tabScope, currentProject, activeScreenId, activeWorkbench]);
+  }, [tabScope, activeWorkbench]);
 
   const setActiveTabId = useCallback((update: React.SetStateAction<string>) => {
     setTabStates((previous) => {
-      const legacyPrefix = JSON.stringify([currentProject, activeScreenId]).slice(0, -1);
-      const current = previous[tabScope] ??
-        Object.entries(previous).find(([k]) => k.startsWith(legacyPrefix))?.[1] ??
-        getDefaultTabForMode(activeWorkbench);
+      const current = previous[tabScope] ?? getDefaultTabForMode(activeWorkbench);
       const activeTabId = typeof update === 'function' ? update(current.activeTabId) : update;
       return { ...previous, [tabScope]: { ...current, activeTabId } };
     });
-  }, [tabScope, currentProject, activeScreenId, activeWorkbench]);
+  }, [tabScope, activeWorkbench]);
 
   const initScreenTabs = useCallback((screenId: string, initialTabs: OrcaTab[], initialActiveTabId?: string) => {
     const scope = JSON.stringify([currentProject, screenId]);
@@ -1190,116 +997,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const openSettings = useCallback((tab?: string) => {
-    if (tab === 'providers' || tab === 'runtime') {
-      openAiSetup(tab === 'runtime' ? 'local' : 'cloud');
-      return;
-    }
-    if (tab === 'subagents') {
-      openAiSetup('subagents');
-      return;
-    }
-    if (tab === 'quotas') {
-      openAiSetup('quotas');
-      return;
-    }
-    setSettingsTab(tab || 'general');
+    const canonicalTab = tab === 'providers' || tab === 'cloud' || tab === 'connections'
+      ? 'connections'
+      : tab === 'runtime' || tab === 'local'
+      ? 'connections'
+      : tab === 'quotas' || tab === 'execution'
+      ? 'execution'
+      : tab === 'tools' || tab === 'plugins' || tab === 'skills'
+      ? 'tools'
+      : tab || 'general';
+    setSettingsTab(canonicalTab);
     setIsAiSetupOpen(false);
     setIsSettingsOpen(true);
-  }, [openAiSetup]);
-
-  const [appearance, setAppearance] = useState<AppearancePreferences>(readAppearance);
-  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
-  const resolvedTheme = appearance.theme === 'system' ? (systemDark ? 'dark' : 'light') : appearance.theme;
-  useEffect(() => {
-    if (appearance.theme !== 'system') return;
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const update = () => setSystemDark(media.matches);
-    update();
-    media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
-  }, [appearance.theme]);
-  useEffect(() => {
-    const sync = (event: StorageEvent) => {
-      if (event.key !== APPEARANCE_KEY && event.key !== null) return;
-      const saved = readAppearance();
-      if (saved.theme === 'system') setSystemDark(window.matchMedia('(prefers-color-scheme: dark)').matches);
-      setAppearance(saved);
-    };
-    window.addEventListener('storage', sync);
-    return () => window.removeEventListener('storage', sync);
-  }, []);
-  useEffect(() => { applyAppearance(appearance, resolvedTheme); }, [appearance, resolvedTheme]);
-  const themeQueue = useRef<Promise<void>>(Promise.resolve());
-  useEffect(() => {
-    if (!isTauri()) return;
-    const theme = appearance.theme === 'system' ? null : resolvedTheme;
-    themeQueue.current = themeQueue.current
-      .then(async () => {
-        await getCurrentWindow().setTheme(theme);
-      })
-      .catch(error => console.warn('Native window theme could not be applied', error));
-  }, [appearance.theme, resolvedTheme]);
-  const updateAppearance = useCallback((next: Partial<AppearancePreferences>) => {
-    if (next.theme === 'system') setSystemDark(window.matchMedia('(prefers-color-scheme: dark)').matches);
-    setAppearance(previous => {
-      const updated = { ...previous, ...next };
-      try { localStorage.setItem(APPEARANCE_KEY, JSON.stringify(updated)); }
-      catch (error) { console.warn('Device appearance could not be saved', error); }
-      return updated;
-    });
   }, []);
 
-  // UI Scale state
-  const [uiScale, setUiScale] = useState<number>(() => {
-    const saved = localStorage.getItem('custos_ui_scale');
-    const value = Number(saved || 100);
-    return Math.min(160, Math.max(70, Math.round((Number.isFinite(value) ? value : 100) / 10) * 10));
-  });
+  const openAiSetup = useCallback((tab?: 'local' | 'cloud' | 'routing' | 'subagents' | 'quotas' | 'tools' | 'environments' | 'diagnostics') => {
+    openSettings(tab);
+  }, [openSettings]);
 
-  const zoomQueue = useRef<Promise<void>>(Promise.resolve());
-  const applyUiScale = useCallback((scaleVal: number) => {
-    const rounded = Math.round((Number.isFinite(scaleVal) ? scaleVal : 100) / 10) * 10;
-    const clamped = Math.min(160, Math.max(70, rounded));
-    setUiScale(clamped);
-    localStorage.setItem('custos_ui_scale', clamped.toString());
-  }, []);
-
-  useEffect(() => {
-    const factor = uiScale / 100;
-    document.documentElement.style.zoom = '';
-    document.body.style.zoom = '';
-    document.documentElement.style.setProperty('--app-browser-zoom', '1');
-    if (isTauri()) {
-      // Serialize native zoom changes so rapid clicks settle at the latest level.
-      zoomQueue.current = zoomQueue.current.then(() => getCurrentWebview().setZoom(factor)).catch(error => {
-        showToast(`Unable to zoom app: ${String(error)}`);
-      });
-    } else {
-      document.documentElement.style.zoom = String(factor);
-      document.documentElement.style.setProperty('--app-browser-zoom', String(factor));
-    }
-  }, [uiScale, showToast]);
-
-  const handleSetUiScale = (val: number) => {
-    applyUiScale(val);
-  };
-
-  const handleStepUiScale = (delta: number) => {
-    handleSetUiScale(uiScale + delta);
-  };
+  const {
+    appearance,
+    resolvedTheme,
+    updateAppearance,
+    uiScale,
+    handleSetUiScale,
+    handleStepUiScale,
+  } = useAppearanceSlice(showToast);
 
   // Check active session object
   const currentSessions = projectData[currentProject] || [];
   const activeSession: Session | null =
     currentSessions.find((s) => s.id === activeSessionId) || null;
 
-  // Selected Model state: default empty string means "No model selected"
-  const [selectedModel, setSelectedModel] = useState<string>(() => {
-    return localStorage.getItem('custos_selected_model') || '';
-  });
 
-  const [selectedModelAccountId, setSelectedModelAccountId] = useState(() => localStorage.getItem('custos_selected_model_account') || '');
-  const [selectedReasoningEffort, setSelectedReasoningEffort] = useState(() => localStorage.getItem('custos_selected_reasoning_effort') || '');
 
   const selectedModelAvailable = (() => {
     if (!selectedModel) return false;
@@ -1588,7 +1318,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }));
       } finally { probing = false; }
     };
-    const timer = window.setInterval(() => { void check(); }, 15000);
+    const timer = window.setInterval(() => { if (!document.hidden) void check(); }, 15000);
     const onVisible = () => { if (!document.hidden) void check(); };
     window.addEventListener('focus', onVisible);
     document.addEventListener('visibilitychange', onVisible);
@@ -1641,7 +1371,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Hydrate state from Custos Daemon on Mount
   useEffect(() => {
-    applyUiScale(uiScale);
+    handleSetUiScale(uiScale);
 
     async function hydrateFromDaemon() {
       try {
@@ -1887,11 +1617,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       initialFlush = false;
       lastPaint = performance.now();
       const text = displayedText;
-      setProjectData(previous => ({ ...previous, [project]: (previous[project] || []).map(chat => chat.id !== conversation ? chat : {
-        ...chat, messages: chat.messages.some(message => message.runId === run)
-          ? chat.messages.map(message => message.runId !== run ? message : { ...message, text, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined })
-          : [...chat.messages, { id: `live-${run}`, role: 'assistant' as const, author, text, runId: run, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined }],
-      }) }));
+
+      // Scoped run observer: notify listening views (e.g. ConversationPane) without re-rendering AppContext
+      scopedLiveRunStore.emit(run, {
+        ...snapshot,
+        text,
+      });
+
+      const isSettled = ['completed', 'failed', 'cancelled', 'interrupted'].includes(snapshot.status);
+      if (immediate || isSettled || initialFlush) {
+        setProjectData(previous => ({ ...previous, [project]: (previous[project] || []).map(chat => chat.id !== conversation ? chat : {
+          ...chat, messages: chat.messages.some(message => message.runId === run)
+            ? chat.messages.map(message => message.runId !== run ? message : { ...message, text, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined })
+            : [...chat.messages, { id: `live-${run}`, role: 'assistant' as const, author, text, runId: run, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined }],
+        }) }));
+      }
       if (displayedText !== snapshot.text && !immediate) schedule();
     };
     const refresh = () => { cancelPending(); if (latest) flush(true); };
@@ -1908,6 +1648,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       systemMotion.removeEventListener('change', refresh);
       livePresentations.current.delete(run);
       liveConnections.current.delete(run);
+      scopedLiveRunStore.clear(run);
     });
   };
 
@@ -2381,112 +2122,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const handleProjectOpened = (project: { name: string; path: string; isGit: boolean; branch?: string }) => {
-    setProjectData((prev) => {
-      if (prev[project.name]) return prev;
-      return {
-        ...prev,
-        [project.name]: [],
-      };
-    });
-    setCurrentProject(project.name);
-    try {
-      localStorage.setItem('custos_current_project', project.name);
-      localStorage.setItem('custos_current_project_path', project.path);
-    } catch {}
-    if (project.path) {
-      daemonClient.detectWorkspace(project.path).then((det) => {
-        setActiveDetection(det);
-      }).catch(() => {});
-    }
-  };
-
-  const handleOpenFolderDirect = async () => {
-    try {
-      const chosen = await daemonClient.pickFolder();
-      if (!chosen) return;
-      const detection = await daemonClient.detectWorkspace(chosen);
-      setActiveDetection(detection);
-      const projectName = chosen.split('/').filter(Boolean).pop() || detection.name || 'Project';
-
-      // If folder contains multiple child Git repositories, create each as a workspace under this project
-      if (detection.sub_repositories && detection.sub_repositories.length > 0) {
-        let firstWsId: string | null = null;
-        for (const sub of detection.sub_repositories) {
-          try {
-            const ws = await daemonClient.createWorkspace({
-              name: sub.name,
-              path: sub.path,
-              kind: {
-                type: 'git',
-                repo_path: sub.path,
-                branch: sub.branch || 'main',
-              },
-            });
-            if (!firstWsId && ws?.id) firstWsId = ws.id;
-          } catch (e) {
-            console.warn(`Failed to auto-create workspace for sub-repo ${sub.name}:`, e);
-          }
-        }
-
-        handleProjectOpened({
-          name: projectName,
-          path: chosen,
-          isGit: false,
-        });
-
-        const refreshed = await refreshWorkspaces();
-        if (firstWsId) {
-          setActiveWorkspaceId(firstWsId);
-        } else if (refreshed && refreshed[0]) {
-          setActiveWorkspaceId(refreshed[0].id);
-        }
-
-        showToast(`Opened project "${projectName}" with ${detection.sub_repositories.length} workspaces.`);
-        return;
-      }
-
-      // Single Git repository or single directory
-      const name = detection.name || projectName;
-      const isGit = detection.is_git;
-      const branch = detection.branch || 'main';
-
-      const ws = await daemonClient.createWorkspace({
-        name,
-        path: detection.root_path || chosen,
-        kind: isGit
-          ? {
-              type: 'git',
-              repo_path: detection.root_path || chosen,
-              branch,
-            }
-          : {
-              type: 'folder',
-              path: detection.root_path || chosen,
-            },
-      });
-
-      handleProjectOpened({
-        name: projectName,
-        path: detection.root_path || chosen,
-        isGit,
-        branch: isGit ? branch : undefined,
-      });
-
-      const refreshed = await refreshWorkspaces();
-      if (ws?.id) {
-        setActiveWorkspaceId(ws.id);
-      } else if (refreshed && refreshed[0]) {
-        setActiveWorkspaceId(refreshed[0].id);
-      }
-
-      showToast(`Opened project: ${projectName} ${isGit ? `(${branch})` : ''}`);
-    } catch (err: any) {
-      console.warn('Direct pick folder fallback to dialog:', err);
-      setIsOpenProjectOpen(true);
-    }
-  };
-
   const handleNewProjectPrompt = () => {
     handleOpenFolderDirect();
   };
@@ -2686,10 +2321,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentSessions,
         tasks,
         refreshTasks,
-        createTask: handleCreateTask,
-        advanceTask: handleAdvanceTask,
-        completeTask: handleCompleteTask,
-        cancelTask: handleCancelTask,
+        createTask,
+        advanceTask,
+        completeTask,
+        cancelTask,
         workspaces,
         activeWorkspaceId,
         setActiveWorkspaceId,
@@ -2760,6 +2395,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isSidebarCollapsed,
         setIsSidebarCollapsed,
         toggleSidebar,
+        isRecentActivityOpen,
+        setIsRecentActivityOpen,
         isWebTabOpen,
         setIsWebTabOpen,
         toggleWebTab,

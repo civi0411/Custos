@@ -10,11 +10,19 @@ import {
   Server,
   Shield,
   SlidersHorizontal,
+  Plug,
+  Layers,
+  Coins,
+  Cpu,
+  Key,
   X,
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { formatKeyCombo } from '@/lib/utils';
 import { DaemonPane } from './DaemonPane';
+import { CloudProvidersUnifiedPane } from '@/features/ai-setup/CloudProvidersUnifiedPane';
+import { LocalAiUnifiedPane } from '@/features/ai-setup/LocalAiUnifiedPane';
+import { CostQuotasPane } from '@/features/ai-setup/CostQuotasPane';
 
 export interface SettingsModalProps {
   isOpen: boolean;
@@ -25,9 +33,12 @@ export interface SettingsModalProps {
   onShowToast: (msg: string) => void;
 }
 
-type SettingsTab =
+export type SettingsTab =
   | 'general'
   | 'appearance'
+  | 'connections'
+  | 'tools'
+  | 'execution'
   | 'shortcuts'
   | 'daemon'
   | 'security'
@@ -53,7 +64,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   embedded = false,
   onClose,
   initialTab = 'general',
-  onShowToast: _onShowToast,
+  onShowToast,
 }) => {
   const {
     appearance,
@@ -61,26 +72,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     updateAppearance,
     uiScale,
     handleSetUiScale,
-    openAiSetup,
+    openAiSetup: _openAiSetup,
+    openPlugins,
+    openSkills,
     clientKeys,
     handleGenerateClientKey,
     handleRevokeClientKey,
   } = useAppContext();
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [connectionsSubTab, setConnectionsSubTab] = useState<'cloud' | 'local'>('cloud');
 
   useEffect(() => {
     if (!isOpen) return;
-    const allowed: SettingsTab[] = [
-      'general',
-      'appearance',
-      'shortcuts',
-      'daemon',
-      'security',
-      'storage',
-      'about',
-    ];
-    setActiveTab(allowed.includes(initialTab as SettingsTab) ? (initialTab as SettingsTab) : 'general');
+    const tabStr = (initialTab || 'general').toLowerCase();
+    if (['providers', 'cloud', 'connections'].includes(tabStr)) {
+      setActiveTab('connections');
+      setConnectionsSubTab('cloud');
+    } else if (['local', 'runtime'].includes(tabStr)) {
+      setActiveTab('connections');
+      setConnectionsSubTab('local');
+    } else if (['tools', 'plugins', 'skills'].includes(tabStr)) {
+      setActiveTab('tools');
+    } else if (['execution', 'quotas', 'environments'].includes(tabStr)) {
+      setActiveTab('execution');
+    } else {
+      const allowed: SettingsTab[] = [
+        'general',
+        'appearance',
+        'connections',
+        'tools',
+        'execution',
+        'shortcuts',
+        'daemon',
+        'security',
+        'storage',
+        'about',
+      ];
+      setActiveTab(allowed.includes(tabStr as SettingsTab) ? (tabStr as SettingsTab) : 'general');
+    }
   }, [isOpen, initialTab]);
 
   if (!isOpen) return null;
@@ -95,7 +125,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       ],
     },
     {
-      category: 'Advanced',
+      category: 'Intelligence & Execution',
+      items: [
+        { id: 'connections' as const, label: 'Models & Connections', icon: Plug },
+        { id: 'tools' as const, label: 'Tools & Extensions', icon: Layers },
+        { id: 'execution' as const, label: 'Execution & Budget', icon: Coins },
+      ],
+    },
+    {
+      category: 'System & Security',
       items: [
         { id: 'daemon' as const, label: 'Diagnostics', icon: Server },
         { id: 'security' as const, label: 'Privacy & Access', icon: Shield },
@@ -107,7 +145,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className={embedded ? "flex h-full min-h-0 flex-col bg-canvas" : "fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs"}>
-      <div className={embedded ? "flex h-full min-h-0 w-full flex-col overflow-hidden bg-canvas" : "flex h-[650px] max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] shadow-2xl"}>
+      <div className={embedded ? "flex h-full min-h-0 w-full flex-col overflow-hidden bg-canvas" : "flex h-[680px] max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] shadow-2xl"}>
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-5">
           <div>
             <h1 className="text-sm font-semibold text-[var(--color-editor-fg)]">Settings</h1>
@@ -124,7 +162,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </header>
 
         <div className="flex min-h-0 flex-1">
-          <nav className="w-52 shrink-0 border-r border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3 space-y-4 overflow-y-auto">
+          <nav className="w-56 shrink-0 border-r border-[var(--color-border-muted)] bg-[var(--color-surface-1)] p-3 space-y-4 overflow-y-auto">
             {navSections.map((section) => (
               <div key={section.category} className="space-y-1">
                 <div className="px-2.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fg-subtle)] font-mono">
@@ -165,8 +203,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <SettingRow title="Keyboard shortcuts" description="Use the same navigation and editing shortcuts across workbenches.">
                     <button type="button" onClick={() => setActiveTab('shortcuts')} className="rounded border border-border-default px-3 py-1.5 text-xs">View shortcuts</button>
                   </SettingRow>
-                  <SettingRow title="Models, agents and tools" description="Accounts and execution environments have a separate management surface.">
-                    <button type="button" onClick={() => { onClose(); openAiSetup('cloud'); }} className="rounded border border-border-default px-3 py-1.5 text-xs">Connections & Tools</button>
+                  <SettingRow title="Models, agents and tools" description="Accounts, credentials and execution environments in one unified view.">
+                    <button type="button" onClick={() => setActiveTab('connections')} className="rounded border border-border-default px-3 py-1.5 text-xs hover:bg-[var(--color-surface-2)] transition">Connections & Tools</button>
                   </SettingRow>
                   <SettingRow title="Workspace restoration" description="Layout restoration is local presentation state and never resumes a run automatically.">
                     <span className="text-[10px] uppercase tracking-wider text-[var(--color-fg-subtle)] font-mono">
@@ -174,6 +212,105 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </span>
                   </SettingRow>
                 </div>
+              </div>
+            )}
+
+            {activeTab === 'connections' && (
+              <div className="space-y-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-[var(--color-editor-fg)]">Models & Connections</h2>
+                    <p className="mt-1 text-[11px] text-[var(--color-fg-muted)]">
+                      Configure cloud frontier providers, OAuth accounts, and local engine runtimes.
+                    </p>
+                  </div>
+                  <div className="flex rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-1)] p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setConnectionsSubTab('cloud')}
+                      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
+                        connectionsSubTab === 'cloud'
+                          ? 'bg-[var(--color-surface-2)] text-[var(--color-editor-fg)] shadow-xs'
+                          : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+                      }`}
+                    >
+                      <Key className="size-3.5" />
+                      <span>Cloud Providers & Keys</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConnectionsSubTab('local')}
+                      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition cursor-pointer ${
+                        connectionsSubTab === 'local'
+                          ? 'bg-[var(--color-surface-2)] text-[var(--color-editor-fg)] shadow-xs'
+                          : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]'
+                      }`}
+                    >
+                      <Cpu className="size-3.5" />
+                      <span>Local AI & Runtimes</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  {connectionsSubTab === 'cloud' && (
+                    <CloudProvidersUnifiedPane onShowToast={onShowToast} />
+                  )}
+                  {connectionsSubTab === 'local' && (
+                    <LocalAiUnifiedPane onShowToast={onShowToast} />
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'tools' && (
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-[var(--color-editor-fg)]">Tools & Extensions</h2>
+                  <p className="mt-1 text-[11px] text-[var(--color-fg-muted)]">
+                    Extend agent capabilities with specialized plugins, task skills and Model Context Protocol (MCP) servers.
+                  </p>
+                </div>
+                <div className="space-y-3">
+                  <SettingRow
+                    title="Installed Plugins"
+                    description="Workspace bundles providing skills, rules and domain tools."
+                  >
+                    <button
+                      type="button"
+                      onClick={openPlugins}
+                      className="flex items-center gap-1.5 rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-3)] transition cursor-pointer"
+                    >
+                      <Layers className="size-3.5" />
+                      <span>Manage Plugins</span>
+                    </button>
+                  </SettingRow>
+                  <SettingRow
+                    title="Agent Skills"
+                    description="Domain workflows and instructions loaded on-demand by execution workers."
+                  >
+                    <button
+                      type="button"
+                      onClick={openSkills}
+                      className="flex items-center gap-1.5 rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-3 py-1.5 text-xs font-medium text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-3)] transition cursor-pointer"
+                    >
+                      <Plug className="size-3.5" />
+                      <span>View Skills Catalog</span>
+                    </button>
+                  </SettingRow>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'execution' && (
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-[var(--color-editor-fg)]">Execution & Budget</h2>
+                  <p className="mt-1 text-[11px] text-[var(--color-fg-muted)]">
+                    Inspect provider usage quotas, tracked tokens, and sovereign hardware execution.
+                  </p>
+                </div>
+                <CostQuotasPane />
               </div>
             )}
 

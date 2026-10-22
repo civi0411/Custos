@@ -80,10 +80,23 @@ export function synthesisClaimFromUrl(value: string): string | undefined {
 }
 
 /** Resource identity is scoped; tab IDs are presentation identities only. */
-export function findScopedResourceTab(tabs: OrcaTab[], type: OrcaTabId, scope: Pick<OrcaTab, 'workspaceId' | 'sessionId' | 'taskId' | 'agentId'>): OrcaTab | undefined {
-  return tabs.find(tab => getTabType(tab) === type
-    && tab.workspaceId === scope.workspaceId && tab.sessionId === scope.sessionId
-    && tab.taskId === scope.taskId && tab.agentId === scope.agentId);
+export function findScopedResourceTab(
+  tabs: OrcaTab[],
+  type: OrcaTabId,
+  scope: Pick<OrcaTab, 'workspaceId' | 'sessionId' | 'taskId' | 'agentId'> & Partial<Pick<OrcaTab, 'sourceId' | 'artifactId' | 'url' | 'revision'>>
+): OrcaTab | undefined {
+  return tabs.find(tab => {
+    if (getTabType(tab) !== type) return false;
+    if (tab.workspaceId !== scope.workspaceId) return false;
+    if (tab.sessionId !== scope.sessionId) return false;
+    if (tab.taskId !== scope.taskId) return false;
+    if (tab.agentId !== scope.agentId) return false;
+    if (scope.sourceId !== undefined && tab.sourceId !== scope.sourceId) return false;
+    if (scope.artifactId !== undefined && tab.artifactId !== scope.artifactId) return false;
+    if (scope.url !== undefined && tab.url !== scope.url) return false;
+    if (scope.revision !== undefined && tab.revision !== scope.revision) return false;
+    return true;
+  });
 }
 
 export interface ResourceTabsState {

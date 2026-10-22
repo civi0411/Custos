@@ -1,9 +1,4 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
 import {
   ArrowUp,
   Compass,
@@ -22,35 +17,11 @@ import { ModelSelector } from './ModelSelector';
 import { AgentActionCard } from './AgentActionCard';
 import { AgentWorkingStatus } from './AgentWorkingStatus';
 import { ComposerPlusMenu } from './ComposerPlusMenu';
-import { HighlightedCodeBlock } from './HighlightedCodeBlock';
-import { remarkNormalizeChatMath } from './markdownMath';
+import { ConversationMarkdown } from './ConversationMarkdown';
 import { TaskAnchorBanner } from '@/components/shell/TaskAnchorBanner';
 import { daemonClient } from '@/api/daemon_client';
 import { useAppContext } from '@/context/AppContext';
-
-const ConversationMarkdown = React.memo(function ConversationMarkdown({ text }: { text: string }) {
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath, remarkNormalizeChatMath]}
-      rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, strict: false, maxExpand: 1000, maxSize: 20 }]]}
-      components={{
-        pre({ children }) {
-          const child = React.Children.toArray(children)[0];
-          if (!React.isValidElement<{ className?: string; children?: React.ReactNode }>(child)) {
-            return <pre>{children}</pre>;
-          }
-          const language = /(?:^|\s)language-([^\s]+)/.exec(child.props.className || '')?.[1];
-          return <HighlightedCodeBlock code={String(child.props.children ?? '').replace(/\n$/, '')} language={language} />;
-        },
-        code({ children, className }) {
-          return <code className={className || 'px-1.5 py-0.5 rounded bg-surface-1 text-fg-editor border border-border-muted font-mono text-[12px]'}>{children}</code>;
-        }
-      }}
-    >
-      {text}
-    </ReactMarkdown>
-  );
-});
+import { useLiveRunSnapshot } from '@/context/app/scopedLiveRun';
 
 // Ephemeral presentation drafts only; daemon messages remain the durable record.
 const conversationDrafts = new Map<string, string>();
@@ -135,6 +106,8 @@ export function ConversationPane({
     return reversed.find((m: ChatMessage) => m.role === 'assistant' && m.runStatus && !['completed', 'failed', 'cancelled', 'interrupted'].includes(m.runStatus));
   }, [session?.messages]);
 
+  const liveSnapshot = useLiveRunSnapshot(liveMessage?.runId);
+
   // Handle scroll shadows
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
@@ -148,12 +121,12 @@ export function ConversationPane({
     handleScroll();
   }, [session?.messages, handleScroll]);
 
-  // Auto scroll on new message
+  // Auto scroll on new message or live streaming token
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [session?.messages?.length, liveMessage?.text]);
+  }, [session?.messages?.length, liveMessage?.text, liveSnapshot?.text]);
 
   const handleTriggerFileInput = () => {
     if (submitting.current) return;
@@ -397,6 +370,12 @@ export function ConversationPane({
           <div className="space-y-6 max-w-3xl mx-auto w-full">
             {session.messages.map((msg, i) => {
               const isUser = msg.role === 'user';
+              const isLive = Boolean(liveMessage?.runId && msg.runId === liveMessage.runId);
+              const text = isLive && liveSnapshot?.text !== undefined ? liveSnapshot.text : msg.text;
+              const runStatus = isLive && liveSnapshot?.status ? liveSnapshot.status : msg.runStatus;
+              const activities = isLive && liveSnapshot?.activities ? liveSnapshot.activities : msg.activities;
+              const liveError = isLive && liveSnapshot?.error ? liveSnapshot.error : msg.liveError;
+
               return (
                 <div
                   key={msg.id || i}
@@ -404,14 +383,14 @@ export function ConversationPane({
                   className={isUser ? "conversation-user-message space-y-2 mb-4" : "space-y-2.5 pb-6 border-b border-border-muted/40 last:border-b-0 min-w-0"}
                 >
                   <div className="conversation-markdown text-[13px] leading-relaxed text-fg-editor space-y-3 min-w-0 break-words [overflow-wrap:anywhere]">
-                    <ConversationMarkdown text={msg.text} />
-                    {!msg.text && msg.runId && !['completed', 'failed', 'cancelled', 'interrupted'].includes(msg.runStatus || '') && (
+                    <ConversationMarkdown text={text} />
+                    {!text && msg.runId && !['completed', 'failed', 'cancelled', 'interrupted'].includes(runStatus || '') && (
                       <p role="status" className="text-xs text-fg-muted">
-                        {msg.runStatus === 'thinking' ? 'Thinking...' : 'Running...'}
+                        {runStatus === 'thinking' ? 'Thinking...' : 'Running...'}
                       </p>
                     )}
-                    {msg.liveError && <p role="alert" className="mt-2 text-xs text-amber-400">{msg.liveError}</p>}
-                    {msg.activities?.map((activity, index) => (
+                    {liveError && <p role="alert" className="mt-2 text-xs text-amber-400">{liveError}</p>}
+                    {activities?.map((activity, index) => (
                       <AgentActionCard
                         key={`${msg.runId || i}-activity-${index}`}
                         activity={activity}
