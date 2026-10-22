@@ -17,9 +17,12 @@ pub mod download_manager;
 pub mod harness;
 pub mod local_inference;
 pub mod mcp;
+pub mod notebook;
 pub mod providers;
+#[cfg(feature = "roaming")]
 pub mod roaming;
 pub mod sandbox;
+pub mod terminal;
 pub mod tools;
 pub mod workspace;
 pub mod repository_git;
@@ -42,6 +45,7 @@ pub use harness::*;
 pub use local_inference::*;
 pub use mcp::*;
 pub use providers::*;
+#[cfg(feature = "roaming")]
 pub use roaming::*;
 pub use sandbox::*;
 pub use workspace::*;

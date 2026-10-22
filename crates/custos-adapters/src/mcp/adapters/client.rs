@@ -484,6 +484,21 @@ impl McpClientTrait for CustosMcpClient {
         name: &str,
         arguments: Option<Value>,
     ) -> Result<CallToolResult> {
+        // B6 / S8: Dangerous tool patterns require explicit grant & permit
+        if crate::mcp::security::is_dangerous_tool_pattern(name) {
+            tracing::warn!(
+                server = %self.server_name,
+                tool = %name,
+                "Dangerous MCP tool pattern detected; explicit execution permit/grant required"
+            );
+            if ctx.permit_id.is_none() {
+                anyhow::bail!(
+                    "Execution of dangerous MCP tool '{}' blocked: requires explicit grant and permit",
+                    name
+                );
+            }
+        }
+
         tracing::info!(
             server = %self.server_name,
             tool = %name,
@@ -581,5 +596,22 @@ mod tests {
             headers,
         );
         assert_eq!(client.server_name, "remote-server");
+    }
+
+    #[tokio::test]
+    async fn test_dangerous_tool_pattern_requires_permit() {
+        let client = CustosMcpClient::new("test-server");
+
+        // 1. Calling dangerous tool without permit must fail
+        let unpermitted_ctx = ToolCallContext::new("sess-1", "req-1");
+        let res_err = client.call_tool(&unpermitted_ctx, "bash_execute", None).await;
+        assert!(res_err.is_err());
+        assert!(res_err.unwrap_err().to_string().contains("requires explicit grant"));
+
+        // 2. Calling dangerous tool with permit succeeds on mock
+        let permitted_ctx = ToolCallContext::new("sess-1", "req-2")
+            .with_sade_scope("task-1", "run-1", Some("pmt-1".into()));
+        let res_ok = client.call_tool(&permitted_ctx, "bash_execute", None).await;
+        assert!(res_ok.is_ok());
     }
 }

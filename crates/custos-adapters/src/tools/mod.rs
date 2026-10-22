@@ -6,13 +6,16 @@
 //! - Document Processing: Word (.docx), PDF (.pdf), Excel (.xlsx)
 
 pub mod checkpoint;
+pub mod source_fetch;
 
-#[cfg(feature = "autovisualiser")]
+pub use source_fetch::*;
+
+#[cfg(all(feature = "mcp-builtins", feature = "autovisualiser"))]
 pub mod visualizer {
-    pub use crate::mcp::core::autovisualiser::*;
+    pub use crate::mcp::builtins::autovisualiser::*;
 }
 
-#[cfg(feature = "memory-server")]
+#[cfg(all(feature = "mcp-builtins", feature = "memory-server"))]
 pub mod memory {
-    pub use crate::mcp::core::MemoryServer;
+    pub use crate::mcp::builtins::MemoryServer;
 }

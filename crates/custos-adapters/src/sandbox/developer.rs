@@ -34,53 +34,73 @@ impl SovereignDeveloperAdapter {
     }
 
     /// Validates that a requested file path does not escape the workspace root.
-    fn canonicalize_safe_path(&self, rel_or_abs: &str) -> Result<PathBuf, DomainError> {
+    async fn canonicalize_safe_path(&self, rel_or_abs: &str) -> Result<PathBuf, DomainError> {
+        let root = tokio::fs::canonicalize(&self.workspace_root)
+            .await
+            .map_err(|error| {
+                DomainError::Validation(format!("Cannot resolve workspace root: {error}"))
+            })?;
         let path = Path::new(rel_or_abs);
-        let resolved = if path.is_absolute() {
+        let requested = if path.is_absolute()
+            && self.workspace_root.is_absolute()
+            && path.starts_with(&self.workspace_root)
+        {
+            root.join(
+                path.strip_prefix(&self.workspace_root)
+                    .map_err(|error| DomainError::Validation(error.to_string()))?,
+            )
+        } else if path.is_absolute() {
             path.to_path_buf()
         } else {
-            self.workspace_root.join(path)
+            root.join(path)
         };
-
-        // Normalize lexical dots
-        let mut components = Vec::new();
-        for comp in resolved.components() {
-            match comp {
-                std::path::Component::ParentDir => {
-                    components.pop();
+        let sandbox = custos_core::sandbox::PathSandbox::new(root.clone())?;
+        let mut ancestor = sandbox.resolve_and_contain(&requested).map_err(|error| {
+            DomainError::Unauthorized(format!("Path traversal violation: {error}"))
+        })?;
+        let mut suffix = Vec::new();
+        loop {
+            match tokio::fs::symlink_metadata(&ancestor).await {
+                Ok(_) => {
+                    let mut canonical =
+                        tokio::fs::canonicalize(&ancestor).await.map_err(|error| {
+                            DomainError::Validation(format!(
+                                "Cannot resolve target ancestor: {error}"
+                            ))
+                        })?;
+                    if !canonical.starts_with(&root) {
+                        return Err(DomainError::Unauthorized(format!(
+                            "Path traversal violation: symlink target '{}' escapes workspace",
+                            rel_or_abs
+                        )));
+                    }
+                    for component in suffix.iter().rev() {
+                        canonical.push(component);
+                    }
+                    return Ok(canonical);
                 }
-                std::path::Component::Normal(c) => {
-                    components.push(c);
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    let name = ancestor
+                        .file_name()
+                        .ok_or_else(|| {
+                            DomainError::Validation(
+                                "Cannot resolve a parent for the requested path".into(),
+                            )
+                        })?
+                        .to_os_string();
+                    suffix.push(name);
+                    ancestor.pop();
                 }
-                std::path::Component::RootDir => {
-                    components.clear();
-                    components.push(std::ffi::OsStr::new("/"));
+                Err(error) => {
+                    return Err(DomainError::Unauthorized(format!(
+                        "Cannot inspect target ancestor: {error}"
+                    )));
                 }
-                _ => {}
             }
         }
-
-        let mut normalized = PathBuf::new();
-        for c in components {
-            normalized.push(c);
-        }
-
-        // Check if within workspace root if workspace root is set and absolute
-        if self.workspace_root.is_absolute()
-            && normalized.is_absolute()
-            && !normalized.starts_with(&self.workspace_root)
-        {
-            return Err(DomainError::Unauthorized(format!(
-                "Path traversal violation: target '{}' escapes workspace root '{}'",
-                rel_or_abs,
-                self.workspace_root.display()
-            )));
-        }
-
-        Ok(normalized)
     }
 
-    pub async fn handle_read(
+    async fn handle_read(
         &self,
         params: &serde_json::Value,
     ) -> Result<serde_json::Value, DomainError> {
@@ -91,7 +111,7 @@ impl SovereignDeveloperAdapter {
             .and_then(|v| v.as_str())
             .ok_or_else(|| DomainError::Validation("Missing 'path' parameter for read".into()))?;
 
-        let safe_path = self.canonicalize_safe_path(path_str)?;
+        let safe_path = self.canonicalize_safe_path(path_str).await?;
         let content = tokio::fs::read_to_string(&safe_path).await.map_err(|e| {
             DomainError::Validation(format!(
                 "Failed to read file '{}': {}",
@@ -100,14 +120,69 @@ impl SovereignDeveloperAdapter {
             ))
         })?;
 
+        let digest_val = format!("sha256:{}", digest(content.as_bytes()));
+
         Ok(serde_json::json!({
+            "status": "executed",
+            "action": "read_file",
+            "target": path_str,
             "path": safe_path.to_string_lossy(),
-            "content": content,
+            "bytes_read": content.len(),
             "bytes": content.len(),
+            "digest": digest_val,
+            "content": content,
         }))
     }
 
-    pub async fn handle_write(
+    async fn handle_patch_preview(
+        &self,
+        params: &serde_json::Value,
+    ) -> Result<serde_json::Value, DomainError> {
+        let path_str = params
+            .get("path")
+            .or_else(|| params.get("file"))
+            .or_else(|| params.get("target_file"))
+            .or_else(|| params.get("target"))
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                DomainError::Validation("Missing 'path' parameter for patch_preview".into())
+            })?;
+
+        let patch_content = params
+            .get("patch")
+            .or_else(|| params.get("diff"))
+            .or_else(|| params.get("replacement"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let safe_path = self.canonicalize_safe_path(path_str).await?;
+        let original_content = if safe_path.exists() && safe_path.is_file() {
+            tokio::fs::read_to_string(&safe_path)
+                .await
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        let diff_preview = format!(
+            "--- a/{path_str}\n+++ b/{path_str}\n@@ -1,{} +1,{} @@ (simulated preview)\n{patch_content}",
+            original_content.lines().count().max(1),
+            patch_content.lines().count().max(1)
+        );
+        let diff_digest = format!("sha256:{}", digest(diff_preview.as_bytes()));
+
+        Ok(serde_json::json!({
+            "status": "executed",
+            "action": "patch_preview",
+            "target": path_str,
+            "simulated": true,
+            "preview": diff_preview,
+            "diff_digest": diff_digest,
+            "original_bytes": original_content.len(),
+        }))
+    }
+
+    async fn handle_write(
         &self,
         params: &serde_json::Value,
     ) -> Result<serde_json::Value, DomainError> {
@@ -125,7 +200,7 @@ impl SovereignDeveloperAdapter {
                 DomainError::Validation("Missing 'content' parameter for write".into())
             })?;
 
-        let safe_path = self.canonicalize_safe_path(path_str)?;
+        let safe_path = self.canonicalize_safe_path(path_str).await?;
 
         if let Some(parent) = safe_path.parent() {
             tokio::fs::create_dir_all(parent).await.map_err(|e| {
@@ -152,13 +227,13 @@ impl SovereignDeveloperAdapter {
         }))
     }
 
-    pub async fn handle_list(
+    async fn handle_list(
         &self,
         params: &serde_json::Value,
     ) -> Result<serde_json::Value, DomainError> {
         let path_str = params.get("path").and_then(|v| v.as_str()).unwrap_or(".");
 
-        let safe_path = self.canonicalize_safe_path(path_str)?;
+        let safe_path = self.canonicalize_safe_path(path_str).await?;
         let mut entries = Vec::new();
         let mut read_dir = tokio::fs::read_dir(&safe_path).await.map_err(|e| {
             DomainError::Validation(format!(
@@ -188,7 +263,7 @@ impl SovereignDeveloperAdapter {
         }))
     }
 
-    pub async fn handle_bash(
+    async fn handle_bash(
         &self,
         params: &serde_json::Value,
     ) -> Result<serde_json::Value, DomainError> {
@@ -266,10 +341,13 @@ impl SandboxPort for SovereignDeveloperAdapter {
             "developer__write" | "write_file" | "write" => {
                 self.handle_write(&action.parameters).await
             }
-            "developer__list" | "list_dir" | "ls" => self.handle_list(&action.parameters).await,
+            "developer__list" | "list_dir" | "list_files" | "ls" => {
+                self.handle_list(&action.parameters).await
+            }
             "developer__bash" | "bash" | "shell" | "exec" => {
                 self.handle_bash(&action.parameters).await
             }
+            "patch_preview" => self.handle_patch_preview(&action.parameters).await,
             other => Err(DomainError::Validation(format!(
                 "Unknown developer capability action: '{}'",
                 other
@@ -278,11 +356,18 @@ impl SandboxPort for SovereignDeveloperAdapter {
 
         let duration_ms = start.elapsed().as_millis() as u64;
 
-        // 4. Seal into immutable ExecutionReceipt with Blake3 digest
+        // 4. Seal into immutable ExecutionReceipt with SHA-256 digest
         match execution_result {
             Ok(output_data) => {
-                let json_bytes = serde_json::to_vec(&output_data).unwrap_or_default();
-                let output_hash = format!("blake3:{}", digest(&json_bytes));
+                let output_hash =
+                    if let Some(d) = output_data.get("diff_digest").and_then(|v| v.as_str()) {
+                        d.to_string()
+                    } else if let Some(d) = output_data.get("digest").and_then(|v| v.as_str()) {
+                        d.to_string()
+                    } else {
+                        let json_bytes = serde_json::to_vec(&output_data).unwrap_or_default();
+                        format!("blake3:{}", digest(&json_bytes))
+                    };
                 let is_failure = output_data
                     .get("exit_code")
                     .and_then(|c| c.as_i64())
@@ -308,7 +393,12 @@ impl SandboxPort for SovereignDeveloperAdapter {
             }
             Err(err) => {
                 let err_msg = err.to_string();
-                let output_hash = format!("blake3:{}", digest(err_msg.as_bytes()));
+                let output_hash = if action.name == "read_file" || action.name == "patch_preview" {
+                    "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+                        .to_string()
+                } else {
+                    format!("blake3:{}", digest(err_msg.as_bytes()))
+                };
 
                 Ok(ExecutionReceipt {
                     receipt_id: new_id("rcpt"),
@@ -331,6 +421,47 @@ impl SandboxPort for SovereignDeveloperAdapter {
 mod tests {
     use super::*;
     use custos_domain::{Action, Permit, RiskClass, RiskLevel};
+
+    #[tokio::test]
+    async fn legitimate_new_nested_files_remain_readable() {
+        let root = tempfile::tempdir().unwrap();
+        let adapter = SovereignDeveloperAdapter::new(root.path());
+        adapter
+            .handle_write(&serde_json::json!({
+                "path": "new/nested/file.txt", "content": "scoped content",
+            }))
+            .await
+            .unwrap();
+        let read = adapter
+            .handle_read(&serde_json::json!({"path": "new/nested/file.txt"}))
+            .await
+            .unwrap();
+        assert_eq!(read["content"], "scoped content");
+        let absolute = root.path().join("new/nested/file.txt");
+        assert!(adapter
+            .handle_read(&serde_json::json!({"path": absolute}))
+            .await
+            .is_ok());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn new_file_below_escaping_symlink_is_rejected_before_creation() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("root");
+        let outside = dir.path().join("outside");
+        tokio::fs::create_dir(&root).await.unwrap();
+        tokio::fs::create_dir(&outside).await.unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("escape")).unwrap();
+        let adapter = SovereignDeveloperAdapter::new(root);
+        let result = adapter
+            .handle_write(&serde_json::json!({
+                "path": "escape/new/file.txt", "content": "must not be written",
+            }))
+            .await;
+        assert!(matches!(result, Err(DomainError::Unauthorized(_))));
+        assert!(!outside.join("new").exists());
+    }
 
     #[tokio::test]
     async fn test_sovereign_developer_adapter_read_write_flow() {
