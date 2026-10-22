@@ -13,6 +13,9 @@ pub mod profile;
 pub use profile::*;
 
 #[cfg(feature = "uniffi")]
+compile_error!("uniffi feature not supported — see F9");
+
+#[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!("custos-engine");
 
 #[cfg(feature = "uniffi")]

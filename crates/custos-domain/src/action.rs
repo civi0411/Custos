@@ -227,6 +227,18 @@ impl EffectStatus {
     }
 }
 
+impl From<crate::authority::ReceiptStatus> for EffectStatus {
+    fn from(status: crate::authority::ReceiptStatus) -> Self {
+        match status {
+            crate::authority::ReceiptStatus::Success => EffectStatus::Succeeded,
+            crate::authority::ReceiptStatus::Failure | crate::authority::ReceiptStatus::Rejected => {
+                EffectStatus::Failed
+            }
+            crate::authority::ReceiptStatus::Timeout => EffectStatus::Uncertain,
+        }
+    }
+}
+
 /// Layer 5 in Execution Lifecycle (RFC 001): Durable Effect Attempt bound to a Permit
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EffectAttempt {

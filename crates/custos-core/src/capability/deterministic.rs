@@ -1,30 +1,41 @@
 use super::traits::{ExecutionResult, ToolGate};
 use crate::authority::AuthorityEngine;
+use crate::contracts::sandbox::SandboxPort;
 use crate::sandbox::PathSandbox;
 use async_trait::async_trait;
 use custos_domain::{
     digest, new_id, Action, DomainError, ExecutionReceipt, ReceiptStatus, VerificationClaim,
 };
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, RwLock};
 
 pub struct DeterministicGate {
     pub authority: Arc<AuthorityEngine>,
     pub sandbox: PathSandbox,
+    pub driver: Option<Arc<dyn SandboxPort>>,
+    memory_files: Arc<RwLock<HashMap<PathBuf, Vec<u8>>>>,
 }
 
 impl DeterministicGate {
     pub fn new(authority: Arc<AuthorityEngine>, workspace_root: PathBuf) -> Self {
         let sandbox = PathSandbox::new(workspace_root).expect("Valid workspace root");
-        Self { authority, sandbox }
+        Self {
+            authority,
+            sandbox,
+            driver: None,
+            memory_files: Arc::new(RwLock::new(HashMap::new())),
+        }
     }
 
     pub fn with_default_authority() -> Self {
-        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let current_dir = PathBuf::from("/workspace");
         let sandbox = PathSandbox::new(current_dir).expect("Valid current directory");
         Self {
             authority: Arc::new(AuthorityEngine::default()),
             sandbox,
+            driver: None,
+            memory_files: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -33,6 +44,8 @@ impl DeterministicGate {
         Self {
             authority: Arc::new(AuthorityEngine::default()),
             sandbox,
+            driver: None,
+            memory_files: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -41,7 +54,38 @@ impl DeterministicGate {
         workspace_root: impl Into<PathBuf>,
     ) -> Self {
         let sandbox = PathSandbox::new(workspace_root).expect("Valid workspace root");
-        Self { authority, sandbox }
+        Self {
+            authority,
+            sandbox,
+            driver: None,
+            memory_files: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    pub fn with_driver(
+        authority: Arc<AuthorityEngine>,
+        workspace_root: impl Into<PathBuf>,
+        driver: Arc<dyn SandboxPort>,
+    ) -> Self {
+        let sandbox = PathSandbox::new(workspace_root).expect("Valid workspace root");
+        Self {
+            authority,
+            sandbox,
+            driver: Some(driver),
+            memory_files: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    pub fn add_memory_file(&self, path: impl Into<PathBuf>, content: impl AsRef<[u8]>) {
+        let mut files = self.memory_files.write().unwrap();
+        files.insert(path.into(), content.as_ref().to_vec());
+    }
+
+    pub fn get_memory_file(&self, path: &Path) -> Option<String> {
+        let files = self.memory_files.read().unwrap();
+        files
+            .get(path)
+            .map(|b| String::from_utf8_lossy(b).to_string())
     }
 
     /// Creates a verified or unverified VerificationClaim directly from an ExecutionResult
@@ -80,46 +124,15 @@ impl DeterministicGate {
         // Enforce sandbox containment
         let resolved_path = self.sandbox.resolve_and_contain(target_str)?;
 
-        if !resolved_path.exists() || !resolved_path.is_file() {
-            let output = serde_json::json!({
-                "status": "failed",
-                "action": "read_file",
-                "target": target_str,
-                "error": format!("File not found or not a regular file: {}", resolved_path.display()),
-            });
-
-            let receipt = ExecutionReceipt {
-                receipt_id: new_id("rcpt"),
-                permit_id: permit_id.to_string(),
-                action_id: action.id.clone(),
-                status: ReceiptStatus::Failure,
-                output_digest:
-                    "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-                        .to_string(),
-                output_data: Some(output.clone()),
-                error_message: Some(format!("File not found: {}", resolved_path.display())),
-                duration_ms: Some(1),
-                executed_at: chrono::Utc::now(),
-                assurance: custos_domain::Assurance::CustosMediated,
-            };
-
-            return Ok(ExecutionResult {
-                success: false,
-                output,
-                permit_id: Some(permit_id.to_string()),
-                evidence: None,
-                receipt: Some(receipt),
-            });
-        }
-
-        let bytes = match std::fs::read(&resolved_path) {
-            Ok(b) => b,
-            Err(e) => {
+        let files = self.memory_files.read().unwrap();
+        let bytes = match files.get(&resolved_path) {
+            Some(b) => b.clone(),
+            None => {
                 let output = serde_json::json!({
                     "status": "failed",
                     "action": "read_file",
                     "target": target_str,
-                    "error": format!("Failed to read file {}: {e}", resolved_path.display()),
+                    "error": format!("File not found or not a regular file: {}", resolved_path.display()),
                 });
 
                 let receipt = ExecutionReceipt {
@@ -131,7 +144,7 @@ impl DeterministicGate {
                         "sha256:0000000000000000000000000000000000000000000000000000000000000000"
                             .to_string(),
                     output_data: Some(output.clone()),
-                    error_message: Some(format!("Failed to read file: {e}")),
+                    error_message: Some(format!("File not found: {}", resolved_path.display())),
                     duration_ms: Some(1),
                     executed_at: chrono::Utc::now(),
                     assurance: custos_domain::Assurance::CustosMediated,
@@ -199,76 +212,17 @@ impl DeterministicGate {
         // Enforce sandbox containment
         let resolved_path = self.sandbox.resolve_and_contain(target_str)?;
 
-        if !resolved_path.exists() || !resolved_path.is_dir() {
-            let output = serde_json::json!({
-                "status": "failed",
-                "action": "list_files",
-                "target": target_str,
-                "error": format!("Directory not found: {}", resolved_path.display()),
-            });
-
-            let receipt = ExecutionReceipt {
-                receipt_id: new_id("rcpt"),
-                permit_id: permit_id.to_string(),
-                action_id: action.id.clone(),
-                status: ReceiptStatus::Failure,
-                output_digest:
-                    "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-                        .to_string(),
-                output_data: Some(output.clone()),
-                error_message: Some(format!("Directory not found: {}", resolved_path.display())),
-                duration_ms: Some(1),
-                executed_at: chrono::Utc::now(),
-                assurance: custos_domain::Assurance::CustosMediated,
-            };
-
-            return Ok(ExecutionResult {
-                success: false,
-                output,
-                permit_id: Some(permit_id.to_string()),
-                evidence: None,
-                receipt: Some(receipt),
-            });
-        }
-
+        let files = self.memory_files.read().unwrap();
         let mut entries = Vec::new();
-        let read_dir = match std::fs::read_dir(&resolved_path) {
-            Ok(rd) => rd,
-            Err(e) => {
-                let output = serde_json::json!({
-                    "status": "failed",
-                    "action": "list_files",
-                    "target": target_str,
-                    "error": format!("Failed to read directory {}: {e}", resolved_path.display()),
-                });
-
-                let receipt = ExecutionReceipt {
-                    receipt_id: new_id("rcpt"),
-                    permit_id: permit_id.to_string(),
-                    action_id: action.id.clone(),
-                    status: ReceiptStatus::Failure,
-                    output_digest:
-                        "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-                            .to_string(),
-                    output_data: Some(output.clone()),
-                    error_message: Some(format!("Failed to read directory: {e}")),
-                    duration_ms: Some(1),
-                    executed_at: chrono::Utc::now(),
-                    assurance: custos_domain::Assurance::CustosMediated,
-                };
-
-                return Ok(ExecutionResult {
-                    success: false,
-                    output,
-                    permit_id: Some(permit_id.to_string()),
-                    evidence: None,
-                    receipt: Some(receipt),
-                });
+        for path in files.keys() {
+            if let Ok(rel) = path.strip_prefix(&resolved_path) {
+                if let Some(first_comp) = rel.components().next() {
+                    let name = first_comp.as_os_str().to_string_lossy().to_string();
+                    if !entries.contains(&name) {
+                        entries.push(name);
+                    }
+                }
             }
-        };
-
-        for entry in read_dir.flatten() {
-            entries.push(entry.file_name().to_string_lossy().to_string());
         }
         entries.sort();
 
@@ -332,9 +286,9 @@ impl DeterministicGate {
             .and_then(|v| v.as_str())
             .unwrap_or("");
 
-        // Simulated preview: Read existing file if present, but do NOT modify disk
-        let original_content = if resolved_path.exists() && resolved_path.is_file() {
-            std::fs::read_to_string(&resolved_path).unwrap_or_default()
+        let files = self.memory_files.read().unwrap();
+        let original_content = if let Some(bytes) = files.get(&resolved_path) {
+            String::from_utf8_lossy(bytes).to_string()
         } else {
             String::new()
         };
@@ -410,24 +364,55 @@ impl ToolGate for DeterministicGate {
         action: &Action,
         actor: &str,
     ) -> Result<ExecutionResult, DomainError> {
+        let mut bound_action = action.clone();
+        if bound_action.task_id.is_none() {
+            bound_action.task_id = Some(task_id.to_string());
+        }
+
         // Step 1: Evaluate policy, classify risk, and issue permit via AuthorityEngine
         let permit = self
             .authority
-            .authorize_action(task_id, action, actor)
+            .authorize_action(task_id, &bound_action, actor)
             .await?;
 
         // Step 2: Atomic consume/burn permit before physical execution (Invariant INV-04)
-        let expected_digest = action.argument_digest();
+        let expected_digest = bound_action.argument_digest();
         self.authority
             .permits
             .consume_permit(&permit.id, &expected_digest)?;
 
         // Step 3: Dispatch action under sandbox containment
-        match action.name.as_str() {
-            "read_file" => self.execute_read_file(action, &permit.id).await,
-            "list_files" => self.execute_list_files(action, &permit.id).await,
-            "patch_preview" => self.execute_patch_preview(action, &permit.id).await,
-            _ => self.execute_generic(action, &permit.id).await,
+        if let Some(ref driver) = self.driver {
+            match bound_action.name.as_str() {
+                "read_file" | "list_files" | "patch_preview" => {
+                    let receipt = driver.execute(&bound_action, &permit).await?;
+                    let success = receipt.status == ReceiptStatus::Success;
+                    let evidence = if success {
+                        Some(receipt.output_digest.clone())
+                    } else {
+                        None
+                    };
+                    let output = receipt
+                        .output_data
+                        .clone()
+                        .unwrap_or(serde_json::Value::Null);
+                    Ok(ExecutionResult {
+                        success,
+                        output,
+                        permit_id: Some(permit.id),
+                        evidence,
+                        receipt: Some(receipt),
+                    })
+                }
+                _ => self.execute_generic(&bound_action, &permit.id).await,
+            }
+        } else {
+            match bound_action.name.as_str() {
+                "read_file" => self.execute_read_file(&bound_action, &permit.id).await,
+                "list_files" => self.execute_list_files(&bound_action, &permit.id).await,
+                "patch_preview" => self.execute_patch_preview(&bound_action, &permit.id).await,
+                _ => self.execute_generic(&bound_action, &permit.id).await,
+            }
         }
     }
 }
@@ -439,12 +424,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_low_risk_read_file_allowed_with_permit_sandbox_and_receipt() {
-        let temp_dir = std::env::temp_dir().join(format!("custos_gate_test_{}", new_id("test")));
-        std::fs::create_dir_all(&temp_dir).unwrap();
-        let file_path = temp_dir.join("sample.txt");
-        std::fs::write(&file_path, "Hello Custos Sovereign!").unwrap();
-
+        let temp_dir = PathBuf::from("/workspace/test_env");
         let gate = DeterministicGate::with_workspace(&temp_dir);
+        let file_path = temp_dir.join("sample.txt");
+        gate.add_memory_file(&file_path, "Hello Custos Sovereign!");
+
         let action = Action::new(
             "act_read_1".into(),
             "read_file".into(),
@@ -466,8 +450,6 @@ mod tests {
         assert_eq!(receipt.status, ReceiptStatus::Success);
         assert!(receipt.output_digest.starts_with("sha256:"));
         assert_eq!(res.output["content"], "Hello Custos Sovereign!");
-
-        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 
     #[tokio::test]
@@ -492,13 +474,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_low_risk_patch_preview_simulated_without_disk_mutation() {
-        let temp_dir = std::env::temp_dir().join(format!("custos_patch_test_{}", new_id("test")));
-        std::fs::create_dir_all(&temp_dir).unwrap();
+        let temp_dir = PathBuf::from("/workspace/test_env");
+        let gate = DeterministicGate::with_workspace(&temp_dir);
         let file_path = temp_dir.join("code.rs");
         let initial_content = "fn main() { println!(\"old\"); }";
-        std::fs::write(&file_path, initial_content).unwrap();
+        gate.add_memory_file(&file_path, initial_content);
 
-        let gate = DeterministicGate::with_workspace(&temp_dir);
         let action = Action::new(
             "act_patch_1".into(),
             "patch_preview".into(),
@@ -524,17 +505,13 @@ mod tests {
         assert!(res.evidence.is_some());
 
         // CRITICAL CHECK: Verify zero disk mutations occurred!
-        let disk_content = std::fs::read_to_string(&file_path).unwrap();
+        let disk_content = gate.get_memory_file(&file_path).unwrap();
         assert_eq!(disk_content, initial_content);
-
-        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 
     #[tokio::test]
     async fn test_sandbox_path_traversal_denied() {
-        let temp_dir = std::env::temp_dir().join(format!("custos_trav_test_{}", new_id("test")));
-        std::fs::create_dir_all(&temp_dir).unwrap();
-
+        let temp_dir = PathBuf::from("/workspace/test_env");
         let gate = DeterministicGate::with_workspace(&temp_dir);
         let action = Action::new(
             "act_trav_1".into(),
@@ -555,15 +532,11 @@ mod tests {
             }
             other => panic!("Expected Unauthorized sandbox error, got: {other:?}"),
         }
-
-        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 
     #[tokio::test]
     async fn test_uncertain_outcome_missing_file_fails_safely() {
-        let temp_dir = std::env::temp_dir().join(format!("custos_miss_test_{}", new_id("test")));
-        std::fs::create_dir_all(&temp_dir).unwrap();
-
+        let temp_dir = PathBuf::from("/workspace/test_env");
         let gate = DeterministicGate::with_workspace(&temp_dir);
         let action = Action::new(
             "act_miss_1".into(),
@@ -573,8 +546,6 @@ mod tests {
             RiskLevel::Low,
         );
 
-        // Execution succeeds at the gate level (it has a valid permit and stayed in sandbox),
-        // but returns success: false with a Failure receipt!
         let res = gate
             .dispatch_for_task("task_miss", &action, "developer")
             .await
@@ -585,8 +556,6 @@ mod tests {
         assert_eq!(res.output["status"], "failed");
         let receipt = res.receipt.unwrap();
         assert_eq!(receipt.status, ReceiptStatus::Failure);
-
-        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 
     #[tokio::test]

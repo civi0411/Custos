@@ -37,10 +37,35 @@ impl HardFilters {
             reasons.push(RejectionReason::BudgetExceeded);
         }
 
-        // 4. Egress Rules check
+        // 4. Egress Rules & Local-Only Constraint check
+        let is_local_only = snapshot
+            .required_capabilities
+            .iter()
+            .any(|c| c.eq_ignore_ascii_case("LocalOnly") || c.eq_ignore_ascii_case("local-only"))
+            || snapshot
+                .egress_rules
+                .iter()
+                .any(|r| r.eq_ignore_ascii_case("LocalOnly") || r.eq_ignore_ascii_case("local-only"));
+
+        if is_local_only {
+            let is_candidate_local = proposal.candidate_harness.contains("local")
+                || proposal.candidate_harness.contains("llama")
+                || proposal.candidate_harness.contains("mlx")
+                || proposal.candidate_harness.contains("ollama");
+            if !is_candidate_local {
+                reasons.push(RejectionReason::LocalOnlyConstraint);
+            }
+        }
+
         for rule in &snapshot.egress_rules {
-            if rule == "no-external-egress" && proposal.candidate_harness.contains("cloud") {
-                reasons.push(RejectionReason::EgressViolation(rule.clone()));
+            if rule == "no-external-egress"
+                && (proposal.candidate_harness.contains("cloud")
+                    || proposal.candidate_harness.contains("claude")
+                    || proposal.candidate_harness.contains("openai"))
+            {
+                if !reasons.contains(&RejectionReason::EgressViolation(rule.clone())) {
+                    reasons.push(RejectionReason::EgressViolation(rule.clone()));
+                }
             }
         }
 
@@ -91,5 +116,20 @@ mod tests {
 
         let res = HardFilters::evaluate(&proposal, &snapshot);
         assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_hard_filter_local_only_constraint() {
+        let mut snapshot = DecisionSnapshot::new("task_local");
+        snapshot.required_capabilities = vec!["LocalOnly".into()];
+
+        let cloud_proposal = StrategyProposal::native_baseline("task_local", "claude-code");
+        let cloud_res = HardFilters::evaluate(&cloud_proposal, &snapshot);
+        assert!(cloud_res.is_err());
+        assert!(cloud_res.unwrap_err().contains(&RejectionReason::LocalOnlyConstraint));
+
+        let local_proposal = StrategyProposal::native_baseline("task_local", "custos-local");
+        let local_res = HardFilters::evaluate(&local_proposal, &snapshot);
+        assert!(local_res.is_ok());
     }
 }

@@ -24,8 +24,10 @@ pub mod harness;
 pub mod judgment;
 pub mod kernel;
 pub mod memory;
+pub mod notebook;
 pub mod oi;
 pub mod sandbox;
+pub mod source_acquisition;
 pub mod storage;
 pub mod terminal;
 pub mod workflow;
@@ -44,14 +46,16 @@ pub use harness::{
 pub use judgment::{JudgmentPort, JudgmentRequest, JudgmentResult};
 pub use kernel::{KernelPort, TrustedKernel};
 pub use memory::MemoryPort;
+pub use notebook::{NotebookDriverPort, NotebookWorkerResponse, NotebookWorkerSession};
 pub use oi::OiPlannerPort;
 pub use sandbox::{SandboxCommand, SandboxPort};
+pub use source_acquisition::SourceAcquisitionPort;
 pub use storage::{
     AssistantDraftPort, CasPort, CommandAdmission, CommandLedgerEntry, CommandLedgerPort, DecisionPort,
     EffectLedgerPort, NotebookStoragePort, OutboxEntry, OutboxPort, OutboxStatus, ReplanPort,
     RunPort, StoragePort, WorkflowRevisionPort,
 };
-pub use terminal::TerminalPort;
+pub use terminal::{TerminalDriverPort, TerminalOutputConsumer, TerminalPort, TerminalProcessHandle};
 pub use workflow::WorkflowPort;
-pub use workspace::{WorkspaceProvider, WorkspaceRepository};
+pub use workspace::{RepositoryGitPort, WorkspaceProvider, WorkspaceRepository};
 pub use workspace_files::WorkspaceFilesPort;

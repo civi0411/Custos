@@ -107,6 +107,7 @@ mod tests {
             worker_run_id: "r1".into(),
             provider_id: "test".into(),
             pack_id: Some("research".into()),
+            scope_root: None,
         };
 
         let output = skill.run(&ctx).await.unwrap();

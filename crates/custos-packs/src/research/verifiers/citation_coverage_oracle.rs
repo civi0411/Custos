@@ -103,6 +103,13 @@ impl PackVerifier for CitationCoverageOracle {
                 .map(|s| !s.trim().is_empty())
                 .unwrap_or(false);
 
+            // B4/F12 Invariant: Source version binding must match between claim and assessment record.
+            let claim_source_version = claim
+                .get("source_version")
+                .or_else(|| claim.get("version"))
+                .or_else(|| claim.get("source_hash"))
+                .and_then(Value::as_str);
+
             // B5/C1 Invariant: Only trust external assessment_records with explicit typed status.
             // Self-asserted booleans or missing records are strictly rejected (fail-closed).
             let is_verified_by_assessment = if let Some(records) = assessment_records {
@@ -125,7 +132,20 @@ impl PackVerifier for CitationCoverageOracle {
                         .unwrap_or(false);
                     let is_stale = rec.get("is_stale").and_then(Value::as_bool).unwrap_or(false)
                         || rec.get("is_fresh").and_then(Value::as_bool).map(|fresh| !fresh).unwrap_or(false);
-                    matches_id && has_valid_status && !is_stale
+
+                    let version_matches = match claim_source_version {
+                        Some(expected_ver) => {
+                            let rec_ver = rec
+                                .get("source_version")
+                                .or_else(|| rec.get("version"))
+                                .or_else(|| rec.get("source_hash"))
+                                .and_then(Value::as_str);
+                            rec_ver == Some(expected_ver)
+                        }
+                        None => true,
+                    };
+
+                    matches_id && has_valid_status && !is_stale && version_matches
                 })
             } else {
                 // FAIL-CLOSED: No assessment records means unverified. Self-asserted claim["verified"] is untrusted.
@@ -434,5 +454,32 @@ mod tests {
 
         let res = oracle.verify(&ctx).await;
         assert!(res.is_pass());
+    }
+
+    #[tokio::test]
+    async fn test_citation_coverage_source_version_binding() {
+        let oracle = CitationCoverageOracle::new();
+
+        // 1. Version mismatch must fail
+        let ctx_mismatch = VerificationContext::new("task_ver_mismatch").with_metadata(json!({
+            "claims": [
+                { "id": "c1", "doi": "10.1038/s41586-020-2649-2", "source_version": "v2" }
+            ],
+            "assessment_records": [
+                { "claim_id": "c1", "status": "verified", "source_version": "v1" }
+            ]
+        }));
+        assert!(matches!(oracle.verify(&ctx_mismatch).await, VerificationResult::Fail { .. }));
+
+        // 2. Matching version must pass
+        let ctx_match = VerificationContext::new("task_ver_match").with_metadata(json!({
+            "claims": [
+                { "id": "c1", "doi": "10.1038/s41586-020-2649-2", "source_version": "v2" }
+            ],
+            "assessment_records": [
+                { "claim_id": "c1", "status": "verified", "source_version": "v2" }
+            ]
+        }));
+        assert!(oracle.verify(&ctx_match).await.is_pass());
     }
 }

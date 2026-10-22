@@ -11,7 +11,6 @@ pub mod decision;
 pub mod evidence;
 pub mod kernel;
 pub mod oi;
-pub mod repo;
 pub mod research_ingress;
 pub mod sandbox_policy;
 
@@ -23,5 +22,4 @@ pub use decision::*;
 pub use evidence::*;
 pub use kernel::*;
 pub use oi::*;
-pub use repo::RepoSecurityPolicy;
 pub use sandbox_policy as sandbox;

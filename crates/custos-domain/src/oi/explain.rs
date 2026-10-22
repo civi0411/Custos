@@ -27,6 +27,10 @@ pub struct ExplainReport {
     pub chosen_topology: ExecutionTopology,
     pub chosen_harness_id: String,
     pub estimated_tokens: u64,
+    #[serde(default)]
+    pub billed_tokens: u64,
+    #[serde(default)]
+    pub unknown_tokens: u64,
     pub estimated_cost_usd: f32,
     pub reasoning: String,
     pub cost_range_tokens: (u64, u64),

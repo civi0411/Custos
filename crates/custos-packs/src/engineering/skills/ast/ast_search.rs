@@ -183,6 +183,7 @@ mod tests {
             worker_run_id: "run_1".into(),
             provider_id: "test".into(),
             pack_id: Some("engineering".into()),
+            scope_root: None,
         };
 
         let err = skill.run(&ctx).await.unwrap_err();
@@ -198,6 +199,7 @@ mod tests {
             worker_run_id: "run_1".into(),
             provider_id: "test".into(),
             pack_id: Some("engineering".into()),
+            scope_root: None,
         };
 
         let err = skill.run(&ctx).await.unwrap_err();

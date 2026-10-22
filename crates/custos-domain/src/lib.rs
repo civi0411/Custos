@@ -132,10 +132,7 @@ pub use remote_fleet::{
     FleetExecParams, FleetExecReceipt, FleetExecResult, RegisterHostParams, RemoteHostNode,
     RemoteHostStatus, SshAuthMethod,
 };
-pub use repo::{
-    ConfidenceLevel, CoverageMetrics, MissingReason, QueryResult, RepoSnapshotRef, SourceSpan,
-    SymbolMatch,
-};
+pub use repo::SourceSpan;
 pub use review::{
     FindingSeverity, RecordReviewParams, ReviewFinding, ReviewMethod, ReviewStatus,
     ReviewTargetType, ReviewerRecord,

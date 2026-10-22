@@ -43,10 +43,21 @@ impl EvidencePipeline {
         pipeline.register_verifier(Arc::new(CommandExitCodeVerifier));
         pipeline.register_verifier(Arc::new(HashVerifier));
         pipeline.register_verifier(Arc::new(ExactMatchVerifier));
-        pipeline.register_verifier(Arc::new(CitationVerifier));
+        pipeline.register_verifier(Arc::new(CitationVerifier::new()));
         pipeline.register_verifier(Arc::new(SemanticSupportEvaluator));
         pipeline.register_verifier(Arc::new(PatchPreviewVerifier));
         pipeline.register_verifier(Arc::new(DiffVerifier));
+        pipeline
+    }
+
+    /// Pre-registers standard verifiers with trusted source acquisition injected for citations.
+    pub fn with_source_acquisition(
+        source_acquisition: Arc<dyn crate::contracts::source_acquisition::SourceAcquisitionPort>,
+    ) -> Self {
+        let mut pipeline = Self::with_standard_verifiers();
+        pipeline.register_verifier(Arc::new(CitationVerifier::with_source_acquisition(
+            source_acquisition,
+        )));
         pipeline
     }
 
