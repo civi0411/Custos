@@ -50,5 +50,4 @@ jobs:
         run: cargo test -p custos-domain -p custos-core -p custos-persistence -p custos-runtime -p custos-daemon -p custos-sdk -p custos-packs --lib
 
       - name: Run Workspace Integration Tests
-        continue-on-error: true
         run: cargo test --workspace --all-targets
