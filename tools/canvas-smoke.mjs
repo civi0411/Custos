@@ -650,3 +650,48 @@ test('Transport semantics: command ID preservation on retry, conservative effect
   assert.equal(failedWs.status, 'setup_failed');
   assert.equal(failedWs.status_reason, 'git clone failed');
 });
+
+test('Screen migration imports legacy resource tabs and preserves future version snapshots', () => {
+  const store = new Map();
+  const mockLocalStorage = {
+    getItem: key => store.get(key) || null,
+    setItem: (key, val) => store.set(key, String(val)),
+  };
+  const { loadAndMigrateScreens } = helpers('context/ScreenContext.tsx', ['loadAndMigrateScreens'], { localStorage: mockLocalStorage });
+
+  // 1. Verify legacy tabs from custos.resource-tabs.v1 are imported and match canvas
+  const legacyScreens = [{ id: 's-legacy', name: 'Legacy Screen', homeWorkbench: 'engineering', canvasState: null }];
+  mockLocalStorage.setItem('custos.screens.default', JSON.stringify(legacyScreens));
+  const canvasKey = `custos.canvas.v1:${JSON.stringify(['default', 's-legacy'])}`;
+  mockLocalStorage.setItem(canvasKey, JSON.stringify({ version: 1, root: { kind: 'group', id: 'root', tabIds: ['file-main'], activeTabId: 'file-main' } }));
+  mockLocalStorage.setItem('custos.resource-tabs.v1', JSON.stringify({
+    version: 1,
+    scopes: {
+      [JSON.stringify(['default', 's-legacy'])]: {
+        tabs: [{ id: 'file-main', type: 'file', title: 'main.rs', url: 'file:///path/to/main.rs' }],
+        activeTabId: 'file-main',
+      },
+    },
+  }));
+
+  const defaultScreens = [{ id: 'screen-default', name: 'Default', homeWorkbench: 'engineering' }];
+  const migrated = loadAndMigrateScreens('default', 'default', defaultScreens);
+  assert.equal(migrated.screens.length, 1);
+  assert.equal(migrated.screens[0].id, 's-legacy');
+  assert.equal(migrated.screens[0].tabs.some(t => t.id === 'file-main'), true);
+  assert.equal(migrated.screens[0].activeTabId, 'file-main');
+
+  // 2. Verify future snapshot version (e.g. version 3) is preserved and futureSnapshotPreserved is true
+  const futureSnapshot = {
+    version: 3,
+    scope: 'default',
+    screens: [{ id: 'future-screen', name: 'Future Screen', homeWorkbench: 'engineering' }],
+    activeScreenId: 'future-screen',
+    timestamp: Date.now(),
+  };
+  mockLocalStorage.setItem('custos.screen_layout.v2.default', JSON.stringify(futureSnapshot));
+  const futureResult = loadAndMigrateScreens('default', 'default', defaultScreens);
+  assert.equal(futureResult.futureSnapshotPreserved, true);
+  assert.equal(JSON.parse(mockLocalStorage.getItem('custos.screen_layout.v2.default')).version, 3);
+  assert.ok(mockLocalStorage.getItem('custos.screen_layout.v2.default.unrecognized_backup'));
+});

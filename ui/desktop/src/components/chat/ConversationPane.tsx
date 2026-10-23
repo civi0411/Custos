@@ -386,7 +386,7 @@ export function ConversationPane({
                     <ConversationMarkdown text={text} />
                     {!text && msg.runId && !['completed', 'failed', 'cancelled', 'interrupted'].includes(runStatus || '') && (
                       <p role="status" className="text-xs text-fg-muted">
-                        {runStatus === 'thinking' ? 'Thinking...' : 'Running...'}
+                        {runStatus === 'thinking' ? 'Thinking...' : runStatus === 'suspended' ? 'Suspended (Awaiting approval)...' : 'Running...'}
                       </p>
                     )}
                     {liveError && <p role="alert" className="mt-2 text-xs text-amber-400">{liveError}</p>}

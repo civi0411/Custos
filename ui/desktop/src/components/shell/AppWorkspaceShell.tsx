@@ -154,12 +154,29 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     }
   }, [activeScreenId]);
 
-  // Keep activeScreen.tabs in sync with resourceTabs on the active screen
+  // Keep activeScreen.tabs in sync with resourceTabs on the active screen, including runId and session bindings
   useEffect(() => {
     if (!activeScreen) return;
     const currentTabs = activeScreen.tabs || [];
     const tabsDiffer = currentTabs.length !== resourceTabs.tabs.length ||
-      currentTabs.some((t, i) => t.id !== resourceTabs.tabs[i]?.id || t.url !== resourceTabs.tabs[i]?.url);
+      currentTabs.some((t, i) => {
+        const next = resourceTabs.tabs[i];
+        if (!next) return true;
+        return (
+          t.id !== next.id ||
+          t.url !== next.url ||
+          t.title !== next.title ||
+          t.type !== next.type ||
+          t.sessionId !== next.sessionId ||
+          t.taskId !== next.taskId ||
+          t.runId !== next.runId ||
+          t.agentId !== next.agentId ||
+          t.workspaceId !== next.workspaceId ||
+          t.sourceId !== next.sourceId ||
+          t.artifactId !== next.artifactId ||
+          t.revision !== next.revision
+        );
+      });
     const activeDiffer = activeScreen.activeTabId !== resourceTabs.activeTabId;
 
     if (tabsDiffer || activeDiffer) {

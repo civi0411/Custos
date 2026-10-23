@@ -124,12 +124,43 @@ export function loadAndMigrateScreens(
   scope: string,
   currentProject: string | undefined,
   defaultScreens: Screen[]
-): { screens: Screen[]; activeScreenId?: string } {
+): { screens: Screen[]; activeScreenId?: string; futureSnapshotPreserved?: boolean } {
   const v2Key = `custos.screen_layout.v2.${scope}`;
   const legacyScreensKey = `custos.screens.${scope}`;
 
+  // Read legacy resource tabs if available
+  let legacyTabsMap: Record<string, { tabs: OrcaTab[]; activeTabId?: string }> = {};
+  try {
+    const rawResourceTabs = localStorage.getItem('custos.resource-tabs.v1');
+    if (rawResourceTabs) {
+      const parsed = JSON.parse(rawResourceTabs);
+      if (parsed && parsed.scopes && typeof parsed.scopes === 'object') {
+        legacyTabsMap = parsed.scopes;
+      }
+    }
+  } catch {}
+
   const resolveTabs = (screen: Partial<Screen>): OrcaTab[] => {
     if (Array.isArray(screen.tabs) && screen.tabs.length > 0) return screen.tabs;
+    const scopeKeys = [
+      screen.id ? JSON.stringify([currentProject, screen.id]) : '',
+      screen.id ? JSON.stringify([scope, screen.id]) : '',
+      screen.id || '',
+    ].filter(Boolean);
+
+    for (const key of scopeKeys) {
+      const entry = legacyTabsMap[key];
+      if (entry && Array.isArray(entry.tabs) && entry.tabs.length > 0) {
+        return entry.tabs;
+      }
+    }
+
+    if (typeof defaultTabsForScreen === 'function') {
+      try {
+        return defaultTabsForScreen(screen);
+      } catch {}
+    }
+
     const wb = screen.homeWorkbench || 'engineering';
     if (wb === 'research') {
       return [
@@ -154,23 +185,37 @@ export function loadAndMigrateScreens(
     const rawV2 = localStorage.getItem(v2Key);
     if (rawV2) {
       const parsed = JSON.parse(rawV2);
-      if (parsed && parsed.version === 2 && Array.isArray(parsed.screens) && parsed.screens.length > 0) {
-        const screensWithTabs: Screen[] = parsed.screens.map((screen: Screen) => {
-          const tabs = resolveTabs(screen);
-          const activeTabId = screen.activeTabId || tabs[0]?.id || '';
+      if (parsed && typeof parsed.version === 'number') {
+        if (parsed.version > 2) {
+          // Future snapshot version detected: preserve in backup and avoid downgrading overwrite
+          try {
+            localStorage.setItem(`${v2Key}.unrecognized_backup`, rawV2);
+          } catch {}
           return {
-            ...screen,
-            tabs,
-            activeTabId,
+            screens: Array.isArray(parsed.screens) && parsed.screens.length > 0 ? parsed.screens : defaultScreens,
+            activeScreenId: parsed.activeScreenId || defaultScreens[0]?.id || 'screen-default',
+            futureSnapshotPreserved: true,
           };
-        });
-        const activeId = parsed.activeScreenId && screensWithTabs.some(s => s.id === parsed.activeScreenId)
-          ? parsed.activeScreenId
-          : screensWithTabs[0].id;
-        return {
-          screens: screensWithTabs,
-          activeScreenId: activeId,
-        };
+        }
+        if (parsed.version === 2 && Array.isArray(parsed.screens) && parsed.screens.length > 0) {
+          const screensWithTabs: Screen[] = parsed.screens.map((screen: Screen) => {
+            const tabs = resolveTabs(screen);
+            const activeTabId = screen.activeTabId || tabs[0]?.id || '';
+            return {
+              ...screen,
+              tabs,
+              activeTabId,
+            };
+          });
+          const activeId = parsed.activeScreenId && screensWithTabs.some(s => s.id === parsed.activeScreenId)
+            ? parsed.activeScreenId
+            : screensWithTabs[0].id;
+          return {
+            screens: screensWithTabs,
+            activeScreenId: activeId,
+            futureSnapshotPreserved: false,
+          };
+        }
       }
     }
   } catch {}
@@ -205,8 +250,48 @@ export function loadAndMigrateScreens(
         }
       } catch {}
 
-      const tabs = resolveTabs(screen);
-      const activeTabId = screen.activeTabId || tabs[0]?.id || '';
+      const tabs = [...resolveTabs(screen)];
+      const scopeKeys = [
+        screen.id ? JSON.stringify([currentProject, screen.id]) : '',
+        screen.id ? JSON.stringify([scope, screen.id]) : '',
+        screen.id || '',
+      ].filter(Boolean);
+      let legacyActiveTabId: string | undefined;
+      for (const key of scopeKeys) {
+        if (legacyTabsMap[key]?.activeTabId) {
+          legacyActiveTabId = legacyTabsMap[key].activeTabId;
+          break;
+        }
+      }
+
+      // Reconcile tabs with canvas tabIds so canvas references are never orphan
+      if (canvasState && canvasState.root) {
+        const tabIdsInCanvas: string[] = [];
+        const collectTabIds = (node: any) => {
+          if (!node) return;
+          if (node.kind === 'group' && Array.isArray(node.tabIds)) {
+            tabIdsInCanvas.push(...node.tabIds);
+          } else if (node.kind === 'split') {
+            collectTabIds(node.first);
+            collectTabIds(node.second);
+          }
+        };
+        collectTabIds(canvasState.root);
+        const tabIdSet = new Set(tabs.map(t => t.id));
+        for (const cid of tabIdsInCanvas) {
+          if (!tabIdSet.has(cid)) {
+            tabs.push({
+              id: cid,
+              type: cid.startsWith('conv') ? 'conversation' : cid.startsWith('term') ? 'terminal' : 'files',
+              title: cid,
+              url: `custos://tab/${cid}`,
+            });
+            tabIdSet.add(cid);
+          }
+        }
+      }
+
+      const activeTabId = screen.activeTabId || legacyActiveTabId || tabs[0]?.id || '';
 
       const fallbackCanvas: CanvasState = {
         version: 1,
@@ -242,9 +327,9 @@ export function loadAndMigrateScreens(
       }
     } catch {}
 
-    return { screens: screensToMigrate, activeScreenId: activeId };
+    return { screens: screensToMigrate, activeScreenId: activeId, futureSnapshotPreserved: false };
   } catch {
-    return { screens: defaultScreens, activeScreenId: defaultScreens[0]?.id || 'screen-default' };
+    return { screens: defaultScreens, activeScreenId: defaultScreens[0]?.id || 'screen-default', futureSnapshotPreserved: false };
   }
 }
 
@@ -293,6 +378,10 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return initial.activeScreenId || initial.screens[0]?.id || 'screen-default';
   });
 
+  const [futureSnapshotPreserved, setFutureSnapshotPreserved] = useState<boolean>(() => {
+    return !!loadAndMigrateScreens(scope, currentProject, defaultScreens).futureSnapshotPreserved;
+  });
+
   // hydratedKey tracks whether the state matches the current storageKey
   const [hydratedKey, setHydratedKey] = useState<string>('');
 
@@ -300,6 +389,7 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     if (hydratedKey === storageKey) return;
     const migrated = loadAndMigrateScreens(scope, currentProject, defaultScreens);
+    setFutureSnapshotPreserved(!!migrated.futureSnapshotPreserved);
     setScreens(migrated.screens);
     const targetId = migrated.activeScreenId && migrated.screens.some(s => s.id === migrated.activeScreenId)
       ? migrated.activeScreenId
@@ -324,6 +414,10 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     if (!hydratedKey || hydratedKey !== storageKey) return;
     if (screens.length === 0) return;
+    if (futureSnapshotPreserved) {
+      // Future snapshot version detected: avoid overwriting v2Key with downgrade snapshot
+      return;
+    }
 
     const validActiveId = screens.some(s => s.id === activeScreenId)
       ? activeScreenId
@@ -340,7 +434,7 @@ export const ScreenProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       localStorage.setItem(`custos.screen_layout.v2.${scope}`, JSON.stringify(snapshot));
       localStorage.setItem(storageKey, JSON.stringify(screens));
     } catch {}
-  }, [storageKey, screens, activeScreenId, hydratedKey, scope]);
+  }, [storageKey, screens, activeScreenId, hydratedKey, scope, futureSnapshotPreserved]);
 
   // Keep activeScreenId valid and aligned with currentWorkbench
   useEffect(() => {

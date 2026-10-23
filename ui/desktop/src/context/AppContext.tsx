@@ -1614,6 +1614,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const trailing = snapshot.text.charCodeAt(end - 1);
       if (end < snapshot.text.length && trailing >= 0xD800 && trailing <= 0xDBFF) end += 1;
       displayedText = snapshot.text.slice(0, end);
+      const wasInitial = initialFlush;
       initialFlush = false;
       lastPaint = performance.now();
       const text = displayedText;
@@ -1625,7 +1626,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       const isSettled = ['completed', 'failed', 'cancelled', 'interrupted'].includes(snapshot.status);
-      if (immediate || isSettled || initialFlush) {
+      if (immediate || isSettled || wasInitial) {
         setProjectData(previous => ({ ...previous, [project]: (previous[project] || []).map(chat => chat.id !== conversation ? chat : {
           ...chat, messages: chat.messages.some(message => message.runId === run)
             ? chat.messages.map(message => message.runId !== run ? message : { ...message, text, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined })
@@ -1661,6 +1662,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const chat: Session = { nativeHarnessId: harness, workspaceId: workspace, id: session.id, sessionId: session.id, taskId: task.id, source: 'daemon', title: instruction.slice(0, 80), time: 'Live', preview: harness, model: harness, pack: 'engineering', fileName: '', diffHunk: '', diffLinesCount: '', summary: '', diffCode: [], messages: [{ role: 'user', author: 'You', text: instruction }] };
     setProjectData(previous => ({ ...previous, [project]: [...(previous[project] || []), chat] }));
     const run = await daemonClient.startRun({ background: true, task_id: task.id, session_id: session.id, turn_id: `turn_${crypto.randomUUID()}`, preferred_mode: 'native', harness_id: harness, workspace_id: workspace, prompt: instruction });
+    setProjectData(previous => ({ ...previous, [project]: (previous[project] || []).map(c => c.id !== session.id ? c : { ...c, messages: [...c.messages, { id: `live-${run.run_id}`, role: 'assistant' as const, author: harness, runId: run.run_id, runStatus: 'queued', badge: 'queued', text: '' }] }) }));
     setCurrentProject(project); setActiveSessionId(session.id);
     followLiveRun(project, session.id, session.id, run.run_id, harness);
     return { run, sessionId: session.id };
