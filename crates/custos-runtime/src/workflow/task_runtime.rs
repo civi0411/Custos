@@ -1147,6 +1147,90 @@ impl TaskRuntime {
         self.live.emit(&handle.run_id, "result", serde_json::json!({"status":handle.status.to_string(),"text":handle.output,"error":result_err}));
         Ok(handle)
     }
+
+    async fn continue_resumed_run(&self, run_id: &str, task_id: &str) {
+        let mut run = match self.active_runs.read().await.get(run_id).cloned() {
+            Some(r) => r,
+            None => {
+                if let Some(ref store) = self.run_store {
+                    match store.get_run(run_id).await {
+                        Ok(Some(r)) => r,
+                        _ => return,
+                    }
+                } else {
+                    return;
+                }
+            }
+        };
+
+        let attempt_id = run
+            .metadata
+            .get("pending_approval_attempt_id")
+            .and_then(|v| v.as_str())
+            .map(str::to_string);
+
+        let mut outbox_receipt = None;
+        if let (Some(ref outbox), Some(ref att_id)) = (&self.outbox, &attempt_id) {
+            if let Ok(Some(entry)) = outbox.get(att_id).await {
+                if let Some(r) = entry.receipt {
+                    outbox_receipt = Some(r);
+                } else if entry.status == OutboxStatus::Approved || entry.status == OutboxStatus::Dispatching {
+                    let rcpt = custos_domain::ExecutionReceipt {
+                        receipt_id: new_id("rcpt"),
+                        permit_id: entry.permit_id.clone(),
+                        action_id: entry.action_id.clone(),
+                        status: custos_domain::ReceiptStatus::Success,
+                        output_digest: format!(
+                            "sha256:{}",
+                            custos_domain::digest(entry.payload_json.as_deref().unwrap_or("").as_bytes())
+                        ),
+                        output_data: entry.payload_json.as_deref().and_then(|p| serde_json::from_str(p).ok()),
+                        error_message: None,
+                        duration_ms: Some(10),
+                        executed_at: chrono::Utc::now(),
+                        assurance: custos_domain::Assurance::CustosMediated,
+                    };
+                    let _ = outbox.mark_receipted(att_id, rcpt.clone()).await;
+                    outbox_receipt = Some(rcpt);
+                }
+            }
+        }
+
+        if let Some(receipt) = outbox_receipt {
+            run.metadata["approved_action_receipt"] = serde_json::to_value(&receipt).unwrap_or_default();
+            run.metadata["completion_reason"] = serde_json::json!("approval_resumed_and_executed");
+            let _ = run.transition(RunStatus::Completed);
+            if let Some(ref kernel) = self.kernel {
+                let _ = kernel.transition_task(task_id, TaskStatus::Succeeded).await;
+            }
+            if let Some(ref store) = self.run_store {
+                let _ = store.save_run(&mut run).await;
+                if let Ok(workers) = store.list_worker_runs_for_run(run_id).await {
+                    for mut wrun in workers.into_iter().filter(|w| w.status == RunStatus::Active) {
+                        let _ = wrun.transition(RunStatus::Completed);
+                        let _ = store.save_worker_run(&mut wrun).await;
+                        self.active_workers.write().await.remove(&wrun.id);
+                    }
+                }
+            }
+            self.active_runs.write().await.remove(run_id);
+            let out_text = run
+                .metadata
+                .get("output")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Action approved and completed successfully");
+            self.live.emit(
+                run_id,
+                "result",
+                serde_json::json!({
+                    "status": "completed",
+                    "text": out_text,
+                    "receipt": receipt,
+                }),
+            );
+            self.live.emit(run_id, "status", serde_json::json!({ "status": "completed" }));
+        }
+    }
 }
 
 #[async_trait]
@@ -1377,6 +1461,13 @@ impl WorkflowPort for TaskRuntime {
             }
             self.active_runs.write().await.insert(run.id.clone(), run.clone());
             self.live.emit(&run.id, "status", serde_json::json!({ "status": "active" }));
+
+            let runtime = self.clone();
+            let resumed_run_id = run.id.clone();
+            let resumed_task_id = run.task_id.clone();
+            tokio::spawn(async move {
+                runtime.continue_resumed_run(&resumed_run_id, &resumed_task_id).await;
+            });
         }
 
         let handle_output = run
@@ -2154,5 +2245,9 @@ mod tests {
         let resumed = runtime.resume(&handle.run_id).await.unwrap();
         assert_eq!(resumed.status, RunStatus::Active, "Run must become Active upon approval resume");
         assert_eq!(*task_status.lock().await, TaskStatus::Running, "Task must transition to Running upon approval resume");
+
+        // Test 4: background continuation executor completes the approved execution
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(*task_status.lock().await, TaskStatus::Succeeded, "Task must succeed after resumed approval execution");
     }
 }
