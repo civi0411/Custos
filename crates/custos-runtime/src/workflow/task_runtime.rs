@@ -1137,7 +1137,14 @@ impl TaskRuntime {
                 .insert(wrun.id.clone(), wrun);
         }
         if background { self.persist_live_journal(&cmd, &mut run, handle.output.as_deref().unwrap_or("")).await?; }
-        self.live.emit(&handle.run_id, "result", serde_json::json!({"status":handle.status.to_string(),"text":handle.output,"error":if handle.status==RunStatus::Failed {Some("Native process failed; see the captured output")} else {None}}));
+        let result_err = if handle.status == RunStatus::Suspended {
+            run.metadata.get("pending_approval_reason").and_then(|v| v.as_str()).map(str::to_string)
+        } else if handle.status == RunStatus::Failed {
+            run.metadata.get("failure_reason").and_then(|v| v.as_str()).map(str::to_string).or_else(|| Some("Native process failed; see the captured output".into()))
+        } else {
+            None
+        };
+        self.live.emit(&handle.run_id, "result", serde_json::json!({"status":handle.status.to_string(),"text":handle.output,"error":result_err}));
         Ok(handle)
     }
 }
@@ -1152,7 +1159,33 @@ impl WorkflowPort for TaskRuntime {
             Err(DomainError::NotFound { .. }) => {
                 let run = self.run_store.as_ref().ok_or_else(|| DomainError::Validation("Run storage unavailable".into()))?.get_run(run_id).await?.ok_or_else(|| DomainError::NotFound { kind:"Run".into(), id:run_id.into() })?;
                 if run.metadata.get("session_id").and_then(|v|v.as_str()) != Some(session_id) { return Err(DomainError::Validation("Run does not belong to this session".into())); }
-                Ok(custos_domain::LiveRunReplay { events: vec![], gap: true, snapshot: custos_domain::LiveRunSnapshot { cursor:0, run_id:run.id, task_id:run.task_id, session_id:session_id.into(), turn_id:run.metadata.get("turn_id").and_then(|v|v.as_str()).unwrap_or("").into(), status:if !run.status.is_terminal() || (run.status==RunStatus::Failed && run.metadata.get("completion_reason").is_none() && run.metadata.get("failure_reason").is_none()) { "interrupted".into() } else { run.status.to_string() }, text:run.metadata.get("output").and_then(|v|v.as_str()).unwrap_or("").into(), activities:vec![], usage:run.metadata.get("usage").cloned(), error:run.metadata.get("failure_reason").and_then(|v|v.as_str()).map(str::to_string).or_else(||if !run.status.is_terminal() || (run.status==RunStatus::Failed && run.metadata.get("completion_reason").is_none()) {Some("Run interrupted by daemon restart; send a new prompt to continue".into())} else {None}) } })
+                let (status_str, err_msg) = if run.status == RunStatus::Suspended {
+                    let reason = run.metadata.get("pending_approval_reason")
+                        .or_else(|| run.metadata.get("suspension_reason"))
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string);
+                    ("suspended".to_string(), reason)
+                } else if !run.status.is_terminal() || (run.status == RunStatus::Failed && run.metadata.get("completion_reason").is_none() && run.metadata.get("failure_reason").is_none()) {
+                    ("interrupted".to_string(), Some("Run interrupted by daemon restart; send a new prompt to continue".to_string()))
+                } else {
+                    (run.status.to_string(), run.metadata.get("failure_reason").and_then(|v| v.as_str()).map(str::to_string))
+                };
+                Ok(custos_domain::LiveRunReplay {
+                    events: vec![],
+                    gap: true,
+                    snapshot: custos_domain::LiveRunSnapshot {
+                        cursor: 0,
+                        run_id: run.id,
+                        task_id: run.task_id,
+                        session_id: session_id.into(),
+                        turn_id: run.metadata.get("turn_id").and_then(|v|v.as_str()).unwrap_or("").into(),
+                        status: status_str,
+                        text: run.metadata.get("output").and_then(|v|v.as_str()).unwrap_or("").into(),
+                        activities: vec![],
+                        usage: run.metadata.get("usage").cloned(),
+                        error: err_msg,
+                    }
+                })
             },
             Err(error) => Err(error),
         }
@@ -1285,11 +1318,65 @@ impl WorkflowPort for TaskRuntime {
         };
 
         if run.status == RunStatus::Suspended {
+            // Revalidate outbox approval if an attempt was recorded
+            if let Some(attempt_id) = run.metadata.get("pending_approval_attempt_id").and_then(|v| v.as_str()) {
+                if let Some(ref outbox) = self.outbox {
+                    if let Ok(Some(entry)) = outbox.get(attempt_id).await {
+                        match entry.status {
+                            OutboxStatus::Failed => {
+                                run.transition(RunStatus::Failed)?;
+                                run.metadata["failure_reason"] = serde_json::json!("Approval rejected by user or outbox execution failed");
+                                if let Some(ref kernel) = self.kernel {
+                                    let _ = kernel.transition_task(&run.task_id, TaskStatus::Failed).await;
+                                }
+                                if let Some(ref store) = self.run_store {
+                                    store.save_run(&mut run).await?;
+                                }
+                                self.live.emit(&run.id, "result", serde_json::json!({
+                                    "status": "failed",
+                                    "text": run.metadata.get("output").and_then(|v| v.as_str()).unwrap_or(""),
+                                    "error": "Approval rejected by user or outbox execution failed"
+                                }));
+                                return Ok(RunHandle {
+                                    run_id: run.id.clone(),
+                                    task_id: run.task_id.clone(),
+                                    status: run.status,
+                                    started_at: run.started_at,
+                                    completed_at: run.ended_at,
+                                    output: run.metadata.get("output").and_then(|v| v.as_str().map(str::to_string)),
+                                });
+                            }
+                            OutboxStatus::Pending => {
+                                return Err(DomainError::Conflict("Cannot resume run: approval is still pending".into()));
+                            }
+                            OutboxStatus::Approved | OutboxStatus::Dispatching | OutboxStatus::Receipted | OutboxStatus::Uncertain => {
+                                // Approval recorded; proceed to reactivate run
+                            }
+                        }
+                    }
+                }
+            }
+
             run.transition(RunStatus::Active)?;
+            if let Some(obj) = run.metadata.as_object_mut() {
+                obj.remove("pending_approval_reason");
+            }
+            run.metadata["resumed_at"] = serde_json::json!(Utc::now().to_rfc3339());
+            if let Some(ref kernel) = self.kernel {
+                let _ = kernel.transition_task(&run.task_id, TaskStatus::Running).await;
+            }
             if let Some(ref store) = self.run_store {
                 store.save_run(&mut run).await?;
+                if let Ok(workers) = store.list_worker_runs_for_run(run_id).await {
+                    for mut wrun in workers.into_iter().filter(|w| w.status == RunStatus::Suspended) {
+                        wrun.transition(RunStatus::Active)?;
+                        let _ = store.save_worker_run(&mut wrun).await;
+                        self.active_workers.write().await.insert(wrun.id.clone(), wrun);
+                    }
+                }
             }
             self.active_runs.write().await.insert(run.id.clone(), run.clone());
+            self.live.emit(&run.id, "status", serde_json::json!({ "status": "active" }));
         }
 
         let handle_output = run
@@ -2036,6 +2123,7 @@ mod tests {
             .with_run_store(store);
 
         let cmd = StartRunCommand::new(&task.id, "actor_user")
+            .with_session_id("session_conflict_02")
             .with_preferred_mode("native")
             .with_harness_id("conflict-harness")
             .with_workspace_root("/tmp/custos-conflict-test");
@@ -2045,8 +2133,26 @@ mod tests {
         assert_eq!(handle.status, RunStatus::Suspended, "Pending approval must suspend run, not complete it");
         assert_eq!(*task_status.lock().await, TaskStatus::Blocked, "Task must transition to Blocked");
 
-        let entries = outbox_entries.lock().await;
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].status, OutboxStatus::Pending);
+        {
+            let entries = outbox_entries.lock().await;
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].status, OutboxStatus::Pending);
+        }
+
+        // Test 1: live_run replay after daemon restart must preserve suspended status, not report "interrupted"
+        let replay = runtime.live_run("session_conflict_02", &handle.run_id, 0).await.unwrap();
+        assert_eq!(replay.snapshot.status, "suspended", "Replay must preserve suspended status");
+        assert_eq!(replay.snapshot.error, Some("Approval required for high risk delete".into()), "Replay must preserve pending approval reason");
+
+        // Test 2: resume before approval must fail with conflict
+        let early_resume = runtime.resume(&handle.run_id).await;
+        assert!(early_resume.is_err(), "Resume must fail while approval is still pending");
+        assert!(matches!(early_resume.unwrap_err(), DomainError::Conflict(_)));
+
+        // Test 3: mark approval granted -> resume transitions to Active and task to Running
+        outbox_entries.lock().await[0].status = OutboxStatus::Approved;
+        let resumed = runtime.resume(&handle.run_id).await.unwrap();
+        assert_eq!(resumed.status, RunStatus::Active, "Run must become Active upon approval resume");
+        assert_eq!(*task_status.lock().await, TaskStatus::Running, "Task must transition to Running upon approval resume");
     }
 }
