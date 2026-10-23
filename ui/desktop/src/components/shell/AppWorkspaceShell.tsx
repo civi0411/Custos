@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Plus } from 'lucide-react';
 import { appendConversationDraft, readConversationDraft } from '@/components/chat/ConversationPane';
 import { Session } from '@/types';
-import { OrcaTabbedContainer, type ResourceTabsState } from '@/components/workbenches/OrcaTabbedContainer';
+import { OrcaTabbedContainer, type ResourceTabsState, type OrcaTab } from '@/components/workbenches/OrcaTabbedContainer';
 import { WorkspaceSidebar, type SidebarTool } from '@/components/shell/WorkspaceSidebar';
 import { type ActiveWorkbench } from '@/components/shell/AppHeader';
 import { AttentionBanner, type AttentionItem } from '@/components/shell/AttentionBanner';
@@ -154,38 +154,34 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     }
   }, [activeScreenId]);
 
-  // Keep activeScreen.tabs in sync with resourceTabs on the active screen, including runId and session bindings
-  useEffect(() => {
-    if (!activeScreen) return;
-    const currentTabs = activeScreen.tabs || [];
-    const tabsDiffer = currentTabs.length !== resourceTabs.tabs.length ||
-      currentTabs.some((t, i) => {
-        const next = resourceTabs.tabs[i];
-        if (!next) return true;
-        return (
-          t.id !== next.id ||
-          t.url !== next.url ||
-          t.title !== next.title ||
-          t.type !== next.type ||
-          t.sessionId !== next.sessionId ||
-          t.taskId !== next.taskId ||
-          t.runId !== next.runId ||
-          t.agentId !== next.agentId ||
-          t.workspaceId !== next.workspaceId ||
-          t.sourceId !== next.sourceId ||
-          t.artifactId !== next.artifactId ||
-          t.revision !== next.revision
-        );
-      });
-    const activeDiffer = activeScreen.activeTabId !== resourceTabs.activeTabId;
+  // ScreenContext directly owns tab descriptors for the active screen.
+  // Tab mutations and selections write directly into ScreenContext, eliminating dual-state effect synchronization.
+  const screenResourceTabs: ResourceTabsState = useMemo(() => {
+    const tabs = activeScreen?.tabs && activeScreen.tabs.length > 0 ? activeScreen.tabs : resourceTabs.tabs;
+    const activeTabId = activeScreen?.activeTabId || resourceTabs.activeTabId;
 
-    if (tabsDiffer || activeDiffer) {
-      updateActiveScreen({
-        tabs: resourceTabs.tabs,
-        activeTabId: resourceTabs.activeTabId,
-      });
-    }
-  }, [resourceTabs.tabs, resourceTabs.activeTabId, activeScreen, updateActiveScreen]);
+    return {
+      scopeKey: resourceTabs.scopeKey,
+      tabs,
+      activeTabId,
+      setTabs: (updater: React.SetStateAction<OrcaTab[]>) => {
+        const nextTabs = typeof updater === 'function' ? updater(activeScreen?.tabs || resourceTabs.tabs) : updater;
+        updateActiveScreen({ tabs: nextTabs });
+        resourceTabs.setTabs(nextTabs);
+      },
+      setActiveTabId: (updater: React.SetStateAction<string>) => {
+        const nextActiveId = typeof updater === 'function' ? updater(activeScreen?.activeTabId || resourceTabs.activeTabId) : updater;
+        updateActiveScreen({ activeTabId: nextActiveId });
+        resourceTabs.setActiveTabId(nextActiveId);
+      },
+      splitTabId: resourceTabs.splitTabId,
+      setSplitTabId: resourceTabs.setSplitTabId,
+      splitRatio: resourceTabs.splitRatio,
+      setSplitRatio: resourceTabs.setSplitRatio,
+      toggleSplitTab: resourceTabs.toggleSplitTab,
+      closeSplitTab: resourceTabs.closeSplitTab,
+    };
+  }, [activeScreen?.tabs, activeScreen?.activeTabId, resourceTabs, updateActiveScreen]);
 
   useEffect(() => {
     const query = window.matchMedia('(max-width: 1100px)');
@@ -216,7 +212,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const openedCanvasScopes = useRef(new Set<string>());
-  const canvasScope = resourceTabs.scopeKey || mode;
+  const canvasScope = screenResourceTabs.scopeKey || mode;
   if (isWebTabOpen) openedCanvasScopes.current.add(canvasScope);
 
   // Active session lookup
@@ -246,7 +242,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
   const { openTab, handleOpenTab, handleLaunchAgentTab } = useWorkspaceTabRouter({
     isWebTabOpen,
     onToggleWebTab,
-    resourceTabs,
+    resourceTabs: screenResourceTabs,
     activeWorkspaceId,
     activeSession,
     selectedTaskId,
@@ -305,55 +301,55 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     updateActiveScreen({ activeSessionId: id });
     const targetSession = allSessions.find((s) => s.id === id) || sessions.find((s) => s.id === id);
     const title = targetSession?.title || 'Chat';
-    const existingTab = resourceTabs.tabs.find((t) => (t.type === 'conversation' || t.type === 'chat') && t.sessionId === id);
+    const existingTab = screenResourceTabs.tabs.find((t) => (t.type === 'conversation' || t.type === 'chat') && t.sessionId === id);
     if (existingTab) {
-      resourceTabs.setActiveTabId(existingTab.id);
+      screenResourceTabs.setActiveTabId(existingTab.id);
     } else {
-      const activeTab = resourceTabs.tabs.find((t) => t.id === resourceTabs.activeTabId);
+      const activeTab = screenResourceTabs.tabs.find((t) => t.id === screenResourceTabs.activeTabId);
       if (activeTab && (activeTab.type === 'conversation' || activeTab.type === 'chat')) {
-        resourceTabs.setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, sessionId: id, title } : t)));
+        screenResourceTabs.setTabs((prev) => prev.map((t) => (t.id === activeTab.id ? { ...t, sessionId: id, title } : t)));
       } else {
         openTab('conversation', title, `custos://chat/${id}`, undefined, activeWorkspaceId, 'primary', id);
       }
     }
-  }, [onSelectSession, updateActiveScreen, allSessions, sessions, resourceTabs, openTab, activeWorkspaceId]);
+  }, [onSelectSession, updateActiveScreen, allSessions, sessions, screenResourceTabs, openTab, activeWorkspaceId]);
 
   const handleSelectTaskWithScreen = useCallback((id: string) => {
     onSelectTask(id);
     updateActiveScreen({ selectedTaskId: id });
-    const existing = resourceTabs.tabs.find((t) => t.type === 'tasks' || t.type === 'task');
+    const existing = screenResourceTabs.tabs.find((t) => t.type === 'tasks' || t.type === 'task');
     if (existing) {
-      resourceTabs.setActiveTabId(existing.id);
+      screenResourceTabs.setActiveTabId(existing.id);
     } else {
       openTab('tasks', 'Tasks & Timeline', 'custos://resource/tasks', undefined, activeWorkspaceId);
     }
-  }, [onSelectTask, updateActiveScreen, resourceTabs, openTab, activeWorkspaceId]);
+  }, [onSelectTask, updateActiveScreen, screenResourceTabs, openTab, activeWorkspaceId]);
 
   const handleChangeSidebarViewWithScreen = useCallback((view: 'chats' | 'tasks') => {
     onChangeSidebarView(view);
     updateActiveScreen({ sidebarView: view });
     if (view === 'tasks') {
-      const existing = resourceTabs.tabs.find((t) => t.type === 'tasks' || t.type === 'task');
+      const existing = screenResourceTabs.tabs.find((t) => t.type === 'tasks' || t.type === 'task');
       if (existing) {
-        resourceTabs.setActiveTabId(existing.id);
+        screenResourceTabs.setActiveTabId(existing.id);
       } else {
         openTab('tasks', 'Tasks & Timeline', 'custos://resource/tasks', undefined, activeWorkspaceId);
       }
     } else {
-      const existing = resourceTabs.tabs.find((t) => t.type === 'conversation' || t.type === 'chat');
+      const existing = screenResourceTabs.tabs.find((t) => t.type === 'conversation' || t.type === 'chat');
       if (existing) {
-        resourceTabs.setActiveTabId(existing.id);
+        screenResourceTabs.setActiveTabId(existing.id);
       }
     }
-  }, [onChangeSidebarView, updateActiveScreen, resourceTabs, openTab, activeWorkspaceId]);
+  }, [onChangeSidebarView, updateActiveScreen, screenResourceTabs, openTab, activeWorkspaceId]);
 
   const handleNewSession = useCallback(() => {
     onNewSession();
-    const existingCount = resourceTabs.tabs.filter((t) => t.type === 'conversation' || t.type === 'chat').length;
+    const existingCount = screenResourceTabs.tabs.filter((t) => t.type === 'conversation' || t.type === 'chat').length;
     const count = existingCount + 1;
     const title = count > 1 ? `Chat #${count}` : 'AI Assistant';
     openTab('conversation', title, `custos://chat/new-${Date.now()}`, undefined, activeWorkspaceId);
-  }, [onNewSession, resourceTabs.tabs, openTab, activeWorkspaceId]);
+  }, [onNewSession, screenResourceTabs.tabs, openTab, activeWorkspaceId]);
 
   const lensMeta = LENS_METADATA[mode];
 
@@ -364,7 +360,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
     return mode === 'engineering' ? ['engineering', 'coding', 'code'].includes(pack)
       : mode === 'research' ? pack === 'research' : ['assistant', 'copilot'].includes(pack);
   });
-  const inspectedTab = resourceTabs.tabs.find(tab => tab.id === resourceTabs.activeTabId);
+  const inspectedTab = screenResourceTabs.tabs.find(tab => tab.id === screenResourceTabs.activeTabId);
   const inspectedWorkspace = isWebTabOpen && inspectedTab?.workspaceId ? workspaces.find(workspace => workspace.id === inspectedTab.workspaceId) : activeWorkspace;
   const inspectedSession = isWebTabOpen && inspectedTab?.sessionId ? allSessions.find(session => session.id === inspectedTab.sessionId) : activeSession;
   const inspectedTask = isWebTabOpen && inspectedTab?.taskId ? tasks.find(task => task.id === inspectedTab.taskId) : tasks.find(task => task.id === selectedTaskId) || boundTask;
@@ -443,7 +439,7 @@ export const AppWorkspaceShell: React.FC<AppWorkspaceShellProps> = ({
         <div ref={containerRef} className="flex-1 flex flex-col overflow-hidden min-w-0 relative bg-canvas">
           <div className="flex-1 min-h-0 overflow-hidden relative">
             <OrcaTabbedContainer
-              resourceTabs={resourceTabs}
+              resourceTabs={screenResourceTabs}
               isPaneOpen={true}
               session={activeSession}
               onSendMessage={onSendMessage}
