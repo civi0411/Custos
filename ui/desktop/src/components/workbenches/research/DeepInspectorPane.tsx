@@ -24,9 +24,6 @@ export const DeepInspectorPane: React.FC<DeepInspectorPaneProps> = ({
           <FileCode className="w-5 h-5" />
         </div>
         <h3 className="text-sm font-semibold text-[var(--color-editor-fg)]">No Artifact Selected</h3>
-        <p className="text-xs text-[var(--color-fg-muted)] mt-1.5 max-w-xs leading-relaxed">
-          Select an artifact, research claim, or execution receipt from the workbench to inspect proof-closure and evidence chains.
-        </p>
         {onClose && (
           <button
             onClick={onClose}

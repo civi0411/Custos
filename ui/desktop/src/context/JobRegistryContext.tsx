@@ -81,11 +81,7 @@ export const JobRegistryProvider: React.FC<{ children: React.ReactNode }> = ({ c
       return jobs.some((j) => {
         if (j.status !== 'running' && j.status !== 'queued') return false;
         if (j.jobId !== jobId) return false;
-        if (sourceTabId !== undefined) {
-          const jBase = j.sourceTabId?.split('-')[0];
-          const queryBase = sourceTabId.split('-')[0];
-          if (j.sourceTabId !== sourceTabId && jBase !== queryBase) return false;
-        }
+        if (sourceTabId !== undefined && j.sourceTabId !== sourceTabId) return false;
         return true;
       });
     },
@@ -94,11 +90,10 @@ export const JobRegistryProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const getRunningCountForTab = useCallback(
     (tabId: string): number => {
-      const targetBase = tabId.split('-')[0];
       return jobs.filter((j) => {
         if (j.status !== 'running' && j.status !== 'queued') return false;
         if (!j.sourceTabId) return false;
-        return j.sourceTabId === tabId || j.sourceTabId.split('-')[0] === targetBase;
+        return j.sourceTabId === tabId;
       }).length;
     },
     [jobs]

@@ -19,6 +19,9 @@ import {
 import { daemonClient } from '@/api/daemon_client';
 import type { NoteRecord, NoteVersionRecord } from '@/types/domain';
 
+// Module-level draft cache to prevent data loss on tab close or screen switch
+const noteDrafts = new Map<string, { title: string; content: string; tagsInput: string }>();
+
 interface NotesWorkbenchPaneProps {
   sessionId?: string;
   onShowToast?: (msg: string) => void;
@@ -64,12 +67,53 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
     }
   };
 
+  const latestStateRef = useRef({ title, content, tagsInput, selectedNoteId, isDirty, sessionId });
+  useEffect(() => {
+    latestStateRef.current = { title, content, tagsInput, selectedNoteId, isDirty, sessionId };
+  }, [title, content, tagsInput, selectedNoteId, isDirty, sessionId]);
+
+  useEffect(() => {
+    return () => {
+      const state = latestStateRef.current;
+      if (state.isDirty && state.title.trim()) {
+        const tags = state.tagsInput
+          .split(',')
+          .map((t) => t.trim())
+          .filter((t) => t.length > 0);
+        void daemonClient.saveNote({
+          id: state.selectedNoteId || undefined,
+          title: state.title.trim(),
+          content: state.content,
+          session_id: state.sessionId,
+          tags,
+        });
+      }
+    };
+  }, []);
+
   const selectNote = (note: NoteRecord) => {
+    const current = latestStateRef.current;
+    if (current.isDirty && current.selectedNoteId) {
+      noteDrafts.set(current.selectedNoteId, {
+        title: current.title,
+        content: current.content,
+        tagsInput: current.tagsInput,
+      });
+    }
+
     setSelectedNoteId(note.id);
-    setTitle(note.title);
-    setContent(note.content);
-    setTagsInput((note.tags || []).join(', '));
-    setIsDirty(false);
+    const draft = noteDrafts.get(note.id);
+    if (draft) {
+      setTitle(draft.title);
+      setContent(draft.content);
+      setTagsInput(draft.tagsInput);
+      setIsDirty(true);
+    } else {
+      setTitle(note.title);
+      setContent(note.content);
+      setTagsInput((note.tags || []).join(', '));
+      setIsDirty(false);
+    }
     setShowHistory(false);
   };
 
@@ -128,6 +172,7 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
 
         setIsDirty(false);
         setSelectedNoteId(saved.id);
+        noteDrafts.delete(saved.id);
         setJustSaved(true);
         setTimeout(() => setJustSaved(false), 2000);
 
@@ -152,7 +197,7 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
 
   // Debounced auto-save effect
   useEffect(() => {
-    if (!isDirty || !selectedNoteId) return;
+    if (!isDirty) return;
 
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
@@ -167,7 +212,7 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [isDirty, selectedNoteId, executeSave]);
+  }, [isDirty, executeSave]);
 
   const handleInsertToChat = () => {
     if (!content.trim()) {
@@ -199,11 +244,11 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
 
   return (
     <div className="flex h-full w-full flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
-      {/* Sleek 44px (h-11) Top Bar */}
-      <div className="flex h-11 flex-shrink-0 items-center justify-between border-b border-[var(--color-border-default)] px-3.5 bg-[var(--color-surface-1)]">
+      {/* Compact Top Bar */}
+      <div className="flex h-9 flex-shrink-0 items-center justify-between border-b border-[var(--color-border-default)] px-3 bg-[var(--color-surface-1)]">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-indigo-400" />
+            <FileText className="h-4 w-4 text-white/70" />
             <span className="text-xs font-semibold text-[var(--color-editor-fg)]">
               Scratchpad & Notes
             </span>
@@ -215,22 +260,22 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
           <div className="flex items-center text-[11px]">
             {isSaving ? (
               <span className="flex items-center gap-1.5 text-[var(--color-fg-muted)]">
-                <RefreshCw className="h-3 w-3 animate-spin text-indigo-400" />
+                <RefreshCw className="h-3 w-3 animate-spin text-white/60" />
                 Saving...
               </span>
             ) : isDirty ? (
-              <span className="flex items-center gap-1.5 font-medium text-amber-400">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+              <span className="flex items-center gap-1.5 font-medium text-white/80">
+                <span className="h-1.5 w-1.5 rounded-full bg-white/50" />
                 Unsaved changes
               </span>
             ) : justSaved ? (
-              <span className="flex items-center gap-1.5 font-medium text-emerald-400">
-                <Check className="h-3 w-3 text-emerald-400" />
+              <span className="flex items-center gap-1.5 font-medium text-white">
+                <Check className="h-3 w-3 text-white/80" />
                 Saved
               </span>
             ) : (
               <span className="flex items-center gap-1.5 text-[var(--color-fg-subtle)]">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/80" />
+                <span className="h-1.5 w-1.5 rounded-full bg-white/70" />
                 Auto-saved
               </span>
             )}
@@ -280,7 +325,7 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
               onClick={fetchHistory}
               className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
                 showHistory
-                  ? 'border-indigo-500/50 bg-indigo-500/10 text-indigo-300'
+                  ? 'border-white/20 bg-white/10 text-white'
                   : 'border-[var(--color-border-default)] bg-[var(--color-surface-2)] text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-3)]'
               }`}
               title="Version history"
@@ -292,26 +337,26 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
 
           <button
             onClick={startNewNote}
-            className="flex items-center gap-1.5 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-2)] px-2.5 py-1 text-xs font-medium text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-3)] transition"
+            className="flex items-center gap-1.5 rounded-md border border-white/15 bg-white/5 px-2.5 py-1 text-xs font-medium text-white/90 hover:bg-white/10 hover:text-white transition"
           >
             <Plus className="h-3.5 w-3.5" />
-            New
+            New Note
           </button>
 
           {/* Primary Action Button: Insert to Chat */}
           <button
             onClick={handleInsertToChat}
-            className="flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-3 py-1 text-xs font-medium text-white transition shadow-sm"
+            className="flex items-center gap-1.5 rounded-md bg-white hover:bg-white/90 px-3 py-1 text-xs font-semibold text-black transition shadow-sm"
             title="Insert this note into prompt input"
           >
             {justInserted ? (
               <>
-                <Check className="h-3.5 w-3.5 text-white" />
+                <Check className="h-3.5 w-3.5 text-black stroke-[2.5]" />
                 <span>Inserted</span>
               </>
             ) : (
               <>
-                <Send className="h-3.5 w-3.5 text-white" />
+                <Send className="h-3.5 w-3.5 text-black" />
                 <span>Insert to Chat</span>
               </>
             )}
@@ -331,7 +376,7 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
                 placeholder="Search notes..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-canvas)] py-1 pl-8 pr-2.5 text-xs text-[var(--color-editor-fg)] placeholder:text-[var(--color-fg-subtle)] focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-canvas)] py-1 pl-8 pr-2.5 text-xs text-[var(--color-editor-fg)] placeholder:text-[var(--color-fg-subtle)] focus:border-white/30 focus:outline-none"
               />
             </div>
           </div>
@@ -349,7 +394,7 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
                 <p>No notes found.</p>
                 <button
                   onClick={startNewNote}
-                  className="mt-2 text-indigo-400 hover:underline text-[11px]"
+                  className="mt-2 text-white/80 hover:text-white hover:underline text-[11px]"
                 >
                   Create your first note
                 </button>
@@ -371,7 +416,7 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
                   onClick={() => selectNote(note)}
                   className={`w-full rounded-lg p-2.5 text-left transition border ${
                     isSelected
-                      ? 'border-indigo-500/30 bg-indigo-500/10 text-[var(--color-editor-fg)]'
+                      ? 'border-white/20 bg-white/10 text-[var(--color-editor-fg)]'
                       : 'border-transparent hover:border-[var(--color-border-muted)] hover:bg-[var(--color-surface-2)] text-[var(--color-fg-muted)]'
                   }`}
                 >
@@ -432,10 +477,10 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
                 <button
                   onClick={() => executeSave()}
                   disabled={isSaving}
-                  className="flex items-center gap-1 rounded bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] border border-[var(--color-border-default)] px-2 py-0.5 text-[11px] font-medium text-[var(--color-editor-fg)] transition"
+                  className="flex items-center gap-1 rounded-md bg-white hover:bg-white/90 px-2.5 py-1 text-xs font-semibold text-black transition shadow-sm"
                   title="Save now"
                 >
-                  <Save className="h-3 w-3" />
+                  <Save className="h-3 w-3 text-black" />
                   Save
                 </button>
               )}
@@ -506,7 +551,7 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
             <div className="mt-3 space-y-3">
               {versions.length === 0 ? (
                 <p className="text-xs text-[var(--color-fg-muted)]">
-                  No previous versions recorded. This is the initial version (v1).
+                  No previous versions recorded.
                 </p>
               ) : (
                 versions.map((ver) => (

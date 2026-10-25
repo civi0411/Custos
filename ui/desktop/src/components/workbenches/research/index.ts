@@ -11,3 +11,5 @@ export * from './DeepInspectorPane';
 export * from './ResearchMethodsPane';
 export * from './ArtifactsWorkbenchPane';
 export * from './ResearchSynthesisPane';
+export * from './ReviewerCard';
+export * from './WorkflowStarters';

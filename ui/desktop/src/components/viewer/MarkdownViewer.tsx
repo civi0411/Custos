@@ -13,6 +13,7 @@ interface MarkdownViewerProps {
   isReadOnly?: boolean;
   onChangeText?: (text: string) => void;
   className?: string;
+  embedded?: boolean;
 }
 
 export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
@@ -20,6 +21,7 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
   isReadOnly = true,
   onChangeText,
   className = '',
+  embedded = false,
 }) => {
   const [viewMode, setViewMode] = useState<'preview' | 'raw'>('preview');
   const [copied, setCopied] = useState(false);
@@ -33,7 +35,7 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
   return (
     <div className={`flex flex-col h-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)] ${className}`}>
       {/* Viewer Sub-Header */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] text-xs select-none">
+      {!embedded && <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] text-xs select-none">
         <div className="flex items-center gap-1.5 bg-[var(--color-surface-2)] p-0.5 rounded-lg border border-[var(--color-border-subtle)]">
           <button
             type="button"
@@ -70,12 +72,12 @@ export const MarkdownViewer: React.FC<MarkdownViewerProps> = ({
           {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
           <span>{copied ? 'Copied' : 'Copy'}</span>
         </button>
-      </div>
+      </div>}
 
       {/* Content Body */}
       <div className="flex-1 overflow-auto">
         {viewMode === 'preview' ? (
-          <div className="max-w-4xl mx-auto p-6 md:p-8 markdown-body conversation-markdown text-sm leading-relaxed text-[var(--color-editor-fg)] select-text">
+          <div className={`max-w-4xl mx-auto ${embedded ? 'p-3' : 'p-6 md:p-8'} markdown-body conversation-markdown text-sm leading-relaxed text-[var(--color-editor-fg)] select-text`}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkMath, remarkNormalizeChatMath]}
               rehypePlugins={[[rehypeKatex, { trust: false, throwOnError: false, strict: false, maxExpand: 1000, maxSize: 20 }]]}

@@ -1,74 +1,174 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  ArrowLeft,
-  ArrowRight,
   PanelLeft,
   PanelRight,
-  MessageSquare,
-  Code2,
-  FlaskConical,
-  GitBranch,
+  Search,
   Minus,
   Square,
   Copy,
   X,
-  Plus,
-  Maximize2,
-  Minimize2,
-  Columns2,
-  FolderTree,
-  FileDiff,
-  Activity,
-  Terminal as TerminalIcon,
-  ShieldCheck,
-  BookOpen,
-  NotebookTabs,
-  Layers,
-  FileCode,
-  FileText,
-  Send,
-  Users,
-  Calendar,
-  Globe,
-  LayoutGrid,
+  ChevronLeft,
+  ChevronRight,
+  Code2,
+  FlaskConical,
+  Bot,
 } from 'lucide-react';
-import WorktreeIcon from '~icons/codicon/worktree';
 import { isMacOS, formatKeyCombo } from '@/lib/utils';
-import { useAppContext, type ActiveWorkbench } from '@/context/AppContext';
-import { getTabType, type OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
+import { useAppContext } from '@/context/AppContext';
+import { useScreenContext } from '@/context/ScreenContext';
+import { ActionIcon } from '@/components/common/ActionIcon';
+import { ScreenSwitcherBar } from '@/components/workbenches/ScreenSwitcherBar';
+import { daemonClient } from '@/api/daemon_client';
+import { screensForWorkbench } from '@/types/screen';
+
+interface SessionMetrics {
+  session_id?: string;
+  tokens_in: number;
+  tokens_out: number;
+  total_tokens: number;
+  estimated_cost_usd: number;
+  active_runs: number;
+  pending_approvals: number;
+}
 
 export const AppTopBar: React.FC = () => {
-  const navigate = useNavigate();
   const isMac = isMacOS();
 
   const {
-    activeWorkbench,
-    setActiveWorkbench,
     isSidebarCollapsed,
     toggleSidebar,
-    isWebTabOpen,
-    setIsWebTabOpen,
-    toggleWebTab,
-    isWebTabExpanded,
-    toggleExpandWebTab,
-    resourceTabs,
-    handleCloseResourceTab,
-    setIsResourcePickerOpen,
-    column2Width,
-    isResizingColumn,
-    handleStartResizeColumn2,
-    handleResetColumn2Width,
-    splitTabId,
-    setSplitTabId,
-    toggleSplitTab,
-    closeSplitTab,
+    isInspectorOpen,
+    toggleInspector,
     activeSession,
-    activeWorkspace,
-    activeDetection,
+    activeSessionId,
+    activeWorkbench,
+    setActiveWorkbench,
+    currentProject: _currentProject,
+    setIsOpenProjectOpen: _setIsOpenProjectOpen,
   } = useAppContext();
 
+  const {
+    screens,
+    activeScreenId,
+    selectScreen,
+    createScreen,
+    closeScreen,
+    togglePinScreen,
+    renameScreen,
+  } = useScreenContext();
+
+  // Screen history navigation (Back / Forward)
+  const [navHistory, setNavHistory] = useState<string[]>([]);
+  const [navIndex, setNavIndex] = useState<number>(-1);
+  const isNavigatingRef = useRef(false);
+
+  useEffect(() => {
+    if (!activeScreenId) return;
+    if (isNavigatingRef.current) {
+      isNavigatingRef.current = false;
+      return;
+    }
+    setNavHistory((prev) => {
+      const current = prev.slice(0, navIndex + 1);
+      if (current[current.length - 1] === activeScreenId) return prev;
+      const next = [...current, activeScreenId];
+      setNavIndex(next.length - 1);
+      return next;
+    });
+  }, [activeScreenId, navIndex]);
+
+  const canGoBack = navIndex > 0;
+  const canGoForward = navIndex >= 0 && navIndex < navHistory.length - 1;
+
+  const handleGoBack = useCallback(() => {
+    if (!canGoBack) return;
+    isNavigatingRef.current = true;
+    const targetScreenId = navHistory[navIndex - 1];
+    setNavIndex((i) => i - 1);
+    selectScreen(targetScreenId);
+  }, [canGoBack, navHistory, navIndex, selectScreen]);
+
+  const handleGoForward = useCallback(() => {
+    if (!canGoForward) return;
+    isNavigatingRef.current = true;
+    const targetScreenId = navHistory[navIndex + 1];
+    setNavIndex((i) => i + 1);
+    selectScreen(targetScreenId);
+  }, [canGoForward, navHistory, navIndex, selectScreen]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === '[') {
+        e.preventDefault();
+        handleGoBack();
+      } else if ((e.metaKey || e.ctrlKey) && e.key === ']') {
+        e.preventDefault();
+        handleGoForward();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleGoBack, handleGoForward]);
+
+  const workbenchModes: {
+    id: 'engineering' | 'research' | 'copilot';
+    label: string;
+    icon: React.ElementType;
+    shortcut: string;
+  }[] = [
+      { id: 'engineering', label: 'Engineering', icon: Code2, shortcut: '⌥1' },
+      { id: 'research', label: 'Research', icon: FlaskConical, shortcut: '⌥2' },
+      { id: 'copilot', label: 'Copilot', icon: Bot, shortcut: '⌥3' },
+    ];
+
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
+
+  // Inspector dynamic width synchronization
+  const [inspectorWidth, setInspectorWidth] = useState<number>(() => {
+    try {
+      const saved = Number(localStorage.getItem('custos.right-sidebar-width'));
+      return saved >= 260 && saved <= 480 ? saved : 300;
+    } catch {
+      return 300;
+    }
+  });
+
+  useEffect(() => {
+    const handleResize = (e: Event) => {
+      const custom = e as CustomEvent<number>;
+      if (typeof custom.detail === 'number') {
+        setInspectorWidth(custom.detail);
+      }
+    };
+    window.addEventListener('custos:right-sidebar-resized', handleResize);
+    return () => window.removeEventListener('custos:right-sidebar-resized', handleResize);
+  }, []);
+
+  // Real live data from daemon for active runs
+  const [metrics, setMetrics] = useState<SessionMetrics | null>(null);
+
+  const fetchLiveData = useCallback(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    try {
+      const isOnline = await daemonClient.checkHealth();
+      if (isOnline) {
+        const metricsData = await daemonClient
+          .getSessionMetrics(activeSessionId || activeSession?.id)
+          .catch(() => null);
+        if (metricsData) setMetrics(metricsData);
+      }
+    } catch {
+      // Keep last known data
+    }
+  }, [activeSessionId, activeSession?.id]);
+
+  useEffect(() => {
+    fetchLiveData();
+    const pollInterval = metrics && metrics.active_runs > 0 ? 5000 : 15000;
+    const interval = setInterval(fetchLiveData, pollInterval);
+    return () => clearInterval(interval);
+  }, [fetchLiveData, metrics?.active_runs]);
 
   useEffect(() => {
     if (isMac) return;
@@ -76,13 +176,12 @@ export const AppTopBar: React.FC = () => {
     let unlisten: (() => void) | undefined;
     const initTauriWindow = async () => {
       try {
-        const { getCurrentWindow } = await import('@tauri-apps/api/window');
         const appWindow = getCurrentWindow();
         setIsWindowMaximized(await appWindow.isMaximized());
         unlisten = await appWindow.onResized(async () => {
           setIsWindowMaximized(await appWindow.isMaximized());
         });
-      } catch {}
+      } catch { }
     };
 
     void initTauriWindow();
@@ -93,103 +192,44 @@ export const AppTopBar: React.FC = () => {
 
   const handleMinimize = async () => {
     try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().minimize();
-    } catch {}
+    } catch { }
   };
 
   const handleToggleMaximize = async () => {
     try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().toggleMaximize();
-    } catch {}
+    } catch { }
   };
 
   const handleClose = async () => {
     try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
       await getCurrentWindow().close();
-    } catch {}
+    } catch { }
   };
 
-  const handleBack = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      navigate(-1);
-    } catch {}
+  const handleOpenGlobalSearch = () => {
+    window.dispatchEvent(new CustomEvent('custos:open-command-palette'));
   };
 
-  const handleForward = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      navigate(1);
-    } catch {}
-  };
+  const activeRuns = metrics?.active_runs ?? 0;
 
-  const workbenchModes: {
-    id: ActiveWorkbench;
-    label: string;
-    icon: React.ElementType;
-    shortcut: string;
-  }[] = [
-    { id: 'copilot', label: 'Copilot', icon: MessageSquare, shortcut: '⌥1' },
-    { id: 'engineering', label: 'Engineering', icon: Code2, shortcut: '⌥2' },
-    { id: 'research', label: 'Research', icon: FlaskConical, shortcut: '⌥3' },
-  ];
-
-  const getTabIcon = (id: OrcaTabId, isActive: boolean) => {
-    const cls = `w-3 h-3 ${isActive ? 'text-workbench-accent' : 'text-white/50 group-hover:text-white/80 transition-colors'}`;
-    switch (id) {
-      case 'tools': return <LayoutGrid className={cls} />;
-      case 'files': return <FolderTree className={cls} />;
-      case 'changes': return <FileDiff className={cls} />;
-      case 'activity': return <Activity className={cls} />;
-      case 'terminal': return <TerminalIcon className={cls} />;
-      case 'worktrees': return <WorktreeIcon className={cls} />;
-      case 'evidence': return <ShieldCheck className={cls} />;
-      case 'literature': return <BookOpen className={cls} />;
-      case 'findings': return <ShieldCheck className={cls} />;
-      case 'claims': return <ShieldCheck className={cls} />;
-      case 'lab': return <FlaskConical className={cls} />;
-      case 'experiments': return <NotebookTabs className={cls} />;
-      case 'runs': return <FlaskConical className={cls} />;
-      case 'knowledge': return <FlaskConical className={cls} />;
-      case 'synthesis': return <Layers className={cls} />;
-      case 'artifacts': return <FileCode className={cls} />;
-      case 'drafts': return <FileText className={cls} />;
-      case 'outbox': return <Send className={cls} />;
-      case 'contacts': return <Users className={cls} />;
-      case 'calendar': return <Calendar className={cls} />;
-      case 'notes': return <FileCode className={cls} />;
-      default: return <Globe className={cls} />;
-    }
-  };
-
-  const currentBranch =
-    activeWorkspace?.active_branch ||
-    (activeWorkspace?.kind?.type === 'git' ? activeWorkspace.kind.branch : null) ||
-    activeDetection?.branch;
-
-  const isDirty = Boolean(
-    activeWorkspace
-      ? activeWorkspace.dirty_manifest?.is_dirty ?? activeWorkspace.dirtyManifest?.is_dirty
-      : activeDetection?.is_dirty
-  );
-
-  const dirtyCount = activeWorkspace
-    ? activeWorkspace.dirty_manifest?.modified_files?.length ??
-      activeWorkspace.dirtyManifest?.modified_files?.length ??
-      0
-    : activeDetection?.dirty_count ?? 0;
 
   return (
     <header
-      className="relative flex h-9.5 w-full shrink-0 items-center justify-between bg-[#212124] border-b border-white/10 text-white/70 select-none z-50 pl-2 pr-0"
-      aria-label="Unified Sovereign Titlebar"
+      className="relative flex h-10 w-full shrink-0 items-center justify-between bg-[#18181b] text-white/70 select-none z-50 border-b border-white/6"
+      aria-label="Custos Titlebar"
     >
-      {/* ── LEFT: macOS Traffic Lights + Nav + Sidebar Toggle + 3 Lenses ── */}
-      <div className="flex items-center gap-1 shrink-0">
-        {/* macOS Traffic Lights Reserved Space */}
+      {/* ── LEFT COLUMN: Window spacer (Traffic lights/Brand) + Sidebar Toggle + Workbench Modes ── */}
+      <div
+        data-tauri-drag-region
+        className={`flex items-center gap-1.5 shrink-0 h-full z-30 transition-[width] duration-200 ease-out pl-2.5 pr-2 ${!isSidebarCollapsed ? 'border-r border-white/6' : ''
+          }`}
+        style={{
+          width: isSidebarCollapsed ? (isMac ? 176 : 148) : 304,
+        }}
+      >
+        {/* macOS Traffic Lights Reserved Space or Windows Brand Name */}
         {isMac ? (
           <div
             data-tauri-drag-region
@@ -204,53 +244,50 @@ export const AppTopBar: React.FC = () => {
           </div>
         )}
 
-        {/* Back / Forward History */}
-        <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            onClick={handleBack}
-            aria-label="Back"
-            title="Back (⌘[)"
-            className="flex size-6 items-center justify-center rounded-md text-white/50 transition-colors hover:bg-white/10 hover:text-white active:scale-95 cursor-pointer"
-          >
-            <ArrowLeft className="size-3.5" strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            onClick={handleForward}
-            aria-label="Forward"
-            title="Forward (⌘])"
-            className="flex size-6 items-center justify-center rounded-md text-white/50 transition-colors hover:bg-white/10 hover:text-white active:scale-95 cursor-pointer"
-          >
-            <ArrowRight className="size-3.5" strokeWidth={2} />
-          </button>
-        </div>
-
-        {/* Vertical divider */}
-        <div className="h-3.5 w-px bg-white/10 mx-1 shrink-0" />
-
         {/* Sidebar Toggle Button */}
-        <button
-          type="button"
+        <ActionIcon
+          icon={PanelLeft}
+          tooltip={`Toggle Sidebar (${formatKeyCombo({ ctrlOrCmd: true, key: 'B' })})`}
+          ariaLabel="Toggle Sidebar"
+          active={!isSidebarCollapsed}
+          size="sm"
           onClick={(e) => {
             e.stopPropagation();
             toggleSidebar();
           }}
-          title={`Toggle Sidebar (${formatKeyCombo({ ctrlOrCmd: true, key: 'B' })})`}
-          className={`flex size-6 items-center justify-center rounded-md transition-colors cursor-pointer ${
-            !isSidebarCollapsed
-              ? 'text-white/80 bg-white/10'
-              : 'text-white/40 hover:bg-white/5 hover:text-white/70'
-          }`}
-        >
-          <PanelLeft className="size-3.5" />
-        </button>
+        />
 
-        {/* ── 3 Workbench Lenses Segmented Switcher (Icon-only: Copilot | Engineering | Research) ── */}
+        {/* Navigation History: Back & Forward */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          <ActionIcon
+            icon={ChevronLeft}
+            tooltip={`Back (${formatKeyCombo({ ctrlOrCmd: true, key: '[' })})`}
+            ariaLabel="Back"
+            size="sm"
+            disabled={!canGoBack}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleGoBack();
+            }}
+          />
+          <ActionIcon
+            icon={ChevronRight}
+            tooltip={`Forward (${formatKeyCombo({ ctrlOrCmd: true, key: ']' })})`}
+            ariaLabel="Forward"
+            size="sm"
+            disabled={!canGoForward}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleGoForward();
+            }}
+          />
+        </div>
+
+        {/* Compact Workbench Modes Switcher (Icon-only, sleek 3-button segmented control) */}
         <div
-          className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-black/25 p-0.5 shrink-0 ml-1"
+          className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-black/40 p-0.5 shrink-0 shadow-xs"
           role="tablist"
-          aria-label="Choose workbench lens"
+          aria-label="Workbench Lens"
         >
           {workbenchModes.map((m) => {
             const Icon = m.icon;
@@ -262,267 +299,143 @@ export const AppTopBar: React.FC = () => {
                 onClick={(e) => {
                   e.stopPropagation();
                   setActiveWorkbench(m.id);
+                  const targetScreen = screensForWorkbench(screens, m.id)
+                    .sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0))[0];
+                  if (targetScreen) {
+                    selectScreen(targetScreen.id);
+                  }
                 }}
-                title={`${m.label} (${m.shortcut})`}
-                aria-label={`${m.label} (${m.shortcut})`}
-                className={`flex size-6 items-center justify-center rounded-md transition cursor-pointer ${
-                  isActive
+                className={`flex items-center justify-center size-6 rounded-md transition cursor-pointer select-none ${isActive
                     ? 'bg-white/18 text-white shadow-xs'
-                    : 'text-white/45 hover:text-white/90 hover:bg-white/8'
-                }`}
-                role="tab"
-                aria-selected={isActive}
+                    : 'text-white/45 hover:text-white/85 hover:bg-white/8'
+                  }`}
+                title={`${m.label} Workbench (${m.shortcut})`}
+                aria-label={`${m.label} Workbench`}
               >
-                <Icon className={`size-3.5 shrink-0 ${isActive ? 'text-workbench-accent' : 'text-white/50'}`} />
+                <Icon className={`size-3.5 shrink-0 ${isActive ? 'text-workbench-accent' : ''}`} />
               </button>
             );
           })}
         </div>
+
+        {/* Empty draggable titlebar space filling up to the 304px workpane boundary */}
+        <div data-tauri-drag-region className="flex-1 h-full min-w-0" />
       </div>
 
-      {/* ── CENTER: Draggable Title Region + Active Session / Branch ── */}
+      {/* ── CENTER: Screen Tabs Bar (Strictly aligned with central workpane axis between the 2 side panels) ── */}
       <div
         data-tauri-drag-region
-        className="flex-1 h-full flex items-center justify-center gap-2 cursor-default select-none px-2 min-w-0"
+        className="flex-1 min-w-0 h-full flex items-center justify-start overflow-hidden px-2 z-20 cursor-default"
       >
-        <span
-          data-tauri-drag-region
-          className="text-[11.5px] font-medium text-white/70 truncate max-w-[280px]"
-        >
-          {activeSession?.title || 'Custos Sovereign Workspace'}
-        </span>
+        <ScreenSwitcherBar
+          screens={screens}
+          activeScreenId={activeScreenId}
+          onSelectScreen={selectScreen}
+          onCreateScreen={createScreen}
+          onCloseScreen={closeScreen}
+          onTogglePinScreen={togglePinScreen}
+          onRenameScreen={renameScreen}
+          currentWorkbench={activeWorkbench || 'engineering'}
+          className="flex items-center justify-start gap-1 max-w-full overflow-x-auto no-scrollbar select-none text-xs"
+        />
 
-        {currentBranch && (
-          <div
-            data-tauri-drag-region
-            className="hidden lg:flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[10px] font-mono text-white/50 shrink-0"
-          >
-            <GitBranch className="size-2.5 text-white/40 shrink-0" />
-            <span className="truncate max-w-[90px] text-white/70">{currentBranch}</span>
-            {isDirty && (
-              <span className="text-amber-400 font-bold shrink-0">
-                • {dirtyCount}*
-              </span>
-            )}
-          </div>
-        )}
+        {/* Draggable titlebar area between the screen tabs and right controls */}
+        <div data-tauri-drag-region className="flex-1 h-full min-w-6 flex items-center pl-2">
+          {activeSession?.title && (
+            <span
+              data-tauri-drag-region
+              className="text-[11px] text-white/30 truncate max-w-[200px] select-none cursor-default"
+              title={`Active Session: ${activeSession.title}`}
+            >
+              · {activeSession.title}
+            </span>
+          )}
+        </div>
       </div>
- 
-      {/* ── RIGHT: Unified Resource Tabs & Pane Controls ── */}
+
+      {/* ── RIGHT COLUMN: Git Branch + Quick Open + Attention Indicator + AI Chat + Inspector Toggle + Window Controls ── */}
       <div
-        className={`flex items-center shrink-0 h-full relative ${
-          !isWebTabOpen ? 'max-w-[480px]' : ''
-        }`}
+        data-tauri-drag-region
+        className={`flex items-center justify-end gap-1.5 shrink-0 h-full transition-[width,min-width] duration-200 ease-out pl-2 pr-2.5 ml-auto ${isInspectorOpen ? 'border-l border-white/6' : ''
+          }`}
         style={{
-          width:
-            isWebTabOpen && !isWebTabExpanded
-              ? `${column2Width}px`
-              : undefined,
-          minWidth: 0,
+          minWidth: isInspectorOpen ? inspectorWidth : undefined,
         }}
       >
-        {/* Continuous Active Drag Handle Divider (Aligned with Workspace Splitter) */}
-        {isWebTabOpen && !isWebTabExpanded && (
+
+        {/* Quick Open Search Button (Compact & clean) */}
+        <button
+          type="button"
+          onClick={handleOpenGlobalSearch}
+          className="flex items-center gap-1.5 h-6.5 px-2 rounded-md border border-white/10 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80 transition text-xs cursor-pointer select-none"
+          title="Quick Open (⌘K)"
+          aria-label="Quick Open"
+        >
+          <Search className="size-3.5" />
+          <kbd className="font-mono text-[9px] text-white/40 bg-white/10 px-1 py-0.2 rounded">
+            {formatKeyCombo({ ctrlOrCmd: true, key: 'K' })}
+          </kbd>
+        </button>
+
+        {/* Attention Indicator (Active agent runs) */}
+        {activeRuns > 0 && (
           <div
-            className="absolute left-0 inset-y-0 w-3 -ml-1.5 cursor-col-resize z-40 group flex items-center justify-center select-none"
-            onMouseDown={handleStartResizeColumn2}
-            onDoubleClick={handleResetColumn2Width}
-            title="Drag to resize pane (double click to reset)"
+            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/6 border border-white/10 text-white/70 text-[10.5px] font-mono select-none shrink-0"
+            title={`${activeRuns} active agent run(s)`}
           >
-            <div
-              className={`w-px h-full transition-colors ${
-                isResizingColumn ? 'bg-workbench-accent' : 'bg-white/10 group-hover:bg-workbench-accent'
-              }`}
-            />
+            <span className="size-1.5 rounded-full bg-white/60 animate-pulse" />
+            <span>{activeRuns}</span>
           </div>
         )}
 
-        <div className="flex items-center justify-between gap-1.5 w-full h-full px-2 overflow-hidden">
-          {/* Resource Tabs Strip (Always visible on menu bar) */}
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 flex-1 min-w-0">
-            {resourceTabs.tabs.map((tab) => {
-              const isActive = tab.id === resourceTabs.activeTabId;
-              const isSplit = tab.id === splitTabId;
-              const tabType = getTabType(tab);
-              return (
-                <div
-                  key={tab.id}
-                  draggable={true}
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/custos-tab-id', tab.id);
-                    e.dataTransfer.setData('text/plain', tab.id);
-                    e.dataTransfer.effectAllowed = 'copyMove';
-                  }}
-                  onClick={() => {
-                    resourceTabs.setActiveTabId(tab.id);
-                    if (!isWebTabOpen) {
-                      setIsWebTabOpen(true);
-                    }
-                  }}
-                  className={`group flex items-center gap-1.5 px-2 py-0.5 rounded-md cursor-pointer transition shrink-0 text-[11.5px] h-6 select-none ${
-                    isActive
-                      ? isWebTabOpen
-                        ? 'bg-white/14 text-white font-medium shadow-xs border border-white/10'
-                        : 'bg-white/12 text-white font-medium border border-white/20 shadow-xs hover:bg-white/18'
-                      : isSplit
-                        ? 'bg-purple-500/15 text-purple-200 border border-purple-500/40 font-medium'
-                        : 'bg-transparent text-white/50 hover:text-white/80 hover:bg-white/6'
-                  }`}
-                  title={isWebTabOpen ? `${tab.title} (Kéo thả xuống canvas để mở song song)` : `${tab.title} (Click để mở canvas)`}
-                >
-                  {getTabIcon(tabType, isActive || isSplit)}
-                  <span className="truncate max-w-[100px]">{tab.title}</span>
 
-                  {/* Split View Indicator Badges */}
-                  {splitTabId && isActive && isWebTabOpen && (
-                    <span className="px-1 py-0.2 rounded text-[8.5px] font-mono bg-blue-500/20 text-blue-400 font-semibold border border-blue-500/30 shrink-0">
-                      1
-                    </span>
-                  )}
-                  {splitTabId && isSplit && isWebTabOpen && (
-                    <span className="px-1 py-0.2 rounded text-[8.5px] font-mono bg-purple-500/25 text-purple-300 font-semibold border border-purple-500/40 shrink-0">
-                      2
-                    </span>
-                  )}
+        {/* Context Inspector Toggle (PanelRight) */}
+        <ActionIcon
+          icon={PanelRight}
+          tooltip={`Context Inspector (${formatKeyCombo({ alt: true, key: 'I' })})`}
+          ariaLabel="Toggle Context Inspector"
+          active={isInspectorOpen}
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleInspector();
+          }}
+        />
 
-                  {/* Quick Split Toggle Button on Tab Hover (When pane is open) */}
-                  {isWebTabOpen && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleSplitTab(tab.id);
-                      }}
-                      className={`opacity-0 group-hover:opacity-100 hover:text-white p-0.5 rounded transition text-white/40 hover:bg-white/10 shrink-0 cursor-pointer ${
-                        isSplit ? '!opacity-100 text-purple-300' : ''
-                      }`}
-                      title={isSplit ? 'Tắt xem song song tab này' : 'Xem song song với tab hiện tại (Split View)'}
-                    >
-                      <Columns2 className="size-2.5" />
-                    </button>
-                  )}
-
-                  {/* Close Tab Button */}
-                  <button
-                    type="button"
-                    onClick={(e) => handleCloseResourceTab(e, tab.id)}
-                    className="opacity-0 group-hover:opacity-100 hover:text-white p-0.5 rounded transition text-white/40 hover:bg-white/10 shrink-0 cursor-pointer"
-                    title="Close tab"
-                  >
-                    <X className="size-2.5" />
-                  </button>
-                </div>
-              );
-            })}
-
-            {/* Add New Tab Button */}
+        {/* Windows / Linux Native Window Controls */}
+        {!isMac && (
+          <div className="flex items-center ml-1 border-l border-white/10 pl-1">
             <button
               type="button"
-              onClick={() => {
-                setIsResourcePickerOpen(true);
-                if (!isWebTabOpen) setIsWebTabOpen(true);
-              }}
-              className="flex size-6 items-center justify-center rounded-md text-white/40 hover:text-white hover:bg-white/10 transition shrink-0 cursor-pointer"
-              title="New resource tab"
+              onClick={handleMinimize}
+              className="flex size-7 items-center justify-center text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+              title="Minimize"
+              aria-label="Minimize Window"
             >
-              <Plus className="size-3" />
+              <Minus className="size-3" />
             </button>
-          </div>
-
-          {/* Action Cluster (Split, Maximize, PanelRight, Native Window Controls) */}
-          <div className="flex items-center gap-1 shrink-0 ml-1">
-            {/* Split View Toggle Button */}
-            {isWebTabOpen && resourceTabs.tabs.length > 1 && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (splitTabId) {
-                    closeSplitTab();
-                  } else {
-                    const secondary = resourceTabs.tabs.find((t) => t.id !== resourceTabs.activeTabId);
-                    if (secondary) setSplitTabId(secondary.id);
-                  }
-                }}
-                className={`flex size-6 items-center justify-center rounded-md transition cursor-pointer ${
-                  splitTabId
-                    ? 'bg-purple-600/30 text-purple-200 border border-purple-500/40 shadow-xs'
-                    : 'text-white/45 hover:text-white hover:bg-white/8'
-                }`}
-                title={splitTabId ? 'Tắt xem song song (Exit split view)' : 'Bật xem song song 2 tab (Split view)'}
-              >
-                <Columns2 className="size-3.5" />
-              </button>
-            )}
-
-            {/* Maximize / Restore Split Toggle */}
-            {isWebTabOpen && (
-              <button
-                type="button"
-                onClick={toggleExpandWebTab}
-                className="flex size-6 items-center justify-center rounded-md text-white/45 hover:text-white hover:bg-white/8 transition cursor-pointer"
-                title={isWebTabExpanded ? 'Restore split layout' : 'Maximize resource canvas'}
-              >
-                {isWebTabExpanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-              </button>
-            )}
-
-            {isWebTabOpen && (
-              <div className="h-3.5 w-px bg-white/10 mx-0.5 shrink-0" />
-            )}
-
-            {/* Resource Canvas Toggle Button - Always visible! */}
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleWebTab();
-              }}
-              className={`flex size-6 items-center justify-center rounded-md transition cursor-pointer ${
-                isWebTabOpen
-                  ? 'bg-white/18 text-white shadow-xs'
-                  : 'text-white/45 hover:bg-white/8 hover:text-white/90'
-              }`}
-              title={`Toggle Resource Canvas (${formatKeyCombo({ ctrlOrCmd: true, shift: true, key: 'B' })})`}
-              aria-label="Toggle Resource Canvas"
+              onClick={handleToggleMaximize}
+              className="flex size-7 items-center justify-center text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+              title={isWindowMaximized ? 'Restore' : 'Maximize'}
+              aria-label={isWindowMaximized ? 'Restore Window' : 'Maximize Window'}
             >
-              <PanelRight className="size-3.5" />
+              {isWindowMaximized ? <Copy className="size-3" /> : <Square className="size-3" />}
             </button>
-
-            {/* Windows / Linux Native Window Controls */}
-            {!isMac && (
-              <div className="flex items-center ml-1">
-                <button
-                  type="button"
-                  onClick={handleMinimize}
-                  className="flex size-7 items-center justify-center text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-                  title="Minimize"
-                  aria-label="Minimize Window"
-                >
-                  <Minus className="size-3" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleToggleMaximize}
-                  className="flex size-7 items-center justify-center text-white/60 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
-                  title={isWindowMaximized ? 'Restore' : 'Maximize'}
-                  aria-label={isWindowMaximized ? 'Restore Window' : 'Maximize Window'}
-                >
-                  {isWindowMaximized ? <Copy className="size-3" /> : <Square className="size-3" />}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="flex size-7 items-center justify-center text-white/60 hover:bg-red-500 hover:text-white transition-colors cursor-pointer"
-                  title="Close"
-                  aria-label="Close Window"
-                >
-                  <X className="size-3" />
-                </button>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={handleClose}
+              className="flex size-7 items-center justify-center text-white/60 hover:bg-red-500 hover:text-white transition-colors cursor-pointer"
+              title="Close"
+              aria-label="Close Window"
+            >
+              <X className="size-3" />
+            </button>
           </div>
-        </div>
+        )}
       </div>
     </header>
   );
 };
+

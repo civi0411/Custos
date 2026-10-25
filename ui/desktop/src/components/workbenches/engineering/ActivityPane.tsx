@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Activity, FileDiff, RefreshCw, Square, Terminal } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Activity, RefreshCw, Square } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
 import type { LiveRunSnapshot } from '@/types/domain';
 import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
@@ -8,6 +8,8 @@ type SessionRun = { run_id: string; model?: string; status: string; journal_occu
 
 export interface ActivityPaneProps {
   sessionId?: string;
+  initialRunId?: string;
+  canCancel?: boolean;
   onShowToast?: (msg: string) => void;
   onAskAgent?: (draft: string) => void;
   onOpenTab?: (id: OrcaTabId) => void;
@@ -19,37 +21,54 @@ const eventText = (value: unknown) => {
   try { return JSON.stringify(value, null, 2); } catch { return String(value); }
 };
 
-export const ActivityPane: React.FC<ActivityPaneProps> = ({ sessionId, onShowToast, onOpenTab }) => {
+export const ActivityPane: React.FC<ActivityPaneProps> = ({ sessionId, initialRunId, canCancel = false, onShowToast, onOpenTab: _onOpenTab }) => {
+  const generation = useRef(0);
   const [runs, setRuns] = useState<SessionRun[]>([]);
   const [selectedRunId, setSelectedRunId] = useState('');
   const [snapshot, setSnapshot] = useState<LiveRunSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [stopping, setStopping] = useState(false);
+  const [cancelRequested, setCancelRequested] = useState(false);
+  useEffect(() => { setCancelRequested(false); }, [sessionId, selectedRunId]);
 
   const refresh = useCallback(async () => {
-    if (!sessionId) { setRuns([]); setSelectedRunId(''); setSnapshot(null); return; }
+    const request = ++generation.current;
     setLoading(true);
     setError('');
     try {
-      const result = await daemonClient.listSessionRuns(sessionId);
-      setRuns(result);
-      setSelectedRunId((previous) => previous && result.some((run) => run.run_id === previous)
-        ? previous
-        : result.find((run) => activeStatus(run.status))?.run_id ?? result[0]?.run_id ?? '');
+      const result = sessionId ? await daemonClient.listSessionRuns(sessionId) : [];
+      if (request !== generation.current) return;
+      const effective = result;
+      setRuns(effective);
+      setSelectedRunId((previous) =>
+        (initialRunId && effective.some(run => run.run_id === initialRunId)) ? initialRunId : previous && effective.some((run) => run.run_id === previous)
+          ? previous
+          : effective.find((run) => activeStatus(run.status))?.run_id ?? effective[0]?.run_id ?? ''
+      );
     } catch (cause) {
+      if (request !== generation.current) return;
       setError(cause instanceof Error ? cause.message : String(cause));
-    } finally { setLoading(false); }
-  }, [sessionId]);
+      setRuns([]);
+      setSelectedRunId('');
+    } finally {
+      if (request === generation.current) setLoading(false);
+    }
+  }, [sessionId, initialRunId]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { setRuns([]); setSelectedRunId(''); setSnapshot(null); void refresh(); return () => { generation.current++; }; }, [refresh]);
 
   useEffect(() => {
-    if (!sessionId || !selectedRunId) { setSnapshot(null); return; }
+    if (!selectedRunId) { setSnapshot(null); return; }
+    if (!sessionId) { setSnapshot(null); return; }
     const controller = new AbortController();
     setSnapshot(null);
-    daemonClient.watchRun(sessionId, selectedRunId, setSnapshot, controller.signal)
-      .catch((cause) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause)); });
+    daemonClient.watchRun(sessionId, selectedRunId, value => { if (!controller.signal.aborted && value.session_id === sessionId && value.run_id === selectedRunId) setSnapshot(value); }, controller.signal)
+      .catch((cause) => {
+        if (!controller.signal.aborted) {
+          setError(cause instanceof Error ? cause.message : String(cause));
+        }
+      });
     return () => controller.abort();
   }, [sessionId, selectedRunId]);
 
@@ -58,11 +77,12 @@ export const ActivityPane: React.FC<ActivityPaneProps> = ({ sessionId, onShowToa
   const activities = useMemo(() => snapshot?.activities ?? [], [snapshot]);
 
   const stop = async () => {
-    if (!selectedRunId) return;
+    if (!selectedRunId || !canCancel) return;
     setStopping(true);
     try {
       await daemonClient.cancelRun({ run_id: selectedRunId, reason: 'Stopped by user from Activity' });
-      onShowToast?.('Stop requested for the selected run.');
+      setCancelRequested(true);
+      onShowToast?.('Cancellation requested; waiting for runtime confirmation.');
       await refresh();
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
@@ -71,23 +91,21 @@ export const ActivityPane: React.FC<ActivityPaneProps> = ({ sessionId, onShowToa
   };
 
   return <div className="flex h-full min-h-0 flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
-    <header className="flex h-11 shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]/50 px-3">
+    <header className="wb-pane-toolbar flex h-9 shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]/50 px-3">
       <div className="flex min-w-0 items-center gap-2"><Activity className="h-4 w-4 shrink-0 text-[var(--color-fg-muted)]" /><span className="text-xs font-semibold">Run activity</span>
-        {selectedRun && <span className={`truncate text-[10px] ${isActive ? 'text-blue-400' : 'text-[var(--color-fg-subtle)]'}`}>{snapshot?.status ?? selectedRun.status}</span>}
+        {selectedRun && <span className={`truncate text-[10px] ${isActive ? 'text-white/80 font-medium' : 'text-[var(--color-fg-subtle)]'}`}>{snapshot?.status ?? selectedRun.status}</span>}
       </div>
       <div className="flex items-center gap-1.5">
-        <button type="button" onClick={() => onOpenTab?.('files')} className="flex items-center gap-1 rounded border border-[var(--color-border-subtle)] px-2 py-1 text-[11px] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)]"><FileDiff className="h-3 w-3" />Files</button>
-        <button type="button" onClick={() => onOpenTab?.('terminal')} className="flex items-center gap-1 rounded border border-[var(--color-border-subtle)] px-2 py-1 text-[11px] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)]"><Terminal className="h-3 w-3" />Terminal</button>
-        <button type="button" onClick={() => void refresh()} disabled={loading} aria-label="Refresh run activity" className="rounded border border-[var(--color-border-subtle)] p-1.5 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} /></button>
-        {isActive && <button type="button" onClick={() => void stop()} disabled={stopping} className="flex items-center gap-1 rounded bg-rose-600 px-2.5 py-1 text-[11px] font-medium text-white disabled:opacity-50"><Square className="h-3 w-3 fill-current" />{stopping ? 'Stopping…' : 'Stop'}</button>}
+        <button type="button" onClick={() => void refresh()} disabled={loading} aria-label="Refresh run activity" title="Refresh run activity" className="rounded border border-[var(--color-border-subtle)] p-1.5 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] disabled:opacity-50"><RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} /></button>
+        {isActive && canCancel && <button type="button" onClick={() => void stop()} disabled={stopping || cancelRequested} className="flex items-center gap-1 rounded bg-white/10 hover:bg-white/15 px-2.5 py-1 text-[11px] font-medium text-white border border-white/20 disabled:opacity-50"><Square className="h-3 w-3 fill-current" />{stopping ? 'Requesting…' : cancelRequested ? 'Cancel requested' : 'Cancel run'}</button>}
       </div>
     </header>
 
-    {!sessionId && <p className="p-4 text-xs text-[var(--color-fg-muted)]">Open a session to see its runs.</p>}
+    {snapshot?.reconnecting && <p role="status" className="border-b border-border-muted px-4 py-1.5 text-xs text-white/70">Reconnecting…</p>}
     {error && <p role="alert" className="border-b border-rose-500/20 px-4 py-2 text-xs text-rose-400">Could not load live activity: {error}</p>}
-    {sessionId && <div className="flex min-h-0 flex-1">
-      <nav aria-label="Session runs" className="w-64 shrink-0 space-y-1 overflow-y-auto border-r border-[var(--color-border-subtle)] p-2">
-        {runs.length === 0 && !loading && !error && <p className="p-3 text-xs text-[var(--color-fg-subtle)]">No recorded runs for this session.</p>}
+    <div className="wb-split flex min-h-0 flex-1">
+      <nav aria-label="Session runs" className="wb-master w-64 shrink-0 space-y-1 overflow-y-auto border-r border-[var(--color-border-subtle)] p-2">
+        {runs.length === 0 && !loading && !error && <p className="p-3 text-xs text-[var(--color-fg-subtle)]">{sessionId ? 'No runs recorded for this session.' : 'Select a session.'}</p>}
         {runs.map((run) => <button key={run.run_id} type="button" onClick={() => setSelectedRunId(run.run_id)} aria-current={selectedRunId === run.run_id ? 'true' : undefined} className={`w-full rounded-lg border p-2.5 text-left ${selectedRunId === run.run_id ? 'border-[var(--color-border-focus)] bg-[var(--color-surface-2)]' : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] hover:bg-[var(--color-surface-2)]'}`}>
           <span className="block truncate font-mono text-[10px]">{run.run_id}</span><span className="mt-1 block truncate text-[10px] text-[var(--color-fg-muted)]">{run.model || 'Runtime not reported'} · {run.status}</span>
         </button>)}
@@ -100,6 +118,6 @@ export const ActivityPane: React.FC<ActivityPaneProps> = ({ sessionId, onShowToa
         </section>)}
         {selectedRun && activities.length === 0 && !snapshot?.text && <p role="status" className="p-4 text-xs text-[var(--color-fg-subtle)]">{snapshot?.reconnecting ? 'Reconnecting to run event stream…' : snapshot ? `No activity events recorded. Run status: ${snapshot.status}.` : 'Loading persisted run events…'}</p>}
       </main>
-    </div>}
+    </div>
   </div>;
 };

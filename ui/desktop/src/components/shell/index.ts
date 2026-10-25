@@ -1,5 +1,4 @@
 export * from './AppHeader';
-export * from './StatusBar';
 export * from './Splitter';
 export * from './Toast';
 export * from './WorkspaceSidebar';
@@ -10,3 +9,7 @@ export * from './WorkspaceTree';
 export * from './ActivityRail';
 export * from './UserProfileMenu';
 export * from './AppTopBar';
+export * from './AppStatusBar';
+export * from './RightSidebar';
+export * from './UsagePopover';
+export * from './ResourceUsagePopover';

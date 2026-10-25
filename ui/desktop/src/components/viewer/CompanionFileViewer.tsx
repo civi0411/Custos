@@ -8,6 +8,7 @@ import {
   Binary,
   Braces,
   Save,
+  Dna,
 } from 'lucide-react';
 import { MarkdownViewer } from './MarkdownViewer';
 import { PdfViewer } from './PdfViewer';
@@ -17,12 +18,14 @@ import { VisualMediaViewer } from './VisualMediaViewer';
 import { WebPreviewViewer } from './WebPreviewViewer';
 import { HexInspector } from './HexInspector';
 import { CodeTextViewer } from './CodeTextViewer';
+import { GenomeView } from './GenomeView';
 import { formatKeyCombo } from '@/lib/utils';
 
 export interface CompanionFileViewerProps {
   path: string;
   content: string;
   isBinary?: boolean;
+  truncated?: boolean;
   sizeBytes?: number;
   lineCount?: number;
   isDirty?: boolean;
@@ -46,6 +49,7 @@ export type DetectedFileType =
   | 'svg'
   | 'image'
   | 'html'
+  | 'genome'
   | 'code'
   | 'binary'
   | 'plain';
@@ -53,7 +57,17 @@ export type DetectedFileType =
 export function detectFileType(path: string, isBinary?: boolean): { type: DetectedFileType; label: string; icon: React.ComponentType<{ className?: string }> } {
   const ext = path.split('.').pop()?.toLowerCase() || '';
 
-  if (isBinary) {
+  // Recognised text, code, config, and markup formats should never fall into HexInspector
+  const isCodeOrTextExt = [
+    'rs', 'ts', 'tsx', 'js', 'jsx', 'py', 'go', 'c', 'cpp', 'h', 'hpp',
+    'java', 'kt', 'swift', 'rb', 'php', 'cs', 'sh', 'bash', 'zsh',
+    'sql', 'html', 'htm', 'css', 'scss', 'sass', 'less',
+    'json', 'jsonl', 'yaml', 'yml', 'toml', 'xml', 'env', 'config',
+    'md', 'markdown', 'mdx', 'txt', 'csv', 'tsv', 'svg',
+    'bed', 'bedgraph', 'bdg', 'gff', 'gff3', 'gtf', 'vcf',
+  ].includes(ext);
+
+  if (isBinary && !isCodeOrTextExt) {
     if (ext === 'pdf') {
       return { type: 'pdf', label: 'PDF Document', icon: FileText };
     }
@@ -64,6 +78,14 @@ export function detectFileType(path: string, isBinary?: boolean): { type: Detect
   }
 
   switch (ext) {
+    case 'bed':
+    case 'bedgraph':
+    case 'bdg':
+    case 'gff':
+    case 'gff3':
+    case 'gtf':
+    case 'vcf':
+      return { type: 'genome', label: `${ext.toUpperCase()} Genome Track`, icon: Dna };
     case 'pdf':
       return { type: 'pdf', label: 'PDF Document', icon: FileText };
     case 'md':
@@ -117,6 +139,9 @@ export function detectFileType(path: string, isBinary?: boolean): { type: Detect
     case 'zsh':
       return { type: 'code', label: 'Shell Script', icon: FileCode };
     default:
+      if (isBinary) {
+        return { type: 'binary', label: 'Binary File', icon: Binary };
+      }
       return { type: 'plain', label: ext ? `${ext.toUpperCase()} File` : 'Text File', icon: FileText };
   }
 }
@@ -125,6 +150,7 @@ export const CompanionFileViewer: React.FC<CompanionFileViewerProps> = ({
   path,
   content,
   isBinary = false,
+  truncated = false,
   sizeBytes = 0,
   lineCount = 0,
   isDirty = false,
@@ -186,7 +212,7 @@ export const CompanionFileViewer: React.FC<CompanionFileViewerProps> = ({
 
       {/* Viewer Body Router */}
       <div className="flex-1 overflow-hidden relative">
-        {type === 'pdf' ? (
+        {truncated ? <div role="alert" className="p-6 text-xs text-fg-muted leading-relaxed">This file exceeds the preview limit. Partial content cannot be rendered or saved as a complete file. Open the original in a local application.</div> : type === 'pdf' ? (
           <PdfViewer
             path={path}
             content={content}
@@ -228,6 +254,11 @@ export const CompanionFileViewer: React.FC<CompanionFileViewerProps> = ({
             isReadOnly={isReadOnly}
             onChangeText={onChangeText}
             onOpenInBrowser={onOpenInBrowser}
+          />
+        ) : type === 'genome' ? (
+          <GenomeView
+            filename={path}
+            text={content}
           />
         ) : type === 'binary' ? (
           <HexInspector

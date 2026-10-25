@@ -156,7 +156,7 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
         {/* Omnibox */}
         <div className="min-w-0 flex-1 flex items-center h-7 px-2.5 bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-md focus-within:border-[var(--color-accent)] focus-within:ring-1 focus-within:ring-[var(--color-accent)] transition">
           {isHttps ? (
-            <Lock size={12} className="shrink-0 text-emerald-400 mr-1.5" />
+            <Lock size={12} className="shrink-0 text-white/80 mr-1.5" />
           ) : (
             <Globe size={12} className="shrink-0 text-[var(--color-fg-muted)] mr-1.5" />
           )}
@@ -171,7 +171,7 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
 
         <button
           type="submit"
-          className="px-2.5 h-7 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-0)] text-[11px] font-medium border border-[var(--color-border-default)] transition disabled:opacity-30"
+          className="px-3 h-7 rounded-md bg-white hover:bg-white/90 text-black text-[11px] font-semibold transition disabled:opacity-30 shadow-sm"
           disabled={!ready}
         >
           Go
@@ -337,30 +337,24 @@ export const BrowserWorkbenchPane: React.FC<Props> = ({ tabId, url, active, onUr
             />
           ) : (
             <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-[var(--color-fg-muted)] gap-2">
-              <Globe className="h-8 w-8 text-[var(--color-accent)] opacity-60" />
-              <p className="text-sm font-medium text-[var(--color-editor-fg)]">Web Mode Preview</p>
-              <p className="text-xs text-[var(--color-fg-subtle)] text-center max-w-sm">
-                Enter a URL above to preview, or use the Custos desktop app for a native browser view. Page inspection is not connected.
-              </p>
+              <Globe className="h-8 w-8 text-white/40" />
+              <p className="text-sm font-semibold text-white">Browser Preview</p>
             </div>
           )
         ) : error ? (
           <div role="alert" className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 bg-[var(--color-canvas)]">
             <AlertCircle size={24} className="text-rose-400" />
             <p className="max-w-md text-center text-xs text-rose-300 font-mono break-words">{error}</p>
-            <button className="px-4 py-1.5 rounded bg-[var(--color-surface-2)] border border-[var(--color-border-default)] hover:bg-[var(--color-surface-0)] text-xs" onClick={browser.retry}>
+            <button className="px-4 py-1.5 rounded-md bg-white hover:bg-white/90 text-black font-semibold text-xs transition shadow-sm" onClick={browser.retry}>
               Retry connection
             </button>
           </div>
         ) : (!browser.currentUrl || browser.currentUrl === 'about:blank') ? (
           <div className="absolute inset-0 bg-[var(--color-canvas)] flex flex-col items-center justify-center p-8 text-center z-10 overflow-y-auto">
-            <div className="size-16 rounded-2xl bg-[var(--color-accent-subtle)] border border-[var(--color-accent)]/30 flex items-center justify-center text-[var(--color-accent)] shadow-lg mb-4">
-              <Globe size={32} />
+            <div className="size-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-white/80 shadow-md mb-3">
+              <Globe size={24} />
             </div>
-            <h2 className="text-lg font-semibold text-[var(--color-editor-fg)]">Desktop Web Browser</h2>
-            <p className="mt-1 text-xs text-[var(--color-fg-muted)] max-w-md leading-relaxed">
-              Native browser preview. Share the current URL with chat; page inspection and network capture are not connected.
-            </p>
+            <h2 className="text-base font-semibold text-white">Browser</h2>
 
             {/* Quick search / URL input */}
             <div className="mt-5 w-full max-w-md flex items-center h-9 px-3 bg-[var(--color-surface-1)] border border-[var(--color-border-default)] rounded-lg focus-within:border-[var(--color-accent)] focus-within:ring-1 focus-within:ring-[var(--color-accent)] shadow-xs transition">

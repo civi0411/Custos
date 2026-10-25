@@ -276,7 +276,7 @@ User Agent: ${mobileUserAgent || 'Default Mobile'}`;
             title={powered ? 'Lock / Power Off' : 'Wake / Power On'}
             onClick={() => setPowered((value) => !value)}
           >
-            <Power size={14} className={powered ? 'text-emerald-400' : 'text-fg-muted'} />
+            <Power size={14} className={powered ? 'text-white' : 'text-fg-muted'} />
           </button>
 
           <div className="h-4 w-px bg-border-muted mx-0.5" />
@@ -295,14 +295,14 @@ User Agent: ${mobileUserAgent || 'Default Mobile'}`;
 
       {/* Co-Browsing Take-Back Banner (Orca Parity) */}
       {agentDriving && (
-        <div className="shrink-0 flex items-center justify-between gap-3 px-3 py-1.5 bg-amber-500/10 border-b border-amber-500/20 text-amber-300 text-xs">
+        <div className="shrink-0 flex items-center justify-between gap-3 px-3 py-1.5 bg-white/5 border-b border-white/10 text-white/80 text-xs">
           <div className="flex items-center gap-2">
-            <Bot size={14} className="animate-pulse text-amber-400" />
+            <Bot size={14} className="animate-pulse text-white/80" />
             <span>AI Agent is inspecting and driving this mobile session</span>
           </div>
           <button
             onClick={() => setAgentDriving(false)}
-            className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-[11px] font-medium transition-colors"
+            className="px-2 py-0.5 rounded bg-white/10 hover:bg-white/15 border border-white/20 text-white text-[11px] font-medium transition-colors"
           >
             Take Back Control
           </button>
@@ -480,9 +480,9 @@ User Agent: ${mobileUserAgent || 'Default Mobile'}`;
                     {isMuted ? (
                       <VolumeX size={14} className="text-red-400" />
                     ) : volumeLevel > 50 ? (
-                      <Volume2 size={14} className="text-emerald-400" />
+                      <Volume2 size={14} className="text-white/80" />
                     ) : (
-                      <Volume1 size={14} className="text-amber-400" />
+                      <Volume1 size={14} className="text-white/60" />
                     )}
                     <span className="font-medium text-[11px]">{hudMessage}</span>
                   </div>
@@ -509,7 +509,7 @@ User Agent: ${mobileUserAgent || 'Default Mobile'}`;
                   <div className="flex items-center gap-1.5 text-[10px] text-zinc-400">
                     <span>5G</span>
                     <div className="w-5 h-2.5 rounded-sm border border-zinc-400 p-0.5 flex items-center">
-                      <div className="h-full w-3/4 bg-emerald-400 rounded-2xs" />
+                      <div className="h-full w-3/4 bg-white/80 rounded-2xs" />
                     </div>
                   </div>
                 </div>

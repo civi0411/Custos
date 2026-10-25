@@ -1,5 +1,5 @@
 import { NativeSelect } from '@/components/common/NativeSelect';
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Code,
   Terminal,
@@ -19,13 +19,19 @@ import {
   XCircle,
   GitCompare,
   Send,
+  RotateCcw,
 } from 'lucide-react';
-import { ArtifactInspectorData, ArtifactTab } from '@/types/research';
+import type { ArtifactDetailResponse } from '@/types/domain';
+import { CompanionFileViewer } from '@/components/viewer';
+import { FigureAnnotator } from './FigureAnnotator';
+import { ArtifactInspectorData, ArtifactTab, AnnotationRecord } from '@/types/research';
 
 const TABS: ArtifactTab[] = ['Code', 'Execution Log', 'Messages', 'Environment', 'Review'];
 
 interface ArtifactInspectorProps {
   data: ArtifactInspectorData;
+  detail?: ArtifactDetailResponse;
+  onSaveAnnotation?: (annotation: AnnotationRecord) => Promise<void>;
   onClose?: () => void;
   isMaximized?: boolean;
   onToggleMaximize?: () => void;
@@ -60,6 +66,8 @@ function computeSimpleLineDiff(oldText: string, newText: string) {
 
 export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
   data,
+  detail,
+  onSaveAnnotation,
   onClose,
   isMaximized,
   onToggleMaximize,
@@ -73,6 +81,25 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
   const [compareIdx, setCompareIdx] = useState<number>(() => Math.max(0, versionIdx - 1));
   const [diffMode, setDiffMode] = useState<boolean>(false);
   const [copied, setCopied] = useState(false);
+  const [preview, setPreview] = useState(false);
+  const [note, setNote] = useState('');
+  const [selection, setSelection] = useState<{ start: number; end: number; text: string } | null>(null);
+  const [annotationError, setAnnotationError] = useState<string | null>(null);
+  const [savingAnnotation, setSavingAnnotation] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const versionNumber = Number((data.versions[versionIdx]?.label || data.activeVersion).replace(/^v/, ''));
+  const annotations = (detail?.annotations || []).filter(annotation => annotation.artifactVersion === versionNumber);
+  const file = detail?.file;
+  const image = !!file && /\.(png|jpe?g|gif|webp|avif)$/i.test(data.filename);
+  const versionAvailable = data.versions[versionIdx]?.contentAvailable !== false;
+  const saveAnnotation = async (annotation: AnnotationRecord) => {
+    if (!onSaveAnnotation) throw new Error('Annotation persistence is unavailable');
+    setSavingAnnotation(true); setAnnotationError(null);
+    try { await onSaveAnnotation(annotation); }
+    catch (reason) { setAnnotationError(String(reason)); throw reason; }
+    finally { setSavingAnnotation(false); }
+  };
+
 
   const currentVersion = data.versions[versionIdx] ?? {
     label: data.activeVersion || 'v1',
@@ -83,9 +110,9 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
   };
 
   const activeCode = currentVersion.code;
-  const activeLog = currentVersion.executionLog || data.executionLog;
-  const activeEnv = currentVersion.environment || data.environment;
-  const reviewStatus = currentVersion.reviewPassed ?? data.reviewPassed;
+  const activeLog = currentVersion.executionLog;
+  const activeEnv = currentVersion.environment;
+  const reviewStatus = currentVersion.reviewPassed;
   const isPassed = reviewStatus === true;
 
   const handleCopy = () => {
@@ -107,7 +134,7 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
   return (
     <div className="flex flex-col h-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)] overflow-hidden select-none font-sans relative">
       {/* 48px Standard Pane Header */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-5 z-10">
+      <header className="wb-pane-toolbar flex h-12 shrink-0 items-center justify-between border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] px-5 z-10">
         <div className="flex items-center gap-3 min-w-0">
           <FileCode2 className="w-4 h-4 workbench-accent shrink-0" />
           <span className="truncate text-xs font-semibold text-[var(--color-editor-fg)]">
@@ -117,7 +144,7 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
           {/* Version Stepper */}
           <div className="flex items-center gap-1 ml-3 bg-[var(--color-surface-2)] border border-[var(--color-border-muted)] rounded-lg px-1.5 py-0.5">
             <button
-              onClick={() => setVersionIdx((i) => Math.max(0, i - 1))}
+              onClick={() => { setVersionIdx(i => Math.max(0, i-1)); setSelection(null); }}
               disabled={versionIdx <= 0}
               className="p-1 text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] disabled:opacity-30 transition rounded"
               title="Previous version"
@@ -128,7 +155,7 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
               {currentVersion.label}
             </span>
             <button
-              onClick={() => setVersionIdx((i) => Math.min(data.versions.length - 1, i + 1))}
+              onClick={() => { setVersionIdx(i => Math.min(data.versions.length-1, i+1)); setSelection(null); }}
               disabled={versionIdx >= data.versions.length - 1}
               className="p-1 text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] disabled:opacity-30 transition rounded"
               title="Next version"
@@ -141,6 +168,7 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
           {data.versions.length > 1 && (
             <div className="flex items-center gap-1.5 ml-2">
               <button
+                disabled={!versionAvailable || !data.versions.some((version, index) => index !== versionIdx && version.contentAvailable !== false)}
                 onClick={() => setDiffMode(!diffMode)}
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition ${
                   diffMode
@@ -162,7 +190,7 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
                     className="bg-transparent text-[var(--color-editor-fg)] font-semibold focus:outline-none cursor-pointer"
                   >
                     {data.versions.map((v, i) => (
-                      <option key={v.label} value={i} disabled={i === versionIdx} className="bg-[var(--color-surface-1)] text-[var(--color-editor-fg)]">
+                      <option key={v.label} value={i} disabled={i === versionIdx || v.contentAvailable === false} className="bg-[var(--color-surface-1)] text-[var(--color-editor-fg)]">
                         {v.label}
                       </option>
                     ))}
@@ -176,17 +204,36 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
         {/* Right Header Controls */}
         <div className="flex items-center gap-1.5 shrink-0">
           {onAskAgent && activeCode && (
-            <button
-              onClick={() => {
-                const snippet = `Context Artifact [${data.title || data.filename} (${currentVersion.label})]:\n\`\`\`${data.language || 'text'}\n${activeCode}\n\`\`\``;
-                onAskAgent(snippet);
-              }}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm"
-              title="Insert artifact code into chat input"
-            >
-              <Send size={12} />
-              <span>Insert to Chat</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  const envNote = data.environment
+                    ? ` Environment: ${typeof data.environment === 'string' ? data.environment : JSON.stringify(data.environment)}.`
+                    : '';
+                  const prompt = `Reproduce artifact \`${data.filename}\` (${currentVersion.label}).${envNote} Re-run its recorded generating code below in this workspace, then compare the newly generated output with current \`${data.filename}\` and report whether they match:\n\n\`\`\`${data.language || 'python'}\n${activeCode}\n\`\`\``;
+                  onAskAgent(prompt);
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-purple-600 hover:bg-purple-500 text-white transition shadow-xs cursor-pointer"
+                title="Draft reproduction prompt into chat composer (reviewed by user before execution)"
+              >
+                <RotateCcw size={12} />
+                <span>Reproduce</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const snippet = `Context Artifact [${data.title || data.filename} (${currentVersion.label})]:\n\`\`\`${data.language || 'text'}\n${activeCode}\n\`\`\``;
+                  onAskAgent(snippet);
+                }}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition shadow-sm cursor-pointer"
+                title="Insert artifact code into chat input"
+              >
+                <Send size={12} />
+                <span>Insert to Chat</span>
+              </button>
+            </>
           )}
           <button
             onClick={handleCopy}
@@ -263,7 +310,23 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
       </nav>
 
       {/* Tab Contents Viewport */}
-      <div className="flex-1 overflow-y-auto p-5 select-text max-w-5xl mx-auto w-full">
+      <div ref={contentRef} onMouseUp={() => {
+        const selected = window.getSelection();
+        if (!selected || selected.isCollapsed || !selected.anchorNode || !contentRef.current?.contains(selected.anchorNode)) return;
+        const text = selected.toString(); const start = activeCode.indexOf(text);
+        if (text && start >= 0 && activeCode.indexOf(text, start+1) < 0) setSelection({ start, end: start+text.length, text });
+      }} className="flex-1 overflow-y-auto p-5 select-text max-w-5xl mx-auto w-full">
+        <div className="flex flex-wrap items-center gap-2 mb-3 text-xs">
+          {file && <button type="button" className="canvas-open-button" onClick={() => setPreview(value => !value)}>{preview ? 'Show recorded content' : 'Preview current workspace file'}</button>}
+          {detail?.content_version !== versionNumber && <span className="text-fg-muted">Archived bytes for this version are unavailable. Current workspace bytes are shown separately.</span>}
+        </div>
+        {annotationError && <p role="alert" className="text-xs text-rose-500 mb-3">{annotationError}</p>}
+        {preview && file ? <div className="h-[500px] min-h-80 relative border border-border-default rounded overflow-hidden">
+          {image && !file.truncated && detail?.content_version === versionNumber && onSaveAnnotation
+            ? <FigureAnnotator key={`${data.filename}:${versionNumber}`} imageUrl={`data:image/${data.filename.split('.').pop() === 'jpg' ? 'jpeg' : data.filename.split('.').pop()};base64,${file.content}`} artifactPath={data.filename} artifactVersion={versionNumber} initialAnnotations={annotations} onSaveAnnotation={saveAnnotation}
+                onStartSideChat={onAskAgent ? (annotation, prompt) => onAskAgent(`Artifact ${annotation.artifactPath}, version ${annotation.artifactVersion}, pin (${annotation.target.xRatio}, ${annotation.target.yRatio}): ${prompt}`) : undefined} />
+            : <CompanionFileViewer path={data.filename} content={file.content} isBinary={file.is_binary} truncated={file.truncated} isReadOnly />}
+        </div> : <>
         {/* TAB 1: CODE */}
         {activeTab === 'Code' && (
           <div className="space-y-4">
@@ -489,6 +552,18 @@ export const ArtifactInspector: React.FC<ArtifactInspectorProps> = ({
             </div>
           </div>
         )}
+        </>}
+        {activeTab === 'Code' && !preview && versionAvailable && activeCode && onSaveAnnotation && <div className="mt-4 border border-border-default rounded p-3 space-y-2 text-xs">
+          <p className="text-fg-muted">Select text in the recorded content, then add a version-bound note.</p>
+          {selection && <blockquote className="border-l-2 border-accent pl-2 whitespace-pre-wrap">{selection.text}</blockquote>}
+          <textarea aria-label="Artifact annotation note" value={note} onChange={event => setNote(event.target.value)} className="w-full p-2 bg-surface-1 rounded border border-border-default" placeholder="What should be checked or changed?" />
+          <button type="button" className="canvas-open-button" disabled={!selection || !note.trim() || savingAnnotation} onClick={async () => {
+            if (!selection) return;
+            try { await saveAnnotation({ id: crypto.randomUUID(), artifactPath: data.filename, artifactVersion: versionNumber, target: { type: 'text', startOffset: selection.start, endOffset: selection.end, exactText: selection.text }, note: note.trim(), actor: 'researcher', status: 'pending', createdAt: Date.now() }); setNote(''); setSelection(null); } catch { /* Error stays visible for retry. */ }
+          }}>{savingAnnotation ? 'Saving…' : 'Save annotation'}</button>
+          {onAskAgent && selection && <button type="button" className="canvas-open-button ml-2" onClick={() => onAskAgent(`Review ${data.filename} (${currentVersion.label}), selected passage:\n${selection.text}\n\n${note}`)}>Ask about selection</button>}
+        </div>}
+        {annotations.length > 0 && <div className="mt-4 space-y-2 text-xs"><h4 className="font-medium">Version annotations</h4>{annotations.map(annotation => <div key={annotation.id} className="rounded border border-border-default p-3"><p>{annotation.note}</p><p className="text-fg-muted mt-1">{annotation.status} · {annotation.actor}</p></div>)}</div>}
       </div>
     </div>
   );

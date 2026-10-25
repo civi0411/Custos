@@ -6,3 +6,4 @@ export * from './AgentActionCard';
 export * from './AgentHarnessSelector';
 export * from './AgentWorkingStatus';
 export * from './ComposerPlusMenu';
+export * from './ConversationPane';

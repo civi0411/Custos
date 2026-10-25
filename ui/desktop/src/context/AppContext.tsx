@@ -1,6 +1,7 @@
-import { APPEARANCE_KEY, readAppearance, applyAppearance, type AppearancePreferences } from '@/lib/appearance';
-import { isTauri } from '@tauri-apps/api/core';
-import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { type AppearancePreferences } from '@/lib/appearance';
+import { useAppearanceSlice } from './app/appearance';
+import { useTasksSlice } from './app/tasks';
+import { useWorkspacesSlice } from './app/workspaces';
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   MainTab,
@@ -13,6 +14,7 @@ import {
   ProviderServiceId,
 } from '../types';
 import { daemonClient } from '../api/daemon_client';
+import { scopedLiveRunStore } from './app/scopedLiveRun';
 import {
   ExecutionWorkspace,
   ModelCatalogOption,
@@ -55,6 +57,9 @@ interface AppContextType {
   setCurrentTab: (tab: MainTab) => void;
   activeWorkbench: 'engineering' | 'research' | 'copilot';
   setActiveWorkbench: (wb: 'engineering' | 'research' | 'copilot') => void;
+  activeScreenId: string;
+  setActiveScreenId: React.Dispatch<React.SetStateAction<string>>;
+  initScreenTabs: (screenId: string, initialTabs: OrcaTab[], initialActiveTabId?: string) => void;
   isSessionsCollapsed: boolean;
   setIsSessionsCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   isRightExplorerOpen: boolean;
@@ -87,9 +92,9 @@ interface AppContextType {
   openSettings: (tab?: string) => void;
   isAiSetupOpen: boolean;
   setIsAiSetupOpen: (open: boolean) => void;
-  aiSetupTab: 'local' | 'cloud' | 'routing' | 'subagents' | 'quotas';
-  setAiSetupTab: (tab: 'local' | 'cloud' | 'routing' | 'subagents' | 'quotas') => void;
-  openAiSetup: (tab?: 'local' | 'cloud' | 'routing' | 'subagents' | 'quotas') => void;
+  aiSetupTab: 'local' | 'cloud' | 'routing' | 'subagents' | 'quotas' | 'tools' | 'environments' | 'diagnostics';
+  setAiSetupTab: (tab: 'local' | 'cloud' | 'routing' | 'subagents' | 'quotas' | 'tools' | 'environments' | 'diagnostics') => void;
+  openAiSetup: (tab?: 'local' | 'cloud' | 'routing' | 'subagents' | 'quotas' | 'tools' | 'environments' | 'diagnostics') => void;
   isNewSessionOpen: boolean;
   setIsNewSessionOpen: (open: boolean) => void;
   isOpenProjectOpen: boolean;
@@ -112,7 +117,7 @@ interface AppContextType {
   isGitHubAuthOpen: boolean;
   setIsGitHubAuthOpen: (open: boolean) => void;
   openGitHubAuth: () => void;
-  handleGitHubLogin: (account: { username: string; token?: string; name?: string; avatar_url?: string }) => Promise<boolean>;
+  handleGitHubLogin: (account: { username: string; name?: string; avatar_url?: string }) => Promise<boolean>;
   handleGitHubLogout: () => void;
   userProfile: {
     name: string;
@@ -133,12 +138,17 @@ interface AppContextType {
   isSidebarCollapsed: boolean;
   setIsSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   toggleSidebar: () => void;
+  isRecentActivityOpen: boolean;
+  setIsRecentActivityOpen: React.Dispatch<React.SetStateAction<boolean>>;
   isWebTabOpen: boolean;
   setIsWebTabOpen: React.Dispatch<React.SetStateAction<boolean>>;
   toggleWebTab: () => void;
   isWebTabExpanded: boolean;
   setIsWebTabExpanded: React.Dispatch<React.SetStateAction<boolean>>;
   toggleExpandWebTab: () => void;
+  isInspectorOpen: boolean;
+  setIsInspectorOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  toggleInspector: () => void;
   isResourcePickerOpen: boolean;
   setIsResourcePickerOpen: React.Dispatch<React.SetStateAction<boolean>>;
   resourceTabs: ResourceTabsState;
@@ -183,14 +193,14 @@ interface AppContextType {
   // Actions
   startNativeConversation: (instruction: string, harness: string, workspace: string) => Promise<{ run: import('../types/domain').RunHandle; sessionId: string }>;
   handleStopRun: (runId: string) => Promise<void>;
-  handleSendMessage: (text: string, lens?: 'assistant' | 'coding' | 'research') => Promise<void>;
+  handleSendMessage: (text: string, lens?: 'assistant' | 'coding' | 'research') => Promise<boolean>;
   handleClearHistory: () => void;
   handleDeleteConversation: (sessionId: string) => Promise<void>;
   handleAcceptAndRun: () => Promise<void>;
   handleRejectDiff: () => void;
   handleCopyDiff: () => void;
   handleCreateNewSession: (title: string, pack: 'engineering' | 'research' | 'assistant') => Promise<void>;
-  handleCreateChatSession: (pack: 'engineering' | 'research' | 'assistant') => Promise<void>;
+  handleCreateChatSession: (pack: 'engineering' | 'research' | 'assistant', taskId?: string) => Promise<void>;
   handleNewProjectPrompt: () => void;
   handleSaveProvider: (
     serviceOrParams: string | { service: string; accountName?: string; apiKey?: string; endpointUrl?: string; model?: string; contextWindow?: number; fastMode?: boolean },
@@ -224,7 +234,7 @@ function mapBackendProvider(p: any): ProviderItem {
     status,
     statusLabel: p.status === 'configured' ? 'Configured' : p.status_label || (status === 'primary' ? 'Enabled' : 'Offline'),
     badgeColor: status === 'primary' ? '#10b981' : status === 'standby' ? '#3b82f6' : '#6b7280',
-    apiKey: p.api_key_masked || (p.api_key && p.api_key.trim().length > 0 ? `${p.api_key.slice(0, 6)}••••••••` : 'Chưa cấu hình'),
+    apiKey: p.api_key_masked || (p.api_key && p.api_key.trim().length > 0 ? `${p.api_key.slice(0, 6)}••••••••` : 'Not configured'),
     quotaUsed: p.quota_used || undefined,
     quotaTotal: p.quota_total || undefined,
     quotaPercent: typeof p.quota_percent === 'number' ? p.quota_percent : undefined,
@@ -252,16 +262,34 @@ function mapBackendKey(k: any): ClientApiKey {
   };
 }
 
-const PROVIDER_LABELS: Record<ProviderServiceId, string> = {
+const PROVIDER_LABELS: Record<string, string> = {
   antigravity: 'Google Antigravity',
   copilot: 'GitHub Copilot',
   gemini: 'Google Gemini',
-  openai: 'OpenAI Platform',
+  openai: 'OpenAI / Codex',
   anthropic: 'Anthropic Claude',
   deepseek: 'DeepSeek',
   openrouter: 'OpenRouter Gateway',
   groq: 'Groq Cloud',
+  cerebras: 'Cerebras',
+  nvidia: 'NVIDIA NIM',
+  mistral: 'Mistral AI',
+  together: 'Together AI',
+  moonshot: 'Moonshot Kimi',
+  zhipu: 'Zhipu GLM / Z.ai',
+  minimax: 'MiniMax',
+  alibaba: 'Alibaba Qwen',
+  qwen: 'Alibaba Qwen',
+  xai: 'xAI (Grok)',
+  sambanova: 'SambaNova Cloud',
+  fireworks: 'Fireworks AI',
+  siliconflow: 'SiliconFlow',
+  nebius: 'Nebius AI Studio',
+  hyperbolic: 'Hyperbolic',
+  cohere: 'Cohere',
+  perplexity: 'Perplexity AI',
   local: 'Local Inference',
+  lmstudio: 'LM Studio',
   custom: 'Custom Gateway',
 };
 
@@ -275,11 +303,28 @@ const normalizeProviderServiceId = (service?: string): ProviderServiceId => {
   if (s.includes('deepseek')) return 'deepseek';
   if (s.includes('openrouter')) return 'openrouter';
   if (s.includes('groq')) return 'groq';
+  if (s.includes('cerebras')) return 'cerebras';
+  if (s.includes('nvidia') || s.includes('nemotron')) return 'nvidia';
+  if (s.includes('mistral') || s.includes('codestral')) return 'mistral';
+  if (s.includes('together')) return 'together';
+  if (s.includes('moonshot') || s.includes('kimi')) return 'moonshot';
+  if (s.includes('zhipu') || s.includes('glm')) return 'zhipu';
+  if (s.includes('minimax')) return 'minimax';
+  if (s.includes('alibaba') || s.includes('qwen') || s.includes('dashscope')) return 'alibaba';
+  if (s.includes('xai') || s.includes('grok')) return 'xai';
+  if (s.includes('sambanova')) return 'sambanova';
+  if (s.includes('fireworks')) return 'fireworks';
+  if (s.includes('siliconflow')) return 'siliconflow';
+  if (s.includes('nebius')) return 'nebius';
+  if (s.includes('hyperbolic')) return 'hyperbolic';
+  if (s.includes('cohere')) return 'cohere';
+  if (s.includes('perplexity') || s.includes('sonar')) return 'perplexity';
+  if (s.includes('lmstudio') || s.includes('lm-studio')) return 'lmstudio';
   if (s.includes('local') || s.includes('ollama')) return 'local';
   return 'custom';
 };
 
-const defaultProbeBaseUrl = (service: ProviderServiceId): string | undefined => {
+export const defaultProbeBaseUrl = (service: ProviderServiceId): string | undefined => {
   switch (service) {
     case 'copilot':
       return 'https://api.githubcopilot.com';
@@ -293,6 +338,45 @@ const defaultProbeBaseUrl = (service: ProviderServiceId): string | undefined => 
       return 'https://generativelanguage.googleapis.com';
     case 'deepseek':
       return 'https://api.deepseek.com/v1';
+    case 'groq':
+      return 'https://api.groq.com/openai/v1';
+    case 'cerebras':
+      return 'https://api.cerebras.ai/v1';
+    case 'nvidia':
+      return 'https://integrate.api.nvidia.com/v1';
+    case 'mistral':
+      return 'https://api.mistral.ai/v1';
+    case 'together':
+      return 'https://api.together.xyz/v1';
+    case 'moonshot':
+      return 'https://api.moonshot.cn/v1';
+    case 'zhipu':
+      return 'https://open.bigmodel.cn/api/paas/v4';
+    case 'minimax':
+      return 'https://api.minimax.chat/v1';
+    case 'alibaba':
+    case 'qwen':
+      return 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+    case 'xai':
+      return 'https://api.x.ai/v1';
+    case 'sambanova':
+      return 'https://api.sambanova.ai/v1';
+    case 'fireworks':
+      return 'https://api.fireworks.ai/inference/v1';
+    case 'siliconflow':
+      return 'https://api.siliconflow.cn/v1';
+    case 'nebius':
+      return 'https://api.studio.nebius.ai/v1';
+    case 'hyperbolic':
+      return 'https://api.hyperbolic.xyz/v1';
+    case 'openrouter':
+      return 'https://openrouter.ai/api/v1';
+    case 'perplexity':
+      return 'https://api.perplexity.ai';
+    case 'cohere':
+      return 'https://api.cohere.com/v2';
+    case 'lmstudio':
+      return 'http://127.0.0.1:1234/v1';
     case 'local':
       return 'http://localhost:11434';
     default:
@@ -307,7 +391,9 @@ const isProviderConnected = (p: ProviderConfigRecord): boolean => {
     status === 'active' ||
     status === 'primary' ||
     status === 'standby';
-  const localProvider = normalizeProviderServiceId(p.service_type) === 'local';
+  const localProvider =
+    normalizeProviderServiceId(p.service_type) === 'local' ||
+    normalizeProviderServiceId(p.service_type) === 'lmstudio';
   return statusConnected && (localProvider || p.api_key_masked !== 'none');
 };
 
@@ -337,101 +423,18 @@ const AI_LOCAL_ENDPOINT = 'http://localhost:11434';
 const isTransientAiLocalAccount = (account?: ConnectedAccount): boolean =>
   account?.id === AI_LOCAL_ACCOUNT_ID;
 
-export const getDefaultTabForMode = (m: ActiveWorkbench): { tabs: OrcaTab[]; activeTabId: string } => {
-  if (m === 'engineering') {
-    return {
-      tabs: [
-        { id: 'files', type: 'files', title: 'Files & Changes', url: 'custos://resource/files' },
-        { id: 'activity', type: 'activity', title: 'Activity', url: 'custos://resource/activity' },
-      ],
-      activeTabId: 'files',
-    };
-  }
-  if (m === 'research') {
-    return {
-      tabs: [
-        { id: 'literature', type: 'literature', title: 'Sources', url: 'custos://resource/literature' },
-        { id: 'findings', type: 'findings', title: 'Findings', url: 'custos://resource/findings' },
-        { id: 'lab', type: 'lab', title: 'Lab', url: 'custos://resource/lab' },
-      ],
-      activeTabId: 'literature',
-    };
-  }
-  return {
-    tabs: [
-      { id: 'drafts', type: 'drafts', title: 'Drafts', url: 'custos://resource/drafts' },
-      { id: 'outbox', type: 'outbox', title: 'Outbox', url: 'custos://resource/outbox' },
-      { id: 'notes', type: 'notes', title: 'Notes', url: 'custos://resource/notes' },
-    ],
-    activeTabId: 'drafts',
-  };
-};
+export const getDefaultTabForMode = (_mode: ActiveWorkbench): { tabs: OrcaTab[]; activeTabId: string } => ({
+  tabs: [{ id: 'conversation', type: 'conversation', title: 'Conversation', url: 'custos://chat' }],
+  activeTabId: 'conversation',
+});
 
 const AppContext = createContext<AppContextType | null>(null);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Projects & Sessions state
-  const [projectData, setProjectData] = useState<ProjectData>({ 'Custos Workspace': [] });
-  const [currentProject, setCurrentProject] = useState<string>('Custos Workspace');
-  const [activeDetection, setActiveDetection] = useState<WorkspaceDetectionResult | null>(null);
+  const [projectData, setProjectData] = useState<ProjectData>({ 'AgentHub': [] });
+  const [currentProject, setCurrentProject] = useState<string>('AgentHub');
   const [activeSessionId, setActiveSessionId] = useState<string>('');
-  const [tasks, setTasks] = useState<Task[]>([]);
-
-  // Workspaces SSOT state (Authoritative execution context matching Left and Right)
-  const [workspaces, setWorkspaces] = useState<ExecutionWorkspace[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<string>(() => {
-    try {
-      return localStorage.getItem('custos.active_workspace_id') || '';
-    } catch {
-      return '';
-    }
-  });
-
-  const setActiveWorkspaceId = useCallback((id: string) => {
-    setActiveWorkspaceIdState(id);
-    try {
-      if (id) {
-        localStorage.setItem('custos.active_workspace_id', id);
-      }
-    } catch {}
-  }, []);
-
-  const refreshWorkspaces = useCallback(async () => {
-    try {
-      const list = await daemonClient.listWorkspaces();
-      const valid = list.filter((w) => {
-        const s = typeof w.status === 'string' ? w.status : (w.status as any)?.setup_failed ? 'failed' : 'unknown';
-        return s !== 'archived';
-      });
-      // Live sync dirty manifest for active workspace so left badge, header, and diff are always synchronized
-      const currentActive = localStorage.getItem('custos.active_workspace_id') || '';
-      if (currentActive && valid.some((w) => w.id === currentActive)) {
-        try {
-          const dirty = await daemonClient.inspectWorkspaceDirty(currentActive);
-          const idx = valid.findIndex((w) => w.id === currentActive);
-          if (idx >= 0) {
-            valid[idx] = { ...valid[idx], dirty_manifest: dirty, dirtyManifest: dirty };
-          }
-        } catch {}
-      }
-      setWorkspaces(valid);
-      if (valid.length > 0) {
-        setActiveWorkspaceIdState((prev) => {
-          if (prev && valid.some((w) => w.id === prev)) return prev;
-          const ready = valid.find((w) => w.status === 'ready') || valid[0];
-          return ready.id;
-        });
-      }
-      return valid;
-    } catch (e) {
-      console.warn('Failed to load workspaces:', e);
-      return [];
-    }
-  }, []);
-
-  const activeWorkspace = React.useMemo(() => {
-    return workspaces.find((w) => w.id === activeWorkspaceId) || null;
-  }, [workspaces, activeWorkspaceId]);
 
   // Toast state
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -448,105 +451,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }, 2500);
   }, []);
 
-  const refreshTasks = useCallback(async () => {
-    const fetchedTasks = await daemonClient.listTasks();
-    setTasks(fetchedTasks);
-    return fetchedTasks;
-  }, []);
 
-  const refreshAfterTaskMutation = useCallback(async (successMessage: string) => {
-    try {
-      await refreshTasks();
-      showToast(successMessage);
-    } catch (error) {
-      showToast(`${successMessage}, but the Task list could not refresh: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }, [refreshTasks, showToast]);
-
-  const handleCreateTask = useCallback(
-    async (params: CreateTaskParams) => {
-      const created = await daemonClient.createTask(params);
-      await refreshAfterTaskMutation(`Task "${created.title}" created`);
-      return created;
-    },
-    [refreshAfterTaskMutation]
-  );
-
-  const handleAdvanceTask = useCallback(
-    async (taskId: string, status: TaskStatus) => {
-      const advanced = await daemonClient.advanceTask(taskId, status);
-      await refreshAfterTaskMutation('Task status updated');
-      return advanced;
-    },
-    [refreshAfterTaskMutation]
-  );
-
-  const handleCompleteTask = useCallback(
-    async (taskId: string, summary?: string) => {
-      const completed = await daemonClient.completeTask(taskId, summary);
-      await refreshAfterTaskMutation('Task marked as complete');
-      return completed;
-    },
-    [refreshAfterTaskMutation]
-  );
-
-  const handleCancelTask = useCallback(
-    async (taskId: string, reason?: string) => {
-      const cancelled = await daemonClient.cancelTask(taskId, reason);
-      await refreshAfterTaskMutation('Task cancelled');
-      return cancelled;
-    },
-    [refreshAfterTaskMutation]
-  );
-
-  useEffect(() => {
-    void refreshWorkspaces();
-    const interval = setInterval(() => {
-      void refreshWorkspaces();
-    }, 4000);
-    const onFocus = () => {
-      void refreshWorkspaces();
-    };
-    window.addEventListener('focus', onFocus);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
-    };
-  }, [refreshWorkspaces]);
-
-  const refreshWorkspaceDetection = useCallback(async () => {
-    const currentPath = localStorage.getItem('custos_current_project_path');
-    if (currentPath) {
-      try {
-        const det = await daemonClient.detectWorkspace(currentPath);
-        setActiveDetection(det);
-      } catch (e) {
-        console.warn('Failed to detect workspace:', e);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    const currentPath = localStorage.getItem('custos_current_project_path');
-    if (currentPath) {
-      daemonClient.detectWorkspace(currentPath).then((det) => {
-        setActiveDetection(det);
-        if (det.name && det.name !== 'Project') {
-          setCurrentProject(det.name);
-        }
-      }).catch(() => {});
-    } else {
-      daemonClient.listWorkspaces().then((list) => {
-        const active = list.find((w) => w.status !== 'archived');
-        if (active && active.path) {
-          daemonClient.detectWorkspace(active.path).then((det) => {
-            setActiveDetection(det);
-            if (det.name) setCurrentProject(det.name);
-          }).catch(() => {});
-        }
-      }).catch(() => {});
-    }
-  }, []);
 
   // Navigation & Layout state
   const [currentTab, setCurrentTab] = useState<MainTab>('studio');
@@ -597,6 +502,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [combos]);
 
   const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>(() => {
+    try {
+      const saved = localStorage.getItem('custos_connected_accounts');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
     return [];
   });
 
@@ -612,11 +524,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [settingsTab, setSettingsTab] = useState<string>('general');
   const [isAiSetupOpen, setIsAiSetupOpen] = useState<boolean>(false);
-  const [aiSetupTab, setAiSetupTab] = useState<'local' | 'cloud' | 'routing' | 'subagents' | 'quotas'>('local');
-  const openAiSetup = useCallback((tab?: 'local' | 'cloud' | 'routing' | 'subagents' | 'quotas') => {
-    if (tab) setAiSetupTab(tab);
-    setIsAiSetupOpen(true);
-  }, []);
+  const [aiSetupTab, setAiSetupTab] = useState<'local' | 'cloud' | 'routing' | 'subagents' | 'quotas' | 'tools' | 'environments' | 'diagnostics'>('local');
   const [isNewSessionOpen, setIsNewSessionOpen] = useState<boolean>(false);
   const [isOpenProjectOpen, setIsOpenProjectOpen] = useState<boolean>(false);
   const [isAddProviderOpen, setIsAddProviderOpen] = useState<boolean>(false);
@@ -633,33 +541,131 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const toggleSidebar = useCallback(() => setIsSidebarCollapsed((prev) => !prev), []);
+  const [isRecentActivityOpen, setIsRecentActivityOpen] = useState<boolean>(false);
 
-  const [isWebTabOpen, setIsWebTabOpen] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('custos_resource_pane_open');
-      if (saved !== null) return saved === 'true';
-    } catch {}
-    return false;
+  // Selected Model state: default empty string means "No model selected"
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    return localStorage.getItem('custos_selected_model') || '';
+  });
+  const [selectedModelAccountId, setSelectedModelAccountId] = useState(() => localStorage.getItem('custos_selected_model_account') || '');
+  const [selectedReasoningEffort, setSelectedReasoningEffort] = useState(() => localStorage.getItem('custos_selected_reasoning_effort') || '');
+
+  const {
+    tasks,
+    setTasks,
+    refreshTasks,
+    createTask,
+    advanceTask,
+    completeTask,
+    cancelTask,
+  } = useTasksSlice(showToast);
+
+  const {
+    workspaces,
+    activeWorkspaceId,
+    setActiveWorkspaceId,
+    activeWorkspace,
+    refreshWorkspaces,
+    activeDetection,
+    refreshWorkspaceDetection,
+    handleProjectOpened,
+    handleOpenFolderDirect,
+  } = useWorkspacesSlice({
+    currentProject,
+    setCurrentProject,
+    onProjectRegistered: useCallback((projectName: string) => {
+      setProjectData((prev) => {
+        if (prev[projectName]) return prev;
+        return {
+          ...prev,
+          [projectName]: [],
+        };
+      });
+    }, []),
+    onModelSelect: setSelectedModel,
+    onOpenProjectFallback: useCallback(() => {
+      setIsOpenProjectOpen(true);
+    }, []),
+    showToast,
   });
 
-  useEffect(() => {
+  const [activeScreenId, setActiveScreenId] = useState<string>('screen-default');
+  const tabScope = useMemo(
+    () => JSON.stringify([currentProject, activeScreenId]),
+    [currentProject, activeScreenId]
+  );
+  const [canvasViews, setCanvasViews] = useState<Record<string, { open: boolean; expanded: boolean }>>(() => {
     try {
-      localStorage.setItem('custos_resource_pane_open', String(isWebTabOpen));
-    } catch {}
-  }, [isWebTabOpen]);
+      const saved = JSON.parse(localStorage.getItem('custos.canvas-views.v1') || '{}');
+      return Object.fromEntries(Object.entries(saved).filter((entry): entry is [string, { open: boolean; expanded: boolean }] => {
+        const value = entry[1] as { open?: unknown; expanded?: unknown } | null;
+        return !!value && typeof value.open === 'boolean' && typeof value.expanded === 'boolean';
+      }));
+    } catch { return {}; }
+  });
+  const isWebTabOpen = canvasViews[tabScope]?.open ?? true;
+  const isWebTabExpanded = canvasViews[tabScope]?.expanded ?? false;
+  const setIsWebTabOpen = useCallback((update: React.SetStateAction<boolean>) => {
+    setCanvasViews(previous => { const view = previous[tabScope] || { open: false, expanded: false };
+      const open = typeof update === 'function' ? update(view.open) : update;
+      return { ...previous, [tabScope]: { open, expanded: open && view.expanded } };
+    });
+  }, [tabScope]);
+  const setIsWebTabExpanded = useCallback((update: React.SetStateAction<boolean>) => {
+    setCanvasViews(previous => { const view = previous[tabScope] || { open: false, expanded: false };
+      return { ...previous, [tabScope]: { ...view, expanded: typeof update === 'function' ? update(view.expanded) : update } };
+    });
+  }, [tabScope]);
+  const toggleWebTab = useCallback(() => setIsWebTabOpen(previous => !previous), [setIsWebTabOpen]);
+  const toggleExpandWebTab = useCallback(() => setIsWebTabExpanded(previous => !previous), [setIsWebTabExpanded]);
+  const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('custos.inspector-open');
+      if (saved !== null) return saved === 'true';
+      return typeof window !== 'undefined' && window.innerWidth >= 1024;
+    } catch {
+      return true;
+    }
+  });
 
-  const toggleWebTab = useCallback(() => setIsWebTabOpen((prev) => !prev), []);
+  const setIsInspectorOpenPersisted = useCallback((update: React.SetStateAction<boolean>) => {
+    setIsInspectorOpen((prev) => {
+      const next = typeof update === 'function' ? update(prev) : update;
+      try {
+        localStorage.setItem('custos.inspector-open', String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
 
-  const [isWebTabExpanded, setIsWebTabExpanded] = useState<boolean>(false);
-  const toggleExpandWebTab = useCallback(() => setIsWebTabExpanded((prev) => !prev), []);
+  const toggleInspector = useCallback(() => setIsInspectorOpenPersisted((previous) => !previous), [setIsInspectorOpenPersisted]);
   const [isResourcePickerOpen, setIsResourcePickerOpen] = useState<boolean>(false);
 
-  const [tabStates, setTabStates] = useState<Record<string, { tabs: OrcaTab[]; activeTabId: string }>>({});
-  const tabScope = `${currentProject}:${activeSessionId || 'no-session'}:${activeWorkbench}`;
+
+  const [tabStates, setTabStates] = useState<Record<string, { tabs: OrcaTab[]; activeTabId: string }>>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('custos.resource-tabs.v1') || '{}');
+      if (saved.version !== 1 || !saved.scopes || typeof saved.scopes !== 'object') return {};
+      return Object.fromEntries(Object.entries(saved.scopes).filter((entry): entry is [string, { tabs: OrcaTab[]; activeTabId: string }] => {
+        const value = entry[1] as { tabs?: OrcaTab[]; activeTabId?: string } | null;
+        return !!value && Array.isArray(value.tabs) && value.tabs.length <= 100 && typeof value.activeTabId === 'string'
+          && new Set(value.tabs.map(tab => tab?.id)).size === value.tabs.length
+          && value.tabs.every(tab => tab && typeof tab.id === 'string' && typeof tab.title === 'string' && typeof tab.url === 'string' && typeof tab.type === 'string' && ['workspaceId', 'sessionId', 'taskId', 'agentId', 'runId', 'artifactId', 'sourceId', 'revision'].every(key => tab[key as keyof OrcaTab] === undefined || typeof tab[key as keyof OrcaTab] === 'string'));
+      }));
+    } catch { return {}; }
+  });
 
   const currentTabState = useMemo(() => {
-    return tabStates[tabScope] ?? getDefaultTabForMode(activeWorkbench);
-  }, [tabStates, tabScope, activeWorkbench]);
+    const state = tabStates[tabScope] ?? getDefaultTabForMode(activeWorkbench);
+    return {
+      ...state,
+      tabs: state.tabs.map(tab => ({
+        ...tab,
+        workspaceId: tab.workspaceId || activeWorkspaceId || undefined,
+        sessionId: tab.sessionId || activeSessionId || undefined,
+      })),
+    };
+  }, [tabStates, tabScope, activeWorkbench, activeWorkspaceId, activeSessionId]);
 
   const setTabs = useCallback((update: React.SetStateAction<OrcaTab[]>) => {
     setTabStates((previous) => {
@@ -676,6 +682,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { ...previous, [tabScope]: { ...current, activeTabId } };
     });
   }, [tabScope, activeWorkbench]);
+
+  const initScreenTabs = useCallback((screenId: string, initialTabs: OrcaTab[], initialActiveTabId?: string) => {
+    const scope = JSON.stringify([currentProject, screenId]);
+    setTabStates((prev) => ({
+      ...prev,
+      [scope]: {
+        tabs: initialTabs,
+        activeTabId: initialActiveTabId || initialTabs[0]?.id || '',
+      },
+    }));
+  }, [currentProject]);
 
   const [splitPercent, setSplitPercent] = useState<number>(() => {
     try {
@@ -704,7 +721,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!isNaN(val) && val >= 260 && val <= 1600) return val;
       }
     } catch {}
-    return 480;
+    return Math.max(360, Math.min(1100, Math.round((window.innerWidth - 296) * 0.58)));
   });
 
   const [isResizingColumn, setIsResizingColumn] = useState<boolean>(false);
@@ -725,10 +742,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [isWebTabOpen]);
 
   const handleResetColumn2Width = useCallback(() => {
-    const def = Math.max(340, Math.min(540, Math.round(window.innerWidth * 0.38)));
+    const def = Math.max(360, Math.min(1100, Math.round((window.innerWidth - 296) * 0.58)));
     setColumn2Width(def);
     setIsWebTabOpen(true);
-  }, []);
+  }, [setIsWebTabOpen]);
 
   // Global mousemove and mouseup listeners when isResizingColumn is true
   useEffect(() => {
@@ -766,7 +783,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const rawWidth = Math.round(window.innerWidth - e.clientX);
       if (rawWidth < 200) {
         setIsWebTabOpen(false);
-        const def = Math.max(340, Math.min(540, Math.round(window.innerWidth * 0.38)));
+        const def = Math.max(360, Math.min(1100, Math.round((window.innerWidth - 296) * 0.58)));
         setColumn2Width(def);
       } else {
         setIsWebTabOpen(true);
@@ -785,7 +802,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isResizingColumn, isSidebarCollapsed]);
+  }, [isResizingColumn, isSidebarCollapsed, setIsWebTabOpen]);
 
   // Window resize clamp
   useEffect(() => {
@@ -818,6 +835,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const resourceTabs: ResourceTabsState = useMemo(() => ({
     ...currentTabState,
+    scopeKey: tabScope,
     setTabs,
     setActiveTabId,
     splitTabId,
@@ -826,7 +844,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSplitRatio,
     toggleSplitTab,
     closeSplitTab,
-  }), [currentTabState, setTabs, setActiveTabId, splitTabId, splitRatio, toggleSplitTab, closeSplitTab]);
+  }), [currentTabState, tabScope, setTabs, setActiveTabId, splitTabId, splitRatio, toggleSplitTab, closeSplitTab]);
 
   const handleCloseResourceTab = useCallback((e: React.MouseEvent, tabId: string) => {
     e.stopPropagation();
@@ -858,16 +876,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const saved = localStorage.getItem('custos_user_profile');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed === 'object') return parsed;
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          parsed.isAuthenticated &&
+          parsed.githubUsername &&
+          parsed.name !== 'Trần Vĩ' &&
+          parsed.initials !== 'TV'
+        ) {
+          return { ...parsed, isAuthenticated: false };
+        }
       }
     } catch {}
     return {
-      name: 'Trần Vĩ',
-      initials: 'TV',
-      tier: 'Plus',
-      githubUsername: 'tranchivi',
-      avatarUrl: 'https://github.com/tranchivi.png',
-      isAuthenticated: true,
+      name: '',
+      initials: '',
+      tier: '',
+      githubUsername: undefined,
+      avatarUrl: undefined,
+      isAuthenticated: false,
     };
   });
 
@@ -878,39 +905,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [userProfile]);
 
   const handleGitHubLogin = useCallback(
-    async (account: { username: string; token?: string; name?: string; avatar_url?: string }) => {
+    async (account: { username: string; name?: string; avatar_url?: string }) => {
       try {
-        let finalName = account.name || account.username;
-        let finalAvatar = account.avatar_url;
-
-        if (account.token && !finalAvatar) {
-          try {
-            const res = await fetch('https://api.github.com/user', {
-              headers: {
-                Authorization: `Bearer ${account.token}`,
-                Accept: 'application/vnd.github.v3+json',
-              },
-            });
-            if (res.ok) {
-              const data = await res.json();
-              finalName = data.name || data.login || finalName;
-              finalAvatar = data.avatar_url;
-            }
-          } catch {}
-        } else if (!finalAvatar) {
-          try {
-            const res = await fetch(`https://api.github.com/users/${encodeURIComponent(account.username)}`);
-            if (res.ok) {
-              const data = await res.json();
-              finalName = data.name || data.login || finalName;
-              finalAvatar = data.avatar_url;
-            }
-          } catch {}
+        const status = await daemonClient.getGitHubAuthStatus();
+        if (!status.authenticated || !status.user?.login || status.user.login !== account.username) {
+          throw new Error(status.error || 'GitHub account has not been verified by the daemon.');
         }
+        const finalName = status.user.name || status.user.login;
+        const finalAvatar = status.user.avatar_url;
 
         const initials =
           finalName
             .split(' ')
+            .filter(Boolean)
             .map((p: string) => p[0])
             .join('')
             .slice(0, 2)
@@ -919,7 +926,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const updated = {
           name: finalName,
           initials,
-          tier: 'GitHub Pro',
+          tier: 'GitHub',
           githubUsername: account.username,
           avatarUrl: finalAvatar || `https://github.com/${encodeURIComponent(account.username)}.png`,
           isAuthenticated: true,
@@ -928,11 +935,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setUserProfile(updated);
         try {
           localStorage.setItem('custos_user_profile', JSON.stringify(updated));
-          if (account.token) {
-            localStorage.setItem('custos_github_token', account.token);
-          }
+          // Security hardening: Purge plaintext token from localStorage
+          localStorage.removeItem('custos_github_token');
         } catch {}
-        showToast(`Connected to GitHub as @${account.username}`);
+
+        showToast(`Logged in as @${account.username}`);
         return true;
       } catch (err: any) {
         showToast(`GitHub login failed: ${err?.message || err}`);
@@ -943,20 +950,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 
   const handleGitHubLogout = useCallback(() => {
-    const guestProfile = {
-      name: 'Guest User',
-      initials: 'GU',
-      tier: 'Free',
+    const unauthProfile = {
+      name: '',
+      initials: '',
+      tier: '',
       githubUsername: undefined,
       avatarUrl: undefined,
       isAuthenticated: false,
     };
-    setUserProfile(guestProfile);
+    setUserProfile(unauthProfile);
     try {
-      localStorage.setItem('custos_user_profile', JSON.stringify(guestProfile));
+      localStorage.setItem('custos_user_profile', JSON.stringify(unauthProfile));
       localStorage.removeItem('custos_github_token');
     } catch {}
-    showToast('Signed out of GitHub');
+    showToast('Account hidden in Custos. GitHub CLI credentials remain on this machine.');
   }, [showToast]);
 
   // Sync projects with daemon ExecutionWorkspaces on mount
@@ -990,116 +997,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const openSettings = useCallback((tab?: string) => {
-    if (tab === 'providers' || tab === 'runtime') {
-      openAiSetup(tab === 'runtime' ? 'local' : 'cloud');
-      return;
-    }
-    if (tab === 'subagents') {
-      openAiSetup('subagents');
-      return;
-    }
-    if (tab === 'quotas') {
-      openAiSetup('quotas');
-      return;
-    }
-    if (tab) setSettingsTab(tab);
+    const canonicalTab = tab === 'providers' || tab === 'cloud' || tab === 'connections'
+      ? 'connections'
+      : tab === 'runtime' || tab === 'local'
+      ? 'connections'
+      : tab === 'quotas' || tab === 'execution'
+      ? 'execution'
+      : tab === 'tools' || tab === 'plugins' || tab === 'skills'
+      ? 'tools'
+      : tab || 'general';
+    setSettingsTab(canonicalTab);
+    setIsAiSetupOpen(false);
     setIsSettingsOpen(true);
-  }, [openAiSetup]);
-
-  const [appearance, setAppearance] = useState<AppearancePreferences>(readAppearance);
-  const [systemDark, setSystemDark] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches);
-  const resolvedTheme = appearance.theme === 'system' ? (systemDark ? 'dark' : 'light') : appearance.theme;
-  useEffect(() => {
-    if (appearance.theme !== 'system') return;
-    const media = window.matchMedia('(prefers-color-scheme: dark)');
-    const update = () => setSystemDark(media.matches);
-    update();
-    media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
-  }, [appearance.theme]);
-  useEffect(() => {
-    const sync = (event: StorageEvent) => {
-      if (event.key !== APPEARANCE_KEY && event.key !== null) return;
-      const saved = readAppearance();
-      if (saved.theme === 'system') setSystemDark(window.matchMedia('(prefers-color-scheme: dark)').matches);
-      setAppearance(saved);
-    };
-    window.addEventListener('storage', sync);
-    return () => window.removeEventListener('storage', sync);
-  }, []);
-  useEffect(() => { applyAppearance(appearance, resolvedTheme); }, [appearance, resolvedTheme]);
-  const themeQueue = useRef<Promise<void>>(Promise.resolve());
-  useEffect(() => {
-    if (!isTauri()) return;
-    const theme = appearance.theme === 'system' ? null : resolvedTheme;
-    themeQueue.current = themeQueue.current
-      .then(async () => {
-        const { getCurrentWindow } = await import('@tauri-apps/api/window');
-        await getCurrentWindow().setTheme(theme);
-      })
-      .catch(error => console.warn('Native window theme could not be applied', error));
-  }, [appearance.theme, resolvedTheme]);
-  const updateAppearance = useCallback((next: Partial<AppearancePreferences>) => {
-    if (next.theme === 'system') setSystemDark(window.matchMedia('(prefers-color-scheme: dark)').matches);
-    setAppearance(previous => {
-      const updated = { ...previous, ...next };
-      try { localStorage.setItem(APPEARANCE_KEY, JSON.stringify(updated)); }
-      catch (error) { console.warn('Device appearance could not be saved', error); }
-      return updated;
-    });
   }, []);
 
-  // UI Scale state
-  const [uiScale, setUiScale] = useState<number>(() => {
-    const saved = localStorage.getItem('custos_ui_scale');
-    const value = Number(saved || 100);
-    return Math.min(160, Math.max(70, Math.round((Number.isFinite(value) ? value : 100) / 10) * 10));
-  });
+  const openAiSetup = useCallback((tab?: 'local' | 'cloud' | 'routing' | 'subagents' | 'quotas' | 'tools' | 'environments' | 'diagnostics') => {
+    openSettings(tab);
+  }, [openSettings]);
 
-  const zoomQueue = useRef<Promise<void>>(Promise.resolve());
-  const applyUiScale = useCallback((scaleVal: number) => {
-    const rounded = Math.round((Number.isFinite(scaleVal) ? scaleVal : 100) / 10) * 10;
-    const clamped = Math.min(160, Math.max(70, rounded));
-    setUiScale(clamped);
-    localStorage.setItem('custos_ui_scale', clamped.toString());
-  }, []);
-
-  useEffect(() => {
-    const factor = uiScale / 100;
-    document.documentElement.style.zoom = '';
-    document.body.style.zoom = '';
-    document.documentElement.style.setProperty('--app-browser-zoom', '1');
-    if (isTauri()) {
-      // Serialize native zoom changes so rapid clicks settle at the latest level.
-      zoomQueue.current = zoomQueue.current.then(() => getCurrentWebview().setZoom(factor)).catch(error => {
-        showToast(`Unable to zoom app: ${String(error)}`);
-      });
-    } else {
-      document.documentElement.style.zoom = String(factor);
-      document.documentElement.style.setProperty('--app-browser-zoom', String(factor));
-    }
-  }, [uiScale, showToast]);
-
-  const handleSetUiScale = (val: number) => {
-    applyUiScale(val);
-  };
-
-  const handleStepUiScale = (delta: number) => {
-    handleSetUiScale(uiScale + delta);
-  };
+  const {
+    appearance,
+    resolvedTheme,
+    updateAppearance,
+    uiScale,
+    handleSetUiScale,
+    handleStepUiScale,
+  } = useAppearanceSlice(showToast);
 
   // Check active session object
   const currentSessions = projectData[currentProject] || [];
   const activeSession: Session | null =
     currentSessions.find((s) => s.id === activeSessionId) || null;
 
-  // Selected Model state: default empty string means "No model selected"
-  const [selectedModel, setSelectedModel] = useState<string>(() => {
-    return localStorage.getItem('custos_selected_model') || '';
-  });
 
-  const [selectedModelAccountId, setSelectedModelAccountId] = useState(() => localStorage.getItem('custos_selected_model_account') || '');
-  const [selectedReasoningEffort, setSelectedReasoningEffort] = useState(() => localStorage.getItem('custos_selected_reasoning_effort') || '');
 
   const selectedModelAvailable = (() => {
     if (!selectedModel) return false;
@@ -1115,8 +1045,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setConnectedAccounts(previous => previous.map(account => {
       const update = updates.find(value => value?.id === account.id && value.endpoint === account.endpointUrl);
       if (!update) return account;
-      return { ...account, supportedModels: update.catalog.models.map(model => model.id), catalogModels: update.catalog.models,
-        unavailableModels: update.catalog.unavailable_models, catalogError: Object.values(update.catalog.unavailable_models || {}).map(value => value.reason).join('; ') || (account.status !== 'active' ? account.catalogError : undefined) };
+      const hasModels = update.catalog.models && update.catalog.models.length > 0;
+      const status = hasModels ? 'active' : account.status;
+      return {
+        ...account,
+        status,
+        statusLabel: status === 'active' ? 'Connected' : account.statusLabel,
+        supportedModels: update.catalog.models.map(model => model.id),
+        catalogModels: update.catalog.models,
+        unavailableModels: update.catalog.unavailable_models,
+        catalogError: Object.values(update.catalog.unavailable_models || {}).map(value => value.reason).join('; ') || (status !== 'active' ? account.catalogError : undefined)
+      };
     }));
   }, []);
 
@@ -1175,7 +1114,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         let tokenMeta: OAuthTokenRecord | null = null;
         let credentialError: string | undefined;
         tokenMeta = await daemonClient.getOAuthToken(provider.id).catch((error) => { credentialError = error instanceof Error ? error.message : String(error); return null; });
-        if (serviceId !== 'local') connected = connected && tokenMeta?.connected === true;
+        const isOAuth = provider.api_key_masked === 'oauth' || Boolean(tokenMeta?.connected);
+        if (isOAuth) {
+          connected = connected && tokenMeta?.connected === true;
+        }
 
         let catalogModels: ModelCatalogOption[] = [];
         let catalogSource: 'live' | 'cached' | 'unavailable' = 'unavailable';
@@ -1205,7 +1147,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               pricing: undefined,
             }));
             const verified = await daemonClient.getModelCatalog(provider.service_type || serviceId, provider.id);
-            catalogModels = verified.models;
+            if (verified.models && verified.models.length > 0) {
+              catalogModels = verified.models;
+            }
             unavailableModels = verified.unavailable_models;
             catalogError = Object.values(unavailableModels || {}).map(value => value.reason).join('; ') || undefined;
           } catch (err) {
@@ -1216,10 +1160,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (connected && catalogSource !== 'live') {
           try {
             const cached = await daemonClient.getModelCatalog(provider.service_type || serviceId, provider.id);
-            if (cached.origin === 'cached' && cached.models.length) {
+            if (cached.models && cached.models.length > 0) {
               catalogModels = cached.models;
               catalogSource = 'cached';
               catalogFetchedAt = cached.fetched_at;
+              unavailableModels = cached.unavailable_models;
             }
           } catch (err) {
             catalogError = err instanceof Error ? err.message : String(err);
@@ -1240,7 +1185,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           catalogModels.find((model) => model.id === defaultModel)?.context_window ||
           provider.context_window ||
           catalogModels[0]?.context_window;
-        const available = connected && catalogSource === 'live';
+        const available = connected && (catalogSource === 'live' || catalogSource === 'cached' || catalogModels.length > 0);
         const authType = tokenLooksOauth(tokenMeta) || provider.api_key_masked === 'oauth'
           ? 'oauth'
           : 'api_key';
@@ -1373,7 +1318,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }));
       } finally { probing = false; }
     };
-    const timer = window.setInterval(() => { void check(); }, 15000);
+    const timer = window.setInterval(() => { if (!document.hidden) void check(); }, 15000);
     const onVisible = () => { if (!document.hidden) void check(); };
     window.addEventListener('focus', onVisible);
     document.addEventListener('visibilitychange', onVisible);
@@ -1426,7 +1371,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Hydrate state from Custos Daemon on Mount
   useEffect(() => {
-    applyUiScale(uiScale);
+    handleSetUiScale(uiScale);
 
     async function hydrateFromDaemon() {
       try {
@@ -1528,9 +1473,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // conversation whose session ID is actually a Task ID.
           const allProjected = projectedSessions;
 
+          const targetProject = currentProject || 'AgentHub';
           setProjectData((prev) => ({
             ...prev,
-            'Custos Workspace': allProjected,
+            [targetProject]: allProjected,
           }));
 
           for (const chat of projectedSessions) {
@@ -1543,17 +1489,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
             for (const run of runs) {
               if (run.journal_occurred_at) {
-                setProjectData(previous => ({...previous, 'Custos Workspace': (previous['Custos Workspace'] || []).map(item => item.id !== chat.id ? item : {...item, messages: item.messages.map(message => message.recordedAt === run.journal_occurred_at ? {...message, runId: run.run_id, runStatus: run.status, badge: run.status, author: run.model || message.author} : message)})}));
+                setProjectData(previous => ({...previous, [targetProject]: (previous[targetProject] || []).map(item => item.id !== chat.id ? item : {...item, messages: item.messages.map(message => message.recordedAt === run.journal_occurred_at ? {...message, runId: run.run_id, runStatus: run.status, badge: run.status, author: run.model || message.author} : message)})}));
               }
-              followLiveRun('Custos Workspace', chat.id, chat.sessionId || chat.id, run.run_id, run.model || 'Custos');
+              followLiveRun(targetProject, chat.id, chat.sessionId || chat.id, run.run_id, run.model || 'Custos');
             }
           }
 
-          setCurrentProject('Custos Workspace');
+          setCurrentProject(targetProject);
           setActiveSessionId((previous) => allProjected.some((session) => session.id === previous)
             ? previous : (allProjected[0]?.id || ''));
         } else {
-          setProjectData((previous) => ({ ...previous, 'Custos Workspace': [] }));
+          const targetProject = currentProject || 'AgentHub';
+          setProjectData((previous) => ({ ...previous, [targetProject]: [] }));
           setActiveSessionId('');
         }
       } catch (err) {
@@ -1593,10 +1540,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         e.preventDefault();
         handleSetUiScale(100);
       }
-      // Open AI Setup (Ctrl+3 or Cmd+3)
+      // Open Connections & Tools (Ctrl+3 or Cmd+3)
       if ((e.metaKey || e.ctrlKey) && e.key === '3') {
         e.preventDefault();
-        openAiSetup('local');
+        openAiSetup('cloud');
       }
       // Close open modals on Escape
       if (e.key === 'Escape') {
@@ -1667,14 +1614,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const trailing = snapshot.text.charCodeAt(end - 1);
       if (end < snapshot.text.length && trailing >= 0xD800 && trailing <= 0xDBFF) end += 1;
       displayedText = snapshot.text.slice(0, end);
+      const wasInitial = initialFlush;
       initialFlush = false;
       lastPaint = performance.now();
       const text = displayedText;
-      setProjectData(previous => ({ ...previous, [project]: (previous[project] || []).map(chat => chat.id !== conversation ? chat : {
-        ...chat, messages: chat.messages.some(message => message.runId === run)
-          ? chat.messages.map(message => message.runId !== run ? message : { ...message, text, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined })
-          : [...chat.messages, { id: `live-${run}`, role: 'assistant' as const, author, text, runId: run, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined }],
-      }) }));
+
+      // Scoped run observer: notify listening views (e.g. ConversationPane) without re-rendering AppContext
+      scopedLiveRunStore.emit(run, {
+        ...snapshot,
+        text,
+      });
+
+      const isSettled = ['completed', 'failed', 'cancelled', 'interrupted'].includes(snapshot.status);
+      if (immediate || isSettled || wasInitial) {
+        setProjectData(previous => ({ ...previous, [project]: (previous[project] || []).map(chat => chat.id !== conversation ? chat : {
+          ...chat, messages: chat.messages.some(message => message.runId === run)
+            ? chat.messages.map(message => message.runId !== run ? message : { ...message, text, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined })
+            : [...chat.messages, { id: `live-${run}`, role: 'assistant' as const, author, text, runId: run, runStatus: snapshot.status, badge: snapshot.reconnecting ? 'Reconnecting' : snapshot.status, activities: snapshot.activities, liveError: snapshot.error || undefined }],
+        }) }));
+      }
       if (displayedText !== snapshot.text && !immediate) schedule();
     };
     const refresh = () => { cancelPending(); if (latest) flush(true); };
@@ -1691,6 +1649,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       systemMotion.removeEventListener('change', refresh);
       livePresentations.current.delete(run);
       liveConnections.current.delete(run);
+      scopedLiveRunStore.clear(run);
     });
   };
 
@@ -1699,20 +1658,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const task = await daemonClient.createTask({ title: instruction.slice(0, 120), metadata: { kind: 'native_coding_agent', pack_id: 'engineering', harness_id: harness, workspace_id: workspace, conversation_session_id: session.id } });
     await daemonClient.attachSession({ session_id: session.id, task_id: task.id });
     await daemonClient.appendSessionMessage(session.id, 'user', instruction);
-    const project = 'Custos Workspace';
+    const project = currentProject || 'AgentHub';
     const chat: Session = { nativeHarnessId: harness, workspaceId: workspace, id: session.id, sessionId: session.id, taskId: task.id, source: 'daemon', title: instruction.slice(0, 80), time: 'Live', preview: harness, model: harness, pack: 'engineering', fileName: '', diffHunk: '', diffLinesCount: '', summary: '', diffCode: [], messages: [{ role: 'user', author: 'You', text: instruction }] };
     setProjectData(previous => ({ ...previous, [project]: [...(previous[project] || []), chat] }));
     const run = await daemonClient.startRun({ background: true, task_id: task.id, session_id: session.id, turn_id: `turn_${crypto.randomUUID()}`, preferred_mode: 'native', harness_id: harness, workspace_id: workspace, prompt: instruction });
+    setProjectData(previous => ({ ...previous, [project]: (previous[project] || []).map(c => c.id !== session.id ? c : { ...c, messages: [...c.messages, { id: `live-${run.run_id}`, role: 'assistant' as const, author: harness, runId: run.run_id, runStatus: 'queued', badge: 'queued', text: '' }] }) }));
     setCurrentProject(project); setActiveSessionId(session.id);
     followLiveRun(project, session.id, session.id, run.run_id, harness);
     return { run, sessionId: session.id };
   };
 
   const handleSendMessage = async (text: string, lens?: 'assistant' | 'coding' | 'research') => {
-    if (!activeSession) return;
-    if (activeSession.messages.some(message => message.runId && !['completed','failed','cancelled','interrupted'].includes(message.runStatus || ''))) { showToast('Stop or wait for the current run before sending another prompt.'); return; }
-    if (pendingTurns.current.has(activeSession.id)) return;
-    if (!activeSession.nativeHarnessId && !selectedModelAvailable) { showToast('Select an available model/account and reasoning effort before sending.'); return; }
+    if (!activeSession) return false;
+    if (activeSession.messages.some(message => message.runId && !['completed','failed','cancelled','interrupted'].includes(message.runStatus || ''))) { showToast('Stop or wait for the current run before sending another prompt.'); return false; }
+    if (pendingTurns.current.has(activeSession.id)) return false;
+    if (!activeSession.nativeHarnessId && !selectedModelAvailable) { showToast('Select an available model/account and reasoning effort before sending.'); return false; }
     pendingTurns.current.add(activeSession.id);
     let userJournalPersisted = false;
     let dispatchAttempted = false;
@@ -1781,7 +1741,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const run = await daemonClient.startRun({ background: true, task_id: taskId, session_id: activeSession.sessionId, turn_id: `turn_${crypto.randomUUID()}`, preferred_mode: 'native', harness_id: harness, workspace_id: activeSession.workspaceId, prompt: text });
         setProjectData(previous => ({ ...previous, [currentProject]: (previous[currentProject] || []).map(chat => chat.id !== activeSession.id ? chat : { ...chat, messages: [...chat.messages, { id: `live-${run.run_id}`, role: 'assistant' as const, author: harness, runId: run.run_id, runStatus: 'queued', badge: 'queued', text: '' }] }) }));
         followLiveRun(currentProject, activeSession.id, activeSession.sessionId, run.run_id, harness);
-        return;
+        return true;
       }
       const chosenModel = (selectedModel || activeSession.model || '').trim();
       const selectedCombo = combos.find((combo) => combo.id.toLowerCase() === chosenModel.toLowerCase());
@@ -1794,7 +1754,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           stepName: 'AI Local',
           text: 'No local model is available yet. Start Ollama and install at least one model, then use Retry models. You can chat without signing in as soon as AI Local discovers it.',
         });
-        return;
+        return false;
       }
 
       if (selectedCombo) {
@@ -1805,7 +1765,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           stepName: 'Model Gateway',
           text: 'Routing combos are not dispatched as a single model turn yet. Select one concrete live model from a connected account.',
         });
-        return;
+        return false;
       }
 
       const isNativeModel = chosenModel.startsWith('native:');
@@ -1823,39 +1783,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
         } catch (error: any) {
           reportTurnFailure({ role: 'assistant', author: 'Custos Engine', badge: 'Local Model Unavailable', text: error?.message || String(error) });
-          return;
+          return false;
         }
       } else {
         const candidates = connectedAccounts.filter(account => account.status === 'active' && account.supportedModels.includes(chosenModel) &&
           (!selectedReasoningEffort || account.catalogModels?.some(model => model.id === chosenModel && model.efforts.includes(selectedReasoningEffort))));
-        if (!candidates.length) { showToast('Selected model is unavailable. Refresh models or choose another model.'); return; }
+        if (!candidates.length) { showToast('Selected model is unavailable. Refresh models or choose another model.'); return false; }
         const transientAccount = candidates.find(isTransientAiLocalAccount);
         const reservation = transientAccount ? undefined : await daemonClient.reserveProviderAccount(candidates[0].providerId, chosenModel, selectedReasoningEffort || undefined);
         modelAccount = transientAccount || candidates.find(account => account.id === reservation?.account_id);
-        if (!modelAccount) { showToast('No available account supports this model and reasoning effort. Refresh models.'); return; }
+        if (!modelAccount) { showToast('No available account supports this model and reasoning effort. Refresh models.'); return false; }
         routedAccountId = isTransientAiLocalAccount(modelAccount) ? undefined : modelAccount.id;
         const metadata = modelAccount.catalogModels?.find(model => model.id === chosenModel);
         effort = selectedReasoningEffort || metadata?.default_effort;
-        if (effort && !metadata?.efforts.includes(effort)) { showToast('Reasoning effort is no longer available. Select the model again.'); return; }
+        if (effort && !metadata?.efforts.includes(effort)) { showToast('Reasoning effort is no longer available. Select the model again.'); return false; }
       }
 
       if (chosenModel.startsWith('ollama/')) {
         const account = connectedAccounts.find(a => a.id === routedAccountId && a.status === 'active');
         if (!account) {
           reportTurnFailure({ role: 'assistant', author: 'Custos Engine', badge: 'Ollama Unavailable', stepName: 'Model Gateway', text: 'Ollama is offline or the selected model is no longer installed. Start Ollama and use Retry models. Your prompt will not be sent to another provider.' });
-          return;
+          return false;
         }
         // Recheck before dispatch to catch shutdowns between periodic probes.
         try {
           const probe = await daemonClient.probeModels(account.endpointUrl || 'http://localhost:11434', 'ollama');
           if (!probe.models.some(model => model.id === chosenModel)) {
             reportTurnFailure({ role: 'assistant', author: 'Custos Engine', badge: 'Model Removed', text: 'The selected Ollama model is no longer installed. Refresh models and choose an installed model.' });
-            return;
+            return false;
           }
         } catch {
           setConnectedAccounts(previous => previous.map(a => a.id === account.id ? { ...a, status: 'offline', statusLabel: 'Ollama offline', badgeColor: '#6b7280', catalogSource: 'cached', catalogError: 'Ollama is unavailable. Start Ollama and retry models.' } : a));
           reportTurnFailure({ role: 'assistant', author: 'Custos Engine', badge: 'Ollama Offline', text: 'Cannot connect to Ollama. Start Ollama and retry models, then resend your prompt. No other provider was used.' });
-          return;
+          return false;
         }
       }
 
@@ -1869,7 +1829,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           stepName: 'Model Gateway',
           text: `Model "${chosenModel}" cannot be dispatched because no active provider accounts are connected. Please connect a provider in Settings > Providers first.`,
         });
-        return;
+        return false;
       }
 
       // 1. Check if an LLM is currently available / configured
@@ -1880,11 +1840,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           author: 'Custos Engine',
           badge: 'No LLM Available',
           stepName: 'LLM Gateway',
-          text: `⚠️ Chưa có LLM nào được cấu hình hiện tại (No LLMs currently available).\n\n${llmStatus.message || 'Hệ thống đang hoạt động ở chế độ Sovereign & Offline Kernel. Vui lòng thêm API Key (Anthropic Claude, OpenAI Codex, Google Gemini...) hoặc chọn Local Model trong Cài đặt > Providers để kích hoạt AI reasoning.'}`,
+          text: `⚠️ No LLM providers configured.\n\n${llmStatus.message || 'The system is running in Sovereign & Offline Kernel mode. Please configure an API Key (Anthropic Claude, OpenAI Codex, Google Gemini...) or select a Local Model in Settings > Providers to enable AI reasoning.'}`,
         };
 
         reportTurnFailure(noLlmMsg);
-        return;
+        return false;
       }
 
       // 2. Ensure a daemon session exists, but run each chat turn on its own task
@@ -1934,7 +1894,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             createTaskError instanceof Error ? createTaskError.message : String(createTaskError || 'unknown error')
           }`,
         });
-        return;
+        return false;
       }
 
       // Append message to backend session journal
@@ -1963,12 +1923,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         { id: `live-${runId}`, role: 'assistant' as const, author: chosenModel, badge: 'queued', stepName: `Run #${runId.slice(0, 8)}`, text: '', runId, runStatus: 'queued' },
       ] }) }));
       if (targetSessionId) followLiveRun(currentProject, activeSession.id, targetSessionId, runId, chosenModel);
+      return true;
     } catch (err: any) {
       void refreshCatalogAvailability();
       if ((selectedModel || activeSession.model || '').startsWith('ollama/') && String(err?.message || err).includes('Ollama connection failed')) {
         setConnectedAccounts(previous => previous.map(a => a.providerId === 'local' ? { ...a, status: 'offline', statusLabel: 'Ollama offline', badgeColor: '#6b7280', catalogSource: 'cached', catalogError: 'Ollama stopped during the request. Start Ollama and resend your prompt.' } : a));
       }
       reportTurnFailure({ role: 'assistant', author: 'Custos', text: `${dispatchAttempted ? 'Could not confirm run start; check Activity before retrying' : 'Could not prepare the run'}: ${err?.message || err}` });
+      return false;
     } finally { pendingTurns.current.delete(activeSession.id); }
   };
 
@@ -2115,19 +2077,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const handleCreateChatSession = async (pack: 'engineering' | 'research' | 'assistant') => {
+  const pendingTaskConversations = useRef(new Set<string>());
+  const handleCreateChatSession = async (pack: 'engineering' | 'research' | 'assistant', taskId?: string) => {
+    if (taskId && pendingTaskConversations.current.has(taskId)) throw new Error('A conversation is already being created for this Task.');
+    if (taskId) pendingTaskConversations.current.add(taskId);
     try {
+      const boundTask = taskId ? await daemonClient.getTask(taskId) : undefined;
+      const taskWorkspaceId = typeof boundTask?.metadata?.workspace_id === 'string' ? boundTask.metadata.workspace_id : undefined;
+      const registeredWorkspace = workspaces.find(workspace => workspace.id === taskWorkspaceId);
       const createdSession = await daemonClient.createSession('assisted');
+      if (boundTask) await daemonClient.attachSession({ session_id: createdSession.id, task_id: boundTask.id });
       await daemonClient.openSessionInLens(createdSession.id, pack === 'engineering' ? 'coding' : pack === 'assistant' ? 'assistant' : 'research');
       const conversation: Session = {
+        taskId: boundTask?.id,
+        taskStatus: boundTask?.status,
+        workspaceId: registeredWorkspace?.id,
         id: createdSession.id,
         sessionId: createdSession.id,
         source: 'daemon',
         pack,
         openedLenses: [pack === 'engineering' ? 'code' : pack === 'assistant' ? 'chat' : 'research'],
-        title: `Conversation ${createdSession.id.slice(0, 8)}`,
+        title: boundTask?.title || `Conversation ${createdSession.id.slice(0, 8)}`,
         time: 'Just now',
-        preview: 'Unbound conversation',
+        preview: boundTask ? `Task · ${boundTask.status}` : 'Unbound conversation',
         model: selectedModel || '',
         modelAccountId: selectedModelAccountId,
         reasoningEffort: selectedReasoningEffort,
@@ -2146,59 +2118,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsNewSessionOpen(false);
     } catch (error) {
       showToast(`Could not create chat: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  };
-
-  const handleProjectOpened = (project: { name: string; path: string; isGit: boolean; branch?: string }) => {
-    setProjectData((prev) => {
-      if (prev[project.name]) return prev;
-      return {
-        ...prev,
-        [project.name]: [],
-      };
-    });
-    setCurrentProject(project.name);
-    try {
-      localStorage.setItem('custos_current_project', project.name);
-      localStorage.setItem('custos_current_project_path', project.path);
-    } catch {}
-    if (project.path) {
-      daemonClient.detectWorkspace(project.path).then((det) => {
-        setActiveDetection(det);
-      }).catch(() => {});
-    }
-  };
-
-  const handleOpenFolderDirect = async () => {
-    try {
-      const chosen = await daemonClient.pickFolder();
-      if (!chosen) return;
-      const detection = await daemonClient.detectWorkspace(chosen);
-      setActiveDetection(detection);
-      const name = detection.name || chosen.split('/').filter(Boolean).pop() || 'Project';
-      const isGit = detection.is_git;
-      const branch = detection.branch || 'main';
-
-      await daemonClient.createWorkspace({
-        name,
-        path: detection.root_path || chosen,
-        kind: {
-          type: 'folder',
-          path: detection.root_path || chosen,
-        },
-      });
-
-      handleProjectOpened({
-        name,
-        path: detection.root_path || chosen,
-        isGit,
-        branch: isGit ? branch : undefined,
-      });
-
-      showToast(`Opened project: ${name} ${isGit ? `(${branch})` : ''}`);
-    } catch (err: any) {
-      console.warn('Direct pick folder fallback to dialog:', err);
-      setIsOpenProjectOpen(true);
+      if (taskId) throw error;
+    } finally {
+      if (taskId) pendingTaskConversations.current.delete(taskId);
     }
   };
 
@@ -2248,10 +2170,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       await refreshProviderState();
       setIsAddProviderOpen(false);
-      showToast(`Provider ${service} đã được lưu với credential bảo mật!`);
+      showToast(`Provider ${service} saved with secure credentials.`);
     } catch (err: any) {
       console.error('[SaveProvider] Error:', err);
-      showToast(`Lỗi lưu provider: ${err?.message || err}`);
+      showToast(`Failed to save provider: ${err?.message || err}`);
       throw err;
     }
   };
@@ -2260,10 +2182,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       await daemonClient.deleteProvider(id);
       await refreshProviderState();
-      showToast(`Đã xóa provider ${id} khỏi hệ thống!`);
+      showToast(`Removed provider ${id} from system.`);
     } catch (err: any) {
       console.error('[DeleteProvider] Error:', err);
-      showToast(`Lỗi xóa provider: ${err?.message || err}`);
+      showToast(`Failed to remove provider: ${err?.message || err}`);
     }
   };
 
@@ -2271,30 +2193,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const provider = providers.find((p) => p.id === providerNameOrId || p.name === providerNameOrId);
       if (!provider) {
-        showToast(`Không tìm thấy provider ${providerNameOrId}`);
+        showToast(`Provider ${providerNameOrId} not found.`);
         return;
       }
       const probeRes = await daemonClient.probeModels(provider.endpoint || '', undefined, undefined, provider.id);
       await refreshProviderState();
-      showToast(`✓ Probe thành công ${provider.name}; daemon tìm thấy ${probeRes.count} models.`);
+      showToast(`✓ Successfully probed ${provider.name}; daemon detected ${probeRes.count} models.`);
     } catch (err: any) {
-      showToast(`Lỗi kết nối provider: ${err?.message || err}`);
+      showToast(`Provider connection error: ${err?.message || err}`);
     }
   };
 
   const handleGenerateClientKey = async () => {
     try {
-      const name = window.prompt('Nhập tên Client Token mới (vd: CLI Integration, Microservice):', 'Custom API Key');
+      const name = window.prompt('Enter new Client Token name (e.g. CLI Integration, Microservice):', 'Custom API Key');
       if (!name) return;
       await daemonClient.generateClientKey(name);
       const updated = await daemonClient.listClientKeys();
       if (updated) {
         setClientKeys(updated.map(mapBackendKey));
       }
-      showToast('Client Key mới đã được tạo và lưu vào SQLite DB!');
+      showToast('New Client Key generated and persisted to SQLite DB.');
     } catch (err: any) {
       console.error('[GenerateKey] Error:', err);
-      showToast(`Lỗi tạo key: ${err?.message || err}`);
+      showToast(`Failed to create key: ${err?.message || err}`);
     }
   };
 
@@ -2305,10 +2227,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (updated) {
         setClientKeys(updated.map(mapBackendKey));
       }
-      showToast(`Đã thu hồi Client Key ${id.slice(0, 8)}`);
+      showToast(`Revoked Client Key ${id.slice(0, 8)}`);
     } catch (err: any) {
       console.error('[RevokeKey] Error:', err);
-      showToast(`Lỗi thu hồi key: ${err?.message || err}`);
+      showToast(`Failed to revoke key: ${err?.message || err}`);
     }
   };
 
@@ -2401,10 +2323,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentSessions,
         tasks,
         refreshTasks,
-        createTask: handleCreateTask,
-        advanceTask: handleAdvanceTask,
-        completeTask: handleCompleteTask,
-        cancelTask: handleCancelTask,
+        createTask,
+        advanceTask,
+        completeTask,
+        cancelTask,
         workspaces,
         activeWorkspaceId,
         setActiveWorkspaceId,
@@ -2414,6 +2336,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCurrentTab,
         activeWorkbench,
         setActiveWorkbench,
+        activeScreenId,
+        setActiveScreenId,
+        initScreenTabs,
         isSessionsCollapsed,
         setIsSessionsCollapsed,
         isRightExplorerOpen,
@@ -2472,12 +2397,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isSidebarCollapsed,
         setIsSidebarCollapsed,
         toggleSidebar,
+        isRecentActivityOpen,
+        setIsRecentActivityOpen,
         isWebTabOpen,
         setIsWebTabOpen,
         toggleWebTab,
         isWebTabExpanded,
         setIsWebTabExpanded,
         toggleExpandWebTab,
+        isInspectorOpen,
+        setIsInspectorOpen: setIsInspectorOpenPersisted,
+        toggleInspector,
         isResourcePickerOpen,
         setIsResourcePickerOpen,
         resourceTabs,

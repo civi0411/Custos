@@ -348,9 +348,6 @@ export const EvidenceWorkbenchPane: React.FC<EvidenceWorkbenchPaneProps> = ({ on
             <h1 className="text-base font-semibold tracking-tight text-fg-default">
               Evidence & Verifier Records
             </h1>
-            <p className="text-xs text-fg-subtle">
-              Cryptographically anchored criteria verifications, verifier lineages, status pills, and freshness audit trail.
-            </p>
           </div>
         </div>
 
@@ -717,20 +714,15 @@ export const EvidenceWorkbenchPane: React.FC<EvidenceWorkbenchPaneProps> = ({ on
                   <ShieldCheck className="w-4 h-4" />
                   Gate 4 Verifier Contract Enforcement
                 </div>
-                <p className="text-xs text-fg-subtle leading-relaxed">
-                  Under Custos fail-closed posture, execution workspaces, diffs, and synthesis artifacts must possess active, fresh verification records before promotion to production branch or coding handoff.
+                <p className="text-[10px] text-fg-subtle">
+                  Active, fresh verification records are required before promotion or handoff.
                 </p>
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-fg-subtle space-y-3">
-              <ShieldCheck className="w-12 h-12 text-fg-subtle opacity-40" />
-              <div className="space-y-1">
-                <h3 className="text-sm font-medium text-fg-default">No Record Selected</h3>
-                <p className="text-xs max-w-sm">
-                  Select a verifier record from the ledger on the left to inspect criteria findings, method lineage, and freshness status.
-                </p>
-              </div>
+            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-fg-subtle space-y-1.5">
+              <ShieldCheck className="w-8 h-8 text-fg-subtle opacity-40" />
+              <h3 className="text-xs font-medium text-fg-default">No record selected</h3>
             </div>
           )}
         </div>

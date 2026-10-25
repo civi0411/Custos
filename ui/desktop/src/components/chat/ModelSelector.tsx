@@ -13,14 +13,11 @@ import {
 } from 'lucide-react';
 import {
   ProviderBrandIcon,
-  OpenAIIcon,
-  ClaudeIcon,
-  GeminiIcon,
-  DeepSeekIcon
 } from '@/components/common/AgentIcons';
 import { useAppContext } from '@/context/AppContext';
 import { daemonClient } from '@/api/daemon_client';
 import type { LoadedModelInstance, LocalModelDescriptor } from '@/types/domain';
+import type { ProviderServiceId } from '@/types/provider_types';
 
 export type ThinkingEffort = string;
 
@@ -28,7 +25,7 @@ export interface ModelOption {
   accountId: string;
   id: string;
   name: string;
-  provider: 'anthropic' | 'openai' | 'gemini' | 'deepseek' | 'local' | 'antigravity' | 'copilot' | 'other';
+  provider: ProviderServiceId;
   providerName: string;
   badge?: string;
   badgeColor?: string;
@@ -52,7 +49,7 @@ export interface UnifiedModelItem {
   id: string; // The active ID to pass to backend
   baseId: string;
   name: string;
-  provider: ModelOption['provider'];
+  provider: ProviderServiceId;
   providerName: string;
   supportsEffort: boolean;
   selectedEffort: ThinkingEffort;
@@ -66,23 +63,40 @@ export interface UnifiedModelItem {
 }
 
 export function getProviderInfo(modelId: string): {
-  provider: ModelOption['provider'];
+  provider: ProviderServiceId;
   label: string;
 } {
   const m = (modelId || '').toLowerCase();
   if (m.startsWith('native:')) return { provider: 'local', label: 'Local (Native Metal)' };
   if (m.startsWith('local/') || m.startsWith('local:')) return { provider: 'local', label: 'Local (Apple Silicon)' };
   if (m.startsWith('ollama/')) return { provider: 'local', label: 'Local (Ollama)' };
+  if (m.startsWith('lmstudio/') || m.includes('lmstudio')) return { provider: 'lmstudio', label: 'LM Studio' };
   if (m.startsWith('copilot/')) return { provider: 'copilot', label: 'GitHub Copilot' };
-  if (m.startsWith('antigravity/')) return { provider: 'antigravity', label: 'Antigravity' };
+  if (m.startsWith('antigravity/')) return { provider: 'antigravity', label: 'Google Antigravity' };
+  if (m.startsWith('groq/') || m.includes('groq')) return { provider: 'groq', label: 'Groq LPU' };
+  if (m.startsWith('cerebras/') || m.includes('cerebras')) return { provider: 'cerebras', label: 'Cerebras' };
+  if (m.startsWith('mistral/') || m.includes('codestral') || m.includes('mistral')) return { provider: 'mistral', label: 'Mistral AI' };
+  if (m.startsWith('moonshot/') || m.includes('kimi')) return { provider: 'moonshot', label: 'Moonshot Kimi' };
+  if (m.startsWith('zhipu/') || m.includes('glm')) return { provider: 'zhipu', label: 'Zhipu GLM' };
+  if (m.startsWith('minimax/')) return { provider: 'minimax', label: 'MiniMax' };
+  if (m.startsWith('alibaba/') || m.startsWith('qwen/') || m.includes('qwen')) return { provider: 'alibaba', label: 'Alibaba Qwen' };
+  if (m.startsWith('nvidia/') || m.includes('nemotron')) return { provider: 'nvidia', label: 'NVIDIA NIM' };
+  if (m.startsWith('together/')) return { provider: 'together', label: 'Together AI' };
+  if (m.startsWith('xai/') || m.includes('grok')) return { provider: 'xai', label: 'xAI (Grok)' };
+  if (m.startsWith('openrouter/')) return { provider: 'openrouter', label: 'OpenRouter' };
+  if (m.startsWith('perplexity/') || m.includes('sonar')) return { provider: 'perplexity', label: 'Perplexity' };
+  if (m.startsWith('cohere/') || m.includes('command-r')) return { provider: 'cohere', label: 'Cohere' };
+  if (m.startsWith('sambanova/')) return { provider: 'sambanova', label: 'SambaNova' };
+  if (m.startsWith('fireworks/')) return { provider: 'fireworks', label: 'Fireworks AI' };
+  if (m.startsWith('siliconflow/')) return { provider: 'siliconflow', label: 'SiliconFlow' };
   if (m.includes('claude') || m.includes('anthropic')) return { provider: 'anthropic', label: 'Anthropic Claude' };
-  if (m.includes('gpt') || m.includes('o1') || m.includes('o3') || m.includes('openai')) return { provider: 'openai', label: 'OpenAI' };
+  if (m.includes('gpt') || m.includes('o1') || m.includes('o3') || m.includes('openai') || m.includes('codex')) return { provider: 'openai', label: 'OpenAI / Codex' };
   if (m.includes('gemini') || m.includes('google')) return { provider: 'gemini', label: 'Google Gemini' };
   if (m.includes('deepseek')) return { provider: 'deepseek', label: 'DeepSeek' };
-  if (m.includes('qwopus') || m.includes('llama') || m.includes('qwen') || m.includes('mistral') || m.includes('local') || m.includes('ollama')) {
+  if (m.includes('qwopus') || m.includes('llama') || m.includes('local') || m.includes('ollama')) {
     return { provider: 'local', label: 'Local (Apple Silicon)' };
   }
-  return { provider: 'other', label: 'Custom' };
+  return { provider: 'custom', label: 'Custom Gateway' };
 }
 
 export function ProviderIcon({
@@ -90,28 +104,11 @@ export function ProviderIcon({
   size = 14,
   className
 }: {
-  provider: ModelOption['provider'];
+  provider: ProviderServiceId;
   size?: number;
   className?: string;
 }): React.JSX.Element {
-  switch (provider) {
-    case 'anthropic':
-      return <ClaudeIcon size={size} className={className} />;
-    case 'openai':
-      return <OpenAIIcon size={size} className={className} />;
-    case 'gemini':
-      return <GeminiIcon size={size} className={className} />;
-    case 'deepseek':
-      return <DeepSeekIcon size={size} className={className} />;
-    case 'copilot':
-      return <ProviderBrandIcon provider="copilot" size={size} className={className} />;
-    case 'antigravity':
-      return <ProviderBrandIcon provider="antigravity" size={size} className={className} />;
-    case 'local':
-      return <ProviderBrandIcon provider="local" size={size} className={className || 'text-teal-400'} />;
-    default:
-      return <Cpu size={size} className={className || 'text-zinc-400'} />;
-  }
+  return <ProviderBrandIcon provider={provider} size={size} className={className} />;
 }
 
 export function formatModelDisplayName(rawId: string): string {
@@ -136,13 +133,14 @@ export function formatModelDisplayName(rawId: string): string {
 export function normalizeModelPresentation(id: string, label: string | undefined, provider: string) {
   const advertisedLabel = label && label !== id ? label.trim() : undefined;
   const annotation = advertisedLabel?.match(/\s*\((none|minimal|extra-low|low|medium|high|xhigh|max|ultra)\)\s*$/i);
-  const suffix = provider === 'antigravity' && !advertisedLabel
+  const isGoogle = provider === 'antigravity' || provider === 'gemini';
+  const suffix = isGoogle && !advertisedLabel
     ? id.match(/-(extra-low|none|minimal|low|medium|high|xhigh|max|ultra)$/i) : null;
   const variantEffort = (annotation?.[1] || suffix?.[1])?.toLowerCase();
   const name = annotation ? advertisedLabel!.slice(0, annotation.index).trim()
     : suffix ? formatModelDisplayName(id.slice(0, suffix.index))
     : advertisedLabel || formatModelDisplayName(id);
-  return { family: provider === 'antigravity' || annotation ? name.toLowerCase() : id, name, variantEffort };
+  return { family: isGoogle || annotation ? name.toLowerCase() : id, name, variantEffort };
 }
 
 /** One presentation family retains every account and discovered transport variant. */
@@ -181,9 +179,13 @@ export function getConnectedModelOptions(accounts: import('@/types').ConnectedAc
   const options: ModelOption[] = [];
 
   for (const account of accounts) {
-    if (account.status !== 'active') continue;
+    if (account.status !== 'active' && account.statusLabel !== 'Connected') continue;
 
-    for (const id of account.supportedModels) {
+    const modelIds = (account.supportedModels && account.supportedModels.length > 0)
+      ? account.supportedModels
+      : account.catalogModels?.map((m) => m.id) || [];
+
+    for (const id of modelIds) {
       const key = `${account.id}:${id}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -219,7 +221,7 @@ export function getConnectedModelOptions(accounts: import('@/types').ConnectedAc
         accountId: account.id,
         id,
         name: presentation.name,
-        familyKey: JSON.stringify([provider, presentation.family]),
+        familyKey: JSON.stringify([(provider === 'antigravity' || provider === 'gemini') ? 'antigravity' : provider, presentation.family]),
         variantEffort: presentation.variantEffort,
         provider,
         providerName,
@@ -386,8 +388,15 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     };
   }), [rawModels, activeModelId, selectedReasoningEffort, effortPreferences]);
 
-  const activeUnifiedItem = useMemo(() => unifiedModels.find(model => model.routes.some(route => route.id === activeModelId)) || null,
-    [unifiedModels, activeModelId]);
+  const activeUnifiedItem = useMemo(() => {
+    if (!activeModelId) return unifiedModels[0] || null;
+    return (
+      unifiedModels.find((model) => model.routes.some((route) => route.id === activeModelId)) ||
+      unifiedModels.find((model) => model.id === activeModelId || model.name.toLowerCase() === activeModelId.toLowerCase()) ||
+      unifiedModels[0] ||
+      null
+    );
+  }, [unifiedModels, activeModelId]);
 
   useEffect(() => {
     if (hoveredEffortItem && !unifiedModels.some(model => model.baseId === hoveredEffortItem.model.baseId)) {
@@ -532,28 +541,46 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             ? 'bg-surface-2 text-fg-editor border border-border-default shadow-xs'
             : 'bg-surface-1/80 hover:bg-surface-2 text-fg-muted hover:text-fg-editor border border-border-muted hover:border-border-default'
         }`}
-        title={loadingNativeModel ? 'Loading local model…' : !hasModel ? 'No model selected' : `Active model: ${activeModelId}`}
+        title={
+          loadingNativeModel
+            ? 'Loading local model…'
+            : !hasModel
+            ? 'No model selected'
+            : activeUnifiedItem && new Set(activeUnifiedItem.routes.map((r) => r.accountId)).size > 1
+            ? `Active model: ${activeModelId} (${new Set(activeUnifiedItem.routes.map((r) => r.accountId)).size} accounts pooled with 429 failover)`
+            : `Active model: ${activeModelId}`
+        }
       >
-        {!hasModel ? (
+        {!hasModel && !activeUnifiedItem ? (
           <Cpu size={13} className="shrink-0 text-amber-400" />
         ) : (
           <ProviderIcon provider={activeUnifiedItem?.provider || getProviderInfo(activeModelId).provider} size={13} className="shrink-0" />
         )}
 
-        <span className="font-mono text-[11px] truncate max-w-[170px] text-fg-editor">
+        <span className="font-mono text-[11px] truncate max-w-[170px] text-fg-editor flex items-center gap-1">
           {loadingNativeModel ? (
             'Loading local model…'
-          ) : !hasModel ? (
-            'No model selected'
-          ) : (
+          ) : activeUnifiedItem ? (
             <>
-              {activeUnifiedItem?.name || formatModelDisplayName(activeModelId)}{!activeUnifiedItem && ' · Unavailable'}
-              {activeUnifiedItem?.supportsEffort && (
-                <span className="ml-1 text-[10px] text-zinc-400 capitalize opacity-90 font-sans">
+              <span className="truncate">{activeUnifiedItem.name}</span>
+              {activeUnifiedItem.supportsEffort && (
+                <span className="text-[10px] text-zinc-400 capitalize opacity-90 font-sans shrink-0">
                   {activeUnifiedItem.selectedEffort}
                 </span>
               )}
+              {new Set(activeUnifiedItem.routes.map((r) => r.accountId)).size > 1 && (
+                <span
+                  className="px-1 py-0.2 rounded text-[9px] bg-purple-500/20 text-purple-300 border border-purple-500/40 font-sans font-medium shrink-0"
+                  title={`${new Set(activeUnifiedItem.routes.map((r) => r.accountId)).size} accounts pooled with 429 failover`}
+                >
+                  {new Set(activeUnifiedItem.routes.map((r) => r.accountId)).size}x
+                </span>
+              )}
             </>
+          ) : activeModelId ? (
+            formatModelDisplayName(activeModelId)
+          ) : (
+            'Select Model'
           )}
         </span>
 
@@ -569,7 +596,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       {isOpen && (
         <div
           ref={menuRef}
-          className="app-dropdown-menu absolute bottom-full mb-2 left-0 z-50 flex flex-col w-80 md:w-88 rounded-xl border border-border-default bg-[#1e1e1e]/98 backdrop-blur-2xl shadow-2xl overflow-visible animate-in fade-in slide-in-from-bottom-2 duration-150"
+          className="app-dropdown-menu absolute bottom-full mb-2 right-0 z-50 flex flex-col w-80 md:w-88 rounded-xl border border-border-default bg-[#1e1e1e]/98 backdrop-blur-2xl shadow-2xl overflow-visible animate-in fade-in slide-in-from-bottom-2 duration-150"
           style={{ maxHeight: 'min(460px, 60vh)' }}
         >
           {/* Header */}
@@ -583,7 +610,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               </span>
             </div>
 
-            {/* Provider Filter Tabs (Định hình của ai rõ ràng) */}
+            {/* Provider Filter Tabs */}
             {availableProviders.length > 1 && (
               <div className="flex items-center gap-1 mb-2 overflow-x-auto no-scrollbar pb-0.5">
                 <button
@@ -673,14 +700,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   </div>
 
                   {/* Provider Models */}
-                  {group.models.map((m) => {
+                  {group.models.map((m, mIdx) => {
                     const isSelected =
                       activeUnifiedItem?.baseId === m.baseId;
                     const isHovered = hoveredBaseId === m.baseId;
 
                     return (
                       <div
-                        key={m.baseId}
+                        key={`${group.providerKey}-${m.baseId || m.id}-${mIdx}`}
                         className="relative"
                         onMouseEnter={(e) => {
                           setHoveredBaseId(m.baseId);
@@ -738,6 +765,17 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                               </span>
                             )}
 
+                            {/* Multi-account Pool Badge */}
+                            {new Set(m.routes.map((r) => r.accountId)).size > 1 && (
+                              <span
+                                className="px-1.5 py-0.5 rounded text-[9px] font-sans border border-purple-500/40 bg-purple-500/15 text-purple-300 font-medium shrink-0 flex items-center gap-1"
+                                title={`${new Set(m.routes.map((r) => r.accountId)).size} accounts pooled with automatic 429 failover`}
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                                {new Set(m.routes.map((r) => r.accountId)).size}x Pool
+                              </span>
+                            )}
+
                             {/* Leaving Soon Badge */}
                             {m.isLeavingSoon && (
                               <span className="flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-sans border border-zinc-700/60 bg-zinc-800/80 text-zinc-400 shrink-0">
@@ -757,7 +795,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                           </div>
 
                           <div className="flex items-center gap-1 shrink-0 ml-1">
-                            {/* Chevron Right for Effort Submenu (3 Chế độ chọn) */}
+                            {/* Chevron Right for Effort Submenu (3 effort levels) */}
                             {(m.supportsEffort) && (
                               <ChevronRight
                                 size={13}

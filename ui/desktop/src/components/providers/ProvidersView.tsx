@@ -1,34 +1,31 @@
 import React, { useState } from 'react';
 import {
   Plus,
-  Laptop,
-  Terminal,
   Layers,
   BarChart3,
   Server,
+  Shield,
+  Key,
+  Terminal,
 } from 'lucide-react';
 import { ProviderItem, ClientApiKey } from '@/types';
 import { useAppContext } from '@/context/AppContext';
 import { CombosManager } from '@/components/providers/CombosManager';
 import { UsageMonitor } from '@/components/providers/UsageMonitor';
-
+import { ProviderBrandIcon, getProviderBrandMeta } from '@/components/common/AgentIcons';
 
 interface ProvidersViewProps {
   providers: ProviderItem[];
-  clientKeys: ClientApiKey[];
+  clientKeys?: ClientApiKey[];
   onOpenAddProviderModal: () => void;
-  onGenerateClientKey: () => void;
-  onRevokeClientKey: (id: string) => void;
+  onGenerateClientKey?: () => void;
+  onRevokeClientKey?: (id: string) => void;
   onTestConnection: (providerName: string) => void;
   onDeleteProvider?: (id: string) => void;
 }
 
-
 export const ProvidersView: React.FC<ProvidersViewProps> = ({
-  clientKeys,
   onOpenAddProviderModal,
-  onGenerateClientKey,
-  onRevokeClientKey,
   onTestConnection,
 }) => {
   const { connectedAccounts, handleDeleteAccount, refreshModels } = useAppContext();
@@ -113,131 +110,193 @@ export const ProvidersView: React.FC<ProvidersViewProps> = ({
         {activeSubTab === 'usage' && <UsageMonitor />}
         {activeSubTab === 'providers' && (
           <div className="space-y-8 min-w-0">
-            {/* SECTION 2: Connected OAuth & Account Identifiers */}
+            {/* SECTION: Connected OAuth & Account Identifiers */}
             <div className="space-y-4 min-w-0">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
-                  Connected Identity & OAuth Accounts
+                  Connected Identity & Provider Accounts
                 </h3>
                 <span className="text-[11px] text-fg-subtle font-mono">
                   {connectedAccounts.length} Active Accounts
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {connectedAccounts.map((account) => (
-                  <div
-                    key={account.id}
-                    className="p-4 sm:p-5 rounded-2xl bg-surface-1 border border-border-muted hover:border-border-default transition flex flex-col justify-between space-y-3 shadow-xs"
+              {connectedAccounts.length === 0 ? (
+                <div className="p-8 rounded-2xl bg-surface-1 border border-dashed border-border-muted text-center space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-surface-2 border border-border-default flex items-center justify-center mx-auto text-fg-muted">
+                    <Server className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-fg-editor">No AI Providers Connected Yet</h4>
+                    <p className="text-xs text-fg-muted max-w-md mx-auto mt-1">
+                      Connect your OpenAI, Anthropic Claude, Google Antigravity, DeepSeek, or local Ollama models to enable multi-account routing, automatic failover, and prompt execution.
+                    </p>
+                  </div>
+                  <button
+                    onClick={onOpenAddProviderModal}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg workbench-primary-action text-xs font-medium cursor-pointer shadow-xs transition mt-2"
                   >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-semibold text-fg-editor">{account.accountName}</h4>
-                          <span className="text-[9px] font-mono px-1.5 py-0.2 rounded border bg-surface-2 border-border-default text-fg-editor">
-                            {account.providerId === 'local' ? 'Local' : account.authType === 'oauth' ? 'OAuth 2.0' : 'API Key'}
-                          </span>
-                          {account.oauthTier && (
-                            <span className="text-[9px] font-mono px-1.5 py-0.2 rounded text-indigo-400 bg-indigo-500/10 border border-indigo-500/20">
-                              {account.oauthTier}
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-1 font-mono text-[11px] text-fg-muted flex items-center gap-1.5">
-                          <span>{account.providerName}</span>
-                          {account.oauthEmail && <span>· {account.oauthEmail}</span>}
-                        </div>
-                      </div>
-
-                      <span
-                        className="w-2.5 h-2.5 rounded-full shrink-0 mt-1"
-                        style={{ backgroundColor: account.badgeColor || '#10b981' }}
-                        title={account.statusLabel || account.status}
-                      />
-                    </div>
-
-                    {account.providerId === 'local' && <div className="flex items-center justify-between text-xs"><span className={account.status === 'active' ? 'text-emerald-400' : 'text-fg-muted'}>{account.status === 'active' ? 'Online' : 'Offline'}</span>{account.status !== 'active' && <button type="button" onClick={() => void refreshModels()} className="rounded border border-border-default bg-surface-2 hover:bg-surface-3 px-2 py-1 text-[10px] text-fg-editor transition cursor-pointer">Retry</button>}</div>}
-
-                    <div className="flex items-center justify-between pt-2 border-t border-border-muted/50 text-[11px] font-mono text-fg-subtle">
-                      <span>Default: {account.defaultModel}</span>
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => onTestConnection(account.id)}
-                          className="text-fg-muted hover:text-fg-editor transition cursor-pointer"
-                        >
-                          Test connection
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                          if (window.confirm(`Disconnect account "${account.accountName}"?`)) {
-                            handleDeleteAccount(account.id);
-                          }
-                          }}
-                          className="text-rose-400 hover:text-rose-300 transition cursor-pointer"
-                        >
-                          Disconnect
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* SECTION 3: Gateway Client API Keys */}
-            <div className="space-y-4 min-w-0">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
-                  Desktop & CLI Gateway Keys
-                </h3>
-                <button
-                  onClick={onGenerateClientKey}
-                  className="text-xs workbench-accent hover:underline flex items-center gap-1 font-medium cursor-pointer"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>Generate new key</span>
-                </button>
-              </div>
-
-              <div className="border border-border-default rounded-xl overflow-x-auto bg-surface-1 shadow-xs">
-                <div className="min-w-[500px]">
-                  <div className="grid grid-cols-12 px-4 py-2.5 border-b border-border-muted text-[11px] font-mono text-fg-subtle bg-surface-2/60">
-                    <span className="col-span-4">KEY NAME</span>
-                    <span className="col-span-4">KEY TOKEN</span>
-                    <span className="col-span-2">CREATED</span>
-                    <span className="col-span-2 text-right">ACTION</span>
-                  </div>
-
-                  {clientKeys.map((k) => (
-                    <div
-                      key={k.id}
-                      className="grid grid-cols-12 px-4 py-3 items-center border-b border-border-muted/50 last:border-b-0 text-xs text-fg-editor"
-                    >
-                      <span className="col-span-4 font-medium text-fg-editor flex items-center gap-2 truncate">
-                        {k.icon === 'laptop' ? (
-                          <Laptop className="w-3.5 h-3.5 workbench-accent shrink-0" />
-                        ) : (
-                          <Terminal className="w-3.5 h-3.5 text-fg-muted shrink-0" />
-                        )}
-                        <span className="truncate">{k.name}</span>
-                      </span>
-                      <span className="col-span-4 font-mono text-[11px] text-fg-muted truncate">{k.token}</span>
-                      <span className="col-span-2 text-fg-subtle text-[11px] font-mono">{k.created}</span>
-                      <div className="col-span-2 text-right">
-                        <button
-                          onClick={() => onRevokeClientKey(k.id)}
-                          className="text-rose-500 hover:text-rose-400 text-[11px] cursor-pointer"
-                        >
-                          Revoke
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Connect First Provider</span>
+                  </button>
                 </div>
-              </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {connectedAccounts.map((account) => {
+                    const brandMeta = getProviderBrandMeta(account.providerId);
+                    const isOauth = account.authType === 'oauth';
+                    const isLocal = account.providerId === 'local';
+
+                    return (
+                      <div
+                        key={account.id}
+                        className="p-4 sm:p-5 rounded-2xl bg-surface-1 border border-border-muted hover:border-border-default transition flex flex-col justify-between space-y-4 shadow-xs relative overflow-hidden group"
+                      >
+                        {/* Top row: Brand Avatar + Name + Provider Tag + Health Dot */}
+                        <div className="flex items-start justify-between gap-3 min-w-0">
+                          <div className="flex items-start gap-3 min-w-0">
+                            {/* Visual Provider Brand Avatar */}
+                            <div
+                              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 shadow-xs"
+                              style={{
+                                background: brandMeta.bgLight,
+                                border: `1px solid ${brandMeta.borderColor}`,
+                              }}
+                              title={brandMeta.name}
+                            >
+                              <ProviderBrandIcon provider={account.providerId} size={20} />
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="text-sm font-semibold text-fg-editor truncate">{account.accountName}</h4>
+                                
+                                {/* Exact Provider Badge */}
+                                <span
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium font-mono shrink-0"
+                                  style={{
+                                    background: brandMeta.bgLight,
+                                    color: brandMeta.brandColor,
+                                    border: `1px solid ${brandMeta.borderColor}`,
+                                  }}
+                                >
+                                  <ProviderBrandIcon provider={account.providerId} size={10} />
+                                  <span>{brandMeta.name}</span>
+                                </span>
+
+                                {/* Auth Type Indicator */}
+                                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded border bg-surface-2 border-border-default text-fg-subtle shrink-0 flex items-center gap-1">
+                                  {isLocal ? (
+                                    <>
+                                      <Terminal className="w-2.5 h-2.5" />
+                                      <span>Local</span>
+                                    </>
+                                  ) : isOauth ? (
+                                    <>
+                                      <Shield className="w-2.5 h-2.5 text-indigo-400" />
+                                      <span>OAuth</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Key className="w-2.5 h-2.5 text-emerald-400" />
+                                      <span>API Key</span>
+                                    </>
+                                  )}
+                                </span>
+
+                                {account.oauthTier && (
+                                  <span className="text-[9px] font-mono px-1.5 py-0.5 rounded text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 shrink-0">
+                                    {account.oauthTier}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Identity subline (OAuth email, masked key, or endpoint) */}
+                              <div className="mt-1 font-mono text-[11px] text-fg-muted flex items-center gap-1.5 truncate">
+                                {account.oauthEmail ? (
+                                  <span className="truncate text-fg-editor/90 font-sans font-medium">{account.oauthEmail}</span>
+                                ) : account.apiKeyMasked ? (
+                                  <span className="font-mono text-fg-muted">{account.apiKeyMasked}</span>
+                                ) : (
+                                  <span className="truncate">{brandMeta.name}</span>
+                                )}
+                                {account.endpointUrl && (
+                                  <span className="text-fg-subtle text-[10px] truncate max-w-[200px]">· {account.endpointUrl}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Health Status Indicator */}
+                          <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                            <span
+                              className={`w-2 h-2 rounded-full shrink-0 ${
+                                account.status === 'active'
+                                  ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
+                                  : account.status === 'rate_limited'
+                                  ? 'bg-amber-400 animate-pulse'
+                                  : 'bg-zinc-400'
+                              }`}
+                              title={account.statusLabel || account.status}
+                            />
+                            <span className="text-[10px] font-mono capitalize hidden sm:inline text-fg-subtle">
+                              {account.status === 'active' ? 'Ready' : account.status === 'rate_limited' ? 'Cooldown' : account.status}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Local runtime probe retry if offline */}
+                        {isLocal && (
+                          <div className="flex items-center justify-between text-xs bg-surface-2/40 px-3 py-1.5 rounded-lg border border-border-muted/50">
+                            <span className={account.status === 'active' ? 'text-emerald-400 font-mono text-[11px]' : 'text-fg-muted font-mono text-[11px]'}>
+                              {account.status === 'active' ? 'Local engine active' : 'Engine offline'}
+                            </span>
+                            {account.status !== 'active' && (
+                              <button
+                                type="button"
+                                onClick={() => void refreshModels()}
+                                className="rounded border border-border-default bg-surface-2 hover:bg-surface-3 px-2 py-0.5 text-[10px] text-fg-editor transition cursor-pointer"
+                              >
+                                Retry Probe
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Bottom row: Default Model & Action buttons */}
+                        <div className="flex items-center justify-between pt-2.5 border-t border-border-muted/50 text-[11px] font-mono text-fg-subtle">
+                          <div className="flex items-center gap-2 truncate pr-2">
+                            <span className="text-fg-subtle">Default:</span>
+                            <span className="font-semibold text-fg-editor truncate">{account.defaultModel || 'auto'}</span>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => onTestConnection(account.id)}
+                              className="text-fg-muted hover:text-fg-editor transition cursor-pointer flex items-center gap-1"
+                            >
+                              <span>Test</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`Disconnect account "${account.accountName}"?`)) {
+                                  handleDeleteAccount(account.id);
+                                }
+                              }}
+                              className="text-rose-400 hover:text-rose-300 transition cursor-pointer"
+                            >
+                              Disconnect
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
+
           </div>
         )}
       </div>

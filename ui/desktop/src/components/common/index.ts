@@ -4,4 +4,5 @@ export * from './AgentStateDot';
 export * from './AgentIcons';
 export * from './CustomSelect';
 export * from './Tooltip';
+export * from './ActionIcon';
 export * from './JobActionButton';

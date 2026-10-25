@@ -13,11 +13,14 @@ import {
   Code2,
   Settings2,
   Plus,
-  ArrowRight
+  ArrowRight,
+  GitBranch,
 } from 'lucide-react';
 import type { ActiveWorkbench } from './AppHeader';
 import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
+import { useNavigate } from 'react-router-dom';
 import { formatKeyCombo } from '@/lib/utils';
+import { useAppContext } from '@/context/AppContext';
 
 export interface CommandPaletteProps {
   isOpen: boolean;
@@ -52,6 +55,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onOpenWorktrees,
   currentMode
 }) => {
+  const { workspaces, setActiveWorkspaceId, activeWorkspaceId } = useAppContext();
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -94,7 +99,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       icon: MessageSquare,
       iconColor: 'text-[#cc785c]',
       badge: currentMode === 'copilot' ? 'Current' : undefined,
-      shortcut: `${formatKeyCombo({ ctrlOrCmd: true, key: '1' })}`,
+      shortcut: `${formatKeyCombo({ alt: true, key: '3' })}`,
       action: () => { onSwitchMode('copilot'); onClose(); }
     },
     {
@@ -105,7 +110,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       icon: Code2,
       iconColor: 'text-[#58a6ff]',
       badge: currentMode === 'engineering' ? 'Current' : undefined,
-      shortcut: `${formatKeyCombo({ ctrlOrCmd: true, key: '2' })}`,
+      shortcut: `${formatKeyCombo({ alt: true, key: '1' })}`,
       action: () => { onSwitchMode('engineering'); onClose(); }
     },
     {
@@ -116,7 +121,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       icon: FlaskConical,
       iconColor: 'text-[#a371f7]',
       badge: currentMode === 'research' ? 'Current' : undefined,
-      shortcut: `${formatKeyCombo({ ctrlOrCmd: true, key: '3' })}`,
+      shortcut: `${formatKeyCombo({ alt: true, key: '2' })}`,
       action: () => { onSwitchMode('research'); onClose(); }
     },
 
@@ -169,12 +174,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     {
       id: 'tab-kanban',
       category: 'tabs',
-      title: 'Open Fleet Kanban (O11)',
-      subtitle: 'Needs You, Working, Done, and Idle agent dashboard',
+      title: 'Open Supervision',
+      subtitle: 'Inspect real runs, blocked work and results across workbenches',
       icon: Bot,
       iconColor: 'text-[#bc8cff]',
       shortcut: `${formatKeyCombo({ ctrlOrCmd: true, alt: true, key: 'K' })}`,
-      action: () => { onOpenTab('kanban', 'Fleet Kanban', 'orca://kanban'); onClose(); }
+      action: () => { navigate('/dashboard'); onClose(); }
     },
 
     // Worktrees
@@ -187,6 +192,19 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       iconColor: 'text-[#58a6ff]',
       action: () => { onOpenWorktrees(); onClose(); }
     },
+    ...workspaces.map((ws) => ({
+      id: `jump-wt-${ws.id}`,
+      category: 'worktrees' as const,
+      title: `Jump to Worktree: ${ws.name}`,
+      subtitle: `${ws.path} (${ws.active_branch || ws.name || 'worktree'})`,
+      icon: GitBranch,
+      iconColor: ws.id === activeWorkspaceId ? 'text-workbench-accent' : 'text-sky-400',
+      badge: ws.id === activeWorkspaceId ? 'Active' : (ws.dirty_manifest?.is_dirty ? `${ws.dirty_manifest.modified_files?.length || 0}*` : undefined),
+      action: () => {
+        setActiveWorkspaceId(ws.id);
+        onClose();
+      },
+    })),
 
     // Quick Actions
     {
@@ -202,7 +220,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     {
       id: 'action-settings',
       category: 'actions',
-      title: 'Open Settings & Providers',
+      title: 'Open Settings',
       subtitle: 'Configure models, API keys, and sandbox permissions',
       icon: Settings2,
       iconColor: 'text-[#8b949e]',

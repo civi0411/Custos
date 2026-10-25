@@ -18,7 +18,7 @@ interface FigureAnnotatorProps {
   artifactPath: string;
   artifactVersion?: number;
   initialAnnotations?: AnnotationRecord[];
-  onSaveAnnotation?: (annotation: AnnotationRecord) => void;
+  onSaveAnnotation?: (annotation: AnnotationRecord) => Promise<void>;
   onStartSideChat?: (annotation: AnnotationRecord, prompt: string) => void;
   onSubmitBatch?: (annotations: AnnotationRecord[]) => void;
   onDeleteAnnotation?: (id: string) => void;
@@ -41,6 +41,9 @@ export const FigureAnnotator: React.FC<FigureAnnotatorProps> = ({
   const [selectedAnnId, setSelectedAnnId] = useState<string | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
   const pendingAnnotations = annotations.filter((a) => a.status === 'pending');
 
   const handleImageClick = (e: React.MouseEvent<HTMLImageElement>) => {
@@ -54,8 +57,8 @@ export const FigureAnnotator: React.FC<FigureAnnotatorProps> = ({
     setSelectedAnnId(null);
   };
 
-  const handleSavePin = () => {
-    if (!activePin) return;
+  const handleSavePin = async () => {
+    if (!activePin || saving || !onSaveAnnotation) return;
     const newPinNumber = annotations.length + 1;
     const newAnn: AnnotationRecord = {
       id: `ann_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -73,15 +76,17 @@ export const FigureAnnotator: React.FC<FigureAnnotatorProps> = ({
       createdAt: Date.now(),
     };
 
-    const next = [...annotations, newAnn];
-    setAnnotations(next);
-    onSaveAnnotation?.(newAnn);
+    setSaving(true); setSaveError(null);
+    try { await onSaveAnnotation(newAnn); }
+    catch (reason) { setSaveError(String(reason)); return; }
+    finally { setSaving(false); }
+    setAnnotations(previous => [...previous, newAnn]);
     setActivePin(null);
     setNoteText('');
   };
 
-  const handleAskSideChat = () => {
-    if (!activePin) return;
+  const handleAskSideChat = async () => {
+    if (!activePin || saving || !onSaveAnnotation || !onStartSideChat) return;
     const prompt = noteText.trim() || "What's going on here?";
     const newPinNumber = annotations.length + 1;
     const newAnn: AnnotationRecord = {
@@ -96,27 +101,29 @@ export const FigureAnnotator: React.FC<FigureAnnotatorProps> = ({
       },
       note: prompt,
       actor: 'researcher',
-      status: 'submitted',
-      sideChatSessionId: `side_chat_${Date.now()}`,
+      status: 'pending',
       createdAt: Date.now(),
     };
 
-    const next = [...annotations, newAnn];
-    setAnnotations(next);
-    onSaveAnnotation?.(newAnn);
+    setSaving(true); setSaveError(null);
+    try { await onSaveAnnotation(newAnn); }
+    catch (reason) { setSaveError(String(reason)); return; }
+    finally { setSaving(false); }
+    setAnnotations(previous => [...previous, newAnn]);
     onStartSideChat?.(newAnn, prompt);
     setActivePin(null);
     setNoteText('');
   };
 
   const handleDelete = (id: string) => {
+    if (!onDeleteAnnotation) return;
     setAnnotations((prev) => prev.filter((a) => a.id !== id));
     if (selectedAnnId === id) setSelectedAnnId(null);
     onDeleteAnnotation?.(id);
   };
 
   const handleSubmitBatch = () => {
-    if (pendingAnnotations.length === 0) return;
+    if (pendingAnnotations.length === 0 || !onSubmitBatch) return;
     const submitted = annotations.map((a) =>
       a.status === 'pending' ? { ...a, status: 'submitted' as const } : a
     );
@@ -126,6 +133,7 @@ export const FigureAnnotator: React.FC<FigureAnnotatorProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)] select-none font-sans relative overflow-hidden">
+      {saveError && <p role="alert" className="text-xs text-rose-500 p-3">{saveError}</p>}
       {/* Header controls */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--color-border-muted)] bg-[var(--color-surface-1)] z-20">
         <div className="flex items-center gap-2 text-xs text-[var(--color-fg-muted)]">
@@ -222,6 +230,7 @@ export const FigureAnnotator: React.FC<FigureAnnotatorProps> = ({
                         Pin #{pinNum} · {ann.status}
                       </span>
                       <button
+                        disabled={!onDeleteAnnotation}
                         onClick={() => handleDelete(ann.id)}
                         className="text-[var(--color-fg-subtle)] hover:text-rose-500 transition"
                       >
@@ -280,14 +289,16 @@ export const FigureAnnotator: React.FC<FigureAnnotatorProps> = ({
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={handleSavePin}
+                    disabled={saving || !onSaveAnnotation}
+                    onClick={() => void handleSavePin()}
                     className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-3)] text-[var(--color-editor-fg)] border border-[var(--color-border-default)] font-medium text-xs transition"
                   >
                     <Check size={12} className="text-emerald-500" />
                     Save Pin
                   </button>
                   <button
-                    onClick={handleAskSideChat}
+                    disabled={saving || !onStartSideChat || !onSaveAnnotation}
+                    onClick={() => void handleAskSideChat()}
                     className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-[var(--color-border-default)] bg-[var(--color-surface-3)] hover:bg-[var(--color-surface-2)] text-[var(--color-editor-fg)] font-medium text-xs transition"
                     title="Start independent side-chat branch"
                   >
@@ -318,7 +329,8 @@ export const FigureAnnotator: React.FC<FigureAnnotatorProps> = ({
                 </span>
                 <span className="max-w-[120px] truncate text-[var(--color-editor-fg)]">{ann.note}</span>
                 <button
-                  onClick={() => handleDelete(ann.id)}
+                  disabled={!onDeleteAnnotation}
+                        onClick={() => handleDelete(ann.id)}
                   className="text-[var(--color-fg-subtle)] hover:text-rose-500 ml-1"
                 >
                   <X size={10} />
