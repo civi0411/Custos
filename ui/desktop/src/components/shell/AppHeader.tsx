@@ -32,9 +32,8 @@ import { formatKeyCombo } from '@/lib/utils';
 import { getAgentBrandIcon } from '@/components/common/AgentIcons';
 
 
-// Three workbench lenses over the current Workspace and Task/Session state.
-export type ActiveWorkbench = 'copilot' | 'engineering' | 'research';
-export type AppWorkspaceMode = ActiveWorkbench;
+import type { ActiveWorkbench, AppWorkspaceMode } from '@/types/workbench';
+export type { ActiveWorkbench, AppWorkspaceMode };
 
 
 

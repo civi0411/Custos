@@ -141,10 +141,6 @@ export const ExecutionWorkspacesPane: React.FC = () => {
           <div>
             <div className="workbench-kicker">execution plane</div>
             <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">Workspaces</h1>
-            <p className="mt-1 max-w-2xl text-xs leading-5 text-[var(--color-fg-muted)]">
-              Daemon-owned folder and Git workspace records. Safe Git ownership, base commit
-              hashes, porcelain dirty manifests, and host recovery.
-            </p>
           </div>
           <div className="flex items-center gap-2">
             <button

@@ -1,1 +1,1 @@
-export * from './ProvidersView';
+export * from '@/features/providers';

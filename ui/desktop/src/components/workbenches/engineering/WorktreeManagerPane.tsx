@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   GitBranch,
   Bot,
@@ -40,6 +40,10 @@ interface CandidateComparison {
   deleted_files: string[];
   diff: string;
   status: string;
+  inspection_error?: string;
+  dirty_error?: string;
+  diff_error?: string;
+  is_ready_for_integration?: boolean;
 }
 
 export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
@@ -64,6 +68,9 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
   const [comparing, setComparing] = useState(false);
   const [candidateComparisons, setCandidateComparisons] = useState<CandidateComparison[]>([]);
   const [integratingId, setIntegratingId] = useState<string | null>(null);
+  const [integrationPreview, setIntegrationPreview] = useState<Awaited<ReturnType<typeof daemonClient.integrateCandidate>> | null>(null);
+  const spawnAttempt = useRef<{ signature: string; commandId: string } | null>(null);
+
 
   // Spawn Candidates state
   const [showSpawnModal, setShowSpawnModal] = useState(false);
@@ -137,11 +144,15 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
 
   // Compare candidates across all active worktrees
   const handleCompareAll = async () => {
+    const selected = workspaces.find(workspace => workspace.id === selectedWorkspaceId);
+    const taskId = selected?.owner_task_id || spawnTaskId;
+    if (!taskId) { onShowToast?.('Select a candidate worktree belonging to the Task you want to compare.'); return; }
+    setCandidateComparisons([]);
     try {
       setComparing(true);
       setShowCompareModal(true);
       const res = await daemonClient.compareCandidates({
-        workspace_ids: workspaces.map((w) => w.id),
+        task_id: taskId,
       });
       setCandidateComparisons(res.candidates || []);
     } catch (err: any) {
@@ -159,19 +170,29 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
       onShowToast?.('Cannot integrate: the selected worktree is no longer available. Refresh the list and compare again.');
       return;
     }
-    const targetBranch = winner.lineage?.target_branch || 'the configured base branch';
-    const confirmed = window.confirm(
-      `Integrate ${winner.active_branch || winner.name || winner.id} into ${targetBranch}?\n\nThis changes the base repository and may encounter merge conflicts. Review the candidate diff first.`
-    );
-    if (!confirmed) return;
-
+    setIntegratingId(winnerWsId);
+    try {
+      const preview = await daemonClient.integrateCandidate({ winner_workspace_id: winnerWsId, target_branch: winner.lineage?.target_branch || undefined, preview: true });
+      if (preview.preview) setIntegrationPreview(preview);
+      else onShowToast?.(preview.merge_detail);
+    } catch (error) { onShowToast?.(`Could not preview integration: ${String(error)}`); }
+    finally { setIntegratingId(null); }
+  };
+  const applyIntegration = async () => {
+    if (!integrationPreview) return;
+    const winnerWsId = integrationPreview.winner_workspace_id;
+    const winner = workspaces.find(workspace => workspace.id === winnerWsId);
+    if (!winner) return;
     setIntegratingId(winnerWsId);
     try {
       onShowToast?.(`Integrating ${winner.name || winnerWsId.slice(0, 8)}...`);
       const res = await daemonClient.integrateCandidate({
         winner_workspace_id: winnerWsId,
-        target_branch: winner.lineage?.target_branch || undefined,
+        target_branch: integrationPreview.target_branch,
+        expected_target_head: integrationPreview.current_target_head,
+        expected_winner_head: integrationPreview.winner_head,
       });
+      setIntegrationPreview(null);
 
       if (res.merge_success) {
         onShowToast?.(
@@ -209,12 +230,15 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
     setSpawning(true);
     try {
       onShowToast?.(`Creating ${spawnCount} candidate worktrees for Task ${taskId}...`);
-      await daemonClient.spawnCandidates({
+      const signature = JSON.stringify([taskId, baseWs.id, spawnCount]);
+      if (spawnAttempt.current?.signature !== signature) spawnAttempt.current = { signature, commandId: crypto.randomUUID() };
+      const batch = await daemonClient.spawnCandidates({
         task_id: taskId,
+        command_id: spawnAttempt.current.commandId,
         base_workspace_id: baseWs.id,
         count: spawnCount,
       });
-      onShowToast?.(`Created ${spawnCount} worktrees for Task ${taskId}. No agent was started.`);
+      onShowToast?.(batch.partial ? `Created ${batch.candidates.length} candidates; ${batch.failed.length} failed: ${batch.failed.map(item => item.error).join('; ')}` : `Created ${batch.candidates.length} worktrees for Task ${taskId}. No agent was started.`);
       setShowSpawnModal(false);
       setSpawnTaskId('');
       await loadWorkspaces();
@@ -227,12 +251,18 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
 
   return (
     <div className="flex h-full flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
+      {integrationPreview && <div role="dialog" aria-modal="true" aria-label="Review integration" className="absolute inset-0 z-50 bg-canvas/95 p-6 flex flex-col gap-4 overflow-auto">
+        <h3 className="text-sm font-semibold">Review integration</h3>
+        <p className="text-xs text-fg-muted">Merge candidate into target checkout. Pre-checked before applying; conflicts stay in target.</p>
+        <dl className="text-xs space-y-2 break-all"><dt>Candidate</dt><dd>{integrationPreview.winner_branch}</dd><dt>Candidate commit</dt><dd className="font-mono">{integrationPreview.winner_head}</dd><dt>Target</dt><dd>{integrationPreview.target_branch}</dd><dt>Target commit</dt><dd className="font-mono">{integrationPreview.current_target_head}</dd></dl>
+        <div className="flex gap-2"><button type="button" autoFocus className="canvas-open-button" disabled={!!integratingId} onClick={() => setIntegrationPreview(null)}>Cancel</button><button type="button" className="canvas-open-button" disabled={!!integratingId} onClick={() => void applyIntegration()}>{integratingId ? 'Integrating…' : 'Integrate reviewed commits'}</button></div>
+      </div>}
       {/* Header */}
-      <div className="flex h-11 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-3 bg-[var(--color-surface-1)]/50">
+      <div className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-3 bg-[var(--color-surface-1)]/50">
         <div className="flex items-center gap-2">
-          <GitBranch className="h-4 w-4 text-[var(--color-fg-muted)] shrink-0" />
-          <span className="text-xs font-semibold">Git worktrees</span>
-          <span className="rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] font-mono text-[var(--color-fg-subtle)]">
+          <GitBranch className="h-4 w-4 text-white/70 shrink-0" />
+          <span className="text-xs font-semibold text-white">Git Worktrees</span>
+          <span className="rounded bg-white/5 border border-white/10 px-1.5 py-0.5 text-[10px] font-mono text-white/60">
             {workspaces.length} active
           </span>
         </div>
@@ -242,28 +272,28 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
             <button
               type="button"
               onClick={handleCompareAll}
-              className="flex items-center gap-1.5 rounded border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-xs text-blue-400 hover:bg-blue-500/20 transition"
+              className="flex items-center gap-1.5 rounded-md border border-white/15 bg-white/5 px-2.5 py-1 text-xs text-white/80 hover:bg-white/10 hover:text-white transition font-medium"
               title="Compare candidates side-by-side"
             >
               <GitCompare className="h-3 w-3" />
-              <span>Compare Candidates</span>
+              <span>Compare</span>
             </button>
           )}
 
           <button
             type="button"
             onClick={() => setShowSpawnModal(true)}
-            className="flex items-center gap-1.5 rounded border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-400 hover:bg-emerald-500/20 transition"
+            className="flex items-center gap-1.5 rounded-md bg-white text-black px-2.5 py-1 text-xs font-semibold hover:bg-white/90 transition shadow-sm"
             title="Spawn new parallel candidate worktrees"
           >
-            <Plus className="h-3 w-3" />
+            <Plus className="h-3 w-3 stroke-[2.5]" />
             <span>Spawn Candidates</span>
           </button>
 
           <button
             type="button"
             onClick={loadWorkspaces}
-            className="flex items-center gap-1.5 rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] px-2.5 py-1 text-xs text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-editor-fg)] transition"
+            className="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-xs text-white/60 hover:bg-white/10 hover:text-white transition"
           >
             <RefreshCw className="h-3 w-3" />
             <span>Refresh</span>
@@ -278,18 +308,16 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
             Loading active worktrees...
           </div>
         ) : workspaces.length === 0 ? (
-          <div className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-6 text-center text-xs text-[var(--color-fg-muted)]">
-            <p>No active git worktrees registered.</p>
-              <p className="mt-1 text-[11px] text-[var(--color-fg-subtle)]">
-              Worktrees are isolated checkouts linked to a Task. Starting and steering agents requires an attached runtime session.
-            </p>
+          <div className="rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-8 text-center text-xs space-y-3">
+            <GitBranch className="h-6 w-6 text-white/20 mx-auto" />
+            <p className="text-white/80 font-medium">No active worktrees</p>
             <button
               type="button"
               onClick={() => setShowSpawnModal(true)}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 transition"
+              className="inline-flex items-center gap-1.5 rounded-md bg-white text-black px-3 py-1.5 text-xs font-semibold hover:bg-white/90 shadow-sm transition"
             >
-              <Plus className="h-3.5 w-3.5" />
-              <span>Spawn Parallel Candidates</span>
+              <Plus className="h-3.5 w-3.5 stroke-[2.5]" />
+              <span>Spawn Worktrees</span>
             </button>
           </div>
         ) : (
@@ -315,7 +343,7 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
                 }}
                 className={`rounded-xl border p-3.5 shadow-xs transition cursor-pointer ${
                   isSelected
-                    ? 'border-[var(--workbench-accent)] bg-[var(--color-surface-2)]/60 ring-1 ring-[var(--workbench-accent)]/30'
+                    ? 'border-white/30 bg-[var(--color-surface-2)]/60 ring-1 ring-white/20'
                     : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] hover:border-[var(--color-border-default)]'
                 }`}
               >
@@ -323,11 +351,11 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <Folder className="h-4 w-4 text-amber-400 shrink-0" />
+                      <Folder className="h-4 w-4 text-white/60 shrink-0" />
                       <span className="font-semibold text-xs truncate">
                         {ws.name || ws.path.split('/').pop() || ws.id}
                       </span>
-                      <span className="flex items-center gap-1 rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] font-mono text-blue-400">
+                      <span className="flex items-center gap-1 rounded bg-[var(--color-surface-2)] px-1.5 py-0.5 text-[10px] font-mono text-white/70 border border-white/10">
                         <GitBranch className="h-3 w-3" />
                         {branchName}
                       </span>
@@ -342,9 +370,9 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
                     <span
                       className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide border ${
                         agentStatus === 'running'
-                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                          ? 'bg-white/10 text-white border-white/20'
                           : agentStatus === 'review_needed'
-                          ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                          ? 'bg-white/[0.06] text-white/80 border-white/15'
                           : 'bg-zinc-500/10 text-[var(--color-fg-subtle)] border-zinc-500/20'
                       }`}
                     >
@@ -373,7 +401,7 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
                             onClick={() => handleViewDiff(ws)}
                             className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-editor-fg)]"
                           >
-                            <FileDiff className="h-3.5 w-3.5 text-blue-400" />
+                            <FileDiff className="h-3.5 w-3.5 text-white/60" />
                             <span>View worktree files</span>
                           </button>
                           <button
@@ -387,7 +415,7 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
                           <button
                             type="button"
                             onClick={() => handleRecoverWorkspace(ws)}
-                            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sky-400 hover:bg-[var(--color-surface-2)]"
+                            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-white/80 hover:bg-[var(--color-surface-2)]"
                           >
                             <RefreshCw className="h-3.5 w-3.5" />
                             <span>Recover Workspace State</span>
@@ -396,7 +424,7 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
                             type="button"
                             disabled={integratingId === ws.id}
                             onClick={() => handleIntegrateWorkspace(ws.id)}
-                            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-emerald-400 hover:bg-[var(--color-surface-2)] disabled:opacity-40"
+                            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-white hover:bg-[var(--color-surface-2)] disabled:opacity-40"
                           >
                             <GitMerge className="h-3.5 w-3.5" />
                             <span>Merge into Base (Gated)</span>
@@ -412,7 +440,7 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
                   <span className="flex items-center gap-1.5 font-mono">
                     <span
                       className={`h-1.5 w-1.5 rounded-full ${
-                        isDirty ? 'bg-amber-400' : 'bg-emerald-400'
+                        isDirty ? 'bg-white/40' : 'bg-white/90'
                       }`}
                     />
                     {isDirty ? `${dirtyCount} uncommitted changes` : 'Clean tree'}
@@ -422,26 +450,27 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
                     type="button"
                     disabled={integratingId === ws.id}
                     onClick={() => handleIntegrateWorkspace(ws.id)}
-                    className="flex items-center gap-1 text-[11px] font-medium text-emerald-400 hover:underline disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium bg-white/10 hover:bg-white/20 text-white border border-white/20 disabled:opacity-40 transition"
                   >
                     {integratingId === ws.id ? (
                       <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
                       <GitMerge className="h-3 w-3" />
                     )}
-                    <span>Integrate Winner</span>
+                    <span>Integrate</span>
                   </button>
                 </div>
 
-                {!ws.running_agent_id && <p className="mt-3 border-t border-[var(--color-border-subtle)] pt-2.5 text-[10px] text-[var(--color-fg-subtle)]">Worktree only · no agent run attached</p>}
-                <button
-                  type="button"
-                  onClick={() => onOpenWorkspaceResource?.('agents', ws.id)}
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[var(--color-border-default)] px-2.5 py-1.5 text-[11px] font-medium text-[var(--color-fg-default)] hover:bg-[var(--color-surface-2)]"
-                >
-                  <Bot className="h-3.5 w-3.5" />
-                  Start agent in this worktree
-                </button>
+                <div className="mt-2.5 pt-2 border-t border-white/5 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => onOpenWorkspaceResource?.('agents', ws.id)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-white/15 bg-white/5 px-2.5 py-1 text-xs font-medium text-white/90 hover:bg-white/10 hover:text-white transition"
+                  >
+                    <Bot className="h-3.5 w-3.5" />
+                    <span>Start Agent</span>
+                  </button>
+                </div>
               </div>
             );
           })
@@ -455,11 +484,11 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] px-4 py-3 bg-[var(--color-surface-1)]">
               <div className="flex items-center gap-2">
-                <GitCompare className="h-4 w-4 text-blue-400" />
+                <GitCompare className="h-4 w-4 text-white/70" />
                 <h3 className="text-sm font-semibold text-[var(--color-editor-fg)]">
-                  Candidate Race Compare View (OrCa)
+                  Compare Candidates
                 </h3>
-                <span className="rounded bg-blue-500/10 px-2 py-0.5 text-[10px] font-mono text-blue-400">
+                <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-mono text-white/80 border border-white/10">
                   {candidateComparisons.length} candidates
                 </span>
               </div>
@@ -476,7 +505,7 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {comparing ? (
                 <div className="flex h-48 items-center justify-center gap-2 text-xs text-[var(--color-fg-subtle)]">
-                  <Loader2 className="h-4 w-4 animate-spin text-blue-400" />
+                  <Loader2 className="h-4 w-4 animate-spin text-white/60" />
                   <span>Computing candidate unified diffs and dirty manifests...</span>
                 </div>
               ) : candidateComparisons.length === 0 ? (
@@ -490,11 +519,12 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
                       key={c.workspace_id}
                       className="flex flex-col rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-4 shadow-xs"
                     >
+                      {c.inspection_error && <p role="alert" className="text-xs text-rose-500 mb-3">{c.dirty_error || c.diff_error || c.inspection_error}</p>}
                       <div className="flex items-start justify-between">
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-xs">{c.name}</span>
-                            <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[10px] font-mono text-blue-400">
+                            <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-mono text-white/80 border border-white/10">
                               {c.branch}
                             </span>
                           </div>
@@ -505,24 +535,24 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
 
                         <button
                           type="button"
-                          disabled={integratingId === c.workspace_id}
+                          disabled={integratingId === c.workspace_id || c.is_ready_for_integration !== true}
                           onClick={() => handleIntegrateWorkspace(c.workspace_id)}
-                          className="flex items-center gap-1 rounded bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-40 transition"
+                          className="flex items-center gap-1.5 rounded-md bg-white text-black hover:bg-white/90 px-2.5 py-1 text-xs font-semibold disabled:opacity-40 transition shadow-sm"
                         >
                           {integratingId === c.workspace_id ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
                           ) : (
                             <CheckCircle2 className="h-3 w-3" />
                           )}
-                          <span>Integrate into base…</span>
+                          <span>Integrate</span>
                         </button>
                       </div>
 
                       {/* Diff Stats Banner */}
-                      <div className="mt-3 flex items-center gap-3 text-[11px] font-mono">
-                        <span className="text-amber-400">+{c.modified_count} modified</span>
-                        <span className="text-blue-400">?{c.untracked_count} new</span>
-                        <span className="text-red-400">-{c.deleted_count} deleted</span>
+                      <div className="mt-3 flex items-center gap-3 text-[11px] font-mono text-[var(--color-fg-muted)]">
+                        <span className="text-white/90">{c.dirty_error ? 'Unknown' : `+${c.modified_count}`} modified</span>
+                        <span className="text-white/70">{c.dirty_error ? 'Unknown' : `?${c.untracked_count}`} new</span>
+                        <span className="text-white/50">{c.dirty_error ? 'Unknown' : `-${c.deleted_count}`} deleted</span>
                       </div>
 
                       {/* Diff snippet */}
@@ -533,7 +563,7 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
                           </pre>
                         ) : (
                           <div className="py-8 text-center text-[10px] text-[var(--color-fg-subtle)] italic">
-                            No uncommitted unified diff changes.
+                            {c.diff_error ? 'Diff is unavailable; retry inspection before integrating.' : 'No uncommitted unified diff changes.'}
                           </div>
                         )}
                       </div>
@@ -552,9 +582,9 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
           <div className="w-full max-w-md rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] p-5 shadow-2xl">
             <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] pb-3">
               <div className="flex items-center gap-2">
-                <Plus className="h-4 w-4 text-emerald-400" />
+                <Plus className="h-4 w-4 text-white/80" />
                 <h3 className="text-sm font-semibold text-[var(--color-editor-fg)]">
-                  Spawn Parallel Candidate Worktrees
+                  Spawn Parallel Candidates
                 </h3>
               </div>
               <button
@@ -575,7 +605,7 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
                   required
                   value={spawnTaskId}
                   onChange={(e) => setSpawnTaskId(e.target.value)}
-                  className="w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] px-3 py-1.5 text-xs text-[var(--color-editor-fg)] focus:outline-none focus:border-emerald-500"
+                  className="w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] px-3 py-1.5 text-xs text-[var(--color-editor-fg)] focus:outline-none focus:border-white/30"
                 >
                   <option value="">Select a Task…</option>
                   {tasks.map((task) => <option key={task.id} value={task.id}>{task.title} · {task.id}</option>)}
@@ -594,7 +624,7 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
                       onClick={() => setSpawnCount(n)}
                       className={`flex-1 rounded border py-1.5 font-medium transition ${
                         spawnCount === n
-                          ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400'
+                          ? 'border-white/30 bg-white/10 text-white'
                           : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)]'
                       }`}
                     >
@@ -602,10 +632,6 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
                     </button>
                   ))}
                 </div>
-              </div>
-
-              <div className="rounded-lg bg-[var(--color-surface-2)]/60 p-3 text-[11px] text-[var(--color-fg-subtle)] leading-relaxed">
-                Creates isolated Git checkouts for the selected Task. This action does not launch coding agents.
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-[var(--color-border-subtle)]">
@@ -619,9 +645,9 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
                 <button
                   type="submit"
                   disabled={spawning || !spawnTaskId || !tasks.some((task) => task.id === spawnTaskId)}
-                  className="flex items-center gap-1.5 rounded bg-emerald-600 px-4 py-1.5 font-medium text-white hover:bg-emerald-500 disabled:opacity-40 transition"
+                  className="flex items-center gap-1.5 rounded-md bg-white hover:bg-white/90 px-4 py-1.5 font-semibold text-black disabled:opacity-40 transition shadow-sm"
                 >
-                  {spawning && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {spawning && <Loader2 className="h-3 w-3 animate-spin text-black" />}
                   <span>Spawn Worktrees</span>
                 </button>
               </div>

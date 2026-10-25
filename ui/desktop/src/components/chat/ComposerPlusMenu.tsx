@@ -105,6 +105,8 @@ export const ComposerPlusMenu: React.FC<ComposerPlusMenuProps> = ({
       {/* 3. Add connector */}
       <button
         type="button"
+        disabled={!onAddConnector}
+        title={onAddConnector ? 'Configure a connector' : 'Connector configuration is not available in this composer'}
         onClick={() => {
           onAddConnector?.();
           onClose();

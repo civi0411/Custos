@@ -44,7 +44,7 @@ export const LENS_THEME_CONFIG: Record<
 > = {
   coding: {
     badgeLabel: 'Coding',
-    workspaceTitle: 'Engineering / Lập trình',
+    workspaceTitle: 'Engineering',
     textClass: 'text-sky-400',
     borderClass: 'border-sky-500/30',
     bgClass: 'bg-sky-500/10',
@@ -54,7 +54,7 @@ export const LENS_THEME_CONFIG: Record<
   },
   research: {
     badgeLabel: 'Research',
-    workspaceTitle: 'Research / Nghiên cứu',
+    workspaceTitle: 'Research',
     textClass: 'text-purple-400',
     borderClass: 'border-purple-500/30',
     bgClass: 'bg-purple-500/10',
@@ -64,7 +64,7 @@ export const LENS_THEME_CONFIG: Record<
   },
   assistant: {
     badgeLabel: 'Copilot',
-    workspaceTitle: 'Copilot / Trợ lý',
+    workspaceTitle: 'Copilot',
     textClass: 'text-amber-400',
     borderClass: 'border-amber-500/30',
     bgClass: 'bg-amber-500/10',
@@ -144,6 +144,41 @@ export const SLASH_COMMANDS: SlashCommandDef[] = [
       scope: args.trim() || '.',
       invariants: 'Preserve API signatures, contracts, and tests parity',
     }),
+  },
+  {
+    command: '/ponytail',
+    label: 'Ponytail Mode',
+    description: 'Minimalist senior dev mode: smallest change that solves the problem',
+    jobId: 'engineering__ponytail',
+    lens: 'coding',
+    icon: Sparkles,
+    hasArgs: true,
+    argPlaceholder: '[lite | full | ultra]',
+    getInputs: (args) => ({
+      level: args.trim() || 'full',
+    }),
+  },
+  {
+    command: '/ponytail-audit',
+    label: 'Ponytail Audit',
+    description: 'Repo-wide quality audit: bugs, security, debt, and bloat',
+    jobId: 'engineering__ponytail_audit',
+    lens: 'coding',
+    icon: ShieldCheck,
+    hasArgs: false,
+    getInputs: (_args, ctx) => ({
+      scope: ctx.workspaceId || '.',
+    }),
+  },
+  {
+    command: '/ponytail-debt',
+    label: 'Debt Ledger',
+    description: 'List deferred shortcuts and technical debt items',
+    jobId: 'engineering__ponytail_debt',
+    lens: 'coding',
+    icon: Clock,
+    hasArgs: false,
+    getInputs: () => ({}),
   },
 
   // Research / Scientific Actions
@@ -346,7 +381,7 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
           <span className="font-semibold text-[var(--color-editor-fg)]">{currentTheme.workspaceTitle}</span>
           <span className="text-[var(--color-fg-subtle)]">· Slash Actions</span>
         </div>
-        <span className="text-[9px] text-[var(--color-fg-subtle)]">↑↓ Chọn • ↵ Kích hoạt</span>
+        <span className="text-[9px] text-[var(--color-fg-subtle)]">↑↓ Select • ↵ Execute</span>
       </div>
 
       <div className="space-y-1">
@@ -356,7 +391,7 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
             <div className="px-2.5 pt-1 pb-0.5 flex items-center justify-between text-[10px] font-medium text-[var(--color-fg-subtle)]">
               <span className="flex items-center gap-1">
                 <span className={currentTheme.textClass}>★</span>
-                <span>Khuyến nghị cho Không gian hiện tại</span>
+                <span>Recommended for active workspace</span>
               </span>
               <span className={`rounded px-1.5 py-0.2 text-[9px] font-mono uppercase border ${currentTheme.badgeClass}`}>
                 {currentTheme.badgeLabel}
@@ -424,8 +459,8 @@ export const SlashCommandMenu: React.FC<SlashCommandMenuProps> = ({
           <div className="space-y-0.5 pt-1">
             {activeCommands.length > 0 && (
               <div className="px-2.5 pt-1.5 pb-0.5 border-t border-[var(--color-border-subtle)]/40 flex items-center justify-between text-[10px] font-medium text-[var(--color-fg-subtle)]">
-                <span>Tác vụ Không gian làm việc khác</span>
-                <span className="text-[9px] font-mono text-[var(--color-fg-subtle)] opacity-70">Toàn hệ thống</span>
+                <span>Other Workspace Actions</span>
+                <span className="text-[9px] font-mono text-[var(--color-fg-subtle)] opacity-70">Global</span>
               </div>
             )}
 

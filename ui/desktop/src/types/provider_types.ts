@@ -7,10 +7,29 @@ export type ProviderServiceId =
   | 'gemini'
   | 'deepseek'
   | 'local'
+  | 'lmstudio'
   | 'copilot'
   | 'openrouter'
   | 'groq'
-  | 'custom';
+  | 'cerebras'
+  | 'nvidia'
+  | 'mistral'
+  | 'together'
+  | 'moonshot'
+  | 'zhipu'
+  | 'minimax'
+  | 'alibaba'
+  | 'qwen'
+  | 'xai'
+  | 'sambanova'
+  | 'fireworks'
+  | 'siliconflow'
+  | 'nebius'
+  | 'hyperbolic'
+  | 'cohere'
+  | 'perplexity'
+  | 'custom'
+  | (string & {});
 
 export type AccountStatus = 'active' | 'rate_limited' | 'quota_exhausted' | 'offline';
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   FileText,
   Download,
@@ -18,6 +18,15 @@ interface PdfViewerProps {
   className?: string;
 }
 
+export function decodePdfBytes(content: string): Uint8Array {
+  if (content.startsWith('%PDF-')) throw new Error('The daemon returned PDF bytes as text. Refresh the daemon before reopening this file.');
+  let binary: string;
+  try { binary = atob(content.replace(/^data:application\/pdf;base64,/, '')); }
+  catch { throw new Error('The PDF response is not valid base64. No partial download was created.'); }
+  if (!binary.startsWith('%PDF-')) throw new Error('The response does not contain a PDF header.');
+  return Uint8Array.from(binary, character => character.charCodeAt(0));
+}
+
 export const PdfViewer: React.FC<PdfViewerProps> = ({
   path,
   content,
@@ -28,42 +37,17 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [zoomScale, setZoomScale] = useState<number>(100);
 
-  // Convert Base64 data to Blob URL
-  const blobUrl = useMemo(() => {
-    setLoadError(null);
-    try {
-      let bytes: Uint8Array;
-      if (content.startsWith('data:application/pdf;base64,')) {
-        const base64Clean = content.replace('data:application/pdf;base64,', '');
-        const binaryString = atob(base64Clean);
-        bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-      } else {
-        const binaryString = atob(content);
-        bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-        }
-      }
-
-      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
-      return URL.createObjectURL(blob);
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Invalid PDF data');
-      return null;
-    }
-  }, [content]);
-
-  // Cleanup object URL
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
   useEffect(() => {
-    return () => {
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
-      }
-    };
-  }, [blobUrl]);
+    setLoadError(null); setBlobUrl(null);
+    let url: string | null = null;
+    try {
+      const bytes = decodePdfBytes(content);
+      url = URL.createObjectURL(new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' }));
+      setBlobUrl(url);
+    } catch (reason) { setLoadError(reason instanceof Error ? reason.message : 'Invalid PDF bytes'); }
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [content]);
 
   const filename = path.split('/').pop() || 'document.pdf';
 
@@ -183,6 +167,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
             <button
               type="button"
               onClick={handleDownload}
+              disabled={!blobUrl}
               className="mt-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-500"
             >
               <Download className="h-3.5 w-3.5" />

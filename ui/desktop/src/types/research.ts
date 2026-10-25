@@ -65,6 +65,23 @@ export interface EnvSnapshot {
   platform?: string;
 }
 
+export type CheckpointResumabilityLevel =
+  | 'export_only'
+  | 'warm_start'
+  | 'training_state_resume'
+  | 'validated_resume';
+
+export interface CheckpointRelayState {
+  latestObservedStep?: number;
+  latestLocalCheckpointStep?: number;
+  latestProtectedCheckpointStep?: number;
+  lastProtectedAt?: string;
+  resumabilityLevel?: CheckpointResumabilityLevel;
+  resumedFromCheckpointId?: string;
+  resumedFromAttemptId?: string;
+  outputNamespace?: string;
+}
+
 export interface ResearchExperimentRun {
   runId: string;
   sessionId: string;
@@ -82,6 +99,7 @@ export interface ResearchExperimentRun {
   logText?: string;
   codeFiles?: { path: string; hash: string }[];
   outputFiles?: { path: string; hash: string; size: number }[];
+  checkpointRelay?: CheckpointRelayState;
   ts: number;
 }
 
@@ -101,6 +119,7 @@ export interface ArtifactLineageNode {
 export interface ArtifactVersion {
   label: string; // "v1", "v2"
   code: string;
+  contentAvailable?: boolean;
   executionLog?: string;
   environment?: string;
   reviewPassed?: boolean;
@@ -216,13 +235,39 @@ export interface ResearchExecutionRecord {
   id: string;
   recipeId: string;
   sessionId?: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'preempted';
   exitCode?: number;
   stdoutCasUri?: string;
   stderrCasUri?: string;
   startedAt: string;
   endedAt?: string;
   artifacts: ResearchExecutionArtifact[];
+  backend?: 'local' | 'colab' | 'kaggle' | 'dedicated_ssh' | 'run_pod' | 'vast_ai' | 'lambda_cloud' | null;
+  checkpoint?: TrainingCheckpointManifest | null;
+  resumeFromAttemptId?: string | null;
+  resumedFromCheckpointId?: string | null;
+  outputNamespace?: string | null;
+  latestObservedStep?: number | null;
+  latestLocalCheckpointStep?: number | null;
+  latestProtectedCheckpointStep?: number | null;
+  lastProtectedAt?: string | null;
+}
+
+export interface TrainingCheckpointManifest {
+  checkpointId: string;
+  globalStep: number;
+  precision: string;
+  commitStatus: 'observed' | 'local_staged' | 'uploading' | 'committed_protected' | 'corrupted';
+  resumabilityLevel: 'export_only' | 'warm_start' | 'training_state_resume' | 'validated_resume';
+  files: { path: string; sizeBytes: number; digest: string; requiredForStateResume: boolean }[];
+}
+
+export interface CheckpointResumeAssessment {
+  metadataValid: boolean;
+  stateInventoryDeclared: boolean;
+  canStart: boolean;
+  blockers: string[];
+  unverifiedChecks: string[];
 }
 
 // ---------------------------------------------------------
@@ -256,5 +301,34 @@ export interface SourceProposal {
   year?: number;
   abstractText?: string;
   createdAt: number;
+}
+
+// ---------------------------------------------------------
+// Compute Targets & GPU Experiment Lifecycle Types
+// ---------------------------------------------------------
+
+export interface ComputeTargetInfo {
+  backend: 'colab' | 'kaggle' | 'runpod' | 'vast_ai' | 'dedicated_ssh';
+  name: string;
+  description: string;
+  supportsInteractive: boolean;
+  decoupledRelease: boolean;
+}
+
+export interface PreflightReport {
+  allowed: boolean;
+  blockers: string[];
+  warnings: string[];
+}
+
+export interface ExecutionAttemptRecord {
+  id: string;
+  experimentId: string;
+  recipeId: string;
+  backend: string;
+  execState: string;
+  resourceState: string;
+  externalRef?: { accountRef: string; jobId: string; versionId: string };
+  parentCheckpointId?: string;
 }
 

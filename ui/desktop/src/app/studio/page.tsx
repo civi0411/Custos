@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { type ActiveWorkbench, AppWorkspaceShell } from '@/components/shell';
 import type { Session } from '@/types';
@@ -37,6 +37,7 @@ export function StudioPage() {
     refreshWorkspaces,
     setIsNewSessionOpen,
     handleSendMessage,
+    handleCreateChatSession,
     handleClearHistory,
     handleDeleteConversation,
     handleAcceptAndRun,
@@ -53,8 +54,10 @@ export function StudioPage() {
     resourceTabs,
     isWebTabExpanded,
     setIsWebTabExpanded,
+    setIsResourcePickerOpen,
   } = useAppContext();
 
+  const location = useLocation();
   const { sessionId } = useParams<{ sessionId?: string }>();
   const routeSessionId = useRef<string | undefined>(undefined);
   const [sessionLenses, setSessionLenses] = useState<Record<string, string[]>>({});
@@ -83,9 +86,7 @@ export function StudioPage() {
     try { localStorage.setItem(SIDEBAR_VIEW_KEY, JSON.stringify(next)); } catch { }
   };
   const openResources = (expanded: boolean) => {
-    const newTabId = `tools-${Date.now()}`;
-    resourceTabs.setTabs((previous) => [...previous, { id: newTabId, type: 'tools', title: 'New Tab', url: 'custos://resources' }]);
-    resourceTabs.setActiveTabId(newTabId);
+    setIsResourcePickerOpen(true);
     setIsWebTabExpanded(expanded);
     setIsWebTabOpen(true);
   };
@@ -100,20 +101,16 @@ export function StudioPage() {
     try { localStorage.setItem(LAST_SESSION_KEY, JSON.stringify(lastSessionByLens)); } catch { }
   }, [lastSessionByLens]);
 
-  // Handle sidebar view switching from ActivityRail or other triggers
   useEffect(() => {
-    const handleSwitchSidebar = (e: Event) => {
-      const customEvent = e as CustomEvent<'chats' | 'tasks'>;
-      if (customEvent.detail) {
-        setSidebarView(mode, customEvent.detail);
-        if (isSidebarCollapsed) {
-          setIsSidebarCollapsed(false);
-        }
-      }
-    };
-    window.addEventListener('custos:switch-sidebar-view', handleSwitchSidebar);
-    return () => window.removeEventListener('custos:switch-sidebar-view', handleSwitchSidebar);
-  }, [mode, isSidebarCollapsed, isSidebarCollapsed, setIsSidebarCollapsed]);
+    const params = new URLSearchParams(location.search);
+    const view = params.get('view');
+    if (view === 'tasks' && params.get('task')) setActiveTaskId(params.get('task'));
+    if (view === 'chats' || view === 'tasks') {
+      setSidebarView(mode, view);
+      setIsSidebarCollapsed(false);
+    }
+  }, [location.key]);
+
 
   const sessionsForMode = (targetMode: ActiveWorkbench) => currentSessions.filter((session) =>
     homeMode(session) === targetMode || session.openedLenses?.includes(targetMode as any) || sessionLenses[session.id]?.includes(targetMode)
@@ -144,12 +141,8 @@ export function StudioPage() {
       setLastSessionByLens((previous) => ({ ...previous, [`${currentProject}:${targetMode}`]: nextSessionId }));
     }
 
-    // Copilot starts in spacious Chat mode (right pane closed); Engineering & Research open right pane
-    if (targetMode === 'copilot') {
-      setIsWebTabOpen(false);
-    } else {
-      setIsWebTabOpen(true);
-    }
+    // Auto-open workbench resource canvas on mode switch
+    setIsWebTabOpen(true);
   };
 
   const openFullChatIn = async (targetMode: ActiveWorkbench, sourceId = activeSessionId) => {
@@ -207,13 +200,13 @@ export function StudioPage() {
       if (e.altKey && !e.metaKey && !e.ctrlKey) {
         if (e.key === '1') {
           e.preventDefault();
-          switchMode('copilot');
+          switchMode('engineering');
         } else if (e.key === '2') {
           e.preventDefault();
-          switchMode('engineering');
+          switchMode('research');
         } else if (e.key === '3') {
           e.preventDefault();
-          switchMode('research');
+          switchMode('copilot');
         }
       }
       if (e.key === 'f' && e.shiftKey && (e.metaKey || e.ctrlKey)) {
@@ -226,8 +219,18 @@ export function StudioPage() {
       }
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, [showToast, currentProject, currentSessions, sessionLenses, lastSessionByLens, setIsWebTabOpen, setIsWebTabExpanded]);
+
+  const previousMode = useRef(mode);
+  useEffect(() => {
+    if (previousMode.current !== mode) {
+      previousMode.current = mode;
+      switchMode(mode);
+    }
+  }, [mode]);
 
   const activeModeSessions = sessionsForMode(mode);
   const displaySessions = activeModeSessions;
@@ -238,7 +241,7 @@ export function StudioPage() {
         mode={mode}
         onSwitchMode={switchMode}
         currentProject={currentProject}
-        projectNames={Object.keys(projectData)}
+        projectNames={Array.from(new Set([currentProject, 'AgentHub', ...Object.keys(projectData)].filter(Boolean)))}
         onSelectProject={(p) => {
           setActiveTaskId(null);
           setCurrentProject(p);
@@ -266,10 +269,17 @@ export function StudioPage() {
         onOpenFullChatIn={openFullChatIn}
         onOpenSessionHere={(id) => void openFullChatIn(mode, id)}
         onNewSession={() => { setSidebarView(mode, 'chats'); setActiveTaskId(null); setIsNewSessionOpen(true); }}
+        onNewSessionForTask={async taskId => {
+          try {
+            await handleCreateChatSession(mode === 'engineering' ? 'engineering' : mode === 'research' ? 'research' : 'assistant', taskId);
+            setSidebarView(mode, 'chats');
+            setActiveTaskId(taskId);
+          } catch { /* The shared action reports the daemon failure and preserves current selection. */ }
+        }}
         onSendMessage={(message) => {
           if (!activeSessionId) {
             showToast('Select or create a conversation first.');
-            return;
+            return Promise.resolve(false);
           }
           if (activeSessionId) {
             setSessionLenses((previous) => ({
@@ -277,7 +287,7 @@ export function StudioPage() {
               [activeSessionId]: Array.from(new Set([...(previous[activeSessionId] || []), mode])),
             }));
           }
-          void handleSendMessage(message, mode === 'engineering' ? 'coding' : mode === 'copilot' ? 'assistant' : 'research');
+          return handleSendMessage(message, mode === 'engineering' ? 'coding' : mode === 'copilot' ? 'assistant' : 'research');
         }}
         onClearHistory={handleClearHistory}
         onDeleteConversation={handleDeleteConversation}
