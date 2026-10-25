@@ -113,6 +113,17 @@ impl SkillCapabilityProfile {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceScope {
+    pub root: std::path::PathBuf,
+}
+
+impl WorkspaceScope {
+    pub fn new(root: impl Into<std::path::PathBuf>) -> Self {
+        Self { root: root.into() }
+    }
+}
+
 /// Execution context passed to every skill invocation.
 /// Carries routing metadata from the 9-Router (D1–D9) alongside task identity.
 #[derive(Debug, Clone)]
@@ -127,6 +138,32 @@ pub struct SkillContext {
     pub provider_id: String,
     /// Resolved pack ID from D5
     pub pack_id: Option<String>,
+    /// Optional workspace boundary for filesystem operations
+    pub scope_root: Option<WorkspaceScope>,
+}
+
+impl SkillContext {
+    pub fn new(
+        args: serde_json::Value,
+        task_id: impl Into<TaskId>,
+        worker_run_id: impl Into<WorkerRunId>,
+        provider_id: impl Into<String>,
+        pack_id: Option<String>,
+    ) -> Self {
+        Self {
+            args,
+            task_id: task_id.into(),
+            worker_run_id: worker_run_id.into(),
+            provider_id: provider_id.into(),
+            pack_id,
+            scope_root: None,
+        }
+    }
+
+    pub fn with_scope_root(mut self, scope: WorkspaceScope) -> Self {
+        self.scope_root = Some(scope);
+        self
+    }
 }
 
 /// Result produced by a skill execution.
@@ -181,6 +218,12 @@ pub enum SkillError {
     PermitRequired,
     #[error("external fetch failed: {0}")]
     FetchError(String),
+    #[error("no workspace scope configured")]
+    NoScope,
+    #[error("path out of workspace scope: {0}")]
+    OutOfScope(String),
+    #[error("integer overflow in offset/limit calculation")]
+    Overflow,
     #[error("domain error: {0}")]
     Domain(#[from] DomainError),
     #[error("io error: {0}")]

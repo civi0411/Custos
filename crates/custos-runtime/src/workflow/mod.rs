@@ -2,6 +2,7 @@
 //!
 //! Event loop, lease renewal, and outbox delivery guarantees.
 
+pub mod contracts;
 pub mod dag;
 pub mod dispatcher;
 pub mod graph_runtime;
@@ -12,6 +13,8 @@ pub mod revision_loader;
 pub mod scheduler;
 pub mod task_runtime;
 pub mod worker_executor;
+
+pub use contracts::*;
 
 pub use dag::*;
 pub use dispatcher::*;

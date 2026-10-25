@@ -113,7 +113,7 @@ pub fn chat_span(
         "gen_ai.response.id" = tracing::field::Empty,
         "gen_ai.usage.input_tokens" = tracing::field::Empty,
         "gen_ai.usage.output_tokens" = tracing::field::Empty,
-        "goose.chat.purpose" = purpose,
+        "custos.chat.purpose" = purpose,
         "error.type" = tracing::field::Empty,
         session.id = %session_id,
     );

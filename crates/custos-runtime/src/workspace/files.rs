@@ -7,6 +7,7 @@ use async_trait::async_trait;
 use std::collections::HashSet;
 use std::path::{Component, Path, PathBuf};
 use tokio::fs;
+use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tracing::info;
 
@@ -277,13 +278,21 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
             .unwrap_or(DEFAULT_MAX_FILE_BYTES)
             .min(HARD_MAX_FILE_BYTES);
 
-        let bytes = fs::read(&target_path).await.map_err(|e| {
-            DomainError::Validation(format!("Failed to read file '{}': {}", relative_path, e))
+        let file = fs::File::open(&target_path).await.map_err(|e| {
+            DomainError::Validation(format!("Failed to open file '{}': {}", relative_path, e))
         })?;
+        let mut bytes = Vec::with_capacity(limit.min(file_len).saturating_add(1));
+        file.take(limit.saturating_add(1) as u64)
+            .read_to_end(&mut bytes).await.map_err(|e| {
+                DomainError::Validation(format!("Failed to read file '{}': {}", relative_path, e))
+            })?;
 
-        // Check for binary content (null bytes in first 1024 bytes)
-        let sample_len = bytes.len().min(1024);
-        let is_binary = bytes[..sample_len].contains(&0);
+        // PDFs can have long ASCII headers without NUL bytes. Preserve their bytes,
+        // as well as any content containing invalid UTF-8, instead of lossy text.
+        let sample = &bytes[..bytes.len().min(8192)];
+        let is_binary = bytes.starts_with(b"%PDF-")
+            || sample.contains(&0)
+            || std::str::from_utf8(&bytes).err().is_some_and(|error| error.error_len().is_some());
 
         if is_binary {
             use base64::Engine;
@@ -309,7 +318,11 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
         } else {
             &bytes[..]
         };
-        let content_str = String::from_utf8_lossy(read_slice).to_string();
+        let complete_slice = match std::str::from_utf8(read_slice) {
+            Err(error) if error.error_len().is_none() => &read_slice[..error.valid_up_to()],
+            _ => read_slice,
+        };
+        let content_str = String::from_utf8_lossy(complete_slice).to_string();
 
         Ok(WorkspaceFileContent::text(
             workspace.id.clone(),
@@ -640,6 +653,44 @@ impl WorkspaceFilesPort for WorkspaceFilesCoordinator {
         info!(workspace_id = %workspace.id, path = %relative_path, "Discarded file changes successfully");
         Ok(())
     }
+
+    async fn commit(
+        &self,
+        workspace: &ExecutionWorkspace,
+        message: &str,
+    ) -> Result<String, DomainError> {
+        let base_dir = Path::new(&workspace.path);
+        if message.trim().is_empty() {
+            return Err(DomainError::Validation("Commit message cannot be empty".into()));
+        }
+
+        let staged = Command::new("git").current_dir(base_dir)
+            .args(["diff", "--cached", "--quiet"]).status().await
+            .map_err(|error| DomainError::Validation(format!("Cannot inspect staged changes: {error}")))?;
+        match staged.code() {
+            Some(1) => {},
+            Some(0) => return Err(DomainError::Validation("No staged changes. Stage the intended files before committing.".into())),
+            _ => return Err(DomainError::Validation("Cannot inspect staged changes".into())),
+        }
+
+        let out = Command::new("git")
+            .current_dir(base_dir)
+            .arg("commit")
+            .arg("-m")
+            .arg(message)
+            .output()
+            .await
+            .map_err(|e| DomainError::Validation(format!("git commit failed: {}", e)))?;
+
+        if !out.status.success() {
+            let err = String::from_utf8_lossy(&out.stderr);
+            return Err(DomainError::Validation(format!("git commit failed: {}", err)));
+        }
+
+        let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        info!(workspace_id = %workspace.id, "Committed git changes successfully: {}", stdout);
+        Ok(stdout)
+    }
 }
 
 async fn is_git_repo(path: &Path) -> bool {
@@ -755,6 +806,23 @@ mod tests {
         use base64::Engine;
         let decoded = base64::engine::general_purpose::STANDARD.decode(&read_bin.content).expect("valid base64");
         assert_eq!(decoded, sample_bytes);
+
+        // An ASCII PDF header and non-UTF8 binary must survive byte-for-byte.
+        for (name, bytes) in [("paper.pdf", b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF".as_slice()),
+                              ("non-null.bin", &[0xff, 0xfe, 0x80, 1, 2])] {
+            fs::write(test_dir.join(name), bytes).await.unwrap();
+            let read = coord.read_file(&ws, name, None).await.unwrap();
+            assert!(read.is_binary, "{name}");
+            assert_eq!(base64::engine::general_purpose::STANDARD.decode(read.content).unwrap(), bytes);
+        }
+        fs::write(test_dir.join("large.pdf"), b"%PDF-1.7\ntruncated payload").await.unwrap();
+        let limited = coord.read_file(&ws, "large.pdf", Some(8)).await.unwrap();
+        assert!(limited.truncated && limited.is_binary);
+        assert_eq!(base64::engine::general_purpose::STANDARD.decode(limited.content).unwrap().len(), 8);
+        fs::write(test_dir.join("utf8.txt"), "abcédef").await.unwrap();
+        let utf8 = coord.read_file(&ws, "utf8.txt", Some(4)).await.unwrap();
+        assert!(!utf8.is_binary && utf8.truncated);
+        assert_eq!(utf8.content, "abc");
 
         let _ = fs::remove_dir_all(&test_dir).await;
     }

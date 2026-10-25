@@ -211,17 +211,16 @@ mod tests {
     #[test]
     fn test_replan_inv03_uncertain_effect_guardrail() {
         let rev = WorkflowRevision::new("task_inv03", "prop_1", 1);
-        let outbox = vec![OutboxEntry {
-            id: "out_1".into(),
-            task_id: "task_inv03".into(),
-            action_id: "node_api_call".into(),
-            permit_id: "permit_1".into(),
-            argument_digest: "digest".into(),
-            idempotency_key: None,
-            status: OutboxStatus::Uncertain,
-            created_at: chrono::Utc::now(),
-            receipt: None,
-        }];
+        let outbox = vec![OutboxEntry::new(
+            "out_1",
+            "task_inv03",
+            "node_api_call",
+            "permit_1",
+            "digest",
+            None,
+            OutboxStatus::Uncertain,
+            chrono::Utc::now(),
+        )];
 
         let brief = Replanner::create_brief(
             "task_inv03",

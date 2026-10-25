@@ -5,42 +5,13 @@
 
 use custos_core::oi::compiler::PlanCompiler;
 use custos_core::oi::hard_filters::HardFilters;
-use custos_domain::oi::{DecisionSnapshot, ExecutionTopology, StrategyProposal};
+pub use custos_domain::oi::{CandidateExplanation, ExplainReport};
+use custos_domain::oi::{DecisionSnapshot, StrategyProposal};
 use custos_domain::DomainError;
-use serde::{Deserialize, Serialize};
 
 use super::candidate_builder::CandidateBuilder;
 use super::estimator::Estimator;
 use super::selector::Selector;
-
-/// Detailed explanation for a single strategy candidate considered during planning.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CandidateExplanation {
-    pub topology: ExecutionTopology,
-    pub harness_id: String,
-    pub estimated_tokens: u64,
-    pub estimated_cost_usd_min: f32,
-    pub estimated_cost_usd_max: f32,
-    pub estimated_latency_ms: u64,
-    pub admissible: bool,
-    pub rejection_reasons: Option<Vec<String>>,
-}
-
-/// Comprehensive inspection report explaining the planner's decision.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExplainReport {
-    pub task_id: String,
-    pub chosen_topology: ExecutionTopology,
-    pub chosen_harness_id: String,
-    pub estimated_tokens: u64,
-    pub estimated_cost_usd: f32,
-    pub reasoning: String,
-    pub cost_range_tokens: (u64, u64),
-    pub cost_range_usd: (f32, f32),
-    pub candidates: Vec<CandidateExplanation>,
-    pub compiled_nodes_preview: Vec<String>,
-    pub obligations: Vec<String>,
-}
 
 /// Service for generating explain reports on orchestration decisions.
 pub struct ExplainService;
@@ -135,11 +106,19 @@ impl ExplainService {
             (min_usd, max_usd)
         };
 
+        let unknown_tokens = if snapshot.unknowns.is_empty() {
+            0
+        } else {
+            (snapshot.unknowns.len() as u64) * 500
+        };
+
         Ok(ExplainReport {
             task_id: snapshot.task_id.clone(),
             chosen_topology: chosen.chosen_topology,
             chosen_harness_id: chosen.candidate_harness,
             estimated_tokens: chosen.estimated_tokens,
+            billed_tokens: 0,
+            unknown_tokens,
             estimated_cost_usd: chosen.estimated_cost_usd,
             reasoning: chosen.reasoning,
             cost_range_tokens,
@@ -159,6 +138,7 @@ mod tests {
     fn test_explain_service_generates_report() {
         let mut snapshot = DecisionSnapshot::new("task-explain-001");
         snapshot.remaining_budget_tokens = 50_000;
+        snapshot.unknowns = vec!["Unverified remote checkpoint".into()];
 
         let report = ExplainService::explain(&snapshot).expect("explain report");
 
@@ -167,5 +147,20 @@ mod tests {
         assert!(report.cost_range_tokens.0 <= report.cost_range_tokens.1);
         assert!(!report.compiled_nodes_preview.is_empty());
         assert!(report.candidates.iter().any(|c| c.admissible));
+        assert_eq!(report.billed_tokens, 0);
+        assert_eq!(report.unknown_tokens, 500);
+    }
+
+    #[test]
+    fn test_explain_service_local_only_and_truthful_spend() {
+        let mut snapshot = DecisionSnapshot::new("task-explain-local");
+        snapshot.required_capabilities = vec!["LocalOnly".into()];
+
+        let report = ExplainService::explain(&snapshot).expect("explain report");
+        assert_eq!(report.chosen_harness_id, "custos-local");
+        assert_eq!(report.estimated_cost_usd, 0.0);
+        let cloud_candidate = report.candidates.iter().find(|c| c.harness_id == "claude-code").unwrap();
+        assert!(!cloud_candidate.admissible);
+        assert!(cloud_candidate.rejection_reasons.as_ref().unwrap().iter().any(|r| r.contains("Local-only")));
     }
 }
