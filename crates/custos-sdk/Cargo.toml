@@ -6,7 +6,7 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "The Custos Development Kit (SDK) for Rust, with optional uniffi bindings for Python/Kotlin"
+description = "The Custos Development Kit (SDK) for Rust client applications and local API integration"
 
 [lib]
 name = "custos_sdk"
@@ -24,7 +24,6 @@ uniffi = [
     "dep:thiserror",
     "dep:anyhow",
     "dep:futures",
-    "dep:tokio",
     "dep:rmcp",
     "dep:base64",
 ]
@@ -35,11 +34,17 @@ agent-client-protocol-schema = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 schemars = { workspace = true, features = ["derive"] }
+custos-domain = { workspace = true }
+custos-core = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["sync", "net", "io-util", "time"] }
+chrono = { workspace = true }
+uuid = { workspace = true, features = ["v4", "serde"] }
+dirs = { workspace = true }
 
-uniffi = { version = "0.32", features = ["cli"], optional = true }
+uniffi = { version = "0.32", optional = true }
 thiserror = { version = "2", optional = true }
 futures = { workspace = true, optional = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "sync"], optional = true }
 anyhow = { workspace = true, optional = true }
 rmcp = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
@@ -47,6 +52,7 @@ base64 = { workspace = true, optional = true }
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "process", "io-std", "io-util"] }
 tokio-util = { workspace = true, features = ["compat", "rt"] }
+tempfile = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = ["agent-client-protocol-schema"]

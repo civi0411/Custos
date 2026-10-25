@@ -1445,6 +1445,7 @@ dependencies = [
  "iroh",
  "iroh-relay",
  "keyring",
+ "libc",
  "llama-cpp-2",
  "llama-cpp-sys-2",
  "minijinja",
@@ -1478,8 +1479,8 @@ name = "custos-app-cli"
 version = "0.1.0"
 dependencies = [
  "custos-core",
- "custos-daemon",
  "custos-domain",
+ "custos-sdk",
  "serde",
  "serde_json",
  "tauri",
@@ -1492,8 +1493,8 @@ dependencies = [
 name = "custos-app-desktop"
 version = "0.1.0"
 dependencies = [
- "custos-daemon",
  "custos-domain",
+ "custos-sdk",
  "serde",
  "serde_json",
  "tauri",
@@ -1558,6 +1559,7 @@ dependencies = [
  "custos-persistence",
  "custos-provider",
  "custos-runtime",
+ "custos-sdk",
  "dirs 5.0.1",
  "fs2",
  "reqwest",
@@ -1659,6 +1661,7 @@ dependencies = [
  "blake3",
  "bytes",
  "chrono",
+ "custos-adapters",
  "custos-core",
  "custos-domain",
  "custos-persistence",
@@ -1695,16 +1698,23 @@ dependencies = [
  "agent-client-protocol",
  "agent-client-protocol-schema",
  "anyhow",
+ "async-trait",
  "base64 0.21.7",
+ "chrono",
+ "custos-core",
+ "custos-domain",
+ "dirs 5.0.1",
  "futures",
  "rmcp",
  "schemars 1.2.2",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 2.0.21",
  "tokio",
  "tokio-util",
  "uniffi",
+ "uuid",
 ]
 
 [[package]]
@@ -1717,6 +1727,7 @@ dependencies = [
  "custos-domain",
  "custos-persistence",
  "custos-provider",
+ "serde",
  "serde_json",
  "tokio",
 ]
@@ -1747,6 +1758,7 @@ dependencies = [
  "custos-persistence",
  "custos-provider",
  "custos-runtime",
+ "custos-testkit",
  "serde_json",
  "tempfile",
  "tokio",
@@ -7918,9 +7930,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76407f5f396a2c949a069eff4a9fca9ce462410eb872bffef4c2b7b89804a77a"
 dependencies = [
  "anyhow",
- "camino",
  "cargo_metadata 0.23.1",
- "clap",
  "uniffi_bindgen",
  "uniffi_core",
  "uniffi_macros",

@@ -1,6 +1,8 @@
 pub mod assistant;
+pub mod command_ledger;
 pub mod continuation;
 pub mod decision;
+pub mod experiment_attempt;
 pub mod fleet_automation;
 pub mod outbox;
 pub mod providers;
@@ -15,8 +17,10 @@ pub mod workflow_revision;
 pub mod workspace;
 
 pub use assistant::*;
+pub use command_ledger::*;
 pub use continuation::*;
 pub use decision::*;
+pub use experiment_attempt::*;
 pub use fleet_automation::*;
 pub use outbox::*;
 pub use providers::*;

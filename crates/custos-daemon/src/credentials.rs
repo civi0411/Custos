@@ -371,7 +371,7 @@ impl ProviderCredentials {
             .into();
         } else {
             config.api_key_masked = "none".into();
-            if !matches!(config.service_type.as_str(), "local" | "ollama") {
+            if !matches!(config.service_type.as_str(), "local" | "ollama" | "lmstudio" | "custom") {
                 config.status = "unconfigured".into();
             }
         }

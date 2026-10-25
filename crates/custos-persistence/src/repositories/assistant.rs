@@ -20,8 +20,9 @@ impl AssistantRepository {
     }
 
     pub fn save_draft_sync(&self, draft: &AssistantDraft) -> Result<(), DomainError> {
-        let conn = self.db.lock()?;
-        conn.execute(
+        let mut conn = self.db.lock()?;
+        let tx = conn.transaction().map_err(|error| DomainError::Validation(error.to_string()))?;
+        tx.execute(
             "INSERT INTO assistant_drafts (id, task_id, session_id, title, kind, content, recipient, status, payload_lock, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
              ON CONFLICT(id) DO UPDATE SET
@@ -47,7 +48,11 @@ impl AssistantRepository {
             ],
         )
         .map_err(|e| DomainError::Validation(format!("Failed to save draft: {}", e)))?;
-
+        tx.execute("INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![custos_domain::new_id("draft_event"), "assistant.draft.saved",
+                serde_json::json!({"draft_id": draft.id, "session_id": draft.session_id, "status": draft.status}).to_string(), chrono::Utc::now().timestamp()])
+            .map_err(|error| DomainError::Validation(error.to_string()))?;
+        tx.commit().map_err(|error| DomainError::Validation(error.to_string()))?;
         Ok(())
     }
 
@@ -130,10 +135,16 @@ impl AssistantRepository {
     }
 
     pub fn delete_draft_sync(&self, id: &str) -> Result<bool, DomainError> {
-        let conn = self.db.lock()?;
-        let affected = conn
-            .execute("DELETE FROM assistant_drafts WHERE id = ?1", params![id])
+        let mut conn = self.db.lock()?;
+        let tx = conn.transaction().map_err(|error| DomainError::Validation(error.to_string()))?;
+        let affected = tx.execute("DELETE FROM assistant_drafts WHERE id = ?1", params![id])
             .map_err(|e| DomainError::Validation(e.to_string()))?;
+        if affected > 0 {
+            tx.execute("INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
+                params![custos_domain::new_id("draft_event"), "assistant.draft.deleted", serde_json::json!({"draft_id": id}).to_string(), chrono::Utc::now().timestamp()])
+                .map_err(|error| DomainError::Validation(error.to_string()))?;
+        }
+        tx.commit().map_err(|error| DomainError::Validation(error.to_string()))?;
         Ok(affected > 0)
     }
 }

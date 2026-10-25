@@ -6,6 +6,15 @@
 pub mod wire_types;
 pub use wire_types::{custom_notifications, custom_requests};
 
+pub mod local_api;
+pub use local_api::*;
+
+pub mod profile;
+pub use profile::*;
+
+#[cfg(feature = "uniffi")]
+compile_error!("uniffi feature not supported — see F9");
+
 #[cfg(feature = "uniffi")]
 uniffi::setup_scaffolding!("custos-engine");
 
