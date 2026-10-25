@@ -7,35 +7,78 @@
 //! - Handles dynamic resizing, stdin writes, and clean termination
 
 use super::buffer::BoundedTerminalBuffer;
-use super::pty::PtyHandle;
 use async_trait::async_trait;
-use custos_core::contracts::terminal::TerminalPort;
+use custos_core::contracts::terminal::{
+    TerminalDriverPort, TerminalOutputConsumer, TerminalPort, TerminalProcessHandle,
+};
 use custos_domain::{
     DomainError, TerminalOutputChunk, TerminalSession, TerminalSessionId, TerminalSessionStatus,
 };
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 use tracing::info;
 
 /// Internal state of a live or retained terminal session.
 struct TerminalSessionInstance {
-    session: RwLock<TerminalSession>,
-    pty: RwLock<Option<PtyHandle>>,
-    buffer: RwLock<BoundedTerminalBuffer>,
+    session: Arc<RwLock<TerminalSession>>,
+    pty: Arc<RwLock<Option<Box<dyn TerminalProcessHandle>>>>,
+    buffer: Arc<std::sync::Mutex<BoundedTerminalBuffer>>,
+}
+
+struct SessionConsumer {
+    session: Arc<RwLock<TerminalSession>>,
+    buffer: Arc<std::sync::Mutex<BoundedTerminalBuffer>>,
+    pty: Arc<RwLock<Option<Box<dyn TerminalProcessHandle>>>>,
+    session_id: String,
+}
+
+impl TerminalOutputConsumer for SessionConsumer {
+    fn on_output(&self, chunk: &[u8]) {
+        if let Ok(mut buf) = self.buffer.lock() {
+            buf.push(chunk);
+        }
+    }
+
+    fn on_exit(&self, exit_code: Option<i32>) {
+        if let Ok(mut buf) = self.buffer.lock() {
+            buf.mark_eof();
+        }
+        let session = self.session.clone();
+        let pty = self.pty.clone();
+        let sid = self.session_id.clone();
+        tokio::spawn(async move {
+            info!(session_id = %sid, ?exit_code, "Terminal process exited");
+
+            {
+                let mut sess = session.write().await;
+                if matches!(sess.status, TerminalSessionStatus::Active) {
+                    sess.status = TerminalSessionStatus::Exited { exit_code };
+                }
+                sess.closed_at = Some(chrono::Utc::now().timestamp());
+            }
+
+            {
+                let mut pty_guard = pty.write().await;
+                pty_guard.take();
+            }
+        });
+    }
 }
 
 /// Thread-safe coordinator for execution-scoped terminal sessions.
 #[derive(Clone)]
 pub struct TerminalCoordinator {
+    driver: Arc<dyn TerminalDriverPort>,
     sessions: Arc<RwLock<HashMap<TerminalSessionId, Arc<TerminalSessionInstance>>>>,
     max_buffer_bytes: usize,
 }
 
 impl TerminalCoordinator {
-    pub fn new() -> Self {
+    pub fn new(driver: Arc<dyn TerminalDriverPort>) -> Self {
         Self {
+            driver,
             sessions: Arc::new(RwLock::new(HashMap::new())),
             max_buffer_bytes: 512 * 1024, // 512 KB scrollback retention
         }
@@ -44,12 +87,6 @@ impl TerminalCoordinator {
     pub fn with_max_buffer_bytes(mut self, bytes: usize) -> Self {
         self.max_buffer_bytes = bytes;
         self
-    }
-}
-
-impl Default for TerminalCoordinator {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -83,6 +120,29 @@ impl TerminalPort for TerminalCoordinator {
             ))
         })?;
 
+        // Bound retained history across all tabs, including terminals whose processes exited.
+        let mut sessions = self.sessions.write().await;
+        if sessions.len() >= 128 {
+            let mut oldest: Option<(String, i64)> = None;
+            for (id, instance) in sessions.iter() {
+                let session = instance.session.read().await;
+                let is_eof = instance.buffer.lock().map(|b| b.is_eof()).unwrap_or(false);
+                if !matches!(session.status, TerminalSessionStatus::Active)
+                    && is_eof
+                    && oldest.as_ref().map_or(true, |(_, created)| session.created_at < *created)
+                {
+                    oldest = Some((id.clone(), session.created_at));
+                }
+            }
+            if let Some((id, _)) = oldest {
+                sessions.remove(&id);
+            } else {
+                return Err(DomainError::Conflict(
+                    "Terminal limit reached. Stop an unused terminal before starting another.".into(),
+                ));
+            }
+        }
+
         let session_id = format!("term_{}", uuid::Uuid::new_v4().simple());
         let command_str = command
             .filter(|c| !c.trim().is_empty())
@@ -101,61 +161,42 @@ impl TerminalPort for TerminalCoordinator {
             closed_at: None,
         };
 
-        let (output_tx, mut output_rx) = mpsc::channel::<Vec<u8>>(128);
+        let session_arc = Arc::new(RwLock::new(initial_session.clone()));
+        let pty_arc = Arc::new(RwLock::new(None));
+        let buffer_arc = Arc::new(std::sync::Mutex::new(BoundedTerminalBuffer::new(
+            self.max_buffer_bytes,
+        )));
 
-        let (pty_handle, exit_rx) = PtyHandle::spawn(
-            &canonical_dir,
-            command,
-            initial_session.cols,
-            initial_session.rows,
-            output_tx,
-        )
-        .map_err(|e| DomainError::Validation(format!("failed to spawn PTY process: {e}")))?;
+        let consumer = Arc::new(SessionConsumer {
+            session: session_arc.clone(),
+            buffer: buffer_arc.clone(),
+            pty: pty_arc.clone(),
+            session_id: session_id.clone(),
+        });
+
+        let pty_handle = self
+            .driver
+            .spawn_pty(
+                &canonical_dir,
+                command,
+                initial_session.cols,
+                initial_session.rows,
+                consumer,
+            )
+            .await
+            .map_err(|e| DomainError::Validation(format!("failed to spawn PTY process: {e}")))?;
+
+        *pty_arc.write().await = Some(pty_handle);
 
         let instance = Arc::new(TerminalSessionInstance {
-            session: RwLock::new(initial_session.clone()),
-            pty: RwLock::new(Some(pty_handle)),
-            buffer: RwLock::new(BoundedTerminalBuffer::new(self.max_buffer_bytes)),
+            session: session_arc,
+            pty: pty_arc,
+            buffer: buffer_arc,
         });
 
         // Register session
-        {
-            let mut lock = self.sessions.write().await;
-            lock.insert(session_id.clone(), instance.clone());
-        }
-
-        // Spawn background task to collect output chunks into bounded buffer
-        let instance_buf = instance.clone();
-        tokio::spawn(async move {
-            while let Some(chunk) = output_rx.recv().await {
-                let mut buf = instance_buf.buffer.write().await;
-                buf.push(&chunk);
-            }
-        });
-
-        // Spawn background task to monitor process exit
-        let instance_exit = instance.clone();
-        let sid = session_id.clone();
-        tokio::spawn(async move {
-            let exit_code = exit_rx.await.unwrap_or(None);
-            info!(session_id = %sid, ?exit_code, "Terminal process exited");
-
-            {
-                let mut buf = instance_exit.buffer.write().await;
-                buf.mark_eof();
-            }
-
-            {
-                let mut sess = instance_exit.session.write().await;
-                sess.status = TerminalSessionStatus::Exited { exit_code };
-                sess.closed_at = Some(chrono::Utc::now().timestamp());
-            }
-
-            {
-                let mut pty_guard = instance_exit.pty.write().await;
-                pty_guard.take(); // drop handle and clean up
-            }
-        });
+        sessions.insert(session_id.clone(), instance);
+        drop(sessions);
 
         Ok(initial_session)
     }
@@ -225,7 +266,9 @@ impl TerminalPort for TerminalCoordinator {
         };
 
         let chunk = {
-            let buf = instance.buffer.read().await;
+            let buf = instance.buffer.lock().map_err(|_| {
+                DomainError::Validation("Failed to acquire terminal buffer lock".into())
+            })?;
             buf.read_from(session_id, from_seq, max_bytes)
         };
         Ok(chunk)
@@ -244,14 +287,34 @@ impl TerminalPort for TerminalCoordinator {
 
         {
             let mut pty_guard = instance.pty.write().await;
-            if let Some(pty) = pty_guard.take() {
-                let _ = pty.terminate();
+            if let Some(pty) = pty_guard.as_ref() {
+                pty.terminate().map_err(|error| {
+                    DomainError::Validation(format!("failed to terminate terminal: {error}"))
+                })?;
+                for _ in 0..50 {
+                    if pty.has_exited() {
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+                if !pty.has_exited() {
+                    pty.force_terminate().map_err(|error| {
+                        DomainError::Validation(format!("failed to stop terminal process: {error}"))
+                    })?;
+                    for _ in 0..50 {
+                        if pty.has_exited() {
+                            break;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                    }
+                }
+                if !pty.has_exited() {
+                    return Err(DomainError::Conflict(
+                        "Terminal stop requested but process exit could not be confirmed".into(),
+                    ));
+                }
             }
-        }
-
-        {
-            let mut buf = instance.buffer.write().await;
-            buf.mark_eof();
+            pty_guard.take();
         }
 
         {
@@ -310,7 +373,7 @@ mod tests {
     #[cfg(unix)]
     async fn test_terminal_coordinator_lifecycle() {
         let temp = tempfile::tempdir().unwrap();
-        let coord = TerminalCoordinator::new();
+        let coord = TerminalCoordinator::new(Arc::new(custos_adapters::terminal::NativePtyDriver));
 
         // 1. Spawn echo command
         let session = coord
@@ -339,7 +402,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_terminal_coordinator_rejects_missing_directory() {
-        let coord = TerminalCoordinator::new();
+        let coord = TerminalCoordinator::new(Arc::new(custos_adapters::terminal::NativePtyDriver));
         let res = coord
             .spawn(
                 "ws-test",
@@ -351,5 +414,49 @@ mod tests {
             .await;
 
         assert!(matches!(res, Err(DomainError::NotFound { .. })));
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn terminal_eof_preserves_trailing_output() {
+        let directory = tempfile::tempdir().unwrap();
+        let coordinator =
+            TerminalCoordinator::new(Arc::new(custos_adapters::terminal::NativePtyDriver));
+        let session = coordinator
+            .spawn(
+                "output-drain",
+                directory.path(),
+                Some("printf 'start\\n'; printf 'final-marker\\n'"),
+                80,
+                24,
+            )
+            .await
+            .unwrap();
+        let output = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let mut cursor = 0;
+            let mut output = String::new();
+            loop {
+                let chunk = coordinator
+                    .read_output(&session.id, cursor, 4096)
+                    .await
+                    .unwrap();
+                output.push_str(&chunk.data);
+                cursor = chunk.next_seq;
+                if chunk.is_eof {
+                    return output;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(output.contains("start"));
+        assert!(output.contains("final-marker"));
+        coordinator.terminate(&session.id).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        assert_eq!(
+            coordinator.get_session(&session.id).await.unwrap().status,
+            TerminalSessionStatus::Terminated
+        );
     }
 }

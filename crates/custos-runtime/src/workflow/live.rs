@@ -123,6 +123,12 @@ impl LiveRuns {
         if kind == "status" {
             if let Some(status) = payload.get("status").and_then(|v| v.as_str()) {
                 p.snapshot.status = status.to_string();
+                if status == "active" {
+                    p.snapshot.error = None;
+                }
+            }
+            if let Some(reason) = payload.get("reason").and_then(|v| v.as_str()) {
+                p.snapshot.error = Some(reason.to_string());
             }
         }
         if kind == "usage" {
@@ -149,7 +155,9 @@ impl LiveRuns {
                 .get("error")
                 .and_then(|v| v.as_str())
                 .map(str::to_string);
-            p.terminal_at = Some(Instant::now());
+            if p.snapshot.status != "suspended" {
+                p.terminal_at = Some(Instant::now());
+            }
         }
         p.snapshot.cursor += 1;
         let event = LiveRunEvent {

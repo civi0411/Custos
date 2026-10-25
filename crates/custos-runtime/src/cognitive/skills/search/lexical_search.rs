@@ -200,6 +200,7 @@ mod tests {
             worker_run_id: "run_test".to_string(),
             provider_id: "test".into(),
             pack_id: Some("engineering".into()),
+            scope_root: None,
         };
 
         let output = skill.run(&ctx).await.unwrap();

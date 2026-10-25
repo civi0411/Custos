@@ -34,12 +34,16 @@ impl BoundedTerminalBuffer {
 
         let start_seq = self.current_seq;
         let next_seq = start_seq + data.len() as u64;
-        self.chunks.push_back((start_seq, data.to_vec()));
-        self.total_bytes += data.len();
+        // Keep only the tail of an oversized PTY read. A single chunk must
+        // never defeat the scrollback limit.
+        let retained = &data[data.len().saturating_sub(self.max_bytes)..];
+        let retained_start = next_seq - retained.len() as u64;
+        self.chunks.push_back((retained_start, retained.to_vec()));
+        self.total_bytes += retained.len();
         self.current_seq = next_seq;
 
-        // Evict oldest chunks if total bytes exceed limit
-        while self.total_bytes > self.max_bytes && self.chunks.len() > 1 {
+        // Evict whole oldest chunks; the newest chunk is at most max_bytes.
+        while self.total_bytes > self.max_bytes {
             if let Some((_, popped)) = self.chunks.pop_front() {
                 self.total_bytes = self.total_bytes.saturating_sub(popped.len());
             }
@@ -185,6 +189,26 @@ mod tests {
         buf.push(&big);
         buf.push(&big);
 
-        assert!(buf.total_bytes <= 4096 || buf.chunks.len() <= 2);
+        assert!(buf.total_bytes <= 4096);
+        let chunk = buf.read_from("s1", 0, 4096);
+        assert_eq!(chunk.start_seq, 3000);
+        assert_eq!(chunk.next_seq, 6000);
+        assert_eq!(chunk.data.len(), 3000);
+    }
+
+    #[test]
+    fn test_oversized_chunk_keeps_only_recent_bytes() {
+        let mut buf = BoundedTerminalBuffer::new(4096);
+        let mut big = vec![b'a'; 5000];
+        big[4999] = b'z';
+
+        assert_eq!(buf.push(&big), (0, 5000));
+        assert_eq!(buf.total_bytes, 4096);
+
+        let chunk = buf.read_from("s1", 0, 5000);
+        assert_eq!(chunk.start_seq, 904);
+        assert_eq!(chunk.next_seq, 5000);
+        assert_eq!(chunk.data.len(), 4096);
+        assert!(chunk.data.ends_with('z'));
     }
 }
