@@ -378,12 +378,18 @@ pub async fn preload_model_with_profile(
     *state = ModelSlotState::Loading;
     drop(state);
 
-    let other_slots = runtime.other_model_slots(&cache_key);
-    for slot in other_slots {
-        let mut other = slot.state.lock().await;
-        if matches!(*other, ModelSlotState::Loaded { .. }) {
-            tracing::info!("Evicting previous model to free memory for {clean_model}");
-            *other = ModelSlotState::Empty;
+    let force_single_model = std::env::var("CUSTOS_SINGLE_MODEL_LOCAL")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+
+    if force_single_model {
+        let other_slots = runtime.other_model_slots(&cache_key);
+        for slot in other_slots {
+            let mut other = slot.state.lock().await;
+            if matches!(*other, ModelSlotState::Loaded { .. }) {
+                tracing::info!("Evicting previous model to free memory for {clean_model} (single-model mode)");
+                *other = ModelSlotState::Empty;
+            }
         }
     }
 
@@ -1152,12 +1158,18 @@ impl Provider for LocalInferenceProvider {
                             return;
                         }
 
-                        let other_model_slots = runtime.other_model_slots(&cache_key);
-                        for slot in other_model_slots {
-                            let mut other = slot.state.lock().await;
-                            if matches!(*other, ModelSlotState::Loaded { .. }) {
-                                tracing::info!("Unloading previous model to free memory");
-                                *other = ModelSlotState::Empty;
+                        let force_single_model = std::env::var("CUSTOS_SINGLE_MODEL_LOCAL")
+                            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                            .unwrap_or(false);
+
+                        if force_single_model {
+                            let other_model_slots = runtime.other_model_slots(&cache_key);
+                            for slot in other_model_slots {
+                                let mut other = slot.state.lock().await;
+                                if matches!(*other, ModelSlotState::Loaded { .. }) {
+                                    tracing::info!("Unloading previous model to free memory (single-model mode)");
+                                    *other = ModelSlotState::Empty;
+                                }
                             }
                         }
 

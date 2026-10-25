@@ -71,6 +71,21 @@ pub fn is_localhost_request(host: Option<&str>, origin: Option<&str>) -> bool {
     true
 }
 
+/// Identifies tool patterns that perform destructive or high-risk actions requiring explicit grants
+pub fn is_dangerous_tool_pattern(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    lower.contains("delete")
+        || lower.contains("remove")
+        || lower.contains("drop")
+        || lower.contains("execute")
+        || lower.contains("bash")
+        || lower.contains("shell")
+        || lower.contains("system")
+        || lower.contains("kill")
+        || lower.contains("eval")
+        || lower.contains("format")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

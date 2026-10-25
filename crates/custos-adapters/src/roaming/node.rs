@@ -1,5 +1,5 @@
 //! The roaming node: owns the iroh [`Endpoint`] and [`Router`], hosts agents
-//! over the `goose-acp/1` ALPN, and dials remote agents as a client.
+//! over the `custos-acp/1` ALPN, and dials remote agents as a client.
 
 use std::sync::Arc;
 
@@ -36,7 +36,7 @@ const HANDSHAKE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10
 const DEFAULT_REVOCATION_POLL: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// Serves an accepted, authorized ACP byte stream. Implemented by the
-/// integration layer (e.g. `goose-cli`) so this crate does not depend on the
+/// integration layer (e.g. `custos-cli` / daemon) so this crate does not depend on the
 /// concrete agent/session machinery.
 pub trait AcpStreamServer: Send + Sync + 'static {
     /// Drive the ACP protocol to completion over the given stream for the

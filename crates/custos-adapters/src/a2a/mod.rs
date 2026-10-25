@@ -94,7 +94,18 @@ pub struct A2aJsonRpcError {
     pub data: Option<Value>,
 }
 
-/// Task Payload exchanged in A2A task interactions
+/// Resource & cost bounds for an A2A task delegation under SADE Packet R3
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct A2aDelegationBudget {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_seconds: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_iterations: Option<u32>,
+}
+
+/// Task Payload exchanged in A2A task interactions under SADE supervision
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct A2aTaskPayload {
     pub task_id: String,
@@ -103,6 +114,16 @@ pub struct A2aTaskPayload {
     pub state: A2aTaskState,
     #[serde(default)]
     pub artifacts: Vec<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_task_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parent_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub budget: Option<A2aDelegationBudget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
 }
 
 /// Helpers for Agent Card path stripping and anchoring
@@ -110,6 +131,121 @@ pub fn strip_agent_card_suffix(path: &str) -> &str {
     let path = path.strip_suffix("/.well-known/agent.json").unwrap_or(path);
     path.strip_suffix("/.well-known/agent-card.json")
         .unwrap_or(path)
+}
+
+/// Lightweight A2A Client for sending task delegations and cancellations
+pub struct A2aClient {
+    http_client: reqwest::Client,
+    default_timeout: std::time::Duration,
+}
+
+impl Default for A2aClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl A2aClient {
+    pub fn new() -> Self {
+        Self {
+            http_client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .unwrap_or_default(),
+            default_timeout: std::time::Duration::from_secs(30),
+        }
+    }
+
+    pub fn with_timeout(mut self, timeout: std::time::Duration) -> Self {
+        self.default_timeout = timeout;
+        self
+    }
+
+    /// Delegate a task to a peer A2A agent under SADE supervision
+    pub async fn delegate_task(
+        &self,
+        endpoint: &str,
+        task: &A2aTaskPayload,
+        auth_header: Option<&str>,
+    ) -> Result<A2aTaskPayload, custos_domain::DomainError> {
+        let req_body = A2aJsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: serde_json::json!(custos_domain::new_id("a2a_req")),
+            method: "tasks/send".to_string(),
+            params: serde_json::to_value(task).unwrap_or_default(),
+        };
+
+        let mut req = self.http_client.post(endpoint).json(&req_body);
+        if let Some(token) = auth_header {
+            req = req.header("Authorization", token);
+        }
+
+        let resp = req.send().await.map_err(|e| {
+            custos_domain::DomainError::Validation(format!("A2A request to '{endpoint}' failed: {e}"))
+        })?;
+
+        if !resp.status().is_success() {
+            return Err(custos_domain::DomainError::Validation(format!(
+                "A2A peer returned HTTP {}",
+                resp.status()
+            )));
+        }
+
+        let rpc_resp: A2aJsonRpcResponse = resp.json().await.map_err(|e| {
+            custos_domain::DomainError::Validation(format!("Failed to parse A2A JSON-RPC response: {e}"))
+        })?;
+
+        if let Some(err) = rpc_resp.error {
+            return Err(custos_domain::DomainError::Validation(format!(
+                "A2A delegation error (code {}): {}",
+                err.code, err.message
+            )));
+        }
+
+        let result_val = rpc_resp.result.unwrap_or_default();
+        let payload: A2aTaskPayload = serde_json::from_value(result_val).map_err(|e| {
+            custos_domain::DomainError::Validation(format!("Invalid A2A payload returned: {e}"))
+        })?;
+
+        Ok(payload)
+    }
+
+    /// Send a cancellation signal to an active A2A task delegation (Generation fencing)
+    pub async fn cancel_task(
+        &self,
+        endpoint: &str,
+        task_id: &str,
+        reason: &str,
+        auth_header: Option<&str>,
+    ) -> Result<(), custos_domain::DomainError> {
+        let req_body = A2aJsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: serde_json::json!(custos_domain::new_id("a2a_cancel")),
+            method: "tasks/cancel".to_string(),
+            params: serde_json::json!({
+                "taskId": task_id,
+                "reason": reason
+            }),
+        };
+
+        let mut req = self.http_client.post(endpoint).json(&req_body);
+        if let Some(token) = auth_header {
+            req = req.header("Authorization", token);
+        }
+
+        let resp = req.send().await.map_err(|e| {
+            custos_domain::DomainError::Validation(format!("A2A cancel request failed: {e}"))
+        })?;
+
+        if !resp.status().is_success() {
+            return Err(custos_domain::DomainError::Validation(format!(
+                "A2A peer returned HTTP {} on cancel",
+                resp.status()
+            )));
+        }
+
+        Ok(())
+    }
 }
 
 /// Dispatcher for standard A2A JSON-RPC methods

@@ -5,12 +5,17 @@
 //! - Persistent Memory: Project & global memory management under `.custos/memory`
 //! - Document Processing: Word (.docx), PDF (.pdf), Excel (.xlsx)
 
-#[cfg(feature = "autovisualiser")]
+pub mod checkpoint;
+pub mod source_fetch;
+
+pub use source_fetch::*;
+
+#[cfg(all(feature = "mcp-builtins", feature = "autovisualiser"))]
 pub mod visualizer {
-    pub use crate::mcp::core::autovisualiser::*;
+    pub use crate::mcp::builtins::autovisualiser::*;
 }
 
-#[cfg(feature = "memory-server")]
+#[cfg(all(feature = "mcp-builtins", feature = "memory-server"))]
 pub mod memory {
-    pub use crate::mcp::core::MemoryServer;
+    pub use crate::mcp::builtins::MemoryServer;
 }

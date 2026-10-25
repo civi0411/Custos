@@ -177,7 +177,7 @@ impl OAuthPkceManager {
             parsed_url
                 .query_pairs_mut()
                 .append_pair("access_type", "offline")
-                .append_pair("prompt", "consent");
+                .append_pair("prompt", "select_account consent");
         }
 
         Ok(OAuthAuthorizeUrlResult {
@@ -551,17 +551,19 @@ mod tests {
 
 /// Provider-specific OAuth defaults; absent configuration never uses another issuer.
 pub fn oauth_settings(service: &str) -> Result<(String, String, String, String), DomainError> {
+    let service = service.split('-').next().unwrap_or(service);
     match service {
         "openai" | "codex" => Ok((DEFAULT_OPENAI_AUTH_URL.into(), DEFAULT_OPENAI_TOKEN_URL.into(), resolve_openai_client_id(), resolve_openai_scope())),
         "anthropic" => Ok(("https://claude.ai/oauth/authorize".into(), "https://api.anthropic.com/v1/oauth/token".into(), std::env::var("CLAUDE_OAUTH_CLIENT_ID").unwrap_or_else(|_| "9d1c250a-e61b-44d9-88ed-5944d1962f5e".into()), "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers".into())),
-        "gemini" => Ok(("https://accounts.google.com/o/oauth2/v2/auth".into(), "https://oauth2.googleapis.com/token".into(), google_oauth_client("gemini")?.0, "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile".into())),
-        "antigravity" => Ok(("https://accounts.google.com/o/oauth2/v2/auth".into(), "https://oauth2.googleapis.com/token".into(), google_oauth_client("antigravity")?.0, "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/cclog https://www.googleapis.com/auth/experimentsandconfigs".into())),
+        "gemini" => Ok(("https://accounts.google.com/o/oauth2/v2/auth".into(), "https://oauth2.googleapis.com/token".into(), google_oauth_client("gemini")?.0, "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/cclog https://www.googleapis.com/auth/experimentsandconfigs".into())),
+        "google" | "antigravity" => Ok(("https://accounts.google.com/o/oauth2/v2/auth".into(), "https://oauth2.googleapis.com/token".into(), google_oauth_client("antigravity")?.0, "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/cclog https://www.googleapis.com/auth/experimentsandconfigs".into())),
         _ => Err(DomainError::Validation(format!("OAuth for {service} requires a verified client and inference configuration; this provider is not configured"))),
     }
 }
 
 // ID tokens supply display claims for Codex; network identity APIs require access tokens.
 fn identity_token<'a>(service: &str, access_token: &'a str, id_token: Option<&'a str>) -> &'a str {
+    let service = service.split('-').next().unwrap_or(service);
     if matches!(service, "openai" | "codex") {
         id_token.unwrap_or(access_token)
     } else {
@@ -570,6 +572,7 @@ fn identity_token<'a>(service: &str, access_token: &'a str, id_token: Option<&'a
 }
 
 pub async fn oauth_identity(service: &str, token: &str) -> Result<Option<String>, DomainError> {
+    let service = service.split('-').next().unwrap_or(service);
     let endpoint = if service == "anthropic" {
         "https://api.anthropic.com/api/claude_cli/bootstrap"
     } else {
@@ -583,7 +586,8 @@ async fn oauth_identity_at(
     token: &str,
     endpoint: &str,
 ) -> Result<Option<String>, DomainError> {
-    if matches!(service, "antigravity" | "gemini" | "anthropic") {
+    let service = service.split('-').next().unwrap_or(service);
+    if matches!(service, "google" | "antigravity" | "gemini" | "anthropic") {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(15))
             .build()
@@ -889,7 +893,7 @@ fn public_google_oauth_defaults(service: &str) -> Result<(String, String), Domai
     ];
     let (id, secret) = match service {
         "gemini" => (GEMINI_ID, GEMINI_ALT),
-        "antigravity" => (ANTIGRAVITY_ID, ANTIGRAVITY_ALT),
+        "google" | "antigravity" => (ANTIGRAVITY_ID, ANTIGRAVITY_ALT),
         _ => {
             return Err(DomainError::Validation(
                 "Unsupported public Google OAuth client".into(),

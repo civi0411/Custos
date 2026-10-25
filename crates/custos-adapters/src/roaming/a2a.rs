@@ -5,7 +5,10 @@
 
 use crate::roaming::directory::{Directory, PeerEntry};
 use crate::roaming::error::RoamingError;
+use crate::roaming::frame::{read_frame, write_frame};
+use crate::roaming::node::RoamingNode;
 use crate::roaming::trust::TrustBook;
+use iroh::{EndpointAddr, EndpointId};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -44,6 +47,7 @@ pub struct A2ADelegationResult {
 pub struct SystemOneA2ARouter {
     directory: Directory,
     trust_book: Arc<RwLock<TrustBook>>,
+    node: Option<Arc<RoamingNode>>,
 }
 
 impl SystemOneA2ARouter {
@@ -51,7 +55,14 @@ impl SystemOneA2ARouter {
         Self {
             directory,
             trust_book,
+            node: None,
         }
+    }
+
+    /// Wire an active Iroh RoamingNode to enable live QUIC peer delegation.
+    pub fn with_node(mut self, node: Arc<RoamingNode>) -> Self {
+        self.node = Some(node);
+        self
     }
 
     /// List active, trusted peer candidates
@@ -92,7 +103,29 @@ impl SystemOneA2ARouter {
             }
         };
 
-        // Simulated immediate dispatch / RPC handshake for fast System One A2A
+        // If a live Iroh node is wired, establish a QUIC bi-stream to the peer
+        if let Some(ref node) = self.node {
+            if let Ok(endpoint_id) = peer.endpoint_id.parse::<EndpointId>() {
+                let addr = EndpointAddr::from(endpoint_id);
+                let mut stream = node.connect_with_addr(addr, Some(req.task.clone())).await?;
+
+                let payload = serde_json::to_vec(&req)
+                    .map_err(|e| RoamingError::Transport(format!("serialize delegation request: {e}")))?;
+                write_frame(&mut stream.send, &payload).await?;
+
+                let resp_bytes = read_frame(&mut stream.recv).await?;
+                let remote_res: A2ADelegationResult = serde_json::from_slice(&resp_bytes)
+                    .unwrap_or_else(|_| A2ADelegationResult {
+                        delegation_id: req.delegation_id.clone(),
+                        peer_endpoint_id: peer.endpoint_id.clone(),
+                        status: A2ADelegationStatus::Completed,
+                        response: Some(String::from_utf8_lossy(&resp_bytes).to_string()),
+                    });
+                return Ok(remote_res);
+            }
+        }
+
+        // Local or offline test dispatch
         Ok(A2ADelegationResult {
             delegation_id: req.delegation_id,
             peer_endpoint_id: peer.endpoint_id.clone(),
