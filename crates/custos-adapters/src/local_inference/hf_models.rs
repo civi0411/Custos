@@ -1,3 +1,6 @@
+#[cfg(not(feature = "hf-hub-vendored"))]
+compile_error!("Feature `local-inference-hf` is unsupported in offline mode (requires external `hf_hub`). See docs/development/optional-features-status.md");
+
 use anyhow::{bail, Result};
 use futures::StreamExt;
 use hf_hub::progress::{DownloadEvent, FileStatus, ProgressEvent, ProgressHandler};

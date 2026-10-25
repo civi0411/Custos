@@ -84,7 +84,7 @@ fn mlx_file_error(error: impl std::fmt::Display) -> ProviderError {
     ProviderError::ExecutionError(format!("MLX model validation failed: {error}"))
 }
 
-#[cfg(all(feature = "mlx", target_os = "macos"))]
+#[cfg(all(feature = "safemlx", target_os = "macos"))]
 mod imp {
     use std::any::Any;
     use std::path::{Path, PathBuf};
@@ -1093,7 +1093,7 @@ mod imp {
     }
 }
 
-#[cfg(not(all(feature = "mlx", target_os = "macos")))]
+#[cfg(not(all(feature = "safemlx", target_os = "macos")))]
 mod imp {
     use std::path::Path;
 

@@ -473,4 +473,78 @@ mod tests {
         assert!(!result.success);
         assert!(result.stderr.contains("cancelled"));
     }
+
+    #[test]
+    fn test_claude_and_codex_event_shape_parity() {
+        let codex_captured = Arc::new(Observer::default());
+        let codex_observer: Arc<dyn RunObserver> = codex_captured.clone();
+        let mut parts = HashMap::new();
+        let mut codex_answer = String::new();
+        for value in [
+            serde_json::json!({"type":"item.started","item":{"type":"reasoning"}}),
+            serde_json::json!({"type":"item.started","item":{"type":"command_execution","id":"c1","command":"ls"}}),
+            serde_json::json!({"type":"item.completed","item":{"type":"command_execution","id":"c1","command":"ls","aggregated_output":"file.rs"}}),
+            serde_json::json!({"type":"item.completed","item":{"type":"agent_message","id":"m1","text":"Done"}}),
+            serde_json::json!({"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":5}}),
+        ] {
+            normalize(&value, "codex", &codex_observer, &mut parts, &mut codex_answer);
+        }
+
+        let claude_captured = Arc::new(Observer::default());
+        let claude_observer: Arc<dyn RunObserver> = claude_captured.clone();
+        let mut claude_parts = HashMap::new();
+        let mut claude_answer = String::new();
+        for value in [
+            serde_json::json!({"event":{"type":"content_block_delta","delta":{"type":"thinking_delta"}}}),
+            serde_json::json!({"event":{"type":"content_block_start","content_block":{"type":"tool_use","name":"bash","input":{}}}}),
+            serde_json::json!({"type":"user","message":{"content":[{"type":"tool_result","content":"file.rs"}]}}),
+            serde_json::json!({"event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"Done"}}}),
+            serde_json::json!({"type":"result","usage":{"input_tokens":10,"output_tokens":5}}),
+        ] {
+            normalize(&value, "claude-code", &claude_observer, &mut claude_parts, &mut claude_answer);
+        }
+
+        assert_eq!(codex_answer, "Done");
+        assert_eq!(claude_answer, "Done");
+
+        let codex_kinds: Vec<String> = codex_captured.events.lock().unwrap().iter().map(|(k, _)| k.clone()).collect();
+        let claude_kinds: Vec<String> = claude_captured.events.lock().unwrap().iter().map(|(k, _)| k.clone()).collect();
+
+        assert!(codex_kinds.contains(&"status".to_string()));
+        assert!(claude_kinds.contains(&"status".to_string()));
+        assert!(codex_kinds.contains(&"tool_input".to_string()));
+        assert!(claude_kinds.contains(&"tool_input".to_string()));
+        assert!(codex_kinds.contains(&"tool_output".to_string()));
+        assert!(claude_kinds.contains(&"tool_output".to_string()));
+        assert!(codex_kinds.contains(&"usage".to_string()));
+        assert!(claude_kinds.contains(&"usage".to_string()));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn test_unix_cancel_stops_process_and_no_events_after_ack() {
+        let observer = Arc::new(Observer::default());
+        let mut command = Command::new("sh");
+        command.args(["-c", "while true; do echo '{\"type\":\"item.updated\",\"item\":{\"type\":\"agent_message\",\"id\":\"a\",\"text\":\"tick\"}}'; sleep 0.05; done"]);
+
+        let cancel = observer.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            cancel.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        });
+
+        let result = tokio::time::timeout(
+            Duration::from_secs(3),
+            run_observed_process(command, observer.clone(), "codex", Duration::from_secs(10)),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+        assert!(!result.success);
+        let count_at_cancel = observer.events.lock().unwrap().len();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let count_after_wait = observer.events.lock().unwrap().len();
+        assert_eq!(count_at_cancel, count_after_wait, "No events must be emitted after cancellation");
+    }
 }

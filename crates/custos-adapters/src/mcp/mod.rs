@@ -1,9 +1,11 @@
 pub mod adapters;
-pub mod core;
+#[cfg(feature = "mcp-builtins")]
+pub mod builtins;
 pub mod federation;
 pub mod security;
 
 pub use adapters::*;
-pub use core::*;
+#[cfg(feature = "mcp-builtins")]
+pub use builtins::*;
 pub use federation::*;
 pub use security::*;

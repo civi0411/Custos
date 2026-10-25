@@ -209,7 +209,7 @@ impl AgentRuntimePort for GenericCliHarnessAdapter {
                 stdout: format!("Custos Governed Runtime dispatched: {instruction}"),
                 stderr: String::new(),
                 observed_effects: vec![],
-                mediation_level: ToolMediationLevel::CustosMediated,
+                mediation_level: self.mediation_level,
             });
         }
 

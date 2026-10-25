@@ -1,7 +1,7 @@
-//! Peer-to-peer roaming transport for goose agents.
+//! Peer-to-peer roaming transport for Custos agents.
 //!
-//! This crate lets a goose agent expose itself over the internet via
-//! [iroh](https://iroh.computer) so that a remote ACP client (another goose, or
+//! This module lets a Custos agent expose itself over the internet via
+//! [iroh](https://iroh.computer) so that a remote ACP/A2A client (another Custos node, or
 //! any other ACP client) can connect to and drive it through a
 //! relay, with no open ports.
 //!
@@ -14,14 +14,13 @@
 //!   verification). It never expires and grants nothing on its own.
 //! * [`TrustBook`] — the local, mutual allowlist: which peer keys this node
 //!   accepts, plus revocations. Access exists only by accepting a key; there is
-//!   no bearer token. An accepted peer gets goose's full ACP surface.
+//!   no bearer token. An accepted peer gets Custos's full ACP/A2A surface.
 //! * [`RoamingNode`] — owns the iroh endpoint + router, hosts agents over the
-//!   `goose-acp/1` ALPN, and dials remote agents.
+//!   `custos-acp/1` ALPN, and dials remote agents.
 //!
-//! The crate deliberately knows nothing about goose's agent internals: hosting
+//! The module deliberately knows nothing about concrete agent internals: hosting
 //! is driven through the [`AcpStreamServer`] trait, which the integration layer
-//! implements by calling goose's generic `acp::server::serve`. This keeps the
-//! heavy iroh dependency out of the `goose` core crate entirely.
+//! implements. This keeps the heavy iroh dependency modularized.
 
 pub mod a2a;
 mod card;

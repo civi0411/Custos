@@ -8,16 +8,23 @@ repository.workspace = true
 description = "Custos Adapters: Model Providers, MCP, Sandboxes, Local Inference"
 
 [features]
-default = ["rustls-tls"]
+default = ["rustls-tls", "local-inference-native"]
 rustls-tls = ["reqwest/rustls"]
 native-tls = ["reqwest/native-tls"]
 live-websocket = []
 autovisualiser = []
-computer-controller = []
 memory-server = []
-tutorial-server = []
 mlx = []
 hf-hub = []
+roaming = ["dep:iroh", "dep:iroh-relay"]
+# Local native inference via llama-cpp is a core adapter capability.
+# llama-cpp-2 and llama-cpp-sys-2 are mandatory dependencies for native local model execution.
+local-inference-native = []
+local-inference-hf = ["hf-hub"]
+local-inference-mlx = ["mlx"]
+safemlx = []
+hf-hub-vendored = []
+mcp-builtins = ["autovisualiser", "memory-server"]
 
 [dependencies]
 custos-domain = { workspace = true }
@@ -57,14 +64,15 @@ encoding_rs = "0.8"
 sha2 = { workspace = true }
 minijinja = "2.7"
 fs2 = { workspace = true }
-iroh = { workspace = true, features = ["tls-aws-lc-rs"] }
-iroh-relay = { workspace = true }
+iroh = { workspace = true, features = ["tls-aws-lc-rs"], optional = true }
+iroh-relay = { workspace = true, optional = true }
 llama-cpp-2 = { workspace = true }
 llama-cpp-sys-2 = { workspace = true }
 etcetera = { workspace = true }
 include_dir = { workspace = true }
 once_cell = { workspace = true }
 pulldown-cmark = "0.12"
+libc = { workspace = true }
 
 [dev-dependencies]
 test-case = { workspace = true }
