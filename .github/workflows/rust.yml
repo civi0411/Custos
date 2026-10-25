@@ -54,5 +54,8 @@ jobs:
       - name: Run Core Tests (Blocking)
         run: cargo test -p custos-domain -p custos-core -p custos-persistence -p custos-runtime -p custos-daemon -p custos-sdk -p custos-packs --lib
 
+      - name: Build Daemon Binary for E2E Tests
+        run: cargo build -p custos-daemon --bin custos-daemon
+
       - name: Run Workspace Integration Tests
         run: cargo test --workspace --all-targets
