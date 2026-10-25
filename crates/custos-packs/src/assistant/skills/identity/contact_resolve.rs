@@ -111,6 +111,7 @@ mod tests {
             worker_run_id: "r1".into(),
             provider_id: "test".into(),
             pack_id: Some("assistant".into()),
+            scope_root: None,
         };
 
         let output = skill.run(&ctx).await.unwrap();
@@ -126,6 +127,7 @@ mod tests {
             worker_run_id: "r1".into(),
             provider_id: "test".into(),
             pack_id: Some("assistant".into()),
+            scope_root: None,
         };
 
         let err = skill.run(&ctx).await.unwrap_err();

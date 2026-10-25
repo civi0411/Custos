@@ -16,19 +16,29 @@
 //! NOTE: module is `contracts`, not `ports`, because `kernel::ports` is glob re-exported
 //! at the crate root and a top-level `ports` module would shadow `crate::ports::TaskStore`.
 
-pub mod harness;
+pub mod checkpoint_store;
+pub mod compute;
 pub mod credentials;
+pub mod experiment;
+pub mod harness;
 pub mod judgment;
 pub mod kernel;
 pub mod memory;
+pub mod notebook;
 pub mod oi;
 pub mod sandbox;
+pub mod source_acquisition;
 pub mod storage;
 pub mod terminal;
 pub mod workflow;
 pub mod workspace;
 pub mod workspace_files;
 
+pub use checkpoint_store::{BlobMetadata, CheckpointStorePort, PromotionOutcome, StoreCapabilities};
+pub use compute::{CloudPodRequest, ComputePort, ComputeTelemetry};
+pub use experiment::{
+    AttemptObservation, ExecutionTargetPort, PreflightReport, TargetCapabilities,
+};
 pub use harness::{
     AgentRuntimePort, CostVisibility, HarnessExecutionResult, HarnessProfile, ToolMediationLevel,
     WorktreeOwnership,
@@ -36,13 +46,16 @@ pub use harness::{
 pub use judgment::{JudgmentPort, JudgmentRequest, JudgmentResult};
 pub use kernel::{KernelPort, TrustedKernel};
 pub use memory::MemoryPort;
+pub use notebook::{NotebookDriverPort, NotebookWorkerResponse, NotebookWorkerSession};
 pub use oi::OiPlannerPort;
 pub use sandbox::{SandboxCommand, SandboxPort};
+pub use source_acquisition::SourceAcquisitionPort;
 pub use storage::{
-    CasPort, DecisionPort, EffectLedgerPort, OutboxEntry, OutboxPort, OutboxStatus, ReplanPort,
+    AssistantDraftPort, CasPort, CommandAdmission, CommandLedgerEntry, CommandLedgerPort, DecisionPort,
+    EffectLedgerPort, NotebookStoragePort, OutboxEntry, OutboxPort, OutboxStatus, ReplanPort,
     RunPort, StoragePort, WorkflowRevisionPort,
 };
-pub use terminal::TerminalPort;
+pub use terminal::{TerminalDriverPort, TerminalOutputConsumer, TerminalPort, TerminalProcessHandle};
 pub use workflow::WorkflowPort;
-pub use workspace::{WorkspaceProvider, WorkspaceRepository};
+pub use workspace::{RepositoryGitPort, WorkspaceProvider, WorkspaceRepository};
 pub use workspace_files::WorkspaceFilesPort;

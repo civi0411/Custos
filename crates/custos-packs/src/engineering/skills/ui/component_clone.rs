@@ -165,6 +165,7 @@ mod tests {
             worker_run_id: "r1".into(),
             provider_id: "test".into(),
             pack_id: Some("engineering".into()),
+            scope_root: None,
         };
         let res = skill.run(&ctx).await;
         assert!(res.is_err());
@@ -183,6 +184,7 @@ mod tests {
             worker_run_id: "r1".into(),
             provider_id: "test".into(),
             pack_id: Some("engineering".into()),
+            scope_root: None,
         };
         let res = skill.run(&ctx).await.expect("run succeeds");
         assert_eq!(res.skill_id, "component_clone");

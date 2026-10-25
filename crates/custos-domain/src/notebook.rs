@@ -5,23 +5,25 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum NotebookCellType {
+    #[default]
     Code,
     Markdown,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum CellExecutionStatus {
+    #[default]
     Idle,
     Running,
     Success,
     Error,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct NotebookCell {
     pub id: String,
     pub session_id: String,
@@ -36,17 +38,22 @@ pub struct NotebookCell {
     pub wall_ms: Option<u64>,
     pub epoch: u32,
     pub updated_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notebook_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cell_version: Option<u32>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum KernelStatus {
+    #[default]
     Idle,
     Busy,
     Interrupted,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct NotebookKernelState {
     pub session_id: String,
     pub epoch: u32,
@@ -55,9 +62,13 @@ pub struct NotebookKernelState {
     pub execution_counter: u32,
     pub created_at: i64,
     pub updated_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notebook_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kernel_id: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ExecuteCellParams {
     pub session_id: String,
     pub cell_id: String,
@@ -66,9 +77,17 @@ pub struct ExecuteCellParams {
     pub cwd: Option<String>,
     #[serde(default)]
     pub task_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notebook_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kernel_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cell_version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_request_id: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ExecuteCellResult {
     pub cell_id: String,
     pub execution_count: u32,
@@ -80,6 +99,14 @@ pub struct ExecuteCellResult {
     pub epoch: u32,
     #[serde(default)]
     pub execution_record_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notebook_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kernel_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cell_version: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_request_id: Option<String>,
 }
 
 #[cfg(test)]
@@ -102,6 +129,8 @@ mod tests {
             wall_ms: Some(15),
             epoch: 1,
             updated_at: 1700000000,
+            notebook_id: None,
+            cell_version: None,
         };
 
         let json = serde_json::to_string(&cell).expect("serialize");

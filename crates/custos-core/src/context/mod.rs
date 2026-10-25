@@ -22,9 +22,12 @@ pub use dedup::HashDeduplicator;
 pub use redaction::SecretRedactor;
 pub use structural::StructuralExtractor;
 
+use crate::contracts::workspace_files::WorkspaceFilesPort;
 use crate::sandbox::PathSandbox;
-use custos_domain::{digest, new_id, ContextItem, ContextPack, DomainError};
+use custos_domain::{digest, new_id, ContextItem, ContextPack, DomainError, ExecutionWorkspace};
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// Request configuration for compiling a context pack
 #[derive(Debug, Clone)]
@@ -38,28 +41,65 @@ pub struct CompileContextRequest {
 
 pub struct ContextCompiler {
     sandbox: PathSandbox,
+    workspace: Option<ExecutionWorkspace>,
+    files_port: Option<Arc<dyn WorkspaceFilesPort>>,
+    memory_files: HashMap<String, String>,
 }
 
 impl ContextCompiler {
     pub fn new(workspace_root: impl Into<PathBuf>) -> Result<Self, DomainError> {
         let sandbox = PathSandbox::new(workspace_root)?;
-        Ok(Self { sandbox })
+        Ok(Self {
+            sandbox,
+            workspace: None,
+            files_port: None,
+            memory_files: HashMap::new(),
+        })
     }
 
     pub fn with_sandbox(sandbox: PathSandbox) -> Self {
-        Self { sandbox }
+        Self {
+            sandbox,
+            workspace: None,
+            files_port: None,
+            memory_files: HashMap::new(),
+        }
+    }
+
+    pub fn with_files_port(
+        sandbox: PathSandbox,
+        workspace: ExecutionWorkspace,
+        files_port: Arc<dyn WorkspaceFilesPort>,
+    ) -> Self {
+        Self {
+            sandbox,
+            workspace: Some(workspace),
+            files_port: Some(files_port),
+            memory_files: HashMap::new(),
+        }
+    }
+
+    pub fn with_memory_files(
+        workspace_root: impl Into<PathBuf>,
+        files: HashMap<String, String>,
+    ) -> Result<Self, DomainError> {
+        let sandbox = PathSandbox::new(workspace_root)?;
+        Ok(Self {
+            sandbox,
+            workspace: None,
+            files_port: None,
+            memory_files: files,
+        })
     }
 
     /// Compiles raw candidate files into a sealed, redacted, compact ContextPack.
-    pub fn compile(&self, req: &CompileContextRequest) -> Result<ContextPack, DomainError> {
+    pub async fn compile(&self, req: &CompileContextRequest) -> Result<ContextPack, DomainError> {
         // Step 1: Scope Resolution (Chặn đứng Path Traversal)
-        let mut resolved_paths = Vec::new();
+        let mut valid_rel_paths = Vec::new();
         for rel_path in &req.candidate_files {
             match self.sandbox.resolve_and_contain(rel_path) {
-                Ok(path) => {
-                    if path.exists() && path.is_file() {
-                        resolved_paths.push((rel_path.clone(), path));
-                    }
+                Ok(_resolved_abs) => {
+                    valid_rel_paths.push(rel_path.clone());
                 }
                 Err(err) => {
                     tracing::warn!(
@@ -74,16 +114,22 @@ impl ContextCompiler {
 
         // Step 2 & 3: Structural Extraction & Anchor Retrieval
         let mut raw_items = Vec::new();
-        for (rel_path, abs_path) in resolved_paths {
-            let raw_content = match std::fs::read_to_string(&abs_path) {
-                Ok(c) => c,
-                Err(_) => continue,
+        for rel_path in valid_rel_paths {
+            let raw_content = if let (Some(port), Some(ws)) = (&self.files_port, &self.workspace) {
+                match port.read_file(ws, &rel_path, None).await {
+                    Ok(file_content) => file_content.content,
+                    Err(_) => continue,
+                }
+            } else if let Some(content) = self.memory_files.get(&rel_path) {
+                content.clone()
+            } else {
+                continue;
             };
 
-            // Step 2: Structural outline extraction (lược trích chữ ký, kiểu, docstrings nếu tệp lớn)
+            // Step 2: Structural outline extraction
             let structural_content = StructuralExtractor::extract_outline(&raw_content, &rel_path);
 
-            // Step 3: Anchor retrieval (trích xuất lát cắt quanh các anchor liên quan mục tiêu tác vụ)
+            // Step 3: Anchor retrieval
             let focused_content =
                 AnchorRetriever::retrieve_anchors(&structural_content, &req.task_goal, 4);
 
@@ -148,52 +194,160 @@ impl ContextCompiler {
     }
 
     fn calculate_relevance(content: &str, goal: &str) -> f32 {
-        if goal.trim().is_empty() {
-            return 1.0;
-        }
+        let goal_keywords: Vec<&str> = goal
+            .split_whitespace()
+            .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()))
+            .filter(|w| !w.is_empty())
+            .collect();
 
-        let goal_words: Vec<&str> = goal.split_whitespace().collect();
-        if goal_words.is_empty() {
-            return 1.0;
+        if goal_keywords.is_empty() {
+            return 0.5;
         }
 
         let mut matches = 0;
         let content_lower = content.to_lowercase();
-        for word in &goal_words {
-            let clean_word = word
-                .trim_matches(|c: char| !c.is_alphanumeric())
-                .to_lowercase();
-            if !clean_word.is_empty() && content_lower.contains(&clean_word) {
+        for kw in &goal_keywords {
+            if content_lower.contains(&kw.to_lowercase()) {
                 matches += 1;
             }
         }
 
-        0.5 + 0.5 * (matches as f32 / goal_words.len() as f32)
+        (matches as f32) / (goal_keywords.len() as f32)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use custos_domain::{
+        WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff, WorkspaceFileTree,
+        WorkspaceId, WorkspaceKind, WriteWorkspaceFileParams,
+    };
 
-    #[test]
-    fn test_context_compiler_full_pipeline() {
-        let temp_dir = std::env::temp_dir().join(format!("custos_ctx_test_{}", new_id("test")));
-        std::fs::create_dir_all(&temp_dir).unwrap();
+    struct MockWorkspaceFilesPort {
+        files: HashMap<String, String>,
+    }
 
-        let file1 = temp_dir.join("main.rs");
-        let file2 = temp_dir.join("secret.rs");
-        let file3 = temp_dir.join("dup.rs");
+    #[async_trait]
+    impl WorkspaceFilesPort for MockWorkspaceFilesPort {
+        async fn get_file_tree(
+            &self,
+            _workspace: &ExecutionWorkspace,
+            _relative_dir: Option<&str>,
+            _max_depth: Option<usize>,
+        ) -> Result<WorkspaceFileTree, DomainError> {
+            unimplemented!()
+        }
 
-        std::fs::write(&file1, "fn main() {\n    println!(\"Target task\");\n}\n").unwrap();
-        std::fs::write(
-            &file2,
-            "// Config with secret\nconst KEY: &str = \"sk-ant-test1234567890abcdef1234567890\";\n",
-        )
-        .unwrap();
-        std::fs::write(&file3, "fn main() {\n    println!(\"Target task\");\n}\n").unwrap(); // Duplicate content of file1
+        async fn read_file(
+            &self,
+            workspace: &ExecutionWorkspace,
+            relative_path: &str,
+            _max_bytes: Option<usize>,
+        ) -> Result<WorkspaceFileContent, DomainError> {
+            if let Some(content) = self.files.get(relative_path) {
+                Ok(WorkspaceFileContent {
+                    workspace_id: workspace.id.clone(),
+                    path: relative_path.to_string(),
+                    content: content.clone(),
+                    is_binary: false,
+                    size_bytes: content.len(),
+                    truncated: false,
+                    line_count: content.lines().count(),
+                })
+            } else {
+                Err(DomainError::Validation(format!(
+                    "File not found: {relative_path}"
+                )))
+            }
+        }
 
-        let compiler = ContextCompiler::new(&temp_dir).unwrap();
+        async fn write_file(
+            &self,
+            _workspace: &ExecutionWorkspace,
+            _params: WriteWorkspaceFileParams,
+        ) -> Result<WorkspaceFileContent, DomainError> {
+            unimplemented!()
+        }
+
+        async fn get_diff(
+            &self,
+            _workspace: &ExecutionWorkspace,
+            _staged: Option<bool>,
+        ) -> Result<WorkspaceDiffSummary, DomainError> {
+            unimplemented!()
+        }
+
+        async fn get_file_diff(
+            &self,
+            _workspace: &ExecutionWorkspace,
+            _relative_path: &str,
+            _staged: Option<bool>,
+        ) -> Result<WorkspaceFileDiff, DomainError> {
+            unimplemented!()
+        }
+
+        async fn stage_file(
+            &self,
+            _workspace: &ExecutionWorkspace,
+            _relative_path: &str,
+        ) -> Result<(), DomainError> {
+            unimplemented!()
+        }
+
+        async fn unstage_file(
+            &self,
+            _workspace: &ExecutionWorkspace,
+            _relative_path: &str,
+        ) -> Result<(), DomainError> {
+            unimplemented!()
+        }
+
+        async fn discard_file(
+            &self,
+            _workspace: &ExecutionWorkspace,
+            _relative_path: &str,
+        ) -> Result<(), DomainError> {
+            unimplemented!()
+        }
+
+        async fn commit(
+            &self,
+            _workspace: &ExecutionWorkspace,
+            _message: &str,
+        ) -> Result<String, DomainError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_context_compiler_full_pipeline_with_mock_port() {
+        let mut files = HashMap::new();
+        files.insert(
+            "main.rs".into(),
+            "fn main() {\n    println!(\"Target task\");\n}\n".into(),
+        );
+        files.insert(
+            "secret.rs".into(),
+            "// Config with secret\nconst KEY: &str = \"sk-ant-test1234567890abcdef1234567890\";\n".into(),
+        );
+        files.insert(
+            "dup.rs".into(),
+            "fn main() {\n    println!(\"Target task\");\n}\n".into(),
+        );
+
+        let port = Arc::new(MockWorkspaceFilesPort { files });
+        let workspace = ExecutionWorkspace::new(
+            WorkspaceId("ws_test".to_string()),
+            "test-ws",
+            WorkspaceKind::Folder {
+                path: "/workspace".into(),
+            },
+            "/workspace",
+        );
+        let sandbox = PathSandbox::new("/workspace").unwrap();
+        let compiler = ContextCompiler::with_files_port(sandbox, workspace, port);
 
         let req = CompileContextRequest {
             task_id: "task_123".into(),
@@ -208,7 +362,7 @@ mod tests {
             untrusted_sources: vec!["secret.rs".into()],
         };
 
-        let pack = compiler.compile(&req).expect("Compilation must succeed");
+        let pack = compiler.compile(&req).await.expect("Compilation must succeed");
 
         // Step 1: Traversal is excluded
         assert!(!pack.items.iter().any(|it| it.source.contains("passwd")));
@@ -231,7 +385,5 @@ mod tests {
         // Step 8: Sealing & Digest present
         assert!(pack.context_digest.starts_with("sha256:"));
         assert_eq!(pack.context_digest.len(), 7 + 64);
-
-        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }

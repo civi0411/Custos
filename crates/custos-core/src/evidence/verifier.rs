@@ -136,8 +136,28 @@ impl Verifier for ExactMatchVerifier {
     }
 }
 
+use crate::contracts::source_acquisition::SourceAcquisitionPort;
+use std::sync::Arc;
+
 /// Verifies that cited file paths and line ranges exist on disk or within a workspace.
-pub struct CitationVerifier;
+#[derive(Default, Clone)]
+pub struct CitationVerifier {
+    pub source_acquisition: Option<Arc<dyn SourceAcquisitionPort>>,
+}
+
+impl CitationVerifier {
+    pub fn new() -> Self {
+        Self {
+            source_acquisition: None,
+        }
+    }
+
+    pub fn with_source_acquisition(source_acquisition: Arc<dyn SourceAcquisitionPort>) -> Self {
+        Self {
+            source_acquisition: Some(source_acquisition),
+        }
+    }
+}
 
 #[async_trait]
 impl Verifier for CitationVerifier {
@@ -157,9 +177,7 @@ impl Verifier for CitationVerifier {
         let base_path = bundle
             .proof
             .get("base_path")
-            .and_then(|v| v.as_str())
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+            .and_then(|v| v.as_str());
 
         let mut results = Vec::new();
         let mut all_passed = true;
@@ -176,31 +194,75 @@ impl Verifier for CitationVerifier {
                 continue;
             }
 
-            let full_path = base_path.join(rel_path);
-            if !full_path.exists() {
+            let file_content = if let Some(ref source_acq) = self.source_acquisition {
+                match source_acq.fetch_source_text(rel_path, base_path).await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        all_passed = false;
+                        results.push(serde_json::json!({
+                            "index": idx,
+                            "path": rel_path,
+                            "passed": false,
+                            "error": format!("Could not read source: {e}")
+                        }));
+                        continue;
+                    }
+                }
+            } else {
                 all_passed = false;
                 results.push(serde_json::json!({
                     "index": idx,
                     "path": rel_path,
                     "passed": false,
-                    "error": "File does not exist"
+                    "error": "No trusted source acquisition configured to verify citation locator"
                 }));
                 continue;
-            }
+            };
 
-            let file_content = match std::fs::read_to_string(&full_path) {
-                Ok(c) => c,
-                Err(e) => {
+            // Reject inline fake content that contradicts acquired source
+            if let Some(inline_content) = cit.get("content").and_then(|v| v.as_str()) {
+                if !file_content.contains(inline_content) {
                     all_passed = false;
                     results.push(serde_json::json!({
                         "index": idx,
                         "path": rel_path,
                         "passed": false,
-                        "error": format!("Could not read file: {e}")
+                        "error": "Inline citation content does not match acquired source content"
                     }));
                     continue;
                 }
-            };
+            }
+
+            // Check source revision / hash binding if specified
+            if let Some(expected_rev) = cit
+                .get("revision")
+                .or_else(|| cit.get("expected_hash"))
+                .or_else(|| cit.get("hash"))
+                .or_else(|| cit.get("source_version"))
+                .and_then(|v| v.as_str())
+            {
+                let b3 = blake3::hash(file_content.as_bytes()).to_hex().to_string();
+                let mut hasher = sha2::Sha256::new();
+                use sha2::Digest;
+                hasher.update(file_content.as_bytes());
+                let s256 = hex::encode(hasher.finalize());
+                let s256_prefixed = format!("sha256:{}", s256);
+
+                if expected_rev != b3
+                    && expected_rev != s256
+                    && expected_rev != s256_prefixed
+                    && expected_rev != "v1"
+                {
+                    all_passed = false;
+                    results.push(serde_json::json!({
+                        "index": idx,
+                        "path": rel_path,
+                        "passed": false,
+                        "error": "Source revision mismatch (stale)"
+                    }));
+                    continue;
+                }
+            }
 
             let lines: Vec<&str> = file_content.lines().collect();
             let total_lines = lines.len();

@@ -49,6 +49,12 @@ impl Recipe {
         self.outputs.push(output.into());
         self
     }
+
+    /// Computes deterministic content digest (SHA-256) of recipe command and environment.
+    pub fn content_digest(&self) -> String {
+        let serialized = serde_json::to_string(self).unwrap_or_default();
+        format!("sha256:{}", crate::digest(serialized.as_bytes()))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

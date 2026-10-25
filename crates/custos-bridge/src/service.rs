@@ -1,15 +1,17 @@
 use crate::port::{
-    AttachMode, BridgePort, ForkReceipt, RecallReceipt, SteerReceipt, TaskObservation,
+    AttachMode, BridgePort, ForkReceipt, RecallReceipt, SteerReceipt, SteerResult, TaskObservation,
 };
 use async_trait::async_trait;
 use custos_core::{CreateTask, TaskService};
 use custos_domain::{DomainError, SessionId, SessionStatus, Task, TaskContract, TaskId};
 use custos_runtime::session::SessionManager;
+use custos_runtime::workflow::TaskRuntime;
 use std::sync::Arc;
 
 pub struct BridgeService {
     session_manager: Arc<SessionManager>,
     task_service: Arc<TaskService>,
+    task_runtime: Option<Arc<TaskRuntime>>,
 }
 
 impl BridgeService {
@@ -17,7 +19,13 @@ impl BridgeService {
         Self {
             session_manager,
             task_service,
+            task_runtime: None,
         }
+    }
+
+    pub fn with_task_runtime(mut self, task_runtime: Arc<TaskRuntime>) -> Self {
+        self.task_runtime = Some(task_runtime);
+        self
     }
 }
 
@@ -78,8 +86,19 @@ impl BridgePort for BridgeService {
         &self,
         session_id: SessionId,
         task_id: TaskId,
-        _mode: AttachMode,
+        mode: AttachMode,
     ) -> Result<(), DomainError> {
+        // C3: Reject steering attachment when harness does not support steering
+        if mode == AttachMode::Steer || mode == AttachMode::SteerEnabled {
+            if let Some(ref runtime) = self.task_runtime {
+                if let Some(harness) = runtime.harness() {
+                    if !harness.profile().supports_steer {
+                        return Err(crate::port::BridgeError::SteerNotSupported.into());
+                    }
+                }
+            }
+        }
+
         self.session_manager
             .attach_to_task(&session_id, task_id.clone())
             .await?;
@@ -101,15 +120,31 @@ impl BridgePort for BridgeService {
     ) -> Result<SteerReceipt, DomainError> {
         let now = chrono::Utc::now().to_rfc3339();
 
-        // Record steering intent in session manager
+        // 1. Record steering intent in session manager (persist only)
         self.session_manager
             .append_user_message(&session_id, &format!("[STEER TASK {task_id}] {message}"))
             .await?;
+
+        // 2. C3: Delivered only if active worker exists and acknowledges
+        let delivery = if let Some(ref runtime) = self.task_runtime {
+            let has_active = runtime.has_active_worker_for_task(&task_id).await;
+            if has_active {
+                match runtime.steer_task(&task_id, &message).await {
+                    Ok(true) => SteerResult::Delivered { worker_ack: true },
+                    _ => SteerResult::Recorded,
+                }
+            } else {
+                SteerResult::Recorded
+            }
+        } else {
+            SteerResult::Recorded
+        };
 
         Ok(SteerReceipt {
             task_id,
             session_id,
             accepted: true,
+            delivery,
             message,
             timestamp: now,
         })

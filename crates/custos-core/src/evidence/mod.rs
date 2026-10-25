@@ -119,20 +119,33 @@ mod tests {
         assert!(eval2.unsatisfied_requirements.is_empty());
     }
 
+    struct MockSourceAcquisition;
+
+    #[async_trait::async_trait]
+    impl crate::contracts::source_acquisition::SourceAcquisitionPort for MockSourceAcquisition {
+        async fn fetch_source_text(
+            &self,
+            path_or_uri: &str,
+            _base_path: Option<&str>,
+        ) -> Result<String, custos_domain::DomainError> {
+            if path_or_uri == "sample.rs" {
+                Ok("line 1: fn main() {\nline 2:     println!(\"hello\");\nline 3: }\n".into())
+            } else {
+                Err(custos_domain::DomainError::Validation(format!(
+                    "File not found: {path_or_uri}"
+                )))
+            }
+        }
+    }
+
     #[tokio::test]
     async fn test_citation_verifier_valid_and_invalid() {
-        let pipeline = EvidencePipeline::with_standard_verifiers();
-        let temp_dir = std::env::temp_dir().join(format!(
-            "custos_cite_test_{}",
-            custos_domain::new_id("test")
+        let mut pipeline = EvidencePipeline::new();
+        pipeline.register_verifier(std::sync::Arc::new(
+            verifier::CitationVerifier::with_source_acquisition(std::sync::Arc::new(
+                MockSourceAcquisition,
+            )),
         ));
-        std::fs::create_dir_all(&temp_dir).unwrap();
-        let file_path = temp_dir.join("sample.rs");
-        std::fs::write(
-            &file_path,
-            "line 1: fn main() {\nline 2:     println!(\"hello\");\nline 3: }\n",
-        )
-        .unwrap();
 
         // Valid citation with existing file, valid range and matching snippet
         let valid_bundle = EvidenceBundle::new(
@@ -140,7 +153,7 @@ mod tests {
             "citation",
             "Cited sample file exists and matches",
             serde_json::json!({
-                "base_path": temp_dir.to_str().unwrap(),
+                "base_path": "/workspace",
                 "citations": [
                     {
                         "path": "sample.rs",
@@ -161,7 +174,7 @@ mod tests {
             "citation",
             "Cited non-existent file",
             serde_json::json!({
-                "base_path": temp_dir.to_str().unwrap(),
+                "base_path": "/workspace",
                 "citations": [
                     {
                         "path": "non_existent.rs",
@@ -174,7 +187,63 @@ mod tests {
         let claim_invalid = pipeline.verify_bundle(&invalid_bundle).await.unwrap();
         assert!(!claim_invalid.passed);
 
-        let _ = std::fs::remove_dir_all(&temp_dir);
+        // Case 3: Inline fake content without source acquisition MUST NOT pass locator
+        let unconfigured_pipeline = EvidencePipeline::with_standard_verifiers();
+        let fake_inline_bundle = EvidenceBundle::new(
+            "task_cite_fake",
+            "citation",
+            "Claiming fabricated content without source acquisition",
+            serde_json::json!({
+                "citations": [
+                    {
+                        "path": "sample.rs",
+                        "content": "fabricated content that does not exist",
+                        "start_line": 1,
+                        "end_line": 1
+                    }
+                ]
+            }),
+        );
+        let claim_unconfigured = unconfigured_pipeline.verify_bundle(&fake_inline_bundle).await.unwrap();
+        assert!(!claim_unconfigured.passed, "Inline fake content must not pass without trusted acquisition");
+
+        // Case 4: Inline content contradicting acquired source is rejected
+        let fake_content_bundle = EvidenceBundle::new(
+            "task_cite_mismatch",
+            "citation",
+            "Claiming contradictory content against existing source",
+            serde_json::json!({
+                "citations": [
+                    {
+                        "path": "sample.rs",
+                        "content": "fn malicious_injected_code() {}",
+                        "start_line": 1,
+                        "end_line": 1
+                    }
+                ]
+            }),
+        );
+        let claim_content_mismatch = pipeline.verify_bundle(&fake_content_bundle).await.unwrap();
+        assert!(!claim_content_mismatch.passed, "Contradictory inline content must be rejected");
+
+        // Case 5: Source revision mismatch (stale citation) is rejected
+        let stale_bundle = EvidenceBundle::new(
+            "task_cite_stale",
+            "citation",
+            "Citation with stale revision hash",
+            serde_json::json!({
+                "citations": [
+                    {
+                        "path": "sample.rs",
+                        "revision": "stale_hash_12345",
+                        "start_line": 1,
+                        "end_line": 2
+                    }
+                ]
+            }),
+        );
+        let claim_stale = pipeline.verify_bundle(&stale_bundle).await.unwrap();
+        assert!(!claim_stale.passed, "Stale revision must be rejected");
     }
 
     #[tokio::test]

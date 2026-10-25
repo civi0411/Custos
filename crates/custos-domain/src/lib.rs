@@ -14,12 +14,14 @@ pub mod browser;
 pub mod budget;
 pub mod capability;
 pub mod claim;
+pub mod compute;
 pub mod context;
 pub mod continuation;
 pub mod decision;
 pub mod error;
 pub mod evidence;
 pub mod execution_record;
+pub mod experiment_attempt;
 pub mod fact;
 pub mod ids;
 pub mod memory;
@@ -54,7 +56,9 @@ pub use artifact::{
     ArtifactHandoff, ArtifactKind, ArtifactLineageGraph, ArtifactRef, ArtifactSummary,
     HandoffConsent, LineageGraphEdge, LineageGraphNode,
 };
-pub use assistant::{AssistantDraft, OutboxActionItem, ResourceActionCapability};
+pub use assistant::{
+    AssistantDraft, OutboxActionItem, OutboxDeliveryState, ResourceActionCapability, StandingGrant,
+};
 pub use authority::{
     ExecutionPermit, ExecutionReceipt, Grant, Permit, PermitId, PermitV1, Receipt, ReceiptStatus,
     RiskClass,
@@ -75,6 +79,11 @@ pub use claim::{
     EvidenceRelation, PassageAnchor, PassageAnchorProposal, ResearchClaim, ResearchClaimProposal,
     ResearchExperimentRun, SourceProposal, SourceRecord,
 };
+pub use compute::{
+    AcceleratorSpec, CheckpointCommitStatus, CheckpointFileEntry, CloudPodLease, CloudPodStatus,
+    ComputeBackendKind, CompatibilityGateEvaluation, CompatibilityVerdict, HardwareAdaptationPlan,
+    ResumabilityLevel, TrainingCheckpointManifest,
+};
 pub use context::{
     ContextDeliveryState, ContextItem, ContextPack, ContextReceipt, OmittedContextReason,
     OmittedContextRef,
@@ -94,6 +103,12 @@ pub use evidence::{
     EvidenceStatus, OutcomeStatus, TaskOutcome, VerificationClaim,
 };
 pub use execution_record::{ExecutionArtifact, ExecutionRecord, ExecutionRecordStatus};
+pub use experiment_attempt::{
+    classify, protection_status, Check, CheckGroup, CheckStatus, ExecEvent, ExecState,
+    ExecutionAttempt, ExternalJobRef, Invocation, InvocationOutcome, ProgressTriplet,
+    ProtectionPolicy, ProtectionStatus, ResourceEvent, ResourceState, ResumeVerdict, TargetCaps,
+    VerificationReport,
+};
 pub use fact::Fact;
 pub use ids::{canonical_json, digest, new_id, TaskId};
 pub use memory::{
@@ -117,10 +132,7 @@ pub use remote_fleet::{
     FleetExecParams, FleetExecReceipt, FleetExecResult, RegisterHostParams, RemoteHostNode,
     RemoteHostStatus, SshAuthMethod,
 };
-pub use repo::{
-    ConfidenceLevel, CoverageMetrics, MissingReason, QueryResult, RepoSnapshotRef, SourceSpan,
-    SymbolMatch,
-};
+pub use repo::SourceSpan;
 pub use review::{
     FindingSeverity, RecordReviewParams, ReviewFinding, ReviewMethod, ReviewStatus,
     ReviewTargetType, ReviewerRecord,
