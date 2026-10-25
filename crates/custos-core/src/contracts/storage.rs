@@ -34,10 +34,10 @@ impl<
 /// Persistence Port for sovereign Runs and bounded WorkerRuns.
 #[async_trait]
 pub trait RunPort: Send + Sync {
-    async fn save_run(&self, run: &Run) -> Result<(), DomainError>;
+    async fn save_run(&self, run: &mut Run) -> Result<(), DomainError>;
     async fn get_run(&self, run_id: &str) -> Result<Option<Run>, DomainError>;
     async fn list_runs_for_task(&self, task_id: &str) -> Result<Vec<Run>, DomainError>;
-    async fn save_worker_run(&self, wrun: &WorkerRun) -> Result<(), DomainError>;
+    async fn save_worker_run(&self, wrun: &mut WorkerRun) -> Result<(), DomainError>;
     async fn get_worker_run(&self, wrun_id: &str) -> Result<Option<WorkerRun>, DomainError>;
     async fn list_worker_runs_for_task(&self, task_id: &str)
         -> Result<Vec<WorkerRun>, DomainError>;
@@ -55,6 +55,12 @@ pub trait RunPort: Send + Sync {
         &self,
         attempt_id: &str,
     ) -> Result<Option<LaunchAttempt>, DomainError>;
+    async fn list_active_claims(&self) -> Result<Vec<DispatchClaim>, DomainError> {
+        Ok(Vec::new())
+    }
+    async fn fence_claim(&self, _claim_id: &str) -> Result<(), DomainError> {
+        Ok(())
+    }
     async fn reconcile_runs_on_startup(&self) -> Result<usize, DomainError> {
         Ok(0)
     }
@@ -114,6 +120,7 @@ pub trait CasPort: Send + Sync {
 #[serde(rename_all = "snake_case")]
 pub enum OutboxStatus {
     Pending,
+    Approved,
     Dispatching,
     Receipted,
     Uncertain,
@@ -132,15 +139,52 @@ pub struct OutboxEntry {
     pub status: OutboxStatus,
     pub created_at: DateTime<Utc>,
     pub receipt: Option<ExecutionReceipt>,
+    #[serde(default)]
+    pub recipient: Option<String>,
+    #[serde(default)]
+    pub payload_json: Option<String>,
+    #[serde(default)]
+    pub error_message: Option<String>,
+}
+
+impl OutboxEntry {
+    pub fn new(
+        id: impl Into<String>,
+        task_id: impl Into<String>,
+        action_id: impl Into<String>,
+        permit_id: impl Into<String>,
+        argument_digest: impl Into<String>,
+        idempotency_key: Option<String>,
+        status: OutboxStatus,
+        created_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            task_id: task_id.into(),
+            action_id: action_id.into(),
+            permit_id: permit_id.into(),
+            argument_digest: argument_digest.into(),
+            idempotency_key,
+            status,
+            created_at,
+            receipt: None,
+            recipient: None,
+            payload_json: None,
+            error_message: None,
+        }
+    }
 }
 
 /// Transactional outbox: the durable record written in T3 BEFORE any external effect.
 #[async_trait]
 pub trait OutboxPort: Send + Sync {
     async fn enqueue(&self, entry: OutboxEntry) -> Result<(), DomainError>;
+    async fn get(&self, id: &str) -> Result<Option<OutboxEntry>, DomainError>;
+    async fn mark_approved(&self, id: &str) -> Result<(), DomainError>;
     async fn mark_dispatching(&self, id: &str) -> Result<(), DomainError>;
     async fn mark_receipted(&self, id: &str, receipt: ExecutionReceipt) -> Result<(), DomainError>;
     async fn mark_uncertain(&self, id: &str) -> Result<(), DomainError>;
+    async fn mark_failed(&self, id: &str, error: &str) -> Result<(), DomainError>;
     /// Used by the reconciliation protocol on daemon restart.
     async fn list_by_status(&self, status: OutboxStatus) -> Result<Vec<OutboxEntry>, DomainError>;
     /// List outbox entries filtered by task_id and status (Fix G6).
@@ -180,4 +224,70 @@ pub trait AssistantDraftPort: Send + Sync {
         task_id: Option<&str>,
     ) -> Result<Vec<custos_domain::AssistantDraft>, DomainError>;
     async fn delete_draft(&self, id: &str) -> Result<bool, DomainError>;
+}
+
+/// Persistence Port for Interactive Notebook Cells and Execution States (RFC 003 §6).
+#[async_trait]
+pub trait NotebookStoragePort: Send + Sync {
+    async fn list_notebook_cells(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<custos_domain::NotebookCell>, DomainError>;
+    async fn replace_notebook_cells(
+        &self,
+        session_id: &str,
+        cells: &[custos_domain::NotebookCell],
+    ) -> Result<(), DomainError>;
+    async fn save_notebook_cell(
+        &self,
+        cell: &custos_domain::NotebookCell,
+    ) -> Result<(), DomainError>;
+    async fn get_notebook_kernel_state(
+        &self,
+        session_id: &str,
+    ) -> Result<custos_domain::NotebookKernelState, DomainError>;
+    async fn save_notebook_kernel_state(
+        &self,
+        state: &custos_domain::NotebookKernelState,
+    ) -> Result<(), DomainError>;
+}
+
+/// Persistence Port for Command Identity, Retry Deduplication and Idempotency Ledger (R1).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CommandLedgerEntry {
+    pub command_id: String,
+    pub method: String,
+    pub payload_digest: String,
+    pub result_json: String,
+    pub created_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CommandAdmission {
+    /// Newly admitted command, caller may proceed with execution
+    New,
+    /// Already completed with the same method and fingerprint, caller should return cached result
+    Replay(String),
+    /// Currently executing in flight
+    InFlight,
+    /// Same command_id attempted with a different method or payload/scope
+    Conflict(String),
+}
+
+#[async_trait]
+pub trait CommandLedgerPort: Send + Sync {
+    async fn get_command(&self, command_id: &str) -> Result<Option<CommandLedgerEntry>, DomainError>;
+    async fn record_command(&self, entry: &CommandLedgerEntry) -> Result<(), DomainError>;
+    async fn admit(
+        &self,
+        command_id: &str,
+        method: &str,
+        payload_digest: &str,
+        scope: Option<&str>,
+        now_ms: i64,
+        ttl_ms: i64,
+    ) -> Result<CommandAdmission, DomainError>;
+    async fn complete(&self, command_id: &str, result_json: &str) -> Result<(), DomainError>;
+    async fn abandon(&self, command_id: &str) -> Result<(), DomainError>;
 }

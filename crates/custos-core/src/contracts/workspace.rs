@@ -75,3 +75,11 @@ pub trait WorkspaceProvider: Send + Sync {
     /// Cleans up or detaches the physical workspace directory or worktree.
     async fn teardown(&self, workspace: &ExecutionWorkspace) -> Result<(), DomainError>;
 }
+
+/// Repository Git Operations Port for isolated worktree lifecycle.
+///
+/// Implemented by `custos-adapters`.
+pub trait RepositoryGitPort: Send + Sync {
+    fn add_worktree(&self, repo_dir: &std::path::Path, worktree_path: &std::path::Path) -> Result<(), DomainError>;
+    fn remove_worktree(&self, repo_dir: &std::path::Path, worktree_path: &std::path::Path) -> Result<(), DomainError>;
+}

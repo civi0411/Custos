@@ -152,6 +152,7 @@ mod tests {
             worker_run_id: "r1".into(),
             provider_id: "test".into(),
             pack_id: Some("assistant".into()),
+            scope_root: None,
         };
         let res = skill.run(&ctx).await.expect("run succeeds");
         assert_eq!(res.skill_id, "ax_tree_audit");
@@ -176,6 +177,7 @@ mod tests {
             worker_run_id: "r1".into(),
             provider_id: "test".into(),
             pack_id: Some("assistant".into()),
+            scope_root: None,
         };
         let res = skill.run(&ctx).await.expect("run succeeds");
         let output = res.result;

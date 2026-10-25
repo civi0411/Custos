@@ -8,7 +8,7 @@
 pub mod port;
 pub mod service;
 
-pub use port::{AttachMode, BridgePort, SteerReceipt};
+pub use port::{AttachMode, BridgePort, SteerReceipt, SteerResult};
 pub use service::BridgeService;
 
 #[cfg(test)]
@@ -55,7 +55,7 @@ mod tests {
             }
         );
 
-        // 3. Test steering
+        // 3. Test steering without active worker (Gate C3: returns Recorded, not Delivered)
         let receipt = bridge
             .steer(
                 task.id.clone(),
@@ -67,6 +67,7 @@ mod tests {
         assert!(receipt.accepted);
         assert_eq!(receipt.task_id, task.id);
         assert_eq!(receipt.session_id, session.id);
+        assert_eq!(receipt.delivery, SteerResult::Recorded);
     }
 
     #[tokio::test]
@@ -145,5 +146,49 @@ mod tests {
             .unwrap();
         assert_eq!(fork.original_task_id, task.id);
         assert_eq!(fork.forked_task.title, "Build pipeline-fork");
+    }
+
+    struct NonSteeringHarness;
+    #[async_trait::async_trait]
+    impl custos_core::contracts::harness::AgentRuntimePort for NonSteeringHarness {
+        fn harness_id(&self) -> &str {
+            "non-steering"
+        }
+        fn profile(&self) -> custos_core::contracts::harness::HarnessProfile {
+            custos_core::contracts::harness::HarnessProfile::new(
+                "non-steering",
+                custos_core::contracts::harness::ToolMediationLevel::ObserveOnly,
+            )
+            .with_supports_steer(false)
+        }
+        async fn execute_turn(
+            &self,
+            _run: &custos_domain::WorkerRun,
+            _ctx: &custos_domain::ContextPack,
+        ) -> Result<Vec<custos_domain::ActionIntent>, custos_domain::DomainError> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_bridge_attach_steer_enabled_fails_when_unsupported() {
+        let session_manager = Arc::new(SessionManager::new());
+        let store = Arc::new(SqliteTaskStore::new_in_memory().unwrap());
+        let task_service = Arc::new(TaskService::new(store));
+        let runtime = Arc::new(
+            custos_runtime::workflow::TaskRuntime::new()
+                .with_harness(Arc::new(NonSteeringHarness)),
+        );
+        let bridge = BridgeService::new(session_manager.clone(), task_service)
+            .with_task_runtime(runtime);
+
+        let session = session_manager.create_session(SessionMode::Bare).await;
+        let res = bridge
+            .attach(session.id, "task-1".into(), AttachMode::SteerEnabled)
+            .await;
+        assert!(res.is_err());
+        assert!(
+            matches!(res.unwrap_err(), custos_domain::DomainError::Validation(msg) if msg.contains("SteerNotSupported"))
+        );
     }
 }

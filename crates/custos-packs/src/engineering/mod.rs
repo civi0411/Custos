@@ -6,12 +6,14 @@
 
 pub mod fixtures;
 pub mod profile;
+pub mod recipe;
 pub mod sdk;
 pub mod skills;
 pub mod verifiers;
 
 pub use fixtures::*;
 pub use profile::*;
+pub use recipe::*;
 pub use skills::*;
 pub use verifiers::*;
 

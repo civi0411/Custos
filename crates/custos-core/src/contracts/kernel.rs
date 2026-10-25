@@ -51,6 +51,21 @@ pub trait KernelPort: Send + Sync {
         bundle: &EvidenceBundle,
     ) -> Result<VerificationClaim, DomainError>;
 
+    /// Endow a task with an explicit capability grant.
+    async fn grant_capability(
+        &self,
+        task_id: &str,
+        grantee: &str,
+        capability: &str,
+    ) -> Result<custos_domain::Grant, DomainError>;
+
+    /// Find an active grant for a task and capability.
+    async fn find_active_grant(
+        &self,
+        task_id: &str,
+        capability: &str,
+    ) -> Result<Option<custos_domain::Grant>, DomainError>;
+
     /// The ONLY way to reach `Succeeded` (plain `transition_task` is refused). Runs the
     /// Completion Gate: task must be Running and every required contract evidence kind must be
     /// backed by a passing, non-stale claim (INV-02).
@@ -60,6 +75,24 @@ pub trait KernelPort: Send + Sync {
         summary: String,
         claims: Vec<VerificationClaim>,
     ) -> Result<Task, DomainError>;
+
+    /// Classify the effect of a requested tool call into a RiskLevel.
+    fn classify_effect(&self, tool_name: &str, args: &serde_json::Value) -> custos_domain::RiskLevel {
+        match tool_name {
+            "developer__read" | "read_file" | "read" | "list_dir" | "list" | "ls" => custos_domain::RiskLevel::Low,
+            "developer__write" | "write_file" | "write" => custos_domain::RiskLevel::Medium,
+            "developer__bash" | "bash" | "shell" | "exec" => {
+                let cmd = args.get("command").or_else(|| args.get("cmd")).and_then(|v| v.as_str()).unwrap_or("");
+                if cmd.contains("rm -rf") || cmd.contains("mkfs") || cmd.contains("dd if=") {
+                    custos_domain::RiskLevel::Critical
+                } else {
+                    custos_domain::RiskLevel::High
+                }
+            }
+            name if name.starts_with("dangerous_") => custos_domain::RiskLevel::Critical,
+            _ => custos_domain::RiskLevel::Medium,
+        }
+    }
 }
 
 /// Reference implementation composing the three trusted engines already in this crate.
@@ -75,6 +108,17 @@ impl TrustedKernel {
             TaskService::new(store),
             AuthorityEngine::default(),
             EvidencePipeline::with_standard_verifiers(),
+        )
+    }
+
+    pub fn with_source_acquisition(
+        store: Arc<dyn TaskStore>,
+        source_acquisition: Arc<dyn crate::contracts::source_acquisition::SourceAcquisitionPort>,
+    ) -> Self {
+        Self::with_parts(
+            TaskService::new(store),
+            AuthorityEngine::default(),
+            EvidencePipeline::with_source_acquisition(source_acquisition),
         )
     }
 
@@ -155,6 +199,31 @@ impl KernelPort for TrustedKernel {
         bundle: &EvidenceBundle,
     ) -> Result<VerificationClaim, DomainError> {
         self.evidence.verify_bundle(bundle).await
+    }
+
+    async fn grant_capability(
+        &self,
+        task_id: &str,
+        grantee: &str,
+        capability: &str,
+    ) -> Result<custos_domain::Grant, DomainError> {
+        let grant = custos_domain::Grant::new(
+            task_id.to_string(),
+            grantee.to_string(),
+            capability.to_string(),
+            serde_json::json!({}),
+            None,
+        );
+        self.authority.grants.insert(grant.clone());
+        Ok(grant)
+    }
+
+    async fn find_active_grant(
+        &self,
+        task_id: &str,
+        capability: &str,
+    ) -> Result<Option<custos_domain::Grant>, DomainError> {
+        Ok(self.authority.grants.find_active_grant(task_id, capability))
     }
 
     async fn complete_task(

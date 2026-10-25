@@ -69,4 +69,11 @@ pub trait WorkspaceFilesPort: Send + Sync {
         workspace: &ExecutionWorkspace,
         relative_path: &str,
     ) -> Result<(), DomainError>;
+
+    /// Commits changes in Git (`git commit -m`).
+    async fn commit(
+        &self,
+        workspace: &ExecutionWorkspace,
+        message: &str,
+    ) -> Result<String, DomainError>;
 }

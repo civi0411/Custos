@@ -4,6 +4,7 @@
 //! candidate admissibility, work packets, and replanning.
 
 pub mod candidate;
+pub mod explain;
 pub mod placement;
 pub mod proposal;
 pub mod record;
@@ -13,6 +14,7 @@ pub mod topology;
 pub mod work_packet;
 
 pub use candidate::{Candidate, RejectionReason};
+pub use explain::{CandidateExplanation, ExplainReport};
 pub use placement::NodePlacement;
 pub use proposal::StrategyProposal;
 pub use record::DecisionRecord;
