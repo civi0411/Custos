@@ -13,5 +13,6 @@ custos-provider = { workspace = true }
 custos-persistence = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tokio = { workspace = true }

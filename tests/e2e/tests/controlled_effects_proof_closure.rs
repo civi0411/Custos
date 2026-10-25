@@ -49,6 +49,18 @@ fn setup_test_workspace(dir: &Path) -> (PathBuf, PathBuf) {
     (repo_dir, sample_file)
 }
 
+fn physical_gate(workspace_root: impl Into<PathBuf>) -> DeterministicGate {
+    let root = workspace_root.into();
+    let driver = std::sync::Arc::new(
+        custos_adapters::sandbox::developer::SovereignDeveloperAdapter::new(&root),
+    );
+    DeterministicGate::with_driver(
+        std::sync::Arc::new(custos_core::authority::AuthorityEngine::default()),
+        root,
+        driver,
+    )
+}
+
 // =========================================================================
 // THEME 1: Sandbox Read & Zero-Mutation Patch Preview Tools
 // =========================================================================
@@ -62,7 +74,7 @@ mod sandbox_and_preview_tools {
         let (repo_dir, sample_file) = setup_test_workspace(&temp_dir);
         let sample_content = std::fs::read_to_string(&sample_file).unwrap();
 
-        let gate = DeterministicGate::with_workspace(&repo_dir);
+        let gate = physical_gate(&repo_dir);
         let pipeline = EvidencePipeline::with_standard_verifiers();
 
         // 1. Read-only repo tool (`read_file`) under Sandbox
@@ -241,7 +253,7 @@ mod daemon_proof_closure_completion {
     use super::*;
 
     async fn create_verified_claims(repo_dir: &Path) -> (VerificationClaim, VerificationClaim) {
-        let gate = DeterministicGate::with_workspace(repo_dir);
+        let gate = physical_gate(repo_dir);
         let pipeline = EvidencePipeline::with_standard_verifiers();
 
         let read_act = Action::new(

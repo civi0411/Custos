@@ -21,3 +21,4 @@ chrono = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 tempfile = { workspace = true }
+custos-testkit = { path = "../testkit" }

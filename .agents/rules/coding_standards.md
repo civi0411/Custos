@@ -1,88 +1,84 @@
-# Quy Chuẩn Kỹ Thuật Mã Nguồn & An Toàn Dành Cho AI Coding Agents
-## (Coding Standards & Safety Protocol)
+# Source Code Engineering Standards & Safety Protocol
+## Coding Standards for AI Coding Assistants
 
-> **Phạm vi áp dụng:** Toàn bộ AI Coding Agents (Cursor, Claude Code, Antigravity, Copilot, Windsurf) khi viết code trong repository Custos.
-
----
-
-### 1. Chuẩn Mực Rust Code (Rust Standards)
-
-1. **Tuyệt đối không `.unwrap()` hoặc `.expect()` trong production code:**
-   - Mọi thao tác có khả năng thất bại phải trả về `Result<T, E>`.
-   - `E` phải là kiểu enum lỗi có định kiểu rõ ràng, được định nghĩa tại cấp crate bằng `thiserror`.
-2. **Tuyệt đối không silent panic:**
-   - Cấm sử dụng `panic!()`, `unreachable!()`, hoặc `unimplemented!()` trong các luồng thực thi production.
-   - Chỉ sử dụng `todo!()` khi được con người yêu cầu giữ placeholder và đánh dấu chưa hoàn thiện.
-3. **Bắt buộc Tracing:**
-   - Mọi hoạt động trọng yếu phải phát ra span hoặc log bằng `tracing::info!` hoặc `tracing::debug!`.
-   - Bắt buộc đính kèm các khóa ngữ cảnh (`task_id`, `run_id`, `session_id`).
-4. **Nhận thức Hủy bỏ (Cancellation-Aware):**
-   - Mọi tác vụ async chạy dài phải theo dõi `CancellationToken` thông qua `tokio::select!`.
-5. **Đột biến trạng thái phải qua Event / Outbox:**
-   - Mọi thao tác ghi dữ liệu vào SQLite store phải thông qua Transactional Outbox pattern hoặc domain event. Không được ghi ngầm bỏ qua kiểm toán.
+> **Scope:** All AI Coding Assistants (Cursor, Claude Code, Antigravity, Codex, Copilot, Windsurf) contributing to the Custos repository.
 
 ---
 
-### 2. Ranh Giới 11 Canonical Crates Bất Biến
+### 1. Rust Engineering Standards
+
+1. **Zero `.unwrap()` or `.expect()` in Production Code:**
+   - Any fallible operation must return `Result<T, E>`.
+   - `E` must be a strongly typed error enum defined at the crate level via `thiserror`.
+2. **Zero Silent Panics:**
+   - Prohibit `panic!()`, `unreachable!()`, or `unimplemented!()` in production execution paths.
+   - Use `todo!()` only when explicitly instructed by human operators to mark deliberate stubs.
+3. **Mandatory Structured Tracing:**
+   - Emit spans or logs for significant operations using `tracing::info!` or `tracing::debug!`.
+   - Always attach contextual identifiers (`task_id`, `run_id`, `session_id`).
+4. **Cancellation Awareness:**
+   - Long-running async routines must observe a `CancellationToken` via `tokio::select!`.
+5. **Transactional State Mutations:**
+   - State mutations persisting to SQLite must utilize the Transactional Outbox pattern or emit domain events. Never perform un-audited direct mutations.
+
+---
+
+### 2. Inviolable 11 Canonical Crate Boundaries
 
 1. **`crates/custos-domain`:**
-   - Bất biến Zero-I/O tuyệt đối.
-   - Không phụ thuộc `tokio`, `rusqlite`, `reqwest`, `std::fs`, hoặc bất kỳ external provider SDK nào.
+   - Absolute Zero-I/O invariant.
+   - Prohibited dependencies: `tokio`, `rusqlite`, `reqwest`, `std::fs`, or external model vendor SDKs.
 2. **`crates/custos-core`:**
-   - Hạt nhân điều phối và máy trạng thái.
-   - Phụ thuộc duy nhất vào `custos-domain`. Tuyệt đối không import các crate adapter hoặc SDK bên ngoài.
+   - Coordination kernel and state engine.
+   - Depends exclusively on `custos-domain`. External SDKs or persistence drivers are strictly forbidden.
 3. **`crates/custos-persistence`:**
-   - Cơ sở dữ liệu SQLite chế độ WAL.
-   - Bắt buộc duy trì kết nối Single-Writer duy nhất để triệt tiêu lỗi tranh chấp ghi và WAL starvation.
+   - SQLite WAL storage implementation.
+   - Must operate via a single-writer connection pool to eliminate write contention and WAL starvation.
 4. **`crates/custos-bridge`:**
-   - Cầu nối phiên hội thoại và Task Kernel.
-   - CẤM TUYỆT ĐỐI việc import trực tiếp `custos-persistence`. Mọi tương tác lưu trữ phải đi qua `custos-core::ports::KernelPort`.
+   - Session-to-Task promotion and client IPC routing.
+   - STRICTLY PROHIBITED from importing `custos-persistence` directly. Storage queries must route through `custos-core::ports::KernelPort`.
 5. **`crates/custos-daemon`:**
-   - Điểm ráp nối duy nhất (Sole Composition Root).
-   - Nơi duy nhất được phép import các hiện thực cụ thể (concrete adapters, storage) để khởi tạo daemon.
+   - Sole Composition Root.
+   - The only crate permitted to bind concrete adapters, databases, and network transports to launch the daemon.
 
 ---
 
-### 3. Quy Chuẩn Định Dạng & Tài Liệu (Zero-Emoji Policy)
+### 3. Formatting & Documentation Standards (Zero-Emoji Policy)
 
-1. **Tuyệt đối không dùng Emoji trang trí:**
-   - Không sử dụng emoji (như biểu tượng tên lửa, ngọn lửa, ngôi sao, icon mặt cười...) trong bất kỳ tài liệu markdown, tiêu đề, ô bảng, ghi chú code (comments), hoặc commit message nào.
-2. **Không gán số phiên bản hoặc ngày tháng vào tiêu đề:**
-   - Không đặt tiêu đề tài liệu dạng "v2", "v3.1", hoặc ngày tháng cụ thể. Tài liệu phải mang tính thường xanh (evergreen).
-3. **Commit Messages (Conventional Commits):**
-   - Định dạng: `<type>(<scope>): <mô tả ngắn bằng tiếng Anh kỹ thuật, tối đa 72 ký tự>`.
-   - Không chứa emoji trong commit message.
-
----
-
-### 4. Giao Thức An Toàn Git (Git Safety Protocol)
-
-1. Không chạy `git reset --hard` khi chưa có xác nhận rõ ràng 2 bước từ con người.
-2. Không chạy `git push --force` dưới bất kỳ hình thức nào.
-3. Trước khi chỉnh sửa, luôn kiểm tra `git status --short`. Bảo tồn các thay đổi dở dang của người dùng.
-4. Không tự ý thực hiện commit hoặc push khi chưa được yêu cầu rõ ràng.
+1. **Zero Decorative Emojis:**
+   - Do not use decorative emojis in markdown documentation, tables, code comments, or commit messages.
+2. **Evergreen Documentation:**
+   - Do not embed ephemeral dates or temporary version tags (e.g. "v2", "v3.1") in document titles.
+3. **Conventional Commits:**
+   - Standard format: `<type>(<scope>): <concise technical English summary, max 72 chars>`.
 
 ---
 
-### 5. Chuẩn Mực Commit, PR & Vinh Danh Đồng Đội (Team Attribution & GitHub Achievements)
+### 4. Git Safety Protocol
 
-> **Mục tiêu:** Đảm bảo toàn bộ 3 thành viên trong nhóm (Vĩ, Vinh, Nhật Trường) đều được ghi nhận đóng góp (contributions), streaks, và mở khóa các huy hiệu GitHub Achievements (Pair Extraordinaire, Pull Shark).
+1. Never run `git reset --hard` without explicit, 2-step written confirmation from a human.
+2. Never execute `git push --force`.
+3. Always inspect `git status --short` before editing to preserve active working changes.
+4. Never auto-commit or auto-push without unambiguous human instruction.
 
-1. **Bắt buộc Trailer Đồng Tác Giả (Co-authored-by Trailing Headers):**
-   - Mọi commit khi được tạo BẮT BUỘC phải đính kèm trailer `Co-authored-by` cho các thành viên còn lại:
+---
+
+### 5. Commit Standards, PR Decomposition & Attribution
+
+> **Objective:** Ensure team members (Vĩ, Vinh, Nhật Trường) receive proper attribution, streak credits, and GitHub Achievements (Pair Extraordinaire, Pull Shark).
+
+1. **Mandatory Co-authored-by Trailers:**
+   - Every commit must include trailing `Co-authored-by` headers for collaborators:
      - `Co-authored-by: Vinh <phuvi301@gmail.com>`
      - `Co-authored-by: NhatTruong1905 <tn696199@gmail.com>`
-     *(hoặc nếu tác giả là Vinh/Trường thì đính kèm `Co-authored-by: civi0411 <cuuvi985@gmail.com>`)*.
-   - Để trống một dòng giữa thân commit message và các dòng `Co-authored-by`.
-2. **Cơ chế Hybrid & Luân Phiên Đóng Góp:**
-   - Khi tách chuỗi commits/PRs, có thể chỉ định `--author` luân phiên giữa các thành viên (Vĩ, Vinh, Trường) kết hợp trailer co-author để cân bằng biểu đồ đóng góp (GitHub contribution graph) cho cả 3 bạn.
-3. **Quy Chuẩn Chia Nhỏ PR & Săn Huy Hiệu (Modular Topic PRs):**
-   - Mỗi PR chỉ tập trung vào một chủ đề kỹ thuật duy nhất (Single Responsibility: giao thức, bảo mật, tài liệu, routing).
-   - Kiểm tra `cargo check --workspace` trước khi push.
-   - Tiêu đề PR phải tuân thủ chuẩn Conventional Commits (ví dụ: `feat(runtime): ...`, `docs(arch): ...`).
-   - Thân PR phải liệt kê rõ:
-     - Tóm tắt thay đổi kỹ thuật.
-     - Kiểm chứng (Test verification).
-     - Đóng góp đồng đội (Co-authors attribution).
-   - Merge PR vào nhánh mặc định (`dev`) theo chuẩn squash/rebase hoặc merge commit có đầy đủ co-authors để kích hoạt huy hiệu Pair Extraordinaire và Pull Shark.
-
+     *(or `Co-authored-by: civi0411 <cuuvi985@gmail.com>` when authored by Vinh or Trường)*.
+   - Exactly one blank line must separate the commit message body from the trailers.
+2. **Hybrid Rotation Strategy:**
+   - Rotate `--author` when generating PR batches to maintain balanced contribution graphs across the team.
+3. **Modular Thematic PR Decomposition:**
+   - Decompose features into single-responsibility, atomic PRs:
+     - Batch 1: Domain schemas and provider contracts.
+     - Batch 2: Adapters and wire protocols.
+     - Batch 3: Runtime coordination and cognitive loop.
+     - Batch 4: Gateways, MCP integrations, and documentation updates.
+   - Validate with `cargo check --workspace` before pushing.

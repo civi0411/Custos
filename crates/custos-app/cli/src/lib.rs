@@ -1,5 +1,5 @@
-use custos_daemon::local_api::LocalApiClient;
-use custos_daemon::{ensure_daemon_client, ProfileResolver};
+use custos_sdk::local_api::{ApiRequest, LocalApiClient};
+use custos_sdk::profile::{ensure_daemon_client, ProfileResolver};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::State;
@@ -38,7 +38,7 @@ async fn custos_request(
     method: String,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
-    let req = custos_daemon::ApiRequest {
+    let req = ApiRequest {
         id: custos_domain::new_id("ipc"),
         method,
         params,
@@ -55,7 +55,7 @@ async fn custos_request(
 async fn list_tasks(
     client: State<'_, Arc<LocalApiClient>>,
 ) -> Result<Vec<serde_json::Value>, String> {
-    let req = custos_daemon::ApiRequest {
+    let req = ApiRequest {
         id: custos_domain::new_id("ipc"),
         method: "v1.tasks.list".into(),
         params: serde_json::json!({}),
@@ -75,7 +75,7 @@ async fn get_task(
     client: State<'_, Arc<LocalApiClient>>,
     id: String,
 ) -> Result<Option<serde_json::Value>, String> {
-    let req = custos_daemon::ApiRequest {
+    let req = ApiRequest {
         id: custos_domain::new_id("ipc"),
         method: "v1.tasks.get".into(),
         params: serde_json::json!({ "task_id": id }),
@@ -99,7 +99,7 @@ async fn create_task(
     metadata: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let meta_json = metadata.and_then(|m| serde_json::from_str::<serde_json::Value>(&m).ok());
-    let req = custos_daemon::ApiRequest {
+    let req = ApiRequest {
         id: custos_domain::new_id("ipc"),
         method: "v1.tasks.create".into(),
         params: serde_json::json!({
@@ -122,7 +122,7 @@ async fn advance_task(
     status: String,
     rationale: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let req = custos_daemon::ApiRequest {
+    let req = ApiRequest {
         id: custos_domain::new_id("ipc"),
         method: "v1.tasks.advance".into(),
         params: serde_json::json!({
@@ -145,7 +145,7 @@ async fn cancel_task(
     id: String,
     reason: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let req = custos_daemon::ApiRequest {
+    let req = ApiRequest {
         id: custos_domain::new_id("ipc"),
         method: "v1.tasks.cancel".into(),
         params: serde_json::json!({

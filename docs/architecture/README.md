@@ -6,11 +6,11 @@ Kiến trúc đích là một Agent Workspace local-first với Coding, Research
 
 | Tài liệu | Câu hỏi giải quyết |
 |---|---|
+| [Desktop ↔ core interaction map](desktop-core-interaction-map.md) | UI trên nhánh refactor đã push tương tác với host/API/runtime/data thế nào, và phần nào chưa đạt? |
 | [SADE design và supervision](sade-design-and-supervision.md) | Bản sắc Custos và cách phối hợp S1–S2–human tối ưu kết quả/chi phí là gì? |
 | [Agent Workspace và UI](agent-workspace-and-ui.md) | Người dùng mở/chạy/xem/so/duyệt/tiếp tục công việc thế nào? |
 | [Capabilities và skills](capability-catalog-and-skills.md) | Feature mới nằm đâu và dùng lại giữa pack/model/harness thế nào? |
 | [Domain packs](domain-packs-and-workflows.md) | Coding, Research, Assistant có contracts và verifier obligations gì? |
-| [Repo Intelligence](repo-intelligence-subsystem.md) | Snapshot/index/query/context/source coverage thuộc subsystem nào? |
 
 ## Execution, trust và data
 

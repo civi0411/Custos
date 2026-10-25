@@ -75,7 +75,7 @@ The cheap path is exact IDs, symbol/path/DOI/contact lookup, and lexical search.
 | Research | DOI/URL/PDF version, page/section/table/figure spans, dataset/method/run refs, counterevidence | Passage viewer, parse coverage, claim relation and source version |
 | Assistant | User-authorized notes, stable contact/event IDs, timestamped connector snapshot and personal preferences | Identity card, freshness, privacy/egress and exact payload preview |
 
-The same source registry and context compiler support all three packs, while pack recipes supply selection and verifier obligations. The service must not collapse a research claim into a fact or choose a recipient solely from an untrusted document. Its indexes are rebuildable projections; canonical source records, artifacts and evidence remain under Task/persistence ownership. Repo Intelligence is a Coding retrieval subsystem, usable by both a Custos worker and a native harness through an admitted capability. It is not inherently an agent or MCP server.
+The same source registry and context compiler support all three packs, while pack recipes supply selection and verifier obligations. The service must not collapse a research claim into a fact or choose a recipient solely from an untrusted document. Its indexes are rebuildable projections; canonical source records, artifacts and evidence remain under Task/persistence ownership. Coding uses admitted file/search/Git capabilities; no dedicated Repo Intelligence scanner, graph, query coordinator or index service is part of the product.
 
 ### Retrieval modes and budgets
 
@@ -127,7 +127,7 @@ Every pane can show `loading`, `available`, `degraded`, `unavailable`, `stale`, 
 | Task, criteria, authority, evidence | `custos-domain`, `custos-core` | Canonical IDs/revisions and gates; no pack or model writes success directly. |
 | Model and harness contracts | `custos-provider`; `custos-core/src/contracts/harness.rs` | One inference attempt versus an autonomous harness; capability/version/assurance per actual path. |
 | Agent loop, worker graph, OI | `custos-runtime/src/agent`, `workflow`, `oi` | Persisted child-worker ownership, bounded graph and join; no second agent-loop authority. |
-| RAG/context and Repo Intelligence | `custos-runtime/src/context`; pack recipes in `custos-packs` | Versioned inventory, permission filter, retrieval, ContextPack/Receipt, freshness and cost; existing lexical compiler is a component, not the full service. |
+| Shared context | `custos-runtime/src/context`; pack recipes in `custos-packs` | Versioned inventory, permission filter, retrieval, ContextPack/Receipt, freshness and cost; existing lexical compiler is a component, not the full service. |
 | External reads/effects | `custos-adapters` | Provider, harness, filesystem, MCP, browser, connector and notebook adapters with real capability discovery and receipt semantics. |
 | State and recovery | `custos-persistence` | Task/Run/Attempt, source/artifact/evidence, event cursor, worker claim and uncertain effect reconciliation. |
 | API composition | `custos-daemon`, `custos-bridge`/SDK | Stable command/query/event DTOs; daemon binds actor and resolves workspace/harness; client never writes DB. |
@@ -146,7 +146,7 @@ An internal retrieval query is a runtime service call, not MCP. MCP is an adapte
 | Three lens navigation and many resource panes | `ui/desktop/src/app/studio/page.tsx`, `OrcaTabbedContainer.tsx`, Research and Engineering pane folders | Present as UI; resource operations now follow daemon descriptors. Session history was previously one shared list and explicit full-session transfer was absent; the per-lens projection is a separate implementation gate. |
 | Task-backed native launch | `custos-runtime/src/workflow/task_runtime.rs`, daemon `api.rs`, desktop `AgentsWorkbenchPane.tsx` | Present for the current native path; launch completion is not Task acceptance. |
 | Custos-owned worker loop | `custos-runtime/src/agent/runtime_port.rs` and `machine.rs` | Code exists and a governed harness is composed. Its full multi-turn/tool/evidence parity with native harnesses is not established by those files. |
-| Retrieval and Repo Intelligence | `custos-runtime/src/context/compiler/compiler.rs` and `repo_intelligence/` | Lexical token packing and repo analysis exist; a measured, versioned cross-pack RAG/context service is still target work. |
+| Shared context | `custos-runtime/src/context/compiler.rs` | Existing context compiler remains; dedicated repo-analysis modules have been removed. |
 | Pack specialization | `custos-packs/src/{engineering,research,assistant}` | Manifests/skills and some verifiers exist; several declared features are not proven production flows. |
 | Research workbench | Literature/Claims/Notebook/Runs/Synthesis/Artifact panes and daemon research API | Partial real surfaces; provenance completeness, claim support and sessionful notebook semantics need per-path proof. |
 | Native OpenCode lifecycle | `custos-adapters/src/harness/opencode.rs` | Bounded CLI path exists. Production server events, continuation, steer and cancel are not connected; capability profile must say so. |

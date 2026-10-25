@@ -11,6 +11,9 @@ use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+pub mod deterministic_trainer;
+pub use deterministic_trainer::*;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use custos_core::contracts::sandbox::verify_permit_binding;
@@ -215,8 +218,16 @@ impl OutboxPort for InMemoryOutbox {
         Ok(())
     }
 
+    async fn get(&self, id: &str) -> Result<Option<OutboxEntry>, DomainError> {
+        Ok(self.entries.lock().unwrap().iter().find(|e| e.id == id).cloned())
+    }
+
     async fn mark_dispatching(&self, id: &str) -> Result<(), DomainError> {
         self.with_entry(id, |e| e.status = OutboxStatus::Dispatching)
+    }
+
+    async fn mark_approved(&self, id: &str) -> Result<(), DomainError> {
+        self.with_entry(id, |e| e.status = OutboxStatus::Approved)
     }
 
     async fn mark_receipted(&self, id: &str, receipt: ExecutionReceipt) -> Result<(), DomainError> {
@@ -228,6 +239,13 @@ impl OutboxPort for InMemoryOutbox {
 
     async fn mark_uncertain(&self, id: &str) -> Result<(), DomainError> {
         self.with_entry(id, |e| e.status = OutboxStatus::Uncertain)
+    }
+
+    async fn mark_failed(&self, id: &str, error: &str) -> Result<(), DomainError> {
+        self.with_entry(id, |e| {
+            e.status = OutboxStatus::Failed;
+            e.error_message = Some(error.to_string());
+        })
     }
 
     async fn list_by_status(&self, status: OutboxStatus) -> Result<Vec<OutboxEntry>, DomainError> {

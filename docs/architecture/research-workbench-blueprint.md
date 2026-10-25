@@ -113,6 +113,10 @@ Output capture gồm stdout/stderr/result/error, MIME bundle, output index, trun
 
 ## 8. Experiments, reproducibility và remote compute
 
+**Portable training refinement:** [checkpoint relay/failover](compute-relay-and-heterogeneous-failover.md) chốt external commit lifecycle, full-state versus warm-start, data/RNG/optimizer compatibility, RPO/RTO và bounded source/destination overlap. [GPU thuê/SSH](remote-compute-external-gpu.md) giữ provider-specific allocation/storage/cleanup. Không claim zero progress loss: last remote committed step mới là mốc phục hồi; full bundle cũng không bảo đảm bitwise parity xuyên hardware. Đổi batch/precision là explicit config delta, không tự điều chỉnh rồi nói semantics giữ nguyên. Đây là target design, không capability đã triển khai.
+
+Chi tiết triển khai đề xuất cho hai CLI upstream ở [Remote compute: Colab và Kaggle](remote-compute-colab-kaggle.md): operation matrix, source extraction, ports/adapter placement, notebook/kernel/job identity, auth/data transfer, uncertainty/recovery, Research panes và các packet nghiệm thu. Reuse existing models/API trước khi thêm contract; Colab interactive khác Kaggle versioned batch có live logs. Thiết kế này chưa chứng nhận backend đã được cài hoặc account đã chạy thử.
+
 ```mermaid
 flowchart TD
     Q[Question and AnalysisSpec revision] --> I[Versioned data, code, environment]

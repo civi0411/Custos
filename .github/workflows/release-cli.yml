@@ -50,8 +50,11 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Smoke check package resolution
+        run: cargo pkgid -p custos-app-cli --offline
+
       - name: Build Release Binary
-        run: cargo build --release -p custos-cli
+        run: cargo build --release -p custos-app-cli
 
       - name: Stage Artifacts
         shell: bash

@@ -31,7 +31,6 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Verify Architecture Boundaries
-        continue-on-error: true
         run: |
           bash scripts/check_deps.sh
           bash scripts/check_naming.sh
@@ -41,13 +40,14 @@ jobs:
         run: cargo fmt --check --all
 
       - name: Cargo Check Workspace
-        continue-on-error: true
         run: cargo check --workspace --all-targets
 
       - name: Clippy Lint
         continue-on-error: true
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Run Tests
-        continue-on-error: true
+      - name: Run Core Tests (Blocking)
+        run: cargo test -p custos-domain -p custos-core -p custos-persistence -p custos-runtime -p custos-daemon -p custos-sdk -p custos-packs --lib
+
+      - name: Run Workspace Integration Tests
         run: cargo test --workspace --all-targets

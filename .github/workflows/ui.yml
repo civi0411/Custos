@@ -1,0 +1,46 @@
+name: Desktop UI CI
+
+on:
+  push:
+    branches: [ main, dev ]
+    paths:
+      - 'ui/desktop/**'
+      - 'tools/canvas-smoke.mjs'
+      - '.github/workflows/ui.yml'
+  pull_request:
+    branches: [ main, dev ]
+    paths:
+      - 'ui/desktop/**'
+      - 'tools/canvas-smoke.mjs'
+      - '.github/workflows/ui.yml'
+
+jobs:
+  ui-check:
+    name: Typecheck & Canvas Smoke (Desktop UI)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui/desktop
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+          cache-dependency-path: ui/desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck TypeScript
+        run: npx tsc --noEmit
+
+      - name: Canvas Smoke Invariants
+        working-directory: .
+        run: node --test tools/canvas-smoke.mjs
+
+      - name: Build Desktop Bundle
+        run: npm run build

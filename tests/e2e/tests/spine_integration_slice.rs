@@ -102,8 +102,9 @@ mod mediated_spine_execution {
         let (store, kernel, runtime, task) = setup_spine_fixture().await;
         assert_eq!(task.status, TaskStatus::Draft);
 
-        let start_cmd =
-            StartRunCommand::new(&task.id, "governor").with_workflow_revision("spine_v1");
+        let start_cmd = StartRunCommand::new(&task.id, "governor")
+            .with_workflow_revision("spine_v1")
+            .with_workspace_root(std::env::temp_dir().display().to_string());
         let run_handle: RunHandle = runtime
             .start_run(start_cmd)
             .await
@@ -164,8 +165,9 @@ mod gate3_idempotency_conflict {
     async fn test_gate3_duplicate_idempotency_key_conflict() {
         let (store, _, runtime, task) = setup_spine_fixture().await;
 
-        let start_cmd =
-            StartRunCommand::new(&task.id, "governor").with_workflow_revision("spine_v1");
+        let start_cmd = StartRunCommand::new(&task.id, "governor")
+            .with_workflow_revision("spine_v1")
+            .with_workspace_root(std::env::temp_dir().display().to_string());
         runtime.start_run(start_cmd).await.expect("start_run");
 
         let worker_runs = store.list_worker_runs_for_task(&task.id).await.unwrap();
@@ -192,8 +194,9 @@ mod crash_reconciliation_and_cancellation {
     async fn test_reconciliation_and_graceful_cancellation() {
         let (store, kernel, runtime, task) = setup_spine_fixture().await;
 
-        let start_cmd =
-            StartRunCommand::new(&task.id, "governor").with_workflow_revision("spine_v1");
+        let start_cmd = StartRunCommand::new(&task.id, "governor")
+            .with_workflow_revision("spine_v1")
+            .with_workspace_root(std::env::temp_dir().display().to_string());
         let run_handle = runtime.start_run(start_cmd).await.expect("start_run");
 
         // Simulate interrupted in-flight effect
