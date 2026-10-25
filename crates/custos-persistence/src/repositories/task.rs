@@ -90,6 +90,15 @@ impl TaskRepository {
     }
 
     pub fn save_task_with_event(&self, task: &Task, event: &TaskEvent) -> Result<(), DomainError> {
+        self.save_task_with_event_and_command(task, event, None)
+    }
+
+    pub fn save_task_with_event_and_command(
+        &self,
+        task: &Task,
+        event: &TaskEvent,
+        command_completion: Option<(&str, &str)>,
+    ) -> Result<(), DomainError> {
         if task.id != event.task_id() {
             return Err(DomainError::InvariantViolation(
                 "task snapshot and event IDs do not match".into(),
@@ -116,6 +125,12 @@ impl TaskRepository {
             .map_err(|error| DomainError::Validation(error.to_string()))?;
         if let Some(existing) = existing {
             if existing == event_json {
+                if let Some((cmd_id, res_json)) = command_completion {
+                    transaction.execute(
+                        "UPDATE command_ledger SET state = 'completed', result_json = ?2 WHERE command_id = ?1 AND state = 'pending'",
+                        params![cmd_id, res_json],
+                    ).map_err(|error| DomainError::Validation(error.to_string()))?;
+                }
                 transaction
                     .commit()
                     .map_err(|error| DomainError::Validation(error.to_string()))?;
@@ -183,6 +198,14 @@ impl TaskRepository {
                 params![event.task_id(), event_sequence, event.event_type(), event_json],
             )
             .map_err(|error| DomainError::Validation(error.to_string()))?;
+
+        if let Some((cmd_id, res_json)) = command_completion {
+            transaction.execute(
+                "UPDATE command_ledger SET state = 'completed', result_json = ?2 WHERE command_id = ?1 AND state = 'pending'",
+                params![cmd_id, res_json],
+            ).map_err(|error| DomainError::Validation(error.to_string()))?;
+        }
+
         transaction
             .commit()
             .map_err(|error| DomainError::Validation(error.to_string()))

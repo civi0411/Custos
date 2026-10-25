@@ -1,21 +1,22 @@
 use crate::connection::DbConnection;
 use crate::repositories::{
-    AssistantRepository, ContinuationRepository, DecisionRepository, FleetAutomationRepository,
-    OutboxRepository, ProviderRepository, ReplanRepository, ResearchRepository, RunRepository,
-    SessionRepository, SpanRepository, TaskRepository, WorkflowRevisionRepository,
-    WorkspaceRepository,
+    AssistantRepository, CommandLedgerRepository, ContinuationRepository, DecisionRepository,
+    ExperimentAttemptRepository, FleetAutomationRepository, OutboxRepository, ProviderRepository,
+    ReplanRepository, ResearchRepository, RunRepository, SessionRepository, SpanRepository,
+    TaskRepository, WorkflowRevisionRepository, WorkspaceRepository,
 };
 use async_trait::async_trait;
 use custos_core::contracts::storage::{
-    DecisionPort, EffectLedgerPort, OutboxEntry, OutboxPort, OutboxStatus, ReplanPort, RunPort,
-    WorkflowRevisionPort,
+    CommandAdmission, CommandLedgerEntry, CommandLedgerPort, DecisionPort, EffectLedgerPort, NotebookStoragePort,
+    OutboxEntry, OutboxPort, OutboxStatus, ReplanPort, RunPort, WorkflowRevisionPort,
 };
 use custos_core::contracts::workspace::WorkspaceRepository as WorkspaceRepoPort;
 use custos_core::kernel::{SessionStore, TaskEvent, TaskStore};
 use custos_domain::{
     ContinuationPacket, DecisionRecord, DispatchClaim, DomainError, ExecutionReceipt,
-    ExecutionWorkspace, LaunchAttempt, NodePlacement, ReplanRecord, Run, Session, SessionId,
-    SessionJournalEntry, Span, Task, WorkerRun, WorkflowRevision, WorkspaceId, WorkspaceStatus,
+    ExecutionWorkspace, LaunchAttempt, NodePlacement, NotebookCell, NotebookKernelState, ReplanRecord, Run, Session,
+    SessionId, SessionJournalEntry, Span, Task, WorkerRun, WorkflowRevision, WorkspaceId,
+    WorkspaceStatus,
 };
 
 /// SQLite-backed persistent storage implementing TaskStore, SessionStore, OutboxPort, RunPort,
@@ -39,6 +40,8 @@ pub struct SqliteTaskStore {
     provider_repo: ProviderRepository,
     fleet_automation_repo: FleetAutomationRepository,
     assistant_repo: AssistantRepository,
+    command_ledger_repo: CommandLedgerRepository,
+    experiment_attempt_repo: ExperimentAttemptRepository,
 }
 
 impl SqliteTaskStore {
@@ -59,6 +62,8 @@ impl SqliteTaskStore {
         let provider_repo = ProviderRepository::new(db.clone());
         let fleet_automation_repo = FleetAutomationRepository::new(db.clone());
         let assistant_repo = AssistantRepository::new(db.clone());
+        let command_ledger_repo = CommandLedgerRepository::new(db.clone());
+        let experiment_attempt_repo = ExperimentAttemptRepository::new(db.writer_arc());
         let store = Self {
             db,
             task_repo,
@@ -75,6 +80,8 @@ impl SqliteTaskStore {
             provider_repo,
             fleet_automation_repo,
             assistant_repo,
+            command_ledger_repo,
+            experiment_attempt_repo,
         };
         Ok(store)
     }
@@ -96,6 +103,8 @@ impl SqliteTaskStore {
         let provider_repo = ProviderRepository::new(db.clone());
         let fleet_automation_repo = FleetAutomationRepository::new(db.clone());
         let assistant_repo = AssistantRepository::new(db.clone());
+        let command_ledger_repo = CommandLedgerRepository::new(db.clone());
+        let experiment_attempt_repo = ExperimentAttemptRepository::new(db.writer_arc());
         let store = Self {
             db,
             task_repo,
@@ -112,12 +121,18 @@ impl SqliteTaskStore {
             provider_repo,
             fleet_automation_repo,
             assistant_repo,
+            command_ledger_repo,
+            experiment_attempt_repo,
         };
         Ok(store)
     }
 
     pub fn db(&self) -> &DbConnection {
         &self.db
+    }
+
+    pub fn experiment_attempts(&self) -> &ExperimentAttemptRepository {
+        &self.experiment_attempt_repo
     }
 
     pub fn outbox(&self) -> &OutboxRepository {
@@ -152,6 +167,10 @@ impl SqliteTaskStore {
         self.run_repo.reconcile_runs_on_startup()
     }
 
+    pub fn fence_claim(&self, claim_id: &str) -> Result<(), DomainError> {
+        self.run_repo.fence_claim(claim_id)
+    }
+
     pub fn decisions(&self) -> &DecisionRepository {
         &self.decision_repo
     }
@@ -178,6 +197,10 @@ impl SqliteTaskStore {
 
     pub fn fleet_automation(&self) -> &FleetAutomationRepository {
         &self.fleet_automation_repo
+    }
+
+    pub fn command_ledger(&self) -> &CommandLedgerRepository {
+        &self.command_ledger_repo
     }
 
     pub fn get_settings(&self) -> Result<std::collections::HashMap<String, String>, DomainError> {
@@ -532,8 +555,16 @@ impl OutboxPort for SqliteTaskStore {
         self.outbox_repo.enqueue(entry).await
     }
 
+    async fn get(&self, id: &str) -> Result<Option<OutboxEntry>, DomainError> {
+        self.outbox_repo.get(id).await
+    }
+
     async fn mark_dispatching(&self, id: &str) -> Result<(), DomainError> {
         self.outbox_repo.mark_dispatching(id).await
+    }
+
+    async fn mark_approved(&self, id: &str) -> Result<(), DomainError> {
+        self.outbox_repo.mark_approved(id).await
     }
 
     async fn mark_receipted(&self, id: &str, receipt: ExecutionReceipt) -> Result<(), DomainError> {
@@ -542,6 +573,10 @@ impl OutboxPort for SqliteTaskStore {
 
     async fn mark_uncertain(&self, id: &str) -> Result<(), DomainError> {
         self.outbox_repo.mark_uncertain(id).await
+    }
+
+    async fn mark_failed(&self, id: &str, error: &str) -> Result<(), DomainError> {
+        self.outbox_repo.mark_failed(id, error).await
     }
 
     async fn list_by_status(&self, status: OutboxStatus) -> Result<Vec<OutboxEntry>, DomainError> {
@@ -591,7 +626,7 @@ impl EffectLedgerPort for SqliteTaskStore {
 
 #[async_trait]
 impl RunPort for SqliteTaskStore {
-    async fn save_run(&self, run: &Run) -> Result<(), DomainError> {
+    async fn save_run(&self, run: &mut Run) -> Result<(), DomainError> {
         self.run_repo.save_run(run)
     }
 
@@ -603,7 +638,7 @@ impl RunPort for SqliteTaskStore {
         self.run_repo.list_runs_for_task(task_id)
     }
 
-    async fn save_worker_run(&self, wrun: &WorkerRun) -> Result<(), DomainError> {
+    async fn save_worker_run(&self, wrun: &mut WorkerRun) -> Result<(), DomainError> {
         self.run_repo.save_worker_run(wrun)
     }
 
@@ -651,6 +686,14 @@ impl RunPort for SqliteTaskStore {
         attempt_id: &str,
     ) -> Result<Option<LaunchAttempt>, DomainError> {
         self.run_repo.get_launch_attempt(attempt_id)
+    }
+
+    async fn list_active_claims(&self) -> Result<Vec<DispatchClaim>, DomainError> {
+        self.run_repo.list_active_claims()
+    }
+
+    async fn fence_claim(&self, claim_id: &str) -> Result<(), DomainError> {
+        self.run_repo.fence_claim(claim_id)
     }
 
     async fn reconcile_runs_on_startup(&self) -> Result<usize, DomainError> {
@@ -720,6 +763,74 @@ impl ReplanPort for SqliteTaskStore {
 
     async fn list_replans_for_task(&self, task_id: &str) -> Result<Vec<ReplanRecord>, DomainError> {
         self.replan_repo.list_replans_for_task(task_id)
+    }
+}
+
+#[async_trait]
+impl CommandLedgerPort for SqliteTaskStore {
+    async fn get_command(&self, command_id: &str) -> Result<Option<CommandLedgerEntry>, DomainError> {
+        self.command_ledger_repo.get_command(command_id)
+    }
+
+    async fn record_command(&self, entry: &CommandLedgerEntry) -> Result<(), DomainError> {
+        self.command_ledger_repo.record_command(entry)
+    }
+
+    async fn admit(
+        &self,
+        command_id: &str,
+        method: &str,
+        payload_digest: &str,
+        scope: Option<&str>,
+        now_ms: i64,
+        ttl_ms: i64,
+    ) -> Result<CommandAdmission, DomainError> {
+        self.command_ledger_repo
+            .admit(command_id, method, payload_digest, scope, now_ms, ttl_ms)
+    }
+
+    async fn complete(&self, command_id: &str, result_json: &str) -> Result<(), DomainError> {
+        self.command_ledger_repo.complete(command_id, result_json)
+    }
+
+    async fn abandon(&self, command_id: &str) -> Result<(), DomainError> {
+        self.command_ledger_repo.abandon(command_id)
+    }
+}
+
+#[async_trait]
+impl NotebookStoragePort for SqliteTaskStore {
+    async fn list_notebook_cells(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<NotebookCell>, DomainError> {
+        self.research_repo.list_notebook_cells(session_id)
+    }
+
+    async fn replace_notebook_cells(
+        &self,
+        session_id: &str,
+        cells: &[NotebookCell],
+    ) -> Result<(), DomainError> {
+        self.research_repo.replace_notebook_cells(session_id, cells)
+    }
+
+    async fn save_notebook_cell(&self, cell: &NotebookCell) -> Result<(), DomainError> {
+        self.research_repo.save_notebook_cell(cell)
+    }
+
+    async fn get_notebook_kernel_state(
+        &self,
+        session_id: &str,
+    ) -> Result<NotebookKernelState, DomainError> {
+        self.research_repo.get_notebook_kernel_state(session_id)
+    }
+
+    async fn save_notebook_kernel_state(
+        &self,
+        state: &NotebookKernelState,
+    ) -> Result<(), DomainError> {
+        self.research_repo.save_notebook_kernel_state(state)
     }
 }
 
@@ -1016,7 +1127,7 @@ mod tests {
         let mut run = Run::new(task.id.clone(), 1);
         run.workflow_revision = Some("rev-1".into());
         run.transition(RunStatus::Active).unwrap();
-        store.save_run(&run).await.unwrap();
+        store.save_run(&mut run).await.unwrap();
 
         // 2. Query Run
         let loaded = store.get_run(&run.id).await.unwrap().unwrap();
@@ -1029,7 +1140,7 @@ mod tests {
         let mut wrun = WorkerRun::new(task.id.clone(), "worker_alpha".into(), 3);
         wrun.run_id = Some(run.id.clone());
         wrun.transition(RunStatus::Active).unwrap();
-        store.save_worker_run(&wrun).await.unwrap();
+        store.save_worker_run(&mut wrun).await.unwrap();
 
         // 4. Query WorkerRun
         let loaded_wrun = store.get_worker_run(&wrun.id).await.unwrap().unwrap();
@@ -1040,7 +1151,7 @@ mod tests {
 
         // 5. Update Run status to Completed
         run.transition(RunStatus::Completed).unwrap();
-        store.save_run(&run).await.unwrap();
+        store.save_run(&mut run).await.unwrap();
         let updated_run = store.get_run(&run.id).await.unwrap().unwrap();
         assert_eq!(updated_run.status, RunStatus::Completed);
         assert!(updated_run.ended_at.is_some());

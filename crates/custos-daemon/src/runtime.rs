@@ -127,9 +127,9 @@ impl CustosRuntime {
             task_service.clone(),
         ));
 
-        let kernel = Arc::new(TrustedKernel::new(store.clone()));
-
         let workspace_root = std::env::current_dir().unwrap_or_else(|_| ".".into());
+        let source_acq = Arc::new(custos_adapters::tools::source_fetch::SourceFetchAdapter::with_base_dir(&workspace_root));
+        let kernel = Arc::new(TrustedKernel::with_source_acquisition(store.clone(), source_acq));
         let sandbox = Arc::new(SovereignDeveloperAdapter::new(workspace_root.clone()));
 
         // Background OAuth Token Sweeper Job: runs every 5 minutes and refreshes expiring tokens
@@ -173,12 +173,79 @@ impl CustosRuntime {
         ));
 
         let mut harness_reg = HarnessRegistry::default_with_workspace(workspace_root.clone());
+        let default_tools = vec![
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "read_file",
+                    "description": "Read contents of a file within the workspace",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "Relative or absolute path within workspace" }
+                        },
+                        "required": ["path"]
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "write_file",
+                    "description": "Write content to a file within the workspace",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "Relative or absolute path within workspace" },
+                            "content": { "type": "string", "description": "File text content" }
+                        },
+                        "required": ["path", "content"]
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "list_dir",
+                    "description": "List files and directories in a workspace folder",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "path": { "type": "string", "description": "Directory path (defaults to '.')" }
+                        }
+                    }
+                }
+            }),
+            serde_json::json!({
+                "type": "function",
+                "function": {
+                    "name": "bash",
+                    "description": "Run a shell command safely inside the sandbox",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "command": { "type": "string", "description": "Shell command to execute" },
+                            "timeout_secs": { "type": "integer", "description": "Execution timeout in seconds" }
+                        },
+                        "required": ["command"]
+                    }
+                }
+            }),
+        ];
+
+        let developer_sandbox = Arc::new(SovereignDeveloperAdapter::new(workspace_root.clone()));
+        let tool_executor = Arc::new(DaemonGovernedToolExecutor::new(
+            developer_sandbox.clone(),
+            kernel.clone(),
+            store.outbox().clone(),
+        ));
         let governed = Arc::new(
             custos_runtime::agent::runtime_port::GovernedAgentRuntime::new(
                 model.clone(),
                 "Custos Governed Agent Runtime",
-                vec![],
-            ),
+                default_tools,
+            )
+            .with_tool_executor(tool_executor),
         );
         harness_reg.register(
             governed,
@@ -213,14 +280,22 @@ impl CustosRuntime {
                 .with_journal_manager(session_manager.clone())
                 .with_workspace_coordinator(workspace_coordinator.clone()),
         );
-        let terminal_coordinator = Arc::new(custos_runtime::TerminalCoordinator::new());
-        let python_coordinator = Arc::new(custos_runtime::PythonKernelCoordinator::new());
+        let active_claims = store.runs().list_active_claims()?;
+        workflow.dispatcher().restore_from_active_claims(active_claims);
+        let terminal_coordinator = Arc::new(custos_runtime::TerminalCoordinator::new(Arc::new(
+            custos_adapters::terminal::NativePtyDriver,
+        )));
+        let python_coordinator = Arc::new(custos_runtime::PythonKernelCoordinator::new(Arc::new(
+            custos_adapters::notebook::LocalPythonDriver,
+        )));
 
         let oauth_callback_server = Arc::new(
             crate::oauth_callback_server::OAuthCallbackServer::with_credentials(credentials.clone()),
         );
 
         let pack_registry = Arc::new(custos_packs::create_default_pack_registry());
+        // not-integrated: gateway awaits product caller and lifecycle test (F4)
+        // not-integrated: in-memory memory store awaits product caller (F3)
 
         let local_api = Arc::new(
             LocalApiDispatcher::new(
@@ -277,16 +352,17 @@ pub(crate) fn reserve_available_provider_account(repo: &custos_persistence::Prov
     let providers = repo.list_providers()?;
     let mut eligible = Vec::new();
     let mut stored = false;
-    for account in providers.iter().filter(|p| p.service_type == service) {
+    for account in providers.iter().filter(|p| p.service_type == service || (matches!(service, "antigravity" | "gemini") && matches!(p.service_type.as_str(), "antigravity" | "gemini"))) {
         stored = true;
         if !matches!(account.status.as_str(), "active"|"configured"|"primary"|"standby") { continue; }
         let metadata = repo.credential_metadata(&account.id)?;
-        if service != "local" && !metadata.as_ref().is_some_and(|m| m.state == "active" && (m.has_refresh_token || m.expires_at > chrono::Utc::now().timestamp_millis())) { continue; }
+        let effective_service = account.service_type.as_str();
+        if effective_service != "local" && !metadata.as_ref().is_some_and(|m| m.state == "active" && (m.has_refresh_token || m.expires_at > chrono::Utc::now().timestamp_millis())) { continue; }
         let oauth = metadata.as_ref().is_some_and(|m| m.has_refresh_token || m.scope.as_deref().is_some_and(|s| !s.is_empty()));
-        let endpoint = account.endpoint_url.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or(match service {
-            "openai" => "https://api.openai.com/v1", "anthropic" => "https://api.anthropic.com/v1", "gemini" => "https://generativelanguage.googleapis.com", "copilot" => "https://api.githubcopilot.com", "antigravity" => "https://cloudcode-pa.googleapis.com", "deepseek" => "https://api.deepseek.com/v1", "local" => "http://localhost:11434", _ => "",
+        let endpoint = account.endpoint_url.as_deref().filter(|s| !s.trim().is_empty()).unwrap_or(match effective_service {
+            "openai" => "https://api.openai.com/v1", "anthropic" => "https://api.anthropic.com/v1", "gemini" => "https://cloudcode-pa.googleapis.com", "copilot" => "https://api.githubcopilot.com", "antigravity" => "https://cloudcode-pa.googleapis.com", "deepseek" => "https://api.deepseek.com/v1", "local" => "http://localhost:11434", _ => "",
         });
-        let key = custos_adapters::providers::probe::verified_catalog_key(&account.id, endpoint, oauth, metadata.as_ref().map(|m| m.created_at).unwrap_or(0), service);
+        let key = custos_adapters::providers::probe::verified_catalog_key(&account.id, endpoint, oauth, metadata.as_ref().map(|m| m.created_at).unwrap_or(0), effective_service);
         if availability.check(&key, model).is_err() { continue; }
         if repo.list_catalog_models(Some(&key))?.iter().any(|m|m.id == model && custos_adapters::providers::probe::conversation_model_is_visible(&m.id, Some(&m.label)) && effort.is_none_or(|value| m.efforts.iter().any(|supported| supported == value))) {
             eligible.push(account.id.clone());
@@ -312,10 +388,11 @@ impl CredentialResolver for DaemonCredentialResolver {
     async fn validate_account(&self, account_id: &str, service: &str) -> Result<(), DomainError> {
         let record = self.store.providers().get_provider(account_id)?.ok_or_else(|| DomainError::Validation("Selected provider account no longer exists".into()))?;
         if !matches!(record.status.as_str(), "active" | "configured" | "primary" | "standby") { return Err(DomainError::Validation("Selected provider account is inactive".into())); }
-        if record.service_type != service {
+        let matches_service = record.service_type == service || (matches!(service, "antigravity" | "gemini") && matches!(record.service_type.as_str(), "antigravity" | "gemini"));
+        if !matches_service {
             return Err(DomainError::Validation("Selected account does not belong to the requested model provider".into()));
         }
-        if !matches!(service,"local"|"ollama") && self.credentials.get_oauth_token(account_id).await?.is_none() {
+        if !matches!(service, "local" | "ollama" | "lmstudio" | "custom") && self.credentials.get_oauth_token(account_id).await?.is_none() {
             return Err(DomainError::Validation("secure_storage_missing: Reconnect this provider account".into()));
         }
         Ok(())
@@ -568,3 +645,325 @@ pub(crate) fn provider_catalog_scope(repo: &custos_persistence::ProviderReposito
     });
     Ok(custos_adapters::providers::probe::verified_catalog_key(account, endpoint, oauth, metadata.as_ref().map(|m| m.created_at).unwrap_or(0), &record.service_type))
 }
+
+/// Concrete tool executor for GovernedAgentRuntime wiring SovereignDeveloperAdapter and McpFederationHub.
+pub struct DaemonGovernedToolExecutor {
+    developer_adapter: Arc<SovereignDeveloperAdapter>,
+    kernel: Arc<dyn custos_core::contracts::kernel::KernelPort>,
+    outbox: custos_persistence::repositories::outbox::OutboxRepository,
+    mcp_hub: Option<Arc<custos_adapters::mcp::McpFederationHub>>,
+}
+
+impl DaemonGovernedToolExecutor {
+    pub fn new(
+        developer_adapter: Arc<SovereignDeveloperAdapter>,
+        kernel: Arc<dyn custos_core::contracts::kernel::KernelPort>,
+        outbox: custos_persistence::repositories::outbox::OutboxRepository,
+    ) -> Self {
+        Self {
+            developer_adapter,
+            kernel,
+            outbox,
+            mcp_hub: None,
+        }
+    }
+
+    pub fn with_mcp_hub(mut self, hub: Arc<custos_adapters::mcp::McpFederationHub>) -> Self {
+        self.mcp_hub = Some(hub);
+        self
+    }
+}
+
+#[async_trait::async_trait]
+impl custos_runtime::agent::runtime_port::GovernedToolExecutor for DaemonGovernedToolExecutor {
+    async fn authorize(
+        &self,
+        ctx: &custos_runtime::agent::runtime_port::InvocationContext,
+        name: &str,
+        _params: &serde_json::Value,
+    ) -> Result<(), DomainError> {
+        if name.starts_with("dangerous_") || name.contains("format_disk") {
+            return Err(DomainError::Unauthorized(format!("Tool '{name}' is forbidden by kernel policy")));
+        }
+        if name.contains("__") && custos_adapters::mcp::security::is_dangerous_tool_pattern(name) {
+            let grant = self.kernel.find_active_grant(&ctx.task_id, name).await?;
+            if grant.is_none() {
+                return Err(DomainError::Unauthorized(format!("Tool '{name}' requires explicit capability grant")));
+            }
+        }
+        Ok(())
+    }
+
+    async fn execute(
+        &self,
+        ctx: &custos_runtime::agent::runtime_port::InvocationContext,
+        name: &str,
+        params: &serde_json::Value,
+    ) -> Result<custos_runtime::agent::runtime_port::ToolResult, DomainError> {
+        let (action_name, risk_level, target) = if name.contains("__") {
+            let risk = if custos_adapters::mcp::security::is_dangerous_tool_pattern(name) {
+                custos_domain::RiskLevel::High
+            } else {
+                custos_domain::RiskLevel::Medium
+            };
+            let tgt = params
+                .get("target")
+                .or_else(|| params.get("path"))
+                .or_else(|| params.get("url"))
+                .and_then(|v| v.as_str())
+                .unwrap_or(name);
+            (name, risk, tgt.to_string())
+        } else {
+            let act = match name {
+                "read_file" | "read" => "read_file",
+                "write_file" | "write" => "write_file",
+                "list_dir" | "list" | "list_files" => "list_dir",
+                "bash" | "shell" | "exec" => "bash",
+                "patch_preview" => "patch_preview",
+                unknown => {
+                    return Err(DomainError::Validation(format!(
+                        "Unknown or unmapped tool: '{unknown}'"
+                    )))
+                }
+            };
+            let risk = match act {
+                "write_file" => custos_domain::RiskLevel::Medium,
+                "bash" => custos_domain::RiskLevel::High,
+                _ => custos_domain::RiskLevel::Low,
+            };
+            let tgt = params
+                .get("path")
+                .or_else(|| params.get("file"))
+                .or_else(|| params.get("target_file"))
+                .or_else(|| params.get("command"))
+                .or_else(|| params.get("cmd"))
+                .or_else(|| params.get("target"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("workspace");
+            (act, risk, tgt.to_string())
+        };
+
+        let action_id = custos_domain::new_id("act");
+        let mut action_intent = custos_domain::ActionIntent::new(
+            action_id.clone(),
+            action_name.to_string(),
+            target,
+            params.clone(),
+            risk_level,
+        )
+        .with_task_id(ctx.task_id.clone());
+        action_intent.assurance = custos_domain::Assurance::CustosMediated;
+
+        // 1. Authorize action and obtain permit via Kernel
+        let permit = match self
+            .kernel
+            .request_permit(&ctx.task_id, &action_intent, &ctx.actor)
+            .await
+        {
+            Ok(p) => p,
+            Err(DomainError::Conflict(reason)) => {
+                let attempt_id = custos_domain::new_id("att");
+                let entry = custos_core::contracts::storage::OutboxEntry {
+                    id: attempt_id.clone(),
+                    task_id: ctx.task_id.clone(),
+                    action_id: action_id.clone(),
+                    permit_id: "".to_string(),
+                    argument_digest: action_intent.argument_digest(),
+                    idempotency_key: Some(format!("{}:{}", ctx.task_id, action_id)),
+                    status: custos_core::contracts::storage::OutboxStatus::Pending,
+                    created_at: chrono::Utc::now(),
+                    receipt: None,
+                    recipient: None,
+                    payload_json: Some(params.to_string()),
+                    error_message: Some(reason),
+                };
+                custos_core::contracts::storage::OutboxPort::enqueue(&self.outbox, entry).await?;
+                return Ok(
+                    custos_runtime::agent::runtime_port::ToolResult::PendingApproval {
+                        attempt_id,
+                    },
+                );
+            }
+            Err(e) => return Err(e),
+        };
+
+        // 2. Consume permit atomically (INV-04)
+        let permit = self
+            .kernel
+            .consume_permit(&permit.id, &action_intent)
+            .await?;
+
+        // 3. Durable ledger admission: MUST succeed before dispatching side-effect
+        let attempt_id = custos_domain::new_id("att");
+        let idempotency_key = action_intent
+            .idempotency_key
+            .clone()
+            .unwrap_or_else(|| format!("{}:{}", ctx.task_id, action_id));
+        let attempt = custos_domain::EffectAttempt {
+            id: attempt_id.clone(),
+            node_attempt_id: ctx.run_id.clone(),
+            permit_id: permit.id.clone(),
+            idempotency_key: idempotency_key.clone(),
+            status: custos_domain::EffectStatus::InFlight,
+            started_at: chrono::Utc::now(),
+            ended_at: None,
+            receipt: None,
+        };
+        self.outbox.record_effect(&attempt)?;
+
+        let outbox_entry = custos_core::contracts::storage::OutboxEntry {
+            id: attempt_id.clone(),
+            task_id: ctx.task_id.clone(),
+            action_id: action_id.clone(),
+            permit_id: permit.id.clone(),
+            argument_digest: action_intent.argument_digest(),
+            idempotency_key: Some(idempotency_key),
+            status: custos_core::contracts::storage::OutboxStatus::Dispatching,
+            created_at: chrono::Utc::now(),
+            receipt: None,
+            recipient: None,
+            payload_json: Some(params.to_string()),
+            error_message: None,
+        };
+        custos_core::contracts::storage::OutboxPort::enqueue(&self.outbox, outbox_entry).await?;
+
+        // 4. Physical / Remote dispatch
+        if name.contains("__") {
+            let hub = self.mcp_hub.as_ref().ok_or_else(|| {
+                DomainError::Validation(
+                    "MCP federation hub is not configured on this tool executor".into(),
+                )
+            })?;
+            let tool_ctx = custos_adapters::mcp::ToolCallContext::new(&permit.id, &ctx.run_id);
+            match hub.dispatch_call(name, Some(params.clone()), &tool_ctx).await {
+                Ok(res) => {
+                    let is_error = res.is_error.unwrap_or(false);
+                    let val = serde_json::to_value(&res)
+                        .unwrap_or_else(|_| serde_json::json!({"success": !is_error}));
+                    let receipt = custos_domain::ExecutionReceipt {
+                        receipt_id: custos_domain::new_id("rcpt"),
+                        permit_id: permit.id.clone(),
+                        action_id: action_intent.id.clone(),
+                        status: if is_error {
+                            custos_domain::ReceiptStatus::Failure
+                        } else {
+                            custos_domain::ReceiptStatus::Success
+                        },
+                        output_digest: format!(
+                            "sha256:{}",
+                            custos_domain::digest(val.to_string().as_bytes())
+                        ),
+                        output_data: Some(val.clone()),
+                        error_message: if is_error {
+                            Some(format!("{:?}", res.content))
+                        } else {
+                            None
+                        },
+                        duration_ms: None,
+                        executed_at: chrono::Utc::now(),
+                        assurance: custos_domain::Assurance::CustosMediated,
+                    };
+                    let status = custos_domain::EffectStatus::from(receipt.status);
+                    self.outbox
+                        .update_effect_status(&attempt_id, status, Some(&receipt))?;
+                    if let Err(settle_err) = custos_core::contracts::storage::OutboxPort::mark_receipted(
+                        &self.outbox,
+                        &attempt_id,
+                        receipt.clone(),
+                    )
+                    .await {
+                        let _ = self.outbox.update_effect_status(
+                            &attempt_id,
+                            custos_domain::EffectStatus::Uncertain,
+                            Some(&receipt),
+                        );
+                        let _ = custos_core::contracts::storage::OutboxPort::mark_uncertain(
+                            &self.outbox,
+                            &attempt_id,
+                        ).await;
+                        return Err(DomainError::Validation(format!("Outbox settlement failed: {settle_err}")));
+                    }
+                    if is_error {
+                        Ok(custos_runtime::agent::runtime_port::ToolResult::Error(
+                            format!("{:?}", res.content),
+                        ))
+                    } else {
+                        Ok(custos_runtime::agent::runtime_port::ToolResult::Success(val))
+                    }
+                }
+                Err(err) => {
+                    let _ = self.outbox.update_effect_status(
+                        &attempt_id,
+                        custos_domain::EffectStatus::Uncertain,
+                        None,
+                    );
+                    let _ = custos_core::contracts::storage::OutboxPort::mark_uncertain(
+                        &self.outbox,
+                        &attempt_id,
+                    )
+                    .await;
+                    Err(err)
+                }
+            }
+        } else {
+            let receipt_res = custos_core::contracts::sandbox::SandboxPort::execute(
+                self.developer_adapter.as_ref(),
+                &action_intent,
+                &permit,
+            )
+            .await;
+
+            match receipt_res {
+                Ok(receipt) => {
+                    let status = custos_domain::EffectStatus::from(receipt.status);
+                    self.outbox
+                        .update_effect_status(&attempt_id, status, Some(&receipt))?;
+                    if let Err(settle_err) = custos_core::contracts::storage::OutboxPort::mark_receipted(
+                        &self.outbox,
+                        &attempt_id,
+                        receipt.clone(),
+                    )
+                    .await {
+                        let _ = self.outbox.update_effect_status(
+                            &attempt_id,
+                            custos_domain::EffectStatus::Uncertain,
+                            Some(&receipt),
+                        );
+                        let _ = custos_core::contracts::storage::OutboxPort::mark_uncertain(
+                            &self.outbox,
+                            &attempt_id,
+                        ).await;
+                        return Err(DomainError::Validation(format!("Outbox settlement failed: {settle_err}")));
+                    }
+                    if receipt.status == custos_domain::ReceiptStatus::Success {
+                        Ok(custos_runtime::agent::runtime_port::ToolResult::Success(
+                            receipt
+                                .output_data
+                                .unwrap_or(serde_json::json!({ "success": true })),
+                        ))
+                    } else {
+                        Ok(custos_runtime::agent::runtime_port::ToolResult::Error(
+                            receipt
+                                .error_message
+                                .unwrap_or_else(|| "Execution failed".into()),
+                        ))
+                    }
+                }
+                Err(err) => {
+                    let _ = self.outbox.update_effect_status(
+                        &attempt_id,
+                        custos_domain::EffectStatus::Uncertain,
+                        None,
+                    );
+                    let _ = custos_core::contracts::storage::OutboxPort::mark_uncertain(
+                        &self.outbox,
+                        &attempt_id,
+                    )
+                    .await;
+                    Err(err)
+                }
+            }
+        }
+    }
+}
+

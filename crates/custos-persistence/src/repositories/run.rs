@@ -14,23 +14,34 @@ impl RunRepository {
         Self { db }
     }
 
-    pub fn save_run(&self, run: &Run) -> Result<(), DomainError> {
+    pub fn save_run(&self, run: &mut Run) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
-        let meta_str = serde_json::to_string(&run.metadata).unwrap_or_else(|_| "{}".to_string());
+        let next_version = run.state_version.checked_add(1)
+            .filter(|v| *v <= i64::MAX as u64)
+            .ok_or_else(|| DomainError::Validation("Run state version exhausted".into()))?;
+        let meta_str = serde_json::to_string(&run.metadata)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
         let ended_at_str = run.ended_at.map(|dt| dt.to_rfc3339());
 
-        conn.execute(
-            "INSERT INTO runs (id, task_id, workflow_revision, status, attempt, current_span_num, started_at, ended_at, metadata_json)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+        let changed = conn.execute(
+            "INSERT INTO runs (id, task_id, workflow_revision, status, attempt, current_span_num, started_at, ended_at, metadata_json, state_version)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10
+             WHERE ?11 = 0 OR EXISTS (SELECT 1 FROM runs WHERE id = ?1)
              ON CONFLICT(id) DO UPDATE SET
-                task_id = excluded.task_id,
-                workflow_revision = excluded.workflow_revision,
                 status = excluded.status,
                 attempt = excluded.attempt,
                 current_span_num = excluded.current_span_num,
-                started_at = excluded.started_at,
                 ended_at = excluded.ended_at,
-                metadata_json = excluded.metadata_json",
+                metadata_json = excluded.metadata_json,
+                state_version = excluded.state_version
+             WHERE runs.state_version = ?11 AND runs.task_id = excluded.task_id
+               AND runs.workflow_revision IS excluded.workflow_revision
+               AND runs.started_at = excluded.started_at
+               AND excluded.attempt >= runs.attempt
+               AND (runs.status = excluded.status
+                 OR (runs.status = 'pending' AND excluded.status IN ('active', 'cancelled'))
+                 OR (runs.status = 'active' AND excluded.status IN ('suspended', 'completed', 'failed', 'cancelled'))
+                 OR (runs.status = 'suspended' AND excluded.status IN ('active', 'cancelled')))",
             params![
                 run.id,
                 run.task_id,
@@ -41,10 +52,15 @@ impl RunRepository {
                 run.started_at.to_rfc3339(),
                 ended_at_str,
                 meta_str,
+                next_version as i64,
+                run.state_version as i64,
             ],
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
-
+        if changed != 1 {
+            return Err(DomainError::Conflict(format!("Stale or invalid run update: {}", run.id)));
+        }
+        run.state_version = next_version;
         Ok(())
     }
 
@@ -52,7 +68,7 @@ impl RunRepository {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, task_id, workflow_revision, status, attempt, current_span_num, started_at, ended_at, metadata_json
+                "SELECT id, task_id, workflow_revision, status, attempt, current_span_num, started_at, ended_at, metadata_json, state_version
                  FROM runs WHERE id = ?1",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -69,7 +85,7 @@ impl RunRepository {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, task_id, workflow_revision, status, attempt, current_span_num, started_at, ended_at, metadata_json
+                "SELECT id, task_id, workflow_revision, status, attempt, current_span_num, started_at, ended_at, metadata_json, state_version
                  FROM runs WHERE task_id = ?1 ORDER BY started_at ASC",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -85,23 +101,32 @@ impl RunRepository {
         Ok(runs)
     }
 
-    pub fn save_worker_run(&self, wrun: &WorkerRun) -> Result<(), DomainError> {
+    pub fn save_worker_run(&self, wrun: &mut WorkerRun) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
+        let next_version = wrun.state_version.checked_add(1)
+            .filter(|v| *v <= i64::MAX as u64)
+            .ok_or_else(|| DomainError::Validation("Worker state version exhausted".into()))?;
         let ended_at_str = wrun.ended_at.map(|dt| dt.to_rfc3339());
 
-        conn.execute(
-            "INSERT INTO worker_runs (id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+        let changed = conn.execute(
+            "INSERT INTO worker_runs (id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version)
+             SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11
+             WHERE ?12 = 0 OR EXISTS (SELECT 1 FROM worker_runs WHERE id = ?1)
              ON CONFLICT(id) DO UPDATE SET
-                run_id = excluded.run_id,
-                task_id = excluded.task_id,
-                worker_id = excluded.worker_id,
                 attempt_id = excluded.attempt_id,
                 max_attempts = excluded.max_attempts,
                 status = excluded.status,
-                started_at = excluded.started_at,
                 ended_at = excluded.ended_at,
-                continuation_packet_ref = excluded.continuation_packet_ref",
+                continuation_packet_ref = excluded.continuation_packet_ref,
+                state_version = excluded.state_version
+             WHERE worker_runs.state_version = ?12
+               AND worker_runs.run_id IS excluded.run_id AND worker_runs.task_id = excluded.task_id
+               AND worker_runs.worker_id = excluded.worker_id AND worker_runs.started_at = excluded.started_at
+               AND excluded.attempt_id >= worker_runs.attempt_id
+               AND (worker_runs.status = excluded.status
+                 OR (worker_runs.status = 'pending' AND excluded.status IN ('active', 'cancelled'))
+                 OR (worker_runs.status = 'active' AND excluded.status IN ('suspended', 'completed', 'failed', 'cancelled'))
+                 OR (worker_runs.status = 'suspended' AND excluded.status IN ('active', 'cancelled')))",
             params![
                 wrun.id,
                 wrun.run_id,
@@ -113,10 +138,15 @@ impl RunRepository {
                 wrun.started_at.to_rfc3339(),
                 ended_at_str,
                 wrun.continuation_packet_ref,
+                next_version as i64,
+                wrun.state_version as i64,
             ],
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
-
+        if changed != 1 {
+            return Err(DomainError::Conflict(format!("Stale or invalid worker update: {}", wrun.id)));
+        }
+        wrun.state_version = next_version;
         Ok(())
     }
 
@@ -124,7 +154,7 @@ impl RunRepository {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref
+                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version
                  FROM worker_runs WHERE id = ?1",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -141,7 +171,7 @@ impl RunRepository {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref
+                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version
                  FROM worker_runs WHERE task_id = ?1 ORDER BY started_at ASC",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -161,7 +191,7 @@ impl RunRepository {
         let conn = self.db.lock()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref
+                "SELECT id, run_id, task_id, worker_id, attempt_id, max_attempts, status, started_at, ended_at, continuation_packet_ref, state_version
                  FROM worker_runs WHERE run_id = ?1 ORDER BY started_at ASC",
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -210,6 +240,7 @@ impl RunRepository {
 
         Ok(Run {
             id: row.get(0)?,
+            state_version: row.get(9)?,
             task_id: row.get(1)?,
             workflow_revision: row.get(2)?,
             status: Self::parse_status(&status_str),
@@ -238,6 +269,7 @@ impl RunRepository {
 
         Ok(WorkerRun {
             id: row.get(0)?,
+            state_version: row.get(10)?,
             run_id: row.get(1)?,
             task_id: row.get(2)?,
             worker_id: row.get(3)?,
@@ -285,22 +317,80 @@ impl RunRepository {
 
     pub fn update_claim(&self, claim: &DispatchClaim) -> Result<(), DomainError> {
         let conn = self.db.lock()?;
-        conn.execute(
-            "UPDATE dispatch_claims SET
-                status = ?2,
-                dispatched_at = ?3,
-                released_at = ?4,
-                worker_run_id = ?5
-             WHERE id = ?1",
-            params![
-                claim.id,
-                claim.status.to_string(),
-                claim.dispatched_at.map(|dt| dt.to_rfc3339()),
-                claim.released_at.map(|dt| dt.to_rfc3339()),
-                claim.worker_run_id,
-            ],
-        )
+        let affected = match claim.status {
+            ClaimStatus::Dispatched => conn.execute(
+                "UPDATE dispatch_claims SET
+                    status = ?2,
+                    dispatched_at = ?3,
+                    released_at = ?4,
+                    worker_run_id = ?5
+                 WHERE id = ?1 AND status = 'pending'",
+                params![
+                    claim.id,
+                    claim.status.to_string(),
+                    claim.dispatched_at.map(|dt| dt.to_rfc3339()),
+                    claim.released_at.map(|dt| dt.to_rfc3339()),
+                    claim.worker_run_id,
+                ],
+            ),
+            ClaimStatus::Released => conn.execute(
+                "UPDATE dispatch_claims SET
+                    status = ?2,
+                    dispatched_at = ?3,
+                    released_at = ?4,
+                    worker_run_id = ?5
+                 WHERE id = ?1 AND status IN ('pending', 'dispatched')",
+                params![
+                    claim.id,
+                    claim.status.to_string(),
+                    claim.dispatched_at.map(|dt| dt.to_rfc3339()),
+                    claim.released_at.map(|dt| dt.to_rfc3339()),
+                    claim.worker_run_id,
+                ],
+            ),
+            _ => conn.execute(
+                "UPDATE dispatch_claims SET
+                    status = ?2,
+                    dispatched_at = ?3,
+                    released_at = ?4,
+                    worker_run_id = ?5
+                 WHERE id = ?1",
+                params![
+                    claim.id,
+                    claim.status.to_string(),
+                    claim.dispatched_at.map(|dt| dt.to_rfc3339()),
+                    claim.released_at.map(|dt| dt.to_rfc3339()),
+                    claim.worker_run_id,
+                ],
+            ),
+        }
         .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        if affected == 0 {
+            let existing: Option<String> = conn
+                .query_row(
+                    "SELECT status FROM dispatch_claims WHERE id = ?1",
+                    params![claim.id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+            if let Some(current_status) = existing {
+                if current_status == claim.status.to_string() {
+                    return Ok(());
+                }
+                return Err(DomainError::Conflict(format!(
+                    "DispatchClaim '{}' CAS conflict: cannot transition from status '{}' to '{}'",
+                    claim.id, current_status, claim.status
+                )));
+            } else {
+                return Err(DomainError::NotFound {
+                    kind: "DispatchClaim".into(),
+                    id: claim.id.clone(),
+                });
+            }
+        }
 
         Ok(())
     }
@@ -346,6 +436,26 @@ impl RunRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         Ok(claim)
+    }
+
+    pub fn list_active_claims(&self) -> Result<Vec<DispatchClaim>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, task_id, node_id, assignee, depth, status, claimed_at, dispatched_at, released_at, worker_run_id
+                 FROM dispatch_claims
+                 WHERE status IN ('pending', 'dispatched')
+                 ORDER BY claimed_at ASC",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let claims = stmt
+            .query_map([], Self::map_dispatch_claim)
+            .map_err(|e| DomainError::Validation(e.to_string()))?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        Ok(claims)
     }
 
     pub fn save_launch_attempt(&self, attempt: &LaunchAttempt) -> Result<(), DomainError> {
@@ -402,29 +512,43 @@ impl RunRepository {
 
         let updated_wruns = conn
             .execute(
-                "UPDATE worker_runs SET status = 'failed', ended_at = ?1 WHERE status = 'active'",
+                "UPDATE worker_runs SET status = 'failed', ended_at = ?1, state_version = state_version + 1 WHERE status = 'active'",
                 params![now],
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let updated_runs = conn
             .execute(
-                "UPDATE runs SET status = 'failed', ended_at = ?1 WHERE status = 'active'",
+                "UPDATE runs SET status = 'failed', ended_at = ?1, state_version = state_version + 1 WHERE status = 'active'",
                 params![now],
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        let _ = conn.execute(
-            "UPDATE dispatch_claims SET status = 'released', released_at = ?1 WHERE status IN ('pending', 'dispatched')",
+        conn.execute(
+            "UPDATE dispatch_claims SET status = 'released', released_at = ?1 
+             WHERE status IN ('pending', 'dispatched') AND (node_id IS NULL OR node_id = '')",
             params![now],
-        );
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        let _ = conn.execute(
+        conn.execute(
             "UPDATE launch_attempts SET status = 'unknown', detail = 'Daemon restart during in-flight execution; recovered fail-closed', resolved_at = ?1 WHERE status IN ('prepared')",
             params![now],
-        );
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         Ok(updated_wruns + updated_runs)
+    }
+
+    pub fn fence_claim(&self, claim_id: &str) -> Result<(), DomainError> {
+        let conn = self.db.lock()?;
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "UPDATE dispatch_claims SET status = 'released', released_at = ?1 WHERE id = ?2 AND status IN ('pending', 'dispatched')",
+            params![now, claim_id],
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+        Ok(())
     }
 
     fn parse_claim_status(s: &str) -> ClaimStatus {
@@ -519,6 +643,48 @@ mod tests {
     use custos_domain::Task;
 
     #[test]
+    fn run_and_worker_updates_reject_stale_writers_and_restart_revival() {
+        let db = DbConnection::open_in_memory().unwrap();
+        {
+            let conn = db.lock().unwrap();
+            run_migrations(&conn).unwrap();
+            run_migrations(&conn).unwrap();
+            conn.execute("INSERT INTO tasks (id, title, status, created_at, updated_at) VALUES ('cas_task', 'CAS', 'running', 'now', 'now')", []).unwrap();
+        }
+        let repo = RunRepository::new(db);
+        let mut run = Run::new("cas_task".into(), 1);
+        run.transition(RunStatus::Active).unwrap();
+        repo.save_run(&mut run).unwrap();
+        assert_eq!(run.state_version, 1);
+        let mut stale = repo.get_run(&run.id).unwrap().unwrap();
+        run.metadata["output"] = serde_json::json!("new");
+        repo.save_run(&mut run).unwrap();
+        assert_eq!(run.state_version, 2);
+        stale.attempt = 2;
+        assert!(matches!(repo.save_run(&mut stale), Err(DomainError::Conflict(_))));
+        assert_eq!(stale.state_version, 1);
+        assert_eq!(repo.get_run(&run.id).unwrap().unwrap().metadata["output"], "new");
+
+        let mut worker = WorkerRun::new("cas_task".into(), "actor".into(), 3).with_run_id(&run.id);
+        worker.transition(RunStatus::Active).unwrap();
+        repo.save_worker_run(&mut worker).unwrap();
+        let mut stale_worker = repo.get_worker_run(&worker.id).unwrap().unwrap();
+        worker.record_attempt().unwrap();
+        repo.save_worker_run(&mut worker).unwrap();
+        assert!(matches!(repo.save_worker_run(&mut stale_worker), Err(DomainError::Conflict(_))));
+
+        repo.reconcile_runs_on_startup().unwrap();
+        assert!(matches!(repo.save_run(&mut run), Err(DomainError::Conflict(_))));
+        assert!(matches!(repo.save_worker_run(&mut worker), Err(DomainError::Conflict(_))));
+        let mut terminal = repo.get_run(&run.id).unwrap().unwrap();
+        terminal.status = RunStatus::Active;
+        assert!(matches!(repo.save_run(&mut terminal), Err(DomainError::Conflict(_))));
+        let mut forged = Run::new("cas_task".into(), 1);
+        forged.state_version = 1;
+        assert!(matches!(repo.save_run(&mut forged), Err(DomainError::Conflict(_))));
+    }
+
+    #[test]
     fn test_durable_dispatch_claim_and_fencing() {
         let db = DbConnection::open_in_memory().unwrap();
         let task = Task::new("task_fencing_test_1".to_string(), "Test Task".to_string());
@@ -561,6 +727,16 @@ mod tests {
             .expect("Claim must succeed after release");
         let active2 = repo.get_active_claim(&task.id, None).unwrap().unwrap();
         assert_eq!(active2.assignee, "worker_2");
+
+        // 4. CAS: Attempting to mark a released claim as dispatched fails with Conflict
+        let mut stale_dispatch = released_claim1.clone();
+        stale_dispatch.status = ClaimStatus::Dispatched;
+        stale_dispatch.worker_run_id = Some("wrun_stale".to_string());
+        let cas_err = repo.update_claim(&stale_dispatch).expect_err("Stale dispatch must fail with CAS conflict");
+        assert!(matches!(cas_err, DomainError::Conflict(_)));
+
+        // 5. Idempotent release succeeds
+        repo.update_claim(&released_claim1).expect("Idempotent release must succeed");
     }
 
     #[test]
@@ -620,6 +796,10 @@ mod tests {
                 "INSERT INTO dispatch_claims (id, task_id, node_id, assignee, depth, status, claimed_at) VALUES ('claim_stale', 'task_rec_test', '', 'worker_alpha', 1, 'dispatched', 'now')",
                 [],
             ).unwrap();
+            c.execute(
+                "INSERT INTO dispatch_claims (id, task_id, node_id, assignee, depth, status, claimed_at) VALUES ('claim_remote', 'task_rec_test', 'node_ext_1', 'worker_beta', 1, 'dispatched', 'now')",
+                [],
+            ).unwrap();
         }
 
         let repo = RunRepository::new(db);
@@ -634,7 +814,17 @@ mod tests {
         let run = repo.get_run("run_stale").unwrap().unwrap();
         assert_eq!(run.status, RunStatus::Failed);
 
+        // Local in-process claim was released
         let claim = repo.get_claim("claim_stale").unwrap().unwrap();
         assert_eq!(claim.status, ClaimStatus::Released);
+
+        // External node claim was preserved until probed
+        let remote_claim = repo.get_claim("claim_remote").unwrap().unwrap();
+        assert_eq!(remote_claim.status, ClaimStatus::Dispatched);
+
+        // Explicit fencing transitions external claim to released
+        repo.fence_claim("claim_remote").unwrap();
+        let fenced_claim = repo.get_claim("claim_remote").unwrap().unwrap();
+        assert_eq!(fenced_claim.status, ClaimStatus::Released);
     }
 }

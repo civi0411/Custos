@@ -35,6 +35,14 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
         "../migrations/0010_harden_outbox_and_effects.sql"
     ))?;
     conn.execute_batch(include_str!("../migrations/0011_runs_and_worker_runs.sql"))?;
+    let has_run_version = conn.prepare("PRAGMA table_info(runs)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?.iter().any(|column| column == "state_version");
+    if !has_run_version {
+        let transaction = conn.unchecked_transaction()?;
+        transaction.execute_batch(include_str!("../migrations/0040_run_state_versions.sql"))?;
+        transaction.commit()?;
+    }
     conn.execute_batch(include_str!("../migrations/0012_decision_records.sql"))?;
     conn.execute_batch(include_str!("../migrations/0013_workflow_revisions.sql"))?;
     conn.execute_batch(include_str!("../migrations/0014_node_placements.sql"))?;
@@ -110,5 +118,28 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     conn.execute_batch(include_str!(
         "../migrations/0034_local_model_load_profiles.sql"
     ))?;
+    let execution_columns = conn
+        .prepare("PRAGMA table_info(research_execution_records)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    if !execution_columns.iter().any(|column| column == "record_json") {
+        conn.execute_batch(include_str!("../migrations/0035_research_execution_snapshot.sql"))?;
+    }
+    conn.execute_batch(include_str!("../migrations/0036_command_ledger.sql"))?;
+    let ledger_columns = conn
+        .prepare("PRAGMA table_info(command_ledger)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    if !ledger_columns.iter().any(|column| column == "state") {
+        conn.execute_batch(include_str!("../migrations/0037_command_ledger_v2.sql"))?;
+    }
+    conn.execute_batch(include_str!("../migrations/0038_experiment_attempts.sql"))?;
+    let outbox_columns = conn
+        .prepare("PRAGMA table_info(outbox_entries)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    if !outbox_columns.iter().any(|column| column == "payload_json") {
+        conn.execute_batch(include_str!("../migrations/0039_outbox_dispatch_intent.sql"))?;
+    }
     Ok(())
 }

@@ -98,10 +98,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut lines = stdin.lines();
         let mut stdout = tokio::io::stdout();
 
+        let mut processed_any = false;
         while let Ok(Some(line)) = lines.next_line().await {
             if line.trim().is_empty() {
                 continue;
             }
+            processed_any = true;
             let response = match serde_json::from_str::<ApiRequest>(&line) {
                 Ok(request) => stdio_api.handle_request(request).await,
                 Err(error) => ApiResponse::error("", format!("Invalid request JSON: {error}")),
@@ -113,6 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
+        processed_any
     });
 
     tokio::select! {
@@ -121,7 +124,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         _ = tcp_task => {}
         _ = http_task => {}
-        _ = stdio_task => {}
+        res = stdio_task => {
+            if let Ok(true) = res {
+                eprintln!("Custos daemon stdio channel closed after processing requests, shutting down...");
+            } else {
+                // Stdio was closed without any requests (e.g. background daemon spawned with /dev/null stdin).
+                // Keep the daemon running indefinitely for TCP and HTTP clients.
+                std::future::pending::<()>().await;
+            }
+        }
     }
 
     let _ = profile.remove_port();
