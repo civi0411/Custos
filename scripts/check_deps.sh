@@ -34,10 +34,10 @@ if [[ -n "$domain_workspace_deps" ]]; then
 fi
 echo "[OK] custos-domain has no workspace-crate dependencies."
 
-app_names="$(jq -c '[.packages[] | select(.manifest_path | contains("/crates/app/")) | .name]' <<<"$metadata")"
+app_names="$(jq -c '[.packages[] | select(.manifest_path | contains("/crates/custos-app/")) | .name]' <<<"$metadata")"
 adapter_to_app="$(jq -r --argjson apps "$app_names" \
-  '.packages[] | select(.manifest_path | contains("/crates/adapters/")) as $pkg
-   | $pkg.dependencies[]? | select(.path != null) as $dep
+  '.packages[] | select(.manifest_path | contains("/crates/custos-adapters/")) as $pkg
+   | $pkg.dependencies[]? | select(.path != null) | select(.kind == null or .kind == "normal") as $dep
    | select($apps | index($dep.name))
    | "\($pkg.name) -> \($dep.name)"' <<<"$metadata")"
 if [[ -n "$adapter_to_app" ]]; then
@@ -49,10 +49,10 @@ echo "[OK] adapter packages do not depend on app binaries."
 
 transitional="$(jq -r '
   .packages[] as $pkg
-  | $pkg.dependencies[]? | select(.path != null) as $dep
+  | $pkg.dependencies[]? | select(.path != null) | select(.kind == null or .kind == "normal") as $dep
   | select(
       ($pkg.name == "custos-bridge" and (["custos-persistence", "custos-session"] | index($dep.name))) or
-      ($pkg.name == "custos-cli" and (["custos-persistence", "custos-kernel", "custos-providers", "custos-mcp", "custos-adapters-mcp"] | index($dep.name)))
+      ($pkg.name == "custos-app-cli" and (["custos-persistence", "custos-kernel", "custos-adapters"] | index($dep.name)))
     )
   | "\($pkg.name) -> \($dep.name)"' <<<"$metadata")"
 if [[ -n "$transitional" ]]; then

@@ -7,6 +7,7 @@
 
 use async_trait::async_trait;
 use custos_domain::{DomainError, WorkflowPlan, WorkflowStep};
+use custos_runtime::workflow::contracts::ExecutionContext;
 use custos_runtime::workflow::dag::{DagGraph, DagNode};
 use custos_runtime::workflow::graph_runtime::{GraphRuntime, StepExecutor};
 use custos_runtime::workflow::scheduler::{JobRecurrence, WorkflowScheduler};
@@ -32,19 +33,19 @@ impl RecordingStepExecutor {
 impl StepExecutor for RecordingStepExecutor {
     async fn execute_step(
         &self,
-        node_id: &str,
+        ctx: &ExecutionContext,
         _action_type: &str,
         _inputs: &serde_json::Value,
     ) -> Result<serde_json::Value, DomainError> {
-        if node_id == "failing_step" {
+        if ctx.node_id == "failing_step" {
             return Err(DomainError::Validation(
                 "Explicit node failure in test".into(),
             ));
         }
-        self.executed_order.lock().await.push(node_id.to_string());
+        self.executed_order.lock().await.push(ctx.node_id.clone());
         Ok(serde_json::json!({
             "status": "ok",
-            "executed_node": node_id
+            "executed_node": ctx.node_id
         }))
     }
 }

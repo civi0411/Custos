@@ -16,10 +16,24 @@ use custos_domain::{
 };
 use custos_persistence::SqliteTaskStore;
 use custos_runtime::oi::engine::OiEngine;
-use custos_runtime::workflow::graph_runtime::GraphRuntime;
+use custos_runtime::workflow::graph_runtime::{GraphRuntime, StepExecutor};
 use custos_runtime::workflow::revision_loader::RevisionLoader;
-use custos_runtime::workflow::worker_executor::WorkerExecutor;
 use std::sync::Arc;
+
+/// This slice checks persisted graph recovery, not a live agent/model workload.
+struct RecoveryFixtureExecutor;
+
+#[async_trait::async_trait]
+impl StepExecutor for RecoveryFixtureExecutor {
+    async fn execute_step(
+        &self,
+        ctx: &custos_runtime::workflow::ExecutionContext,
+        _action_type: &str,
+        _inputs: &serde_json::Value,
+    ) -> Result<serde_json::Value, custos_domain::DomainError> {
+        Ok(serde_json::json!({"fixture_node": ctx.node_id}))
+    }
+}
 
 async fn setup_task(store: &Arc<SqliteTaskStore>, title: &str) -> Task {
     let kernel: Arc<dyn KernelPort> = Arc::new(TrustedKernel::new(store.clone()));
@@ -166,7 +180,7 @@ mod workflow_revision_crash_resilience {
                 .expect("compile recovered revision into DAG");
             assert_eq!(dag.nodes().len(), 2);
 
-            let executor = Arc::new(WorkerExecutor::new());
+            let executor = Arc::new(RecoveryFixtureExecutor);
             let report = GraphRuntime::new(dag, executor)
                 .execute_all()
                 .await

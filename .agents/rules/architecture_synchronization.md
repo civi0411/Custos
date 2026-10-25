@@ -1,74 +1,73 @@
-# Quy Tắc Đồng Bộ Kiến Trúc & Tài Liệu Dành Cho AI Coding Agents
-## (Architecture Decision & Documentation Synchronization Triad)
+# Architecture Decision & Documentation Synchronization Triad
+## Mandatory Protocol for AI Coding Agents
 
-> **Phạm vi áp dụng:** Toàn bộ AI Coding Agents (Cursor, Claude Code, Antigravity, Copilot, Windsurf) khi làm việc trên repository Custos.  
-> **Nguyên tắc tối thượng:** Bất kỳ thay đổi hoặc thống nhất mới nào về mặt kiến trúc hệ thống đều BẮT BUỘC phải được cập nhật đồng bộ vào 3 tầng tài liệu trước khi được phép viết mã nguồn.
+> **Scope:** All AI Coding Assistants (Cursor, Claude Code, Antigravity, Codex, Copilot, Windsurf) working on the Custos and AgentHub repositories.  
+> **Absolute Invariant:** Any system architecture decision or modification MUST be synchronized across the 3-tier documentation structure before code changes are permitted.
 
 ---
 
-### 1. Mô Hình 3 Tầng Tài Liệu (The Documentation Triad)
+### 1. The Documentation Triad Hierarchy
 
-Mọi thông tin kiến trúc trong Custos được phân bổ nghiêm ngặt vào đúng 3 tầng:
+Every architectural fact and system boundary is strictly governed within three synchronized tiers:
 
-1. **Tầng 1 — `Custos.md` (Root Master Specification — SSOT):**
-   - **Bản chất:** Nguồn chân lý duy nhất (Single Source of Truth) định nghĩa triết lý sản phẩm, 10 Bất biến hệ thống, State Machines, Trust Zones, Threat Defense, và Protocol Specifications.
-   - **Quy tắc:** Khi thống nhất quyết định kiến trúc mới, phải tìm đúng Chương/Chủ đề liên quan trong `Custos.md` (ví dụ: Phần 2 cho Tầng kiến trúc, Phần 3 cho Kernel/Task, Phần 4 cho Authority, Phần 15 cho Repo Boundaries) để cập nhật hoặc bổ sung.
+1. **Tier 1 — `Custos.md` (Root Master Specification — SSOT):**
+   - **Nature:** The Single Source of Truth (SSOT) defining core philosophy, 10 System Invariants, State Machines, Trust Zones, Threat Modeling, and Protocol Specifications.
+   - **Rule:** When agreeing on a new architectural design, locate and update the corresponding Chapter/Topic in `Custos.md` (e.g. Part 2 for Layers, Part 3 for Kernel/Task, Part 4 for Authority, Part 15 for Repo Boundaries).
 
-2. **Tầng 2 — Thư mục `docs/` (Authoritative Topic-Based Engineering Specifications):**
-   - **Bản chất:** Đặc tả kỹ thuật chuyên sâu theo từng chủ đề:
-     - `docs/architecture/`: 9 trụ cột kiến trúc (Kernel, Authority, Evidence, Memory, Protocols, Security, Orchestration, Packs).
+2. **Tier 2 — `docs/` Directory (Authoritative Topic-Based Engineering Specifications):**
+   - **Nature:** Deep-dive technical specifications per functional subsystem:
+     - `docs/architecture/`: 9 architectural pillars (Kernel, Authority, Evidence, Memory, Protocols, Security, Orchestration, Packs).
      - `docs/reference/`: Invariants, Naming Conventions, Schema Mapping, Glossary.
-     - `docs/development/`: Quy chuẩn kỹ thuật, Delivery Blueprint, Testing.
-   - **Quy tắc:** Cập nhật hoặc tạo mới tài liệu tương ứng đúng chủ đề, không để tài liệu kỹ thuật bị lệch pha so với `Custos.md`.
+     - `docs/development/`: Engineering standards, Delivery Blueprint, Verification.
+   - **Rule:** Update or create matching topical documents to ensure no divergence exists between implementation guides and `Custos.md`.
 
-3. **Tầng 3 — `docs/development/codebase-architecture.md` (Master Physical Codebase Catalog):**
-   - **Bản chất:** Bản đồ vật lý chi tiết đến từng file mã nguồn, quản lý vị trí, số dòng code, vai trò kiến trúc và danh mục struct/trait/hàm cốt lõi của 11 canonical product crates.
-   - **Quy tắc:** Mọi file mới hoặc module được thêm/sửa/xóa đều phải được ghi nhận và chèn đúng vào bảng danh mục của crate tương ứng trong tài liệu này.
-
----
-
-### 2. Quy Trình 5 Bước Bắt Buộc (Mandatory 5-Step Workflow)
-
-Khi có bất kỳ thay đổi kiến trúc nào:
-
-```
-[Đồng thuận Kiến trúc với User/Team]
-               │
-               ▼
-   [Bước 1: Cập nhật Custos.md (SSOT)]
-               │
-               ▼
-   [Bước 2: Cập nhật docs/ đúng chủ đề]
-               │
-               ▼
-   [Bước 3: Chèn đúng chỗ vào docs/development/codebase-architecture.md]
-               │
-               ▼
-   [Bước 4: Triển khai Code & Chạy Kiểm thử cargo check / cargo test]
-```
-
-- **Bước 1: Đồng thuận Kiến trúc:** Xác định rõ thay đổi thuộc về crate nào trong 11 canonical crates, vi phạm hay tuân thủ bất biến nào, và ai là người sở hữu (Vĩ / Trường / Vinh).
-- **Bước 2: Cập nhật `Custos.md`:** Cập nhật nội dung vào đúng chương mục trong `Custos.md`.
-- **Bước 3: Cập nhật `docs/`:** Cập nhật chi tiết kỹ thuật vào đúng file chuyên đề trong `docs/`.
-- **Bước 4: Chèn đúng chỗ vào `docs/development/codebase-architecture.md`:**
-  - Xác định đúng Layer (Layer 0 đến Layer 4) và Crate (`crates/custos-...`).
-  - Chèn dòng mới vào bảng Danh mục file của Crate theo định dạng 4 cột chuẩn:
-    `| Cột 1: Link file mã nguồn | Cột 2: Số dòng | Cột 3: Vai trò kiến trúc | Cột 4: Các Struct / Trait / Hàm cốt lõi |`
-    (ví dụ cụ thể: `| [`src/action.rs`](../../crates/custos-domain/src/action.rs) | 163 | Vai trò... | Các Struct... |`)
-  - Cập nhật số lượng file và số dòng mã ở tiêu đề của crate đó.
-- **Bước 5: Viết code và xác thực:** Viết code, chạy `cargo check --workspace` và `cargo test`. Tuyệt đối không viết code trước khi hoàn tất Bước 1, 2, 3, 4!
+3. **Tier 3 — `docs/development/codebase-architecture.md` (Master Physical Codebase Catalog):**
+   - **Nature:** Detailed physical code map tracking every source file, line counts, architectural responsibilities, and exported structs/traits across the 11 canonical product crates.
+   - **Rule:** Every new, modified, or deleted file must be registered into the exact matching crate table in this document.
 
 ---
 
-### 3. Quy Tắc Đọc Dành Cho AI Coding Agents (Shared Mental Model)
+### 2. Mandatory 5-Step Synchronization Workflow
 
-Trước khi thực hiện bất kỳ lệnh sửa đổi mã nguồn nào:
-1. **Đọc `docs/development/codebase-architecture.md` trước tiên:**
-   - Để biết chính xác file mình sắp sửa nằm ở crate nào, tầng nào, và đang chịu ràng buộc gì.
-   - Để tránh việc tự ý tạo thêm file mới bừa bãi hoặc tạo các thư mục rác (như `scratch/`, `templates/`, `services/`).
-2. **Không tự ý suy đoán ranh giới (Zero Guesswork):**
-   - Nếu một struct hay trait chưa rõ nên thuộc về `custos-domain` hay `custos-core`, hãy tra cứu `Custos.md` và `docs/development/codebase-architecture.md`.
-3. **Cấm tuyệt đối:**
-   - Không được tạo crate mới ngoài 11 canonical product crates.
-   - Không được phá vỡ tính bất biến Zero-I/O của `custos-domain`.
-   - Không được để `custos-bridge` gọi trực tiếp vào `custos-persistence`.
+For any architectural change, follow this sequential execution pipeline:
+
+```
+[Architectural Alignment with User/Team]
+               │
+               ▼
+   [Step 1: Update Custos.md (SSOT)]
+               │
+               ▼
+   [Step 2: Update docs/ Topical Spec]
+               │
+               ▼
+   [Step 3: Register in docs/development/codebase-architecture.md]
+               │
+               ▼
+   [Step 4: Implement Code & Verify with cargo check / cargo test]
+```
+
+- **Step 1: Architectural Alignment:** Clarify which crate among the 11 canonical crates owns the logic, verify adherence to invariants, and confirm crate ownership.
+- **Step 2: Update `Custos.md`:** Commit the design update into the exact chapter of `Custos.md`.
+- **Step 3: Update `docs/`:** Detail functional requirements and contracts in the appropriate topical markdown file.
+- **Step 4: Register in `docs/development/codebase-architecture.md`:**
+  - Locate the exact Layer (Layer 0 to Layer 4) and Crate (`crates/custos-...`).
+  - Insert a new row in the Crate's file table following the 4-column standard:
+    `| Source File Link | Line Count | Architectural Responsibility | Key Structs / Traits / Functions |`
+  - Update aggregate file and line counters in the crate header.
+- **Step 5: Code Implementation & Verification:** Write source code and verify with `cargo check --workspace` and `cargo test`. Never write code prior to completing Steps 1 through 4.
+
+---
+
+### 3. Mental Model for AI Coding Agents
+
+Before executing any file modification:
+1. **Read `docs/development/codebase-architecture.md` first:**
+   - Identify which crate and layer owns the target file, and verify all constraints.
+   - Avoid creating loose, unstructured files or unapproved utility directories.
+2. **Zero Guesswork Policy:**
+   - If unsure whether a struct or contract belongs to `custos-domain` or `custos-core`, consult `Custos.md` and `docs/development/codebase-architecture.md`.
+3. **Absolute Invariants:**
+   - Do not create crates outside the 11 canonical product crates.
+   - Never violate the Zero-I/O invariant of `custos-domain`.
+   - Never allow `custos-bridge` to access `custos-persistence` directly.

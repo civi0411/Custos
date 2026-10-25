@@ -31,7 +31,7 @@ mod harness_profile_and_gate4_invariants {
         );
         assert!(!profile.is_custos_governed());
         assert!(profile.supports_cancel);
-        assert!(profile.supports_steer);
+        assert!(!profile.supports_steer);
 
         // Gate 4 Invariant: Fraudulent attempt to claim 'custos-mediated' MUST be rejected
         let fraudulent_intent = ActionIntent::new(

@@ -1,6 +1,14 @@
 # Kế hoạch refactor Custos SADE và tối ưu chi phí
 
-**Queue hiện hành:** [Backend–desktop convergence §2/§7](sade-frontend-backend-convergence-plan.md#2-những-vấn-đề-hiện-tại-phải-xử-lý-theo-thứ-tự-rủi-ro) chốt thứ tự cấp tốc trên checkout `4b73cce`. Các nhãn R/P/OF trong tài liệu dài này là backlog capability và dependency map; nếu một đoạn dưới đây xếp việc khác thứ tự, dùng queue hiện hành rồi kiểm lại source tại packet đó.
+**Repo Intelligence removal:** subsystem scanner/graph/query/coordinator riêng đã được bỏ theo quyết định sản phẩm. Không triển khai hoặc phục hồi các placement Repo Intelligence trong những snapshot/kế hoạch lịch sử bên dưới. Giữ file/search/Git/worktree, context compiler và SourceSpan của Engineering; Nexus vẫn là development utility độc lập.
+
+**Bản sắp xếp crates để duyệt:** [plan §§17–21](crates-topic-refactor-plan.md#17-tái-kiểm-checkout-sau-đợt-tách-module) tái kiểm dirty tree trên `28ab973`: 803 inventory paths, 561 Rust files, test placement hợp lệ và regression đọc file thật đã tái hiện. Packet A–L là bước hoàn thiện của cùng campaign, ưu tiên physical acquisition, effect/authority/evidence rồi mới extraction/footprint. [Ledger từng file](crates-file-disposition-ledger.md) còn là snapshot sạch cũ, không chứng nhận các move đã hoàn tất. Lượt khảo sát này không move/delete source.
+
+**Bổ sung khảo sát crates hiện tại để duyệt:** [Crates topic refactor plan](crates-topic-refactor-plan.md) đối chiếu snapshot `d25c27b`, xác định các execution/authority gaps và phân loại giữ/chuyển/cô lập/retire. Packet A–L trong bản bổ sung là breakdown của cùng chương trình refactor bên dưới, không một backend hoặc campaign song song. Các nhận định theo SHA cũ phải kiểm lại; production executor hiện đã có code nhưng chưa đồng nghĩa đầy đủ authority theo Task/Run.
+
+**Queue triển khai hiện hành:** [Superplan sau audit §17](sade-core-refactor-plan.md#17-superplan-hoàn-thiện-sau-audit) cập nhật checkout `vi-rft` / `c96f414`. R0–R11 đã có partial implementation, chưa hoàn tất 100%; F01–F12 là breakdown hoàn thiện các gap, không kiến trúc/campaign song song. Queue gồm atomic commands, claim CAS/recovery, producer bounds/Unicode, trusted evidence, notebook binding, SDK/application/shell, composed worker, desktop/domain acceptance, training targets, measured OI và release parity. Có dependency graph, files/contracts, golden G01–G13, migration/rollback và mốc M0–M4. §14 giữ capability map; §17 ưu tiên thứ tự sau audit, không đồng nghĩa nhãn R lịch sử bên dưới.
+
+**Queue lịch sử:** [Backend–desktop convergence §2/§7](sade-frontend-backend-convergence-plan.md#2-những-vấn-đề-hiện-tại-phải-xử-lý-theo-thứ-tự-rủi-ro) chốt thứ tự cấp tốc trên checkout `4b73cce`. Các nhãn R/P/OF trong tài liệu dài này là backlog capability và dependency map; kiểm lại source tại từng packet, không coi snapshot cũ là hiện trạng mới.
 
 **Deliverable:** bản kế hoạch kiến trúc và migration để triển khai trên checkout hiện có. Phần 1–10 giữ inventory và các packet R0–R10; phần 11–19 cụ thể hóa execution spine, economics, ba pack, thứ tự tích hợp và nghiệm thu; §20 map đầy đủ nền năng lực OrCa vào chương trình refactor Custos OF0–OF7. Đây là kế hoạch, chưa là chứng nhận refactor đã thực hiện. Không thay source of truth của [Custos.md](../../Custos.md).
 
@@ -1195,6 +1203,220 @@ Cross-profile không copy transcript mặc định. `Open resource in…` giữ 
 6. Fleet/remote/automation: bounded multi-worker, SSH/server và schedule sau local crash/recovery gates.
 
 Mỗi packet có headless API test và Desktop projection test trên cùng IDs. Không merge pane nếu backend chỉ có timer/mock. Không merge backend capability nếu UI không hiện offline/degraded/unknown. “Đủ lõi” được đo bằng end-to-end jobs và recovery, không bằng số folder copy từ upstream.
+
+## 27. Unified full-stack application boundary
+
+**Design decision, not completed refactor.** Custos needs one stable product application boundary shared by Desktop, CLI/editor and agent clients. It does not need one giant crate holding all implementation. The folder `custos-app` currently groups two executable hosts; it is not a Cargo package containing a shared backend service. Do not silently change that meaning or move state/authority into Tauri to match the name.
+
+### 27.1 Evidence from current source
+
+### Target blueprint: decision summary
+
+This is the consolidated reading entry for the refactor branch (observed branch `vi-rft`). It summarizes, not replaces, §§27.2–27.8 and the domain-specific compute/continuity specifications. It is a target requiring implementation gates; changing branches is not authorization to discard existing state or safeguards.
+
+1. **Deployment:** one modular Rust product backend per canonical profile/database, shared by all three workbench lenses and clients. One desktop product shell manages native experience; optional execution helpers run on demand. Neither one backend per workbench nor microservices per crate.
+2. **Application entry:** local API commands/queries enter domain-oriented application handlers inside existing daemon. The host is a capable product shell, not a workflow engine; the daemon is not a giant dispatcher. Existing SDK becomes the stable client/contract boundary without forcing ACP semantics on every operation.
+3. **Execution:** trusted core admits policy/state/evidence; runtime coordinates jobs/context/S1/S2/OI via ports; packs define domain semantics; adapters perform concrete provider/agent/tool/compute I/O; persistence owns canonical transactions and artifact storage. Small synchronous queries need no extra wrapper chain.
+4. **Experience:** one shell/canvas and shared conversation/resource renderers; Coding, Research and Copilot have different toolsets/views over linked canonical resources. They are not separate apps, provider registries or history silos. Layout selection never becomes authority or job lifecycle.
+5. **Identity:** Project groups resources; repository/worktree is a Coding execution scope, not the universal parent of Research/Assistant. Session is dialogue, Task is durable intent/criteria, Run/attempt is execution, Screen is presentation. A session may reference several Tasks/notebooks; moving views preserves exact IDs and grants are never copied implicitly.
+6. **Provider distinction:** direct model endpoint uses `ModelPort` plus the existing Custos agent loop when tools/iteration are needed; external coding/research harness uses `AgentRuntimePort` and declared assurance. Tools, compute kernels and training engines are not reasoning providers. MCP/ACP/A2A are scoped edge adapters, not the kernel or a mandatory internal bus.
+7. **Compute:** separate notebook binding, compute lease, training attempt and checkpoint. Same-kernel reconnect may preserve memory; new kernel requires explicit replay or engine-aware checkpoint restoration. Unsloth is a training integration, Colab/Kaggle/SSH are execution profiles, not one universal resume engine.
+8. **Resource economics:** one owner per expensive resource with bounded consumers, byte/concurrency limits and explicit cleanup. Share observers, snapshots and supported model caches, not credentials or mutable namespaces. No model/worker startup simply from opening a tab. Benchmark accepted outcomes including failed/recovery costs and retained resources.
+9. **Source reuse:** absorb Orca interaction/execution patterns and Open Science domain workflows/viewers into the boundaries above. Do not import their independent DB, app store, scheduler or auth authority wholesale. Every reused component needs pinned source/license and behavior tests; UI similarity is not proof of backend parity.
+10. **Extension rule:** each new capability names its product use case, state/resource owners, port/adapter, UI resource and acceptance/failure tests. Extend existing seams first; create a module only with an actual vertical. New crate/service/store/framework requires a demonstrated dependency/lifecycle need, not another feature name.
+
+| Refactor checkpoint | Minimum shippable result | What must remain true |
+|---|---|---|
+| Foundation | Shared client/wire boundary, async app attachment, typed errors and safe command IDs | UI/browser attach to the same backend; lost reply cannot silently duplicate effects |
+| First vertical | One application handler extracted with preserved API behavior and canonical resource IDs | Thin route, testable coordination, same authority/recovery via all transports |
+| Shared experience | Scoped query subscriptions, resource-bound tabs and safe drafts across all lenses | No duplicated jobs or state store; close view does not stop backend work |
+| Capability convergence | Engineering patch/verify, Research source/notebook, Assistant draft/effect flows through the same entry | Domain-specific acceptance remains independent; unsupported capability is explicit |
+| Remote research | Owned remote notebook, frozen training recipe, external checkpoint round-trip and tested continuation | No fake kernel migration, unapproved paid fallback or unverified backup label |
+| Optimization | Measured idle/load/multi-window CPU/RAM/latency and cost-to-accepted-result improve within quality margins | No trade of durability, privacy or verification for a nicer benchmark |
+
+The foundation is a refactor of existing packages, not a new architecture alongside them. Keep old routes as compatibility facades while moving one behavior at a time; remove redundant imports/handlers only after all consumers and fault tests use the new owner. Preserve data migrations and rollback/forward-recovery strategy. Completing this blueprint means source paths/tests implement it, not that the folders have been created.
+
+### Current-source evidence
+
+| Source | Observed behavior | Gap to close |
+|---|---|---|
+| `custos-app/desktop/src/lib.rs` | Tauri commands authorize the webview and forward through `LocalApiClient`; bootstrap ensures daemon connection | Correct host direction. Client/profile imports still come from daemon; reconnect/resend requires command-level safety, not generic mutation retries. Native browser/window operations legitimately remain host-specific. |
+| `custos-app/cli/src/lib.rs` | Also a Tauri host with forwarding commands and task wrappers | It is not currently a completed headless terminal CLI. Avoid describing it as such; both hosts must share backend semantics rather than duplicate use cases. |
+| `custos-daemon/src/runtime.rs` | `CustosRuntime::bootstrap` wires stores, provider/harness, kernel, workflow, notebook and pack registry | Correct sole composition root; composition is distinct from per-command application orchestration. |
+| `custos-daemon/src/api.rs` | Large dispatcher imports concrete repositories/adapters and serves many product domains; current snapshot 10,498 lines including tests | Size alone is not a defect, but routing/use-case/I/O concerns are mixed. Extract by behavior with tests, not by arbitrary equal-size files. |
+| `custos-daemon/src/local_api/lib.rs`; `custos-sdk/src/lib.rs` | Local API client/DTOs are in daemon; SDK default exports ACP wire types | Hosts depend on backend package to obtain client code. Move the shared Local API contract/client into existing SDK incrementally; ACP is a distinct adapter concern, not the entire product API. |
+| `ui/desktop/src/api/daemon_client.ts` | Tauri failure falls back to HTTP; HTTP creates a fresh request ID | Unknown mutation outcome could be resubmitted under a different identity. Do not assume exactly-once. Separate application rejection from transport failure, preserve command IDs across transport and reconcile uncertain mutations. |
+| `ui/desktop/src/context/AppContext.tsx` | Global resources, selection, transport-driven updates and preferences share a large context; current snapshot 2,853 lines | Split ownership/hooks by actual state lifetime without creating parallel authoritative stores. Frontend snapshots are projections of daemon truth, not permission or execution truth. |
+
+This is a focused call-path/manifest audit, not an assertion that every API has been security-audited. Existing runtime→persistence coupling and notebook I/O remain migration debts documented elsewhere. Preserve user changes and public method compatibility during each packet.
+
+### 27.2 Runtime path and software ownership
+
+```mermaid
+flowchart TD
+    UI[React views: Coding / Research / Copilot] --> FC[Typed feature actions and query projections]
+    FC --> CL[Shared Local API client contract]
+    CL --> TH[Tauri host relay and native access checks]
+    CL --> WEB[Authorized browser / editor / CLI transport]
+    TH --> API[Daemon transport and request dispatcher]
+    WEB --> API
+    API --> APP[Application use cases by product concern]
+    APP --> CORE[Core: scope, authority, state and evidence admission]
+    APP --> RT[Runtime: long-lived execution and recovery]
+    APP --> PACK[Pack semantics and verification obligations]
+    RT --> PORT[Core / provider contracts]
+    APP --> PORT
+    PORT --> IO[Adapters and persistence implementations]
+    IO --> EV[Observed results and canonical events]
+    EV --> FC
+    BOOT[Daemon bootstrap: sole concrete composition] -. wires .-> APP
+    BOOT -. wires .-> IO
+```
+
+This is a runtime path, not a declaration that core imports runtime or adapters. Domain remains pure; adapters/persistence implement ports; runtime does not import concrete vendor implementations. Application modules live inside daemon initially because no new crate is required. They receive narrow existing services/ports from bootstrap, not a global service locator. Daemon being the composition root does not authorize arbitrary business logic or raw I/O in each route.
+
+| Boundary | Owns | Must not own |
+|---|---|---|
+| Frontend | Navigation, layout, draft editing, accessible interactions, cancellable reads, server-resource projections | Grants, canonical Task/run status, provider credentials, GPU lifecycle or DB writes |
+| App host | Native windows/webviews/dialogs, IPC caller authorization, backend connect/launch/discovery | Scientific/coding workflows, DB writer, scheduler or provider selection policy |
+| Local API/SDK | Versioned commands/queries/events, typed client, transport/error/correlation semantics | Application business decisions, SQLite or worker loop |
+| Application use cases | Validate operation context; invoke core admission; coordinate services; command identity; result/attention projection | Duplicate domain FSM, a new AI planner, vendor SDK calls or long-running work held in HTTP request |
+| Core/domain | Invariants, rights, bounded state transitions, completion/evidence policy and ports | UI callbacks, concrete DB/cloud/OS calls |
+| Runtime | Execution queues/workflows, context, S1/S2/OI scheduling and recovery through ports | New grants, direct provider wire logic or screen-owned jobs |
+| Packs | Domain recipes/context/verifier obligations | Canonical persistence or privilege escalation |
+| Adapters/persistence | Admitted concrete I/O, receipts, transactional storage/CAS | Independent Task success or second backend authority |
+
+The same use case must behave consistently via Tauri, local HTTP or a future editor adapter. Native-only operations can reject unsupported transports; do not fake a browser equivalent. No promise that every API is exposed over MCP/A2A/ACP: protocol adapters expose scoped subsets, not separate business implementations.
+
+### 27.3 Physical target within the existing repository
+
+Proposed module paths are created only with a runnable extraction, not empty scaffold:
+
+```text
+crates/custos-app/desktop/       native host and authenticated relay
+crates/custos-app/cli/           existing host; headless conversion is a separate packet
+crates/custos-sdk/src/           target shared Local API client/contracts + existing protocol bindings
+crates/custos-daemon/src/
+  main.rs, profile.rs           backend process/profile lifecycle
+  runtime.rs                   concrete composition, not product workflows
+  api.rs, local_api/            compatibility facade and transport dispatch during migration
+  application/                 proposed use-case modules, no new crate
+    workspace.rs               open/bind/reconcile workspace operations
+    conversation.rs            turn submission, binding and continuation
+    tasks.rs                   task admission/control/query coordination
+    notebook.rs                connect/execute/interrupt/reconcile orchestration
+    research.rs                recipe/attempt/checkpoint/artifact operations
+    assistant.rs               draft/approve/dispatch/reconcile operations
+    connections.rs             profile/capability observations and setup coordination
+ui/desktop/src/
+  api/                         one typed transport facade, target feature clients behind it
+  context/                     compatibility providers, selection and Screen composition
+  features/                    feature actions, query hooks and projections where applicable
+  components/shell/            common shell
+  components/workbenches/      three workbench-specific experiences
+  components/chat/, viewer/    shared conversation and resource renderers
+```
+
+Core, domain, provider, runtime, packs, adapters and persistence retain their current crates. Do not mirror every Rust module into a frontend store or add a generic repository layer to React. Extend existing feature directories/hooks before introducing new ones. SDK client extraction must preserve wire fixtures and avoid circular daemon↔SDK dependencies; move contracts before switching imports, retain compatibility re-exports temporarily, and verify dependency graph. Process discovery/launch policy stays at host/bootstrap boundary; SDK client must not silently become an auto-starting daemon supervisor.
+
+### 27.4 Frontend state and workbench matching
+
+There are three state lifetimes, not one global store for everything:
+
+1. **Canonical backend state:** Task, Session journal, Run/attempt, authority, effects, resources and evidence. Daemon/persistence own it. Frontend caches retain IDs, revision/cursor, loading/error/stale state and scoped projections.
+2. **Durable presentation state:** Screen layout, tab resource references, selected workbench and local view preferences. Existing ScreenContext/canvas mechanisms own it; it cannot retarget a running resource.
+3. **Ephemeral input state:** unsubmitted composer/notebook edits, open menus, search and focus. Keep it local or in existing session-keyed draft owner; acceptance acknowledgement clears only the submitted unchanged draft.
+
+AppContext is currently the shared projection facade, not canonical server authority. Split implementation into concern hooks/providers only when extracting consumers together; do not introduce a second workspace/session registry. Observations shared by several panes need one scoped subscription/cache and bounded fan-out. Backend mutations return canonical identity/revision or an uncertain operation reference; UI does not synthesize success from a toast or finished animation.
+
+| Workbench | Representative use case | Common path / domain-specific part |
+|---|---|---|
+| Coding | Propose/apply patch, run verifier, reconcile worktree | Application coordinates scope/base revision; core admits; runtime/harness executes; adapters perform I/O; Engineering defines acceptance |
+| Research | Attach notebook compute; submit recipe; restore attempt | Same command/event boundary; explicit kernel/lease/recipe/checkpoint identities; Research defines scientific criteria |
+| Copilot | Draft, approve exact message, dispatch/reconcile | Same authority/effect path; Assistant resolves identities and defines domain checks; no UI-owned send sequence |
+
+Switching workbench changes tools/layout over linked resources, not which backend owns the conversation. Cross-workbench handoff uses existing typed artifacts and explicit scope; no transcript/grant copy by React. Research non-Git folders/remote kernels and personal Copilot resources cannot be forced into fake Git worktrees. The older worktree-only frontend rule needs an explicit scoped standards amendment before implementing those paths; do not bypass it silently.
+
+### 27.5 Concrete use-case example and transport safety
+
+`ConnectNotebookCompute` is a proposed use-case name, not a current endpoint: resolve notebook and actor → check expected binding/epoch → admit connection/create-kernel/data operations separately → persist any mutation intent → invoke notebook coordinator/adapter → record exact external identity/observation → return canonical binding or uncertain operation → client updates projections. Do not have React call five low-level operations and own their rollback/recovery.
+
+Likewise StartTraining returns an admitted operation/attempt promptly; runtime owns subsequent work. Application does not await hours inside a Tauri command. Disconnect view/transport is distinct from interrupt kernel, stop job and release compute. Tauri authorization guards the webview boundary; daemon still validates caller/profile/scope because browser/editor transports do not pass through that webview check.
+
+Retries require method semantics, a stable command ID and durable dedup/reconciliation where effects occur. A business validation error is not a reason to switch transports. A timeout after dispatch is uncertain, not proof no effect happened. Fix host reconnect plus client HTTP fallback together; preserving an ID alone is insufficient if the endpoint does not enforce idempotency. Test exact lost-reply windows before relying on automatic retries.
+
+### 27.6 Migration and completion gates
+
+1. Inventory active routes, concrete dependencies, write effects and UI consumers; map each to an application concern. Preserve existing method names and persisted IDs.
+2. Close retry/error classification and stable command identity gaps first for mutations; add lost-reply/double-transport tests. Do not enable GPU allocation/send/patch retries on a generic fallback.
+3. Extract one vertical use case from dispatcher into an application module with existing injected services/ports. Route both Tauri and HTTP to it; compare behavior and errors. Do not create pass-through classes for every getter.
+4. Move shared client/DTOs toward SDK with compatibility re-exports and golden fixtures; verify hosts no longer link server/runtime/storage merely to make a request. Keep daemon composition acyclic.
+5. Extract frontend feature queries/actions from AppContext without changing its public facade in one step. Test session/Task/workspace switches, stale async responses, draft persistence and peer-resource navigation.
+6. Repeat by bounded concern; long-lived orchestration remains runtime and invariant checks remain core. Introduce notebook/compute use cases against real adapters only when their conformance is ready.
+7. Run contract/recovery/security tests plus desktop build/canvas tests and actual host/browser interaction tests. Large-bundle warnings are separate tracked debt, not hidden by module relocation.
+
+Completion means: three workbenches use one versioned backend contract; no duplicated application workflow in Tauri/React; no client import of concrete persistence/runtime; dispatcher is transport-oriented; scope/command/error/recovery semantics match across transports; closing/reopening UI preserves canonical work. No microservices, replacement Task engine or new crate is required.
+
+Research basis: [Tauri process model](https://v2.tauri.app/concept/process-model/) separates privileged host/native integration from webview rendering; Custos additionally places reusable product backend in its existing daemon, a Custos deployment decision rather than a Tauri requirement. [Service Layer](https://martinfowler.com/eaaCatalog/serviceLayer.html) supports a common operation boundary across clients. Neither reference proves current Custos correctness; source call paths and tests remain the implementation evidence.
+
+### 27.7 Custos-app as a product shell, not an empty proxy
+
+The goal is a coherent product with clear seams, not a maze of mandatory wrappers. Keep the decision in §27.2, but make host responsibility concrete. A small host can be valuable; an unreliable host with no startup/recovery/diagnostic model is incomplete even if domain code is elsewhere.
+
+| Product-shell responsibility | App/host behavior | Shared backend behavior |
+|---|---|---|
+| Startup and compatibility | Resolve installed backend/profile, attach or request one managed launch, show connecting/degraded/recovery choices; negotiate API capabilities | Own profile lock, migrations, canonical state and readiness; report actual capabilities/errors |
+| Native resources | Own windows, browser webviews, file dialogs, shortcuts and OS integration with caller authorization | Own admitted product file/process effects and retained workload identities |
+| Reconnection | Re-establish an authenticated client, preserve drafts/layout, show stale state and pending operation identity | Reconcile work and deduplicate admitted commands; do not rerun jobs because client reconnects |
+| Workspace experience | Present Projects, resource-bound Screens and three workbench lenses; persist view preferences | Own repositories/folders, sessions, Tasks, kernels, jobs, evidence and permissions |
+| Shutdown/background mode | Distinguish close-window, quit-UI and explicit stop-backend requests; preview active work | Own granted background jobs, durable checkpoints and independently reconciled resource cleanup |
+| Resource diagnostics | Display attributed CPU/memory/queues, unknown metrics and supported controls in one place | Collect bounded observations and enforce application admission/leases; OS isolation limits stated honestly |
+| Packaging/update | Locate signed/platform-appropriate binaries, version compatibility and install diagnostics | Preserve DB migration/backup/recovery compatibility; never run two incompatible writers |
+
+These responsibilities extend existing host/UI/daemon modules, not another desktop backend. Native webview state necessarily lives in the host; product work is not relocated there. SDK transports remain reusable and do not import Tauri. An application use case is justified where coordination/authority/recovery is required; simple reads may use a direct admitted query handler without five forwarding layers.
+
+Source observations to retain as migration findings:
+
+- Hosts currently depend on `custos-daemon` for client/discovery code; this imports its transitive dependency graph into host builds. That can affect compilation/package/linking, but is not proof all server code or model weights are resident in each host. Inspect release link/package artifacts and process memory before making a savings claim.
+- `profile.rs::ensure_daemon_client` synchronously creates a Tokio runtime and polls with thread sleeps up to 30 seconds (its nearby comment still says three). It is used during host startup/reconnect. Replace with one cancellation-aware asynchronous attachment lifecycle and visible readiness; do not block a native command executor or create a fresh runtime per request.
+- Backend bootstrap currently obtains an inference-runtime handle; `local_inference/mod.rs::get_or_init` initializes backend objects and an initially empty model-slot map. This does not establish eager weight loading. Inventory backend initialization, explicit model loading and cache eviction separately before deciding what to make lazy.
+- AppContext currently has periodic connectivity/catalog checks as well as streamed updates. Classify each observer's scope/lifetime and measure requests before consolidating. Do not remove all polling where it is the only supported reconciliation path.
+- Current `custos-app/cli` is another Tauri app. A future headless CLI should not require a WebView; until implemented, do not promise its memory/process profile is that of a terminal-only client.
+
+The default deployment remains one shared backend per canonical profile and its database, plus app/native WebView processes and only requested execution helpers. The single-writer lock is not a license to start a backend per window or workbench. Paths/profiles resolving to the same DB need ownership validation before opening writers. Do not merge separate security/user profiles just to reduce memory.
+
+### 27.8 Resource ownership, performance and extension contract
+
+For every new feature, review five things together: product use case, canonical state owner, expensive-resource owner, client projection, and failure/cleanup behavior. This is a review checklist, not a new registry/schema. If the proposed feature cannot answer these, do not attach another singleton or background loop to AppContext.
+
+| Resource | Intended single owner / lifetime | Limits and release rules |
+|---|---|---|
+| DB writer and decision events | Existing backend persistence/profile lifetime | Short transactions, queue/lock-time observation; no network calls under transaction; preserve durability |
+| Model instance and context memory | Existing inference runtime/model slots | Explicit load/request admission, token/context/concurrency limits; reuse supported slots; eviction only when idle and safe |
+| Notebook kernel | Notebook execution coordinator and exact binding | No spawn per render/tab; bounded queue/output; restart/detach/kill semantics distinct |
+| Terminal/harness/training job | Existing runtime coordinator and owned process/job identity | Max active runs, process-tree cleanup where supported; closing view detaches, explicit stop controls execution |
+| Indexer/parser/OCR helper | Existing adapter/runtime operation | Lazy start, bounded worker count and bytes, cancel stale work; cache by source revision; do not continuously reparse all projects |
+| Remote stream/observer | Backend observer for exact job/resource | Share observations across windows, bounded spool/backpressure, reconnect/backoff; no observer per visual card |
+| Frontend cache/DOM/viewer | Scoped query projection and resource renderer | Paginated metadata, bounded rich output, on-demand heavyweight viewers; drafts retained independently of mounts |
+| Provider/model/cloud spend | Existing admitted effect/usage attempt | Reserve/settle, rate/concurrency limits, unknown costs explicit; neither low RAM nor a cheap router authorizes extra calls |
+
+Use in-process Rust module calls for core/application/runtime coordination. Ports are code boundaries, not mandatory queues/network hops. Subprocesses are for actual native/engine/vendor isolation or SDK needs, not one service per architectural box. A process boundary improves some failure isolation but costs startup/RSS/IPC; select per capability and measure. A separate daemon is justified by shared windows/clients and background jobs, not by an assumption that more processes are faster.
+
+First resource protections should be admission, bounded buffers and queues, cancellation, safe reuse and prompt cleanup. Soft CPU/RAM limits and monitoring are not OS-enforced sandbox quotas; report which limits are actually enforced on each platform. Memory pressure must stop admitting optional work before attempting unsafe model/kernel eviction. Do not kill a user-owned remote instance or an unrelated notebook to meet a desktop memory target.
+
+Frontend design keeps a stable shell and lazily mounts heavy viewers/editors as needed; hidden resources may retain minimal drafts/layout but should not automatically continue rendering/polling. Do not unmount to save RAM if that loses unsaved work or owns a process lifetime. Maintain shared revisioned snapshots and narrow subscriptions; selectors/hooks must preserve stable identities for unchanged records. Existing React context is retained while extracting concerned consumers; `useSyncExternalStore` is an option for an actual external store, not a requirement to invent a second one.
+
+#### Performance gates instead of guessed limits
+
+Record release-build process inventory, executable sizes, startup-to-interactive and startup-to-backend-ready, p50/p95 admitted query/command latency, per-process CPU and memory footprint, idle wakeups, I/O and observer/job counts. Measure multiple panes/windows and the backend together. RSS sums can double-count shared/mapped pages; use platform-appropriate proportional/physical footprint where available, record unavailable measurements, and distinguish file-backed mappings from private resident memory. GPU/shared-memory usage is separate from UI heap.
+
+Baseline scenarios: cold launch with no model; warm attach to existing daemon; idle empty project; large history; multiple Screens on the same resources; output flood; active local model; local notebook; remote GPU observation; disconnect/reconnect and quit/reopen. Verify no unexpected model/helper launch, no duplicate job/observer, unchanged saved work and no leaked owned resources after cleanup. Profiling/debug builds are not release performance results.
+
+Changes pass only when correctness/recovery gates pass and measured CPU/RAM/startup/latency improve or remain within a predeclared workload-specific margin. No hard numeric target is claimed before baseline collection. Publish both cold-load cost and steady-state benefit. Low idle CPU achieved by stale data or missing recovery is not success.
+
+Recommended next refactor order: shared client/wire extraction to SDK and safe async host attachment → typed command/error/retry semantics → one real application vertical → scoped frontend subscriptions/query pagination → bounded outputs and lazy expensive capability lifetimes → benchmark-driven optimization. Do not relocate all modules in one patch or add a new application crate merely to make the diagram symmetrical. A separate reusable application package can be reconsidered only when independent server compositions actually need it and package authority is explicitly approved.
+
+Research constraints: [Cargo features](https://doc.rust-lang.org/cargo/reference/features.html) are additive and dependency features can unify; a host-only build must be tested explicitly rather than inferred from folder names. [Tauri sidecar packaging](https://v2.tauri.app/develop/sidecar/) supports platform-specific external binaries; bundling does not itself establish daemon singleton, authentication or safe updates. [React external-store subscription guidance](https://react.dev/reference/react/useSyncExternalStore) supports consistent shared snapshots but does not eliminate unnecessary renders without a correct subscription/snapshot design. These references inform the approach; no measured Custos savings follow from them alone.
 
 ## 26. Interaction fidelity và hòa giải `origin/dev`
 

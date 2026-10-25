@@ -14,7 +14,7 @@ Custos là local-first Agent Workspace cho Coding, Research và Assistant. Bộ 
 
 ## Theo chủ đề
 
-- [Ba domain pack](architecture/domain-packs-and-workflows.md): jobs/artifacts/verification, Repo Intelligence, research AI/Data experiments và assistant effects/automation.
+- [Ba domain pack](architecture/domain-packs-and-workflows.md): jobs/artifacts/verification, scoped code reading, research AI/Data experiments và assistant effects/automation.
 - [OI economics evaluation](../evals/oi/README.md): baseline, ablations, report fields và negative cases; design khác benchmark result.
 
 - [Architecture](architecture/README.md): Task/kernel, authority/effects, evidence, context/memory, OI và protocol boundaries.

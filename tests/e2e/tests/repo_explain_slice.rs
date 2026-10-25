@@ -2,17 +2,16 @@
 //!
 //! Master Reference: dev_docs/README.md (Section 4)
 //! Proves the entire architectural loop end-to-end:
-//! CLI/Service -> Task Kernel -> SQLite Persistence -> Workspace Intelligence
+//! CLI/Service -> Task Kernel -> SQLite Persistence -> Explicit source files
 //! -> Context Compiler -> FakeProvider -> Citation Verifier -> Artifact Store
 //! -> Evidence Engine -> Crash Recovery.
 
-use custos_adapters::custos_adapter_provider_fake::FakeProvider;
+use custos_adapters::providers::fake::FakeProvider;
 use custos_core::evidence::{EvidenceBundle, EvidencePipeline};
 use custos_core::{AdvanceTask, CompleteTask, CreateTask, TaskService, TaskStore};
 use custos_domain::{ContinuationPacket, Span, SpanState, TaskStatus};
 use custos_persistence::{ArtifactStore, FsArtifactStore, SqliteTaskStore};
 use custos_provider::{ModelProvider, ProviderRequest};
-use custos_runtime::context::repo_intelligence::WorkspaceScanner;
 use custos_runtime::context::{ContextBuilder, SourceDocument, TokenAwareContextCompiler};
 use std::sync::Arc;
 
@@ -87,7 +86,7 @@ pub struct Task;
                 task_id: task.id.clone(),
                 next_status: TaskStatus::Queued,
                 expected_epoch: 0,
-                rationale: Some("Queued for repository intelligence worker".into()),
+                rationale: Some("Queued for source explanation worker".into()),
             })
             .await
             .expect("Advance to Queued must succeed");
@@ -98,27 +97,26 @@ pub struct Task;
                 task_id: task.id.clone(),
                 next_status: TaskStatus::Running,
                 expected_epoch: 1,
-                rationale: Some("Worker scanning repo and compiling context".into()),
+                rationale: Some("Worker reading selected files and compiling context".into()),
             })
             .await
             .expect("Advance to Running must succeed");
         assert_eq!(task.status, TaskStatus::Running);
 
         // -------------------------------------------------------------
-        // Step 4: Workspace Engine scans fixture repository
+        // Step 4: Select the two fixture sources explicitly; no repo indexer is involved.
         // -------------------------------------------------------------
-        let scanner = WorkspaceScanner::new();
-        let inventory = scanner
-            .scan_inventory(&fixture_repo)
-            .expect("Inventory scan must succeed");
-        assert_eq!(inventory.len(), 2);
+        let source_paths = [
+            persistence_mod_dir.join("lib.rs"),
+            core_domain_dir.join("lib.rs"),
+        ];
 
         // -------------------------------------------------------------
         // Step 5: Context Compiler indexes and selects token-budgeted slice
         // -------------------------------------------------------------
         let mut compiler = TokenAwareContextCompiler::new();
-        for file in &inventory {
-            let doc = SourceDocument::from_file(&file.absolute_path).expect("Read file");
+        for path in &source_paths {
+            let doc = SourceDocument::from_file(path).expect("Read selected source file");
             compiler.add_document(doc);
         }
 
@@ -194,7 +192,10 @@ pub struct Task;
         // -------------------------------------------------------------
         // Step 8: Evidence Engine verifies citations
         // -------------------------------------------------------------
-        let pipeline = EvidencePipeline::with_standard_verifiers();
+        let source_acq = std::sync::Arc::new(
+            custos_adapters::tools::source_fetch::SourceFetchAdapter::with_base_dir(&fixture_repo),
+        );
+        let pipeline = EvidencePipeline::with_source_acquisition(source_acq);
         let evidence_bundle = EvidenceBundle::new(
             task.id.clone(),
             "citation",

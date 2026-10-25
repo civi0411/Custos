@@ -54,7 +54,9 @@ async fn vertical_slice_links_all_ports() {
     assert!(h.kernel.get_task(&task.id).await.unwrap().is_some());
 
     // 3. Context Compiler (Vĩ): 8-step pipeline produces a sealed ContextPack
-    let pack = ContextCompiler::new(&h.workspace)
+    let mut files = std::collections::HashMap::new();
+    files.insert("src/lib.rs".into(), "pub fn add(a: i32, b: i32) -> i32 { a + b }\n".into());
+    let pack = ContextCompiler::with_memory_files(&h.workspace, files)
         .unwrap()
         .compile(&CompileContextRequest {
             task_id: task.id.clone(),
@@ -63,6 +65,7 @@ async fn vertical_slice_links_all_ports() {
             max_tokens: 500,
             untrusted_sources: vec![],
         })
+        .await
         .unwrap();
     assert_eq!(
         pack.items.len(),
@@ -107,20 +110,20 @@ async fn vertical_slice_links_all_ports() {
     // 6. Outbox (Trường, T3): durable record BEFORE the effect
     let entry_id = new_id("ob");
     h.outbox
-        .enqueue(OutboxEntry {
-            id: entry_id.clone(),
-            task_id: task.id.clone(),
-            action_id: intent.id.clone(),
-            permit_id: permit.id.clone(),
-            argument_digest: permit.argument_digest.clone(),
-            idempotency_key: None,
-            status: OutboxStatus::Pending,
-            created_at: chrono::Utc::now(),
-            receipt: None,
-        })
+        .enqueue(OutboxEntry::new(
+            entry_id.clone(),
+            task.id.clone(),
+            intent.id.clone(),
+            permit.id.clone(),
+            permit.argument_digest.clone(),
+            None,
+            OutboxStatus::Pending,
+            chrono::Utc::now(),
+        ))
         .await
         .unwrap();
     let burned = h.kernel.consume_permit(&permit.id, &intent).await.unwrap();
+    h.outbox.mark_approved(&entry_id).await.unwrap();
     h.outbox.mark_dispatching(&entry_id).await.unwrap();
 
     // 7. SandboxPort (Vinh): effect executes only with the burned, bound permit

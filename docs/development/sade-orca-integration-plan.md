@@ -1,5 +1,7 @@
 # Kế hoạch triển khai lõi Custos SADE và hấp thụ OrCa
 
+**Repo Intelligence removal:** subsystem scanner/graph/query/coordinator riêng đã được bỏ theo quyết định sản phẩm. Không triển khai hoặc phục hồi các placement Repo Intelligence trong những snapshot/kế hoạch lịch sử bên dưới. Giữ file/search/Git/worktree, context compiler và SourceSpan của Engineering; Nexus vẫn là development utility độc lập.
+
 **Trạng thái:** đề xuất triển khai dựa trên source Custos và snapshot OrCa đã đối chiếu; chưa phải xác nhận code đã chuyển hoặc các gate đã đạt. [Custos.md](../../Custos.md) giữ quyết định sản phẩm, [source study OrCa](orca-source-study.md) giữ provenance, [kế hoạch refactor tổng](workspace-restructuring-plan.md) giữ các packet đã có. Tài liệu này chốt cây repo đích, ownership, trình tự chuyển code và cách làm mỏng app hosts để nhóm có thể chia việc mà vẫn chạy được một đường sản phẩm.
 
 ## 1. Câu trả lời về cây repo

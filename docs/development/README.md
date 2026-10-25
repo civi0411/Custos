@@ -1,12 +1,15 @@
 # Custos Developer Hub & Getting Started
 
-**Thứ tự triển khai hiện hành:** [Backend–desktop convergence §2/§7](sade-frontend-backend-convergence-plan.md#2-những-vấn-đề-hiện-tại-phải-xử-lý-theo-thứ-tự-rủi-ro) dựa trên checkout `4b73cce`: khóa ingress/physical execution và capability UI, làm một chat→worker→answer thật, rồi Coding/Research vertical slices, continuity/Assistant, cuối cùng delegated multiworker và optimization. Các bảng PR/wave khác là kế hoạch dài hạn hoặc lịch sử nếu thứ tự khác. [Upstream matching ledger](upstream-source-map.md#cross-source-nexus-audit-orca-and-open-science) xác định mức đã hiện thực của OrCa/Open Science.
+**Thứ tự triển khai để duyệt hiện hành:** [Backend–desktop convergence §12](sade-frontend-backend-convergence-plan.md#12-refactor-crates-và-desktop-theo-ownership) map toàn bộ 11 nhóm crate và frontend vào 12 gói: baseline, effect/driver correctness, one Screen/layout owner, AppContext/transport extraction, shell/center/inspector, settings, Coding/Copilot/Research, performance/visual, OI và nghiệm thu. UI cleanup có thể bắt đầu sau baseline, không đợi full GPU/OI. Các queue §2/§7 và snapshot `4b73cce` là lịch sử khi khác §12; plan không đồng nghĩa đã triển khai. [Upstream matching ledger](upstream-source-map.md#cross-source-nexus-audit-orca-and-open-science) xác định mức đã hiện thực của OrCa/Open Science.
 
 Để refactor đúng từng crate, đọc [blueprint §22](workspace-restructuring-plan.md#22-crate-blueprint-và-chuyển-lõi-orca-theo-trách-nhiệm): actual/target dependencies, module addresses, OrCa core decomposition, atomic storage operations, resource/lease gap và skill/model/native integration.
 
 Để giao triển khai kết hợp desktop/headless, bắt đầu từ [superplan §21](workspace-restructuring-plan.md#21-superplan-kết-hợp-custos-và-orca-cho-desktop-và-headless): reuse decisions, source findings, module map, packets đầu và gates. Mobile nằm ngoài scope; ba pack cùng phát triển trên foundation OF/R/P hiện có.
 
 **Chiến dịch hiện tại:** [SADE refactor plan](workspace-restructuring-plan.md#11-quyết-định-khóa-cho-chiến-dịch-sade) — source gaps → live worker/cost ledger → native resources → Coding/Research/Assistant → coordination → measured optimization. [OrCa foundation §20](workspace-restructuring-plan.md#20-chương-trình-hấp-thụ-orca-vào-nền-custos) map toàn bộ capability families sang Custos OF0–OF7; đây là functional assimilation, không nhúng OrCa runtime. [Domain design](../architecture/domain-packs-and-workflows.md) và [evaluation contract](../../evals/oi/README.md) đi cùng; không đợi OI hoàn thiện mới đo economics.
+
+**Implementation plan (execution level):** [sade-implementation-plan.md](sade-implementation-plan.md) — PR-by-PR breakdown of F01–F12 with verified findings, UI conflict verdict, tests and rollback.
+
 
 For the concrete source refactor, read [audit and R0–R10 packets](workspace-restructuring-plan.md#6-audit-code-và-quyết-định-giữchuyểnhợp-nhất): exact current paths, keep/move/consolidate decisions, target imports, compatibility and verification gates. Package names come from Cargo metadata; folder names alone do not establish active runtime behavior.
 
