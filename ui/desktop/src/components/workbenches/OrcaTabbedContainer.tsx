@@ -81,21 +81,6 @@ export const OrcaTabbedContainer = React.memo(function OrcaTabbedContainer(props
     dispatch({ type: 'split', groupId: group.id, newGroupId, axis, tabId: targetTabId });
     if (targetTabId) {
       resourceTabs.setActiveTabId(targetTabId);
-    } else {
-      // Group only had 1 tab: open a natural companion tab into the newly created split pane
-      const companionType: OrcaTabId = isEngineeringMode ? 'terminal' : props.mode === 'research' ? 'lab' : 'tasks';
-      const companionTitle = companionType === 'terminal' ? 'Terminal' : companionType === 'lab' ? 'Lab & Notebook' : 'Tasks & Approvals';
-      const companionTabId = `${companionType}-${crypto.randomUUID()}`;
-      const companionTab: OrcaTab = {
-        id: companionTabId,
-        type: companionType,
-        title: companionTitle,
-        url: urlFor(companionType),
-        workspaceId: props.activeWorkspaceId,
-        sessionId: props.session?.id,
-      };
-      resourceTabs.setTabs(prev => [...prev, companionTab]);
-      resourceTabs.setActiveTabId(companionTabId);
     }
   };
 

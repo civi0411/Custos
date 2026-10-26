@@ -39,6 +39,7 @@ export function useWorkspaceTabRouter({
     }
     const activeTab = resourceTabs.tabs.find((t) => t.id === resourceTabs.activeTabId);
     const newTabId = `${id}-${crypto.randomUUID()}`;
+    const isSessionIndependent = ['fleet', 'contacts', 'calendar', 'notes'].includes(id);
     const newTab: OrcaTab = {
       id: newTabId,
       type: id,
@@ -46,8 +47,8 @@ export function useWorkspaceTabRouter({
       url,
       agentId,
       workspaceId: workspaceId || activeWorkspaceId || undefined,
-      sessionId: targetSessionId || activeSession.id || undefined,
-      taskId: selectedTaskId || activeSession.taskId,
+      sessionId: isSessionIndependent ? undefined : (targetSessionId || activeSession.id || undefined),
+      taskId: isSessionIndependent ? undefined : (selectedTaskId || activeSession.taskId),
     };
 
     if (activeTab && getTabType(activeTab) === 'tools') {
@@ -62,8 +63,8 @@ export function useWorkspaceTabRouter({
         const existing = findScopedResourceTab(resourceTabs.tabs, id, {
           agentId,
           workspaceId: workspaceId || activeWorkspaceId || undefined,
-          sessionId: targetSessionId || activeSession.id || undefined,
-          taskId: selectedTaskId || activeSession.taskId,
+          sessionId: isSessionIndependent ? undefined : (targetSessionId || activeSession.id || undefined),
+          taskId: isSessionIndependent ? undefined : (selectedTaskId || activeSession.taskId),
         });
         if (existing) {
           if (targetPane === 'split') {
@@ -189,10 +190,11 @@ export function useWorkspaceTabRouter({
     }
 
     // Singleton scoped lenses (worktrees, activity, lab, literature, findings, drafts, outbox, etc.)
+    const isSessionIndependent = ['fleet', 'contacts', 'calendar', 'notes'].includes(id);
     const existing = findScopedResourceTab(resourceTabs.tabs, id, {
       workspaceId: effectiveWsId || undefined,
-      sessionId: activeSession.id || undefined,
-      taskId: selectedTaskId || activeSession.taskId,
+      sessionId: isSessionIndependent ? undefined : (activeSession.id || undefined),
+      taskId: isSessionIndependent ? undefined : (selectedTaskId || activeSession.taskId),
     });
     if (existing) {
       if (id === 'synthesis' && customUrl) {

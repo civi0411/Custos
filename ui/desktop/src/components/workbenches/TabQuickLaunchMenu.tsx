@@ -120,8 +120,8 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
       );
 
     if (mode === 'research') {
-      const sec1Ids: OrcaTabId[] = ['literature', 'lab', 'findings', 'artifacts'];
-      const sec2Ids: OrcaTabId[] = ['conversation'];
+      const sec1Ids: OrcaTabId[] = ['conversation', 'literature', 'lab', 'findings', 'artifacts'];
+      const sec2Ids: OrcaTabId[] = ['knowledge', 'synthesis'];
 
       const sec1 = sec1Ids
         .map((id) => pickerResources.find((r) => r.id === id))
@@ -133,15 +133,15 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
 
       return {
         section1Title: 'Research Surfaces',
-        section2Title: 'Scientific Dialogue',
+        section2Title: 'Analysis & Synthesis',
         section1Resources: sec1,
         section2Resources: sec2,
       };
     }
 
     if (mode === 'copilot') {
-      const sec1Ids: OrcaTabId[] = ['tasks', 'drafts'];
-      const sec2Ids: OrcaTabId[] = ['conversation'];
+      const sec1Ids: OrcaTabId[] = ['conversation', 'tasks', 'drafts'];
+      const sec2Ids: OrcaTabId[] = ['outbox', 'contacts', 'calendar', 'notes'];
 
       const sec1 = sec1Ids
         .map((id) => pickerResources.find((r) => r.id === id))
@@ -153,14 +153,14 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
 
       return {
         section1Title: 'Executive Workflows',
-        section2Title: 'Assistant Dialogue',
+        section2Title: 'Workspace Operations',
         section1Resources: sec1,
         section2Resources: sec2,
       };
     }
 
     // Default: Engineering
-    const engIds: OrcaTabId[] = ['terminal', 'files', 'browser', 'emulator', 'worktrees', 'conversation'];
+    const engIds: OrcaTabId[] = ['conversation', 'terminal', 'files', 'browser', 'emulator', 'worktrees'];
     const engResources = engIds
       .map((id) => pickerResources.find((r) => r.id === id))
       .filter(matchesSearch);
