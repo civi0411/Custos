@@ -1571,7 +1571,6 @@ export class DaemonClient {
     ssh_user?: string;
     pod_id?: string;
     cloud_api_key?: string;
-    mock?: boolean;
   }): Promise<PreflightReport> {
     const res = await this.request<unknown>('v1.experiment.preflight', params);
     return fromDaemon<PreflightReport>(res);
@@ -1587,7 +1586,6 @@ export class DaemonClient {
     ssh_user?: string;
     pod_id?: string;
     cloud_api_key?: string;
-    mock?: boolean;
   }): Promise<{ attempt: ExecutionAttemptRecord; externalRef: any }> {
     const res = await this.request<{ attempt: unknown; external_ref: unknown }>('v1.experiment.submit', params);
     return {
@@ -1596,10 +1594,9 @@ export class DaemonClient {
     };
   }
 
-  async observeExperiment(attemptId: string, mock?: boolean): Promise<{ attempt: ExecutionAttemptRecord; observation: any }> {
+  async observeExperiment(attemptId: string): Promise<{ attempt: ExecutionAttemptRecord; observation: any }> {
     const res = await this.request<{ attempt: unknown; observation: unknown }>('v1.experiment.observe', {
       attempt_id: attemptId,
-      mock,
     });
     return {
       attempt: fromDaemon<ExecutionAttemptRecord>(res.attempt),
@@ -1607,10 +1604,9 @@ export class DaemonClient {
     };
   }
 
-  async stopExperiment(attemptId: string, mock?: boolean): Promise<{ stopped: boolean; attempt: ExecutionAttemptRecord }> {
+  async stopExperiment(attemptId: string): Promise<{ stopped: boolean; attempt: ExecutionAttemptRecord }> {
     const res = await this.request<{ stopped: boolean; attempt: unknown }>('v1.experiment.stop', {
       attempt_id: attemptId,
-      mock,
     });
     return {
       stopped: res.stopped,
@@ -1618,10 +1614,9 @@ export class DaemonClient {
     };
   }
 
-  async releaseExperiment(attemptId: string, mock?: boolean): Promise<{ released: boolean; attempt: ExecutionAttemptRecord }> {
+  async releaseExperiment(attemptId: string): Promise<{ released: boolean; attempt: ExecutionAttemptRecord }> {
     const res = await this.request<{ released: boolean; attempt: unknown }>('v1.experiment.release', {
       attempt_id: attemptId,
-      mock,
     });
     return {
       released: res.released,
@@ -1629,10 +1624,9 @@ export class DaemonClient {
     };
   }
 
-  async collectExperimentArtifacts(attemptId: string, mock?: boolean): Promise<{ artifacts: any[]; attempt: ExecutionAttemptRecord }> {
+  async collectExperimentArtifacts(attemptId: string): Promise<{ artifacts: any[]; attempt: ExecutionAttemptRecord }> {
     const res = await this.request<{ artifacts: any[]; attempt: unknown }>('v1.experiment.collect', {
       attempt_id: attemptId,
-      mock,
     });
     return {
       artifacts: res.artifacts || [],
