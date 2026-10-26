@@ -12,7 +12,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
-import type { OrcaTab, OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
+import { getTabIcon, type OrcaTab, type OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
 import type { ExecutionWorkspace, Task } from '@/types/domain';
 import type { Session } from '@/types';
 
@@ -150,6 +150,87 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   const criteria = Array.isArray(activeTask?.contract?.criteria) ? activeTask.contract.criteria : [];
   const activeTabType = activeTab?.type || activeTab?.id;
 
+  const renderTabContext = (type?: string, tab?: OrcaTab) => {
+    if (!type || !tab) return null;
+    switch (type) {
+      case 'terminal':
+        return (
+          <div className="mt-2.5 pt-2 border-t border-white/5 space-y-1 text-[10.5px]">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-white/40">Shell</span>
+              <span className="font-mono text-emerald-400">interactive</span>
+            </div>
+            {tab.workspaceId && (
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-white/40">Workspace</span>
+                <span className="font-mono truncate max-w-[130px] text-white/70">{tab.workspaceId}</span>
+              </div>
+            )}
+          </div>
+        );
+      case 'lab':
+      case 'experiments':
+        return (
+          <div className="mt-2.5 pt-2 border-t border-white/5 space-y-1 text-[10.5px]">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-white/40">Environment</span>
+              <span className="font-mono text-purple-400">Jupyter / Analysis</span>
+            </div>
+            <p className="text-[10px] text-white/50 leading-relaxed">
+              Notebook session for experimental calculations and visualization.
+            </p>
+          </div>
+        );
+      case 'literature':
+        return (
+          <div className="mt-2.5 pt-2 border-t border-white/5 space-y-1 text-[10.5px]">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-white/40">Reader</span>
+              <span className="font-mono text-sky-400">Citation & References</span>
+            </div>
+            <p className="text-[10px] text-white/50 leading-relaxed">
+              Inspect claims, evidence references, and linked scientific publications.
+            </p>
+          </div>
+        );
+      case 'files':
+      case 'changes':
+        return (
+          <div className="mt-2.5 pt-2 border-t border-white/5 space-y-1 text-[10.5px]">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-white/40">Mode</span>
+              <span className="font-mono text-amber-400">
+                {tab.url.startsWith('custos://diff?') ? 'Diff View' : 'Source File'}
+              </span>
+            </div>
+          </div>
+        );
+      case 'browser':
+      case 'emulator':
+        return (
+          <div className="mt-2.5 pt-2 border-t border-white/5 space-y-1 text-[10.5px]">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-white/40">Runtime</span>
+              <span className="font-mono text-blue-400">
+                {type === 'browser' ? 'Web Container' : 'Mobile Simulator'}
+              </span>
+            </div>
+          </div>
+        );
+      case 'tasks':
+        return (
+          <div className="mt-2.5 pt-2 border-t border-white/5 space-y-1 text-[10.5px]">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="text-white/40">Tracker</span>
+              <span className="font-mono text-emerald-400">Task Board</span>
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <aside
       id="custos-context-inspector"
@@ -274,10 +355,20 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
 
             {activeTab && (
               <div className="rounded-lg border border-white/8 bg-white/[0.035] p-3">
-                <div className="mb-2 flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-white/45"><BookOpen aria-hidden="true" className="size-3.5" />Focused resource</div>
+                <div className="mb-2 flex items-center justify-between text-[10px] font-medium uppercase tracking-wide text-white/45">
+                  <span className="flex items-center gap-2">
+                    {getTabIcon(activeTabType as OrcaTabId, true, activeTab)}
+                    Active Canvas Tab
+                  </span>
+                  {activeTabType && (
+                    <span className="font-mono text-[9px] text-workbench-accent lowercase px-1.5 py-0.5 rounded bg-white/5 border border-white/10">
+                      {activeTabType}
+                    </span>
+                  )}
+                </div>
                 <p className="truncate text-xs font-medium text-white/85" title={activeTab.title}>{activeTab.title}</p>
-                {activeTabType && <p className="mt-1 font-mono text-[10px] text-workbench-accent">{activeTabType}</p>}
-                {activeTab.url && <p className="mt-2 break-all font-mono text-[9px] leading-relaxed text-white/40">{activeTab.url}</p>}
+                {activeTab.url && <p className="mt-1.5 break-all font-mono text-[9px] leading-relaxed text-white/40">{activeTab.url}</p>}
+                {renderTabContext(activeTabType, activeTab)}
               </div>
             )}
           </section>
@@ -286,7 +377,10 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
         {activeTabId === 'checks' && (
           <section className="space-y-3" aria-label="Research evidence support">
             <div className="rounded-lg border border-white/8 bg-white/[0.035] p-3">
-              <div className="mb-2 flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-white/45"><BookOpen aria-hidden="true" className="size-3.5" />Research context</div>
+              <div className="mb-2 flex items-center gap-2 text-[10px] font-medium uppercase tracking-wide text-white/45">
+                {activeTab ? getTabIcon(activeTabType as OrcaTabId, true, activeTab) : <BookOpen aria-hidden="true" className="size-3.5" />}
+                Research context
+              </div>
               {activeTab ? <p className="truncate text-xs font-medium text-white/85" title={activeTab.title}>{activeTab.title}</p> : <p className="text-[11px] text-white/50">No research resource is focused.</p>}
               {activeTask && <p className="mt-2 text-[10px] text-white/50">Task: <span className="text-white/70">{activeTask.title}</span></p>}
             </div>
