@@ -1,6 +1,6 @@
 import React from 'react';
 import WorktreeIcon from '~icons/codicon/worktree';
-import { Activity, BookOpen, Bot, FileCode, FileDiff, FileText, FlaskConical, FolderTree, Globe, ShieldCheck, Terminal, Layers, Server, Smartphone, ArrowRight, Send, Users, Calendar, MessageSquare, CheckSquare } from 'lucide-react';
+import { Activity, BookOpen, Bot, FileCode, FileDiff, FileText, FlaskConical, FolderTree, Globe, ShieldCheck, Terminal, Layers, Server, Smartphone, ArrowRight, Send, Users, Calendar, MessageSquare, CheckSquare, LayoutGrid, NotebookTabs } from 'lucide-react';
 import { getAgentBrandIcon } from '@/components/common/AgentIcons';
 import { daemonClient } from '@/api/daemon_client';
 import type { CapabilityDescriptor } from '@/types/domain';
@@ -376,39 +376,57 @@ export function resolveResources(
 export const urlFor = (id: OrcaTabId) =>
   id === 'tools' ? 'custos://resources' : `custos://resource/${id}`;
 
-export const getTabIcon = (type: OrcaTabId, active: boolean, tab?: OrcaTab) => {
+export const getTabIcon = (
+  type: OrcaTabId,
+  active: boolean,
+  tabOrAgentId?: OrcaTab | string,
+) => {
   const cls = `size-3.5 shrink-0 ${active ? 'text-white' : 'text-white/40'}`;
+  const agentId = typeof tabOrAgentId === 'string' ? tabOrAgentId : tabOrAgentId?.agentId;
+  const tab = typeof tabOrAgentId === 'object' ? tabOrAgentId : undefined;
+
   switch (type) {
     case 'conversation':
     case 'chat': return <MessageSquare className={cls} />;
     case 'tasks':
     case 'task': return <CheckSquare className={cls} />;
+    case 'tools': return <LayoutGrid className={cls} />;
     case 'files': {
       if (tab?.url?.startsWith('custos://diff?')) return <FileDiff className={cls} />;
       if (tab?.url?.startsWith('custos://file?')) return <FileCode className={cls} />;
       return <FolderTree className={cls} />;
     }
+    case 'changes': return <FileDiff className={cls} />;
     case 'activity': return <Activity className={cls} />;
     case 'terminal': return <Terminal className={cls} />;
     case 'worktrees': return <WorktreeIcon className={cls} />;
     case 'agents': {
-      if (tab?.agentId) {
-        return getAgentBrandIcon(tab.agentId, 14, cls);
+      if (agentId) {
+        return getAgentBrandIcon(agentId, 14, cls);
       }
       return <Bot className={cls} />;
     }
+    case 'kanban': return <Bot className={cls} />;
     case 'browser': return <Globe className={cls} />;
     case 'emulator': return <Smartphone className={cls} />;
     case 'fleet': return <Server className={cls} />;
+    case 'training': return <Server className={cls} />;
     case 'literature': return <BookOpen className={cls} />;
-    case 'findings': return <ShieldCheck className={cls} />;
-    case 'lab': return <FlaskConical className={cls} />;
+    case 'findings':
+    case 'evidence':
+    case 'claims': return <ShieldCheck className={cls} />;
+    case 'dag': return <Activity className={cls} />;
+    case 'lab':
+    case 'runs':
+    case 'knowledge': return <FlaskConical className={cls} />;
+    case 'experiments': return <NotebookTabs className={cls} />;
     case 'synthesis': return <Layers className={cls} />;
     case 'artifacts': return <FileCode className={cls} />;
     case 'drafts': return <FileText className={cls} />;
     case 'outbox': return <Send className={cls} />;
     case 'contacts': return <Users className={cls} />;
     case 'calendar': return <Calendar className={cls} />;
+    case 'notes': return <FileText className={cls} />;
     default: return <Globe className={cls} />;
   }
 };
