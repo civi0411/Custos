@@ -4,7 +4,4 @@ export * from './WorktreeManagerPane';
 export * from './TerminalWorkbenchPane';
 export * from './WorkflowDagWorkbenchPane';
 export * from './EvidenceWorkbenchPane';
-export * from './ExecutionWorkspacesPane';
-export * from './FilesWorkbenchPane';
-export * from './ChangesWorkbenchPane';
 export * from './AgentsWorkbenchPane';

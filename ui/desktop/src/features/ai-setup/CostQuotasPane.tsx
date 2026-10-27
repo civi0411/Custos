@@ -1,5 +1,5 @@
 import React from 'react';
-import { UsageMonitor } from '@/components/providers/UsageMonitor';
+import { UsageMonitor } from '@/features/providers/UsageMonitor';
 
 /** Usage is daemon-backed; an unenforced budget is not a setting. */
 export const CostQuotasPane: React.FC = () => (
