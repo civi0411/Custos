@@ -6,7 +6,6 @@ import {
   SettingsModal,
   AiSetupModal,
   NewSessionModal,
-  AddProviderModal,
   OpenProjectModal,
   PluginsModal,
   SkillsModal,
@@ -31,8 +30,6 @@ export const RootLayout: React.FC = () => {
     isOpenProjectOpen,
     setIsOpenProjectOpen,
     handleProjectOpened,
-    isAddProviderOpen,
-    setIsAddProviderOpen,
     isPluginsOpen,
     setIsPluginsOpen,
     isSkillsOpen,
@@ -46,7 +43,6 @@ export const RootLayout: React.FC = () => {
     activeWorkbench,
     handleCreateNewSession,
     handleCreateChatSession,
-    handleSaveProvider,
     isResizingColumn,
   } = useAppContext();
 
@@ -98,12 +94,6 @@ export const RootLayout: React.FC = () => {
         onClose={() => setIsOpenProjectOpen(false)}
         onProjectOpened={handleProjectOpened}
         onShowToast={showToast}
-      />
-
-      <AddProviderModal
-        isOpen={isAddProviderOpen}
-        onClose={() => setIsAddProviderOpen(false)}
-        onSaveProvider={handleSaveProvider}
       />
 
       <PluginsModal
