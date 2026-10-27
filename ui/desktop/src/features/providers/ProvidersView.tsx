@@ -10,8 +10,8 @@ import {
 } from 'lucide-react';
 import { ProviderItem, ClientApiKey } from '@/types';
 import { useAppContext } from '@/context/AppContext';
-import { CombosManager } from '@/components/providers/CombosManager';
-import { UsageMonitor } from '@/components/providers/UsageMonitor';
+import { CombosManager } from './CombosManager';
+import { UsageMonitor } from './UsageMonitor';
 import { ProviderBrandIcon, getProviderBrandMeta } from '@/components/common/AgentIcons';
 
 interface ProvidersViewProps {
