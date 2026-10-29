@@ -148,6 +148,7 @@ pub struct OutboxEntry {
 }
 
 impl OutboxEntry {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: impl Into<String>,
         task_id: impl Into<String>,

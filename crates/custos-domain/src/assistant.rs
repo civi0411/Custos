@@ -123,7 +123,7 @@ impl OutboxActionItem {
             "pending_approval" | "draft" => OutboxDeliveryState::Draft,
             "approved" | "dispatching" => OutboxDeliveryState::RequestedSend,
             "receipted" | "observed_sent" => OutboxDeliveryState::ObservedSent,
-            "uncertain" | "failed" | _ => OutboxDeliveryState::Uncertain,
+            _ => OutboxDeliveryState::Uncertain,
         }
     }
 

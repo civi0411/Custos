@@ -62,10 +62,9 @@ impl HardFilters {
                 && (proposal.candidate_harness.contains("cloud")
                     || proposal.candidate_harness.contains("claude")
                     || proposal.candidate_harness.contains("openai"))
+                && !reasons.contains(&RejectionReason::EgressViolation(rule.clone()))
             {
-                if !reasons.contains(&RejectionReason::EgressViolation(rule.clone())) {
-                    reasons.push(RejectionReason::EgressViolation(rule.clone()));
-                }
+                reasons.push(RejectionReason::EgressViolation(rule.clone()));
             }
         }
 

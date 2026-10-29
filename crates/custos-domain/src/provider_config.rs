@@ -135,18 +135,13 @@ fn default_true() -> bool {
 }
 
 /// Compatibility status of a model against local machine VRAM and RAM.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ModelCompatibility {
+    #[default]
     Green,  // Fits 100% in Metal VRAM (Fast GPU inference)
     Yellow, // Fits partially in VRAM / RAM offload
     Red,    // Exceeds total usable memory (OOM risk)
-}
-
-impl Default for ModelCompatibility {
-    fn default() -> Self {
-        Self::Green
-    }
 }
 
 /// Metadata and performance descriptor for a discovered local GGUF model.

@@ -57,7 +57,7 @@ impl Recipe {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EnvironmentSpec {
     pub python_version: Option<String>,
     pub requirements: Vec<String>,
