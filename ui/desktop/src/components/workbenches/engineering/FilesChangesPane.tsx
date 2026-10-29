@@ -1,23 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
-  Folder,
   FolderOpen,
-  File,
   FileCode,
-  FileText,
   RefreshCw,
-  Search,
-  ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  Copy,
-  Check,
-  Plus,
-  Minus,
-  Trash2,
   FolderTree,
   FolderGit2,
-  Filter,
   PanelLeft,
   PanelLeftClose,
   Terminal,
@@ -25,6 +12,9 @@ import {
 import { useAppContext } from '@/context/AppContext';
 import { daemonClient } from '@/api/daemon_client';
 import { CompanionFileViewer } from '@/components/viewer';
+import { getFileIcon } from '@/utils/fileIcons';
+import { FileTreeSidebar, checkIsDir } from './FileTreeSidebar';
+import { DiffViewer } from './DiffViewer';
 import type {
   ExecutionWorkspace,
   WorkspaceFileEntry,
@@ -46,85 +36,6 @@ export interface FilesChangesPaneProps {
   onOpenTab?: (id: OrcaTabId, customUrl?: string, customTitle?: string) => void;
 }
 
-function getFileIcon(name: string) {
-  const ext = name.split('.').pop()?.toLowerCase();
-  switch (ext) {
-    case 'ts':
-    case 'tsx':
-    case 'js':
-    case 'jsx':
-    case 'rs':
-    case 'py':
-    case 'go':
-    case 'c':
-    case 'cpp':
-    case 'html':
-    case 'css':
-      return <FileCode className="h-3.5 w-3.5 text-white/60 shrink-0" />;
-    case 'json':
-    case 'yaml':
-    case 'yml':
-    case 'toml':
-    case 'md':
-    case 'txt':
-      return <FileText className="h-3.5 w-3.5 text-white/50 shrink-0" />;
-    default:
-      return <File className="h-3.5 w-3.5 text-[var(--color-fg-muted)] shrink-0" />;
-  }
-}
-
-interface TreeNode {
-  entry?: WorkspaceFileEntry;
-  name: string;
-  path: string;
-  isDir: boolean;
-  children: Map<string, TreeNode>;
-}
-
-function checkIsDir(entry?: WorkspaceFileEntry): boolean {
-  if (!entry) return false;
-  return Boolean(
-    (entry as any).isDir ??
-    (entry as any).is_dir
-  );
-}
-
-function buildFileTree(entries: WorkspaceFileEntry[]): TreeNode {
-  const root: TreeNode = {
-    name: 'root',
-    path: '',
-    isDir: true,
-    children: new Map(),
-  };
-
-  for (const entry of entries) {
-    const parts = entry.path.split('/').filter(Boolean);
-    let current = root;
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      const isLast = i === parts.length - 1;
-      const nodePath = parts.slice(0, i + 1).join('/');
-
-      if (!current.children.has(part)) {
-        current.children.set(part, {
-          entry: isLast ? entry : undefined,
-          name: part,
-          path: nodePath,
-          isDir: isLast ? checkIsDir(entry) : true,
-          children: new Map(),
-        });
-      } else if (isLast && entry) {
-        const existing = current.children.get(part)!;
-        existing.entry = entry;
-        existing.isDir = checkIsDir(entry);
-      }
-      current = current.children.get(part)!;
-    }
-  }
-
-  return root;
-}
-
 export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
   sessionId: _sessionId,
   initialWorkspaceId,
@@ -143,14 +54,11 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
   const appliedInitialWorkspace = useRef<string | undefined>(undefined);
   const treeGeneration = useRef(0);
   const [loading, setLoading] = useState<boolean>(true);
-  const [filterQuery, setFilterQuery] = useState<string>('');
-  const [onlyChanged, setOnlyChanged] = useState<boolean>(false);
   const [isExplorerOpen, setIsExplorerOpen] = useState<boolean>(true);
 
   // Files & Diff state
   const [fileEntries, setFileEntries] = useState<WorkspaceFileEntry[]>([]);
   const [diffSummary, setDiffSummary] = useState<WorkspaceDiffSummary | null>(null);
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
 
   // Active selected file (never a folder)
   const [selectedPath, setSelectedPath] = useState<string | null>(initialFilePath || null);
@@ -233,17 +141,6 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
       const files: WorkspaceFileEntry[] = (tree && Array.isArray(tree.entries)) ? tree.entries : [];
       setFileEntries(files);
       setDiffSummary(diff || null);
-
-      // Keep the first two directory levels visible, including inferred parents from flat path listings.
-      const initialExpanded = new Set<string>();
-      files.forEach((f: WorkspaceFileEntry) => {
-        const parts = f.path.split('/').filter(Boolean);
-        const directoryParts = checkIsDir(f) ? parts : parts.slice(0, -1);
-        for (let depth = 1; depth <= Math.min(2, directoryParts.length); depth++) {
-          initialExpanded.add(directoryParts.slice(0, depth).join('/'));
-        }
-      });
-      setExpandedDirs(initialExpanded);
 
       setSelectedPath(previous => previous || diff?.files?.[0]?.path || files.find(file => !checkIsDir(file))?.path || null);
     } catch {
@@ -347,31 +244,6 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
     };
   }, [selectedWorkspaceId, selectedPath, diffSummary]);
 
-  const filteredEntries = useMemo(() => {
-    return fileEntries.filter((entry) => {
-      if (onlyChanged) {
-        if (checkIsDir(entry)) {
-          const count = folderChangeCounts.get(entry.path) || 0;
-          if (count === 0) return false;
-        } else if (!changedFilesMap.has(entry.path)) {
-          return false;
-        }
-      }
-      if (!filterQuery) return true;
-      return entry.path.toLowerCase().includes(filterQuery.toLowerCase());
-    });
-  }, [fileEntries, onlyChanged, changedFilesMap, folderChangeCounts, filterQuery]);
-
-  const treeRoot = useMemo(() => buildFileTree(filteredEntries), [filteredEntries]);
-
-  const toggleDir = (dirPath: string) => {
-    setExpandedDirs((prev) => {
-      const next = new Set(prev);
-      if (next.has(dirPath)) next.delete(dirPath);
-      else next.add(dirPath);
-      return next;
-    });
-  };
 
   const changedFileList = useMemo(() => diffSummary?.files || [], [diffSummary]);
   const currentDiffIndex = changedFileList.findIndex((f) => f.path === selectedPath);
@@ -445,125 +317,6 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
     onShowToast?.('Copied file path to clipboard');
   };
 
-  const renderTree = (node: TreeNode, depth = 0) => {
-    const isExpanded = expandedDirs.has(node.path);
-    const hasDiff = changedFilesMap.get(node.path);
-    const isSelected = selectedPath === node.path;
-    const folderChangeCount = node.isDir ? folderChangeCounts.get(node.path) || 0 : 0;
-
-    const sortedChildren = Array.from(node.children.values()).sort((a, b) => {
-      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-
-    // Root container directly renders its children
-    if (node.path === '') {
-      return (
-        <div className="space-y-0.5">
-          {sortedChildren.map((child) => renderTree(child, 0))}
-        </div>
-      );
-    }
-
-    if (node.isDir) {
-      if (onlyChanged && folderChangeCount === 0) {
-        return null;
-      }
-
-      return (
-        <div key={node.path}>
-          <button
-            type="button"
-            aria-expanded={isExpanded}
-            onClick={() => toggleDir(node.path)}
-            style={{ paddingLeft: `${depth * 12 + 6}px` }}
-            className="flex w-full items-center justify-between py-1 px-1.5 text-left text-xs transition-colors rounded cursor-pointer select-none text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-editor-fg)] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent group"
-          >
-            <div className="flex items-center gap-1.5 min-w-0 pr-2">
-              <span className="p-0.5 text-[var(--color-fg-subtle)]">
-                {isExpanded ? (
-                  <ChevronDown className="h-3 w-3" />
-                ) : (
-                  <ChevronRight className="h-3 w-3" />
-                )}
-              </span>
-              {isExpanded ? (
-                <FolderOpen className="h-3.5 w-3.5 shrink-0 text-white/60" />
-              ) : (
-                <Folder className="h-3.5 w-3.5 shrink-0 text-white/40" />
-              )}
-              <span className="truncate">{node.name}</span>
-            </div>
-            {folderChangeCount > 0 && (
-              <span className="text-[10px] font-mono font-medium text-white/60 mr-1">
-                {folderChangeCount}
-              </span>
-            )}
-          </button>
-          {isExpanded && (
-            <div>
-              {sortedChildren.map((child) => renderTree(child, depth + 1))}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // Git Status coloring matching standard IDEs:
-    // Modified: amber/yellow text + M
-    // Added / Untracked: emerald/green text + U or A
-    // Deleted: rose/red text + D
-    let nameColorClass = 'text-[var(--color-editor-fg)]';
-    let statusLetter = '';
-    let statusColor = '';
-
-    if (hasDiff) {
-      if (hasDiff.status === 'added' || hasDiff.status === '??') {
-        nameColorClass = 'text-white font-medium';
-        statusLetter = hasDiff.status === '??' ? 'U' : 'A';
-        statusColor = 'text-white/70';
-      } else if (hasDiff.status === 'deleted') {
-        nameColorClass = 'text-white/40 line-through';
-        statusLetter = 'D';
-        statusColor = 'text-white/40';
-      } else {
-        nameColorClass = 'text-white font-medium';
-        statusLetter = 'M';
-        statusColor = 'text-white/70';
-      }
-    }
-
-    return (
-      <div
-        key={node.path}
-        role="button"
-        tabIndex={0}
-        onClick={() => setSelectedPath(node.path)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            setSelectedPath(node.path);
-          }
-        }}
-        style={{ paddingLeft: `${depth * 12 + 18}px` }}
-        className={`flex w-full items-center justify-between py-1 px-1.5 text-left text-xs transition-colors rounded cursor-pointer select-none group ${
-          isSelected
-            ? 'bg-[var(--color-surface-2)] text-[var(--color-editor-fg)]'
-            : 'hover:bg-[var(--color-surface-1)]'
-        }`}
-      >
-        <div className="flex items-center gap-1.5 min-w-0 pr-2">
-          {getFileIcon(node.name)}
-          <span className={`truncate ${nameColorClass}`}>{node.name}</span>
-        </div>
-        {statusLetter && (
-          <span className={`mr-1 shrink-0 font-mono text-[10px] font-bold ${statusColor}`}>
-            {statusLetter}
-          </span>
-        )}
-      </div>
-    );
-  };
 
   return (
     <div className="wb-split flex h-full bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
@@ -592,78 +345,16 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
         <>
           {/* Optional In-Canvas Mini File Navigator (Collapsible, default collapsed when file is open) */}
           {isExplorerOpen && (
-            <div className="wb-master w-60 shrink-0 border-r border-[var(--color-border-subtle)] flex flex-col bg-[var(--color-surface-1)]/30 z-10 transition-all">
-              {/* Explorer Header */}
-              <div className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-2.5 bg-[var(--color-surface-1)]/50">
-                <div className="flex items-center gap-1.5 truncate">
-                  <FolderTree className="h-3.5 w-3.5 text-white/60 shrink-0" />
-                  <span className="text-xs font-semibold text-[var(--color-editor-fg)] truncate">
-                    Files Navigator
-                  </span>
-                  {changedFilesMap.size > 0 && (
-                    <span className="text-[10px] font-mono text-white/60 font-medium">
-                      ({changedFilesMap.size})
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setOnlyChanged(!onlyChanged)}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition flex items-center gap-1 ${
-                      onlyChanged
-                        ? 'bg-white/10 text-white border border-white/15'
-                        : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)]'
-                    }`}
-                    title={onlyChanged ? 'Show all files' : 'Show only changed files'}
-                  >
-                    <Filter className="h-3 w-3" />
-                    <span>{onlyChanged ? 'Changed' : 'All'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={loadData}
-                    className="p-1 rounded text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"
-                    title="Refresh files"
-                  >
-                    <RefreshCw className="h-3 w-3" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIsExplorerOpen(false)}
-                    className="p-1 rounded text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"
-                    title="Close files navigator"
-                  >
-                    <PanelLeftClose className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Filter Box */}
-              <div className="p-1.5 border-b border-[var(--color-border-subtle)]">
-                <div className="relative">
-                  <Search className="absolute left-2 top-1.5 h-3 w-3 text-[var(--color-fg-subtle)]" />
-                  <input
-                    type="text"
-                    placeholder="Filter files..."
-                    value={filterQuery}
-                    onChange={(e) => setFilterQuery(e.target.value)}
-                    className="w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] pl-6 pr-2 py-0.5 text-xs text-[var(--color-editor-fg)] focus:outline-none focus:border-white/20"
-                  />
-                </div>
-              </div>
-
-              {/* Tree */}
-              <div className="flex-1 overflow-y-auto p-1 font-mono text-xs">
-                {renderTree(treeRoot)}
-                {fileEntries.length === 0 && !loading && (
-                  <div className="p-4 text-center text-xs text-[var(--color-fg-subtle)]">
-                    No files found.
-                  </div>
-                )}
-              </div>
-            </div>
+            <FileTreeSidebar
+              fileEntries={fileEntries}
+              changedFilesMap={changedFilesMap}
+              folderChangeCounts={folderChangeCounts}
+              selectedPath={selectedPath}
+              onSelectPath={setSelectedPath}
+              onRefresh={loadData}
+              onClose={() => setIsExplorerOpen(false)}
+              loading={loading}
+            />
           )}
 
           {/* Main Column: Full-width Code & Diff Canvas */}
@@ -675,172 +366,25 @@ export const FilesChangesPane: React.FC<FilesChangesPaneProps> = ({
                   <span>Loading file details...</span>
                 </div>
               ) : fileDiff && fileViewMode === 'diff' ? (
-                <>
-                  {/* Diff Header */}
-                  <div className="flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border-subtle)] px-3 text-xs bg-[var(--color-surface-1)]/40 font-mono">
-                    <div className="flex items-center gap-2 truncate text-[11px] text-[var(--color-fg-muted)]">
-                      <button
-                        type="button"
-                        onClick={() => setIsExplorerOpen((prev) => !prev)}
-                        className={`p-1 rounded transition mr-0.5 ${
-                          isExplorerOpen
-                            ? 'bg-[var(--color-surface-2)] text-[var(--color-editor-fg)]'
-                            : 'text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)]'
-                        }`}
-                        title={isExplorerOpen ? 'Hide Files Navigator' : 'Show Files Navigator'}
-                      >
-                        {isExplorerOpen ? <PanelLeftClose className="h-3.5 w-3.5" /> : <PanelLeft className="h-3.5 w-3.5" />}
-                      </button>
-                      <span className="text-[var(--color-border-subtle)]">|</span>
-                      {getFileIcon(selectedPath)}
-                      <span className="text-[var(--color-editor-fg)] font-semibold truncate">{selectedPath}</span>
-                      {currentDiffEntry && (
-                        <span className="text-[10px] font-mono text-white/70">
-                          {currentDiffEntry.is_staged ? '• Staged' : '• Modified'}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1.5">
-                      {/* View Mode Toggle */}
-                      {fileContent && (
-                        <div className="flex items-center rounded bg-[var(--color-surface-2)] p-0.5 border border-[var(--color-border-subtle)] text-[10px] mr-1">
-                          <button
-                            type="button"
-                            onClick={() => setFileViewMode('diff')}
-                            className="px-2 py-0.5 rounded transition bg-[var(--color-surface-1)] text-[var(--color-editor-fg)] shadow-xs font-semibold"
-                          >
-                            Git Diff
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setFileViewMode('content')}
-                            className="px-2 py-0.5 rounded transition text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]"
-                          >
-                            Code Details
-                          </button>
-                        </div>
-                      )}
-
-                      {diffStats && (
-                        <span className="flex items-center gap-1 font-mono text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-surface-2)] border border-[var(--color-border-subtle)] mr-0.5">
-                          <span className="text-white/90 font-semibold font-mono">+{diffStats.added}</span>
-                          <span className="text-white/50 font-semibold font-mono">-{diffStats.deleted}</span>
-                        </span>
-                      )}
-
-                      {changedFileList.length > 1 && (
-                        <div className="flex items-center gap-0.5 px-1 py-0.5 rounded bg-[var(--color-surface-2)] border border-[var(--color-border-subtle)] text-[10px] text-[var(--color-fg-muted)] mr-0.5">
-                          <button
-                            type="button"
-                            onClick={handlePrevDiff}
-                            className="hover:text-[var(--color-editor-fg)] transition p-0.5"
-                            title="Previous changed file"
-                          >
-                            <ChevronUp className="h-3 w-3" />
-                          </button>
-                          <span className="font-mono text-[9px] px-1 select-none">
-                            {currentDiffIndex >= 0 ? currentDiffIndex + 1 : 1}/{changedFileList.length}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={handleNextDiff}
-                            className="hover:text-[var(--color-editor-fg)] transition p-0.5"
-                            title="Next changed file"
-                          >
-                            <ChevronDown className="h-3 w-3" />
-                          </button>
-                        </div>
-                      )}
-
-                      {currentDiffEntry && (
-                        <>
-                          <button
-                            type="button"
-                            disabled={!!actionInProgress}
-                            onClick={handlePrimaryAction}
-                            className={`flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition disabled:opacity-50 ${
-                              currentDiffEntry.is_staged
-                                ? 'border border-white/15 bg-white/5 text-white/80 hover:bg-white/10 hover:text-white font-medium'
-                                : 'bg-white text-black hover:bg-white/90 font-semibold shadow-sm'
-                            }`}
-                          >
-                            {currentDiffEntry.is_staged ? (
-                              <>
-                                <Minus className="h-2.5 w-2.5" />
-                                <span>Unstage</span>
-                              </>
-                            ) : (
-                              <>
-                                <Plus className="h-2.5 w-2.5" />
-                                <span>Stage</span>
-                              </>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={!!actionInProgress}
-                            onClick={handleDiscardCurrent}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] text-white/60 hover:text-white hover:bg-white/10 transition"
-                            title="Discard changes"
-                          >
-                            <Trash2 className="h-2.5 w-2.5" />
-                            <span>Discard</span>
-                          </button>
-                        </>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={handleCopyPath}
-                        className="p-1 rounded text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-2)] transition"
-                        title="Copy file path"
-                      >
-                        {copied ? <Check className="h-3 w-3 text-white" /> : <Copy className="h-3 w-3" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Diff Viewer Body */}
-                  <div className="flex-1 overflow-auto p-3 font-mono text-xs">
-                    <div className="space-y-0.5">
-                      {fileDiff.diff ? (
-                        fileDiff.diff.split('\n').map((line: string, idx: number) => {
-                          const isAdd = line.startsWith('+') && !line.startsWith('+++');
-                          const isDel = line.startsWith('-') && !line.startsWith('---');
-                          const isHunk = line.startsWith('@@');
-
-                          let lineClass = 'text-[var(--color-fg-muted)]';
-                          let bgClass = '';
-                          if (isAdd) {
-                            lineClass = 'text-emerald-400';
-                            bgClass = 'bg-emerald-500/10';
-                          } else if (isDel) {
-                            lineClass = 'text-rose-400';
-                            bgClass = 'bg-rose-500/10';
-                          } else if (isHunk) {
-                            lineClass = 'text-blue-400 font-semibold';
-                            bgClass = 'bg-blue-500/5';
-                          }
-
-                          return (
-                            <div
-                              key={idx}
-                              className={`flex px-2 py-0.5 whitespace-pre rounded-xs ${lineClass} ${bgClass}`}
-                            >
-                              <span className="w-8 shrink-0 select-none text-[10px] text-[var(--color-fg-subtle)] text-right pr-2">
-                                {idx + 1}
-                              </span>
-                              <span>{line}</span>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="text-[var(--color-fg-subtle)]">No diff changes detected in file.</div>
-                      )}
-                    </div>
-                  </div>
-                </>
+                <DiffViewer
+                  selectedPath={selectedPath}
+                  fileDiff={fileDiff}
+                  fileContent={fileContent}
+                  currentDiffEntry={currentDiffEntry}
+                  diffStats={diffStats}
+                  isExplorerOpen={isExplorerOpen}
+                  onToggleExplorer={() => setIsExplorerOpen((prev) => !prev)}
+                  onViewModeChange={setFileViewMode}
+                  changedFileList={changedFileList}
+                  currentDiffIndex={currentDiffIndex}
+                  onPrevDiff={handlePrevDiff}
+                  onNextDiff={handleNextDiff}
+                  onPrimaryAction={handlePrimaryAction}
+                  onDiscardCurrent={handleDiscardCurrent}
+                  onCopyPath={handleCopyPath}
+                  copied={copied}
+                  actionInProgress={actionInProgress}
+                />
               ) : fileContent ? (
                 <CompanionFileViewer
                   path={selectedPath}

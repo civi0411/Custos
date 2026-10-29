@@ -14,7 +14,6 @@ const FilesChangesPane = React.lazy(() => import('./engineering/FilesChangesPane
 const WorktreeManagerPane = React.lazy(() => import('./engineering/WorktreeManagerPane').then(module => ({ default: module.WorktreeManagerPane })));
 const TerminalWorkbenchPane = React.lazy(() => import('./engineering/TerminalWorkbenchPane').then(module => ({ default: module.TerminalWorkbenchPane })));
 const AgentsWorkbenchPane = React.lazy(() => import('./engineering/AgentsWorkbenchPane').then(module => ({ default: module.AgentsWorkbenchPane })));
-const WorkflowDagWorkbenchPane = React.lazy(() => import('./engineering/WorkflowDagWorkbenchPane').then(module => ({ default: module.WorkflowDagWorkbenchPane })));
 const EvidenceWorkbenchPane = React.lazy(() => import('./engineering/EvidenceWorkbenchPane').then(module => ({ default: module.EvidenceWorkbenchPane })));
 const LiteraturePane = React.lazy(() => import('./research/LiteraturePane').then(module => ({ default: module.LiteraturePane })));
 const ResearchMethodsPane = React.lazy(() => import('./research/ResearchMethodsPane').then(module => ({ default: module.ResearchMethodsPane })));
@@ -267,22 +266,9 @@ export const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
       );
     }
 
-    if (tabType === 'activity' || tabType === 'kanban') {
+    if (tabType === 'activity' || tabType === 'kanban' || tabType === 'dag') {
       return frameTabResource(
         <ActivityPane
-          sessionId={session?.id}
-          initialRunId={tab.runId}
-          canCancel={tabResource?.supportedOperations?.includes('runs.cancel') ?? false}
-          onShowToast={onShowToast}
-          onAskAgent={onAskAgent}
-          onOpenTab={onOpenTab}
-        />
-      );
-    }
-
-    if (tabType === 'dag') {
-      return frameTabResource(
-        <WorkflowDagWorkbenchPane
           sessionId={session?.id}
           initialRunId={tab.runId}
           canCancel={tabResource?.supportedOperations?.includes('runs.cancel') ?? false}
