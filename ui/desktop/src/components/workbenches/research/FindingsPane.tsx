@@ -14,12 +14,13 @@ import {
   PanelLeft,
   Copy,
   Check,
-  X,
 } from 'lucide-react';
 import type { ReviewerRecord } from '@/types/domain';
 import type { ResearchClaim, ClaimGroundingLevel } from '@/types/research';
 import { daemonClient } from '@/api/daemon_client';
 import type { OrcaTabId } from '@/components/workbenches/OrcaTabbedContainer';
+import { NewClaimDialog } from './NewClaimDialog';
+import { ClaimReviewPanel } from './ClaimReviewPanel';
 
 export interface FindingsPaneProps {
   sessionId?: string;
@@ -44,7 +45,6 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
 
   // New claim modal state
   const [isNewClaimOpen, setIsNewClaimOpen] = useState(false);
-  const [newStatement, setNewStatement] = useState('');
   const [reviewClaim, setReviewClaim] = useState<ResearchClaim | null>(null);
   const [reviews, setReviews] = useState<ReviewerRecord[]>([]);
   const [reviewError, setReviewError] = useState<string | null>(null);
@@ -81,13 +81,12 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
     finally { setValidating(false); }
   };
 
-  const handleCreateClaim = async () => {
-    if (!newStatement.trim()) return;
+  const handleCreateClaim = async (statement: string) => {
     try {
       const id = crypto.randomUUID();
       const claim: ResearchClaim = {
         id,
-        statement: newStatement.trim(),
+        statement,
         level: 'L0_UNGROUNDED',
         confidenceScore: 0,
         invariants: [],
@@ -96,8 +95,6 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
       };
       await daemonClient.saveResearchClaim(claim);
       onShowToast?.('New research claim logged.');
-      setIsNewClaimOpen(false);
-      setNewStatement('');
       loadClaims();
       setSelectedClaimId(id);
     } catch (err: any) {
@@ -165,17 +162,13 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
 
   return (
     <div className="flex h-full w-full flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)] overflow-hidden font-sans">
-      {reviewClaim && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6" role="dialog" aria-modal="true" aria-label="Claim review records">
-        <section className="w-full max-w-xl max-h-[80vh] overflow-auto rounded-xl border border-border-default bg-canvas p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3"><h2 className="text-sm font-semibold">Claim review records</h2><button type="button" autoFocus aria-label="Close reviews" className="canvas-icon" onClick={() => setReviewClaim(null)}><X size={16} /></button></div>
-          <p className="text-xs text-fg-muted">{reviewClaim.statement}</p>
-          {validating ? <p role="status" className="text-xs">Loading records…</p> : reviewError ? <p role="alert" className="text-xs text-rose-400">{reviewError}</p> : reviews.length === 0 ? <p className="text-xs text-fg-muted">No review records attached.</p> : reviews.map(review => <article key={review.id} className="rounded border border-border-default p-3 text-xs space-y-2">
-            <div className="flex justify-between gap-2"><strong>{review.reviewer}</strong><span>{review.status} · {review.is_fresh ? 'Current' : 'Stale'}</span></div>
-            <p>{review.evidence_summary}</p><p className="text-fg-muted">{review.method} · {review.id}</p>
-            {review.evidence_digest && <code className="block break-all text-[11px]">{review.evidence_digest}</code>}
-          </article>)}
-        </section>
-      </div>}
+      <ClaimReviewPanel
+        claim={reviewClaim}
+        validating={validating}
+        reviewError={reviewError}
+        reviews={reviews}
+        onClose={() => setReviewClaim(null)}
+      />
       {/* ── Surface Header ── */}
       <div className="wb-pane-toolbar flex h-9 shrink-0 items-center justify-between border-b border-[var(--color-border-muted)] px-3 bg-[var(--color-surface-1)]">
         <div className="flex items-center gap-2 min-w-0">
@@ -477,60 +470,11 @@ export const FindingsPane: React.FC<FindingsPaneProps> = ({
       </div>
 
       {/* ── Add Claim Modal ── */}
-      {isNewClaimOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-[var(--color-border-muted)] pb-3">
-              <h3 className="text-sm font-semibold text-[var(--color-editor-fg)] flex items-center gap-2">
-                <ShieldCheck size={16} className="text-teal-400" />
-                Log New Research Claim
-              </h3>
-              <button
-                type="button"
-                onClick={() => setIsNewClaimOpen(false)}
-                className="text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[11px] font-medium text-[var(--color-fg-muted)] mb-1">
-                  Claim Statement *
-                </label>
-                <textarea
-                  rows={3}
-                  value={newStatement}
-                  onChange={(e) => setNewStatement(e.target.value)}
-                  placeholder="e.g. Model inference throughput scales sublinearly when KV-cache exceeds L2 capacity..."
-                  className="w-full rounded-md border border-[var(--color-border-default)] bg-[var(--color-surface-1)] px-3 py-1.5 text-xs text-[var(--color-editor-fg)] outline-none"
-                />
-              </div>
-
-              <p className="text-[10px] text-fg-muted">Created as an ungrounded draft (L0).</p>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--color-border-muted)]">
-              <button
-                type="button"
-                onClick={() => setIsNewClaimOpen(false)}
-                className="px-3 py-1.5 text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCreateClaim}
-                disabled={!newStatement.trim()}
-                className="rounded-lg bg-teal-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-teal-500 disabled:opacity-50 transition"
-              >
-                Log Claim
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <NewClaimDialog
+        isOpen={isNewClaimOpen}
+        onClose={() => setIsNewClaimOpen(false)}
+        onCreateClaim={handleCreateClaim}
+      />
     </div>
   );
 };
