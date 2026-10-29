@@ -37,37 +37,12 @@ import type {
 interface EvidenceWorkbenchPaneProps {
   onShowToast?: (msg: string) => void;
 }
-
-const TARGET_TYPES: { label: string; value: ReviewTargetType }[] = [
-  { label: 'Artifact', value: 'artifact' },
-  { label: 'Diff', value: 'diff' },
-  { label: 'Task', value: 'task' },
-  { label: 'Run', value: 'run' },
-  { label: 'Note', value: 'note' },
-  { label: 'Workspace', value: 'workspace' },
-];
-
-const REVIEW_METHODS: { label: string; value: ReviewMethod }[] = [
-  { label: 'Automated Verifier', value: 'automated_verifier' },
-  { label: 'Contract Proof', value: 'contract_proof' },
-  { label: 'Model Evaluation', value: 'model_evaluation' },
-  { label: 'Peer Review', value: 'peer_review' },
-  { label: 'Runtime Inspection', value: 'runtime_inspection' },
-];
-
-const REVIEW_STATUSES: { label: string; value: ReviewStatus }[] = [
-  { label: 'Approved', value: 'approved' },
-  { label: 'Rejected', value: 'rejected' },
-  { label: 'Degraded', value: 'degraded' },
-  { label: 'Pending', value: 'pending' },
-];
-
-const SEVERITIES: { label: string; value: FindingSeverity }[] = [
-  { label: 'Info', value: 'info' },
-  { label: 'Warning', value: 'warning' },
-  { label: 'Error', value: 'error' },
-  { label: 'Blocker', value: 'blocker' },
-];
+import {
+  TARGET_TYPES,
+  REVIEW_METHODS,
+  REVIEW_STATUSES,
+  SEVERITIES,
+} from './reviewConsts';
 
 export const EvidenceWorkbenchPane: React.FC<EvidenceWorkbenchPaneProps> = ({ onShowToast }) => {
   const [reviews, setReviews] = useState<ReviewerRecord[]>([]);

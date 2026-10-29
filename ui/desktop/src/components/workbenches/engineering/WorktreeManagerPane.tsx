@@ -10,40 +10,19 @@ import {
   RefreshCw,
   GitCompare,
   Plus,
-  X,
-  CheckCircle2,
   Loader2,
 } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
 import { useAppContext } from '@/context/AppContext';
 import type { ExecutionWorkspace, DirtyManifest, Task } from '@/types/domain';
+import { SpawnModal } from './SpawnModal';
+import { CompareModal, type CandidateComparison } from './CompareModal';
 
 export interface WorktreeManagerPaneProps {
   activeWorkspaceId?: string;
   onSelectWorkspace?: (id: string) => void;
   onShowToast?: (msg: string) => void;
   onOpenWorkspaceResource?: (resource: 'files' | 'terminal' | 'agents', workspaceId: string) => void;
-}
-
-interface CandidateComparison {
-  workspace_id: string;
-  name: string;
-  path: string;
-  branch: string;
-  base_commit_hash?: string;
-  is_dirty: boolean;
-  modified_count: number;
-  untracked_count: number;
-  deleted_count: number;
-  modified_files: string[];
-  untracked_files: string[];
-  deleted_files: string[];
-  diff: string;
-  status: string;
-  inspection_error?: string;
-  dirty_error?: string;
-  diff_error?: string;
-  is_ready_for_integration?: boolean;
 }
 
 export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
@@ -74,9 +53,6 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
 
   // Spawn Candidates state
   const [showSpawnModal, setShowSpawnModal] = useState(false);
-  const [spawnTaskId, setSpawnTaskId] = useState('');
-  const [spawnCount, setSpawnCount] = useState(2);
-  const [spawning, setSpawning] = useState(false);
 
   useEffect(() => {
     daemonClient.listTasks().then(setTasks).catch((err) => {
@@ -145,7 +121,7 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
   // Compare candidates across all active worktrees
   const handleCompareAll = async () => {
     const selected = workspaces.find(workspace => workspace.id === selectedWorkspaceId);
-    const taskId = selected?.owner_task_id || spawnTaskId;
+    const taskId = selected?.owner_task_id;
     if (!taskId) { onShowToast?.('Select a candidate worktree belonging to the Task you want to compare.'); return; }
     setCandidateComparisons([]);
     try {
@@ -214,10 +190,9 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
   };
 
   // Spawn parallel candidates
-  const handleSpawnSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const taskId = spawnTaskId.trim();
-    if (!tasks.some((task) => task.id === taskId)) {
+  const handleSpawnCandidates = async (taskId: string, count: number) => {
+    const trimmedTaskId = taskId.trim();
+    if (!tasks.some((task) => task.id === trimmedTaskId)) {
       onShowToast?.('Choose an existing Task before creating candidate worktrees.');
       return;
     }
@@ -227,25 +202,22 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
       return;
     }
 
-    setSpawning(true);
     try {
-      onShowToast?.(`Creating ${spawnCount} candidate worktrees for Task ${taskId}...`);
-      const signature = JSON.stringify([taskId, baseWs.id, spawnCount]);
+      onShowToast?.(`Creating ${count} candidate worktrees for Task ${trimmedTaskId}...`);
+      const signature = JSON.stringify([trimmedTaskId, baseWs.id, count]);
       if (spawnAttempt.current?.signature !== signature) spawnAttempt.current = { signature, commandId: crypto.randomUUID() };
       const batch = await daemonClient.spawnCandidates({
-        task_id: taskId,
+        task_id: trimmedTaskId,
         command_id: spawnAttempt.current.commandId,
         base_workspace_id: baseWs.id,
-        count: spawnCount,
+        count,
       });
-      onShowToast?.(batch.partial ? `Created ${batch.candidates.length} candidates; ${batch.failed.length} failed: ${batch.failed.map(item => item.error).join('; ')}` : `Created ${batch.candidates.length} worktrees for Task ${taskId}. No agent was started.`);
+      onShowToast?.(batch.partial ? `Created ${batch.candidates.length} candidates; ${batch.failed.length} failed: ${batch.failed.map(item => item.error).join('; ')}` : `Created ${batch.candidates.length} worktrees for Task ${trimmedTaskId}. No agent was started.`);
       setShowSpawnModal(false);
-      setSpawnTaskId('');
       await loadWorkspaces();
     } catch (err: any) {
       onShowToast?.(`Failed to spawn candidates: ${err?.message || err}`);
-    } finally {
-      setSpawning(false);
+      throw err;
     }
   };
 
@@ -479,181 +451,22 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
 
       {/* Compare Candidates Modal */}
       {showCompareModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="flex h-[80vh] w-[90vw] max-w-5xl flex-col rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] shadow-2xl">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] px-4 py-3 bg-[var(--color-surface-1)]">
-              <div className="flex items-center gap-2">
-                <GitCompare className="h-4 w-4 text-white/70" />
-                <h3 className="text-sm font-semibold text-[var(--color-editor-fg)]">
-                  Compare Candidates
-                </h3>
-                <span className="rounded bg-white/10 px-2 py-0.5 text-[10px] font-mono text-white/80 border border-white/10">
-                  {candidateComparisons.length} candidates
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCompareModal(false)}
-                className="rounded p-1 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-editor-fg)]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {comparing ? (
-                <div className="flex h-48 items-center justify-center gap-2 text-xs text-[var(--color-fg-subtle)]">
-                  <Loader2 className="h-4 w-4 animate-spin text-white/60" />
-                  <span>Computing candidate unified diffs and dirty manifests...</span>
-                </div>
-              ) : candidateComparisons.length === 0 ? (
-                <div className="text-center py-12 text-xs text-[var(--color-fg-muted)]">
-                  No candidates available for comparison.
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {candidateComparisons.map((c) => (
-                    <div
-                      key={c.workspace_id}
-                      className="flex flex-col rounded-xl border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] p-4 shadow-xs"
-                    >
-                      {c.inspection_error && <p role="alert" className="text-xs text-rose-500 mb-3">{c.dirty_error || c.diff_error || c.inspection_error}</p>}
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-xs">{c.name}</span>
-                            <span className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] font-mono text-white/80 border border-white/10">
-                              {c.branch}
-                            </span>
-                          </div>
-                          <p className="mt-0.5 text-[10px] font-mono text-[var(--color-fg-subtle)]">
-                            Base: {c.base_commit_hash?.slice(0, 8) || 'unknown'}
-                          </p>
-                        </div>
-
-                        <button
-                          type="button"
-                          disabled={integratingId === c.workspace_id || c.is_ready_for_integration !== true}
-                          onClick={() => handleIntegrateWorkspace(c.workspace_id)}
-                          className="flex items-center gap-1.5 rounded-md bg-white text-black hover:bg-white/90 px-2.5 py-1 text-xs font-semibold disabled:opacity-40 transition shadow-sm"
-                        >
-                          {integratingId === c.workspace_id ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <CheckCircle2 className="h-3 w-3" />
-                          )}
-                          <span>Integrate</span>
-                        </button>
-                      </div>
-
-                      {/* Diff Stats Banner */}
-                      <div className="mt-3 flex items-center gap-3 text-[11px] font-mono text-[var(--color-fg-muted)]">
-                        <span className="text-white/90">{c.dirty_error ? 'Unknown' : `+${c.modified_count}`} modified</span>
-                        <span className="text-white/70">{c.dirty_error ? 'Unknown' : `?${c.untracked_count}`} new</span>
-                        <span className="text-white/50">{c.dirty_error ? 'Unknown' : `-${c.deleted_count}`} deleted</span>
-                      </div>
-
-                      {/* Diff snippet */}
-                      <div className="mt-3 flex-1 overflow-hidden rounded-lg border border-[var(--color-border-subtle)] bg-black/40 p-2.5 font-mono text-[11px] text-[var(--color-editor-fg)]">
-                        {c.diff ? (
-                          <pre className="max-h-56 overflow-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-[var(--color-fg-muted)]">
-                            {c.diff}
-                          </pre>
-                        ) : (
-                          <div className="py-8 text-center text-[10px] text-[var(--color-fg-subtle)] italic">
-                            {c.diff_error ? 'Diff is unavailable; retry inspection before integrating.' : 'No uncommitted unified diff changes.'}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+        <CompareModal
+          comparing={comparing}
+          candidateComparisons={candidateComparisons}
+          integratingId={integratingId}
+          onIntegrateWorkspace={handleIntegrateWorkspace}
+          onClose={() => setShowCompareModal(false)}
+        />
       )}
 
       {/* Spawn Candidates Modal */}
       {showSpawnModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] p-5 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[var(--color-border-subtle)] pb-3">
-              <div className="flex items-center gap-2">
-                <Plus className="h-4 w-4 text-white/80" />
-                <h3 className="text-sm font-semibold text-[var(--color-editor-fg)]">
-                  Spawn Parallel Candidates
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowSpawnModal(false)}
-                className="rounded p-1 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)]"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSpawnSubmit} className="mt-4 space-y-4 text-xs">
-              <div>
-                <label className="block text-[11px] font-medium text-[var(--color-fg-muted)] mb-1">
-                  Existing Task
-                </label>
-                <select
-                  required
-                  value={spawnTaskId}
-                  onChange={(e) => setSpawnTaskId(e.target.value)}
-                  className="w-full rounded border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] px-3 py-1.5 text-xs text-[var(--color-editor-fg)] focus:outline-none focus:border-white/30"
-                >
-                  <option value="">Select a Task…</option>
-                  {tasks.map((task) => <option key={task.id} value={task.id}>{task.title} · {task.id}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-medium text-[var(--color-fg-muted)] mb-1">
-                  Number of Candidates (Race)
-                </label>
-                <div className="flex gap-2">
-                  {[2, 3, 4].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setSpawnCount(n)}
-                      className={`flex-1 rounded border py-1.5 font-medium transition ${
-                        spawnCount === n
-                          ? 'border-white/30 bg-white/10 text-white'
-                          : 'border-[var(--color-border-subtle)] bg-[var(--color-surface-1)] text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)]'
-                      }`}
-                    >
-                      {n} Candidates
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--color-border-subtle)]">
-                <button
-                  type="button"
-                  onClick={() => setShowSpawnModal(false)}
-                  className="rounded px-3 py-1.5 text-[var(--color-fg-muted)] hover:bg-[var(--color-surface-2)]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={spawning || !spawnTaskId || !tasks.some((task) => task.id === spawnTaskId)}
-                  className="flex items-center gap-1.5 rounded-md bg-white hover:bg-white/90 px-4 py-1.5 font-semibold text-black disabled:opacity-40 transition shadow-sm"
-                >
-                  {spawning && <Loader2 className="h-3 w-3 animate-spin text-black" />}
-                  <span>Spawn Worktrees</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <SpawnModal
+          tasks={tasks}
+          onSpawn={handleSpawnCandidates}
+          onClose={() => setShowSpawnModal(false)}
+        />
       )}
     </div>
   );
