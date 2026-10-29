@@ -28,13 +28,7 @@ pub const DEFAULT_MAX_TOOL_OUTPUT_BYTES: usize = 64 * 1024;
 
 /// Truncate a String to at most `max_bytes` without slicing inside a multi-byte UTF-8 char.
 pub fn truncate_to_char_boundary(s: &mut String, max_bytes: usize) {
-    if s.len() > max_bytes {
-        let mut end = max_bytes;
-        while !s.is_char_boundary(end) {
-            end = end.saturating_sub(1);
-        }
-        s.truncate(end);
-    }
+    custos_domain::truncate_to_char_boundary(s, max_bytes);
 }
 
 /// Invocation context resolved by the backend (never trusted from model payload).

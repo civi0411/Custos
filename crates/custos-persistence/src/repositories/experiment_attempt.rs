@@ -32,7 +32,7 @@ impl ExperimentAttemptRepository {
         let ext_json = attempt
             .external_ref
             .as_ref()
-            .map(|r| serde_json::to_string(r))
+            .map(serde_json::to_string)
             .transpose()
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 

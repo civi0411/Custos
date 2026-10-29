@@ -82,7 +82,7 @@ impl ResearchRepository {
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let mut rows = stmt
-            .query_map(params![id], |row| Self::row_to_review(row))
+            .query_map(params![id], Self::row_to_review)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         if let Some(r) = rows.next() {

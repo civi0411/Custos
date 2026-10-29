@@ -301,7 +301,7 @@ mod catalog_capability_tests {
             let store = crate::SqliteTaskStore::new(path.to_str().unwrap()).unwrap();
             store
                 .providers()
-                .save_catalog_models("account-scope", &[model.clone()])
+                .save_catalog_models("account-scope", std::slice::from_ref(&model))
                 .unwrap();
         }
         let store = crate::SqliteTaskStore::new(path.to_str().unwrap()).unwrap();

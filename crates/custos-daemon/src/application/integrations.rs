@@ -420,7 +420,7 @@ impl LocalApiDispatcher {
                                     final_title,
                                     status_code,
                                     links.len(),
-                                    if compact_text.len() > 300 { &compact_text[..300] } else { &compact_text }
+                                    custos_domain::truncate_str_to_char_boundary(&compact_text, 300)
                                 ),
                                 text_content: compact_text,
                                 links,
