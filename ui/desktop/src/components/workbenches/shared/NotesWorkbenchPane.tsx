@@ -2,22 +2,20 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import {
   FileText,
   Plus,
-  Save,
   History,
   Search,
-  Tag,
   Eye,
   Edit3,
   Columns,
-  RotateCcw,
   Send,
   Check,
   RefreshCw,
   AlertCircle,
-  X,
 } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
 import type { NoteRecord, NoteVersionRecord } from '@/types/domain';
+import { NoteVersionHistoryPanel } from './NoteVersionHistoryPanel';
+import { NoteEditor } from './NoteEditor';
 
 // Module-level draft cache to prevent data loss on tab close or screen switch
 const noteDrafts = new Map<string, { title: string; content: string; tagsInput: string }>();
@@ -458,132 +456,39 @@ export const NotesWorkbenchPane: React.FC<NotesWorkbenchPaneProps> = ({
         </div>
 
         {/* Center: Editor & Preview */}
-        <div className="flex flex-1 flex-col overflow-hidden bg-[var(--color-canvas)]">
-          {/* Metadata Bar */}
-          <div className="border-b border-[var(--color-border-default)] px-4 py-2.5 bg-[var(--color-surface-1)]">
-            <div className="flex items-center gap-3">
-              <input
-                type="text"
-                placeholder="Note Title"
-                value={title}
-                onChange={(e) => {
-                  setTitle(e.target.value);
-                  setIsDirty(true);
-                }}
-                className="flex-1 bg-transparent text-sm font-semibold text-[var(--color-editor-fg)] placeholder:text-[var(--color-fg-subtle)] focus:outline-none"
-              />
-
-              {isDirty && (
-                <button
-                  onClick={() => executeSave()}
-                  disabled={isSaving}
-                  className="flex items-center gap-1 rounded-md bg-white hover:bg-white/90 px-2.5 py-1 text-xs font-semibold text-black transition shadow-sm"
-                  title="Save now"
-                >
-                  <Save className="h-3 w-3 text-black" />
-                  Save
-                </button>
-              )}
-            </div>
-
-            <div className="mt-1.5 flex items-center gap-2">
-              <Tag className="h-3 w-3 text-[var(--color-fg-subtle)] shrink-0" />
-              <input
-                type="text"
-                placeholder="Tags (comma-separated, e.g. task, prompt, experiment)"
-                value={tagsInput}
-                onChange={(e) => {
-                  setTagsInput(e.target.value);
-                  setIsDirty(true);
-                }}
-                className="w-full bg-transparent text-[11px] text-[var(--color-fg-muted)] placeholder:text-[var(--color-fg-subtle)] focus:outline-none"
-              />
-            </div>
-          </div>
-
-          {/* Editor Workspace */}
-          <div className="flex flex-1 overflow-hidden">
-            {/* Markdown Textarea */}
-            {(viewMode === 'edit' || viewMode === 'split') && (
-              <div
-                className={`flex-1 h-full p-4 overflow-y-auto ${
-                  viewMode === 'split' ? 'border-r border-[var(--color-border-default)]' : ''
-                }`}
-              >
-                <textarea
-                  value={content}
-                  onChange={(e) => {
-                    setContent(e.target.value);
-                    setIsDirty(true);
-                  }}
-                  placeholder="Start writing markdown notes..."
-                  className="h-full w-full resize-none bg-transparent font-mono text-xs leading-relaxed text-[var(--color-editor-fg)] placeholder:text-[var(--color-fg-subtle)] focus:outline-none"
-                />
-              </div>
-            )}
-
-            {/* Markdown Rendered Preview */}
-            {(viewMode === 'preview' || viewMode === 'split') && (
-              <div className="flex-1 h-full p-6 overflow-y-auto prose prose-invert prose-xs max-w-none">
-                <div className="text-xs leading-relaxed text-[var(--color-editor-fg)] whitespace-pre-wrap font-sans">
-                  {content}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+        <NoteEditor
+          title={title}
+          onTitleChange={(val) => {
+            setTitle(val);
+            setIsDirty(true);
+          }}
+          tagsInput={tagsInput}
+          onTagsInputChange={(val) => {
+            setTagsInput(val);
+            setIsDirty(true);
+          }}
+          content={content}
+          onContentChange={(val) => {
+            setContent(val);
+            setIsDirty(true);
+          }}
+          viewMode={viewMode}
+          isDirty={isDirty}
+          isSaving={isSaving}
+          onSave={() => executeSave()}
+        />
 
         {/* Right Drawer: Version History */}
         {showHistory && (
-          <div className="w-72 flex-shrink-0 border-l border-[var(--color-border-default)] bg-[var(--color-surface-1)] p-4 overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border-muted)]">
-              <span className="text-xs font-semibold text-[var(--color-editor-fg)]">
-                Version History
-              </span>
-              <button
-                onClick={() => setShowHistory(false)}
-                className="text-xs text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)] p-1 rounded hover:bg-[var(--color-surface-2)]"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            <div className="mt-3 space-y-3">
-              {versions.length === 0 ? (
-                <p className="text-xs text-[var(--color-fg-muted)]">
-                  No previous versions recorded.
-                </p>
-              ) : (
-                versions.map((ver) => (
-                  <div
-                    key={ver.id}
-                    className="rounded-lg border border-[var(--color-border-muted)] bg-[var(--color-surface-2)] p-2.5 text-xs"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-[var(--color-editor-fg)]">
-                        v{ver.version}
-                      </span>
-                      <span className="text-[10px] text-[var(--color-fg-muted)]">
-                        {new Date(ver.created_at * 1000).toLocaleTimeString()}
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        setContent(ver.content);
-                        setIsDirty(true);
-                        onShowToast?.(`Loaded content from v${ver.version}.`);
-                      }}
-                      className="mt-2.5 flex items-center gap-1 rounded bg-[var(--color-surface-3)] px-2 py-1 text-[10px] font-medium text-[var(--color-editor-fg)] hover:bg-[var(--color-surface-4)] transition w-full justify-center"
-                    >
-                      <RotateCcw className="h-3 w-3" />
-                      Restore Content
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          <NoteVersionHistoryPanel
+            versions={versions}
+            onRestore={(ver) => {
+              setContent(ver.content);
+              setIsDirty(true);
+              onShowToast?.(`Loaded content from v${ver.version}.`);
+            }}
+            onClose={() => setShowHistory(false)}
+          />
         )}
       </div>
     </div>
