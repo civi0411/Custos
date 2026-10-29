@@ -96,7 +96,10 @@ impl Skill for WebExtractSkill {
 
         // Truncate to reasonable context window limit (max 50,000 chars)
         let truncated = if cleaned.len() > 50_000 {
-            format!("{}...\n[Truncated for context length]", &cleaned[..50_000])
+            format!(
+                "{}...\n[Truncated for context length]",
+                custos_domain::truncate_str_to_char_boundary(&cleaned, 50_000)
+            )
         } else {
             cleaned.to_string()
         };

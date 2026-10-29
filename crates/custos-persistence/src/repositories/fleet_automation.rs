@@ -18,6 +18,7 @@ pub struct FleetAutomationRepository {
     db: DbConnection,
 }
 
+#[allow(clippy::type_complexity)]
 impl FleetAutomationRepository {
     pub fn new(db: DbConnection) -> Self {
         Self { db }
@@ -238,7 +239,7 @@ impl FleetAutomationRepository {
                 .map_err(|e| DomainError::Validation(format!("Failed to prepare query: {}", e)))?;
 
             let rows = stmt
-                .query_map(params![sid], |row| Self::extract_tab_tuple(row))
+                .query_map(params![sid], Self::extract_tab_tuple)
                 .map_err(|e| DomainError::Validation(format!("Query failed: {}", e)))?;
 
             for r in rows {
@@ -251,7 +252,7 @@ impl FleetAutomationRepository {
                 .map_err(|e| DomainError::Validation(format!("Failed to prepare query: {}", e)))?;
 
             let rows = stmt
-                .query_map([], |row| Self::extract_tab_tuple(row))
+                .query_map([], Self::extract_tab_tuple)
                 .map_err(|e| DomainError::Validation(format!("Query failed: {}", e)))?;
 
             for r in rows {
@@ -610,7 +611,7 @@ impl FleetAutomationRepository {
                 .map_err(|e| DomainError::Validation(format!("Failed to prepare query: {}", e)))?;
 
             let rows = stmt
-                .query_map(params![hid], |row| Self::extract_execution_tuple(row))
+                .query_map(params![hid], Self::extract_execution_tuple)
                 .map_err(|e| DomainError::Validation(format!("Query failed: {}", e)))?;
 
             for r in rows {
@@ -643,7 +644,7 @@ impl FleetAutomationRepository {
                 .map_err(|e| DomainError::Validation(format!("Failed to prepare query: {}", e)))?;
 
             let rows = stmt
-                .query_map([], |row| Self::extract_execution_tuple(row))
+                .query_map([], Self::extract_execution_tuple)
                 .map_err(|e| DomainError::Validation(format!("Query failed: {}", e)))?;
 
             for r in rows {
