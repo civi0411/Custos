@@ -7,4 +7,6 @@
 
 pub use crate::artifact::ArtifactRef;
 pub use crate::error::DomainError;
-pub use crate::ids::{canonical_json, digest, new_id};
+pub use crate::ids::{
+    canonical_json, digest, new_id, truncate_str_to_char_boundary, truncate_to_char_boundary,
+};

@@ -84,6 +84,7 @@ pub struct RecordReviewParams {
 }
 
 impl ReviewerRecord {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         target_type: ReviewTargetType,
         target_id: impl Into<String>,

@@ -16,10 +16,11 @@ pub struct Claim {
 }
 
 /// 4-Level Grounding Status enforcing zero false-passes
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ClaimGroundingLevel {
     /// L0: Raw assertion without citation or verification
+    #[default]
     L0Ungrounded,
     /// L1: Formally anchored to a cryptographic passage in a verified source
     L1Cited,
@@ -27,12 +28,6 @@ pub enum ClaimGroundingLevel {
     L2Verified,
     /// L3: Invariant proof sealed into CAS Ledger (cas://bafy...)
     L3Sealed,
-}
-
-impl Default for ClaimGroundingLevel {
-    fn default() -> Self {
-        Self::L0Ungrounded
-    }
 }
 
 /// A scientific literature, dataset, code repo, or web source record

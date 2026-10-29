@@ -170,3 +170,4 @@ pub use workspace_files::{
     WorkspaceDiffEntry, WorkspaceDiffSummary, WorkspaceFileContent, WorkspaceFileDiff,
     WorkspaceFileEntry, WorkspaceFileTree, WriteWorkspaceFileParams,
 };
+pub use types::{truncate_str_to_char_boundary, truncate_to_char_boundary};
