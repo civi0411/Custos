@@ -1,4 +1,3 @@
-import { NativeSelect } from '@/components/common/NativeSelect';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Server,
@@ -6,7 +5,6 @@ import {
   Play,
   Terminal,
   Activity,
-  X,
   Layers,
   RefreshCw,
   Clock,
@@ -19,6 +17,8 @@ import {
   CreateHeadlessJobParams,
 } from '@/types/domain';
 import { daemonClient } from '@/api/daemon_client';
+import { RegisterHostModal } from './RegisterHostModal';
+import { CreateJobModal } from './CreateJobModal';
 
 interface RemoteFleetWorkbenchPaneProps {
   onShowToast?: (message: string) => void;
@@ -48,18 +48,6 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
   // Modals
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState<boolean>(false);
   const [isCreateJobModalOpen, setIsCreateJobModalOpen] = useState<boolean>(false);
-
-  // New Host Form
-  const [newHostName, setNewHostName] = useState<string>('');
-  const [newHostAddress, setNewHostAddress] = useState<string>('');
-  const [newHostPort, setNewHostPort] = useState<number>(22);
-  const [newHostUser, setNewHostUser] = useState<string>('');
-  const [newHostKeyPath, setNewHostKeyPath] = useState<string>('');
-
-  // New Job Form
-  const [newJobName, setNewJobName] = useState<string>('');
-  const [newJobCommand, setNewJobCommand] = useState<string>('cargo check --workspace');
-  const [newJobTargetType, setNewJobTargetType] = useState<string>('local_process');
 
   const selectedHost = hosts.find((h) => h.id === selectedHostId) ?? hosts[0] ?? null;
 
@@ -104,31 +92,12 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
     loadJobs();
   }, [loadHosts, loadJobs]);
 
-  const handleRegisterHost = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newHostName.trim() || !newHostAddress.trim() || !newHostUser.trim()) {
-      onShowToast?.('Please fill in required host fields.');
-      return;
-    }
-
+  const handleRegisterHost = async (params: RegisterHostParams) => {
     try {
-      const params: RegisterHostParams = {
-        name: newHostName.trim(),
-        host: newHostAddress.trim(),
-        port: newHostPort,
-        user: newHostUser.trim(),
-        private_key_path: newHostKeyPath.trim() || undefined,
-        labels: { managed_by: 'custos-daemon' },
-      };
-
       const registered = await daemonClient.registerRemoteHost(params);
       setHosts((prev) => [...prev, registered]);
       setSelectedHostId(registered.id);
       setIsRegisterModalOpen(false);
-      setNewHostName('');
-      setNewHostAddress('');
-      setNewHostUser('');
-      setNewHostKeyPath('');
       onShowToast?.(`Host '${registered.name}' registered successfully.`);
     } catch (err) {
       onShowToast?.(`Failed to register host: ${String(err)}`);
@@ -177,29 +146,11 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
     }
   };
 
-  const handleCreateJob = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newJobName.trim() || !newJobCommand.trim()) {
-      onShowToast?.('Please specify job name and command.');
-      return;
-    }
-
+  const handleCreateJob = async (params: CreateHeadlessJobParams) => {
     try {
-      const params: CreateHeadlessJobParams = {
-        name: newJobName.trim(),
-        spec: {
-          target_type: newJobTargetType,
-          command_or_script: newJobCommand.trim(),
-          timeout_secs: 600,
-          env: {},
-          required_evidence: ['EXECUTION-EVIDENCE-01'],
-        },
-        trigger: { type: 'manual' },
-      };
       const job = await daemonClient.createHeadlessJob(params);
       setJobs((prev) => [job, ...prev]);
       setIsCreateJobModalOpen(false);
-      setNewJobName('');
       onShowToast?.(`Headless automation job '${job.name}' created.`);
     } catch (err) {
       onShowToast?.(`Failed to create job: ${String(err)}`);
@@ -577,168 +528,20 @@ export const RemoteFleetWorkbenchPane: React.FC<RemoteFleetWorkbenchPaneProps> =
 
       {/* Modal: Register SSH Host */}
       {isRegisterModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-[var(--color-surface-1)] border border-[var(--color-border-default)] rounded-xl w-full max-w-md p-5 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-[var(--color-border-muted)] pb-2.5">
-              <span className="font-semibold text-[var(--color-editor-fg)] text-xs">Register Remote SSH Host</span>
-              <button
-                onClick={() => setIsRegisterModalOpen(false)}
-                className="text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]"
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            <form onSubmit={handleRegisterHost} className="space-y-3">
-              <div>
-                <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">Node Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Cluster GPU Node 01"
-                  value={newHostName}
-                  onChange={(e) => setNewHostName(e.target.value)}
-                  className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div className="col-span-2">
-                  <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">Host IP / FQDN</label>
-                  <input
-                    type="text"
-                    value={newHostAddress}
-                    onChange={(e) => setNewHostAddress(e.target.value)}
-                    placeholder="192.168.1.50 or host.internal"
-                    className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">Port</label>
-                  <input
-                    type="number"
-                    value={newHostPort}
-                    onChange={(e) => setNewHostPort(parseInt(e.target.value) || 22)}
-                    className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">SSH Username</label>
-                <input
-                  type="text"
-                  placeholder="e.g. ubuntu, root, dev"
-                  value={newHostUser}
-                  onChange={(e) => setNewHostUser(e.target.value)}
-                  className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">Private Key Path (optional)</label>
-                <input
-                  type="text"
-                  placeholder="~/.ssh/id_ed25519"
-                  value={newHostKeyPath}
-                  onChange={(e) => setNewHostKeyPath(e.target.value)}
-                  className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none font-mono"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--color-border-muted)]">
-                <button
-                  type="button"
-                  onClick={() => setIsRegisterModalOpen(false)}
-                  className="px-3 py-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-0)] text-[var(--color-editor-fg)] text-xs border border-[var(--color-border-default)]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!can('hosts.register')}
-                  className="px-3.5 py-1.5 rounded-md bg-white hover:bg-white/90 text-black text-xs font-semibold shadow-sm"
-                >
-                  Register Node
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <RegisterHostModal
+          canRegister={can('hosts.register')}
+          onSubmit={handleRegisterHost}
+          onClose={() => setIsRegisterModalOpen(false)}
+        />
       )}
 
       {/* Modal: Create Headless Job */}
       {isCreateJobModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-[var(--color-surface-1)] border border-[var(--color-border-default)] rounded-xl w-full max-w-md p-5 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between border-b border-[var(--color-border-muted)] pb-2.5">
-              <span className="font-semibold text-[var(--color-editor-fg)] text-xs">Create Headless Job</span>
-              <button
-                onClick={() => setIsCreateJobModalOpen(false)}
-                className="text-[var(--color-fg-muted)] hover:text-[var(--color-editor-fg)]"
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateJob} className="space-y-3">
-              <div>
-                <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">Job Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Nightly Benchmark Sweep"
-                  value={newJobName}
-                  onChange={(e) => setNewJobName(e.target.value)}
-                  className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">Target Execution Type</label>
-                <NativeSelect
-                  value={newJobTargetType}
-                  onChange={(e) => setNewJobTargetType(e.target.value)}
-                  className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none"
-                >
-                  <option value="local_process">local_process (Host Process)</option>
-                  <option value="remote_ssh">remote_ssh (Fleet Node)</option>
-                  <option value="browser_session">browser_session (Headless Browser)</option>
-                </NativeSelect>
-              </div>
-
-              <div>
-                <label className="text-[var(--color-fg-muted)] text-[11px] block mb-1">Command or Script</label>
-                <textarea
-                  rows={3}
-                  value={newJobCommand}
-                  onChange={(e) => setNewJobCommand(e.target.value)}
-                  className="w-full bg-[var(--color-surface-0)] border border-[var(--color-border-default)] rounded-md px-2.5 py-1.5 text-xs text-[var(--color-editor-fg)] focus:border-[var(--workbench-accent)] focus:outline-none font-mono"
-                  required
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--color-border-muted)]">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateJobModalOpen(false)}
-                  className="px-3 py-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-surface-0)] text-[var(--color-editor-fg)] text-xs border border-[var(--color-border-default)]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={!can('jobs.create')}
-                  className="px-3.5 py-1.5 rounded-md bg-white hover:bg-white/90 text-black text-xs font-semibold shadow-sm"
-                >
-                  Save Job
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <CreateJobModal
+          canCreate={can('jobs.create')}
+          onSubmit={handleCreateJob}
+          onClose={() => setIsCreateJobModalOpen(false)}
+        />
       )}
     </div>
   );

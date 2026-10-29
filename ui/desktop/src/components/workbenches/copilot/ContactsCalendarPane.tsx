@@ -8,6 +8,7 @@ export interface ContactsCalendarPaneProps {
   onOpenTab?: (id: OrcaTabId) => void;
 }
 
+// shortcut: localStorage only, not daemon-backed — upgrade when contacts API lands
 export interface LocalRosterItem {
   id: string;
   name: string;
