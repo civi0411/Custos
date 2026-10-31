@@ -56,13 +56,10 @@ pub fn build_anthropic_request(req: &ModelTurnRequest) -> AnthropicMessagesReque
 
         let mut blocks = Vec::new();
         for block in &msg.content {
-            match block {
-                MessageContentBlock::Text(t) => {
-                    blocks.push(AnthropicContentBlock::Text {
-                        text: t.text.clone(),
-                    });
-                }
-                _ => {}
+            if let MessageContentBlock::Text(t) = block {
+                blocks.push(AnthropicContentBlock::Text {
+                    text: t.text.clone(),
+                });
             }
         }
 

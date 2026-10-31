@@ -311,6 +311,7 @@ impl HttpClient {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 enum TransportState {
     Mock {
         tools: Arc<Mutex<Vec<Tool>>>,

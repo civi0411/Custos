@@ -109,13 +109,11 @@ impl ModelCatalogService {
             });
         }
 
-        let result = ModelCatalogResult {
+        ModelCatalogResult {
             origin: "probe".into(),
             models,
             fetched_at: chrono::Utc::now().timestamp_millis(),
-        };
-
-        result
+        }
     }
 }
 

@@ -175,18 +175,20 @@ impl DeterministicTrainer {
         self.last_loss = loss;
 
         // Gradients
-        let grad_w = vec![diff * x[0], diff * x[1]];
+        let grad_w = [diff * x[0], diff * x[1]];
         let grad_b = diff;
 
         // Optimizer update
         match &mut self.optimizer_state.kind {
             OptimizerKind::SgdNoMomentum { lr } => {
+                #[allow(clippy::needless_range_loop)]
                 for i in 0..2 {
                     self.weights.w[i] -= *lr * grad_w[i];
                 }
                 self.weights.b -= *lr * grad_b;
             }
             OptimizerKind::SgdWithMomentum { lr, momentum } => {
+                #[allow(clippy::needless_range_loop)]
                 for i in 0..2 {
                     self.optimizer_state.v_w[i] =
                         *momentum * self.optimizer_state.v_w[i] + *lr * grad_w[i];
@@ -208,6 +210,7 @@ impl DeterministicTrainer {
                 let correction1 = 1.0 - beta1.powi(t as i32);
                 let correction2 = 1.0 - beta2.powi(t as i32);
 
+                #[allow(clippy::needless_range_loop)]
                 for i in 0..2 {
                     self.optimizer_state.m_w[i] =
                         beta1 * self.optimizer_state.m_w[i] + (1.0 - beta1) * grad_w[i];

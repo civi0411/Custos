@@ -96,13 +96,10 @@ pub fn build_bedrock_request(req: &ModelTurnRequest) -> BedrockConverseRequest {
 
         let mut content = Vec::new();
         for block in &msg.content {
-            match block {
-                MessageContentBlock::Text(t) => {
-                    content.push(BedrockContentBlock::Text {
-                        text: t.text.clone(),
-                    });
-                }
-                _ => {}
+            if let MessageContentBlock::Text(t) = block {
+                content.push(BedrockContentBlock::Text {
+                    text: t.text.clone(),
+                });
             }
         }
 

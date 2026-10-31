@@ -311,8 +311,6 @@ impl RouterModelProvider {
             "gemini"
         } else if m.contains("deepseek") {
             "deepseek"
-        } else if m.contains("gpt") {
-            "openai"
         } else {
             "openai"
         }
@@ -833,7 +831,7 @@ impl RouterModelProvider {
                 self.observe_adapter_error(super::antigravity::generate_codeassist_content("gemini", "https://cloudcode-pa.googleapis.com", &token, req).await, req).await
             }
             "google" | "antigravity" => {
-                let token = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or("google")).await?.or_else(|| None);
+                let token = self.resolver.get_token(req.provider_account_id.as_deref().unwrap_or("google")).await?;
                 let token = match token {
                     Some(t) => t,
                     None => self.resolver.get_token("antigravity").await?.ok_or_else(|| DomainError::Validation("Connect Google OAuth first".into()))?,
@@ -1810,8 +1808,8 @@ mod tests {
         let router = RouterModelProvider::new(Arc::new(RejectingNativeAccountResolver));
         let mut request = ProviderRequest::simple("hello");
         request.model = "native:/models/coder.gguf".into();
-        let generate_error = router.generate(&request).await.err().expect("native backend is absent");
-        let stream_error = router.stream(&request).await.err().expect("native backend is absent");
+        let generate_error = router.generate(&request).await.expect_err("native backend is absent");
+        let stream_error = router.stream(&request).await.expect_err("native backend is absent");
         assert!(generate_error.to_string().contains("Native local inference runtime is not configured"));
         assert!(stream_error.to_string().contains("Native local inference runtime is not configured"));
     }
@@ -1917,8 +1915,8 @@ mod tests {
     #[tokio::test]
     async fn test_unconfigured_model_fails_closed_without_panic() {
         // Clear environment variables
-        let _ = std::env::remove_var("OPENAI_API_KEY");
-        let _ = std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::remove_var("OPENAI_API_KEY");
+        std::env::remove_var("ANTHROPIC_API_KEY");
 
         let router = RouterModelProvider::new(Arc::new(MockEmptyResolver));
         let req = ProviderRequest::simple("Hello world");

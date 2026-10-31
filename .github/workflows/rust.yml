@@ -48,7 +48,6 @@ jobs:
         run: cargo check --workspace --all-targets
 
       - name: Clippy Lint
-        continue-on-error: true
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Run Core Tests (Blocking)

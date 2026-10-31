@@ -642,9 +642,9 @@ mod provider_oauth_tests {
         );
         let result = OAuthPkceManager::new(settings.0, settings.1)
             .build_authorization_url(
-                &settings.2,
+                settings.2,
                 "http://localhost:51121/oauth-callback",
-                Some(&settings.3),
+                Some(settings.3),
                 &OAuthPkceManager::generate_pkce_challenge(),
             )
             .unwrap();
