@@ -383,7 +383,7 @@ struct DaemonCredentialResolver {
 #[async_trait::async_trait]
 impl CredentialResolver for DaemonCredentialResolver {
     async fn select_account(&self, service: &str, model: &str) -> Result<Option<String>, DomainError> {
-        reserve_available_provider_account(&self.store.providers(), service, model, None, &self.availability)
+        reserve_available_provider_account(self.store.providers(), service, model, None, &self.availability)
     }
     async fn validate_account(&self, account_id: &str, service: &str) -> Result<(), DomainError> {
         let record = self.store.providers().get_provider(account_id)?.ok_or_else(|| DomainError::Validation("Selected provider account no longer exists".into()))?;
@@ -483,6 +483,7 @@ impl CredentialResolver for DaemonCredentialResolver {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod credential_tests {
     use super::*;
     fn token(oauth: bool) -> custos_domain::OAuthTokenRecord {
@@ -550,21 +551,21 @@ mod credential_tests {
             let model=custos_domain::ModelCatalogOption{id:if id=="C" {"gpt-other"} else {"gpt-test"}.into(),label:id.into(),provider_type:"openai".into(),description:None,is_default:false,default_effort:None,efforts:vec![],supports_fast_mode:false,context_window:None,pricing:None};
             repo.save_catalog_models(&key,&[model]).unwrap();
         }
-        assert_eq!(reserve_provider_account(&repo,"openai","gpt-test").unwrap().as_deref(),Some("A"));
+        assert_eq!(reserve_provider_account(repo,"openai","gpt-test").unwrap().as_deref(),Some("A"));
         repo.save_routing_policy("openai",false,&["B".into(),"A".into(),"C".into()]).unwrap();
-        for _ in 0..3 { assert_eq!(reserve_provider_account(&repo,"openai","gpt-test").unwrap().as_deref(),Some("B")); }
+        for _ in 0..3 { assert_eq!(reserve_provider_account(repo,"openai","gpt-test").unwrap().as_deref(),Some("B")); }
         repo.save_routing_policy("openai",true,&["B".into(),"A".into(),"C".into()]).unwrap();
-        for expected in ["B","A","B","A"] { assert_eq!(reserve_provider_account(&repo,"openai","gpt-test").unwrap().as_deref(),Some(expected)); }
+        for expected in ["B","A","B","A"] { assert_eq!(reserve_provider_account(repo,"openai","gpt-test").unwrap().as_deref(),Some(expected)); }
         assert!(repo.save_routing_policy("openai",true,&["A".into(),"A".into()]).is_err());
         assert!(repo.save_routing_policy("copilot",true,&["A".into()]).is_err());
-        assert!(reserve_provider_account(&repo,"openai","missing").is_err());
+        assert!(reserve_provider_account(repo,"openai","missing").is_err());
         service.delete("B",true).await.unwrap();
-        assert_eq!(reserve_provider_account(&repo,"openai","gpt-test").unwrap().as_deref(),Some("A"));
+        assert_eq!(reserve_provider_account(repo,"openai","gpt-test").unwrap().as_deref(),Some("A"));
         assert_eq!(service.get_oauth_token("A").await.unwrap().unwrap().access_token,"fixture-A");
         let mut config=repo.get_provider("A").unwrap().unwrap();
         config.endpoint_url=Some("https://different.invalid/v1".into());
         repo.save_provider(&config).unwrap();
-        assert!(reserve_provider_account(&repo,"openai","gpt-test").is_err());
+        assert!(reserve_provider_account(repo,"openai","gpt-test").is_err());
     }
 
     #[tokio::test]

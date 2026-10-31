@@ -280,7 +280,7 @@ use custos_bridge::BridgeService;
             service_type: "openai".into(),
             access_token: "sk-proj-test-oauth-access-token".into(),
             refresh_token: Some("rt-test-refresh-token".into()),
-            expires_at: now + 3600_000,
+            expires_at: now + 3_600_000,
             token_type: "Bearer".into(),
             scope: Some("openid profile email model.request".into()),
             created_at: now,

@@ -36,6 +36,7 @@ pub struct WorkerRole {
 }
 
 impl WorkerRole {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         role_id: impl Into<String>,
         pack_id: impl Into<String>,
@@ -90,6 +91,7 @@ pub struct WorkbenchJob {
 }
 
 impl WorkbenchJob {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         job_id: impl Into<String>,
         lens: WorkbenchLens,

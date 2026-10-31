@@ -18,9 +18,9 @@ impl LocalApiDispatcher {
                     .unwrap_or("");
                 let expanded_path = if raw_path_str.is_empty() || raw_path_str == "." {
                     std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
-                } else if raw_path_str.starts_with("~/") {
+                } else if let Some(stripped) = raw_path_str.strip_prefix("~/") {
                     if let Some(home) = dirs::home_dir() {
-                        home.join(&raw_path_str[2..])
+                        home.join(stripped)
                     } else {
                         std::path::PathBuf::from(raw_path_str)
                     }

@@ -111,10 +111,10 @@ impl LocalApiDispatcher {
                     }
                     _ => repo.routing_policy(service),
                 };
-                return match result {
+                match result {
                     Ok(value) => ApiResponse::success(req.id, value),
                     Err(e) => ApiResponse::error(req.id, e.to_string()),
-                };
+                }
             }
             "v1.providers.save" => {
                 let providers_repo = match self.providers.as_ref() {
@@ -750,7 +750,7 @@ impl LocalApiDispatcher {
                         let profile = custos_domain::LocalModelLoadProfile {
                             model_path: model_path.to_string(),
                             revision: 0,
-                            context_size: descriptor.context_length.min(4096).max(512),
+                            context_size: descriptor.context_length.clamp(512, 4096),
                             gpu_mode: "auto".to_string(),
                             gpu_layers: None,
                             eval_batch_size: Some(512),
@@ -898,7 +898,7 @@ impl LocalApiDispatcher {
                     .and_then(|v| v.as_u64())
                     .unwrap_or(4096)
                     .min(descriptor.context_length);
-                let inspected_context = descriptor.context_length.min(8192).max(1);
+                let inspected_context = descriptor.context_length.clamp(1, 8192);
                 let inspected_kv_bytes = descriptor
                     .total_memory_required
                     .saturating_sub(descriptor.file_size_bytes);
@@ -969,7 +969,7 @@ impl LocalApiDispatcher {
                         custos_domain::LocalModelLoadProfile {
                             model_path: model_path.to_string(),
                             revision: 0,
-                            context_size: descriptor.context_length.min(4096).max(512),
+                            context_size: descriptor.context_length.clamp(512, 4096),
                             gpu_mode: "auto".to_string(),
                             gpu_layers: None,
                             eval_batch_size: Some(512),
@@ -1027,7 +1027,7 @@ impl LocalApiDispatcher {
                         custos_domain::LocalModelLoadProfile {
                             model_path: model_path.to_string(),
                             revision: 0,
-                            context_size: descriptor.context_length.min(4096).max(512),
+                            context_size: descriptor.context_length.clamp(512, 4096),
                             gpu_mode: "auto".to_string(),
                             gpu_layers: None,
                             eval_batch_size: Some(512),

@@ -196,19 +196,17 @@ impl LocalApiDispatcher {
                             match tag {
                                 "p" => current_pid = rest.parse().unwrap_or(0),
                                 "c" => current_cmd = rest.to_string(),
-                                "n" => {
-                                    if own_pids.contains(&current_pid) {
-                                        if let Some((host, port_str)) = rest.rsplit_once(':') {
-                                            if let Ok(port) = port_str.parse::<u16>() {
-                                                let is_public = !(host.starts_with("127.") || host == "[::1]" || host == "localhost");
-                                                if active_ports_set.insert(port) {
-                                                    listening_ports.push(serde_json::json!({
-                                                        "port": port,
-                                                        "pid": current_pid,
-                                                        "command": current_cmd.clone(),
-                                                        "public": is_public,
-                                                    }));
-                                                }
+                                "n" if own_pids.contains(&current_pid) => {
+                                    if let Some((host, port_str)) = rest.rsplit_once(':') {
+                                        if let Ok(port) = port_str.parse::<u16>() {
+                                            let is_public = !(host.starts_with("127.") || host == "[::1]" || host == "localhost");
+                                            if active_ports_set.insert(port) {
+                                                listening_ports.push(serde_json::json!({
+                                                    "port": port,
+                                                    "pid": current_pid,
+                                                    "command": current_cmd.clone(),
+                                                    "public": is_public,
+                                                }));
                                             }
                                         }
                                     }
@@ -406,7 +404,7 @@ impl LocalApiDispatcher {
                     .enumerate()
                     .map(|(index, operation)| ResourceActionCapability {
                         id: operation.clone(),
-                        label: operation.replace('.', " ").replace('_', " "),
+                        label: operation.replace(['.', '_'], " "),
                         status: "available".into(),
                         reason: None,
                         primary: index == 0,

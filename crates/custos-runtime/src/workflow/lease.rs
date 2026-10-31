@@ -240,15 +240,9 @@ impl WorkspaceLeaseManager {
                     .trim_end_matches("/*");
 
                 // Strict boundary check to prevent prefix-collision (e.g. "src_other" matching "src")
-                let matches_prefix = if clean_prefix.is_empty() {
-                    true
-                } else if rel_str == clean_prefix {
-                    true
-                } else if rel_str.starts_with(&format!("{}/", clean_prefix)) {
-                    true
-                } else {
-                    false
-                };
+                let matches_prefix = clean_prefix.is_empty()
+                    || rel_str == clean_prefix
+                    || rel_str.starts_with(&format!("{}/", clean_prefix));
 
                 if !matches_prefix {
                     return Err(DomainError::Validation(format!(

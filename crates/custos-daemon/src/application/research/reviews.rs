@@ -300,10 +300,7 @@ impl LocalApiDispatcher {
                     Ok(c) => c,
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
-                let all_reviews = match research.list_reviews(None, None) {
-                    Ok(r) => r,
-                    Err(_) => Vec::new(),
-                };
+                let all_reviews = research.list_reviews(None, None).unwrap_or_default();
 
                 let claims: Vec<ClaimHandoffSummary> = params
                     .claim_ids
@@ -395,10 +392,7 @@ impl LocalApiDispatcher {
                     Ok(c) => c,
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
-                let all_reviews = match research.list_reviews(None, None) {
-                    Ok(r) => r,
-                    Err(_) => Vec::new(),
-                };
+                let all_reviews = research.list_reviews(None, None).unwrap_or_default();
 
                 // Invariant: Verify all requested claim IDs actually exist in the repository
                 for cid in &params.claim_ids {
