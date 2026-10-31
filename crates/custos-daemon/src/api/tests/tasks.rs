@@ -380,6 +380,38 @@ use custos_domain::*;
             .error
             .unwrap()
             .contains("Admission gate refused unverified session_id"));
+
+        // 5. Start run with privileged actor override (system/kernel/root) must be refused
+        let priv_actor_req = ApiRequest {
+            id: "req_priv_actor".into(),
+            method: "v1.workflow.start_run".into(),
+            params: serde_json::json!({
+                "task_id": "task_api_workflow_priv",
+                "actor": "system"
+            }),
+        };
+        let priv_resp = dispatcher.handle_request(priv_actor_req).await;
+        assert!(priv_resp.error.is_some());
+        assert!(priv_resp
+            .error
+            .unwrap()
+            .contains("Admission gate refused privileged actor override"));
+
+        // 6. Start run with invalid actor characters must be refused
+        let bad_actor_req = ApiRequest {
+            id: "req_bad_actor".into(),
+            method: "v1.workflow.start_run".into(),
+            params: serde_json::json!({
+                "task_id": "task_api_workflow_bad_actor",
+                "actor": "bad actor; rm -rf /"
+            }),
+        };
+        let bad_actor_resp = dispatcher.handle_request(bad_actor_req).await;
+        assert!(bad_actor_resp.error.is_some());
+        assert!(bad_actor_resp
+            .error
+            .unwrap()
+            .contains("Admission gate refused invalid actor identifier"));
     }
 
 
