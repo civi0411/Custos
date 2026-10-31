@@ -10,100 +10,103 @@
 
 </div>
 
-**A local-first Agent Workspace for coding, research, and assistance.**
+# Custos SADE
 
-**Product direction: Custos SADE — Supervised Agent Development Environment.** An ADE experience with source-aware supervision, strong-agent reasoning, bounded S1 assistance, and cost optimization measured on accepted outcomes. See the [SADE design](docs/architecture/sade-design-and-supervision.md); this is a target architecture, not a benchmark superiority claim.
+> **Supervised Agent Development Environment (SADE) — Local-First, Evidence-Bound, Human-Governed.**
 
-Custos brings conversations, resources, agent runs, and results into one workspace. Its target architecture combines durable tasks, scoped execution, source-aware outcomes, and honest effect status across local models, cloud APIs, and native agent harnesses. Desktop/CLI surfaces are clients of the same runtime; a native harness retains its own loop and declared assurance limits.
-
-**Status:** evolving implementation and target design, not a claim that the full workspace or all connectors are shipped. Start with the [workspace/UI specification](docs/architecture/agent-workspace-and-ui.md), [restructuring plan](docs/development/workspace-restructuring-plan.md), and [documentation hub](docs/README.md). These distinguish existing paths from planned modules and preserve compatibility during migration.
+Custos is a local-first development and execution environment for autonomous agents across coding, scientific research, and personal workflow assistance. Unlike simple LLM wrappers or opaque multi-agent orchestrators, Custos enforces strong human supervision, deterministic state persistence, cryptographically audited capability gates, and empirical proof before any task is recognized as complete.
 
 ---
 
-## Core Motivation
+## Three Non-Negotiable Pillars
 
-Contemporary agentic tools offer immense capability but suffer from fundamental architectural flaws:
-
-- **Ephemeral Context Loss:** Context is trapped within isolated vendor silos and discarded across sessions or tool changes.
-- **Unverified Assertions:** Model declarations of completion are trusted without objective verification or proof.
-- **Uncontrolled Side Effects:** External mutations (file edits, network requests, system commands) execute without strict capability gating or audit trails.
-- **Fragile State:** System crashes, rate limits, and context overflows abort in-flight work with no deterministic recovery.
-- **Erosion of Human Agency:** Opaque multi-agent setups diminish human supervision and consequential decision authority.
-
-Custos resolves these failures by introducing a local-first, evidence-bound operating model where human sovereignty is paramount and agent actions are strictly audited.
+| Pillar | Principle | Architectural Guarantee |
+|---|---|---|
+| **P1 — Task First-Class** | Tasks live independently of sessions and connections | Durable SQLite WAL persistence, deterministic crash recovery, and idempotent command ledger. |
+| **P2 — Proposal ≠ Decision ≠ Effect** | AI proposes; Kernel permits; Gateway executes | Untrusted models emit `ActionIntent`; Kernel signs a single-use `ExecutionPermit`; Sandbox enforces capability gating. |
+| **P3 — Evidence-Backed Completion** | No completion without empirical proof | Tasks only pass when backed by objective artifacts (diffs, test execution traces, citation audits); zero phantom completions. |
 
 ---
 
-## Fundamental Concepts
+## 10 Inviolable System Invariants
 
-Custos enforces clear boundaries between operational entities:
+1. **INV-01 (Local-First Sovereignty):** All state, contracts, tasks, and telemetry reside on local storage.
+2. **INV-02 (Zero Phantom Atomicity):** State changes commit to SQLite before external actions dispatch.
+3. **INV-03 (Permit Before Effect):** No mutation executes without a cryptographically bound `ExecutionPermit`.
+4. **INV-04 (Actor Identity Binding):** Actor identity is bound from authenticated transports, never payload claims.
+5. **INV-05 (Evidence Over Assertions):** Acceptance criteria require verified empirical artifacts, never model affirmations.
+6. **INV-06 (Explicit Capability Truth):** UI surfaces fail closed (`unavailable`/`degraded`) when backend capability is missing.
+7. **INV-07 (Worktree Lease Isolation):** Concurrent writes to the same working tree are fenced to prevent data loss.
+8. **INV-08 (Resource Headroom Bounding):** All process execution, line buffering, and token pruning respect strict byte limits.
+9. **INV-09 (Audited Transports):** Every mutation passes through the idempotent Command Ledger with digest verification.
+10. **INV-10 (Human Supremacy):** The human operator retains unconstrained power to pause, steer, or abort tasks at any lifecycle stage.
 
-- **Session:** An ephemeral interaction channel (CLI, IDE harness, desktop interface, chat).
-- **Task:** The durable, immutable unit of intent, policy, state, and acceptance criteria.
-- **Run:** A discrete execution attempt within an active task lifecycle.
-- **Action Intent:** A proposed external mutation generated by a model worker.
-- **Execution Permit:** A cryptographically bound, single-use authorization issued by the authority engine.
-- **Effect:** A sandboxed mutation executed exclusively under an active permit.
-- **Evidence:** Objective, verifiable artifacts confirming claims independently of model assertions.
+---
+
+## Operational Mechanics
 
 ```mermaid
 flowchart LR
-    Human[Human Authority] --> Session[Session Channel]
+    Human[Human Operator] --> Session[Session / Workbench]
     Session --> Task[Durable Task]
-    Task --> Context[Context Assembly]
+    Task --> Context[Context Compilation]
     Context --> Worker[Model / Harness Worker]
     Worker --> Intent[Action Intent]
-    Intent --> Gate[Authority Gate]
+    Intent --> Gate[Authority Gate & Permit]
     Gate --> Effect[Sandboxed Effect]
     Effect --> Evidence[Objective Evidence]
-    Evidence --> Outcome[Verified Outcome]
+    Evidence --> Outcome[Verified Completion]
 ```
 
 ---
 
-## System Architecture
+## System Architecture: The 11 Canonical Rust Crates
 
-Custos operates across three distinct Trust Zones:
-
-1. **Untrusted Zone:** External models, foreign agent workers, third-party network endpoints, and unparsed user input.
-2. **Supervised Zone:** Context compilation, prompt synthesis, semantic routing, and ephemeral execution planning.
-3. **Trusted Kernel:** SQLite write-ahead-log (WAL) persistence, authority engine, capability gateway, and completion verifiers.
-
-### Product Crates
-
-The codebase is organized into 11 focused Rust crates:
+Custos strictly separates pure logic from side effects across 11 layered Rust crates:
 
 | Layer | Crate | Core Responsibility |
 |---|---|---|
-| **Domain** | `custos-domain` | Pure domain identities, entity models, state machines, and invariants. |
-| **Core** | `custos-core` | Task orchestration service, authority engine, and completion policies. |
-| | `custos-persistence` | SQLite migrations, durable repositories, and crash recovery. |
-| **Runtime** | `custos-runtime` | Session lifecycle, worker processes, cognition, and memory tiers. |
-| | `custos-provider` | Provider-neutral model contracts, streaming protocols, and tokenizers. |
-| **Bridges & Adapters** | `custos-bridge` | Session-to-Task promotion and local application programming interface dispatch. |
-| | `custos-adapters` | Concrete implementations for models, capabilities, and sandboxes. |
-| **Domain Packs** | `custos-packs` | Specialized workflows: Engineering, Research, and Assistant packs. |
-| **Daemon & Entry** | `custos-daemon` | Sole production composition root and background daemon service. |
-| | `custos-sdk` | Client data transfer objects and transport client abstractions. |
-| | `custos-cli` | Lightweight terminal operator interface. |
+| **Layer 0 (Domain)** | `custos-domain` | Pure domain identities, entity models, state machines, and zero-I/O invariants. |
+| **Layer 1 (Core)** | `custos-core` | Task orchestration service, authority engine, and completion verifiers. |
+| | `custos-persistence` | SQLite WAL storage, outbox pattern, CAS state transitions, and crash recovery. |
+| | `custos-provider` | Provider-neutral model contracts, streaming SSE parsers, and tokenizers. |
+| **Layer 2 (Runtime & Bridge)** | `custos-bridge` | Session-to-Task promotion, RPC routing, and local API dispatching. |
+| | `custos-runtime` | Agent cognitive loop, context compression (RTK), memory tiers, and execution planners. |
+| | `custos-adapters` | OS sandboxes, MCP client adapters, local inference sidecars, and wire translators. |
+| **Layer 3 (Domain Packs)** | `custos-packs` | Specialized domain workflows: Engineering, Research, and Assistant packs. |
+| **Layer 4 (Entry & Distribution)** | `custos-daemon` | Sole composition root, background daemon server, and local HTTP/JSON-RPC. |
+| | `custos-sdk` | Client data transfer objects (DTOs), UniFFI bindings, and transport clients. |
+| | `custos-cli` | Terminal operator interface built with `ratatui`. |
 
 ---
 
-## Protocol Hubs and Harness Support
+## Desktop User Interface
 
-The Custos local daemon serves as a central interoperability gateway through six specialized hubs:
+The Custos Desktop UI is built with **Vite, React 19, and Tauri 2**:
 
-- **Model Hub:** Routes requests across local engines and cloud inference providers with fallback resilience.
-- **Tool Hub:** Governs Model Context Protocol (MCP) servers and external execution tools.
-- **Agent Hub:** Manages Agent-to-Agent (A2A) communications and Agent Communication Protocol (ACP) workflows.
-- **Storage Hub:** Coordinates SQLite persistence, blob storage, and structured index caches.
+- **3-Tier Hierarchy:** Navigates seamlessly through `Project -> Workspace -> Worktree`.
+- **Graphite JetBlack Token System:** Sleek, high-contrast dark theme optimized for long cognitive sessions.
+- **Dedicated Workbenches:**
+  - **Engineering:** Files & Changes, Evidence, and Worktree Manager.
+  - **Research:** Synthesis Studio, Findings, and Runs Ledger.
+  - **Assistant & Shared:** Browser, Terminal, Remote Fleet, and Notes.
+- **Zero-Mock Policy:** All UI metrics reflect actual daemon telemetry and fail closed when degraded.
+
+---
+
+## Protocol Hubs & Harness Integration
+
+The Custos daemon serves as a central interoperability gateway through six specialized hubs:
+
+- **Model Hub:** Routes requests across local engines (GGUF, llama.cpp) and cloud providers (Anthropic, OpenAI, Gemini, Bedrock) with automatic fallback.
+- **Tool Hub:** Governs Model Context Protocol (MCP) clients and sandboxed system tools.
+- **Agent Hub:** Coordinates Agent-to-Agent (A2A) protocols and Agent Communication Protocol (ACP) workflows.
+- **Storage Hub:** Coordinates SQLite persistence, blob storage, and structured indexes.
 - **Event Hub:** Distributes high-throughput audit telemetry and lifecycle events.
-- **Operator Hub:** Provides secure local endpoints for operator interfaces and terminal sessions.
+- **Operator Hub:** Provides authenticated local endpoints for CLI and Desktop frontends.
 
-### Harness Adapters
-
-Custos integrates with external developer environments without compromising safety boundaries:
-
+### Native Harness Adapters
+Custos wraps and supervises external coding harnesses without altering their internal mechanics:
 - **Claude Code:** Stdio subprocess isolation and command wrapping.
 - **Codex:** Sandboxed code completion and test execution.
 - **Cursor:** Editor buffer synchronization and diff application.
@@ -111,42 +114,37 @@ Custos integrates with external developer environments without compromising safe
 
 ---
 
-## Domain Packs
-
-Custos provides workflow packs tailored to specific knowledge domains:
+## Domain Workflow Packs
 
 - **Engineering Pack:** Autonomous software engineering workflows featuring atomic patch bundles, multi-worker fault localization, and three-path execution workspaces (canonical repo, staging fork, and verification sandbox).
-- **Research Pack:** Scientific and technical investigation workflows emphasizing reproducibility bundles, iterative claim verification, dataset auditing, and experiment tracking.
+- **Research Pack:** Scientific and technical investigation workflows emphasizing reproducibility bundles, iterative claim verification, citation oracles, and experiment tracking.
 - **Assistant Pack:** Personal workflow management with multi-tier autonomy, calendar and communication governance, and stable payload scheduling.
 
 ---
 
-## System Invariants
+## Verification & Quality Gates
 
-1. **Local-First Sovereignty:** All task data, state transitions, context artifacts, and audit logs reside on local disk.
-2. **Zero Unchecked Effects:** No agent or model can perform file system modifications, process execution, or network calls without an active execution permit.
-3. **Evidence Over Assertions:** A task cannot enter a completed state based solely on a model's claim of success; verified evidence must be attached.
-4. **Durable State Transactions:** State changes persist to disk before action execution is dispatched, preventing indeterminate states during crashes.
-5. **Human Supremacy:** The human operator holds unconstrained authority to pause, inspect, modify, or abort any task at any point in its lifecycle.
-
----
-
-## Verification and Testing
-
-Build and verify the workspace:
+All contributions must pass the mandatory quality gates:
 
 ```bash
-cargo fmt --all -- --check
-cargo check --workspace
+# 1. Zero-diagnostic Clippy hard gate (Rust)
+cargo clippy --workspace --all-targets -- -D warnings
+
+# 2. Comprehensive test suite (>1,670 tests, 100% pass)
 cargo test --workspace --all-targets
+
+# 3. Desktop UI type checking and bundle build
+cd ui/desktop && npm run build
 ```
 
 ---
 
-## Documentation and Specifications
+## Documentation & References
 
-- **Architectural Specification:** [Custos.md](Custos.md) (Single Source of Truth)
-- **Agent and Contributor Rules:** [AGENTS.md](AGENTS.md)
+- **Architectural Specification:** [Custos.md](Custos.md)
+- **Agent & Contributor Rules:** [AGENTS.md](AGENTS.md)
+- **Desktop UI Standards:** [.agents/rules/desktop_ui_architecture_standards.md](.agents/rules/desktop_ui_architecture_standards.md)
+- **Git PR Delivery Flow:** [.agents/rules/git_pr_workflow.md](.agents/rules/git_pr_workflow.md)
 - **Documentation Directory:** [docs/README.md](docs/README.md)
 - **Internationalization:** [docs/i18n/README.md](docs/i18n/README.md)
 
@@ -154,4 +152,4 @@ cargo test --workspace --all-targets
 
 ## License
 
-The root [LICENSE](LICENSE) is distributed under the **GNU AGPL-3.0-or-later**. It includes a strict Trademark Notice to protect the Custos identity and prohibits closed-source commercial SaaS wrapping. See the LICENSE file for full details.
+Custos is distributed under the **GNU AGPL-3.0-or-later**. It includes a strict Trademark Notice protecting the Custos identity and prohibiting closed-source commercial SaaS wrapping. See [LICENSE](LICENSE) for details.
