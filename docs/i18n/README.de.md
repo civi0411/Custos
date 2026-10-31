@@ -6,150 +6,121 @@
   <img alt="Custos" src="../assets/banner.png" width="100%">
 </picture>
 
-# Custos
-
 [ EN ](../../README.md) · [ VI ](README.vi.md) · [ DE ](README.de.md) · [ ZH ](README.zh.md) · [ JA ](README.ja.md) · [ KO ](README.ko.md) · [ ES ](README.es.md)
 
 </div>
 
-**Eine Local-First-, vom Menschen gesteuerte Laufzeitumgebung für nachweisbasierte Agentenarbeit.**
+# Custos SADE
 
-Custos transformiert flüchtige Konversationen mit künstlicher Intelligenz in persistente, kontrollierte Aufgaben mit expliziter Absicht, abgegrenzter Ausführung, wiederherstellbarem Zustand und evidenzbasierten Ergebnissen. Es operiert lokal über lokale Modelle, Cloud-Anbieter und externe Programmier-Harnesses hinweg.
+> **Supervised Agent Development Environment (SADE) — Local-First, Evidenzbasiert, Menschlich Gesteuert.**
 
----
-
-## Kernmotivation
-
-Heutige Agentensysteme bieten enorme Leistungsfähigkeit, leiden jedoch unter grundlegenden architektonischen Schwachstellen:
-
-- **Flüchtiger Kontextverlust:** Kontexte verbleiben in isolierten Herstellersilos und gehen bei Sitzungswechseln oder Werkzeugwechseln verloren.
-- **Unverifizierte Behauptungen:** Aussagen von Modellen über die Aufgabenerfüllung werden ungeprüft und ohne objektiven Nachweis übernommen.
-- **Unkontrollierte Seiteneffekte:** Externe Mutationen (Dateiveränderungen, Netzwerkanfragen, Systembefehle) werden ohne strikte Autorisierungsschranken oder Prüfprotokolle ausgeführt.
-- **Fragiler Ausführungszustand:** Systemabstürze, Ratengrenzen und Kontextüberläufe unterbrechen laufende Arbeiten ohne deterministische Wiederherstellung.
-- **Erosion menschlicher Kontrolle:** Undurchsichtige Multi-Agenten-Konstrukte schwächen die menschliche Aufsicht und entziehen wesentliche Entscheidungsbefugnisse.
-
-Custos behebt diese Mängel durch ein lokales, evidenzgebundenes Betriebsmodell, in dem die menschliche Souveränität gewahrt bleibt und alle Agentenaktionen streng auditiert werden.
+Custos ist eine Local-First-Entwicklungs- und Ausführungsumgebung für autonome Agenten in den Bereichen Programmierung (Coding), wissenschaftliche Forschung (Research) und persönliche Assistenz. Im Gegensatz zu einfachen LLM-Wrappern oder intransparenten Multi-Agenten-Systemen erzwingt Custos strikte menschliche Aufsicht, deterministische Zustandspersistenz, kryptografisch auditierte Fähigkeitsschranken und empirische Nachweise, bevor eine Aufgabe als abgeschlossen anerkannt wird.
 
 ---
 
-## Grundlegende Konzepte
+## Drei Nicht Verhandelbare Säulen
 
-Custos trennt strikt zwischen den operativen Entitäten:
+| Säule | Grundprinzip | Architektonische Garantie |
+|---|---|---|
+| **P1 — Aufgabe als First-Class-Bürger** | Aufgaben existieren unabhängig von Sitzungen und Verbindungen | Persistente SQLite-WAL-Speicherung, deterministische Absturzwiederherstellung und idempotentes Befehlsbuch. |
+| **P2 — Vorschlag ≠ Entscheidung ≠ Effekt** | Das Modell schlägt vor; der Kernel genehmigt; das Gateway führt aus | Das KI-Modell gibt lediglich einen `ActionIntent` aus; der Kernel signiert ein Einmal-`ExecutionPermit`; die Sandbox erzwingt Fähigkeitsschranken. |
+| **P3 — Evidenzbasierter Abschluss** | Kein Abschluss ohne empirischen Nachweis | Aufgaben bestehen nur, wenn sie durch objektive Artefakte (Diffs, Testausführungs-Traces, Zitationsaudits) belegt sind; null Scheinerfolge. |
 
-- **Sitzung (Session):** Ein flüchtiger Interaktionskanal (CLI, IDE-Harness, Desktop-Oberfläche, Chat).
-- **Aufgabe (Task):** Die persistente, unveränderliche Einheit aus Absicht, Richtlinie, Zustand und Akzeptanzkriterien.
-- **Durchlauf (Run):** Ein diskreter Ausführungsversuch innerhalb des Lebenszyklus einer aktiven Aufgabe.
-- **Handlungsabsicht (Action Intent):** Eine von einem Modell-Worker vorgeschlagene externe Mutation.
-- **Ausführungsschein (Execution Permit):** Eine kryptografisch gebundene Einmalgenehmigung der Autorisierungs-Engine.
-- **Effekt (Effect):** Eine in einer Sandbox ausgeführte Mutation, die ausschließlich unter einem gültigen Schein erfolgt.
-- **Evidenz (Evidence):** Objektive, unabhängig verifizierbare Artefakte, die Ergebnisse unabhängig von Modellaussagen belegen.
+---
+
+## 10 Unverrückbare Systeminvarianten
+
+1. **INV-01 (Local-First-Souveränität):** Alle Zustände, Verträge, Aufgaben und Telemetriedaten verbleiben auf dem lokalen Datenträger.
+2. **INV-02 (Keine Schein-Atomarität):** Zustandsänderungen werden in SQLite committet, bevor externe Aktionen versendet werden.
+3. **INV-03 (Genehmigung vor Effekt):** Keine externe Mutation wird ohne ein kryptografisch gebundenes `ExecutionPermit` ausgeführt.
+4. **INV-04 (Akteursidentitätsbindung):** Die Identität des Akteurs wird aus authentifizierten Transportschichten gebunden, niemals aus Payload-Angaben.
+5. **INV-05 (Evidenz vor Behauptung):** Die Aufgabenabnahme erfordert verifizierte empirische Artefakte, nicht bloße Zusicherungen des Modells.
+6. **INV-06 (Explizite UI-Wahrheit):** Die Benutzeroberfläche wechselt sofort in einen Fail-Closed-Zustand (`unavailable`/`degraded`), wenn Backend-Dienste fehlen.
+7. **INV-07 (Worktree-Lease-Isolation):** Parallele Schreibzugriffe auf denselben Arbeitsbaum werden gefenced, um Datenverlust zu verhindern.
+8. **INV-08 (Ressourcen-Obergrenzen):** Jede Prozessausführung, Zeilenpufferung und Token-Bereinigung respektiert strenge Byte-Limits.
+9. **INV-09 (Auditierte Transportschichten):** Jede Mutation durchläuft das idempotente Befehlsbuch mit Digest-Überprüfung.
+10. **INV-10 (Menschliche Vorherrschaft):** Der menschliche Operator behält das uneingeschränkte Recht, Aufgaben in jeder Phase zu pausieren, anzupassen oder abzubrechen.
+
+---
+
+## Funktionsmechanismus
 
 ```mermaid
 flowchart LR
-    Human[Menschliche Autorität] --> Session[Sitzungskanal]
+    Human[Menschlicher Operator] --> Session[Sitzungskanal / Workbench]
     Session --> Task[Persistente Aufgabe]
     Task --> Context[Kontextaufbereitung]
     Context --> Worker[Modell- / Harness-Worker]
-    Worker --> Intent[Handlungsabsicht]
-    Intent --> Gate[Autorisierungsschranke]
+    Worker --> Intent[Handlungsabsicht (Action Intent)]
+    Intent --> Gate[Autorisierungsschranke & Schein]
     Gate --> Effect[Sandbox-Effekt]
     Effect --> Evidence[Objektive Evidenz]
-    Evidence --> Outcome[Verifiziertes Ergebnis]
+    Evidence --> Outcome[Verifizierter Abschluss]
 ```
 
 ---
 
-## Systemarchitektur
+## Systemarchitektur: Die 11 Kanonischen Rust-Crates
 
-Custos operiert über drei getrennte Vertrauenszonen (Trust Zones):
-
-1. **Nicht vertrauenswürdige Zone (Untrusted Zone):** Externe Modelle, Drittanbieter-Agenten, Netzwerkendpunkte und unvalidierte Benutzereingaben.
-2. **Überwachte Zone (Supervised Zone):** Kontextkompilierung, Prompt-Synthese, semantisches Routing und flüchtige Ausführungsplanung.
-3. **Vertrauenswürdiger Kernel (Trusted Kernel):** Persistenz mittels SQLite Write-Ahead Logging (WAL), Autorisierungs-Engine, Capability Gateway und Verifizierer.
-
-### Workspace-Crates
-
-Der Quellcode ist in 11 fokussierte Rust-Crates gegliedert:
+Custos trennt reine Domänenlogik und Seiteneffekte strikt in 11 geschichteten Rust-Crates:
 
 | Schicht | Crate | Kernverantwortung |
 |---|---|---|
-| **Domäne** | `custos-domain` | Reine Domänenidentitäten, Entitätsmodelle, Zustandsautomaten und Invarianten. |
-| **Kern** | `custos-core` | Aufgabenorchestrierung, Autorisierungs-Engine und Abschlussrichtlinien. |
-| | `custos-persistence` | SQLite-Migrationen, persistente Repositorien und Absturzwiederherstellung. |
-| **Laufzeit** | `custos-runtime` | Sitzungslebenszyklus, Worker-Prozesse, Kognition und Speicherschichten. |
-| | `custos-provider` | Provider-neutrale Modellverträge, Streaming-Protokolle und Tokenizer. |
-| **Brücken & Adapter** | `custos-bridge` | Hochstufung von Sitzungen zu Aufgaben und Dispatch der lokalen Programmierschnittstelle. |
-| | `custos-adapters` | Konkrete Implementierungen für Modelle, Fähigkeiten und Sandboxes. |
-| **Domänenpakete** | `custos-packs` | Spezialisierte Workflows: Engineering-, Research- und Assistant-Pakete. |
-| **Daemon & Clients** | `custos-daemon` | Einziger Produktions-Kompositionswurzel und Hintergrunddienst. |
-| | `custos-sdk` | Client-Datentransferobjekte und Transportabstraktionen. |
-| | `custos-cli` | Schlanke Befehlszeilenschnittstelle für Operatoren. |
+| **Schicht 0 (Domain)** | `custos-domain` | Reine Domänenentitäten, Zustandsautomaten und Zero-I/O-Systeminvarianten. |
+| **Schicht 1 (Core)** | `custos-core` | Aufgabenorchestrierung, Autorisierungs-Engine und Abschlussverifizierer. |
+| | `custos-persistence` | SQLite-WAL-Persistenz, Outbox-Muster, CAS-Zustandsübergänge und Absturzwiederherstellung. |
+| | `custos-provider` | Anbieterneutrale Modellverträge, Streaming-SSE-Parser und Tokenizer. |
+| **Schicht 2 (Runtime & Bridge)** | `custos-bridge` | Heraufstufung von Sitzungen zu Aufgaben, RPC-Routing und lokaler API-Dispatch. |
+| | `custos-runtime` | Kognitiver Agentenzyklus, Kontextkomprimierung (RTK), Speicherstufen und Planer. |
+| | `custos-adapters` | Betriebssystem-Sandboxen, MCP-Client-Adapter, lokale Inferenz-Sidecars und Protokollübersetzer. |
+| **Schicht 3 (Domain Packs)** | `custos-packs` | Spezialisierte Workflows: Software-Engineering, wissenschaftliche Forschung, Assistenz. |
+| **Schicht 4 (Entry & Distribution)** | `custos-daemon` | Einzige Composition Root, Hintergrund-Daemon-Dienst und lokale HTTP/JSON-RPC-Schnittstelle. |
+| | `custos-sdk` | Client-DTOs, UniFFI-Bindungen und Transport-Clients. |
+| | `custos-cli` | Terminal-TUI-Bedienoberfläche (`ratatui`). |
 
 ---
 
-## Protokoll-Hubs und Harness-Unterstützung
+## Desktop-Benutzeroberfläche
 
-Der lokale Custos-Daemon fungiert als zentrales Interoperabilitäts-Gateway über sechs spezialisierte Hubs:
+Die Desktop-Oberfläche von Custos basiert auf **Vite, React 19 und Tauri 2**:
 
-- **Model Hub:** Leitet Anfragen an lokale Engines und Cloud-Inferenzanbieter mit Ausfallschutz weiter.
-- **Tool Hub:** Verwaltet Model Context Protocol (MCP)-Server und externe Werkzeuge.
-- **Agent Hub:** Steuert Agent-to-Agent (A2A)-Kommunikation und Workflows des Agent Communication Protocol (ACP).
-- **Storage Hub:** Koordiniert SQLite-Persistenz, Blob-Speicher und strukturierte Index-Caches.
-- **Event Hub:** Verteilt Prüfprotokolle mit hohem Durchsatz und Lebenszyklusereignisse.
-- **Operator Hub:** Stellt sichere lokale Endpunkte für Bedienoberflächen und Terminal-Sitzungen bereit.
-
-### Harness-Adapter
-
-Custos integriert externe Entwicklungsumgebungen unter strikter Einhaltung von Sicherheitsgrenzen:
-
-- **Claude Code:** Stdio-Subprozessisolation und Befehlskapselung.
-- **Codex:** Sandboxed Code-Vervollständigung und Testausführung.
-- **Cursor:** Editor-Puffersynchronisation und sichere Diff-Anwendung.
-- **Antigravity:** Koordination der agentischen Laufzeit und Aufgabensynchronisation.
+- **3-Ebenen-Hierarchie:** Nahtlose Navigation über `Projekt -> Arbeitsbereich -> Arbeitsbaum (Project -> Workspace -> Worktree)`.
+- **Graphite JetBlack Token-System:** Modernes, kontrastreiches Dark-Design für ermüdungsfreie Arbeit.
+- **Dedizierte Workbenches:**
+  - **Engineering:** Dateien & Änderungen, Evidenz-Prüfer und Worktree-Manager.
+  - **Forschung:** Synthesestudio, wissenschaftliche Entdeckungen und Durchlauf-Journal.
+  - **Assistenz & Geteilt:** Integrierter Browser, Terminal, Remote-Flotte und Notizen.
+- **Null-Mock-Richtlinie (Zero-Mock Policy):** Alle UI-Metriken spiegeln reale Daemon-Telemetrie wider und warnen explizit bei Ausfällen.
 
 ---
 
-## Spezialisierte Domänenpakete
+## Qualitätsschranken und Tests
 
-Custos stellt auf Fachgebiete zugeschnittene Workflow-Pakete bereit:
-
-- **Engineering Pack:** Autonome Software-Entwicklungsworkflows mit atomaren Patch-Bündeln, Fehlerlokalisierung über mehrere Worker und Drei-Wege-Arbeitsbereichen (Haupt-Repo, Staging-Fork, Verifikations-Sandbox).
-- **Research Pack:** Workflows für wissenschaftliche und technische Untersuchungen mit Fokus auf Reproduzierbarkeitsbündel, iterative Faktenerhärtung (FIRE), Datensatzprüfung und Experiment-Tracking.
-- **Assistant Pack:** Persönliches Workflow-Management mit mehrstufiger Autonomie, Termin- und Kommunikationssteuerung sowie stabiler Ablaufplanung.
-
----
-
-## Systeminvarianten
-
-1. **Local-First-Souveränität:** Sämtliche Aufgabendaten, Zustandsübergänge, Kontextartefakte und Prüfprotokolle verbleiben auf dem lokalen Datenträger.
-2. **Keine unkontrollierten Effekte:** Kein Agent oder Modell darf Dateisystemänderungen, Prozessausführungen oder Netzwerkaufrufe ohne aktiven Ausführungsschein tätigen.
-3. **Evidenz vor Behauptungen:** Eine Aufgabe kann niemals allein durch die Selbstaussage eines Modells abgeschlossen werden; objektive Nachweise sind zwingend erforderlich.
-4. **Dauerhafte Zustandstransaktionen:** Zustandsänderungen werden vor dem Absenden von Aktionen persistent gesichert, um unbestimmte Zustände bei Abstürzen auszuschließen.
-5. **Menschliche Vorherrschaft:** Der menschliche Operator behält das uneingeschränkte Recht, jede Aufgabe jederzeit anzuhalten, einzusehen, anzupassen oder abzubrechen.
-
----
-
-## Verifizierung und Tests
-
-Kompilierung und Verifikation des Workspaces:
+Alle Codebeiträge müssen zwingend folgende Schranken passieren:
 
 ```bash
-cargo fmt --all -- --check
-cargo check --workspace
+# 1. Blockierendes Clippy-Gate ohne Warnungen (Rust)
+cargo clippy --workspace --all-targets -- -D warnings
+
+# 2. Umfassende Testsuite (>1.670 Tests, 100% bestanden)
 cargo test --workspace --all-targets
+
+# 3. Desktop-UI Typüberprüfung und Bundle-Build
+cd ui/desktop && npm run build
 ```
 
 ---
 
-## Dokumentation und Spezifikationen
+## Dokumentation und Referenzen
 
-- **Architekturspezifikation:** [Custos.md](../../Custos.md) (Einzige Quelle der Wahrheit - SSOT)
-- **Agenten- und Beitragsrichtlinien:** [AGENTS.md](../../AGENTS.md)
+- **Architekturspezifikation:** [Custos.md](../../Custos.md)
+- **Agenten- und Beitragsregeln:** [AGENTS.md](../../AGENTS.md)
+- **Desktop-UI-Standards:** [.agents/rules/desktop_ui_architecture_standards.md](../../.agents/rules/desktop_ui_architecture_standards.md)
+- **Git-PR-Workflow:** [.agents/rules/git_pr_workflow.md](../../.agents/rules/git_pr_workflow.md)
 - **Dokumentationsverzeichnis:** [docs/README.md](../README.md)
-- **Internationalisierung:** [docs/i18n/README.md](README.md)
 
 ---
 
 ## Lizenz
 
-Die [LICENSE](../../LICENSE) im Repository enthält derzeit die MIT-Lizenz. Herkunft und Kennzeichnung von Goose-abgeleitetem Code werden im [Upstream-Quellenverzeichnis](../development/upstream-source-map.md) geprüft; die Root-Lizenz beschreibt nicht zwangsläufig jeden übernommenen Bestandteil.
+Custos wird unter der **GNU AGPL-3.0-or-later** vertrieben. Sie enthält eine strikte Markenklausel zum Schutz der Marke Custos und untersagt proprietäre kommerzielle SaaS-Verpackungen. Einzelheiten siehe [LICENSE](../../LICENSE).

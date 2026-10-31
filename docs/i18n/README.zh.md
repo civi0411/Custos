@@ -10,144 +10,137 @@
 
 </div>
 
-**本地优先、由人类治理、具备可实证成果的智能体运行时环境。**
+# Custos SADE
 
-Custos 将瞬态的人工智能对话转化为受治理的持久化任务，具备明确意图、有界执行、可恢复状态以及基于客观实证的成果。它在本地运行，横跨本地模型、云端提供商和外部编程工具套件（Harness）。
+> **受监督智能体开发环境 (SADE) — 本地优先、实证绑定、人类主导。**
 
----
-
-## 核心动因
-
-当前的智能体工具虽然功能强大，但普遍存在根本性的架构缺陷：
-
-- **瞬态上下文丢失：** 上下文被困在孤立的厂商孤岛中，一旦更换会话或切换工具就会丢失。
-- **未经实证的模型断言：** 模型关于任务完成的自我声明被直接信任，缺乏客观且独立的验证证据。
-- **失控的外部副作用：** 外部变更（文件修改、网络请求、系统命令）在缺乏严格能力门禁和审计日志的情况下直接执行。
-- **脆弱的执行状态：** 系统崩溃、速率限制和上下文溢出会中断进行中的工作，且无法进行确定性恢复。
-- **人类主权的侵蚀：** 晦涩的多智能体结构削弱了人类监督，剥夺了对重大决策的审批控制权。
-
-Custos 通过引入本地优先、与实证绑定的运行模型彻底解决这些问题：人类主权至上，所有智能体动作均受到严格审计。
+Custos 是一个面向自主智能体（Agent）的本地优先开发与执行环境，覆盖编程辅助、科学研究及个人工作流管理。与简单的 LLM 包装器或不透明的多智能体系统不同，Custos 强制执行严格的人类监督、确定性的状态持久化、经密码学审计的能力网关，并在任何任务被确认为完成前，必须提供客观的实证成果。
 
 ---
 
-## 基础概念
+## 三大不可妥协的支柱
 
-Custos 严格划分系统运行实体之间的界限：
+| 支柱 | 核心原则 | 架构保障 |
+|---|---|---|
+| **P1 — 任务作为一等公民** | 任务独立于交互会话和网络连接而持久存在 | 基于 SQLite WAL 的持久存储、确定性崩溃恢复以及防重放幂等命令账本。 |
+| **P2 — 提议 ≠ 决策 ≠ 副作用** | 模型提议；内核许可；网关执行 | AI 模型仅发起 `ActionIntent`；内核签发单次使用的 `ExecutionPermit`；沙箱严格执行能力门禁。 |
+| **P3 — 基于实证的完成判定** | 无客观证据则绝不认可完成 | 验收条件必须有独立的实体产物（Diff 补丁、测试运行追踪、引用审计）背书；杜绝一切虚假完成。 |
 
-- **会话 (Session)：** 瞬态交互通道（命令行、IDE 套件、桌面界面、对话窗口）。
-- **任务 (Task)：** 包含意图、策略、状态与验收标准的不可变持久化单元。
-- **运行尝试 (Run)：** 活跃任务生命周期内的一次独立执行尝试。
-- **动作意图 (Action Intent)：** 由模型工作器提议的外部变更操作。
-- **执行许可凭证 (Execution Permit)：** 由权限引擎签发的具备密码学绑定的单次使用授权凭证。
-- **副作用 (Effect)：** 仅在持有有效许可凭证时在沙箱中执行的外部变更。
-- **客观实证 (Evidence)：** 独立于模型自我声明、客观可验证的成果证明产物。
+---
+
+## 10 条不可逾越的系统不变量
+
+1. **INV-01 (本地优先主权):** 所有的状态、契约、任务和遥测日志均驻留在本地存储介质中。
+2. **INV-02 (零虚幻原子性):** 任何状态变更必须先提交至 SQLite，方可向外部调度分发动作。
+3. **INV-03 (副作用前置许可):** 任何外部变更操作在没有有效的 `ExecutionPermit` 时严禁执行。
+4. **INV-04 (执行者身份强绑定):** 操作者身份直接绑定自经过身份验证的传输层，绝不信任载荷自声明。
+5. **INV-05 (实证重于模型断言):** 任务验收必须依赖经过验证的实体产物，严禁直接信任模型的完成自述。
+6. **INV-06 (界面能力真实性):** 当后台服务缺失或降级时，前端界面必须立即进入关闭防御状态（`unavailable`/`degraded`）。
+7. **INV-07 (工作树租约隔离):** 针对同一工作树（Worktree）的并发写操作实施强隔离栅栏，杜绝数据损坏。
+8. **INV-08 (资源余量边界限制):** 所有进程执行、日志行缓冲和 Token 剪裁均严格遵循字节配额限制。
+9. **INV-09 (全链路传输审计):** 所有系统变更均须经过命令账本并验证摘要哈希，严格防止重复执行。
+10. **INV-10 (人类最高统治权):** 操作人员在任务生命周期的任何阶段，均保有无条件暂停、纠偏或中止任务的权力。
+
+---
+
+## 运行机制
 
 ```mermaid
 flowchart LR
-    Human[人类主权者] --> Session[会话通道]
+    Human[人类操作者] --> Session[交互会话 / 工作台]
     Session --> Task[持久化任务]
     Task --> Context[上下文组装]
     Context --> Worker[模型 / Harness 工作器]
-    Worker --> Intent[动作意图]
-    Intent --> Gate[权限网关]
-    Gate --> Effect[沙箱副作用]
-    Effect --> Evidence[客观实证]
-    Evidence --> Outcome[实证检验成果]
+    Worker --> Intent[动作提议 (Action Intent)]
+    Intent --> Gate[权限网关与许可凭证]
+    Gate --> Effect[沙箱副作用执行]
+    Effect --> Evidence[客观实证产物]
+    Evidence --> Outcome[经检验的完成成果]
 ```
 
 ---
 
-## 系统架构
+## 系统架构：11 个规范的 Rust Crates
 
-Custos 运行于三个清晰隔离的信任区域（Trust Zones）：
-
-1. **非信任区 (Untrusted Zone)：** 外部模型、第三方智能体工作器、远程网络端点以及未经校验的用户原始输入。
-2. **受监督区 (Supervised Zone)：** 上下文编译、提示词合成、语义路由以及瞬态执行规划。
-3. **可信内核 (Trusted Kernel)：** 基于 SQLite 预写日志（WAL）的持久化存储、权限引擎、能力网关以及完成度校验器。
-
-### 工作区 Crate 组成
-
-代码仓库由 11 个职责明确的 Rust Crate 构成：
+Custos 在 11 个分层的 Rust Crate 中严格隔离纯逻辑与外部副作用：
 
 | 分层 | Crate | 核心职责 |
 |---|---|---|
-| **领域层 (Domain)** | `custos-domain` | 纯领域标识、实体模型、状态机与系统不变式。 |
-| **核心层 (Core)** | `custos-core` | 任务编排服务、权限引擎与完成度判定策略。 |
-| | `custos-persistence` | SQLite 数据库迁移、持久化仓储与故障恢复。 |
-| **运行时层 (Runtime)** | `custos-runtime` | 会话生命周期、工作器进程、认知系统与分层记忆。 |
-| | `custos-provider` | 厂商中立的模型契约、流式传输协议与分词器。 |
-| **桥接与适配层** | `custos-bridge` | 会话至任务的提升以及本地 API 分发。 |
-| | `custos-adapters` | 模型、能力工具与执行沙箱的具体实现。 |
-| **领域总成 (Packs)** | `custos-packs` | 专业工作流总成：工程总成、研究总成与助理总成。 |
-| **守护进程与客户端** | `custos-daemon` | 唯一的生产组合根节点与后台守护进程服务。 |
-| | `custos-sdk` | 客户端数据传输对象（DTO）与传输层抽象。 |
-| | `custos-cli` | 面向操作员的轻量级命令行交互界面。 |
+| **Layer 0 (Domain)** | `custos-domain` | 纯领域实体模型、状态机规范及零 I/O 系统不变量。 |
+| **Layer 1 (Core)** | `custos-core` | 任务编排服务、权限引擎以及完成判定验证器。 |
+| | `custos-persistence` | SQLite WAL 存储层、Outbox 模式、CAS 状态迁移及崩溃恢复。 |
+| | `custos-provider` | 跨提供商模型契约、流式 SSE 解析器及 Token 计算模块。 |
+| **Layer 2 (Runtime & Bridge)** | `custos-bridge` | 会话至任务晋升机制、RPC 路由以及本地 API 分发调度。 |
+| | `custos-runtime` | 智能体认知循环、上下文无损压缩 (RTK)、记忆分层及执行规划器。 |
+| | `custos-adapters` | 操作系统沙箱、MCP 客户端适配器、本地推理 Sidecar 及协议转换器。 |
+| **Layer 3 (Domain Packs)** | `custos-packs` | 领域业务工作流包：工程开发包 (Engineering)、科研包 (Research) 与助手包 (Assistant)。 |
+| **Layer 4 (Entry & Distribution)** | `custos-daemon` | 唯一的组合根（Composition Root）、后台守护进程及本地 HTTP/JSON-RPC 服务。 |
+| | `custos-sdk` | 客户端数据传输对象 (DTO)、UniFFI 跨语言绑定及传输客户端。 |
+| | `custos-cli` | 基于终端界面的操作工具 (`ratatui`)。 |
 
 ---
 
-## 协议中枢与 Harness 兼容性
+## 桌面用户界面 (Desktop UI)
 
-Custos 本地守护进程通过六个专用中枢（Hub）充当核心互操作网关：
+Custos 桌面端由 **Vite、React 19 与 Tauri 2** 驱动：
 
-- **Model Hub：** 在本地引擎与云端推理提供商之间路由请求，具备弹性回退能力。
-- **Tool Hub：** 治理 Model Context Protocol (MCP) 服务端与外部执行工具。
-- **Agent Hub：** 管理智能体间通信 (A2A) 与 Agent Communication Protocol (ACP) 工作流。
-- **Storage Hub：** 协调 SQLite 持久化、二进制大对象（Blob）存储与结构化索引缓存。
-- **Event Hub：** 分发高吞吐量审计日志与系统生命周期事件。
-- **Operator Hub：** 为操作员前端与终端会话提供安全的本地端点。
-
-### Harness 适配器
-
-Custos 可以在不破坏安全边界的前提下无缝对接主流外部开发环境：
-
-- **Claude Code：** 基于 stdio 的子进程隔离与命令封装。
-- **Codex：** 沙箱化代码补全与测试用例执行。
-- **Cursor：** 编辑器缓冲区同步与安全差异合并。
-- **Antigravity：** 智能体编程运行时协调与任务状态同步。
+- **三级层次结构:** 直观导航体系：`项目 -> 工作空间 -> 工作树 (Project -> Workspace -> Worktree)`。
+- **Graphite JetBlack 设计系统:** 现代高对比度暗黑设计，专为长时间沉浸式开发深度优化。
+- **专业工作台 (Workbenches):**
+  - **工程工作台 (Engineering):** 文件与变更审查、实证查看器与工作树管理器。
+  - **科研工作台 (Research):** 综合研究室 (Synthesis Studio)、科学发现看板及执行记录总账。
+  - **助手与共享工作台 (Assistant & Shared):** 内置浏览器、终端、远程集群与便签笔记本。
+- **零假数据政策 (Zero-Mock Policy):** 界面显示的所有指标均来自 Daemon 真实遥测，服务不可用时明确显示警告。
 
 ---
 
-## 领域专用总成
+## 协议中心 (Hubs) 与外部工具套件集成
 
-Custos 针对特定专业领域提供预置工作流总成：
+Custos 守护进程作为核心互操作网关，提供 6 大功能中心：
 
-- **工程总成 (Engineering Pack)：** 自主软件工程工作流，包含原子补丁总成、多工作器错误定位以及三路径执行工作区（标准仓、暂存分支、验证沙箱）。
-- **研究总成 (Research Pack)：** 面向科学与技术探索的工作流，重点涵盖可复现性总成、迭代式事实检验 (FIRE)、数据集审计与实验追踪。
-- **助理总成 (Assistant Pack)：** 个人工作流管理，支持多层级自主权、日程与通信治理以及荷载稳定性保障。
+- **Model Hub:** 智能调度本地模型（GGUF、llama.cpp）与云端大模型（Anthropic、OpenAI、Gemini、Bedrock），支持无缝容灾切换。
+- **Tool Hub:** 治理模型上下文协议 (MCP) 服务端与沙箱系统工具。
+- **Agent Hub:** 协调智能体对智能体通信协议 (A2A) 与智能体交互协议 (ACP)。
+- **Storage Hub:** 管理 SQLite WAL 事务存储、Blob 二进制存储及结构化索引缓存。
+- **Event Hub:** 高吞吐分发审计追踪事件及全生命周期状态更新。
+- **Operator Hub:** 为命令行工具及桌面界面提供经认证的本地端点。
+
+### 外部编码套件适配器
+Custos 在不破坏外部工具内部机制的前提下提供统一的监督沙箱：
+- **Claude Code:** Stdio 子进程隔离与安全命令包装。
+- **Codex:** 沙箱化代码补全与测试自动化执行。
+- **Cursor:** 编辑器缓冲区实时同步与差分应用。
+- **Antigravity:** 智能体编程运行时协调与任务一致性同步。
 
 ---
 
-## 系统不变式
+## 质量门禁与验证
 
-1. **本地优先主权：** 所有任务数据、状态流转、上下文产物与审计日志均完整保存在本地存储介质。
-2. **零无凭证副作用：** 任何智能体或模型在未获取有效执行许可凭证前，严禁修改文件系统、执行系统进程或发起网络请求。
-3. **实证先于断言：** 任务绝不可仅凭模型的自我声明即判定为完成；必须附带客观独立的实证依据。
-4. **持久化状态事务：** 状态变更在外部操作派发前必须持久化落盘，杜绝异常崩溃造成的模糊未决状态。
-5. **人类主权至上：** 人类操作员在任务生命周期的任何节点，均享有无条件暂停、审查、修改或终止任务的最高权限。
-
----
-
-## 构建与测试验证
-
-构建并验证工作区完整性：
+所有提交必须通过严格的质量门禁：
 
 ```bash
-cargo fmt --all -- --check
-cargo check --workspace
+# 1. 零警告 Clippy 阻断性门禁 (Rust)
+cargo clippy --workspace --all-targets -- -D warnings
+
+# 2. 全量测试套件 (>1,670 个测试，100% 通过)
 cargo test --workspace --all-targets
+
+# 3. 桌面端前端类型检查与打包构建
+cd ui/desktop && npm run build
 ```
 
 ---
 
-## 文档与规范索引
+## 文档与参考链接
 
-- **系统架构规范：** [Custos.md](../../Custos.md) (单一事实来源 - SSOT)
-- **智能体与协作准则：** [AGENTS.md](../../AGENTS.md)
-- **文档导航目录：** [docs/README.md](../README.md)
-- **多语言本地化索引：** [docs/i18n/README.md](README.md)
+- **系统架构权威规范:** [Custos.md](../../Custos.md)
+- **智能体与开发者准则:** [AGENTS.md](../../AGENTS.md)
+- **桌面 UI 架构标准:** [.agents/rules/desktop_ui_architecture_standards.md](../../.agents/rules/desktop_ui_architecture_standards.md)
+- **Git PR 工作流规范:** [.agents/rules/git_pr_workflow.md](../../.agents/rules/git_pr_workflow.md)
+- **文档中心目录:** [docs/README.md](../README.md)
 
 ---
 
 ## 许可证
 
-仓库根目录的 [LICENSE](../../LICENSE) 目前为 MIT 许可证。Goose 衍生代码的来源与署名要求正在[上游源码清单](../development/upstream-source-map.md)中核查；不能仅凭根目录许可证判断所有衍生文件的条款。
+Custos 采用 **GNU AGPL-3.0-or-later** 许可证开源发布。包含严格的商标保护条款，禁止闭源的商业 SaaS 封装。详见 [LICENSE](../../LICENSE)。
