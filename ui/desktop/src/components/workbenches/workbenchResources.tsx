@@ -335,14 +335,8 @@ export function resolveResources(
   };
 
   return DEFAULT_RESOURCES.map((def) => {
-    if (def.id === 'browser' || def.id === 'emulator') {
-      return {
-        ...def,
-        status: 'available',
-        supportedOperations: [],
-      };
-    }
-    if (def.id === 'contacts' || def.id === 'calendar' || def.id === 'conversation' || def.id === 'notes') {
+    // Client-local presentation items that do not require daemon capabilities
+    if (def.id === 'conversation' || def.id === 'contacts' || def.id === 'calendar') {
       return { ...def, status: 'available', supportedOperations: [] };
     }
     if (!loaded || failed) {

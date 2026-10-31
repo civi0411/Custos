@@ -474,7 +474,7 @@ export const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
 
     // Shared Browser & Emulator
     if (tabType === 'browser') {
-      return (
+      return frameTabResource(
         <React.Suspense
           fallback={
             <div role="status" aria-label="Loading browser" className="h-full p-8 bg-canvas space-y-5 motion-safe:animate-pulse">
@@ -499,7 +499,7 @@ export const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
     }
 
     if (tabType === 'emulator') {
-      return (
+      return frameTabResource(
         <React.Suspense
           fallback={
             <div role="status" aria-label="Loading emulator" className="h-full p-8 bg-canvas space-y-5 motion-safe:animate-pulse">

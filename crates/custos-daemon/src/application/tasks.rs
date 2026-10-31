@@ -153,8 +153,32 @@ impl LocalApiDispatcher {
                 }
 
                 let actor = match params.actor {
-                    Some(ref a) if !a.trim().is_empty() => a.trim().to_string(),
-                    _ => "daemon_user".into(),
+                    Some(ref a) => {
+                        let trimmed = a.trim();
+                        if trimmed.is_empty() {
+                            "daemon_user".to_string()
+                        } else if trimmed.eq_ignore_ascii_case("system")
+                            || trimmed.eq_ignore_ascii_case("kernel")
+                            || trimmed.eq_ignore_ascii_case("root")
+                        {
+                            return ApiResponse::error(
+                                req.id,
+                                format!("Admission gate refused privileged actor override '{trimmed}': caller cannot claim system/kernel authority over Local API transport"),
+                            );
+                        } else if trimmed.len() > 128
+                            || !trimmed
+                                .chars()
+                                .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '@' || c == '.')
+                        {
+                            return ApiResponse::error(
+                                req.id,
+                                format!("Admission gate refused invalid actor identifier '{trimmed}': must be valid alphanumeric identifier up to 128 chars"),
+                            );
+                        } else {
+                            trimmed.to_string()
+                        }
+                    }
+                    None => "daemon_user".into(),
                 };
 
                 let resolved_workspace_root = if let Some(ref workspace_id) = params.workspace_id {
@@ -243,7 +267,7 @@ impl LocalApiDispatcher {
                 };
                 match result {
                     Ok(handle) => {
-                        if let (Some(ref sid), Some(ref out)) = (
+                        if let (Some(ref sid), Some(out)) = (
                             params.session_id.as_ref().filter(|_| !background),
                             handle.output.as_ref(),
                         ) {
