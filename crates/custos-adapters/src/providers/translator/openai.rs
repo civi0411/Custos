@@ -46,11 +46,8 @@ pub fn build_openai_request(req: &ModelTurnRequest) -> OpenAiChatRequest {
 
         let mut text_parts = Vec::new();
         for block in &msg.content {
-            match block {
-                MessageContentBlock::Text(t) => {
-                    text_parts.push(t.text.clone());
-                }
-                _ => {}
+            if let MessageContentBlock::Text(t) = block {
+                text_parts.push(t.text.clone());
             }
         }
 
@@ -194,7 +191,7 @@ pub fn parse_openai_sse_chunk(
 
             // Tool call delta
             if let Some(tc_array) = delta.get("tool_calls").and_then(|tc| tc.as_array()) {
-                if let Some(tc) = tc_array.get(0) {
+                if let Some(tc) = tc_array.first() {
                     let id = tc
                         .get("id")
                         .and_then(|v| v.as_str())

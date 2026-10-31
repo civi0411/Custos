@@ -68,7 +68,7 @@ impl GenericCliHarnessAdapter {
         if bin_str == "internal" {
             return Some(self.binary_path.clone());
         }
-        for sub in bin_str.split(|c| c == ',' || c == '|').map(str::trim) {
+        for sub in bin_str.split([',', '|']).map(str::trim) {
             let bin_name = sub.split_whitespace().next().unwrap_or(sub);
             let bin = Path::new(bin_name);
             if bin.exists() {

@@ -168,11 +168,7 @@ pub fn inspect_gguf_file(
     // 6. Memory estimation & Apple Silicon compatibility
     // Estimate based on a standard working context window (capped at 8192 for baseline estimate)
     // rather than the model's theoretical max context length (e.g. 262k), which would grossly overestimate KV cache.
-    let head_dim = if head_count > 0 {
-        embedding_length / head_count
-    } else {
-        128
-    };
+    let head_dim = embedding_length.checked_div(head_count).unwrap_or(128);
     let eval_context = context_length.min(8192);
     let kv_cache_bytes = 2 * block_count * head_count_kv * head_dim * eval_context * 2;
     let total_memory_required = file_size_bytes + kv_cache_bytes;

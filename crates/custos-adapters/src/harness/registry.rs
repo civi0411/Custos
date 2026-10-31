@@ -27,7 +27,7 @@ pub fn probe_binary_available(binary_name: &str) -> bool {
     if binary_name == "internal" || binary_name.is_empty() {
         return true;
     }
-    for sub in binary_name.split(|c| c == ',' || c == '|').map(str::trim) {
+    for sub in binary_name.split([',', '|']).map(str::trim) {
         let bin_name = sub.split_whitespace().next().unwrap_or(sub);
         let bin = Path::new(bin_name);
         if bin.exists() || which::which(bin).is_ok() {

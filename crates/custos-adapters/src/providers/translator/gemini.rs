@@ -103,13 +103,10 @@ pub fn build_gemini_request(req: &ModelTurnRequest) -> GeminiContentRequest {
 
         let mut parts = Vec::new();
         for block in &msg.content {
-            match block {
-                MessageContentBlock::Text(t) => {
-                    parts.push(GeminiPart::Text {
-                        text: t.text.clone(),
-                    });
-                }
-                _ => {}
+            if let MessageContentBlock::Text(t) = block {
+                parts.push(GeminiPart::Text {
+                    text: t.text.clone(),
+                });
             }
         }
 

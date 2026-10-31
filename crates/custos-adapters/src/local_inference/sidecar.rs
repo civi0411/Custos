@@ -439,6 +439,7 @@ pub async fn stop_sidecar() -> Result<bool, ProviderError> {
 }
 
 /// Streams chat completions directly from the managed sidecar via its OpenAI-compatible endpoint.
+#[allow(clippy::type_complexity)]
 pub async fn stream_sidecar_chat(
     model_name: &str,
     system: &str,
