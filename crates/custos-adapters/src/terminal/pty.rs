@@ -502,7 +502,7 @@ mod tests {
         let pty = PtyHandle::spawn(temp.path(), Some("echo hello_pty"), 80, 24, consumer.clone()).unwrap();
 
         assert!(pty.pid() > 0);
-        assert_eq!(pty.resize(100, 30).is_ok(), true);
+        assert!(pty.resize(100, 30).is_ok());
 
         // Allow child process to finish echo and exit
         for _ in 0..50 {

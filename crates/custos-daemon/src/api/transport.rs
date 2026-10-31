@@ -181,7 +181,7 @@ pub fn parse_github_remote(remote_url: &str) -> (Option<String>, Option<String>,
     if !s.contains("://") {
         if let Some((left, path)) = s.split_once(':') {
             if !left.contains('/') {
-                let host = left.split('@').last().unwrap_or(left).trim();
+                let host = left.split('@').next_back().unwrap_or(left).trim();
                 let path = path.trim().trim_start_matches('/');
                 let parts: Vec<&str> = path.split('/').filter(|p| !p.is_empty()).collect();
                 if parts.len() >= 2 {

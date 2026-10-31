@@ -129,7 +129,7 @@ impl TerminalPort for TerminalCoordinator {
                 let is_eof = instance.buffer.lock().map(|b| b.is_eof()).unwrap_or(false);
                 if !matches!(session.status, TerminalSessionStatus::Active)
                     && is_eof
-                    && oldest.as_ref().map_or(true, |(_, created)| session.created_at < *created)
+                    && oldest.as_ref().is_none_or(|(_, created)| session.created_at < *created)
                 {
                     oldest = Some((id.clone(), session.created_at));
                 }
@@ -345,7 +345,7 @@ impl TerminalPort for TerminalCoordinator {
         }
 
         // Sort latest first
-        result.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        result.sort_by_key(|a| std::cmp::Reverse(a.created_at));
         Ok(result)
     }
 

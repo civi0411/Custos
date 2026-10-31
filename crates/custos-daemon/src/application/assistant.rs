@@ -188,11 +188,11 @@ impl LocalApiDispatcher {
                         Err(error) => return ApiResponse::error(req.id, error.to_string()),
                     }
                 }
-                all.sort_by(|left, right| right.created_at.cmp(&left.created_at));
+                all.sort_by_key(|left| std::cmp::Reverse(left.created_at));
                 let task_filter = req.params.get("task_id").and_then(|value| value.as_str());
                 let items: Vec<OutboxActionItem> = all
                     .into_iter()
-                    .filter(|item| task_filter.map_or(true, |id| item.task_id == id))
+                    .filter(|item| task_filter.is_none_or(|id| item.task_id == id))
                     .map(|e| {
                         let recipient_str = e
                             .recipient

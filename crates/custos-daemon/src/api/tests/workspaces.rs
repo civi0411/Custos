@@ -757,7 +757,7 @@ mod git_and_github_workspace_detection_tests {
         let replay = dispatcher.handle_request(retry).await;
         assert_eq!(first.error, replay.error);
         assert_eq!(replay.id, "retry");
-        assert_eq!(store.command_ledger().get_command("error_once").unwrap().unwrap().result_json.contains("custos_command_response"), true);
+        assert!(store.command_ledger().get_command("error_once").unwrap().unwrap().result_json.contains("custos_command_response"));
 
         store.db().lock().unwrap().execute("DROP TABLE command_ledger", []).unwrap();
         let denied = dispatcher.handle_request(ApiRequest::new("denied", "v1.tasks.create", serde_json::json!({"title":"Must not exist","command_id":"deny_me"}))).await;

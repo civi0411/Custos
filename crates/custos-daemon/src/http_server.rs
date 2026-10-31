@@ -393,6 +393,10 @@ fn find_header_end(buf: &[u8]) -> Option<usize> {
     None
 }
 
+async fn write_live<W: tokio::io::AsyncWrite + Unpin>(stream: &mut W, bytes: &[u8]) -> std::io::Result<()> {
+    tokio::time::timeout(Duration::from_secs(5), async { stream.write_all(bytes).await?; stream.flush().await }).await.map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut,"Slow SSE subscriber"))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -426,7 +430,7 @@ mod tests {
         let url=format!("http://127.0.0.1:{port}/api/events?session_id={}&run_id={}",session.id,run.run_id);
         let response=reqwest::get(&url).await.unwrap();assert_eq!(response.status(),200);assert!(response.headers()["content-type"].to_str().unwrap().starts_with("text/event-stream"));
         let events=response.text().await.unwrap();assert!(events.contains("event: run"));assert!(events.contains("queued"));assert!(events.contains("completed"));assert!(events.contains("answer"));
-        let cursor=events.lines().filter_map(|line|line.strip_prefix("id: ")).last().unwrap();
+        let cursor=events.lines().filter_map(|line|line.strip_prefix("id: ")).next_back().unwrap();
         let response=reqwest::Client::new().get(&url).header("Last-Event-ID",cursor).send().await.unwrap();let replay=response.text().await.unwrap();assert!(replay.contains("event: snapshot"));assert!(!replay.contains("text_delta"));
         let wrong=format!("http://127.0.0.1:{port}/api/events?session_id={}&run_id={}",other.id,run.run_id);assert_eq!(reqwest::get(wrong).await.unwrap().status(),403);
         server.abort();
@@ -492,8 +496,4 @@ mod tests {
         // Without CUSTOS_IPC_TOKEN, allowed origin is accepted
         assert!(is_authorized_ipc_client(Some("http://localhost:1420"), None, None, None));
     }
-}
-
-async fn write_live<W: tokio::io::AsyncWrite + Unpin>(stream: &mut W, bytes: &[u8]) -> std::io::Result<()> {
-    tokio::time::timeout(Duration::from_secs(5), async { stream.write_all(bytes).await?; stream.flush().await }).await.map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut,"Slow SSE subscriber"))?
 }

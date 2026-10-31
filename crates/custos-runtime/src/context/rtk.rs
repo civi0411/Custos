@@ -142,11 +142,12 @@ impl RtkPruner {
         }
 
         // Iterate through intermediate messages (skip first message and last message)
-        for idx in 1..(total_messages - 1) {
+        let end_idx = total_messages.saturating_sub(1);
+        #[allow(clippy::needless_range_loop)]
+        for idx in 1..end_idx {
             if current_total <= target_max_tokens {
                 break;
             }
-
             let msg = &mut messages[idx];
             // Prune ToolResponse blocks first (they are usually verbose stdout / file dumps)
             for block in &mut msg.content {
