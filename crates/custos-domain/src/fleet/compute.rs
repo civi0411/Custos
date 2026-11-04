@@ -559,6 +559,167 @@ pub enum CloudPodStatus {
     Terminated,
 }
 
+/// Device architecture or acceleration backend kind
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeviceKind {
+    Cpu,
+    Cuda,
+    Mps,
+    Rocm,
+}
+
+impl std::fmt::Display for DeviceKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Cpu => write!(f, "cpu"),
+            Self::Cuda => write!(f, "cuda"),
+            Self::Mps => write!(f, "mps"),
+            Self::Rocm => write!(f, "rocm"),
+        }
+    }
+}
+
+/// Logical descriptor of an inventoried compute device (CPU or accelerator)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ComputeDeviceRef {
+    pub device_id: String,
+    pub backend: ComputeBackendKind,
+    pub device_kind: DeviceKind,
+    pub ordinal: u32,
+    pub name: String,
+    pub total_memory_mb: u64,
+    pub available_memory_mb: Option<u64>,
+    pub bus_id: Option<String>,
+    pub uuid: Option<String>,
+}
+
+impl ComputeDeviceRef {
+    pub fn cpu() -> Self {
+        Self {
+            device_id: "dev_cpu_0".into(),
+            backend: ComputeBackendKind::Local,
+            device_kind: DeviceKind::Cpu,
+            ordinal: 0,
+            name: "Host CPU".into(),
+            total_memory_mb: 16384,
+            available_memory_mb: Some(8192),
+            bus_id: None,
+            uuid: None,
+        }
+    }
+
+    pub fn apple_mps(memory_mb: u64) -> Self {
+        Self {
+            device_id: "dev_mps_0".into(),
+            backend: ComputeBackendKind::Local,
+            device_kind: DeviceKind::Mps,
+            ordinal: 0,
+            name: "Apple Silicon Metal (MPS)".into(),
+            total_memory_mb: memory_mb,
+            available_memory_mb: Some(memory_mb * 3 / 4),
+            bus_id: None,
+            uuid: None,
+        }
+    }
+
+    pub fn cuda(ordinal: u32, name: impl Into<String>, memory_mb: u64, uuid: Option<String>) -> Self {
+        Self {
+            device_id: format!("dev_cuda_{ordinal}"),
+            backend: ComputeBackendKind::Local,
+            device_kind: DeviceKind::Cuda,
+            ordinal,
+            name: name.into(),
+            total_memory_mb: memory_mb,
+            available_memory_mb: Some(memory_mb),
+            bus_id: None,
+            uuid,
+        }
+    }
+}
+
+/// Category of computational workload claiming resources
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ComputeWorkloadKind {
+    NotebookKernel,
+    TrainingRun,
+    EvaluationRun,
+    LocalInference,
+    BackgroundEmbedding,
+    DocumentOcr,
+}
+
+impl ComputeWorkloadKind {
+    pub fn is_cooperative_background(&self) -> bool {
+        matches!(self, Self::BackgroundEmbedding | Self::DocumentOcr)
+    }
+
+    pub fn priority_rank(&self) -> u8 {
+        match self {
+            Self::NotebookKernel => 10,
+            Self::LocalInference => 9,
+            Self::TrainingRun => 8,
+            Self::EvaluationRun => 7,
+            Self::DocumentOcr => 3,
+            Self::BackgroundEmbedding => 2,
+        }
+    }
+}
+
+/// Placement decision for an optional consumer workload (Embeddings / OCR)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OptionalConsumerPlacement {
+    pub workload_kind: ComputeWorkloadKind,
+    pub target_device_id: String,
+    pub is_accelerated: bool,
+    pub batch_size: u32,
+    pub allows_cloud_egress: bool,
+    pub reason: String,
+}
+
+/// Lifecycle state of a workload resource lease
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkloadLeaseStatus {
+    Admitted,
+    Queued,
+    Active,
+    Released,
+    Preempted,
+}
+
+/// Admitted or active lease for a compute workload on a target device
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkloadLease {
+    pub lease_id: String,
+    pub device_id: String,
+    pub workload_kind: ComputeWorkloadKind,
+    pub owner_id: String,
+    pub is_exclusive: bool,
+    pub status: WorkloadLeaseStatus,
+    pub acquired_at: i64,
+    pub released_at: Option<i64>,
+}
+
+/// Inbound request to reserve compute capacity for a workload
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkloadAdmissionRequest {
+    pub workload_kind: ComputeWorkloadKind,
+    pub owner_id: String,
+    pub preferred_device_id: Option<String>,
+    pub require_exclusive: bool,
+    pub required_memory_mb: Option<u64>,
+}
+
+/// Structured outcome of an admission decision
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WorkloadAdmissionVerdict {
+    Admitted { lease: WorkloadLease },
+    Queued { queue_position: usize, reason: String },
+    Rejected { reason: String },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -719,4 +880,42 @@ mod tests {
         assert_eq!(manifest.files.len(), 1);
         assert!(manifest.optimizer_state_preserved);
     }
+
+    #[test]
+    fn test_compute_device_ref_and_admission_models() {
+        let cpu = ComputeDeviceRef::cpu();
+        assert_eq!(cpu.device_kind, DeviceKind::Cpu);
+        assert_eq!(cpu.device_id, "dev_cpu_0");
+
+        let mps = ComputeDeviceRef::apple_mps(32768);
+        assert_eq!(mps.device_kind, DeviceKind::Mps);
+        assert_eq!(mps.total_memory_mb, 32768);
+        assert_eq!(mps.available_memory_mb, Some(24576));
+
+        let cuda = ComputeDeviceRef::cuda(0, "NVIDIA RTX 4090", 24576, Some("GPU-UUID-1".into()));
+        assert_eq!(cuda.device_kind, DeviceKind::Cuda);
+        assert_eq!(cuda.ordinal, 0);
+
+        let req = WorkloadAdmissionRequest {
+            workload_kind: ComputeWorkloadKind::TrainingRun,
+            owner_id: "run_123".into(),
+            preferred_device_id: Some(cuda.device_id.clone()),
+            require_exclusive: true,
+            required_memory_mb: Some(20000),
+        };
+        assert!(req.require_exclusive);
+
+        let lease = WorkloadLease {
+            lease_id: "lease_abc".into(),
+            device_id: cuda.device_id,
+            workload_kind: req.workload_kind,
+            owner_id: req.owner_id,
+            is_exclusive: true,
+            status: WorkloadLeaseStatus::Admitted,
+            acquired_at: 1000,
+            released_at: None,
+        };
+        assert_eq!(lease.status, WorkloadLeaseStatus::Admitted);
+    }
 }
+

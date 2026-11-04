@@ -17,6 +17,7 @@ pub enum RunStatus {
     Completed,
     Failed,
     Cancelled,
+    Uncertain,
 }
 
 impl std::fmt::Display for RunStatus {
@@ -28,6 +29,7 @@ impl std::fmt::Display for RunStatus {
             RunStatus::Completed => write!(f, "completed"),
             RunStatus::Failed => write!(f, "failed"),
             RunStatus::Cancelled => write!(f, "cancelled"),
+            RunStatus::Uncertain => write!(f, "uncertain"),
         }
     }
 }
@@ -46,8 +48,13 @@ impl RunStatus {
                     | RunStatus::Completed
                     | RunStatus::Failed
                     | RunStatus::Cancelled
+                    | RunStatus::Uncertain
             ),
             RunStatus::Suspended => matches!(next, RunStatus::Active | RunStatus::Cancelled),
+            RunStatus::Uncertain => matches!(
+                next,
+                RunStatus::Completed | RunStatus::Failed | RunStatus::Cancelled
+            ),
             RunStatus::Completed | RunStatus::Failed | RunStatus::Cancelled => false,
         }
     }
@@ -295,6 +302,8 @@ pub struct StartRunCommand {
     pub task_id: String,
     pub actor: String,
     #[serde(default)]
+    pub node_id: Option<String>,
+    #[serde(default)]
     pub workflow_revision: Option<String>,
     #[serde(default)]
     pub preferred_mode: Option<String>,
@@ -323,6 +332,7 @@ impl StartRunCommand {
         Self {
             task_id: task_id.into(),
             actor: actor.into(),
+            node_id: None,
             workflow_revision: None,
             preferred_mode: None,
             harness_id: None,
@@ -335,6 +345,11 @@ impl StartRunCommand {
             reasoning_effort: None,
             provider_account_id: None,
         }
+    }
+
+    pub fn with_node_id(mut self, node_id: impl Into<String>) -> Self {
+        self.node_id = Some(node_id.into());
+        self
     }
 
     pub fn with_workflow_revision(mut self, revision: impl Into<String>) -> Self {
@@ -770,4 +785,12 @@ pub struct LiveRunReplay {
     pub events: Vec<LiveRunEvent>,
     pub snapshot: LiveRunSnapshot,
     pub gap: bool,
+}
+
+/// Summary of entities reconciled during startup / crash recovery (G13).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct ReconciliationSummary {
+    pub outbox_reconciled: usize,
+    pub runs_reconciled: usize,
+    pub attempts_reconciled: usize,
 }

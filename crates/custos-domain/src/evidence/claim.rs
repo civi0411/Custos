@@ -6,15 +6,6 @@ use serde::{Deserialize, Serialize};
 use crate::error::DomainError;
 use crate::ids::new_id;
 
-/// Legacy Claim representation for backwards compatibility
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Claim {
-    pub id: String,
-    pub statement: String,
-    pub supported_by: Vec<String>,
-    pub refuted_by: Vec<String>,
-}
-
 /// 4-Level Grounding Status enforcing zero false-passes
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -256,6 +247,176 @@ pub struct ArtifactLineageNode {
     pub timestamp: i64,
 }
 
+/// Evaluation status for research claim verification
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AssessmentStatus {
+    Verified,
+    Approved,
+    Passed,
+    Rejected,
+    Uncertain,
+}
+
+impl AssessmentStatus {
+    pub fn is_passing(&self) -> bool {
+        matches!(self, Self::Verified | Self::Approved | Self::Passed)
+    }
+}
+
+/// Natural Language Inference (NLI) verdict for claim grounding
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EntailmentVerdict {
+    Entailed { confidence: f32, rationale: String },
+    Neutral { confidence: f32, rationale: String },
+    Contradicted { confidence: f32, rationale: String },
+}
+
+impl EntailmentVerdict {
+    pub fn is_entailed(&self) -> bool {
+        matches!(self, Self::Entailed { .. })
+    }
+
+    pub fn confidence(&self) -> f32 {
+        match self {
+            Self::Entailed { confidence, .. }
+            | Self::Neutral { confidence, .. }
+            | Self::Contradicted { confidence, .. } => *confidence,
+        }
+    }
+
+    pub fn rationale(&self) -> &str {
+        match self {
+            Self::Entailed { rationale, .. }
+            | Self::Neutral { rationale, .. }
+            | Self::Contradicted { rationale, .. } => rationale,
+        }
+    }
+}
+
+/// Cryptographically bound assessment record for research claim verification
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaimAssessmentRecord {
+    pub id: String,
+    pub claim_id: String,
+    pub passage_anchor_id: Option<String>,
+    pub source_version: Option<String>,
+    pub status: AssessmentStatus,
+    pub confidence_score: f32,
+    pub is_stale: bool,
+    pub evaluator_id: String,
+    pub assessed_at: i64,
+}
+
+impl ClaimAssessmentRecord {
+    pub fn new(
+        claim_id: impl Into<String>,
+        status: AssessmentStatus,
+        confidence_score: f32,
+        evaluator_id: impl Into<String>,
+        assessed_at: i64,
+    ) -> Result<Self, DomainError> {
+        let claim_id = claim_id.into();
+        let evaluator_id = evaluator_id.into();
+        if claim_id.trim().is_empty() {
+            return Err(DomainError::Validation("Assessment requires non-empty claim_id".into()));
+        }
+        if !(0.0..=1.0).contains(&confidence_score) {
+            return Err(DomainError::Validation("Confidence score must be between 0.0 and 1.0".into()));
+        }
+        Ok(Self {
+            id: new_id("assess"),
+            claim_id,
+            passage_anchor_id: None,
+            source_version: None,
+            status,
+            confidence_score,
+            is_stale: false,
+            evaluator_id,
+            assessed_at,
+        })
+    }
+
+    pub fn with_passage(mut self, passage_anchor_id: impl Into<String>) -> Self {
+        self.passage_anchor_id = Some(passage_anchor_id.into());
+        self
+    }
+
+    pub fn with_source_version(mut self, version: impl Into<String>) -> Self {
+        self.source_version = Some(version.into());
+        self
+    }
+
+    pub fn is_valid_and_fresh(&self) -> bool {
+        self.status.is_passing() && !self.is_stale
+    }
+}
+
+impl ResearchClaim {
+    /// Elevates grounding level based on a verified assessment record
+    pub fn elevate_grounding(&mut self, assessment: &ClaimAssessmentRecord) -> Result<(), DomainError> {
+        if assessment.claim_id != self.id {
+            return Err(DomainError::Validation(format!(
+                "Assessment target {} does not match claim {}",
+                assessment.claim_id, self.id
+            )));
+        }
+        if assessment.is_stale {
+            return Err(DomainError::Validation("Cannot elevate claim with stale assessment".into()));
+        }
+        if !assessment.status.is_passing() {
+            return Err(DomainError::Validation(format!(
+                "Assessment status {:?} is not passing",
+                assessment.status
+            )));
+        }
+
+        self.confidence_score = assessment.confidence_score;
+
+        if self.evidence_links.is_empty() && assessment.passage_anchor_id.is_none() {
+            self.level = ClaimGroundingLevel::L1Cited;
+        } else if assessment.confidence_score >= 0.70 {
+            self.level = ClaimGroundingLevel::L2Verified;
+        } else {
+            self.level = ClaimGroundingLevel::L1Cited;
+        }
+
+        Ok(())
+    }
+
+    /// Adds a cryptographically linked evidence passage to this claim
+    pub fn link_evidence(&mut self, link: ClaimEvidenceLink) -> Result<(), DomainError> {
+        if link.passage_anchor_id.trim().is_empty() {
+            return Err(DomainError::Validation("Evidence link requires valid passage_anchor_id".into()));
+        }
+        self.evidence_links.push(link);
+        if self.level == ClaimGroundingLevel::L0Ungrounded {
+            self.level = ClaimGroundingLevel::L1Cited;
+        }
+        Ok(())
+    }
+
+    /// Seals the claim proof into a CAS URI (L3Sealed)
+    pub fn seal_cas_proof(&mut self, uri: impl Into<String>) -> Result<(), DomainError> {
+        if self.level != ClaimGroundingLevel::L2Verified {
+            return Err(DomainError::Validation("Claim must be L2Verified before sealing CAS proof".into()));
+        }
+        let uri = uri.into();
+        if !uri.starts_with("cas://") {
+            return Err(DomainError::Validation("Proof URI must start with cas://".into()));
+        }
+        self.sealed_proof_uri = Some(uri);
+        self.level = ClaimGroundingLevel::L3Sealed;
+        Ok(())
+    }
+
+    pub fn is_verified_for_coding(&self) -> bool {
+        matches!(self.level, ClaimGroundingLevel::L2Verified | ClaimGroundingLevel::L3Sealed)
+            && self.confidence_score >= 0.70
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -282,5 +443,50 @@ mod tests {
             assert_eq!(value.start_offset, 10);
             assert_eq!(value.end_offset, 20);
         }
+    }
+
+    #[test]
+    fn test_claim_elevation_and_cas_sealing_state_machine() {
+        let mut claim = ResearchClaimProposal::new("LoRA achieves parity with full fine-tuning", 100)
+            .unwrap()
+            .into_unverified_claim();
+        assert_eq!(claim.level, ClaimGroundingLevel::L0Ungrounded);
+        assert!(!claim.is_verified_for_coding());
+
+        // Linking evidence passage moves it to L1Cited
+        let link = ClaimEvidenceLink {
+            passage_anchor_id: "anchor_lora_p4".into(),
+            source_title: Some("LoRA Paper".into()),
+            exact_text: Some("Table 1 shows parity on GLUE benchmark".into()),
+            relation: EvidenceRelation::Supports,
+            rationale: "Empirical parity on GLUE".into(),
+            verified_by: "alce_engine".into(),
+        };
+        assert!(claim.link_evidence(link).is_ok());
+        assert_eq!(claim.level, ClaimGroundingLevel::L1Cited);
+
+        // Cannot seal CAS from L1
+        assert!(claim.seal_cas_proof("cas://bafytest123").is_err());
+
+        // Assessment with verified status elevates to L2Verified
+        let assess = ClaimAssessmentRecord::new(
+            &claim.id,
+            AssessmentStatus::Verified,
+            0.92,
+            "alce_evaluator_v1",
+            105,
+        )
+        .unwrap()
+        .with_passage("anchor_lora_p4")
+        .with_source_version("sha256:abc1234");
+
+        assert!(claim.elevate_grounding(&assess).is_ok());
+        assert_eq!(claim.level, ClaimGroundingLevel::L2Verified);
+        assert!(claim.is_verified_for_coding());
+
+        // Now sealing CAS proof succeeds and moves to L3Sealed
+        assert!(claim.seal_cas_proof("cas://bafytest123").is_ok());
+        assert_eq!(claim.level, ClaimGroundingLevel::L3Sealed);
+        assert_eq!(claim.sealed_proof_uri.as_deref(), Some("cas://bafytest123"));
     }
 }

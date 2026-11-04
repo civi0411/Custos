@@ -1,49 +1,71 @@
 //! Custos Core Domain
 //!
 //! Pure, deterministic domain models with ZERO side effects and ZERO external framework dependencies.
-//! All models are serializable and validate state machine transitions strictly.
+//! Organized by Bounded Contexts:
+//! - `task`: Task, Run, Attempt, Continuation, Workflow, Recipe
+//! - `session`: Session, Assistant, Automation
+//! - `authority`: Action, Permit, Approval, Capability
+//! - `evidence`: Evidence, Claim, Fact, Synthesis, Review, ExecutionRecord, ExperimentAttempt
+//! - `context`: ContextPack, Memory, Annotation
+//! - `workspace`: Workspace, WorkspaceFiles, Artifact, Terminal, Repo
+//! - `research`: Notebook, Note
+//! - `fleet`: Compute, RemoteFleet, Browser, ProviderConfig
+//! - `shared`: IDs, Error, Types, Budget, Span, Packet
+//! - `oi`: Orchestration Intelligence (Topologies, Decision)
 
-pub mod action;
-pub mod annotation;
-pub mod approval;
-pub mod artifact;
-pub mod assistant;
 pub mod authority;
-pub mod automation;
-pub mod browser;
-pub mod budget;
-pub mod capability;
-pub mod claim;
-pub mod compute;
 pub mod context;
-pub mod continuation;
-pub mod decision;
-pub mod error;
 pub mod evidence;
-pub mod execution_record;
-pub mod experiment_attempt;
-pub mod fact;
-pub mod ids;
-pub mod memory;
-pub mod note;
-pub mod notebook;
+pub mod fleet;
 pub mod oi;
-pub mod packet;
-pub mod provider_config;
-pub mod recipe;
-pub mod remote_fleet;
-pub mod repo;
-pub mod review;
-pub mod run;
+pub mod pipeline;
+pub mod quant;
+pub mod research;
 pub mod session;
-pub mod span;
-pub mod synthesis;
+pub mod shared;
 pub mod task;
-pub mod terminal;
-pub mod types;
-pub mod workflow;
 pub mod workspace;
-pub mod workspace_files;
+
+// Backward-compatible module paths for existing callers
+pub use authority::action;
+pub use authority::approval;
+pub use authority::capability;
+pub use context::annotation;
+pub use context::memory;
+pub use evidence::claim;
+pub use evidence::execution_record;
+pub use evidence::experiment_attempt;
+pub use evidence::fact;
+pub use evidence::review;
+pub use evidence::synthesis;
+pub use fleet::browser;
+pub use fleet::compute;
+pub use fleet::provider_config;
+pub use fleet::remote_fleet;
+pub use quant::backtest;
+pub use quant::factor;
+pub use quant::order;
+pub use quant::risk;
+pub use research::experiment;
+pub use research::note;
+pub use research::notebook;
+pub use session::assistant;
+pub use session::automation;
+pub use shared::budget;
+pub use shared::error;
+pub use shared::ids;
+pub use shared::packet;
+pub use shared::span;
+pub use shared::types;
+pub use task::continuation;
+pub use task::decision;
+pub use task::recipe;
+pub use task::run;
+pub use task::workflow;
+pub use workspace::artifact;
+pub use workspace::repo;
+pub use workspace::terminal;
+pub use workspace::workspace_files;
 
 // Explicit re-exports of public domain surface (No glob *)
 pub use action::{
@@ -75,14 +97,17 @@ pub use browser::{
 pub use budget::{Budget, Headroom, ReservationToken};
 pub use capability::{CapabilityDescriptor, CapabilityGroup, CapabilityManifest, CapabilityStatus};
 pub use claim::{
-    ArtifactLineageNode, Claim, ClaimEvidenceLink, ClaimGroundingLevel, EnvSnapshot,
-    EvidenceRelation, PassageAnchor, PassageAnchorProposal, ResearchClaim, ResearchClaimProposal,
-    ResearchExperimentRun, SourceProposal, SourceRecord,
+    ArtifactLineageNode, AssessmentStatus, ClaimAssessmentRecord, ClaimEvidenceLink,
+    ClaimGroundingLevel, EntailmentVerdict, EnvSnapshot, EvidenceRelation, PassageAnchor,
+    PassageAnchorProposal, ResearchClaim, ResearchClaimProposal, ResearchExperimentRun,
+    SourceProposal, SourceRecord,
 };
 pub use compute::{
     AcceleratorSpec, CheckpointCommitStatus, CheckpointFileEntry, CloudPodLease, CloudPodStatus,
-    ComputeBackendKind, CompatibilityGateEvaluation, CompatibilityVerdict, HardwareAdaptationPlan,
-    ResumabilityLevel, TrainingCheckpointManifest,
+    CompatibilityGateEvaluation, CompatibilityVerdict, ComputeBackendKind, ComputeDeviceRef,
+    ComputeWorkloadKind, DeviceKind, HardwareAdaptationPlan, OptionalConsumerPlacement,
+    ResumabilityLevel, TrainingCheckpointManifest, WorkloadAdmissionRequest,
+    WorkloadAdmissionVerdict, WorkloadLease, WorkloadLeaseStatus,
 };
 pub use context::{
     ContextDeliveryState, ContextItem, ContextPack, ContextReceipt, OmittedContextReason,
@@ -118,7 +143,7 @@ pub use memory::{
 pub use note::{NoteRecord, NoteVersionRecord};
 pub use notebook::{
     CellExecutionStatus, ExecuteCellParams, ExecuteCellResult, KernelStatus, NotebookCell,
-    NotebookCellType, NotebookKernelState,
+    NotebookCellType, NotebookDocument, NotebookKernelBinding, NotebookKernelState,
 };
 pub use packet::ContinuationPacket as PacketContinuation;
 pub use provider_config::{
@@ -126,6 +151,18 @@ pub use provider_config::{
     LocalModelFolder, LocalModelLoadProfile, LocalModelLoadRequest, LocalModelPreflightRequest,
     LocalModelPreflightResponse, ModelCatalogOption, ModelCatalogResult, ModelCompatibility,
     ModelPricing, OAuthTokenRecord, ProbedModel, ProviderConfig,
+};
+pub use experiment::{
+    FrozenTrainingRecipe, ModelEvaluationReport, ModelEvaluationSpec, TrainingExecutionReceipt,
+    TrainingStepTelemetry,
+};
+pub use pipeline::{
+    AstSyntaxInvariant, ClosedBarInvariant, DataInvariant, DataModality, EvidenceGroundingInvariant,
+    GovernedOutboxInvariant, PipelineRecord, PipelineStage,
+};
+pub use quant::{
+    AlphaFactor, BacktestTearsheet, MonthlyReturn, OhlcvBar, OrderDirection, OrderTicket,
+    OrderTicketStatus, OrderType, RiskBreach, RiskPermitConfig,
 };
 pub use recipe::{EnvironmentSpec, Recipe, RecipeInput};
 pub use remote_fleet::{
@@ -138,9 +175,9 @@ pub use review::{
     ReviewTargetType, ReviewerRecord,
 };
 pub use run::{
-    CancelReceipt, ClaimStatus, DispatchClaim, LaunchAttempt, LaunchStatus, NodeAttempt, Run,
-    RunHandle, RunStatus, StartRunCommand, UsageExecutorKind, UsageMeasurement, UsageRecord,
-    WorkerRun,
+    CancelReceipt, ClaimStatus, DispatchClaim, LaunchAttempt, LaunchStatus, NodeAttempt,
+    ReconciliationSummary, Run, RunHandle, RunStatus, StartRunCommand, UsageExecutorKind,
+    UsageMeasurement, UsageRecord, WorkerRun,
 };
 pub use run::{LiveRunEvent, LiveRunReplay, LiveRunSnapshot};
 pub use session::{
@@ -160,6 +197,7 @@ pub use terminal::{
     TerminalOutputChunk, TerminalSession, TerminalSessionId, TerminalSessionStatus,
 };
 pub use workflow::{
+    CandidateExecutionReport, CandidateRaceResult, CandidateRaceSpec, ModelCandidateConfig,
     RevisionNode, WorkflowIR, WorkflowNodeIR, WorkflowPlan, WorkflowRevision, WorkflowStep,
 };
 pub use workspace::{

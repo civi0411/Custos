@@ -91,6 +91,7 @@ pub enum WorkbenchLens {
     Assistant,
     Coding,
     Research,
+    Quant,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

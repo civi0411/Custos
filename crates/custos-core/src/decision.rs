@@ -59,6 +59,7 @@ impl DecisionSnapshotExtractor {
             required_capabilities,
             egress_rules: Vec::new(),
             unknowns: Vec::new(),
+            available_executors: Vec::new(),
         })
     }
 }

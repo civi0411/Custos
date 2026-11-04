@@ -26,6 +26,8 @@ pub struct DecisionSnapshot {
     pub egress_rules: Vec<String>,
     #[serde(default)]
     pub unknowns: Vec<String>,
+    #[serde(default)]
+    pub available_executors: Vec<String>,
 }
 
 impl DecisionSnapshot {
@@ -44,6 +46,7 @@ impl DecisionSnapshot {
             required_capabilities: Vec::new(),
             egress_rules: Vec::new(),
             unknowns: Vec::new(),
+            available_executors: Vec::new(),
         }
     }
 }

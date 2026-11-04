@@ -1,7 +1,5 @@
-pub mod bubblewrap;
-pub mod path_sandbox;
-pub mod seatbelt;
+//! Sandbox policy enforcement for workspace path containment.
 
-pub use bubblewrap::*;
+pub mod path_sandbox;
+
 pub use path_sandbox::*;
-pub use seatbelt::*;

@@ -23,3 +23,4 @@ pub use evidence::*;
 pub use kernel::*;
 pub use oi::*;
 pub use sandbox_policy as sandbox;
+pub use contracts::skill;

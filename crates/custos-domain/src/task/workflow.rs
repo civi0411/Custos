@@ -159,6 +159,110 @@ impl WorkflowRevision {
     }
 }
 
+/// Specification for multi-candidate race execution across isolated worktrees.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CandidateRaceSpec {
+    pub id: String,
+    pub task_id: String,
+    pub base_workspace_id: String,
+    pub candidates: Vec<ModelCandidateConfig>,
+    pub test_command: Option<String>,
+    pub timeout_seconds: u64,
+    #[serde(default = "Utc::now")]
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelCandidateConfig {
+    pub candidate_id: String,
+    pub model_id: String,
+    pub harness_id: String,
+    #[serde(default)]
+    pub workspace_id: Option<String>,
+    pub temperature: Option<f32>,
+}
+
+impl ModelCandidateConfig {
+    pub fn new(
+        candidate_id: impl Into<String>,
+        model_id: impl Into<String>,
+        harness_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            candidate_id: candidate_id.into(),
+            model_id: model_id.into(),
+            harness_id: harness_id.into(),
+            workspace_id: None,
+            temperature: None,
+        }
+    }
+
+    pub fn with_workspace_id(mut self, ws_id: impl Into<String>) -> Self {
+        self.workspace_id = Some(ws_id.into());
+        self
+    }
+
+    pub fn with_temperature(mut self, temp: f32) -> Self {
+        self.temperature = Some(temp);
+        self
+    }
+}
+
+impl CandidateRaceSpec {
+    pub fn new(
+        task_id: impl Into<String>,
+        base_workspace_id: impl Into<String>,
+        candidates: Vec<ModelCandidateConfig>,
+    ) -> Self {
+        Self {
+            id: new_id("race"),
+            task_id: task_id.into(),
+            base_workspace_id: base_workspace_id.into(),
+            candidates,
+            test_command: None,
+            timeout_seconds: 600,
+            created_at: Utc::now(),
+        }
+    }
+
+    pub fn with_test_command(mut self, cmd: impl Into<String>) -> Self {
+        self.test_command = Some(cmd.into());
+        self
+    }
+
+    pub fn with_timeout_seconds(mut self, timeout: u64) -> Self {
+        self.timeout_seconds = timeout;
+        self
+    }
+}
+
+/// Individual candidate execution and verification scorecard.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CandidateExecutionReport {
+    pub candidate_id: String,
+    pub model_id: String,
+    pub workspace_id: String,
+    pub worktree_path: String,
+    pub test_passed: bool,
+    pub tests_succeeded: u32,
+    pub tests_failed: u32,
+    pub test_output: String,
+    pub modified_files: Vec<String>,
+    pub total_tokens: u64,
+    pub execution_duration_ms: u64,
+}
+
+/// Aggregated multi-candidate race outcome and winning verdict.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CandidateRaceResult {
+    pub race_id: String,
+    pub task_id: String,
+    pub winner_candidate_id: Option<String>,
+    pub candidate_reports: Vec<CandidateExecutionReport>,
+    #[serde(default = "Utc::now")]
+    pub completed_at: DateTime<Utc>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,5 +277,22 @@ mod tests {
         assert_eq!(ir.nodes.len(), 2);
         assert_eq!(ir.dependencies.len(), 1);
         assert_eq!(ir.dependencies[0], ("node_1".into(), "node_2".into()));
+    }
+
+    #[test]
+    fn test_candidate_race_spec_construction() {
+        let candidates = vec![
+            ModelCandidateConfig::new("cand_claude", "claude-3-5-sonnet", "claude_code"),
+            ModelCandidateConfig::new("cand_gpt4o", "gpt-4o", "generic_cli"),
+        ];
+        let spec = CandidateRaceSpec::new("task_race_01", "ws_base_01", candidates)
+            .with_test_command("cargo test")
+            .with_timeout_seconds(300);
+
+        assert!(spec.id.starts_with("race_"));
+        assert_eq!(spec.task_id, "task_race_01");
+        assert_eq!(spec.candidates.len(), 2);
+        assert_eq!(spec.test_command, Some("cargo test".into()));
+        assert_eq!(spec.timeout_seconds, 300);
     }
 }

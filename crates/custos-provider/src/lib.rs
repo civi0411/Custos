@@ -10,6 +10,7 @@
 //! processes or effect authorization. Concrete implementations live in
 //! `custos-adapters`; production composition lives in `custos-daemon`.
 
+pub mod bridge;
 pub mod catalog;
 pub mod conformance;
 pub mod events;
@@ -20,6 +21,7 @@ pub mod traits;
 pub mod turn;
 pub mod types;
 
+pub use bridge::*;
 pub use catalog::*;
 pub use conformance::*;
 pub use events::*;

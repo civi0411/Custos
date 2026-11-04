@@ -12,22 +12,6 @@ description = "The Custos Development Kit (SDK) for Rust client applications and
 name = "custos_sdk"
 crate-type = ["cdylib", "staticlib", "rlib"]
 
-[[bin]]
-name = "custos-uniffi-bindgen"
-path = "src/bin/uniffi-bindgen.rs"
-required-features = ["uniffi"]
-
-[features]
-default = []
-uniffi = [
-    "dep:uniffi",
-    "dep:thiserror",
-    "dep:anyhow",
-    "dep:futures",
-    "dep:rmcp",
-    "dep:base64",
-]
-
 [dependencies]
 agent-client-protocol = { workspace = true }
 agent-client-protocol-schema = { workspace = true }
@@ -41,13 +25,6 @@ tokio = { workspace = true, features = ["sync", "net", "io-util", "time"] }
 chrono = { workspace = true }
 uuid = { workspace = true, features = ["v4", "serde"] }
 dirs = { workspace = true }
-
-uniffi = { version = "0.32", optional = true }
-thiserror = { version = "2", optional = true }
-futures = { workspace = true, optional = true }
-anyhow = { workspace = true, optional = true }
-rmcp = { workspace = true, optional = true }
-base64 = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "process", "io-std", "io-util"] }
