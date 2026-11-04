@@ -6,7 +6,7 @@ use custos_domain::{
 };
 
 impl LocalApiDispatcher {
-    pub(in crate::api) async fn handle_research_notebooks(
+    pub(crate) async fn handle_research_notebooks(
         &self,
         req: ApiRequest,
     ) -> ApiResponse {
@@ -71,6 +71,7 @@ impl LocalApiDispatcher {
                         return ApiResponse::error(req.id, "Missing or empty session_id parameter")
                     }
                 };
+                let notebook_id = req.params.get("notebook_id").and_then(|v| v.as_str());
                 let research = match self.research.as_ref() {
                     Some(r) => r,
                     None => {
@@ -80,7 +81,7 @@ impl LocalApiDispatcher {
                         )
                     }
                 };
-                match research.list_notebook_cells(session_id) {
+                match research.list_notebook_cells_scoped(session_id, notebook_id) {
                     Ok(cells) => match serde_json::to_value(&cells) {
                         Ok(val) => ApiResponse::success(req.id, val),
                         Err(e) => ApiResponse::error(req.id, e.to_string()),
@@ -95,6 +96,7 @@ impl LocalApiDispatcher {
                         return ApiResponse::error(req.id, "Missing or empty session_id parameter")
                     }
                 };
+                let notebook_id = req.params.get("notebook_id").and_then(|v| v.as_str());
                 let mut cells: Vec<NotebookCell> = match req
                     .params
                     .get("cells")
@@ -121,7 +123,6 @@ impl LocalApiDispatcher {
                     }
                 };
                 if let Some(kernel) = self.python_kernel.as_ref() {
-                    let notebook_id = req.params.get("notebook_id").and_then(|v| v.as_str());
                     match kernel
                         .get_status_scoped(
                             session_id,
@@ -143,11 +144,16 @@ impl LocalApiDispatcher {
                         _ => {}
                     }
                 }
-                let stored = match research.list_notebook_cells(session_id) {
+                let stored = match research.list_notebook_cells_scoped(session_id, notebook_id) {
                     Ok(cells) => cells,
                     Err(e) => return ApiResponse::error(req.id, e.to_string()),
                 };
                 for cell in &mut cells {
+                    if let Some(nb) = notebook_id {
+                        if cell.notebook_id.is_none() {
+                            cell.notebook_id = Some(nb.to_string());
+                        }
+                    }
                     if let Some(previous) = stored.iter().find(|saved| saved.id == cell.id) {
                         if previous.source == cell.source && previous.cell_type == cell.cell_type {
                             cell.execution_count = previous.execution_count;
@@ -156,6 +162,7 @@ impl LocalApiDispatcher {
                             cell.stderr = previous.stderr.clone();
                             cell.output_image = previous.output_image.clone();
                             cell.wall_ms = previous.wall_ms;
+                            cell.cell_version = previous.cell_version.or(Some(1));
                         } else {
                             cell.execution_count = None;
                             cell.status = CellExecutionStatus::Idle;
@@ -163,6 +170,7 @@ impl LocalApiDispatcher {
                             cell.stderr = None;
                             cell.output_image = None;
                             cell.wall_ms = None;
+                            cell.cell_version = Some(previous.cell_version.unwrap_or(1) + 1);
                         }
                         cell.epoch = previous.epoch;
                     } else {
@@ -173,9 +181,10 @@ impl LocalApiDispatcher {
                         cell.output_image = None;
                         cell.wall_ms = None;
                         cell.epoch = 0;
+                        cell.cell_version = Some(1);
                     }
                 }
-                match research.replace_notebook_cells(session_id, &cells) {
+                match research.replace_notebook_cells_scoped(session_id, notebook_id, &cells) {
                     Ok(()) => ApiResponse::success(
                         req.id,
                         serde_json::json!({ "saved": true, "count": cells.len() }),
@@ -226,14 +235,43 @@ impl LocalApiDispatcher {
                     Some(repository) => repository,
                     None => return ApiResponse::error(req.id, "ResearchRepository not configured"),
                 };
-                let saved = match research.list_notebook_cells(&params.session_id) {
+                let saved = match research.list_notebook_cells_scoped(
+                    &params.session_id,
+                    params.notebook_id.as_deref(),
+                ) {
                     Ok(cells) => cells,
                     Err(error) => return ApiResponse::error(req.id, error.to_string()),
                 };
                 match saved.iter().find(|cell| cell.id == params.cell_id) {
                     Some(cell)
                         if cell.source == params.code
-                            && cell.cell_type == custos_domain::NotebookCellType::Code => {}
+                            && cell.cell_type == custos_domain::NotebookCellType::Code =>
+                    {
+                        if let (Some(expected), Some(actual)) =
+                            (params.cell_version, cell.cell_version)
+                        {
+                            if expected != actual {
+                                return ApiResponse::error(
+                                    req.id,
+                                    format!(
+                                        "Cell version mismatch: requested {expected}, but saved version is {actual}"
+                                    ),
+                                );
+                            }
+                        }
+                        if let (Some(ref req_nb), Some(ref saved_nb)) =
+                            (&params.notebook_id, &cell.notebook_id)
+                        {
+                            if req_nb != saved_nb {
+                                return ApiResponse::error(
+                                    req.id,
+                                    format!(
+                                        "Notebook mismatch: cell belongs to {saved_nb}, not {req_nb}"
+                                    ),
+                                );
+                            }
+                        }
+                    }
                     _ => {
                         return ApiResponse::error(
                             req.id,

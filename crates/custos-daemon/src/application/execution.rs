@@ -1,9 +1,9 @@
 //! execution application use cases over the shared daemon context.
 
-use super::super::*;
+use super::*;
 
 impl LocalApiDispatcher {
-    pub(in crate::api) async fn handle_execution(&self, req: ApiRequest) -> ApiResponse {
+    pub(crate) async fn handle_execution(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             METHOD_TERMINAL_SPAWN => {
                 let workspace_id = match req.params.get("workspace_id").and_then(|v| v.as_str()) {

@@ -1,27 +1,27 @@
 //! tasks application use cases over the shared daemon context.
 
-use super::super::*;
+use super::*;
 
 impl LocalApiDispatcher {
-    pub(in crate::api) async fn handle_tasks(&self, req: ApiRequest) -> ApiResponse {
+    pub(crate) async fn handle_tasks(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             "v1.tasks.create" => {
-                tasks::TaskApiHandler::create_task(&self.task_service, &req.id, req.params).await
+                crate::api::tasks::TaskApiHandler::create_task(&self.task_service, &req.id, req.params).await
             }
             "v1.tasks.get" => {
-                tasks::TaskApiHandler::get_task(&self.task_service, &req.id, &req.params).await
+                crate::api::tasks::TaskApiHandler::get_task(&self.task_service, &req.id, &req.params).await
             }
             "v1.tasks.cancel" => {
-                tasks::TaskApiHandler::cancel_task(&self.task_service, &req.id, req.params).await
+                crate::api::tasks::TaskApiHandler::cancel_task(&self.task_service, &req.id, req.params).await
             }
             "v1.tasks.advance" => {
-                tasks::TaskApiHandler::advance_task(&self.task_service, &req.id, req.params).await
+                crate::api::tasks::TaskApiHandler::advance_task(&self.task_service, &req.id, req.params).await
             }
             "v1.tasks.complete" => {
-                tasks::TaskApiHandler::complete_task(&self.task_service, &req.id, req.params).await
+                crate::api::tasks::TaskApiHandler::complete_task(&self.task_service, &req.id, req.params).await
             }
             "v1.tasks.list" => {
-                tasks::TaskApiHandler::list_tasks(&self.task_service, &req.id, &req.params).await
+                crate::api::tasks::TaskApiHandler::list_tasks(&self.task_service, &req.id, &req.params).await
             }
             "v1.tasks.spans" => {
                 let task_id = match req.params.get("task_id").and_then(|v| v.as_str()) {

@@ -3,7 +3,6 @@
 //! Protocol types and dispatcher for IPC communication between CLI / UI / VS Code and custosd.
 
 use std::sync::Arc;
-use base64::Engine;
 use custos_domain::DomainError;
 
 pub use crate::custos_local_api::{
@@ -43,7 +42,13 @@ pub use crate::custos_local_api::{
     METHOD_WORKSPACES_GET, METHOD_WORKSPACES_INSPECT_DIRTY, METHOD_WORKSPACES_LIST,
     METHOD_WORKSPACES_RECOVER, METHOD_WORKSPACES_DETECT, METHOD_WORKSPACES_PICK_FOLDER,
     METHOD_WORKSPACES_CANDIDATES_SPAWN, METHOD_WORKSPACES_CANDIDATES_COMPARE,
-    METHOD_WORKSPACES_INTEGRATE, METHOD_SETTINGS_GET, METHOD_SETTINGS_SET,
+    METHOD_WORKSPACES_CANDIDATES_RACE, METHOD_WORKSPACES_INTEGRATE, METHOD_SETTINGS_GET, METHOD_SETTINGS_SET,
+    METHOD_QUANT_BACKTEST_SUBMIT, METHOD_QUANT_TEARSHEET_GET, METHOD_QUANT_ORDERS_CREATE,
+    METHOD_QUANT_ORDERS_LIST, METHOD_QUANT_ORDERS_APPROVE, METHOD_QUANT_FACTORS_DISCOVER,
+    METHOD_QUANT_MARKET_BARS_INGEST, METHOD_QUANT_MARKET_BARS_GET, METHOD_PIPELINE_STATUS,
+    METHOD_PIPELINE_STRUCTURE_DETECT, METHOD_PIPELINE_RUN, METHOD_QUANT_INDICATORS_COMPUTE,
+    METHOD_QUANT_GATE_EVALUATE, METHOD_QUANT_REVIEW_COMPUTE, METHOD_QUANT_ORDERBOOK_GET,
+    METHOD_QUANT_KILL_SWITCH, METHOD_QUANT_GRID_EVALUATE,
     METHOD_WORKSPACE_DIFF, METHOD_WORKSPACE_FILES_READ,
     METHOD_WORKSPACE_FILES_TREE, METHOD_WORKSPACE_FILES_WRITE, METHOD_WORKSPACE_FILE_DIFF,
     METHOD_WORKSPACE_GIT_COMMIT, METHOD_WORKSPACE_GIT_DISCARD, METHOD_WORKSPACE_GIT_STAGE, METHOD_WORKSPACE_GIT_UNSTAGE,
@@ -58,67 +63,65 @@ pub use crate::custos_local_api::{
     METHOD_EXPERIMENT_OBSERVE, METHOD_EXPERIMENT_STOP, METHOD_EXPERIMENT_RELEASE,
     METHOD_EXPERIMENT_COLLECT,
 };
-use custos_adapters::compute::{ColabTargetAdapter, KaggleTargetAdapter, RentedGpuTargetAdapter};
-use custos_adapters::harness::HarnessRegistry;
-use custos_bridge::{AttachMode, BridgePort, BridgeService};
-use custos_core::contracts::experiment::ExecutionTargetPort;
-use custos_core::contracts::storage::{OutboxEntry, OutboxPort};
-use custos_core::contracts::terminal::TerminalPort;
-use custos_core::contracts::workflow::WorkflowPort;
-use custos_core::contracts::workspace_files::WorkspaceFilesPort;
-use custos_core::{AdvanceTask, CreateTask, TaskService};
-use custos_domain::{
+pub(crate) use custos_adapters::compute::{ColabTargetAdapter, KaggleTargetAdapter, RentedGpuTargetAdapter};
+pub(crate) use custos_adapters::harness::HarnessRegistry;
+pub(crate) use custos_bridge::BridgeService;
+pub(crate) use custos_core::contracts::experiment::ExecutionTargetPort;
+pub(crate) use custos_core::contracts::storage::{OutboxEntry, OutboxPort};
+pub(crate) use custos_core::contracts::terminal::TerminalPort;
+pub(crate) use custos_core::contracts::workflow::WorkflowPort;
+pub(crate) use custos_core::contracts::workspace_files::WorkspaceFilesPort;
+pub(crate) use custos_core::{AdvanceTask, CreateTask, TaskService};
+pub(crate) use custos_domain::{
     new_id, validate_browser_url, AssistantDraft, Assurance, BrowserConsoleEntry,
     BrowserNetworkRequest, BrowserPageSnapshot, BrowserSession, BrowserTab, BrowserTabStatus,
     CreateHeadlessJobParams, ExecuteCellParams, ExecutionReceipt, FleetExecReceipt,
     HeadlessAutomationJob, HeadlessJobStatus, OutboxActionItem,
     ReceiptStatus, RegisterHostParams, RemoteHostNode, RemoteHostStatus,
     ResourceActionCapability, SessionId, SessionMode, SshAuthMethod, TaskContract,
-    ComputeBackendKind, ExecEvent, ExecutionAttempt, ResourceEvent,
+    ComputeBackendKind, ExecEvent, ExecState, ExecutionAttempt, ResourceEvent,
 };
-use custos_persistence::repositories::{AssistantRepository, OutboxRepository};
-use custos_persistence::{FleetAutomationRepository, ProviderRepository, ResearchRepository};
-use custos_runtime::session::SessionManager;
-use custos_runtime::workspace::{
+pub(crate) use custos_persistence::repositories::{AssistantRepository, OutboxRepository};
+pub(crate) use custos_persistence::{FleetAutomationRepository, ProviderRepository, ResearchRepository};
+pub(crate) use custos_runtime::session::SessionManager;
+pub(crate) use custos_runtime::workspace::{
     WorkspaceCoordinator, WorkspaceFilesCoordinator,
 };
 #[cfg(test)]
 pub(crate) use custos_runtime::workspace::CreateWorkspaceRequest;
-use custos_runtime::{PythonKernelCoordinator, TerminalCoordinator};
+pub(crate) use custos_runtime::{PythonKernelCoordinator, TerminalCoordinator};
 
 pub mod transport;
 pub use transport::*;
 pub mod capabilities;
 pub mod commands;
 pub mod tasks;
-#[path = "application/mod.rs"]
-mod application;
 
 /// Local API Dispatcher wrapping TaskService, SessionManager, BridgeService, WorkflowPort, ResearchRepository, ProviderRepository, TerminalCoordinator, and WorkspaceFilesPort for IPC callers.
 pub struct LocalApiDispatcher {
-    task_service: Arc<TaskService>,
-    session_manager: Arc<SessionManager>,
-    bridge_service: Arc<BridgeService>,
-    workflow: Option<Arc<dyn WorkflowPort>>,
-    usage_runs: Option<Arc<dyn custos_core::contracts::storage::RunPort>>,
-    workspace: Option<Arc<WorkspaceCoordinator>>,
-    candidate_mutation: tokio::sync::Mutex<()>,
-    research: Option<Arc<ResearchRepository>>,
-    providers: Option<Arc<ProviderRepository>>,
-    credentials: Option<Arc<crate::credentials::ProviderCredentials>>,
-    terminal: Arc<TerminalCoordinator>,
-    files: Arc<dyn WorkspaceFilesPort>,
-    harnesses: Arc<HarnessRegistry>,
-    python_kernel: Option<Arc<PythonKernelCoordinator>>,
-    fleet_automation: Option<Arc<FleetAutomationRepository>>,
-    model_availability: custos_adapters::providers::catalog::ModelAvailability,
-    model_catalog: custos_adapters::providers::catalog::ModelCatalogService,
-    oauth_callback_server: Option<Arc<crate::oauth_callback_server::OAuthCallbackServer>>,
-    pack_registry: Arc<custos_packs::DomainPackRegistry>,
-    assistant: Option<Arc<AssistantRepository>>,
-    outbox: Option<Arc<OutboxRepository>>,
-    sqlite_store: Option<Arc<custos_persistence::SqliteTaskStore>>,
-    mcp_hub: Arc<custos_adapters::mcp::McpFederationHub>,
+    pub(crate) task_service: Arc<TaskService>,
+    pub(crate) session_manager: Arc<SessionManager>,
+    pub(crate) bridge_service: Arc<BridgeService>,
+    pub(crate) workflow: Option<Arc<dyn WorkflowPort>>,
+    pub(crate) usage_runs: Option<Arc<dyn custos_core::contracts::storage::RunPort>>,
+    pub(crate) workspace: Option<Arc<WorkspaceCoordinator>>,
+    pub(crate) candidate_mutation: tokio::sync::Mutex<()>,
+    pub(crate) research: Option<Arc<ResearchRepository>>,
+    pub(crate) providers: Option<Arc<ProviderRepository>>,
+    pub(crate) credentials: Option<Arc<crate::credentials::ProviderCredentials>>,
+    pub(crate) terminal: Arc<TerminalCoordinator>,
+    pub(crate) files: Arc<dyn WorkspaceFilesPort>,
+    pub(crate) harnesses: Arc<HarnessRegistry>,
+    pub(crate) python_kernel: Option<Arc<PythonKernelCoordinator>>,
+    pub(crate) fleet_automation: Option<Arc<FleetAutomationRepository>>,
+    pub(crate) model_availability: custos_adapters::providers::catalog::ModelAvailability,
+    pub(crate) model_catalog: custos_adapters::providers::catalog::ModelCatalogService,
+    pub(crate) oauth_callback_server: Option<Arc<crate::oauth_callback_server::OAuthCallbackServer>>,
+    pub(crate) pack_registry: Arc<custos_packs::DomainPackRegistry>,
+    pub(crate) assistant: Option<Arc<AssistantRepository>>,
+    pub(crate) outbox: Option<Arc<OutboxRepository>>,
+    pub(crate) sqlite_store: Option<Arc<custos_persistence::SqliteTaskStore>>,
+    pub(crate) mcp_hub: Arc<custos_adapters::mcp::McpFederationHub>,
 }
 
 impl LocalApiDispatcher {
@@ -227,7 +230,7 @@ impl LocalApiDispatcher {
         self
     }
 
-    fn outbox_repo(&self) -> Option<&OutboxRepository> {
+    pub(crate) fn outbox_repo(&self) -> Option<&OutboxRepository> {
         self.outbox.as_deref().or_else(|| self.sqlite_store.as_ref().map(|s| s.outbox()))
     }
 
@@ -241,23 +244,23 @@ impl LocalApiDispatcher {
         self.credentials = Some(credentials);
         self
     }
-    fn credential_service(&self) -> Result<&Arc<crate::credentials::ProviderCredentials>, DomainError> {
+    pub(crate) fn credential_service(&self) -> Result<&Arc<crate::credentials::ProviderCredentials>, DomainError> {
         self.credentials.as_ref().ok_or_else(|| DomainError::Validation(
             "secure_storage_unavailable: Credential service is not configured".into()))
     }
-    async fn read_provider_token(&self, account: &str) -> Result<Option<custos_domain::OAuthTokenRecord>, DomainError> {
+    pub(crate) async fn read_provider_token(&self, account: &str) -> Result<Option<custos_domain::OAuthTokenRecord>, DomainError> {
         self.credential_service()?.get_oauth_token(account).await
     }
-    async fn refresh_provider_token(&self, previous: &custos_domain::OAuthTokenRecord, refreshed: &custos_domain::OAuthTokenRecord) -> Result<(), DomainError> {
+    pub(crate) async fn refresh_provider_token(&self, previous: &custos_domain::OAuthTokenRecord, refreshed: &custos_domain::OAuthTokenRecord) -> Result<(), DomainError> {
         self.credential_service()?.save_refreshed(previous, refreshed).await
     }
-    async fn write_provider_connection(&self, token: &custos_domain::OAuthTokenRecord, config: &custos_domain::ProviderConfig) -> Result<(), DomainError> {
+    pub(crate) async fn write_provider_connection(&self, token: &custos_domain::OAuthTokenRecord, config: &custos_domain::ProviderConfig) -> Result<(), DomainError> {
         self.credential_service()?.save_oauth_connection(token, Some(config)).await
     }
-    async fn remove_provider_credential(&self, account: &str, remove_provider: bool) -> Result<(), DomainError> {
+    pub(crate) async fn remove_provider_credential(&self, account: &str, remove_provider: bool) -> Result<(), DomainError> {
         self.credential_service()?.delete(account, remove_provider).await
     }
-    async fn provider_tokens(&self) -> Result<Vec<custos_domain::OAuthTokenRecord>, DomainError> {
+    pub(crate) async fn provider_tokens(&self) -> Result<Vec<custos_domain::OAuthTokenRecord>, DomainError> {
         self.credential_service()?.list_oauth_tokens().await
     }
 
@@ -282,7 +285,7 @@ impl LocalApiDispatcher {
         self
     }
 
-    async fn resolve_workspace_for_dispatch(
+    pub(crate) async fn resolve_workspace_for_dispatch(
         &self,
         req_id: &str,
         ws_id_str: &str,
@@ -311,7 +314,7 @@ impl LocalApiDispatcher {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn resolve_target_adapter(
+    pub(crate) fn resolve_target_adapter(
         &self,
         backend: ComputeBackendKind,
         work_dir: &std::path::Path,
@@ -440,8 +443,18 @@ impl LocalApiDispatcher {
         ) {
             // A handler error may follow an external effect; never make it retryable by deleting admission.
             let result_json = serde_json::json!({"custos_command_response": 1, "response": &resp}).to_string();
-            if let Err(e) = store.command_ledger().complete(cmd_id, &result_json) {
-                tracing::error!(command_id = %cmd_id, error = %e, "Command settlement failed; admission remains fenced");
+            let mut settlement_res = store.command_ledger().complete(cmd_id, &result_json);
+            if settlement_res.is_err() {
+                for delay_ms in [5, 25, 125] {
+                    tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                    settlement_res = store.command_ledger().complete(cmd_id, &result_json);
+                    if settlement_res.is_ok() {
+                        break;
+                    }
+                }
+            }
+            if let Err(e) = settlement_res {
+                tracing::error!(command_id = %cmd_id, error = %e, "Command settlement failed after retries; admission remains fenced");
                 return ApiResponse::error(resp.id, format!("Command '{cmd_id}' may have taken effect, but its result could not be persisted: {e}. Do not retry with a new command ID; reconcile its state first."));
             }
         }
@@ -459,5 +472,4 @@ impl crate::custos_local_api::ApiTransport for LocalApiDispatcher {
 
 
 #[cfg(test)]
-#[path = "api/tests/mod.rs"]
 mod tests;
