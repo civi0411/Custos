@@ -120,6 +120,7 @@ impl CustosRuntime {
         // Crash Recovery Reconcile (Gate 3): transition any InFlight effects to Uncertain on startup
         store.outbox().reconcile_on_startup()?;
         store.reconcile_runs_on_startup()?;
+        let _ = store.command_ledger().reconcile_orphaned_inflight_commands(24);
         let task_service = Arc::new(TaskService::new(store.clone()));
         let session_manager = Arc::new(SessionManager::with_store(store.clone()));
         let bridge_service = Arc::new(BridgeService::new(
@@ -161,6 +162,28 @@ impl CustosRuntime {
                                 Ok(()) => tracing::info!(provider_id = %tok.provider_id, "Sweeper saved refreshed credential"),
                                 Err(_) => tracing::warn!(provider_id = %tok.provider_id, "Sweeper could not save refreshed credential"),
                             }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Background Uncertain Runs Reconciler (Phase 1 / F04): polls uncertain runs every 60s
+        let uncertain_store = store.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                if let Ok(uncertain_runs) = uncertain_store.list_uncertain_runs() {
+                    let now = chrono::Utc::now();
+                    for mut run in uncertain_runs {
+                        let is_expired = (now - run.started_at).num_hours() >= 24;
+
+                        if is_expired {
+                            tracing::warn!(run_id = %run.id, "Uncertain run timed out after 24h; marking failed");
+                            run.status = custos_domain::RunStatus::Failed;
+                            run.ended_at = Some(now);
+                            let _ = uncertain_store.runs().save_run(&mut run);
                         }
                     }
                 }
@@ -673,35 +696,26 @@ impl DaemonGovernedToolExecutor {
         self.mcp_hub = Some(hub);
         self
     }
-}
 
-#[async_trait::async_trait]
-impl custos_runtime::agent::runtime_port::GovernedToolExecutor for DaemonGovernedToolExecutor {
-    async fn authorize(
-        &self,
-        ctx: &custos_runtime::agent::runtime_port::InvocationContext,
-        name: &str,
-        _params: &serde_json::Value,
-    ) -> Result<(), DomainError> {
-        if name.starts_with("dangerous_") || name.contains("format_disk") {
-            return Err(DomainError::Unauthorized(format!("Tool '{name}' is forbidden by kernel policy")));
-        }
-        if name.contains("__") && custos_adapters::mcp::security::is_dangerous_tool_pattern(name) {
-            let grant = self.kernel.find_active_grant(&ctx.task_id, name).await?;
-            if grant.is_none() {
-                return Err(DomainError::Unauthorized(format!("Tool '{name}' requires explicit capability grant")));
-            }
-        }
-        Ok(())
-    }
-
-    async fn execute(
-        &self,
-        ctx: &custos_runtime::agent::runtime_port::InvocationContext,
+    /// Parses tool name and parameters into canonical action, risk level, and target.
+    /// Rejects unknown tools and parameter safety violations (such as directory traversal).
+    pub fn parse_tool_invocation(
         name: &str,
         params: &serde_json::Value,
-    ) -> Result<custos_runtime::agent::runtime_port::ToolResult, DomainError> {
-        let (action_name, risk_level, target) = if name.contains("__") {
+    ) -> Result<(String, custos_domain::RiskLevel, String), DomainError> {
+        // 1. Parameter safety check: directory traversal
+        for key in &["path", "file", "target_file", "target", "dir"] {
+            if let Some(val) = params.get(key).and_then(|v| v.as_str()) {
+                if val.contains("..") {
+                    return Err(DomainError::Validation(format!(
+                        "Path traversal is forbidden in parameter '{key}': '{val}'"
+                    )));
+                }
+            }
+        }
+
+        // 2. Resolve action name, risk level, and target
+        if name.contains("__") {
             let risk = if custos_adapters::mcp::security::is_dangerous_tool_pattern(name) {
                 custos_domain::RiskLevel::High
             } else {
@@ -713,7 +727,7 @@ impl custos_runtime::agent::runtime_port::GovernedToolExecutor for DaemonGoverne
                 .or_else(|| params.get("url"))
                 .and_then(|v| v.as_str())
                 .unwrap_or(name);
-            (name, risk, tgt.to_string())
+            Ok((name.to_string(), risk, tgt.to_string()))
         } else {
             let act = match name {
                 "read_file" | "read" => "read_file",
@@ -729,7 +743,18 @@ impl custos_runtime::agent::runtime_port::GovernedToolExecutor for DaemonGoverne
             };
             let risk = match act {
                 "write_file" => custos_domain::RiskLevel::Medium,
-                "bash" => custos_domain::RiskLevel::High,
+                "bash" => {
+                    let cmd = params
+                        .get("command")
+                        .or_else(|| params.get("cmd"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    if cmd.contains("mkfs") || cmd.contains("dd if=") || cmd.contains("format_disk") {
+                        custos_domain::RiskLevel::Critical
+                    } else {
+                        custos_domain::RiskLevel::High
+                    }
+                }
                 _ => custos_domain::RiskLevel::Low,
             };
             let tgt = params
@@ -741,8 +766,47 @@ impl custos_runtime::agent::runtime_port::GovernedToolExecutor for DaemonGoverne
                 .or_else(|| params.get("target"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("workspace");
-            (act, risk, tgt.to_string())
-        };
+            Ok((act.to_string(), risk, tgt.to_string()))
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl custos_runtime::agent::runtime_port::GovernedToolExecutor for DaemonGovernedToolExecutor {
+    async fn authorize(
+        &self,
+        ctx: &custos_runtime::agent::runtime_port::InvocationContext,
+        name: &str,
+        params: &serde_json::Value,
+    ) -> Result<(), DomainError> {
+        let (action_name, risk_level, _target) = Self::parse_tool_invocation(name, params)?;
+
+        if risk_level == custos_domain::RiskLevel::Critical {
+            return Err(DomainError::Unauthorized(format!(
+                "Tool '{name}' is forbidden by kernel policy (critical risk)"
+            )));
+        }
+
+        if name.starts_with("dangerous_")
+            || (name.contains("__") && custos_adapters::mcp::security::is_dangerous_tool_pattern(name))
+        {
+            let grant = self.kernel.find_active_grant(&ctx.task_id, &action_name).await?;
+            if grant.is_none() {
+                return Err(DomainError::Unauthorized(format!(
+                    "Tool '{name}' requires explicit capability grant"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    async fn execute(
+        &self,
+        ctx: &custos_runtime::agent::runtime_port::InvocationContext,
+        name: &str,
+        params: &serde_json::Value,
+    ) -> Result<custos_runtime::agent::runtime_port::ToolResult, DomainError> {
+        let (action_name, risk_level, target) = Self::parse_tool_invocation(name, params)?;
 
         let action_id = custos_domain::new_id("act");
         let mut action_intent = custos_domain::ActionIntent::new(
@@ -965,6 +1029,66 @@ impl custos_runtime::agent::runtime_port::GovernedToolExecutor for DaemonGoverne
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_tool_invocation_valid_standard_tools() {
+        let params = serde_json::json!({ "path": "crates/custos-core/src/lib.rs" });
+        let (act, risk, target) =
+            DaemonGovernedToolExecutor::parse_tool_invocation("read_file", &params).unwrap();
+        assert_eq!(act, "read_file");
+        assert_eq!(risk, custos_domain::RiskLevel::Low);
+        assert_eq!(target, "crates/custos-core/src/lib.rs");
+
+        let write_params = serde_json::json!({ "path": "output.txt", "content": "hello" });
+        let (act, risk, _) =
+            DaemonGovernedToolExecutor::parse_tool_invocation("write_file", &write_params).unwrap();
+        assert_eq!(act, "write_file");
+        assert_eq!(risk, custos_domain::RiskLevel::Medium);
+    }
+
+    #[test]
+    fn test_parse_tool_invocation_rejects_path_traversal() {
+        let params = serde_json::json!({ "path": "../../etc/passwd" });
+        let res = DaemonGovernedToolExecutor::parse_tool_invocation("read_file", &params);
+        assert!(res.is_err());
+        assert!(matches!(res.unwrap_err(), DomainError::Validation(msg) if msg.contains("Path traversal")));
+    }
+
+    #[test]
+    fn test_parse_tool_invocation_rejects_unknown_tools() {
+        let params = serde_json::json!({});
+        let res = DaemonGovernedToolExecutor::parse_tool_invocation("unregistered_tool", &params);
+        assert!(res.is_err());
+        assert!(matches!(res.unwrap_err(), DomainError::Validation(msg) if msg.contains("Unknown or unmapped")));
+    }
+
+    #[test]
+    fn test_parse_tool_invocation_classifies_critical_bash_commands() {
+        let safe_cmd = serde_json::json!({ "command": "cargo check" });
+        let (_, risk, _) =
+            DaemonGovernedToolExecutor::parse_tool_invocation("bash", &safe_cmd).unwrap();
+        assert_eq!(risk, custos_domain::RiskLevel::High);
+
+        let destructive_cmd = serde_json::json!({ "command": "mkfs.ext4 /dev/sda1" });
+        let (_, risk, _) =
+            DaemonGovernedToolExecutor::parse_tool_invocation("bash", &destructive_cmd).unwrap();
+        assert_eq!(risk, custos_domain::RiskLevel::Critical);
+    }
+
+    #[test]
+    fn test_parse_tool_invocation_mcp_tools() {
+        let mcp_params = serde_json::json!({ "target": "https://example.com" });
+        let (act, risk, target) =
+            DaemonGovernedToolExecutor::parse_tool_invocation("web__fetch", &mcp_params).unwrap();
+        assert_eq!(act, "web__fetch");
+        assert_eq!(risk, custos_domain::RiskLevel::Medium);
+        assert_eq!(target, "https://example.com");
     }
 }
 

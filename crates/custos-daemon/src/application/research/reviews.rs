@@ -11,7 +11,7 @@ use custos_domain::{
 use custos_domain::EnvironmentSpec;
 
 impl LocalApiDispatcher {
-    pub(in crate::api) async fn handle_research_reviews(&self, req: ApiRequest) -> ApiResponse {
+    pub(crate) async fn handle_research_reviews(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             METHOD_RESEARCH_HANDOFF_CODING => {
                 let research = match self.research.as_ref() {

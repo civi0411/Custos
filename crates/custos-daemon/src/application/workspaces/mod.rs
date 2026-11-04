@@ -12,7 +12,7 @@ pub mod lifecycle;
 use crate::api::*;
 
 impl LocalApiDispatcher {
-    pub(in crate::api) async fn handle_workspaces(&self, req: ApiRequest) -> ApiResponse {
+    pub(crate) async fn handle_workspaces(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             METHOD_WORKSPACES_CREATE
             | METHOD_WORKSPACES_GET
@@ -41,6 +41,7 @@ impl LocalApiDispatcher {
 
             METHOD_WORKSPACES_CANDIDATES_SPAWN
             | METHOD_WORKSPACES_CANDIDATES_COMPARE
+            | METHOD_WORKSPACES_CANDIDATES_RACE
             | METHOD_WORKSPACES_INTEGRATE => self.handle_workspaces_changes(req).await,
 
             METHOD_GITHUB_ACCOUNTS

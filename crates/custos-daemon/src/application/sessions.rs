@@ -1,9 +1,10 @@
 //! sessions application use cases over the shared daemon context.
 
-use super::super::*;
+use super::*;
+use custos_bridge::{AttachMode, BridgePort};
 
 impl LocalApiDispatcher {
-    pub(in crate::api) async fn handle_sessions(&self, req: ApiRequest) -> ApiResponse {
+    pub(crate) async fn handle_sessions(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             "v1.sessions.create" => {
                 let mode: SessionMode = match req.params.get("mode").and_then(|v| v.as_str()) {

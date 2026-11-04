@@ -12,7 +12,7 @@ pub mod sources;
 use crate::api::*;
 
 impl LocalApiDispatcher {
-    pub(in crate::api) async fn handle_research(&self, req: ApiRequest) -> ApiResponse {
+    pub(crate) async fn handle_research(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             METHOD_RESEARCH_SOURCES_LIST
             | METHOD_RESEARCH_SOURCES_SAVE

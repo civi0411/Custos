@@ -1,9 +1,9 @@
 //! compute application use cases over the shared daemon context.
 
-use super::super::*;
+use super::*;
 
 impl LocalApiDispatcher {
-    pub(in crate::api) async fn handle_compute(&self, req: ApiRequest) -> ApiResponse {
+    pub(crate) async fn handle_compute(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             METHOD_COMPUTE_TARGETS_LIST => {
                 let targets = serde_json::json!([
@@ -246,6 +246,19 @@ impl LocalApiDispatcher {
 
                 match adapter.observe(&ext_ref).await {
                     Ok(obs) => {
+                        let _ = match obs.exec_state {
+                            ExecState::Running => attempt
+                                .apply(ExecEvent::ObservedRunning)
+                                .or_else(|_| attempt.apply(ExecEvent::ReconciledRunning)),
+                            ExecState::Completed => attempt
+                                .apply(ExecEvent::RemoteCompleted)
+                                .or_else(|_| attempt.apply(ExecEvent::ReconciledCompleted)),
+                            ExecState::Failed => attempt
+                                .apply(ExecEvent::RemoteFailed)
+                                .or_else(|_| attempt.apply(ExecEvent::ReconciledFailed)),
+                            ExecState::Uncertain => attempt.apply(ExecEvent::ConnectionLost),
+                            _ => Ok(()),
+                        };
                         attempt.exec_state = obs.exec_state;
                         attempt.resource_state = obs.resource_state;
                         let _ = store.experiment_attempts().save_attempt(&attempt);
@@ -258,6 +271,8 @@ impl LocalApiDispatcher {
                         )
                     }
                     Err(e) => {
+                        let _ = attempt.apply(ExecEvent::ConnectionLost);
+                        let _ = store.experiment_attempts().save_attempt(&attempt);
                         ApiResponse::error(req.id, format!("Failed to observe {attempt_id}: {e}"))
                     }
                 }

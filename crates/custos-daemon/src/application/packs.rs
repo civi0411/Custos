@@ -1,9 +1,9 @@
 //! packs application use cases over the shared daemon context.
 
-use super::super::*;
+use super::*;
 
 impl LocalApiDispatcher {
-    pub(in crate::api) async fn handle_packs(&self, req: ApiRequest) -> ApiResponse {
+    pub(crate) async fn handle_packs(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             METHOD_PACKS_MANIFESTS_LIST => {
                 let manifests = self.pack_registry.list_packs();
@@ -31,6 +31,9 @@ impl LocalApiDispatcher {
                                 fl.eq_ignore_ascii_case("assistant")
                                     || fl.eq_ignore_ascii_case("chat")
                             }
+                            custos_domain::WorkbenchLens::Quant => {
+                                fl.eq_ignore_ascii_case("quant") || fl.eq_ignore_ascii_case("trading")
+                            }
                         };
                         if !matches_lens {
                             continue;
@@ -50,7 +53,11 @@ impl LocalApiDispatcher {
                         | "research__dataset_audit"
                         | "research__reproduce"
                         | "assistant__inbox_triage"
-                        | "assistant__schedule_proposal" => (JobOperationalStatus::Available, None),
+                        | "assistant__schedule_proposal"
+                        | "quant__alpha_discover"
+                        | "quant__backtest_full"
+                        | "quant__risk_audit"
+                        | "quant__execution_plan" => (JobOperationalStatus::Available, None),
 
                         "engineering__migration" => (
                             JobOperationalStatus::Planned,
@@ -107,7 +114,11 @@ impl LocalApiDispatcher {
                             | "research__dataset_audit"
                             | "research__reproduce"
                             | "assistant__inbox_triage"
-                            | "assistant__schedule_proposal" => (JobOperationalStatus::Available, None),
+                            | "assistant__schedule_proposal"
+                            | "quant__alpha_discover"
+                            | "quant__backtest_full"
+                            | "quant__risk_audit"
+                            | "quant__execution_plan" => (JobOperationalStatus::Available, None),
 
                             "engineering__migration"
                             | "assistant__mutate_execution"
@@ -211,11 +222,13 @@ impl LocalApiDispatcher {
                         custos_domain::WorkbenchLens::Coding => "engineering",
                         custos_domain::WorkbenchLens::Research => "research",
                         custos_domain::WorkbenchLens::Assistant => "assistant",
+                        custos_domain::WorkbenchLens::Quant => "quant",
                     },
                     "lens": match job.lens {
                         custos_domain::WorkbenchLens::Coding => "coding",
                         custos_domain::WorkbenchLens::Research => "research",
                         custos_domain::WorkbenchLens::Assistant => "assistant",
+                        custos_domain::WorkbenchLens::Quant => "quant",
                     },
                     "primary_role": job.primary_role,
                     "inputs": inputs,

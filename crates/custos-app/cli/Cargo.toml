@@ -27,5 +27,4 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 custos-sdk = { workspace = true }
 custos-domain = { workspace = true }
-custos-core = { workspace = true }
 tokio = { workspace = true }

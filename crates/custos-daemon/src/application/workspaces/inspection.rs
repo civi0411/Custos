@@ -1,10 +1,11 @@
 //! Workspace inspection and file operations use cases over WorkspaceFilesPort and RepositoryGitPort.
 
 use crate::api::*;
+use custos_core::contracts::terminal::TerminalPort;
 use custos_domain::{DomainError, WriteWorkspaceFileParams};
 
 impl LocalApiDispatcher {
-    pub(in crate::api) async fn handle_workspaces_inspection(
+    pub(crate) async fn handle_workspaces_inspection(
         &self,
         req: ApiRequest,
     ) -> ApiResponse {

@@ -5,7 +5,7 @@ use custos_domain::WorkspaceId;
 use custos_runtime::workspace::CreateWorkspaceRequest;
 
 impl LocalApiDispatcher {
-    pub(in crate::api) async fn handle_workspaces_lifecycle(
+    pub(crate) async fn handle_workspaces_lifecycle(
         &self,
         req: ApiRequest,
     ) -> ApiResponse {

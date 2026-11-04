@@ -5,3 +5,4 @@ mod workspaces;
 mod providers;
 mod research;
 mod assistant;
+mod quant;

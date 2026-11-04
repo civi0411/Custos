@@ -1,9 +1,9 @@
 //! assistant application use cases over the shared daemon context.
 
-use super::super::*;
+use super::*;
 
 impl LocalApiDispatcher {
-    pub(in crate::api) async fn handle_assistant(&self, req: ApiRequest) -> ApiResponse {
+    pub(crate) async fn handle_assistant(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             METHOD_ASSISTANT_DRAFTS_LIST => {
                 let assistant = match self.assistant.as_ref() {

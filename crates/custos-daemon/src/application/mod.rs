@@ -4,16 +4,18 @@ mod execution;
 mod integrations;
 mod packs;
 mod providers;
+mod quant;
 mod research;
 mod sessions;
 mod system;
 mod tasks;
 mod workspaces;
 
-use super::*;
+pub(crate) use crate::api::*;
+pub(crate) use custos_domain::DomainError;
 
 impl LocalApiDispatcher {
-    pub(super) async fn dispatch_application(&self, req: ApiRequest) -> ApiResponse {
+    pub(crate) async fn dispatch_application(&self, req: ApiRequest) -> ApiResponse {
         match req.method.split('.').nth(1).unwrap_or("") {
             // Group: Tasks & Workflow — Task lifecycle, workflow execution, omni-intelligence orchestration
             "tasks" | "workflow" | "oi" => self.handle_tasks(req).await,
@@ -23,6 +25,9 @@ impl LocalApiDispatcher {
 
             // Group: Workspaces & Git — Workspace filesystem, worktree leasing, git changes, github integration
             "workspaces" | "workspace" | "github" => self.handle_workspaces(req).await,
+
+            // Group: Quantitative Trading — Backtests, tearsheets, risk audits & execution order tickets
+            "quant" => self.handle_quant(req).await,
 
             // Group: Research — Scientific research pipeline, claims, notebook kernels, reviews & synthesis
             "research" | "notebook" | "reviews" | "synthesis" | "artifacts" | "notes" => {
@@ -49,8 +54,8 @@ impl LocalApiDispatcher {
             // Group: Domain Packs — Domain-specific pack manifests, jobs and roles
             "packs" => self.handle_packs(req).await,
 
-            // Group: System & Diagnostic — System settings, diagnostic capabilities, ping & health
-            "settings" | "system" | "capabilities" | "resources" | "ping" | "health" => {
+            // Group: System & Diagnostic — System settings, diagnostic capabilities, ping & health, pipeline status
+            "settings" | "system" | "capabilities" | "resources" | "ping" | "health" | "pipeline" => {
                 self.handle_system(req).await
             }
             _ => ApiResponse::error(req.id.clone(), format!("Unknown method: {}", req.method)),

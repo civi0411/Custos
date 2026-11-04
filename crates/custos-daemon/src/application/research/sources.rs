@@ -4,7 +4,7 @@ use crate::api::*;
 use custos_domain::{PassageAnchor, ResearchClaim, SourceRecord};
 
 impl LocalApiDispatcher {
-    pub(in crate::api) async fn handle_research_sources(&self, req: ApiRequest) -> ApiResponse {
+    pub(crate) async fn handle_research_sources(&self, req: ApiRequest) -> ApiResponse {
         match req.method.as_str() {
             METHOD_RESEARCH_SOURCES_LIST => {
                 let research = match self.research.as_ref() {

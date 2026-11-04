@@ -582,12 +582,13 @@ use custos_domain::*;
         assert!(man_res.is_success(), "man_res failed: {:?}", man_res.error);
         let manifests: Vec<custos_packs::DomainPackManifest> =
             serde_json::from_value(man_res.result.unwrap()).unwrap();
-        assert_eq!(manifests.len(), 3);
+        assert_eq!(manifests.len(), 4);
         assert!(manifests.iter().any(|m| m.id == "engineering"));
         assert!(manifests.iter().any(|m| m.id == "research"));
         assert!(manifests.iter().any(|m| m.id == "assistant"));
+        assert!(manifests.iter().any(|m| m.id == "quant"));
 
-        // 2. List Jobs (All 20 Jobs) via v1.packs.jobs.list
+        // 2. List Jobs (All 24 Jobs) via v1.packs.jobs.list
         let jobs_req = ApiRequest {
             id: "pack_2".into(),
             method: METHOD_PACKS_JOBS_LIST.into(),
@@ -597,7 +598,7 @@ use custos_domain::*;
         assert!(jobs_res.is_success());
         let catalog: Vec<PacksJobCatalogItem> =
             serde_json::from_value(jobs_res.result.unwrap()).unwrap();
-        assert_eq!(catalog.len(), 20, "Expected 20 standardized Workbench Jobs");
+        assert_eq!(catalog.len(), 24, "Expected 24 standardized Workbench Jobs");
 
         // Verify status mapping:
         let repo_explain = catalog.iter().find(|j| j.job_id == "engineering__repo_explain").unwrap();
@@ -639,6 +640,17 @@ use custos_domain::*;
             serde_json::from_value(research_res.result.unwrap()).unwrap();
         assert_eq!(research_catalog.len(), 8, "Expected 8 Research Jobs in research lens");
 
+        let quant_req = ApiRequest {
+            id: "pack_2d".into(),
+            method: METHOD_PACKS_JOBS_LIST.into(),
+            params: serde_json::json!({ "lens": "quant" }),
+        };
+        let quant_res = dispatcher.handle_request(quant_req).await;
+        let quant_catalog: Vec<PacksJobCatalogItem> =
+            serde_json::from_value(quant_res.result.unwrap()).unwrap();
+        assert_eq!(quant_catalog.len(), 4, "Expected 4 Quant Jobs in quant lens");
+        assert!(quant_catalog.iter().all(|j| j.status == JobOperationalStatus::Available));
+
         // 3. Get Specific Job via v1.packs.jobs.get
         let get_req = ApiRequest {
             id: "pack_3".into(),
@@ -673,7 +685,7 @@ use custos_domain::*;
         assert!(roles_res.is_success());
         let all_roles: Vec<custos_packs::WorkerRole> =
             serde_json::from_value(roles_res.result.unwrap()).unwrap();
-        assert_eq!(all_roles.len(), 12, "Expected 12 specialized Worker Roles");
+        assert_eq!(all_roles.len(), 16, "Expected 16 specialized Worker Roles");
 
         let eng_roles_req = ApiRequest {
             id: "pack_4b".into(),

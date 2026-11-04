@@ -7,7 +7,7 @@ use custos_domain::{
 };
 
 impl LocalApiDispatcher {
-    pub(in crate::api) async fn handle_research_artifacts(
+    pub(crate) async fn handle_research_artifacts(
         &self,
         req: ApiRequest,
     ) -> ApiResponse {

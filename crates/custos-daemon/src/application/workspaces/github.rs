@@ -1,9 +1,10 @@
 //! GitHub accounts, login, auth status, and viewer use cases.
 
 use crate::api::*;
+use custos_core::contracts::terminal::TerminalPort;
 
 impl LocalApiDispatcher {
-    pub(in crate::api) async fn handle_workspaces_github(
+    pub(crate) async fn handle_workspaces_github(
         &self,
         req: ApiRequest,
     ) -> ApiResponse {
