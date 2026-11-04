@@ -100,7 +100,7 @@ fn google_generate_content_model(name: &str) -> bool {
 
 fn mapping_report() -> &'static serde_json::Value {
     static REPORT: once_cell::sync::Lazy<serde_json::Value> = once_cell::sync::Lazy::new(|| {
-        serde_json::from_str(include_str!("canonical/data/canonical_mapping_report.json"))
+        serde_json::from_str(include_str!("data/canonical_mapping_report.json"))
             .expect("bundled canonical mapping report must be valid")
     });
     &REPORT

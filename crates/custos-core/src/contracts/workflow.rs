@@ -4,7 +4,10 @@
 //! Defined here so the Kernel/Bridge/Daemon can depend on it; `custos-runtime/workflow` implements it.
 
 use async_trait::async_trait;
-use custos_domain::{CancelReceipt, ContinuationPacket, DomainError, RunHandle, StartRunCommand};
+use custos_domain::{
+    CancelReceipt, CandidateRaceResult, CandidateRaceSpec, ContinuationPacket, DomainError,
+    RunHandle, StartRunCommand,
+};
 
 #[async_trait]
 pub trait WorkflowPort: Send + Sync {
@@ -32,4 +35,12 @@ pub trait WorkflowPort: Send + Sync {
 
     /// Persist a resumable packet (CheckpointPolicy, Custos.md §3.4).
     async fn checkpoint(&self, run_id: &str) -> Result<ContinuationPacket, DomainError>;
+
+    /// Executes a multi-candidate race across models on candidate worktrees.
+    async fn execute_candidate_race(
+        &self,
+        _spec: CandidateRaceSpec,
+    ) -> Result<CandidateRaceResult, DomainError> {
+        Err(DomainError::Validation("Candidate race is not supported by this workflow runtime".into()))
+    }
 }

@@ -6,7 +6,8 @@
 use async_trait::async_trait;
 use custos_domain::{
     AcceleratorSpec, CloudPodLease, CompatibilityGateEvaluation, CompatibilityVerdict,
-    ComputeBackendKind, DomainError, HardwareAdaptationPlan, TrainingCheckpointManifest,
+    ComputeBackendKind, ComputeDeviceRef, DomainError, HardwareAdaptationPlan,
+    TrainingCheckpointManifest, WorkloadAdmissionRequest, WorkloadAdmissionVerdict, WorkloadLease,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -105,6 +106,28 @@ pub trait ComputePort: Send + Sync {
             }),
         }
     }
+}
+
+/// Port for hardware resource inventory and workload admission arbitration (GPU-A / GPU-B)
+#[async_trait]
+pub trait WorkloadAdmissionPort: Send + Sync {
+    /// Discovers all available compute devices on the local host or configured targets
+    async fn discover_devices(&self) -> Result<Vec<ComputeDeviceRef>, DomainError>;
+
+    /// Requests admission for a compute workload (notebook, training, eval, inference)
+    async fn admit_workload(
+        &self,
+        request: &WorkloadAdmissionRequest,
+    ) -> Result<WorkloadAdmissionVerdict, DomainError>;
+
+    /// Releases an active workload lease
+    async fn release_lease(&self, lease_id: &str) -> Result<(), DomainError>;
+
+    /// Lists active and queued leases, optionally filtered by device
+    async fn list_active_leases(
+        &self,
+        device_id: Option<&str>,
+    ) -> Result<Vec<WorkloadLease>, DomainError>;
 }
 
 #[cfg(test)]

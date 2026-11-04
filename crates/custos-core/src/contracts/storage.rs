@@ -234,11 +234,33 @@ pub trait NotebookStoragePort: Send + Sync {
         &self,
         session_id: &str,
     ) -> Result<Vec<custos_domain::NotebookCell>, DomainError>;
+    async fn list_notebook_cells_scoped(
+        &self,
+        session_id: &str,
+        notebook_id: Option<&str>,
+    ) -> Result<Vec<custos_domain::NotebookCell>, DomainError> {
+        let cells = self.list_notebook_cells(session_id).await?;
+        match notebook_id {
+            Some(nb) if !nb.trim().is_empty() => Ok(cells
+                .into_iter()
+                .filter(|c| c.notebook_id.as_deref() == Some(nb))
+                .collect()),
+            _ => Ok(cells),
+        }
+    }
     async fn replace_notebook_cells(
         &self,
         session_id: &str,
         cells: &[custos_domain::NotebookCell],
     ) -> Result<(), DomainError>;
+    async fn replace_notebook_cells_scoped(
+        &self,
+        session_id: &str,
+        _notebook_id: Option<&str>,
+        cells: &[custos_domain::NotebookCell],
+    ) -> Result<(), DomainError> {
+        self.replace_notebook_cells(session_id, cells).await
+    }
     async fn save_notebook_cell(
         &self,
         cell: &custos_domain::NotebookCell,
@@ -247,6 +269,13 @@ pub trait NotebookStoragePort: Send + Sync {
         &self,
         session_id: &str,
     ) -> Result<custos_domain::NotebookKernelState, DomainError>;
+    async fn get_notebook_kernel_state_scoped(
+        &self,
+        session_id: &str,
+        _notebook_id: Option<&str>,
+    ) -> Result<custos_domain::NotebookKernelState, DomainError> {
+        self.get_notebook_kernel_state(session_id).await
+    }
     async fn save_notebook_kernel_state(
         &self,
         state: &custos_domain::NotebookKernelState,
@@ -292,3 +321,17 @@ pub trait CommandLedgerPort: Send + Sync {
     async fn complete(&self, command_id: &str, result_json: &str) -> Result<(), DomainError>;
     async fn abandon(&self, command_id: &str) -> Result<(), DomainError>;
 }
+
+/// Persistence Port for Quantitative Trading backtest tearsheets, order tickets, and market data bars.
+#[async_trait]
+pub trait QuantPort: Send + Sync {
+    async fn save_tearsheet(&self, tearsheet: &custos_domain::quant::BacktestTearsheet, task_id: &str) -> Result<(), DomainError>;
+    async fn get_latest_tearsheet(&self, strategy_id: &str) -> Result<Option<custos_domain::quant::BacktestTearsheet>, DomainError>;
+    async fn save_order_ticket(&self, ticket: &custos_domain::quant::OrderTicket, task_id: &str) -> Result<(), DomainError>;
+    async fn list_order_tickets(&self, strategy_id: Option<&str>, task_id: Option<&str>) -> Result<Vec<custos_domain::quant::OrderTicket>, DomainError>;
+    async fn get_order_ticket(&self, order_id: &str) -> Result<Option<custos_domain::quant::OrderTicket>, DomainError>;
+    async fn update_order_ticket(&self, ticket: &custos_domain::quant::OrderTicket) -> Result<(), DomainError>;
+    async fn save_market_bars(&self, symbol: &str, timeframe: &str, bars: &[custos_domain::quant::OhlcvBar]) -> Result<(), DomainError>;
+    async fn get_market_bars(&self, symbol: &str, timeframe: &str, limit: usize) -> Result<Vec<custos_domain::quant::OhlcvBar>, DomainError>;
+}
+

@@ -27,6 +27,7 @@ pub mod memory;
 pub mod notebook;
 pub mod oi;
 pub mod sandbox;
+pub mod skill;
 pub mod source_acquisition;
 pub mod storage;
 pub mod terminal;
@@ -34,8 +35,13 @@ pub mod workflow;
 pub mod workspace;
 pub mod workspace_files;
 
+pub use skill::{
+    Skill, SkillCapabilityProfile, SkillContext, SkillError, SkillOutput, SkillRegistry,
+    TaintLevel, WorkerRunId, WorkspaceScope, WriteTarget,
+};
+
 pub use checkpoint_store::{BlobMetadata, CheckpointStorePort, PromotionOutcome, StoreCapabilities};
-pub use compute::{CloudPodRequest, ComputePort, ComputeTelemetry};
+pub use compute::{CloudPodRequest, ComputePort, ComputeTelemetry, WorkloadAdmissionPort};
 pub use experiment::{
     AttemptObservation, ExecutionTargetPort, PreflightReport, TargetCapabilities,
 };
@@ -52,7 +58,7 @@ pub use sandbox::{SandboxCommand, SandboxPort};
 pub use source_acquisition::SourceAcquisitionPort;
 pub use storage::{
     AssistantDraftPort, CasPort, CommandAdmission, CommandLedgerEntry, CommandLedgerPort, DecisionPort,
-    EffectLedgerPort, NotebookStoragePort, OutboxEntry, OutboxPort, OutboxStatus, ReplanPort,
+    EffectLedgerPort, NotebookStoragePort, OutboxEntry, OutboxPort, OutboxStatus, QuantPort, ReplanPort,
     RunPort, StoragePort, WorkflowRevisionPort,
 };
 pub use terminal::{TerminalDriverPort, TerminalOutputConsumer, TerminalPort, TerminalProcessHandle};

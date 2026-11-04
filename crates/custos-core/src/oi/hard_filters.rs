@@ -20,6 +20,16 @@ impl HardFilters {
     ) -> Result<(), Vec<RejectionReason>> {
         let mut reasons = Vec::new();
 
+        // 0. Available Executors Catalog check
+        if !snapshot.available_executors.is_empty()
+            && !snapshot.available_executors.contains(&proposal.candidate_harness)
+        {
+            reasons.push(RejectionReason::CapabilityMissing(format!(
+                "executor '{}' is unavailable or not configured",
+                proposal.candidate_harness
+            )));
+        }
+
         // 1. Model Pinning check
         if let Some(ref pin) = snapshot.pinned_model {
             if &proposal.candidate_harness != pin {
@@ -38,6 +48,11 @@ impl HardFilters {
         }
 
         // 4. Egress Rules & Local-Only Constraint check
+        let is_candidate_local = proposal.candidate_harness.contains("local")
+            || proposal.candidate_harness.contains("llama")
+            || proposal.candidate_harness.contains("mlx")
+            || proposal.candidate_harness.contains("ollama");
+
         let is_local_only = snapshot
             .required_capabilities
             .iter()
@@ -47,21 +62,13 @@ impl HardFilters {
                 .iter()
                 .any(|r| r.eq_ignore_ascii_case("LocalOnly") || r.eq_ignore_ascii_case("local-only"));
 
-        if is_local_only {
-            let is_candidate_local = proposal.candidate_harness.contains("local")
-                || proposal.candidate_harness.contains("llama")
-                || proposal.candidate_harness.contains("mlx")
-                || proposal.candidate_harness.contains("ollama");
-            if !is_candidate_local {
-                reasons.push(RejectionReason::LocalOnlyConstraint);
-            }
+        if is_local_only && !is_candidate_local {
+            reasons.push(RejectionReason::LocalOnlyConstraint);
         }
 
         for rule in &snapshot.egress_rules {
-            if rule == "no-external-egress"
-                && (proposal.candidate_harness.contains("cloud")
-                    || proposal.candidate_harness.contains("claude")
-                    || proposal.candidate_harness.contains("openai"))
+            if (rule == "no-external-egress" || rule.eq_ignore_ascii_case("local-only"))
+                && !is_candidate_local
                 && !reasons.contains(&RejectionReason::EgressViolation(rule.clone()))
             {
                 reasons.push(RejectionReason::EgressViolation(rule.clone()));
@@ -130,5 +137,39 @@ mod tests {
         let local_proposal = StrategyProposal::native_baseline("task_local", "custos-local");
         let local_res = HardFilters::evaluate(&local_proposal, &snapshot);
         assert!(local_res.is_ok());
+    }
+
+    #[test]
+    fn test_hard_filter_no_external_egress_blocks_external_harnesses() {
+        let mut snapshot = DecisionSnapshot::new("task_egress");
+        snapshot.egress_rules = vec!["no-external-egress".into()];
+
+        // External harnesses that previously could bypass string-matching
+        for harness in &["codex", "gemini-1.5-pro", "openrouter/anthropic", "gpt-4o", "unknown-cloud"] {
+            let proposal = StrategyProposal::native_baseline("task_egress", *harness);
+            let res = HardFilters::evaluate(&proposal, &snapshot);
+            assert!(
+                res.is_err(),
+                "Harness {} must be rejected under no-external-egress",
+                harness
+            );
+            assert!(
+                res.unwrap_err()
+                    .contains(&RejectionReason::EgressViolation("no-external-egress".into())),
+                "Harness {} should have EgressViolation reason",
+                harness
+            );
+        }
+
+        // Allowed local harnesses
+        for local in &["custos-local", "llama-3-8b", "mlx-runner", "ollama-mistral"] {
+            let proposal = StrategyProposal::native_baseline("task_egress", *local);
+            let res = HardFilters::evaluate(&proposal, &snapshot);
+            assert!(
+                res.is_ok(),
+                "Local harness {} must be permitted under no-external-egress",
+                local
+            );
+        }
     }
 }
