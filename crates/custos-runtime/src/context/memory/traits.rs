@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use custos_domain::{DomainError, Fact};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MemoryTier {
     Working,
     Episodic,

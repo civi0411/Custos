@@ -29,7 +29,7 @@ pub struct CompactionConfig {
 impl Default for CompactionConfig {
     fn default() -> Self {
         Self {
-            threshold: crate::DEFAULT_COMPACTION_THRESHOLD,
+            threshold: crate::context::DEFAULT_COMPACTION_THRESHOLD,
             max_retained_tokens: 32_000,
         }
     }

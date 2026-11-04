@@ -16,27 +16,8 @@ use regex::Regex;
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
-/// Primary lexical search skill with explicit `text_match` assurance.
-pub struct LexicalSearchSkill;
-
-#[async_trait]
-impl Skill for LexicalSearchSkill {
-    fn skill_id(&self) -> &'static str {
-        "lexical_search"
-    }
-
-    fn description(&self) -> &'static str {
-        "Fast lexical regex search for syntax symbol definitions and candidate reference occurrences (assurance: text_match)"
-    }
-
-    fn capability_profile(&self) -> SkillCapabilityProfile {
-        SkillCapabilityProfile::read_only(15_000)
-    }
-
-    async fn run(&self, ctx: &SkillContext) -> Result<SkillOutput, SkillError> {
-        execute_lexical_search(self.skill_id(), ctx).await
-    }
-}
+// Re-export canonical LexicalSearchSkill from runtime to eliminate duplicate definition
+pub use custos_runtime::cognitive::skills::search::LexicalSearchSkill;
 
 /// Backwards-compatible alias for existing pipelines expecting `ast_search`.
 pub struct AstSearchSkill;

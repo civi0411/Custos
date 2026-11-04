@@ -1,5 +1,6 @@
 pub mod compaction;
 pub mod compiler;
+pub mod memory;
 pub mod rtk;
 pub mod token_counter;
 pub mod traits;

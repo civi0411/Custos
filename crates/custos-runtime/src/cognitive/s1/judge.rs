@@ -45,7 +45,17 @@ impl S1Judge {
     ) -> Result<(), String> {
         let crit_lower = criterion.to_lowercase();
 
-        // 1. Check for explicit exit code or status requirements
+        // 1. Keyword / substring presence requirement (if prefixed with contains:)
+        if let Some(expected_kw) = crit_lower.strip_prefix("contains:") {
+            let kw = expected_kw.trim();
+            let candidate_str = candidate.to_string().to_lowercase();
+            if !candidate_str.contains(kw) {
+                return Err(format!("candidate missing required token '{}'", kw));
+            }
+            return Ok(());
+        }
+
+        // 2. Check for explicit exit code or status requirements
         if crit_lower.contains("exit code 0") || crit_lower.contains("success") {
             if let Some(code) = candidate.get("exit_code").and_then(|v| v.as_i64()) {
                 if code != 0 {
@@ -59,7 +69,7 @@ impl S1Judge {
             }
         }
 
-        // 2. Check for prohibited patterns or errors
+        // 3. Check for prohibited patterns or errors
         if crit_lower.contains("no errors") || crit_lower.contains("clean") {
             if let Some(err) = candidate.get("error").and_then(|v| v.as_str()) {
                 if !err.is_empty() {
@@ -70,15 +80,6 @@ impl S1Judge {
                 if !stderr.is_empty() && (stderr.contains("error:") || stderr.contains("fatal:")) {
                     return Err(format!("candidate stderr contains fatal error: {}", stderr));
                 }
-            }
-        }
-
-        // 3. Keyword / substring presence requirement
-        if let Some(expected_kw) = crit_lower.strip_prefix("contains:") {
-            let kw = expected_kw.trim();
-            let candidate_str = candidate.to_string().to_lowercase();
-            if !candidate_str.contains(kw) {
-                return Err(format!("candidate missing required token '{}'", kw));
             }
         }
 
@@ -101,7 +102,9 @@ impl S1Judge {
         // If candidate lacks standard structured execution fields, reduce confidence
         let has_status = candidate.get("status").is_some();
         let has_exit = candidate.get("exit_code").is_some();
-        let has_output = candidate.get("output").is_some() || candidate.get("stdout").is_some();
+        let has_output = candidate.get("output").is_some()
+            || candidate.get("stdout").is_some()
+            || candidate.get("stderr").is_some();
 
         if !has_status && !has_exit {
             conf -= 0.15;

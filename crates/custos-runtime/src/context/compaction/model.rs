@@ -37,6 +37,17 @@ impl ProviderModel {
             model_config,
         }
     }
+
+    /// Construct a `ProviderModel` from the canonical hexagonal `ModelProvider` (`ModelPort`).
+    pub fn from_model_provider(
+        provider: Arc<dyn custos_provider::port::ModelProvider>,
+        model_config: ModelConfig,
+    ) -> Self {
+        Self::new(
+            Arc::new(custos_provider::bridge::ModelPortToProvider::new(provider)),
+            model_config,
+        )
+    }
 }
 
 #[async_trait]
@@ -51,3 +62,47 @@ impl CompactionModel for ProviderModel {
             .await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use custos_domain::DomainError;
+    use custos_provider::port::ModelProvider;
+    use custos_provider::request::{ModelResponse, ProviderRequest};
+    use custos_provider::events::ProviderEvent;
+    use tokio::sync::mpsc;
+
+    struct DummyModelProvider;
+
+    #[async_trait]
+    impl ModelProvider for DummyModelProvider {
+        fn provider_id(&self) -> &str {
+            "dummy"
+        }
+
+        async fn generate(&self, req: &ProviderRequest) -> Result<ModelResponse, DomainError> {
+            Ok(ModelResponse::text(format!("compacted: {}", req.prompt), &req.model, 42))
+        }
+
+        async fn stream(
+            &self,
+            _req: &ProviderRequest,
+        ) -> Result<mpsc::Receiver<ProviderEvent>, DomainError> {
+            unimplemented!()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_provider_model_from_model_provider() {
+        let dummy = Arc::new(DummyModelProvider);
+        let model_config = ModelConfig::new("test-compact-model");
+        let compaction_model = ProviderModel::from_model_provider(dummy, model_config);
+
+        let messages = vec![Message::user().with_text("history to compact")];
+        let (msg, usage) = compaction_model.complete("summarize", &messages).await.unwrap();
+
+        assert_eq!(msg.content[0].as_text().unwrap(), "compacted: System: summarize\n\nUser: history to compact\n");
+        assert_eq!(usage.model, "test-compact-model");
+    }
+}
+

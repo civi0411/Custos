@@ -1,4 +1,4 @@
-use crate::journal::SessionJournal;
+use crate::session::journal::SessionJournal;
 use custos_core::{SessionStateMachine, SessionStore};
 use custos_domain::{
     DomainError, Session, SessionId, SessionJournalEntry, SessionMode, SessionStatus, TaskId,
@@ -204,6 +204,7 @@ impl SessionManager {
             WorkbenchLens::Assistant => "chat",
             WorkbenchLens::Coding => "code",
             WorkbenchLens::Research => "research",
+            WorkbenchLens::Quant => "quant",
         };
         let mut journals = self.journals.write().await;
         let journal = journals.get_mut(id).ok_or_else(|| DomainError::NotFound {

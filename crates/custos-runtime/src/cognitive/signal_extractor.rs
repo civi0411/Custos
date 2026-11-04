@@ -1,4 +1,4 @@
-use crate::routing::RoutingSignals;
+use crate::cognitive::routing::RoutingSignals;
 use custos_domain::RiskLevel;
 
 pub struct SignalExtractor;

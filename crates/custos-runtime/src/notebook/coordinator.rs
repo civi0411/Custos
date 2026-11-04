@@ -24,12 +24,14 @@ struct ActiveKernel {
     worker: Option<Arc<dyn NotebookWorkerSession>>,
     work_dir: Option<PathBuf>,
     recent_requests: HashMap<String, ExecuteCellResult>,
+    active_lease_id: Option<String>,
 }
 
 #[derive(Clone)]
 pub struct PythonKernelCoordinator {
     driver: Arc<dyn NotebookDriverPort>,
     kernels: Arc<RwLock<HashMap<String, ActiveKernel>>>,
+    admission: Option<Arc<dyn custos_core::contracts::compute::WorkloadAdmissionPort>>,
 }
 
 impl PythonKernelCoordinator {
@@ -37,7 +39,16 @@ impl PythonKernelCoordinator {
         Self {
             driver,
             kernels: Arc::new(RwLock::new(HashMap::new())),
+            admission: None,
         }
+    }
+
+    pub fn with_admission_coordinator(
+        mut self,
+        admission: Arc<dyn custos_core::contracts::compute::WorkloadAdmissionPort>,
+    ) -> Self {
+        self.admission = Some(admission);
+        self
     }
 
     /// Discovers system Python binary
@@ -123,7 +134,9 @@ impl PythonKernelCoordinator {
             }
             Ok(state)
         } else if let Some(r) = repo {
-            let mut state = r.get_notebook_kernel_state(session_id).await?;
+            let mut state = r
+                .get_notebook_kernel_state_scoped(session_id, notebook_id)
+                .await?;
             if let Some(nb) = notebook_id {
                 state.notebook_id = Some(nb.to_string());
             }
@@ -146,6 +159,7 @@ impl PythonKernelCoordinator {
                     worker: None,
                     work_dir: None,
                     recent_requests: HashMap::new(),
+                    active_lease_id: None,
                 },
             );
             Ok(state)
@@ -173,6 +187,7 @@ impl PythonKernelCoordinator {
                     worker: None,
                     work_dir: None,
                     recent_requests: HashMap::new(),
+                    active_lease_id: None,
                 },
             );
             Ok(state)
@@ -197,6 +212,53 @@ impl PythonKernelCoordinator {
             }
         }
 
+        // Validate cell version before execution if specified and saved
+        if let Some(r) = repo {
+            let cells = r
+                .list_notebook_cells_scoped(&params.session_id, params.notebook_id.as_deref())
+                .await?;
+            if let Some(saved) = cells.iter().find(|c| c.id == params.cell_id) {
+                if let Some(expected_v) = params.cell_version {
+                    if let Some(actual_v) = saved.cell_version {
+                        if expected_v != actual_v {
+                            return Err(DomainError::Validation(format!(
+                                "Cell version mismatch: requested {expected_v}, but saved cell has {actual_v}"
+                            )));
+                        }
+                    }
+                }
+            }
+        }
+
+        // SADE GPU-A / GPU-B: Resource admission check
+        let mut acquired_lease = None;
+        if let Some(ref dev_id) = params.device_id {
+            if let Some(ref adm) = self.admission {
+                let req = custos_domain::WorkloadAdmissionRequest {
+                    workload_kind: custos_domain::ComputeWorkloadKind::NotebookKernel,
+                    owner_id: key.clone(),
+                    preferred_device_id: Some(dev_id.clone()),
+                    require_exclusive: false,
+                    required_memory_mb: None,
+                };
+                match adm.admit_workload(&req).await? {
+                    custos_domain::WorkloadAdmissionVerdict::Admitted { lease } => {
+                        acquired_lease = Some(lease.lease_id);
+                    }
+                    custos_domain::WorkloadAdmissionVerdict::Queued { reason, .. } => {
+                        return Err(DomainError::Conflict(format!(
+                            "Compute device '{dev_id}' busy: {reason}"
+                        )));
+                    }
+                    custos_domain::WorkloadAdmissionVerdict::Rejected { reason } => {
+                        return Err(DomainError::Validation(format!(
+                            "Compute admission for device '{dev_id}' rejected: {reason}"
+                        )));
+                    }
+                }
+            }
+        }
+
         let python_path = Self::discover_python_path();
         let work_dir = if let Some(ref cwd) = params.cwd {
             PathBuf::from(cwd)
@@ -216,7 +278,12 @@ impl PythonKernelCoordinator {
                     worker: None,
                     work_dir: None,
                     recent_requests: HashMap::new(),
+                    active_lease_id: None,
                 });
+
+            if let Some(lease_id) = acquired_lease {
+                kernel.active_lease_id = Some(lease_id);
+            }
 
             if kernel.status == KernelStatus::Busy {
                 return Err(DomainError::Validation("A cell is already running in this session".into()));
@@ -305,7 +372,9 @@ impl PythonKernelCoordinator {
         }
 
         if let Some(r) = repo {
-            let cells = r.list_notebook_cells(&params.session_id).await?;
+            let cells = r
+                .list_notebook_cells_scoped(&params.session_id, params.notebook_id.as_deref())
+                .await?;
             let cell = NotebookCell {
                 id: params.cell_id.clone(),
                 session_id: params.session_id.clone(),
@@ -348,6 +417,7 @@ impl PythonKernelCoordinator {
             kernel_id: params.kernel_id,
             cell_version: params.cell_version,
             execution_request_id: params.execution_request_id,
+            device_id: params.device_id,
         };
 
         if let Some(ref req_id) = result.execution_request_id {
@@ -374,14 +444,28 @@ impl PythonKernelCoordinator {
     ) -> Result<bool, DomainError> {
         let key = Self::kernel_key(session_id, notebook_id);
         let mut kernels = self.kernels.write().await;
+        let mut lease_to_release = None;
         if let Some(k) = kernels.get_mut(&key) {
+            lease_to_release = k.active_lease_id.take();
             if let Some(worker) = k.worker.take() {
                 worker.interrupt();
                 k.epoch += 1;
                 k.execution_counter = 0;
                 k.work_dir = None;
                 k.status = KernelStatus::Interrupted;
+                drop(kernels);
+                if let Some(lease_id) = lease_to_release {
+                    if let Some(ref adm) = self.admission {
+                        let _ = adm.release_lease(&lease_id).await;
+                    }
+                }
                 return Ok(true);
+            }
+        }
+        drop(kernels);
+        if let Some(lease_id) = lease_to_release {
+            if let Some(ref adm) = self.admission {
+                let _ = adm.release_lease(&lease_id).await;
             }
         }
         Ok(false)
@@ -415,7 +499,10 @@ impl PythonKernelCoordinator {
                 worker: None,
                 work_dir: None,
                 recent_requests: HashMap::new(),
+                active_lease_id: None,
             });
+
+        let lease_to_release = entry.active_lease_id.take();
 
         // Terminate active worker actor process if any
         if let Some(worker) = entry.worker.take() {
@@ -439,12 +526,59 @@ impl PythonKernelCoordinator {
             updated_at: chrono::Utc::now().timestamp(),
             ..Default::default()
         };
+        drop(kernels);
+
+        if let Some(lease_id) = lease_to_release {
+            if let Some(ref adm) = self.admission {
+                let _ = adm.release_lease(&lease_id).await;
+            }
+        }
 
         if let Some(r) = repo {
             let _ = r.save_notebook_kernel_state(&state).await;
         }
 
         Ok(state)
+    }
+
+    /// Bounded diagnostic probe for kernel accelerator availability (GPU-B §5)
+    pub async fn probe_kernel_device_environment(
+        &self,
+        python_path: Option<&PathBuf>,
+    ) -> Result<String, DomainError> {
+        let py = python_path.cloned().unwrap_or_else(Self::discover_python_path);
+        let check_script = "import sys; \
+try:\n    import torch\n    print(f'torch:{torch.__version__},cuda:{torch.cuda.is_available()},mps:{hasattr(torch.backends, \"mps\") and torch.backends.mps.is_available()}')\n\
+except Exception as e:\n    print(f'error:{e}')";
+
+        let child = tokio::process::Command::new(py)
+            .arg("-c")
+            .arg(check_script)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .kill_on_drop(true)
+            .spawn();
+
+        let child = match child {
+            Ok(c) => c,
+            Err(e) => return Ok(format!("python_probe_failed: {e}")),
+        };
+
+        match tokio::time::timeout(std::time::Duration::from_secs(5), child.wait_with_output()).await {
+            Ok(Ok(output)) => {
+                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                if output.status.success() && !stdout.is_empty() {
+                    Ok(stdout)
+                } else if !stderr.is_empty() {
+                    Ok(format!("probe_stderr: {stderr}"))
+                } else {
+                    Ok("torch_unavailable".to_string())
+                }
+            }
+            Ok(Err(e)) => Ok(format!("probe_execution_error: {e}")),
+            Err(_) => Ok("probe_timed_out_5s".to_string()),
+        }
     }
 }
 

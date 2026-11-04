@@ -10,6 +10,7 @@ pub mod benchmark;
 pub mod engineering;
 pub mod pack;
 pub mod profile;
+pub mod quant;
 pub mod registry;
 pub mod research;
 pub mod verifier;
@@ -25,18 +26,19 @@ use custos_runtime::cognitive::skills::{
 };
 use std::sync::Arc;
 
-/// Constructs a canonical `DomainPackRegistry` loaded with all 3 canonical packs:
-/// Engineering, Research, and Assistant.
+/// Constructs a canonical `DomainPackRegistry` loaded with all 4 canonical packs:
+/// Engineering, Research, Assistant, and Quant.
 pub fn create_default_pack_registry() -> DomainPackRegistry {
     let mut registry = DomainPackRegistry::new();
     registry.register(Arc::new(engineering::EngineeringPack::new()));
     registry.register(Arc::new(research::ResearchPack::new()));
     registry.register(Arc::new(assistant::AssistantPack::new()));
+    registry.register(Arc::new(quant::QuantPack::new()));
     registry
 }
 
 /// Constructs a canonical `SkillRegistry` loaded with cross-pack foundation skills
-/// and all registered skills from Engineering, Research, and Assistant domain packs.
+/// and all registered skills from Engineering, Research, Assistant, and Quant domain packs.
 pub fn create_default_skill_registry() -> SkillRegistry {
     let mut registry = SkillRegistry::new();
 
@@ -54,6 +56,9 @@ pub fn create_default_skill_registry() -> SkillRegistry {
     // 4. Domain Pack: Assistant
     assistant::skills::register_assistant_skills(&mut registry);
 
+    // 5. Domain Pack: Quant
+    quant::skills::register_quant_skills(&mut registry);
+
     registry
 }
 
@@ -70,6 +75,7 @@ mod tests {
         assert!(registry.get_pack("engineering").is_some());
         assert!(registry.get_pack("research").is_some());
         assert!(registry.get_pack("assistant").is_some());
+        assert!(registry.get_pack("quant").is_some());
 
         // 2. Lens mapping
         let coding_pack = registry
@@ -87,12 +93,17 @@ mod tests {
             .expect("assistant pack");
         assert_eq!(assistant_pack.manifest().id, "assistant");
 
-        // 3. Total jobs count = 7 (eng) + 8 (res) + 5 (ast) = 20
+        let quant_pack = registry
+            .get_pack_for_lens(WorkbenchLens::Quant)
+            .expect("quant pack");
+        assert_eq!(quant_pack.manifest().id, "quant");
+
+        // 3. Total jobs count = 7 (eng) + 8 (res) + 5 (ast) + 4 (quant) = 24
         let all_jobs = registry.list_all_jobs();
         assert_eq!(
             all_jobs.len(),
-            20,
-            "Expected 20 standardized Workbench Jobs"
+            24,
+            "Expected 24 standardized Workbench Jobs"
         );
 
         // Verify key jobs across all lenses
@@ -102,10 +113,12 @@ mod tests {
         assert!(registry.get_job("research__source_qa").is_some());
         assert!(registry.get_job("assistant__inbox_triage").is_some());
         assert!(registry.get_job("assistant__mutate_execution").is_some());
+        assert!(registry.get_job("quant__alpha_discover").is_some());
+        assert!(registry.get_job("quant__execution_plan").is_some());
 
-        // 4. Total roles count = 4 (eng) + 4 (res) + 4 (ast) = 12
+        // 4. Total roles count = 4 (eng) + 4 (res) + 4 (ast) + 4 (quant) = 16
         let all_roles = registry.list_all_roles();
-        assert_eq!(all_roles.len(), 12, "Expected 12 specialized Worker Roles");
+        assert_eq!(all_roles.len(), 16, "Expected 16 specialized Worker Roles");
 
         // Verify key roles across packs
         let repo_scout = registry.get_role("repo_scout").expect("repo scout role");
@@ -125,10 +138,21 @@ mod tests {
         let triage_worker = registry.get_role("triage_worker").expect("triage worker");
         assert!(triage_worker.read_only);
 
+        let alpha_scout = registry.get_role("alpha_scout").expect("alpha scout");
+        assert!(alpha_scout.read_only);
+        assert_eq!(alpha_scout.pack_id, "quant");
+
+        let backtest_runner = registry
+            .get_role("backtest_runner")
+            .expect("backtest runner");
+        assert!(!backtest_runner.read_only);
+
         // 5. Verifiers discovery
         assert!(registry.get_verifier("cargo_test_oracle").is_some());
         assert!(registry.get_verifier("citation_coverage_oracle").is_some());
         assert!(registry.get_verifier("user_acceptance_oracle").is_some());
+        assert!(registry.get_verifier("deflated_sharpe_verifier").is_some());
+        assert!(registry.get_verifier("lookahead_bias_checker").is_some());
     }
 
     #[test]

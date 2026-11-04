@@ -5,12 +5,13 @@
 
 pub mod agent;
 pub mod cognitive;
+pub mod compute;
 pub mod context;
 pub use context::compaction as context_management;
-#[cfg(feature = "gateway-experimental")]
-pub mod gateway;
+pub mod clock;
+pub mod event_bus;
 pub mod integration;
-pub mod memory_service;
+pub use crate::context::memory as memory_service;
 pub mod notebook;
 pub mod oi;
 pub mod session;
@@ -18,18 +19,21 @@ pub mod terminal;
 pub mod workflow;
 pub mod workspace;
 
+pub use clock::{ClockError, ClockTick, PrecisionEventClock};
+pub use event_bus::{EventBusError, PipelineEvent, PipelineEventBus};
 pub use integration::{
     BindingDirection, IntegrationBinding, IntegrationKind, IntegrationRegistry, LifecycleState,
     MediationLevel,
 };
 
-// Re-exports
-#[allow(ambiguous_glob_reexports)]
-pub use agent::*;
-pub use cognitive::*;
-pub use context::*;
+// Targeted root re-exports
+pub use compute::{
+    CheckpointRelayCoordinator, LocalTrainingRunner, ModelEvaluationRunner,
+    OptionalConsumerPlacementEngine, RemoteExecutionCoordinator, WorkloadAdmissionCoordinator,
+};
 pub use notebook::PythonKernelCoordinator;
-pub use session::*;
+pub use session::SessionManager;
 pub use terminal::TerminalCoordinator;
-pub use workflow::*;
+pub use workflow::{TaskRuntime, WorkspaceLeaseManager};
 pub use workspace::{CreateWorkspaceRequest, WorkspaceCoordinator, WorkspaceFilesCoordinator};
+

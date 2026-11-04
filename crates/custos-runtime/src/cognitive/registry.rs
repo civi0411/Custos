@@ -3,8 +3,8 @@
 //! Maintains active ModelProvider instances, tracks health/latency statistics,
 //! and resolves the best available provider for a given ReasoningTier.
 
-use crate::provider_selector::{ProviderPreference, TierProviderMap};
-use crate::routing::ReasoningTier;
+use crate::cognitive::provider_selector::{ProviderPreference, TierProviderMap};
+use crate::cognitive::routing::ReasoningTier;
 use chrono::{DateTime, Utc};
 use custos_domain::DomainError;
 use custos_provider::port::ModelProvider;

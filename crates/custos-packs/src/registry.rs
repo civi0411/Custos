@@ -82,6 +82,21 @@ impl DomainPackRegistry {
         None
     }
 
+    /// Unregisters a domain pack by its unique identifier.
+    pub fn unregister(&mut self, pack_id: &str) -> Option<Arc<dyn DomainPack>> {
+        self.packs.remove(pack_id)
+    }
+
+    /// Checks if a domain pack is currently registered.
+    pub fn has_pack(&self, pack_id: &str) -> bool {
+        self.packs.contains_key(pack_id)
+    }
+
+    /// Retrieves the manifest for a specific domain pack if registered.
+    pub fn get_pack_manifest(&self, pack_id: &str) -> Option<DomainPackManifest> {
+        self.packs.get(pack_id).map(|p| p.manifest())
+    }
+
     /// Lists manifests of all registered domain packs.
     pub fn list_packs(&self) -> Vec<DomainPackManifest> {
         self.packs.values().map(|p| p.manifest()).collect()
@@ -95,5 +110,42 @@ impl DomainPackRegistry {
     /// Lists all supported Worker Roles across all packs.
     pub fn list_all_roles(&self) -> Vec<WorkerRole> {
         self.packs.values().flat_map(|p| p.roles()).collect()
+    }
+
+    /// Lists all unique verification oracles across all packs.
+    pub fn list_all_verifiers(&self) -> Vec<Arc<dyn PackVerifier>> {
+        self.packs.values().flat_map(|p| p.verifiers()).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::quant::QuantPack;
+
+    #[test]
+    fn test_dynamic_pack_lifecycle() {
+        let mut registry = DomainPackRegistry::new();
+        assert_eq!(registry.list_packs().len(), 0);
+        assert!(!registry.has_pack("quant"));
+
+        // Register on-demand
+        let quant_pack = Arc::new(QuantPack::new());
+        registry.register(quant_pack);
+        assert!(registry.has_pack("quant"));
+        assert_eq!(registry.list_packs().len(), 1);
+
+        let manifest = registry.get_pack_manifest("quant").expect("quant manifest");
+        assert_eq!(manifest.id, "quant");
+        assert_eq!(manifest.lens, WorkbenchLens::Quant);
+
+        let verifiers = registry.list_all_verifiers();
+        assert_eq!(verifiers.len(), 2, "Quant pack must expose 2 verifiers");
+
+        // Unregister on-demand
+        let removed = registry.unregister("quant");
+        assert!(removed.is_some());
+        assert!(!registry.has_pack("quant"));
+        assert_eq!(registry.list_packs().len(), 0);
     }
 }

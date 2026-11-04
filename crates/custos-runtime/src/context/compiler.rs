@@ -2,7 +2,7 @@
 //!
 //! Provides relevance scoring, context ranking, and token budget enforcement.
 
-use crate::traits::{ContextBuilder, ContextSlice};
+use crate::context::traits::{ContextBuilder, ContextSlice};
 use async_trait::async_trait;
 use custos_domain::{new_id, ContextItem, DomainError, SessionJournalEntry};
 use std::path::Path;

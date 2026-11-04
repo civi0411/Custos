@@ -4,7 +4,7 @@
 //! Implements both `MemoryStore` and canonical `MemoryPort` with project-scope isolation
 //! and strict MAX_FACTS_PER_TIER capacity bounds.
 
-use crate::memory_service::traits::{MemoryStore, MemoryTier};
+use super::traits::{MemoryStore, MemoryTier};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use custos_core::contracts::memory::MemoryPort;

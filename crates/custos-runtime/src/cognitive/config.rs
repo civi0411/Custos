@@ -2,7 +2,7 @@
 //!
 //! Controls routing preferences, deliberation limits, and fallback settings.
 
-use crate::provider_selector::TierProviderMap;
+use crate::cognitive::provider_selector::TierProviderMap;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
