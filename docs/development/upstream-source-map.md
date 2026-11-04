@@ -165,7 +165,7 @@ ui/desktop/src/
 └── api/                      # generated/typed Local API client; no domain truth
 ```
 
-The immediate structural pressure is in `custos-daemon/src/api.rs` and `local_api/lib.rs`, not in the number of crates. Extract handlers and typed client groups mechanically while preserving one dispatcher, one schema surface and identical contract fixtures. Do not combine this move with semantic redesign of Task, Run or authority.
+The immediate structural pressure is in `custos-daemon/src/api/mod.rs` and `local_api/lib.rs`, not in the number of crates. Extract handlers and typed client groups mechanically while preserving one dispatcher, one schema surface and identical contract fixtures. Do not combine this move with semantic redesign of Task, Run or authority.
 
 ## Dependency-ordered realization plan
 

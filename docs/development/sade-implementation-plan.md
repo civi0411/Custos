@@ -22,7 +22,7 @@ Every claim below is tagged:
 
 | ID | Finding | Evidence | Tag |
 |---|---|---|---|
-| V01 | Command admission is check-then-act with no lock: lookup at start of `handle_request`, ledger write after the whole handler finished. Two concurrent identical commands both execute. | `crates/custos-daemon/src/api.rs:317-340` vs `:6824-6842` | Read |
+| V01 | Command admission is check-then-act with no lock: lookup at start of `handle_request`, ledger write after the whole handler finished. Two concurrent identical commands both execute. | `crates/custos-daemon/src/api/mod.rs:317-340` vs `:6824-6842` | Read |
 | V02 | Ledger failure is fail-open: lookup error is logged and the mutation proceeds; record error is logged and the reply is returned. | `api.rs:336-338`, `:6838-6840` | Read |
 | V03 | Fingerprint is `digest(serde_json(params))`: excludes method, trusted actor/profile/scope; includes `command_id` itself; depends on JSON key order. Collision of the same ID across methods is not detected. | `api.rs:309-312`, `:324` | Read |
 | V04 | `INSERT OR REPLACE` overwrites an accepted command record. Only success results are recorded; errors are never recorded. | `repositories/command_ledger.rs:69`, `api.rs:6829` | Read |
@@ -295,7 +295,7 @@ New repository API, all inside one connection lock / one SQL statement:
 - `abandon(command_id)`: delete a `pending` row after a deterministic rejection so a corrected retry can run.
 - Remove `INSERT OR REPLACE` and the string-date SQL. Expiry compared as integers.
 
-**B6b - daemon integration** (`crates/custos-daemon/src/api.rs`, new `api/commands.rs` helper next to `capabilities.rs`).
+**B6b - daemon integration** (`crates/custos-daemon/src/api/mod.rs`, new `api/commands.rs` helper next to `capabilities.rs`).
 - Daemon owns the catalog: one `fn method_effect(method) -> Effect { Read, Mutation }` with an exhaustive match over the
   59 dispatch arms. Unknown methods are `Mutation` by default (safe side).
 - Fingerprint = `digest(method + "\0" + canonical_json(params without command_id) + "\0" + trusted scope)`. Canonical

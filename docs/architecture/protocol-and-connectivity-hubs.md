@@ -177,7 +177,7 @@ Settings must provide four distinct management tabs instead of a single ambiguou
 |---|:---:|---|---|
 | **Local API Ingress & Envelopes** | `integrated` | `custos-daemon`, `custos-sdk` | Currently accepts basic `ApiRequest`. Upgrade to `CommandEnvelope` + `EventEnvelope`. |
 | **Daemon Listener Security** | `defect` | `custos-daemon/src/main.rs` | Currently binds HTTP `127.0.0.1:3000` without auth. Transition to Unix socket default; HTTP opt-in with Bearer token. |
-| **Credential Storage & Protection** | `defect` | `custos-daemon/src/api.rs:2868` | `v1.oauth.get` leaks plaintext tokens. Sanitize to return status metadata only. |
+| **Credential Storage & Protection** | `defect` | `custos-daemon/src/api/mod.rs:2868` | `v1.oauth.get` leaks plaintext tokens. Sanitize to return status metadata only. |
 | **ModelPort & Multimodal Turn** | `coded-unwired` | `custos-provider/src/port.rs` | Default `execute_turn` strips images/tools into `flat_prompt`. Remove flattening; preserve multimodal context. |
 | **Connection Fallback & Economics** | `coded-unwired` | `custos-adapters/src/providers/fallback.rs` | Has `FallbackRouter` and `(connection, model)` lock idea from 9Router, but unwired to daemon. Wire with typed errors. |
 | **MCP Client & Authority** | `coded-unwired` | `custos-adapters/src/mcp/` | `client.rs` returns mock strings. Replace with real 2026-07-28 stdio/HTTP client + `ExecutionPermit` enforcement. |

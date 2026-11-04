@@ -11,6 +11,7 @@ import {
   HelpCircle,
   FlaskConical,
   Bot,
+  TrendingUp,
 } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
 import type { WorkspaceDetectionResult } from '@/types/domain';
@@ -22,6 +23,7 @@ import {
 } from './sidebar/types';
 import { CopilotTaskHub } from './sidebar/CopilotTaskHub';
 import { ResearchStudyExplorer } from './sidebar/ResearchStudyExplorer';
+import { QuantStrategyExplorer } from './sidebar/QuantStrategyExplorer';
 import { EngineeringWorkspaceTree } from './sidebar/EngineeringWorkspaceTree';
 import { RecentActivityFlyout } from './sidebar/RecentActivityFlyout';
 import { useProjectGroups } from './sidebar/useProjectGroups';
@@ -218,6 +220,20 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           activeCount: tasks.filter((t) => t.status === 'Blocked' || t.metadata?.approval_required === 'true').length,
           footerStatus: 'Copilot Supervisor Ready',
         };
+      case 'quant':
+        return {
+          title: 'Quant Strategies',
+          icon: TrendingUp,
+          iconColor: 'text-workbench-accent',
+          badge: 'PORTFOLIO',
+          badgeClass: 'bg-violet-400/10 text-violet-300 border-violet-400/20',
+          searchPlaceholder: 'Search alphas, backtests, risk audits...',
+          allLabel: 'All Strategies',
+          allCount: 3,
+          activeLabel: 'Live Alphas',
+          activeCount: 2,
+          footerStatus: 'Quant Risk Engine · Ready',
+        };
       case 'engineering':
       default: {
         const totalWorktrees = projectGroups.reduce(
@@ -411,7 +427,9 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                   ? 'Refresh Tasks'
                   : activeWorkbench === 'research'
                     ? 'Refresh Studies & Datasets'
-                    : 'Refresh Git Status'
+                    : activeWorkbench === 'quant'
+                      ? 'Refresh Alpha Signals'
+                      : 'Refresh Git Status'
               }
               position="bottom"
             >
@@ -424,7 +442,9 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
                       ? 'Refreshed task registry.'
                       : activeWorkbench === 'research'
                         ? 'Refreshed studies and datasets.'
-                        : 'Refreshed workspace and worktree registry.'
+                        : activeWorkbench === 'quant'
+                          ? 'Refreshed alpha signals and risk models.'
+                          : 'Refreshed workspace and worktree registry.'
                   );
                 }}
                 className="p-1 hover:text-white hover:bg-white/8 rounded transition cursor-pointer"
@@ -505,6 +525,8 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             researchDetection={researchDetection}
             handleOpenStudyFolder={handleOpenStudyFolder}
           />
+        ) : activeWorkbench === 'quant' ? (
+          <QuantStrategyExplorer onShowToast={onShowToast} />
         ) : (
           <EngineeringWorkspaceTree
             projectGroups={projectGroups}

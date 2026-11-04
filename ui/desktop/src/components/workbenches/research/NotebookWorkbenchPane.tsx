@@ -9,6 +9,7 @@ import { WorkbenchEmptyState } from '@/components/common/WorkbenchPane';
 
 export interface NotebookWorkbenchPaneProps {
   sessionId?: string;
+  notebookId?: string;
   toolbarNavigation?: React.ReactNode;
   workspace?: ExecutionWorkspace | null;
   onAskAgent?: (draftText: string) => void;
@@ -21,7 +22,7 @@ export function editNotebookCell(cell: NotebookCell, source: string, cellType = 
   return cell.source === source && cell.cell_type === cellType ? cell : { ...cell, source, cell_type: cellType, status: 'idle', execution_count: null,
     stdout: null, stderr: null, output_image: null, wall_ms: null };
 }
-export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({ sessionId, workspace, onAskAgent, onShowToast, toolbarNavigation }) => {
+export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({ sessionId, notebookId, workspace, onAskAgent, onShowToast, toolbarNavigation }) => {
   const [cells, setCells] = useState<NotebookCell[]>([]);
   const [kernel, setKernel] = useState<NotebookKernelState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -33,7 +34,7 @@ export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({ se
   const [dirty, setDirty] = useState(false);
   const generation = useRef(0);
   const busy = useRef(false);
-  const key = sessionId || '';
+  const key = notebookId ? `${sessionId || ''}::${notebookId}` : (sessionId || '');
   const load = useCallback(async () => {
     const epoch = ++generation.current;
     if (!sessionId) {
@@ -46,11 +47,11 @@ export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({ se
     setLoading(true); setError(null); setLoadStatus('loading');
     try {
       const [saved, state] = await Promise.all([
-        daemonClient.listNotebookCells(sessionId),
-        daemonClient.getNotebookKernelStatus(sessionId).catch(() => null),
+        daemonClient.listNotebookCells(sessionId, notebookId),
+        daemonClient.getNotebookKernelStatus(sessionId, notebookId).catch(() => null),
       ]);
       if (epoch !== generation.current) return;
-      const edits = notebookEdits.get(sessionId);
+      const edits = notebookEdits.get(key);
       const effective = edits || saved || [];
       setCells(effective);
       setDirty(!!edits);
@@ -63,20 +64,20 @@ export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({ se
       }
     }
     finally { if (epoch === generation.current) setLoading(false); }
-  }, [sessionId]);
+  }, [sessionId, notebookId, key]);
   useEffect(() => { void load(); return () => { generation.current++; }; }, [load]);
   useEffect(() => {
     if (!sessionId) return;
     const onRemoteChange = (e: Event) => {
-      const ev = e as CustomEvent<{ sessionId: string; cells: NotebookCell[] }>;
-      if (ev.detail?.sessionId === sessionId && ev.detail.cells) {
+      const ev = e as CustomEvent<{ key: string; cells: NotebookCell[] }>;
+      if (ev.detail?.key === key && ev.detail.cells) {
         setCells(ev.detail.cells);
         setDirty(true);
       }
     };
     window.addEventListener('custos:notebook-cells-change', onRemoteChange);
     return () => window.removeEventListener('custos:notebook-cells-change', onRemoteChange);
-  }, [sessionId]);
+  }, [sessionId, key]);
   useEffect(() => {
     if (!dirty) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
@@ -85,18 +86,18 @@ export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({ se
   }, [dirty]);
   const change = (next: NotebookCell[]) => {
     if (loadStatus === 'failed') return;
-    const indexed = next.map((cell, index) => ({ ...cell, cell_index: index }));
+    const indexed = next.map((cell, index) => ({ ...cell, cell_index: index, notebook_id: notebookId }));
     notebookEdits.set(key, indexed);
     setCells(indexed);
     setDirty(true);
-    window.dispatchEvent(new CustomEvent('custos:notebook-cells-change', { detail: { sessionId: key, cells: indexed } }));
+    window.dispatchEvent(new CustomEvent('custos:notebook-cells-change', { detail: { key, cells: indexed } }));
   };
   const save = async () => {
     if (!sessionId || loadStatus === 'failed') return false;
     setSaving(true);
     setError(null);
     try {
-      await daemonClient.saveNotebookCells(sessionId, cells);
+      await daemonClient.saveNotebookCells(sessionId, cells, notebookId);
       notebookEdits.delete(key);
       setDirty(false);
       return true;
@@ -109,7 +110,7 @@ export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({ se
   };
   const add = (cellType: NotebookCell['cell_type'] = 'code') => {
     if (!sessionId || busy.current || loadStatus === 'failed') return;
-    change([...cells, { id: crypto.randomUUID(), session_id: sessionId, cell_index: cells.length, cell_type: cellType, source: '', execution_count: null, status: 'idle', epoch: kernel?.epoch || 0, updated_at: Math.floor(Date.now() / 1000) }]);
+    change([...cells, { id: crypto.randomUUID(), session_id: sessionId, notebook_id: notebookId, cell_index: cells.length, cell_type: cellType, source: '', execution_count: null, status: 'idle', epoch: kernel?.epoch || 0, updated_at: Math.floor(Date.now() / 1000) }]);
   };
   const run = async () => {
     const cell = cells.find(item => item.id === previewCellId);
@@ -118,19 +119,26 @@ export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({ se
     const epoch = generation.current;
     try {
       if (!await save()) return;
-      const result = await daemonClient.executeNotebookCell({ session_id: sessionId, cell_id: cell.id, code: cell.source, workspace_id: workspace.id });
+      const result = await daemonClient.executeNotebookCell({
+        session_id: sessionId,
+        notebook_id: notebookId,
+        cell_id: cell.id,
+        code: cell.source,
+        cell_version: cell.cell_version ?? undefined,
+        workspace_id: workspace.id,
+      });
       if (epoch !== generation.current) return;
       setCells(previous => previous.map(item => item.id === cell.id && item.source === cell.source ? { ...item,
         execution_count: result.execution_count, status: result.status, stdout: result.stdout, stderr: result.stderr,
         output_image: result.output_image, wall_ms: result.wall_ms, epoch: result.epoch } : item));
-      setKernel(await daemonClient.getNotebookKernelStatus(sessionId));
+      setKernel(await daemonClient.getNotebookKernelStatus(sessionId, notebookId));
       onShowToast?.(`Cell ${result.status} · ${result.wall_ms} ms`);
     } catch (reason) { if (epoch === generation.current) setError(String(reason)); }
     finally { busy.current = false; if (epoch === generation.current) setRunning(null); }
   };
   const reset = async () => {
     if (!sessionId || running || saving) return;
-    try { setKernel(await daemonClient.resetNotebookKernel(sessionId)); setError(null); }
+    try { setKernel(await daemonClient.resetNotebookKernel(sessionId, notebookId)); setError(null); }
     catch (reason) { setError(String(reason)); }
   };
   const preview = cells.find(cell => cell.id === previewCellId);
@@ -145,7 +153,7 @@ export const NotebookWorkbenchPane: React.FC<NotebookWorkbenchPaneProps> = ({ se
       <button type="button" className="wb-icon-button" aria-label="Save notebook" title="Save notebook" disabled={disabled || !dirty} onClick={() => void save()}><Save size={13} /></button>
       <button type="button" className="canvas-icon" aria-label="Refresh notebook" disabled={disabled || dirty} onClick={() => void load()}><RefreshCw size={13} /></button>
       <button type="button" className="canvas-icon" aria-label="Reset Python worker" disabled={disabled} onClick={() => void reset()}><RotateCcw size={13} /></button>
-      <button type="button" className="wb-icon-button" aria-label="Interrupt notebook execution" title="Interrupt execution" disabled={!running} onClick={async () => { try { const result = await daemonClient.interruptNotebookKernel(key); onShowToast?.(result.interrupted ? 'Worker interrupted.' : 'No running worker.'); } catch (reason) { setError(String(reason)); } }}><Square size={13} /></button>
+      <button type="button" className="wb-icon-button" aria-label="Interrupt notebook execution" title="Interrupt execution" disabled={!running || !sessionId} onClick={async () => { if (!sessionId) return; try { const result = await daemonClient.interruptNotebookKernel(sessionId, notebookId); onShowToast?.(result.interrupted ? 'Worker interrupted.' : 'No running worker.'); } catch (reason) { setError(String(reason)); } }}><Square size={13} /></button>
     </header>
     <div className="wb-context-line">
       <span className="truncate" title={workspace?.path}>{workspace ? workspace.name : 'No execution workspace'}</span>

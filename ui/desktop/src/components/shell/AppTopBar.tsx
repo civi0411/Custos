@@ -13,6 +13,7 @@ import {
   Code2,
   FlaskConical,
   Bot,
+  TrendingUp,
 } from 'lucide-react';
 import { isMacOS, formatKeyCombo } from '@/lib/utils';
 import { useAppContext } from '@/context/AppContext';
@@ -112,7 +113,7 @@ export const AppTopBar: React.FC = () => {
   }, [handleGoBack, handleGoForward]);
 
   const workbenchModes: {
-    id: 'engineering' | 'research' | 'copilot';
+    id: 'engineering' | 'research' | 'copilot' | 'quant';
     label: string;
     icon: React.ElementType;
     shortcut: string;
@@ -120,6 +121,7 @@ export const AppTopBar: React.FC = () => {
       { id: 'engineering', label: 'Engineering', icon: Code2, shortcut: '⌥1' },
       { id: 'research', label: 'Research', icon: FlaskConical, shortcut: '⌥2' },
       { id: 'copilot', label: 'Copilot', icon: Bot, shortcut: '⌥3' },
+      { id: 'quant', label: 'Quant', icon: TrendingUp, shortcut: '⌥4' },
     ];
 
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);

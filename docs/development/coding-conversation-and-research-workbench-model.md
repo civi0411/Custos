@@ -75,7 +75,7 @@ The pasted text correctly identifies mixed navigation axes. Its proposed strict 
 | Worktrees guarantee isolation | Git working directories do not isolate services, shared directories, credentials, or external effects | Show actual runtime authority and scope |
 | Clicking worktree changes every open pane | Switching a workspace layout is valid; silently rebinding existing resources is not | Retain resource IDs and scope in pinned panes |
 
-Custos references: [conversation identity](../../Custos.md#12a-agent-workspace), [canonical specification](../../Custos.md), and [ExecutionWorkspace types](../../crates/custos-domain/src/workspace.rs). In particular, the specification's SessionTaskBinding allows multiple tasks per session and multiple sessions per task. A branch is not a task ID.
+Custos references: [conversation identity](../../Custos.md#12a-agent-workspace), [canonical specification](../../Custos.md), and [ExecutionWorkspace types](../../crates/custos-domain/src/workspace/workspace.rs). In particular, the specification's SessionTaskBinding allows multiple tasks per session and multiple sessions per task. A branch is not a task ID.
 
 ```mermaid
 flowchart TD

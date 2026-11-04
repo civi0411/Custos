@@ -21,4 +21,6 @@ chrono = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 tempfile = { workspace = true }
+rusqlite = { workspace = true }
+sha2 = { workspace = true }
 custos-testkit = { path = "../testkit" }

@@ -443,7 +443,7 @@ Các đường dẫn dưới tương đối từ repo root; dùng chúng để t
 |---|---|
 | Host/client | `crates/custos-app/desktop/src/{lib,browser}.rs`, `crates/custos-sdk/src/{lib,profile}.rs`, `local_api/` |
 | Daemon composition | `crates/custos-daemon/src/{runtime,profile,http_server}.rs` |
-| Application ingress | `crates/custos-daemon/src/api.rs`, `api/{commands,tasks,transport,capabilities}.rs` |
+| Application ingress | `crates/custos-daemon/src/api/mod.rs`, `api/{commands,tasks,transport,capabilities}.rs` |
 | UI transport | `ui/desktop/src/api/{daemon_client,native_browser}.ts` |
 | UI scope/layout | `context/{AppContext,ScreenContext}.tsx`, `types/{canvas,screen}.ts` |
 | UI resource hosting | `components/workbenches/{workbenchResources,ResourceContent,OrcaTabbedContainer}.tsx` |

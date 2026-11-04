@@ -49,5 +49,17 @@ export const LENS_METADATA: Record<ActiveWorkbench, LensMeta> = {
     badge: 'Research',
     modelName: 'Sources · claims · experiments',
     placeholder: 'Ask a question, inspect evidence, or design an experiment…'
+  },
+  quant: {
+    title: 'Quant Sessions',
+    taskLabel: 'New Alpha Hypothesis',
+    iconColor: 'workbench-accent',
+    activeColor: 'workbench-accent-bg',
+    avatarText: 'QT',
+    avatarBg: 'workbench-accent-bg',
+    avatarColor: 'text-fg-on-emphasis',
+    badge: 'Quant',
+    modelName: 'Signals · tearsheet · risk supervision',
+    placeholder: 'Discover alphas, run backtests, or audit lookahead bias…'
   }
 };

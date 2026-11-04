@@ -178,6 +178,14 @@ Research exposes Notebook, Runs and Training as independent central resource tab
   - [12.10 Trải Nghiệm Người Dùng (UX) Chủ Động](#1210-trải-nghiệm-người-dùng-ux-chủ-động)
   - [12.11 Research Foundation](#1211-research-foundation)
   - [12.12 Ranh giới](#1212-ranh-giới)
+- [PHẦN 12B — QUANT FINANCE PACK](#phần-12b--quant-finance-pack)
+  - [12B.1 Motivation](#12b1-motivation)
+  - [12B.2 Bốn Vai Trò Chuyên Biệt (WorkerRoles)](#12b2-bốn-vai-trò-chuyên-biệt-workerroles)
+  - [12B.3 Bốn Loại Tác Vụ Lượng Hóa (WorkbenchJobs)](#12b3-bốn-loại-tác-vụ-lượng-hóa-workbenchjobs)
+  - [12B.4 Bốn Thực Thể Tài Chính Domain Cốt Lõi (Layer 0)](#12b4-bốn-thực-thể-tài-chính-domain-cốt-lõi-layer-0)
+  - [12B.5 Bộ Đôi Kiểm Chứng Oracle (DSR & Lookahead Bias)](#12b5-bộ-đôi-kiểm-chứng-oracle-dsr--lookahead-bias)
+  - [12B.6 Cầu Nối Quản Trị Outbox Handoff và ExecutionPermit](#12b6-cầu-nối-quản-trị-outbox-handoff-và-executionpermit)
+  - [12B.7 Ranh Giới và Chống Mẫu](#12b7-ranh-giới-và-chống-mẫu)
 - [PHẦN 13 — GIAO THỨC ĐA GÓI VÀ HỢP ĐỒNG XUYÊN DOMAIN (CROSS-PACK CONTRACTS)](#phần-13-giao-thức-đa-gói-và-hợp-đồng-xuyên-domain-cross-pack-contracts)
   - [13.1 Motivation](#131-motivation)
   - [13.2 Cross-Pack Handoff](#132-cross-pack-handoff)
@@ -2348,6 +2356,54 @@ Assistant hiển thị “đã tìm thấy”, “đã chuẩn bị”, “đã 
 
 ---
 
+# PHẦN 12B — QUANT FINANCE PACK
+
+## 12B.1 Motivation
+
+Giao dịch lượng hóa và tài chính thuật toán đòi hỏi sự khắt khe cao độ về tính xác thực thống kê và quản trị rủi ro. Khác với mã nguồn thông thường hoặc tài liệu văn bản, một sai sót trong chiến lược lượng hóa (như rò rỉ dữ liệu tương lai - lookahead bias, hoặc hiện tượng data mining overfitting) có thể gây thiệt hại vốn nghiêm trọng tức thì. **Quant Finance Pack** được thiết kế như một Workbench chuyên biệt thứ tư của Custos, định hình các vai trò tác tử, rào cản kiểm định (verifiers) và quy trình chuyển giao lệnh giao dịch được bảo hộ nghiêm ngặt.
+
+## 12B.2 Bốn Vai Trò Chuyên Biệt (WorkerRoles)
+
+| Role ID | Phân Quyền | Kỹ Năng Cho Phép | Mục Tiêu & Trách Nhiệm |
+|---|---|---|---|
+| `alpha_scout` | Read-Only | `file_read`, `lexical_search`, `http_fetch`, `shell_exec` | Quét dữ liệu thị trường, tính toán hệ số tương quan thông tin (IC), tỷ lệ thông tin (IR) và cấu hình suy giảm tín hiệu (decay profile). |
+| `backtest_runner` | Read-Write | `file_read`, `shell_exec` | Thực thi kiểm thử ngược (backtest) bằng mô hình vector hóa. Xuất dữ liệu tearsheet PnL, Sharpe, drawdown. |
+| `risk_supervisor` | Read-Only | `file_read` | Kiểm toán kết quả backtest, áp dụng công thức Deflated Sharpe Ratio (DSR) và rà soát lookahead bias. |
+| `exec_broker` | Read-Write | `file_read`, `shell_exec` | Lập kế hoạch phân bổ vốn, sinh phiếu lệnh (`OrderTicket`) kèm mô hình trượt giá (slippage) và ngưỡng dừng lỗ cho con người duyệt. |
+
+## 12B.3 Bốn Loại Tác Vụ Lượng Hóa (WorkbenchJobs)
+
+1. `quant__alpha_discover` (T1SingleWorker, vai trò `alpha_scout`): Khám phá tín hiệu alpha; yêu cầu $IC_{mean} \ge 0.02$, $IR \ge 0.5$ và `lookahead_clean = true`.
+2. `quant__backtest_full` (T2StagedPipeline, vai trò `backtest_runner`): Chạy toàn diện backtest; tạo ra `tearsheet_json` và `equity_curve_csv`, yêu cầu $Sharpe > 0.8$, $MaxDrawdown < 0.20$ và $DSR > 0$.
+3. `quant__risk_audit` (T0Direct, vai trò `risk_supervisor`): Thẩm định kiểm toán rủi ro độc lập với hai oracle `deflated_sharpe_verifier` và `lookahead_bias_checker`.
+4. `quant__execution_plan` (T1SingleWorker, vai trò `exec_broker`): Lập kế hoạch thực thi giao dịch và thiết lập circuit breakers, đưa lệnh vào Outbox chờ con người cấp phép.
+
+## 12B.4 Bốn Thực Thể Tài Chính Domain Cốt Lõi (Layer 0)
+
+1. `AlphaFactor`: Đại diện cho tín hiệu alpha, công thức tính (`formula`), vũ trụ tài sản (`universe`), các chỉ số thống kê $IC_{mean}, IC_{std}, IR$, chu kỳ suy giảm và trạng thái kiểm tra rò rỉ tương lai (`lookahead_clean`).
+2. `BacktestTearsheet`: Bảng tổng kết hiệu năng chiến lược mô phỏng, bao gồm Sharpe Ratio kinh điển, Deflated Sharpe Ratio (DSR), Max Drawdown, Calmar Ratio, tỷ lệ thắng (Win Rate), hệ số lợi nhuận (Profit Factor) và mảng lợi nhuận theo từng tháng (`MonthlyReturn`).
+3. `RiskPermitConfig`: Cấu hình hạn mức rủi ro bắt buộc gồm tỷ trọng vị thế tối đa (`max_position_pct`), đòn bẩy tối đa (`max_leverage`), tỷ lệ cắt lỗ (`stop_loss_pct`), Value at Risk 95% (`var_95`) và ngưỡng $DSR$ tối thiểu. Vi phạm bất kỳ điều kiện nào đều kích hoạt enum lỗi `RiskBreach`.
+4. `OrderTicket`: Phiếu lệnh giao dịch với mã tài sản (`symbol`), hướng giao dịch (`direction`: Buy/Sell/SellShort/BuyToCover), loại lệnh (`order_type`: Market/Limit/TWAP/VWAP), số lượng, tỷ trọng mục tiêu, trượt giá dự tính (`estimated_slippage_bps`) và trạng thái phê duyệt của con người (`approved_by_human`).
+
+## 12B.5 Bộ Đôi Kiểm Chứng Oracle (DSR & Lookahead Bias)
+
+- **`DeflatedSharpeVerifier`:** Ứng dụng nghiên cứu của Bailey & López de Prado (2016). Khắc phục hiện tượng chọn lọc thiên lệch (selection bias under multiple testing), bác bỏ các chiến lược có Sharpe cao ảo do overfitting dữ liệu lịch sử ($DSR \le 0$).
+- **`LookaheadBiasChecker`:** Ngăn chặn việc mô hình hoặc mã thuật toán vô tình sử dụng dữ liệu tương lai tại thời điểm ra quyết định trong quá khứ. Bắt buộc phải có xác nhận độc lập `lookahead_clean == true` từ bước phân tích tĩnh hoặc thẩm tra dữ liệu.
+
+## 12B.6 Cầu Nối Quản Trị Outbox Handoff và ExecutionPermit
+
+Để đảm bảo an toàn tuyệt đối cho vốn và tài khoản:
+- Tác tử `exec_broker` **KHÔNG BAO GIỜ** được gửi lệnh trực tiếp ra sàn giao dịch bên ngoài.
+- Mọi phiếu lệnh `OrderTicket` đều phải gọi qua phương thức `to_outbox_action_item(task_id)` để tạo ra một bản ghi `OutboxActionItem` trong hộp thư Outbox của Copilot.
+- Bản ghi này được khóa nội dung bằng mã băm cryptographic SHA256 (`payload_digest`) và chỉ được phép gửi ra adapter sàn khi có con người duyệt và ký cấp `ExecutionPermit` dùng một lần (Single-use permit).
+
+## 12B.7 Ranh Giới và Chống Mẫu
+
+- Quant Pack **KHÔNG** tự ý thực thi giao dịch live khi chưa có chữ ký `ExecutionPermit` của người vận hành.
+- Quant Pack **KHÔNG** che giấu hiện tượng overfitting: bất kỳ backtest nào có Sharpe $> 4.0$ hoặc đường PnL phi thực tế đều bị gắn cờ bắt buộc kiểm toán nâng cao.
+- Quant Pack **KHÔNG** vi phạm Layer 0 Zero-I/O: toàn bộ mô hình dữ liệu trong `custos-domain::quant` là deterministic, thuần bộ nhớ và hoàn toàn độc lập với mọi thư viện mạng hay hệ quản trị cơ sở dữ liệu.
+
+---
 
 # PHẦN 13 — GIAO THỨC ĐA GÓI VÀ HỢP ĐỒNG XUYÊN DOMAIN (CROSS-PACK CONTRACTS)
 
@@ -2372,6 +2428,7 @@ Mỗi `PackManifest` chỉ có một registry trong `custos-packs`: task kinds, 
 - **Engineering:** Giao tiếp qua source anchors hoặc `PatchProposal`. Thiếu reproducer, flaky test -> `unknown/stale`.
 - **Research:** Giao tiếp qua `SourceRecord`. Trích dẫn không khớp passage, data leakage -> `unknown`.
 - **Assistant:** Giao tiếp qua `ActionIntent` và Outbox. Chờ approval, timeout sau send -> `uncertain`.
+- **Quant:** Giao tiếp qua `AlphaFactor`, `BacktestTearsheet`, `RiskPermitConfig` và `OrderTicket`. Thiếu kiểm định lookahead bias hoặc DSR không dương -> `reject/fail`. Lệnh thực thi chuyển giao sang Outbox (`OutboxActionItem`) với SHA256 digest locking và chữ ký `ExecutionPermit`.
 
 ## 13.4 Một Vòng Lặp Đủ Lớn Để Kiểm Chứng (E2E)
 Ví dụ: “Đánh giá hai cách giảm latency retrieval, thử cách phù hợp trên dataset nội bộ, sửa code và gửi báo cáo”.
@@ -3247,6 +3304,8 @@ Existing `custos-adapters/src/workspace.rs` (Trường/Vinh) must return inspect
 
 Candidate create/integrate completion extends the existing daemon workspace commands and Workspace metadata. The single daemon serializes candidate mutations; caller command IDs and request digests persist with workspace records. Replayed creation returns recorded candidates without reprovisioning. Integration has a read-only preview, expected-head checks and a persisted intent/result; restart recovery reconciles Git ancestry/conflict state before any retry. No new command store, table or workspace backend is introduced. Desktop WorktreeManager uses the same client methods for preview and apply.
 
+Multi-candidate race dispatching and scoped claim fencing: `StartRunCommand` accepts an optional `node_id` to scope task claims to individual DAG nodes or candidate worktrees (`candidate:<id>`). `CandidateRaceSpec` defines competitive multi-model specifications, test verification commands, and timeout budgets. `CandidateRaceResult` aggregates individual `CandidateExecutionReport` scorecards (tests passed/failed, modified files, token usage, duration) and records the winning candidate. `TaskRuntime::dispatch_run` forwards this scope into `WorkflowDispatcher::claim_ready_task`, preventing whole-task lock collisions during concurrent multi-model races on the same Task while preserving strict double-dispatch prevention per candidate worktree. The `v1.workspaces.candidates.race` daemon API binds `WorkflowPort::execute_candidate_race`, automatically auto-discovering spawned candidate worktrees when candidates are omitted, executing parallel agent runs across checkouts, evaluating the Test Oracle, and returning comparative scorecards for 1-click winner integration in Desktop WorktreeManager.
+
 The legacy Assistant outbox create/approve/dispatch endpoints must fail without a configured mediated connector. They must not fabricate permit/receipt IDs or mark dispatching as approval. Local draft editing/review and read-only outbox remain usable; adding a real external connector is a separate composition/configuration requirement.
 
 Canvas side-open commands consume the legacy split request into the existing canvas reducer, then clear it; no second split layout is rendered. Detached routes do not mount interactive resources until shared-window scope/state reconciliation exists. Integration recovery checks the recorded target branch reference, independent of the current checkout.
@@ -3304,3 +3363,271 @@ The implementation target is specified in [Workspace/UI §13](docs/architecture/
 ### Repository Git implementation slice
 
 The source-control implementation extends the existing workspace adapter with `repository_git.rs`, composed only by daemon local API. Repository-bound GitHub preference is non-secret `{host,user}` in the repository's shared local Git config (`custos.github-account`), inherited by linked worktrees; it never changes machine-wide gh active account or stores a token in UI/config. Account-bound viewer requests resolve the exact gh keyring account and inject only child-scoped credentials; host mismatch/unavailable account fails closed. The first vertical slice adds real ref/worktree/remote/history inventory, guarded local branch switching, explicit remote fetch, staged-only commit, and a panel inside the existing Files/Changes resource. Existing creation/adoption stays in the workspace lifecycle. Publishing/PR/rebase remain unsupported until their authority/recovery contracts are connected; no enabled placeholder actions. Research source evidence and current gaps remain explicit.
+
+### Notebook document, scoped kernel binding and migration (F06)
+
+Notebook identity, kernel execution binding, and chat session association are distinct architectural concerns:
+1. **Document Identity & Kernel Scoping:** A `NotebookDocument` carries an independent identity (`notebook_id`) distinct from the containing chat `session_id`. Multiple notebooks within the same session maintain strictly isolated Python execution environments (`ActiveKernel` key: `{session_id}::{notebook_id}`). Executing code in one notebook never leaks memory or variables to another notebook in the same session, while multiple UI panes viewing the same notebook document cleanly share its underlying kernel binding handle and process memory.
+2. **Cell Invalidation & Versioning:** Editing a cell's source code automatically invalidates previous execution outputs (`stdout`, `stderr`, `output_image`), resets `execution_count` to `None`, and increments `cell_version`. Pre-execution validation verifies `cell_version` against the saved store, rejecting stale or concurrent execution requests.
+3. **Execution Idempotency:** Cell execution parameters accept an `execution_request_id`. Duplicate in-flight or retried requests return the cached execution result without re-executing or incrementing the kernel execution counter.
+4. **Persistence Layer Scoping & Backward Compatibility:** `ResearchRepository` scopes cell mutations with `WHERE session_id = ?1 AND notebook_id = ?2`, preventing cross-notebook cell wiping during replacements. Kernel state records in `notebook_kernel_sessions` use scoped keys while preserving backward compatibility for legacy single-notebook sessions with nullable `notebook_id` columns.
+
+### Governed agent loop, budget & gateway ownership (F08)
+
+The multi-turn autonomous agent loop operates under strict kernel authority mediation, budget bounds, and transactional effect separation:
+1. **Governed Tool Execution & Dual-Stage Loop:** In `GovernedAgentRuntime`, model-proposed tool calls are intercepted into `ActionIntent`s with `Assurance::CustosMediated`. Rather than dispatching arbitrary side-effects, the loop delegates each tool call to `GovernedToolExecutor` (`DaemonGovernedToolExecutor`). Tools undergo a two-phase check:
+   - **Gate 2 Authority & Parameter Validation:** `authorize()` rejects critical-risk operations without explicit human grants, unmapped tools, and directory traversal attempts (e.g. `..` in paths) before touching disk or burning permits.
+   - **Permit Acquisition, Durable Ledger & Physical Dispatch:** `execute()` acquires a cryptographic `ExecutionPermit` via `TrustedKernel`, burns the permit (INV-04), writes an `InFlight` effect to `OutboxRepository` and an outbox entry to `OutboxPort`, executes the physical side-effect via `SovereignDeveloperAdapter` or `McpFederationHub`, and settles the receipt atomically. If outbox settlement fails, the effect is safely marked `Uncertain` to prevent unrecorded physical state changes.
+2. **Prevention of Duplicate Execution (F08 / G07 Invariant):** Successful tool execution under `GovernedAgentRuntime` marks the returned action intent with `ActionLifecycleState::Receipt`. When downstream orchestration (`TaskRuntime`) processes returned intents, it recognizes `ActionLifecycleState::Receipt` and bypasses re-dispatching, ensuring exactly one physical mutation on disk and one durable entry in the outbox ledger.
+3. **Loop Convergence & Budget Bounds:** The loop enforces strict iteration limits (`max_iterations`, default 10). Exhausting iterations without the model cleanly completing returns `DomainError::BudgetExceeded` with `"status: limited"`, guaranteeing that unfinished or looping tasks are never misreported as successful completions.
+4. **Cancellation Responsiveness & Handle Pruning:** When cancellation is signaled before or mid-loop, execution halts immediately with `DomainError::Validation`, pruning steering notes and cancellation registry entries to eliminate memory leaks and dangling handlers.
+
+### Three-vertical acceptance, desktop & cross-pack acceptance (F09)
+
+The three primary verticals—Assistant, Coding, and Research—operate under unified continuity while strictly preserving domain invariants, sandbox containment, and transactional boundaries:
+1. **Three-Lens Continuity & Cross-Session Isolation (G08):**
+   - The same conversational thread spans across Assistant, Coding, and Research lenses with a unified journal, without fabricating phantom tasks, runs, or synthetic tool calls.
+   - Lens switching is idempotent and does not implicitly transfer authority or capabilities across lenses.
+   - Assistant communication drafts remain scoped to their origin session and task (`Draft scope cannot be changed`), preventing cross-session leakage.
+   - Draft payload locking (`payload_lock`) seals the cryptographic hash (`blake3`/`digest`) upon approval; subsequent modifications to locked drafts are strictly forbidden.
+   - Project and workspace switching preserves context isolation, preventing cross-tenant bleed.
+2. **Coding Vertical: Dirty Repo, Base Drift & Containment (G09):**
+   - Bugfix workflows execute against real Git repositories using `SovereignDeveloperAdapter` with `patch_preview` simulation, producing zero disk mutations prior to explicit write actions.
+   - Uncommitted user dirty files (`user_scratch.rs`) and untracked notes are strictly preserved during agent actions; `inspect_dirty` accurately reports user modifications alongside agent changes.
+   - Baseline commit hashes are tracked to capture base drift accurately.
+   - Agent-edited test containment prevents rogue or hallucinating agents from tampering with test files to bypass trusted acceptance pipelines (`EvidencePipeline` and `EvidenceBundle` verification).
+   - Sandbox drivers strictly enforce directory traversal containment (`..` path escapes outside the workspace boundary fail closed with `ReceiptStatus::Failure` and error message `Path traversal violation`).
+3. **Assistant Vertical: Outbox, Timeout Reconciliation & Double-Dispatch CAS Fencing (G10):**
+   - Outbound communications follow the fail-closed sequence: Draft Creation -> Approval & Payload Lock -> Outbox Enqueue (`Pending`) -> Outbox Approval (`Approved`) -> CAS Dispatch (`Dispatching`) -> Durable Receipt (`Receipted`).
+   - Timeouts and connection drops immediately mark entries as `Uncertain` (Gate 3).
+   - On daemon restart, `reconcile_on_startup()` recovers in-flight effect attempts and dispatching outbox entries to `Uncertain`. Invariant 3 strictly forbids blind retries (`ActionLifecycleState::Uncertain.allows_blind_retry() == false`), preventing duplicate sends and quota exhaustion.
+   - Unapproved entries or tampered payloads (digest mismatch between calculated payload bytes and recorded `argument_digest`) are strictly blocked before dispatch.
+   - Atomic Compare-And-Swap (CAS) transitions (`UPDATE outbox_entries SET status = 'dispatching' WHERE id = ?1 AND status = 'approved'`) guarantee that concurrent dispatch workers are fenced to exactly one execution, preventing race conditions and double delivery.
+
+### Training studio, remote targets & checkpoint continuity (F10)
+
+The Training Studio and remote compute substrate operate under strict generation-CAS fencing, single-writer promotion, and crash recovery reconciliation:
+1. **Immutable Attempt Lineage & Cross-Target Continuation (G11):**
+   - Each training execution is encapsulated in an `ExecutionAttempt` carrying `experiment_id`, `recipe_id`, `generation`, and an optional `parent_checkpoint_id`.
+   - When a training attempt is continued on a different destination (e.g., from RunPod to DedicatedSsh or VastAi), the continuation attempt strictly increments the fencing `generation` (e.g. 1 -> 2) and records the parent checkpoint identifier in `parent_checkpoint_id`.
+   - The entire attempt DAG is durably tracked in `ExperimentAttemptRepository` with atomic outbox event publishing (`experiment.attempt.saved`).
+2. **Crash Recovery & Startup Reconciliation to Uncertain:**
+   - In-flight states (`submitting`, `submitted`, `running`, `stopping`) on a crashed or disconnected worker process are automatically recovered to `Uncertain` by `reconcile_attempts_on_startup()`.
+   - Resources with state `ReleaseRequested` are recovered to `Unknown` fail-closed, preventing unverified resource release claims or billing leakage.
+3. **Single-Writer Promotion & Stale Generation CAS Fencing:**
+   - Checkpoint promotions enforce an atomic generation-CAS check in `checkpoint_promotions`: `PRIMARY KEY (experiment_id, generation)`.
+   - When a newer generation attempt (e.g., Generation 2) has been promoted, any late, partitioned, or zombie attempt (e.g., Generation 1) attempting to promote its checkpoint is strictly rejected with `PromotionOutcome::StaleGeneration { actual_generation: 2 }`.
+   - Single-writer ownership is guaranteed across distributed heterogeneous hardware without distributed locks.
+4. **Pre-Resume Checkpoint Validation (Fail-Closed Gate):**
+   - Resuming training state via `validate_for_state_resume()` enforces that checkpoints must have `commit_status: CommittedProtected` and `resumability_level: TrainingStateResume`.
+   - Checkpoints in `LocalStaged` or `Observed` state, checkpoints missing critical single-GPU Trainer state bundles (`model.safetensors`, `optimizer.pt`, `scheduler.pt`, `rng_state.pth`, `trainer_state.json`), or manifests with path traversal attempts (`..`) are rejected before compute allocation.
+5. **Idempotent Invocations:**
+   - Remote CLI and API operations (`attempt_invocations`) are fenced with unique `idempotency_key` constraints (`ON CONFLICT(idempotency_key) DO NOTHING`), preventing duplicate remote job dispatch or redundant billing.
+
+### Measured orchestration intelligence, S1 & baseline evaluation (F11)
+
+Orchestration Intelligence (OI) and S1/S2 deliberation transition from scaffold into an empirically verified and measured optimization substrate (G12):
+1. **Pinned Baseline Comparison & Invariant Margin Enforcement (G12 Invariant):**
+   - The direct execution model (e.g. sovereign Claude 3.5 Sonnet / Governed native harness) remains the pinned reference baseline.
+   - Any optimization candidate (e.g. S1 triage + lightweight worker model) cannot claim cost reduction or quality preservation without empirically and statistically meeting pre-configured margins (`ComparisonMarginConfig`).
+   - Total economic cost strictly includes direct token spend, failed attempt retries, verifier overhead, and human intervention time priced at a standard rate (e.g., $60/hr). Superficially cheap token runs requiring human recovery are rejected (`OptimizationClaimOutcome::NotCheaper`).
+   - Quality degradation beyond the non-inferiority tolerance margin is strictly rejected (`OptimizationClaimOutcome::QualityInferior`).
+   - Sample counts below `min_sample_size` output `OptimizationClaimOutcome::Inconclusive`, preserving the pinned baseline as default.
+2. **S1 Fast Judge Calibration & Uncompressed Escalation:**
+   - S1 Judge evaluates structured candidate execution against declared contract criteria.
+   - Clean evidence with unambiguous status and exit codes achieves calibrated confidence (`>= 0.75`), granting fast verification without heavy model deliberation.
+   - Ambiguous, indeterminate, or partial execution drops confidence below threshold (`< 0.75`), triggering explicit abstain (`passed: false`, `rationale` containing `S1 Abstain`) and escalating to S2 or human review.
+   - Raw candidate output, criteria violations, and caveats are preserved uncompressed so downstream deliberation does not lose reasoning context.
+3. **Delta Replanning Authority Preservation & INV-03 Guardrail:**
+   - Upon node failure or assumption violation, `Replanner::create_brief()` computes DAG dependency reachability, isolating affected nodes while preserving settled upstream nodes.
+   - `Replanner::apply_delta()` retains preserved nodes and carries forward committed authority obligations (`obligations`), preventing unauthorized authority escalation or retroactive criteria rewrites.
+   - Invariant INV-03: If a node produced an `Uncertain` outbox effect, automated blind retry is strictly forbidden (`[INV-03 Guardrail]`), requiring explicit human reconciliation.
+4. **Hard Filters & Catalog Availability Pruning:**
+   - `CandidateBuilder` inspects `DecisionSnapshot.available_executors` and strictly prunes any absent or unconfigured executors from consideration.
+   - `HardFilters::evaluate()` rejects proposals targeting absent executors with `RejectionReason::CapabilityMissing`.
+   - Model pin mismatches, local-only constraints, and network egress rules are enforced fail-closed prior to plan compilation.
+5. **Explicit Representation of Uncertainty:**
+   - Unknown spend, latency, and quality are never masked as 0.
+   - `Estimator::estimate_with_snapshot()` factors in declared `snapshot.unknowns`, active uncertain effects (`uncertain_effects_count`), and criteria verification overhead into explicit token ranges, latency bounds, and cost ceilings.
+
+### Upstream parity, release and operational recovery (F12)
+
+Upstream parity, release upgrade, and daemon recovery form the operational durability backbone of Custos (G13):
+1. **G13 Operational Invariant:**
+   - *"Release upgrade/restart/orphan resource recovery | Legacy data readable, active jobs discoverable, no destructive cleanup."*
+2. **Legacy Schema Migration & Historical Data Preservation (Release Upgrade):**
+   - Opening a database initialized with early core schemas (0001 - 0006) automatically executes forward migrations up to 0041 (notebook bindings, checkpoint promotions, session journals).
+   - Historical records (tasks, sessions, continuation packets, ledger records) remain completely intact and readable without destructive data alteration or column dropping.
+3. **Crash & Startup Reconciliation (Orphan Resource Recovery):**
+   - Unified startup reconciliation (`SqliteTaskStore::reconcile_all_on_startup()`) safely handles unexpected daemon terminations without data loss:
+     * **Remote runs & remote worker runs:** In-flight runs targeting cloud backends (RunPod, Vast, SSH, Colab, Kaggle) or carrying `external_job_ref` transition to `RunStatus::Uncertain`, preserving active compute handles for passive observation and preventing duplicate compute billing.
+     * **Local worker runs & local runs:** In-flight local processes transition fail-closed to `RunStatus::Failed` with recorded `ended_at` timestamps and incremented `state_version`.
+     * **Outbox entries:** In-flight entries in `dispatching` state transition to `OutboxStatus::Uncertain`, blocking automated blind retries under INV-03 until explicitly reviewed.
+     * **Experiment attempts:** In-flight attempts transition to `ExecState::Uncertain`, while attempts with pending release requests transition to `ResourceState::Unknown`.
+     * **Launch attempts:** In-flight attempts in `prepared` status transition to `LaunchStatus::Unknown` with diagnostic detail (`Daemon restart during in-flight execution; recovered fail-closed`).
+     * **Orphan dispatch claims:** Pending or dispatched claims without assigned node IDs transition to `ClaimStatus::Released`.
+4. **Active Job Discoverability Post-Crash:**
+   - Reconciled and uncertain jobs remain fully discoverable via standard APIs (`list_uncertain_runs()`, `list_runs_for_task()`).
+   - Historical task tracking, audit logs, and lineage links are completely preserved.
+5. **Workspace Orphan & Host Recovery with Dirty Protection:**
+   - Physical workspaces pointing to intact host directories recover cleanly to `WorkspaceStatus::Ready`.
+   - Workspaces pointing to missing or corrupt host paths recover safely to `WorkspaceStatus::SetupFailed` with diagnostic detail, strictly retaining the database metadata rather than dropping rows.
+   - Worktrees containing uncommitted modifications, untracked files, or staged changes reject non-force deletion/archival (`DomainError::Conflict`), guaranteeing zero data destruction for user bytes on disk.
+
+### GPU workload components and resource admission (GPU-A / GPU-B)
+
+Heterogeneous compute accelerators (Apple Silicon Metal MPS, NVIDIA CUDA, host CPU) are governed by the sovereign resource admission subsystem:
+1. **GPU Admission Invariant:**
+   - *"Two workloads claim the same managed exclusive device; one is rejected or queued — NO dual launch on exclusive accelerators."*
+2. **Layer 0 Zero-I/O Domain Models (`custos-domain`):**
+   - Pure, deterministic representations: `ComputeDeviceRef` (CPU, CUDA, MPS, ROCm), `ComputeWorkloadKind` (NotebookKernel, TrainingRun, EvaluationRun, LocalInference), `WorkloadLease` with lifecycle status (`Admitted`, `Queued`, `Active`, `Released`, `Preempted`), and `WorkloadAdmissionRequest` / `WorkloadAdmissionVerdict`.
+3. **Core Admission Contract (`custos-core`):**
+   - `WorkloadAdmissionPort` exposes `discover_devices()`, `admit_workload()`, `release_lease()`, and `list_active_leases()`.
+4. **Runtime Arbitration & Mutual Exclusion (`custos-runtime`):**
+   - `WorkloadAdmissionCoordinator` arbitrates device contention in-memory without microservices:
+     * Exclusive workloads (e.g. TrainingRun) acquire exclusive locks on their target device.
+     * Subsequent exclusive requests targeting the same device are queued or rejected with detailed reasons (e.g., `Device 'dev_cuda_0' is exclusively held by workload 'TrainingRun' (owner: '...')`).
+     * When training holds a GPU, interactive notebook cells or local inference requests targeting that GPU fail-closed with `DomainError::Conflict`, strictly preventing CUDA OOM, segmentation faults, and uncoordinated dual launch.
+     * Shared workloads (concurrent notebook kernels across different tabs or sessions) are admitted simultaneously on non-exclusive targets (CPU or shared MPS) with isolated lease IDs.
+5. **Crash & Reset Lifecycle Recovery (Zero Zombie Leases):**
+   - Kernel resets (`reset_scoped`) and interrupts (`interrupt_scoped`) in `PythonKernelCoordinator` immediately release associated device leases.
+   - `sweep_orphaned_leases(owner_id)` reclaims abandoned allocations upon unexpected session or process crashes, preventing zombie VRAM reservations.
+6. **Bounded Diagnostic Probe:**
+   - `PythonKernelCoordinator::probe_kernel_device_environment()` executes a 5-second bounded probe checking PyTorch and accelerator availability (CUDA/MPS) without hanging or auto-installing packages.
+7. **Golden Test Verification:**
+   - Verified by `tests/e2e/tests/gpu_workload_admission_golden_test.rs` covering all 6 core scenarios (6/6 PASS).
+
+### GPU Training, Evaluation, and Inference Coexistence (GPU-C / GPU-D)
+
+Supervised training runs, held-out model evaluations, and local reasoning inference coordinate via cooperative hardware resource admission:
+1. **GPU Coexistence Invariants:**
+   - *"Actual training and evaluation execution with fault recovery; zero parallel model OOM on shared hardware; inference fails closed without silent fallback."*
+   - *"Loaded model eviction is protected against in-flight request races; hardware leases are reclaimed synchronously on completion, error, or cancellation."*
+2. **Layer 0 Pure Domain Models (`custos-domain`):**
+   - Defined in `crates/custos-domain/src/research/experiment.rs`:
+     * `FrozenTrainingRecipe`: Immutable recipe with base model, dataset URI, split, learning rate, batch size, and deterministic SHA-256 digest (`content_digest()`).
+     * `TrainingStepTelemetry`: Monotonic step progress, epoch, loss, learning rate, and memory footprint.
+     * `TrainingExecutionReceipt`: Complete execution receipt with step count, final loss, created checkpoints, and terminal state (`Collected`).
+     * `ModelEvaluationSpec`: Evaluation target checkpoint, dataset URI, rubric version, and sample limit.
+     * `ModelEvaluationReport`: Scored metrics including sample count, passed/failed count, accuracy, average loss, and hurdle verification (`passed_hurdle`).
+3. **Local Training Runner (`custos-runtime::compute::LocalTrainingRunner`):**
+   - Manages supervised training execution attempts:
+     * Preflights attempt and acquires exclusive lease on target accelerator.
+     * Rejects or queues competing training runs fail-closed with `DomainError::Conflict`.
+     * Drives deterministic training steps with monotonic loss convergence and progress milestones.
+     * Generates valid `TrainingCheckpointManifest` records with `CheckpointCommitStatus::CommittedProtected` and state resume files at scheduled intervals.
+     * Reclaims the exclusive lease upon clean completion, cancellation, or simulated OOM (zero zombie allocations).
+4. **Model Evaluation Runner (`custos-runtime::compute::ModelEvaluationRunner`):**
+   - Prevents memory collision and duplicate model weights in VRAM:
+     * When training actively occupies an accelerator, evaluation is blocked with `DomainError::Conflict`.
+     * At sequential safe-points (after training commits checkpoint and releases device), evaluation admits, executes against held-out data, computes accuracy, and releases the lease immediately.
+5. **Local Inference Coexistence Seam (`custos-adapters::local_inference`):**
+   - Connects `InferenceRuntime` to `WorkloadAdmissionPort`:
+     * Preloading models checks admission before allocating hardware weights.
+     * When training exclusively occupies a GPU, local inference requests queue or fail-closed (`ProviderError::ExecutionError`), strictly preventing silent cloud fallback or unpinned backend switching.
+     * `ModelSlot` tracks in-flight generation requests via atomic counter (`active_requests: AtomicUsize`) and RAII `InFlightGuard`.
+     * `evict_model()` safely blocks eviction if requests are in-flight, and releases the hardware lease upon complete unload.
+6. **Golden Test Verification:**
+   - Verified by `tests/e2e/tests/gpu_training_eval_coexistence_golden_test.rs` covering all 7 core scenarios (7/7 PASS):
+     * *Scenario 1:* Deterministic Tiny CPU Training Run (monotonic steps, valid checkpoint manifests, zero zombie leases).
+     * *Scenario 2:* Anti-Dual-Launch on exclusive accelerators (competing run blocked with `Conflict`).
+     * *Scenario 3:* Inter-workload collision avoidance (training blocks evaluation from duplicate model loading in VRAM).
+     * *Scenario 4:* Sequential safe-point handoff (training $\to$ protected checkpoint $\to$ evaluation pass).
+     * *Scenario 5:* Inference coexistence fail-closed (no silent cloud fallback when GPU is occupied).
+     * *Scenario 6:* In-flight inference request eviction race protection (eviction blocked until drained).
+     * *Scenario 7:* Training fault & OOM recovery (lease immediately reclaimed, zero zombie allocations).
+
+### Remote Compute Targets, Decoupled Lifecycle & Reconciliation (GPU-E)
+
+1. **Remote Target Adapter Capabilities & Preflight Gate:**
+   - Standardized `RentedGpuTargetAdapter` (`crates/custos-adapters/src/compute/rented_gpu.rs`) implementing `ExecutionTargetPort`.
+   - Preflight probes remote hardware via SSH and `nvidia-smi`, verifying GPU architecture, available VRAM, and driver versions.
+   - Rejects execution attempts fail-closed with clear blockers if target specifications do not satisfy recipe constraints.
+2. **Remote Execution Coordinator (`crates/custos-runtime/src/compute/remote.rs`):**
+   - Implements `RemoteExecutionCoordinator` to bridge `ExecutionAttempt`, `ExecutionTargetPort`, and `WorkloadAdmissionPort`.
+   - Adopts exclusive lease locking on remote compute devices, preventing competing workloads from concurrent execution on the same GPU.
+3. **Decoupled Stop and Release (Cloud Billing Leakage Protection):**
+   - Decouples `stop_job()` and `release_compute()`:
+     * `stop_job()` terminates remote script execution (SIGTERM -> SIGKILL) $\to$ attempt enters `ExecState::Stopped`, but `ResourceState` remains `Held`.
+     * Billing continues until explicit `release_compute()`, allowing post-run log inspection without accidental pod deallocation.
+     * `release_compute()` invokes cloud provider deallocation (RunPod GraphQL mutation, Vast.ai CLI destroy) $\to$ transitions `ResourceState::ReleaseConfirmed` and frees the hardware lease.
+     * Direct invocation of `release_compute()` on an active job safely guarantees process teardown before pod deletion.
+4. **Disconnection Tolerance & Startup Crash Recovery:**
+   - Drops in network connectivity transition attempts to `ExecState::Uncertain` with `ExecEvent::ConnectionLost`, preventing blind retries or duplicate charges.
+   - Startup crash reconciliation (`reconcile_attempts_on_startup()` in SQLite store) recovers in-flight attempts to `Uncertain` and sweeps dangling leases.
+5. **Artifact Collection & CAS Integrity:**
+   - Remote execution logs and model weights downloaded via `collect_artifacts()` with SHA-256 content digest attestation.
+   - Attempt transitions to terminal `ExecState::Collected`.
+6. **Golden Test Verification:**
+   - Verified by `tests/e2e/tests/gpu_remote_target_golden_test.rs` covering all 7 core scenarios (7/7 PASS):
+     * *Scenario 1:* Remote Target Preflight & Capability Gate (mock A100 GPU verified, blockers reject upfront).
+     * *Scenario 2:* Idempotent Submission & Anti-Dual-Launch (exclusive admission prevents overlapping runs).
+     * *Scenario 3:* Telemetry & Monotonic Progress Observation (`protected <= local <= observed` invariant).
+     * *Scenario 4:* Decoupled Stop vs. Release Billing Protection (`may_still_incur_cost()` truthfulness).
+     * *Scenario 5:* Disconnection & Startup Crash Recovery (safe transition to Uncertain, no duplicate launch).
+     * *Scenario 6:* Direct Teardown Safety (guaranteed process termination before pod deletion).
+     * *Scenario 7:* Artifact Collection & CAS Content Verification (SHA-256 hashes).
+
+### Protected Jobs, Checkpoint Relay & Heterogeneous Failover (GPU-F)
+
+1. **Content-Addressed Checkpoint Store Adapter (`crates/custos-adapters/src/compute/checkpoint_store.rs`):**
+   - Standardized `CasCheckpointStoreAdapter` implementing `CheckpointStorePort`.
+   - `put_blob()` verifies SHA-256 content digest attestation before writing, failing closed on tampering or corruption.
+   - `publish_manifest()` validates all declared files exist with matching sizes and digests.
+   - `promote()` enforces `validate_for_state_resume()` (quarantining incomplete or uncommitted checkpoints) and optimistic single-writer generation-CAS fencing.
+2. **Single-Writer Generation CAS Fencing (Zombie Writer Defense):**
+   - Every promotion increments the experiment's active generation count monotonically.
+   - Any delayed write or stale checkpoint commit from a crashed/zombie attempt with `generation < expected_generation` is rejected with `PromotionOutcome::StaleGeneration`.
+3. **Pre-Resume State Validation Gate:**
+   - Resuming training requires a `CommittedProtected` manifest with `resumability_level: TrainingStateResume` and all 5 mandatory files: model weights/adapter, `optimizer.pt`, `scheduler.pt`, `rng_state.pth`, and `trainer_state.json`.
+   - Rejects uncommitted `LocalStaged` or path-traversal attacks fail-closed.
+4. **Heterogeneous Failover & Hardware Adaptation Gate:**
+   - When failing over from a high-VRAM node (e.g. RunPod A100 40GB) to a lower-VRAM fallback node (e.g. SSH RTX 4090 24GB), `HardwareAdaptationPlan::evaluate_gate` dynamically scales `per_device_batch_size` (8 $\to$ 4) and proportionally increases `gradient_accumulation_steps` (2 $\to$ 4), preserving bit-exact effective batch size (16).
+5. **Checkpoint Relay & Continuation Dispatch (`crates/custos-runtime/src/compute/relay.rs`):**
+   - `CheckpointRelayCoordinator` handles crash recovery and seamless continuation dispatch.
+   - Marks crashed attempts terminal (`RemoteFailed`) and links child continuation attempts to `parent_checkpoint_id` with incremented `generation`.
+   - Full provenance lineage maintained in `SqliteTaskStore`.
+6. **Golden Test Verification:**
+   - Verified by `tests/e2e/tests/gpu_checkpoint_relay_golden_test.rs` covering all 7 core scenarios (7/7 PASS):
+     * *Scenario 1:* On-Target Checkpoint Blob Commit & CAS Digest Attestation.
+     * *Scenario 2:* Pre-Resume Full State Validation Gate.
+     * *Scenario 3:* Single-Writer Generation CAS Fencing (Zombie Writer Defense).
+     * *Scenario 4:* Heterogeneous Failover Hardware Adaptation Gate (A100 40GB $\to$ RTX 4090 24GB).
+     * *Scenario 5:* Quarantining Corrupted / Incomplete Checkpoints.
+     * *Scenario 6:* Full Provenance Lineage in SQLite Store.
+     * *Scenario 7:* Crash Handoff & Continuation Dispatch.
+
+### Multi-Target Profiles & Optional Consumers (GPU-G)
+
+1. **Google Colab Target Adapter (`crates/custos-adapters/src/compute/colab.rs`):**
+   - Implements `ExecutionTargetPort` for Google Colab runtimes via `ColabTargetAdapter`.
+   - Supports interactive control, staged script validation, graceful stop vs. release decoupling (protecting against burning cloud compute units while preserving post-run inspection).
+2. **Kaggle Kernels Target Adapter (`crates/custos-adapters/src/compute/kaggle.rs`):**
+   - Implements `ExecutionTargetPort` for Kaggle non-interactive batch mode.
+   - Enforces exact version pinning (strictly never "latest" to preserve execution immutability).
+   - Artifact collection with SHA-256 digest attestation.
+3. **Multi-Target Admission Arbitration via Remote Coordinator:**
+   - Standardized `RemoteExecutionCoordinator` admits and submits jobs across Colab, Kaggle, RunPod, and SSH targets.
+   - Prevents overlapping dual-launch on virtual or physical remote devices through admission locking.
+4. **Optional Consumer Placement Engine (`crates/custos-runtime/src/compute/placement.rs`):**
+   - Evaluates placement for background embedding and document OCR workloads.
+   - **Cooperative Prioritization:** Interactive kernels and training runs strictly outrank background consumers (`priority_rank`).
+   - **Graceful CPU Fallback:** When a target GPU is held exclusively by an active training run, background embedding/OCR tasks are routed cleanly to CPU execution with bounded batch sizes (16), preventing VRAM contention or training crashes.
+   - **Cloud Egress Guardrail:** Fails closed if local corpus/dataset indexing is directed to cloud runtimes without explicit user consent.
+5. **Golden Test Verification:**
+   - Verified by `tests/e2e/tests/gpu_multi_target_golden_test.rs` covering all 7 core scenarios (7/7 PASS):
+     * *Scenario 1:* Google Colab interactive lifecycle & capability conformance.
+     * *Scenario 2:* Colab decoupled stop vs. release billing protection.
+     * *Scenario 3:* Kaggle Kernels batch lifecycle & exact version pinning.
+     * *Scenario 4:* Kaggle artifact collection and SHA-256 digest attestation.
+     * *Scenario 5:* Multi-target admission coordination via RemoteExecutionCoordinator.
+     * *Scenario 6:* Optional consumer placement & cooperative CPU fallback.
+     * *Scenario 7:* Data privacy / cloud egress guardrail & cooperative priority preemption.
+
+
+
+
+
+
+
+
