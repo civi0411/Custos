@@ -40,7 +40,8 @@ impl RunRepository {
                AND excluded.attempt >= runs.attempt
                AND (runs.status = excluded.status
                  OR (runs.status = 'pending' AND excluded.status IN ('active', 'cancelled'))
-                 OR (runs.status = 'active' AND excluded.status IN ('suspended', 'completed', 'failed', 'cancelled'))
+                 OR (runs.status = 'active' AND excluded.status IN ('suspended', 'completed', 'failed', 'cancelled', 'uncertain'))
+                 OR (runs.status = 'uncertain' AND excluded.status IN ('completed', 'failed', 'cancelled'))
                  OR (runs.status = 'suspended' AND excluded.status IN ('active', 'cancelled')))",
             params![
                 run.id,
@@ -125,7 +126,8 @@ impl RunRepository {
                AND excluded.attempt_id >= worker_runs.attempt_id
                AND (worker_runs.status = excluded.status
                  OR (worker_runs.status = 'pending' AND excluded.status IN ('active', 'cancelled'))
-                 OR (worker_runs.status = 'active' AND excluded.status IN ('suspended', 'completed', 'failed', 'cancelled'))
+                 OR (worker_runs.status = 'active' AND excluded.status IN ('suspended', 'completed', 'failed', 'cancelled', 'uncertain'))
+                 OR (worker_runs.status = 'uncertain' AND excluded.status IN ('completed', 'failed', 'cancelled'))
                  OR (worker_runs.status = 'suspended' AND excluded.status IN ('active', 'cancelled')))",
             params![
                 wrun.id,
@@ -207,6 +209,26 @@ impl RunRepository {
         Ok(wruns)
     }
 
+    pub fn list_uncertain_runs(&self) -> Result<Vec<Run>, DomainError> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, task_id, workflow_revision, status, attempt, current_span_num, started_at, ended_at, metadata_json, state_version
+                 FROM runs WHERE status = 'uncertain' ORDER BY started_at ASC",
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([], Self::map_run)
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let mut runs = Vec::new();
+        for row in rows {
+            runs.push(row.map_err(|e| DomainError::Validation(e.to_string()))?);
+        }
+        Ok(runs)
+    }
+
     fn parse_status(s: &str) -> RunStatus {
         match s {
             "pending" => RunStatus::Pending,
@@ -214,6 +236,7 @@ impl RunRepository {
             "suspended" => RunStatus::Suspended,
             "completed" => RunStatus::Completed,
             "failed" => RunStatus::Failed,
+            "uncertain" => RunStatus::Uncertain,
             _ => RunStatus::Cancelled,
         }
     }
@@ -510,14 +533,52 @@ impl RunRepository {
         let conn = self.db.lock()?;
         let now = chrono::Utc::now().to_rfc3339();
 
-        let updated_wruns = conn
+        // 1. Remote runs transition to 'uncertain' to avoid killing live cloud pods
+        let updated_remote_runs = conn
+            .execute(
+                "UPDATE runs SET status = 'uncertain', state_version = state_version + 1 \
+                 WHERE status = 'active' AND ( \
+                     json_extract(metadata_json, '$.external_job_ref') IS NOT NULL \
+                     OR json_extract(metadata_json, '$.backend') IN ('colab', 'kaggle', 'runpod', 'vast_ai', 'dedicated_ssh', 'remote') \
+                     OR id IN ( \
+                         SELECT run_id FROM worker_runs WHERE id IN ( \
+                             SELECT worker_run_id FROM dispatch_claims \
+                              WHERE status IN ('pending', 'dispatched') \
+                                AND node_id IS NOT NULL AND node_id != '' \
+                                AND worker_run_id IS NOT NULL \
+                         ) \
+                     ) \
+                 )",
+                [],
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        let updated_remote_wruns = conn
+            .execute(
+                "UPDATE worker_runs SET status = 'uncertain', state_version = state_version + 1 \
+                 WHERE status = 'active' AND ( \
+                     run_id IN (SELECT id FROM runs WHERE status = 'uncertain') \
+                     OR id IN (SELECT worker_run_id FROM launch_attempts WHERE actual_mode IN ('colab', 'kaggle', 'runpod', 'vast_ai', 'dedicated_ssh', 'remote')) \
+                     OR id IN ( \
+                         SELECT worker_run_id FROM dispatch_claims \
+                          WHERE status IN ('pending', 'dispatched') \
+                            AND node_id IS NOT NULL AND node_id != '' \
+                            AND worker_run_id IS NOT NULL \
+                     ) \
+                 )",
+                [],
+            )
+            .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        // 2. Remaining active local runs/worker_runs fail-closed to 'failed'
+        let updated_local_wruns = conn
             .execute(
                 "UPDATE worker_runs SET status = 'failed', ended_at = ?1, state_version = state_version + 1 WHERE status = 'active'",
                 params![now],
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        let updated_runs = conn
+        let updated_local_runs = conn
             .execute(
                 "UPDATE runs SET status = 'failed', ended_at = ?1, state_version = state_version + 1 WHERE status = 'active'",
                 params![now],
@@ -537,7 +598,7 @@ impl RunRepository {
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        Ok(updated_wruns + updated_runs)
+        Ok(updated_remote_runs + updated_remote_wruns + updated_local_wruns + updated_local_runs)
     }
 
     pub fn fence_claim(&self, claim_id: &str) -> Result<(), DomainError> {

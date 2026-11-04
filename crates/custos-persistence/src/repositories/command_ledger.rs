@@ -121,6 +121,18 @@ impl CommandLedgerRepository {
         Ok(())
     }
 
+    pub fn reconcile_orphaned_inflight_commands(&self, max_age_hours: u32) -> Result<usize, DomainError> {
+        let conn = self.db.lock()?;
+        let cutoff_dt = (chrono::Utc::now() - chrono::Duration::hours(max_age_hours as i64)).to_rfc3339();
+        let cutoff_ms = chrono::Utc::now().timestamp_millis() - (max_age_hours as i64 * 3600 * 1000);
+        let deleted = conn.execute(
+            "DELETE FROM command_ledger WHERE state = 'pending' AND ((expires_at_ms IS NOT NULL AND expires_at_ms <= ?1) OR created_at <= ?2)",
+            params![cutoff_ms, cutoff_dt],
+        )
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
+        Ok(deleted)
+    }
+
     fn read_command(conn: &Connection, command_id: &str) -> Result<Option<CommandLedgerEntry>, DomainError> {
         let now_ms = chrono::Utc::now().timestamp_millis();
         let mut stmt = conn
@@ -278,6 +290,23 @@ mod tests {
         // After abandon, cmd-2 can be admitted again as New
         let res_re_admit = repo.admit("cmd-2", "v1.tasks.cancel", "hash-b", None, t0 + 500, ttl).unwrap();
         assert_eq!(res_re_admit, CommandAdmission::New);
+    }
+
+    #[test]
+    fn test_reconcile_orphaned_inflight_commands() {
+        let db = DbConnection::open_in_memory().unwrap();
+        let repo = CommandLedgerRepository::new(db);
+
+        let t0 = 1_700_000_000_000i64;
+        let ttl = 60_000i64;
+
+        repo.admit("cmd-orphaned", "v1.tasks.create", "hash-o", None, t0, ttl).unwrap();
+
+        let reconciled = repo.reconcile_orphaned_inflight_commands(0).unwrap();
+        assert_eq!(reconciled, 1);
+
+        let res = repo.admit("cmd-orphaned", "v1.tasks.create", "hash-o", None, t0 + 1000, ttl).unwrap();
+        assert_eq!(res, CommandAdmission::New);
     }
 }
 

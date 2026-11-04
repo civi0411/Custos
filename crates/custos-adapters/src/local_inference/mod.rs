@@ -59,6 +59,8 @@ type ModelSlotHandle = Arc<ModelSlot>;
 struct ModelSlot {
     state: Mutex<ModelSlotState>,
     notify: Notify,
+    active_requests: std::sync::atomic::AtomicUsize,
+    lease_id: StdMutex<Option<String>>,
 }
 
 enum ModelSlotState {
@@ -78,6 +80,8 @@ impl ModelSlot {
         Self {
             state: Mutex::new(ModelSlotState::Empty),
             notify: Notify::new(),
+            active_requests: std::sync::atomic::AtomicUsize::new(0),
+            lease_id: StdMutex::new(None),
         }
     }
 }
@@ -107,6 +111,7 @@ pub struct InferenceRuntime {
     models: StdMutex<HashMap<ModelCacheKey, ModelSlotHandle>>,
     cold_load_lock: Mutex<()>,
     backends: HashMap<&'static str, Arc<dyn LocalInferenceBackend>>,
+    admission: StdMutex<Option<Arc<dyn custos_core::contracts::compute::WorkloadAdmissionPort>>>,
 }
 
 pub fn builtin_chat_template_names() -> Vec<String> {
@@ -117,6 +122,14 @@ static RUNTIME: StdMutex<Weak<InferenceRuntime>> = StdMutex::new(Weak::new());
 
 fn current_runtime() -> Option<Arc<InferenceRuntime>> {
     RUNTIME.lock().expect("runtime lock poisoned").upgrade()
+}
+
+pub fn set_admission_coordinator(
+    admission: Arc<dyn custos_core::contracts::compute::WorkloadAdmissionPort>,
+) {
+    if let Ok(runtime) = InferenceRuntime::get_or_init() {
+        runtime.set_admission_coordinator(admission);
+    }
 }
 
 impl InferenceRuntime {
@@ -134,9 +147,24 @@ impl InferenceRuntime {
             models: StdMutex::new(HashMap::new()),
             cold_load_lock: Mutex::new(()),
             backends,
+            admission: StdMutex::new(None),
         });
         *guard = Arc::downgrade(&runtime);
         Ok(runtime)
+    }
+
+    pub fn set_admission_coordinator(
+        &self,
+        admission: Arc<dyn custos_core::contracts::compute::WorkloadAdmissionPort>,
+    ) {
+        let mut guard = self.admission.lock().expect("admission lock poisoned");
+        *guard = Some(admission);
+    }
+
+    pub fn get_admission_coordinator(
+        &self,
+    ) -> Option<Arc<dyn custos_core::contracts::compute::WorkloadAdmissionPort>> {
+        self.admission.lock().expect("admission lock poisoned").clone()
     }
 
     fn default_backend(&self) -> &dyn LocalInferenceBackend {
@@ -247,11 +275,27 @@ pub async fn evict_model(model_name: &str) -> Result<bool, ProviderError> {
     };
 
     for slot in slots {
+        let in_flight = slot.active_requests.load(std::sync::atomic::Ordering::SeqCst);
+        if in_flight > 0 {
+            return Err(ProviderError::ExecutionError(format!(
+                "Cannot evict model '{}': {} inference request(s) currently in-flight",
+                model_name, in_flight
+            )));
+        }
+
         let mut state = slot.state.lock().await;
         if matches!(*state, ModelSlotState::Loaded { .. }) {
             *state = ModelSlotState::Empty;
             evicted = true;
             slot.notify.notify_waiters();
+        }
+
+        // Release hardware lease if registered
+        if let Some(ref admission) = runtime.get_admission_coordinator() {
+            let lease_opt = slot.lease_id.lock().unwrap().take();
+            if let Some(lease_id) = lease_opt {
+                let _ = admission.release_lease(&lease_id).await;
+            }
         }
     }
     Ok(evicted)
@@ -373,6 +417,36 @@ pub async fn preload_model_with_profile(
             });
         }
         *state = ModelSlotState::Empty;
+    }
+
+    if let Some(ref admission) = runtime.get_admission_coordinator() {
+        let admission_req = custos_domain::WorkloadAdmissionRequest {
+            workload_kind: custos_domain::ComputeWorkloadKind::LocalInference,
+            owner_id: format!("infer_{}", clean_model),
+            preferred_device_id: None,
+            require_exclusive: false,
+            required_memory_mb: Some(4096),
+        };
+        let verdict = admission.admit_workload(&admission_req).await
+            .map_err(|e| ProviderError::ExecutionError(e.to_string()))?;
+        match verdict {
+            custos_domain::WorkloadAdmissionVerdict::Admitted { lease } => {
+                let mut l_guard = model_slot.lease_id.lock().unwrap();
+                *l_guard = Some(lease.lease_id);
+            }
+            custos_domain::WorkloadAdmissionVerdict::Queued { reason, .. } => {
+                drop(cold_load_guard);
+                return Err(ProviderError::ExecutionError(format!(
+                    "Local inference queued: accelerator busy - {reason}"
+                )));
+            }
+            custos_domain::WorkloadAdmissionVerdict::Rejected { reason } => {
+                drop(cold_load_guard);
+                return Err(ProviderError::ExecutionError(format!(
+                    "Local inference rejected: {reason}"
+                )));
+            }
+        }
     }
 
     *state = ModelSlotState::Loading;
@@ -1057,6 +1131,9 @@ impl Provider for LocalInferenceProvider {
             model_settings.chat_template.clone(),
         );
         let model_slot = self.runtime.get_or_create_model_slot(cache_key.clone());
+        model_slot
+            .active_requests
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let runtime = self.runtime.clone();
 
         let cache_key = cache_key.clone();
@@ -1094,6 +1171,16 @@ impl Provider for LocalInferenceProvider {
         let mut log = start_log(model_config, &log_payload)?;
 
         tokio::spawn(async move {
+            struct InFlightGuard(ModelSlotHandle);
+            impl Drop for InFlightGuard {
+                fn drop(&mut self) {
+                    self.0
+                        .active_requests
+                        .fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+                }
+            }
+            let _in_flight_guard = InFlightGuard(model_arc.clone());
+
             // 1. Check if model is already running in active sidecar
             if sidecar::is_sidecar_healthy().await {
                 if let Some(active) = sidecar::get_loaded_sidecar_instance().await {
@@ -1144,6 +1231,48 @@ impl Provider for LocalInferenceProvider {
                             }
                             ModelSlotState::Empty => {}
                         }
+
+                        if let Some(ref admission) = runtime.get_admission_coordinator() {
+                            let admission_req = custos_domain::WorkloadAdmissionRequest {
+                                workload_kind: custos_domain::ComputeWorkloadKind::LocalInference,
+                                owner_id: format!("infer_{}", model_name),
+                                preferred_device_id: None,
+                                require_exclusive: false,
+                                required_memory_mb: Some(4096),
+                            };
+                            match admission.admit_workload(&admission_req).await {
+                                Ok(custos_domain::WorkloadAdmissionVerdict::Admitted { lease }) => {
+                                    let mut l_guard = model_slot.lease_id.lock().unwrap();
+                                    *l_guard = Some(lease.lease_id);
+                                }
+                                Ok(custos_domain::WorkloadAdmissionVerdict::Queued { reason, .. }) => {
+                                    drop(cold_load_guard);
+                                    let err = ProviderError::ExecutionError(format!(
+                                        "Local inference queued: accelerator busy with exclusive workload - {reason}"
+                                    ));
+                                    let _ = log.error(&err);
+                                    let _ = tx.send(Err(err)).await;
+                                    return;
+                                }
+                                Ok(custos_domain::WorkloadAdmissionVerdict::Rejected { reason }) => {
+                                    drop(cold_load_guard);
+                                    let err = ProviderError::ExecutionError(format!(
+                                        "Local inference rejected: {reason}"
+                                    ));
+                                    let _ = log.error(&err);
+                                    let _ = tx.send(Err(err)).await;
+                                    return;
+                                }
+                                Err(e) => {
+                                    drop(cold_load_guard);
+                                    let err = ProviderError::ExecutionError(e.to_string());
+                                    let _ = log.error(&err);
+                                    let _ = tx.send(Err(err)).await;
+                                    return;
+                                }
+                            }
+                        }
+
                         *state = ModelSlotState::Loading;
                         drop(state);
 

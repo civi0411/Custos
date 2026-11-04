@@ -141,5 +141,23 @@ pub fn run_migrations(conn: &Connection) -> Result<()> {
     if !outbox_columns.iter().any(|column| column == "payload_json") {
         conn.execute_batch(include_str!("../migrations/0039_outbox_dispatch_intent.sql"))?;
     }
+    let notebook_columns = conn
+        .prepare("PRAGMA table_info(notebook_cells)")?
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    if !notebook_columns.iter().any(|column| column == "notebook_id") {
+        conn.execute_batch(include_str!(
+            "../migrations/0041_notebook_document_binding.sql"
+        ))?;
+    }
+    let quant_tables = conn
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='quant_market_bars'")?
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    if quant_tables.is_empty() {
+        conn.execute_batch(include_str!(
+            "../migrations/0042_quant_live_pipeline.sql"
+        ))?;
+    }
     Ok(())
 }

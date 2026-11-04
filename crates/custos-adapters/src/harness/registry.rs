@@ -7,7 +7,7 @@
 //! - Custos Governed Agent Runtime (`governed-agent-runtime`)
 
 use custos_core::contracts::harness::{
-    AgentRuntimePort, HarnessDescriptor, HarnessExecutionResult, HarnessMaturity, ToolMediationLevel,
+    AgentRuntimePort, HarnessDescriptor, HarnessExecutionResult, HarnessMaturity,
 };
 use custos_domain::DomainError;
 use std::collections::HashMap;
@@ -23,68 +23,8 @@ pub struct HarnessEntry {
     pub harness: Arc<dyn AgentRuntimePort>,
 }
 
-pub fn probe_binary_available(binary_name: &str) -> bool {
-    if binary_name == "internal" || binary_name.is_empty() {
-        return true;
-    }
-    for sub in binary_name.split([',', '|']).map(str::trim) {
-        let bin_name = sub.split_whitespace().next().unwrap_or(sub);
-        let bin = Path::new(bin_name);
-        if bin.exists() || which::which(bin).is_ok() {
-            return true;
-        }
-        let candidates = [
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-            "/usr/bin",
-            "/bin",
-        ];
-        for dir in candidates {
-            if Path::new(dir).join(bin).exists() {
-                return true;
-            }
-        }
-        if let Ok(home) = std::env::var("HOME") {
-            if Path::new(&home).join(".cargo/bin").join(bin).exists() {
-                return true;
-            }
-            if Path::new(&home).join(".local/bin").join(bin).exists() {
-                return true;
-            }
-        }
-        #[cfg(windows)]
-        {
-            if let Ok(userprofile) = std::env::var("USERPROFILE") {
-                let cargo_bin = Path::new(&userprofile).join(".cargo/bin");
-                if cargo_bin.join(bin).exists()
-                    || cargo_bin.join(format!("{bin_name}.exe")).exists()
-                    || cargo_bin.join(format!("{bin_name}.cmd")).exists()
-                {
-                    return true;
-                }
-            }
-            if let Ok(appdata) = std::env::var("APPDATA") {
-                let npm_bin = Path::new(&appdata).join("npm");
-                if npm_bin.join(bin).exists()
-                    || npm_bin.join(format!("{bin_name}.cmd")).exists()
-                    || npm_bin.join(format!("{bin_name}.exe")).exists()
-                {
-                    return true;
-                }
-            }
-            if let Ok(localappdata) = std::env::var("LOCALAPPDATA") {
-                let pnpm_bin = Path::new(&localappdata).join("pnpm");
-                if pnpm_bin.join(bin).exists()
-                    || pnpm_bin.join(format!("{bin_name}.cmd")).exists()
-                    || pnpm_bin.join(format!("{bin_name}.exe")).exists()
-                {
-                    return true;
-                }
-            }
-        }
-    }
-    false
-}
+pub use super::binary::{probe_binary_available, resolve_binary_path};
+
 
 #[derive(Clone, Default)]
 pub struct HarnessRegistry {
@@ -106,380 +46,22 @@ impl HarnessRegistry {
         let root = workspace_root.into();
         let mut registry = Self::new();
 
-        // 1. Dedicated first-party harnesses (Verified Native with structured event conformance)
-        let claude = Arc::new(super::claude_code::ClaudeCodeHarnessAdapter::new(
-            root.clone(),
-        ));
-        registry.register_with_maturity(
-            claude,
-            "Claude Code",
-            "Anthropic Claude Code sub-process native coding harness.",
-            "claude",
-            "claude",
-            HarnessMaturity::VerifiedNative,
-        );
-
-        let codex = Arc::new(super::codex::CodexHarnessAdapter::new(root.clone()));
-        registry.register_with_maturity(
-            codex,
-            "OpenAI Codex",
-            "OpenAI Codex / GPT execution loop native coding harness.",
-            "codex",
-            "codex",
-            HarnessMaturity::VerifiedNative,
-        );
-
-        let goose = Arc::new(super::goose::GooseHarnessAdapter::new(root.clone()));
-        registry.register_with_maturity(
-            goose,
-            "Block Goose",
-            "Block Goose autonomous developer CLI native coding harness.",
-            "goose",
-            "goose",
-            HarnessMaturity::VerifiedNative,
-        );
-
-        let opencode = Arc::new(super::opencode::OpenCodeHarnessAdapter::new(root.clone()));
-        registry.register_with_maturity(
-            opencode,
-            "OpenCode",
-            "OpenCode native server/CLI agent loop with provider-governed execution.",
-            "opencode",
-            "opencode",
-            HarnessMaturity::VerifiedNative,
-        );
-
-        // 2. Comprehensive catalog of all Orca-supported AI coding agents
-        struct GenericAgentDef {
-            id: &'static str,
-            name: &'static str,
-            desc: &'static str,
-            bin: &'static str,
-            launch_cmd: &'static str,
-        }
-
-        let catalog_agents = [
-            GenericAgentDef {
-                id: "claude-agent-teams",
-                name: "Claude Agent Teams",
-                desc: "Claude Code Agent Teams multi-pane orchestration.",
-                bin: "claude",
-                launch_cmd: "claude",
-            },
-            GenericAgentDef {
-                id: "openclaude",
-                name: "OpenClaude",
-                desc: "Open-source Claude Code derivative agent.",
-                bin: "openclaude",
-                launch_cmd: "openclaude",
-            },
-            GenericAgentDef {
-                id: "grok",
-                name: "xAI Grok",
-                desc: "xAI Grok CLI coding assistant.",
-                bin: "grok",
-                launch_cmd: "grok",
-            },
-            GenericAgentDef {
-                id: "copilot",
-                name: "GitHub Copilot",
-                desc: "GitHub Copilot CLI coding assistant.",
-                bin: "copilot",
-                launch_cmd: "copilot",
-            },
-            GenericAgentDef {
-                id: "opencode2",
-                name: "OpenCode 2",
-                desc: "OpenCode 2 standalone coding agent.",
-                bin: "opencode2",
-                launch_cmd: "opencode2 --standalone",
-            },
-            GenericAgentDef {
-                id: "mimo-code",
-                name: "MiMo Code",
-                desc: "Xiaomi MiMo Code developer CLI.",
-                bin: "mimo",
-                launch_cmd: "mimo",
-            },
-            GenericAgentDef {
-                id: "ante",
-                name: "Ante",
-                desc: "Antigma Labs Ante preview coding agent.",
-                bin: "ante",
-                launch_cmd: "ante",
-            },
-            GenericAgentDef {
-                id: "trae",
-                name: "ByteDance Trae",
-                desc: "ByteDance Trae CLI coding assistant.",
-                bin: "traecli,trae-cli",
-                launch_cmd: "traecli",
-            },
-            GenericAgentDef {
-                id: "muse",
-                name: "Meta Muse",
-                desc: "Meta Muse Code developer CLI.",
-                bin: "muse",
-                launch_cmd: "muse --trust-workspace",
-            },
-            GenericAgentDef {
-                id: "dsh",
-                name: "DeepSeek Harness",
-                desc: "DeepSeek Harness (dsh-tui) terminal agent.",
-                bin: "dsh-tui,dsh,dst",
-                launch_cmd: "dsh-tui .",
-            },
-            GenericAgentDef {
-                id: "qoder",
-                name: "Qoder CLI",
-                desc: "Qoder CLI coding agent.",
-                bin: "qodercli,qoder",
-                launch_cmd: "qodercli",
-            },
-            GenericAgentDef {
-                id: "qoder-cn",
-                name: "Qoder CLI China",
-                desc: "Qoder CLI China coding agent.",
-                bin: "qoderclicn,qodercn",
-                launch_cmd: "qoderclicn",
-            },
-            GenericAgentDef {
-                id: "zcode",
-                name: "ZCode",
-                desc: "Z.ai ZCode autonomous coding CLI.",
-                bin: "zcode,zcode-cli",
-                launch_cmd: "zcode",
-            },
-            GenericAgentDef {
-                id: "pi",
-                name: "Pi Code",
-                desc: "Pi minimal coding agent (pi.dev).",
-                bin: "pi",
-                launch_cmd: "pi",
-            },
-            GenericAgentDef {
-                id: "omp",
-                name: "OMP (Oh My Pi)",
-                desc: "Oh My Pi terminal developer assistant.",
-                bin: "omp",
-                launch_cmd: "omp",
-            },
-            GenericAgentDef {
-                id: "prime-agent",
-                name: "Prime Agent",
-                desc: "Prime Intellect autonomous coding agent.",
-                bin: "prime-agent",
-                launch_cmd: "prime-agent",
-            },
-            GenericAgentDef {
-                id: "gemini",
-                name: "Google Gemini CLI",
-                desc: "Google Gemini developer assistant CLI.",
-                bin: "gemini",
-                launch_cmd: "gemini",
-            },
-            GenericAgentDef {
-                id: "antigravity",
-                name: "Google Antigravity",
-                desc: "Google Antigravity advanced agentic coding CLI.",
-                bin: "agy",
-                launch_cmd: "agy",
-            },
-            GenericAgentDef {
-                id: "aider",
-                name: "Aider Pair Programmer",
-                desc: "AI pair programming in your terminal.",
-                bin: "aider",
-                launch_cmd: "aider",
-            },
-            GenericAgentDef {
-                id: "amp",
-                name: "Amp Code",
-                desc: "Amp Code developer assistant.",
-                bin: "amp",
-                launch_cmd: "amp",
-            },
-            GenericAgentDef {
-                id: "kilo",
-                name: "Kilocode",
-                desc: "Kilocode autonomous developer CLI.",
-                bin: "kilo",
-                launch_cmd: "kilo",
-            },
-            GenericAgentDef {
-                id: "kiro",
-                name: "Kiro CLI",
-                desc: "Kiro CLI developer assistant.",
-                bin: "kiro-cli,kiro",
-                launch_cmd: "kiro-cli chat --tui",
-            },
-            GenericAgentDef {
-                id: "crush",
-                name: "Charm Crush",
-                desc: "Charm Crush terminal developer assistant.",
-                bin: "crush",
-                launch_cmd: "crush",
-            },
-            GenericAgentDef {
-                id: "aug",
-                name: "Auggie (Augment)",
-                desc: "Augment Auggie coding assistant.",
-                bin: "auggie,aug",
-                launch_cmd: "auggie",
-            },
-            GenericAgentDef {
-                id: "autohand",
-                name: "Autohand Code",
-                desc: "Autohand Code CLI developer assistant.",
-                bin: "autohand",
-                launch_cmd: "autohand",
-            },
-            GenericAgentDef {
-                id: "cline",
-                name: "Cline Coding Agent",
-                desc: "Autonomous coding agent CLI for complex tasks.",
-                bin: "cline",
-                launch_cmd: "cline",
-            },
-            GenericAgentDef {
-                id: "codebuff",
-                name: "Codebuff",
-                desc: "Codebuff terminal coding agent.",
-                bin: "codebuff",
-                launch_cmd: "codebuff",
-            },
-            GenericAgentDef {
-                id: "freebuff",
-                name: "Freebuff",
-                desc: "Freebuff developer assistant.",
-                bin: "freebuff",
-                launch_cmd: "freebuff",
-            },
-            GenericAgentDef {
-                id: "command-code",
-                name: "Command Code",
-                desc: "Command Code terminal assistant.",
-                bin: "command-code",
-                launch_cmd: "command-code --trust",
-            },
-            GenericAgentDef {
-                id: "continue",
-                name: "Continue CLI",
-                desc: "Continue CLI coding assistant.",
-                bin: "cn,continue",
-                launch_cmd: "cn",
-            },
-            GenericAgentDef {
-                id: "cursor",
-                name: "Cursor Agent CLI",
-                desc: "Cursor background terminal agent.",
-                bin: "cursor-agent,cursor",
-                launch_cmd: "cursor-agent",
-            },
-            GenericAgentDef {
-                id: "droid",
-                name: "Factory Droid",
-                desc: "Factory Droid autonomous agent CLI.",
-                bin: "droid",
-                launch_cmd: "droid",
-            },
-            GenericAgentDef {
-                id: "kimi",
-                name: "Moonshot Kimi CLI",
-                desc: "Kimi coding and engineering assistant CLI.",
-                bin: "kimi,kimi-code",
-                launch_cmd: "kimi",
-            },
-            GenericAgentDef {
-                id: "mistral-vibe",
-                name: "Mistral Vibe",
-                desc: "Mistral Vibe interactive coding assistant.",
-                bin: "vibe,mistral-vibe",
-                launch_cmd: "vibe",
-            },
-            GenericAgentDef {
-                id: "qwen-code",
-                name: "Alibaba Qwen Code",
-                desc: "Qwen Code developer assistant CLI.",
-                bin: "qwen,qwen-code",
-                launch_cmd: "qwen",
-            },
-            GenericAgentDef {
-                id: "rovo",
-                name: "Atlassian Rovo Dev",
-                desc: "Atlassian Rovo Dev CLI assistant.",
-                bin: "rovo",
-                launch_cmd: "rovo",
-            },
-            GenericAgentDef {
-                id: "hermes",
-                name: "Nous Hermes Agent",
-                desc: "Nous Research Hermes autonomous agent CLI.",
-                bin: "hermes",
-                launch_cmd: "hermes --tui",
-            },
-            GenericAgentDef {
-                id: "devin",
-                name: "Cognition Devin CLI",
-                desc: "Cognition Devin CLI agent.",
-                bin: "devin",
-                launch_cmd: "devin",
-            },
-            GenericAgentDef {
-                id: "openclaw",
-                name: "OpenClaw",
-                desc: "OpenClaw autonomous agent CLI.",
-                bin: "openclaw",
-                launch_cmd: "openclaw",
-            },
-            GenericAgentDef {
-                id: "codebuddy",
-                name: "CodeBuddy",
-                desc: "CodeBuddy CLI coding agent.",
-                bin: "codebuddy,cbc",
-                launch_cmd: "codebuddy",
-            },
-            GenericAgentDef {
-                id: "jcode",
-                name: "Jcode",
-                desc: "Jcode developer assistant.",
-                bin: "jcode",
-                launch_cmd: "jcode",
-            },
-            GenericAgentDef {
-                id: "governed-agent-runtime",
-                name: "Custos Governed Runtime",
-                desc: "Supervised agent runtime with strict Permit boundaries and proof ledger.",
-                bin: "internal",
-                launch_cmd: "internal",
-            },
-        ];
-
-        for agent in catalog_agents {
-            let (mediation, maturity) = if agent.bin == "internal" {
-                (ToolMediationLevel::ObserveOnly, HarnessMaturity::VerifiedNative)
-            } else {
-                (ToolMediationLevel::ProviderGoverned, HarnessMaturity::DiscoveredCli)
-            };
-            let adapter = Arc::new(super::generic_cli::GenericCliHarnessAdapter::new(
-                agent.id,
-                agent.bin,
-                root.clone(),
-                mediation,
-            ));
+        for spec in super::catalog::SPECS {
+            let adapter = Arc::new(super::adapter::CliHarness::from_spec(spec, root.clone()));
             registry.register_with_maturity(
                 adapter,
-                agent.name,
-                agent.desc,
-                agent.bin,
-                agent.launch_cmd,
-                maturity,
+                spec.name,
+                spec.desc,
+                spec.bins,
+                spec.launch_cmd,
+                spec.maturity,
             );
         }
 
         registry.set_default("claude-code");
         registry
     }
+
 
     pub fn register(
         &mut self,
@@ -627,7 +209,7 @@ mod tests {
         let registry = HarnessRegistry::default_with_workspace("/tmp");
 
         let harnesses = registry.list();
-        assert_eq!(harnesses.len(), 46);
+        assert_eq!(harnesses.len(), 45);
 
         let ids: Vec<&str> = harnesses.iter().map(|h| h.id.as_str()).collect();
         assert!(ids.contains(&"claude-code"));
@@ -650,7 +232,6 @@ mod tests {
         assert!(ids.contains(&"omp"));
         assert!(ids.contains(&"dsh"));
         assert!(ids.contains(&"devin"));
-        assert!(ids.contains(&"governed-agent-runtime"));
 
         assert_eq!(registry.default_harness_id(), Some("claude-code"));
 
@@ -658,7 +239,7 @@ mod tests {
         assert_eq!(opencode.harness_id(), "opencode");
 
         let runtimes = registry.runtimes();
-        assert_eq!(runtimes.len(), 46);
+        assert_eq!(runtimes.len(), 45);
         assert!(runtimes.contains_key("codex"));
 
         let desc = registry

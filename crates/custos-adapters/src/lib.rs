@@ -16,6 +16,7 @@ pub mod compute;
 pub mod download_manager;
 pub mod harness;
 pub mod local_inference;
+pub mod market;
 pub mod mcp;
 pub mod notebook;
 pub mod providers;
@@ -25,27 +26,21 @@ pub mod sandbox;
 pub mod terminal;
 pub mod tools;
 pub mod workspace;
-pub mod repository_git;
+pub use workspace::github as repository_git;
+
 
 pub mod model {
     pub use crate::local_inference::model::*;
     pub use custos_provider::types::model::*;
 }
 
-// Re-exports for local_inference internal cross-references
 pub use local_inference::backend;
 pub use local_inference::provider_utils::*;
 pub use local_inference::tool_emulation;
 pub use local_inference::tool_parsing;
 
-pub use a2a::*;
-pub use compute::*;
-pub use download_manager::*;
-pub use harness::*;
-pub use local_inference::*;
-pub use mcp::*;
-pub use providers::*;
-#[cfg(feature = "roaming")]
-pub use roaming::*;
-pub use sandbox::*;
-pub use workspace::*;
+// Internal crate re-exports required by vendored provider client implementations
+pub(crate) use local_inference::*;
+pub(crate) use providers::*;
+
+

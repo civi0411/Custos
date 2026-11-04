@@ -33,6 +33,8 @@ pub struct RentedGpuTargetAdapter {
     mock_mode: bool,
     mock_status: Arc<Mutex<String>>,
     mock_released: Arc<Mutex<bool>>,
+    mock_progress: Arc<Mutex<ProgressTriplet>>,
+    mock_preflight_blockers: Arc<Mutex<Vec<String>>>,
 }
 
 impl RentedGpuTargetAdapter {
@@ -55,6 +57,8 @@ impl RentedGpuTargetAdapter {
             mock_mode: false,
             mock_status: Arc::new(Mutex::new("running".to_string())),
             mock_released: Arc::new(Mutex::new(false)),
+            mock_progress: Arc::new(Mutex::new(ProgressTriplet::default())),
+            mock_preflight_blockers: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -81,6 +85,16 @@ impl RentedGpuTargetAdapter {
     pub async fn set_mock_status(&self, status: impl Into<String>) {
         let mut guard = self.mock_status.lock().await;
         *guard = status.into();
+    }
+
+    pub async fn set_mock_progress(&self, progress: ProgressTriplet) {
+        let mut guard = self.mock_progress.lock().await;
+        *guard = progress;
+    }
+
+    pub async fn set_mock_preflight_blockers(&self, blockers: Vec<String>) {
+        let mut guard = self.mock_preflight_blockers.lock().await;
+        *guard = blockers;
     }
 
     pub async fn is_released(&self) -> bool {
@@ -128,6 +142,14 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
 
     async fn preflight(&self, _recipe_id: &str) -> Result<PreflightReport, DomainError> {
         if self.mock_mode {
+            let blockers = self.mock_preflight_blockers.lock().await.clone();
+            if !blockers.is_empty() {
+                return Ok(PreflightReport {
+                    allowed: false,
+                    blockers,
+                    warnings: Vec::new(),
+                });
+            }
             return Ok(PreflightReport {
                 allowed: true,
                 blockers: Vec::new(),
@@ -202,7 +224,18 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
             return Err(DomainError::Validation("Invalid characters in execution attempt id".into()));
         }
 
-        // 1. Create run directory
+        // 1. Validate recipe/command upfront before performing remote SSH calls
+        let exec_cmd = if attempt.recipe_id != "default" && !attempt.recipe_id.trim().is_empty() {
+            format!("custos-agent execute-recipe {}", attempt.recipe_id)
+        } else if self.mock_mode {
+            "python3 -u -c \"import time; print('Training on GPU...'); time.sleep(1); print('Done')\"".to_string()
+        } else {
+            return Err(DomainError::Validation(
+                "Cannot submit real GPU job without a valid recipe_id; dummy training script is only permitted in mock mode".into(),
+            ));
+        };
+
+        // 2. Create run directory
         let mkdir_cmd = format!("mkdir -p {remote_run_dir}");
         let mut cmd = self.build_ssh_command(&mkdir_cmd);
         let res = cmd.output().await.map_err(|e| {
@@ -216,13 +249,13 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
             )));
         }
 
-        // 2. Write runner script
+        // 3. Write runner script
         let runner_script = format!(
             "cat << 'EOF' > {remote_run_dir}/run.sh\n\
              #!/bin/bash\n\
              cd {remote_run_dir}\n\
              echo 'Custos GPU job starting...' > train.log\n\
-             python3 -u -c \"import time; print('Training on GPU...'); time.sleep(1); print('Done')\" >> train.log 2>&1\n\
+             {exec_cmd} >> train.log 2>&1\n\
              echo $? > exit_code\n\
              EOF\n\
              chmod +x {remote_run_dir}/run.sh\n"
@@ -252,7 +285,8 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
     async fn observe(&self, external_ref: &ExternalJobRef) -> Result<AttemptObservation, DomainError> {
         let (raw_status, exit_code, progress) = if self.mock_mode {
             let guard = self.mock_status.lock().await;
-            (guard.clone(), None, ProgressTriplet::default())
+            let prog = self.mock_progress.lock().await;
+            (guard.clone(), None, *prog)
         } else {
             let pid = &external_ref.version_id;
             let run_dir = format!("/tmp/custos/runs/{}", external_ref.job_id);
@@ -352,6 +386,9 @@ impl ExecutionTargetPort for RentedGpuTargetAdapter {
     }
 
     async fn release_compute(&self, external_ref: &ExternalJobRef) -> Result<(), DomainError> {
+        // Ensure remote process is stopped prior to deallocating compute
+        let _ = self.stop_job(external_ref).await;
+
         if self.mock_mode {
             let mut guard = self.mock_released.lock().await;
             *guard = true;
@@ -515,5 +552,21 @@ mod tests {
         assert!(adapter.is_released().await);
         let obs = adapter.observe(&job).await.unwrap();
         assert_eq!(obs.resource_state, ResourceState::ReleaseConfirmed);
+    }
+
+    #[tokio::test]
+    async fn rented_gpu_submit_fails_in_live_mode_without_recipe() {
+        let tmp = tempfile::tempdir().unwrap();
+        let adapter = RentedGpuTargetAdapter::new(
+            "192.168.1.50",
+            22,
+            "root",
+            ComputeBackendKind::DedicatedSsh,
+            tmp.path(),
+        );
+        let attempt = ExecutionAttempt::new("exp_gpu_fail", "default", ComputeBackendKind::DedicatedSsh, None);
+        let res = adapter.submit(&attempt, "idem").await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("Cannot submit real GPU job without a valid recipe_id"));
     }
 }

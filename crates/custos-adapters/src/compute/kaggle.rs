@@ -182,9 +182,16 @@ impl ExecutionTargetPort for KaggleTargetAdapter {
         // Ensure entrypoint exists
         let entrypoint = attempt_dir.join("main.py");
         if !entrypoint.exists() {
-            tokio::fs::write(&entrypoint, "# Custos supervised kernel entrypoint\nprint('Starting Kaggle job')\n")
-                .await
-                .map_err(|e| DomainError::Validation(format!("Failed to write entrypoint script: {e}")))?;
+            if self.mock_mode {
+                tokio::fs::write(&entrypoint, "# Custos supervised kernel entrypoint\nprint('Starting Kaggle job')\n")
+                    .await
+                    .map_err(|e| DomainError::Validation(format!("Failed to write entrypoint script: {e}")))?;
+            } else {
+                return Err(DomainError::Validation(format!(
+                    "Kaggle execution entrypoint '{}' does not exist; stage your script before submitting",
+                    entrypoint.display()
+                )));
+            }
         }
 
         if self.mock_mode {
@@ -428,5 +435,25 @@ mod tests {
         assert_eq!(artifacts.len(), 1);
         assert!(artifacts[0].path.ends_with("output.txt"));
         assert!(artifacts[0].size_bytes > 0);
+    }
+
+    #[tokio::test]
+    async fn kaggle_submit_fails_without_credentials_in_live_mode() {
+        let tmp = tempfile::tempdir().unwrap();
+        let adapter = KaggleTargetAdapter::new(tmp.path());
+        let attempt = ExecutionAttempt::new("exp_kaggle_cred_fail", "default", ComputeBackendKind::Kaggle, None);
+        let res = adapter.submit(&attempt, "idem").await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("Kaggle username could not be determined"));
+    }
+
+    #[tokio::test]
+    async fn kaggle_submit_fails_without_entrypoint_in_live_mode() {
+        let tmp = tempfile::tempdir().unwrap();
+        let adapter = KaggleTargetAdapter::new(tmp.path()).with_credentials("test_user", "test_key");
+        let attempt = ExecutionAttempt::new("exp_kaggle_fail", "default", ComputeBackendKind::Kaggle, None);
+        let res = adapter.submit(&attempt, "idem").await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("does not exist; stage your script"));
     }
 }
