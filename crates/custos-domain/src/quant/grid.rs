@@ -55,7 +55,7 @@ impl GridConfig {
                 "Invalid price bounds: lower ({lower_price}) must be positive and less than upper ({upper_price})"
             )));
         }
-        if grid_count < 2 || grid_count > 200 {
+        if !(2..=200).contains(&grid_count) {
             return Err(DomainError::Validation(format!(
                 "Grid count ({grid_count}) must be between 2 and 200"
             )));

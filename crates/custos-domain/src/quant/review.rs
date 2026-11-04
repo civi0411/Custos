@@ -286,7 +286,7 @@ impl PostTradeAnalyzer {
             .into_iter()
             .map(|(reason, (count, pnl))| ExitReasonCohort { reason, count, net_pnl: pnl })
             .collect();
-        exit_cohorts.sort_by(|a, b| b.count.cmp(&a.count));
+        exit_cohorts.sort_by_key(|a| std::cmp::Reverse(a.count));
 
         // 4 Diagnostic Checks
         let mut diagnostics = Vec::new();

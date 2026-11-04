@@ -147,6 +147,7 @@ impl MarketStreamCoordinator {
 
     /// Ingest a candidate market bar from WebSocket or REST poll.
     /// Validates `ClosedBarInvariant` against `reference_ts` before promoting to Silver and broadcasting.
+    #[allow(clippy::too_many_arguments)]
     pub fn ingest_bar(
         &self,
         symbol: &str,
