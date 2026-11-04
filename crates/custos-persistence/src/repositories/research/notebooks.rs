@@ -11,51 +11,76 @@ use rusqlite::params;
 impl ResearchRepository {
     // Notebook Cells & Kernel Sessions
     pub fn list_notebook_cells(&self, session_id: &str) -> Result<Vec<NotebookCell>, DomainError> {
+        self.list_notebook_cells_scoped(session_id, None)
+    }
+
+    pub fn list_notebook_cells_scoped(
+        &self,
+        session_id: &str,
+        notebook_id: Option<&str>,
+    ) -> Result<Vec<NotebookCell>, DomainError> {
         let conn = self.db.lock()?;
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, session_id, cell_type, source, cell_index, execution_count, status, stdout, stderr, output_image, wall_ms, epoch, updated_at
+        let (sql, use_filter) = match notebook_id {
+            Some(nb) if !nb.trim().is_empty() => (
+                "SELECT id, session_id, cell_type, source, cell_index, execution_count, status, stdout, stderr, output_image, wall_ms, epoch, updated_at, notebook_id, cell_version
+                 FROM notebook_cells WHERE session_id = ?1 AND notebook_id = ?2 ORDER BY cell_index ASC",
+                true,
+            ),
+            _ => (
+                "SELECT id, session_id, cell_type, source, cell_index, execution_count, status, stdout, stderr, output_image, wall_ms, epoch, updated_at, notebook_id, cell_version
                  FROM notebook_cells WHERE session_id = ?1 ORDER BY cell_index ASC",
-            )
+                false,
+            ),
+        };
+        let mut stmt = conn
+            .prepare(sql)
             .map_err(|e| DomainError::Validation(e.to_string()))?;
 
-        let rows = stmt
-            .query_map(params![session_id], |row| {
-                let cell_type_str: String = row.get(2)?;
-                let cell_type = match cell_type_str.as_str() {
-                    "markdown" => NotebookCellType::Markdown,
-                    _ => NotebookCellType::Code,
-                };
-                let status_str: String = row.get(6)?;
-                let status = match status_str.as_str() {
-                    "running" => CellExecutionStatus::Running,
-                    "success" => CellExecutionStatus::Success,
-                    "error" => CellExecutionStatus::Error,
-                    _ => CellExecutionStatus::Idle,
-                };
-                let cell_idx: i64 = row.get(4)?;
-                let exec_cnt: Option<i64> = row.get(5)?;
-                let wall: Option<i64> = row.get(10)?;
-                let ep: i64 = row.get(11)?;
+        let map_row = |row: &rusqlite::Row| {
+            let cell_type_str: String = row.get(2)?;
+            let cell_type = match cell_type_str.as_str() {
+                "markdown" => NotebookCellType::Markdown,
+                _ => NotebookCellType::Code,
+            };
+            let status_str: String = row.get(6)?;
+            let status = match status_str.as_str() {
+                "running" => CellExecutionStatus::Running,
+                "success" => CellExecutionStatus::Success,
+                "error" => CellExecutionStatus::Error,
+                _ => CellExecutionStatus::Idle,
+            };
+            let cell_idx: i64 = row.get(4)?;
+            let exec_cnt: Option<i64> = row.get(5)?;
+            let wall: Option<i64> = row.get(10)?;
+            let ep: i64 = row.get(11)?;
+            let nb_id: Option<String> = row.get(13)?;
+            let version: Option<i64> = row.get(14)?;
 
-                Ok(NotebookCell {
-                    id: row.get(0)?,
-                    session_id: row.get(1)?,
-                    cell_type,
-                    source: row.get(3)?,
-                    cell_index: cell_idx as u32,
-                    execution_count: exec_cnt.map(|c| c as u32),
-                    status,
-                    stdout: row.get(7)?,
-                    stderr: row.get(8)?,
-                    output_image: row.get(9)?,
-                    wall_ms: wall.map(|w| w as u64),
-                    epoch: ep as u32,
-                    updated_at: row.get(12)?,
-                    ..Default::default()
-                })
+            Ok(NotebookCell {
+                id: row.get(0)?,
+                session_id: row.get(1)?,
+                cell_type,
+                source: row.get(3)?,
+                cell_index: cell_idx as u32,
+                execution_count: exec_cnt.map(|c| c as u32),
+                status,
+                stdout: row.get(7)?,
+                stderr: row.get(8)?,
+                output_image: row.get(9)?,
+                wall_ms: wall.map(|w| w as u64),
+                epoch: ep as u32,
+                updated_at: row.get(12)?,
+                notebook_id: nb_id,
+                cell_version: version.map(|v| v as u32),
             })
-            .map_err(|e| DomainError::Validation(e.to_string()))?;
+        };
+
+        let rows = if use_filter {
+            stmt.query_map(params![session_id, notebook_id], map_row)
+        } else {
+            stmt.query_map(params![session_id], map_row)
+        }
+        .map_err(|e| DomainError::Validation(e.to_string()))?;
 
         let mut res = Vec::new();
         for r in rows {
@@ -103,8 +128,8 @@ impl ResearchRepository {
         let affected = conn
             .execute(
                 "INSERT INTO notebook_cells (
-                id, session_id, cell_type, source, cell_index, execution_count, status, stdout, stderr, output_image, wall_ms, epoch, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                id, session_id, cell_type, source, cell_index, execution_count, status, stdout, stderr, output_image, wall_ms, epoch, updated_at, notebook_id, cell_version
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             ON CONFLICT(id) DO UPDATE SET
                 cell_type = excluded.cell_type,
                 source = excluded.source,
@@ -116,7 +141,9 @@ impl ResearchRepository {
                 output_image = excluded.output_image,
                 wall_ms = excluded.wall_ms,
                 epoch = excluded.epoch,
-                updated_at = excluded.updated_at
+                updated_at = excluded.updated_at,
+                notebook_id = excluded.notebook_id,
+                cell_version = excluded.cell_version
             WHERE notebook_cells.session_id = excluded.session_id",
                 params![
                     cell.id,
@@ -132,6 +159,8 @@ impl ResearchRepository {
                     cell.wall_ms.map(|w| w as i64),
                     cell.epoch as i64,
                     cell.updated_at,
+                    cell.notebook_id,
+                    cell.cell_version.map(|v| v as i64),
                 ],
             )
             .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -157,6 +186,15 @@ impl ResearchRepository {
         session_id: &str,
         cells: &[NotebookCell],
     ) -> Result<(), DomainError> {
+        self.replace_notebook_cells_scoped(session_id, None, cells)
+    }
+
+    pub fn replace_notebook_cells_scoped(
+        &self,
+        session_id: &str,
+        notebook_id: Option<&str>,
+        cells: &[NotebookCell],
+    ) -> Result<(), DomainError> {
         let ids: std::collections::HashSet<_> =
             cells.iter().map(|cell| cell.id.as_str()).collect();
         if session_id.trim().is_empty()
@@ -174,15 +212,33 @@ impl ResearchRepository {
         let tx = conn
             .transaction()
             .map_err(|e| DomainError::Validation(e.to_string()))?;
-        tx.execute(
-            "DELETE FROM notebook_cells WHERE session_id = ?1",
-            params![session_id],
-        )
-        .map_err(|e| DomainError::Validation(e.to_string()))?;
+
+        match notebook_id {
+            Some(nb) if !nb.trim().is_empty() => {
+                tx.execute(
+                    "DELETE FROM notebook_cells WHERE session_id = ?1 AND notebook_id = ?2",
+                    params![session_id, nb],
+                )
+                .map_err(|e| DomainError::Validation(e.to_string()))?;
+            }
+            _ => {
+                tx.execute(
+                    "DELETE FROM notebook_cells WHERE session_id = ?1",
+                    params![session_id],
+                )
+                .map_err(|e| DomainError::Validation(e.to_string()))?;
+            }
+        }
+
         for cell in cells {
             Self::write_notebook_cell(&tx, cell)?;
         }
-        let payload = serde_json::json!({"session_id": session_id, "cell_ids": cells.iter().map(|cell| &cell.id).collect::<Vec<_>>()}).to_string();
+        let payload = serde_json::json!({
+            "session_id": session_id,
+            "notebook_id": notebook_id,
+            "cell_ids": cells.iter().map(|cell| &cell.id).collect::<Vec<_>>()
+        })
+        .to_string();
         tx.execute(
             "INSERT INTO outbox_messages (id, topic, payload, created_at) VALUES (?1, ?2, ?3, ?4)",
             params![
@@ -209,17 +265,29 @@ impl ResearchRepository {
         &self,
         session_id: &str,
     ) -> Result<NotebookKernelState, DomainError> {
+        self.get_notebook_kernel_state_scoped(session_id, None)
+    }
+
+    pub fn get_notebook_kernel_state_scoped(
+        &self,
+        session_id: &str,
+        notebook_id: Option<&str>,
+    ) -> Result<NotebookKernelState, DomainError> {
+        let key = match notebook_id {
+            Some(nb) if !nb.trim().is_empty() => format!("{session_id}::{nb}"),
+            _ => session_id.to_string(),
+        };
         let existing = {
             let conn = self.db.lock()?;
             let mut stmt = conn
                 .prepare(
-                    "SELECT session_id, epoch, status, python_version, execution_counter, created_at, updated_at
+                    "SELECT session_id, epoch, status, python_version, execution_counter, created_at, updated_at, notebook_id, kernel_id
                      FROM notebook_kernel_sessions WHERE session_id = ?1",
                 )
                 .map_err(|e| DomainError::Validation(e.to_string()))?;
 
             let mut rows = stmt
-                .query_map(params![session_id], |row| {
+                .query_map(params![key], |row| {
                     let status_str: String = row.get(2)?;
                     let status = match status_str.as_str() {
                         "busy" => KernelStatus::Busy,
@@ -228,15 +296,18 @@ impl ResearchRepository {
                     };
                     let ep: i64 = row.get(1)?;
                     let counter: i64 = row.get(4)?;
+                    let nb: Option<String> = row.get(7)?;
+                    let kid: Option<String> = row.get(8)?;
                     Ok(NotebookKernelState {
-                        session_id: row.get(0)?,
+                        session_id: session_id.to_string(),
                         epoch: ep as u32,
                         status,
                         python_version: row.get(3)?,
                         execution_counter: counter as u32,
                         created_at: row.get(5)?,
                         updated_at: row.get(6)?,
-                        ..Default::default()
+                        notebook_id: nb.or_else(|| notebook_id.map(|s| s.to_string())),
+                        kernel_id: kid,
                     })
                 })
                 .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -254,6 +325,7 @@ impl ResearchRepository {
             let now = chrono::Utc::now().timestamp();
             let default_state = NotebookKernelState {
                 session_id: session_id.to_string(),
+                notebook_id: notebook_id.map(|s| s.to_string()),
                 epoch: 1,
                 status: KernelStatus::Idle,
                 python_version: "Python 3.14".to_string(),
@@ -271,6 +343,12 @@ impl ResearchRepository {
         &self,
         state: &NotebookKernelState,
     ) -> Result<(), DomainError> {
+        let key = match state.notebook_id.as_deref() {
+            Some(nb) if !nb.trim().is_empty() && !state.session_id.contains("::") => {
+                format!("{}::{}", state.session_id, nb)
+            }
+            _ => state.session_id.clone(),
+        };
         let conn = self.db.lock()?;
         let status_str = match state.status {
             KernelStatus::Idle => "idle",
@@ -279,22 +357,26 @@ impl ResearchRepository {
         };
         conn.execute(
             "INSERT INTO notebook_kernel_sessions (
-                session_id, epoch, status, python_version, execution_counter, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                session_id, epoch, status, python_version, execution_counter, created_at, updated_at, notebook_id, kernel_id
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
             ON CONFLICT(session_id) DO UPDATE SET
                 epoch = excluded.epoch,
                 status = excluded.status,
                 python_version = excluded.python_version,
                 execution_counter = excluded.execution_counter,
-                updated_at = excluded.updated_at",
+                updated_at = excluded.updated_at,
+                notebook_id = excluded.notebook_id,
+                kernel_id = excluded.kernel_id",
             params![
-                state.session_id,
+                key,
                 state.epoch as i64,
                 status_str,
                 state.python_version,
                 state.execution_counter as i64,
                 state.created_at,
                 state.updated_at,
+                state.notebook_id,
+                state.kernel_id,
             ],
         )
         .map_err(|e| DomainError::Validation(e.to_string()))?;
@@ -312,12 +394,29 @@ impl NotebookStoragePort for ResearchRepository {
         self.list_notebook_cells(session_id)
     }
 
+    async fn list_notebook_cells_scoped(
+        &self,
+        session_id: &str,
+        notebook_id: Option<&str>,
+    ) -> Result<Vec<NotebookCell>, DomainError> {
+        self.list_notebook_cells_scoped(session_id, notebook_id)
+    }
+
     async fn replace_notebook_cells(
         &self,
         session_id: &str,
         cells: &[NotebookCell],
     ) -> Result<(), DomainError> {
         self.replace_notebook_cells(session_id, cells)
+    }
+
+    async fn replace_notebook_cells_scoped(
+        &self,
+        session_id: &str,
+        notebook_id: Option<&str>,
+        cells: &[NotebookCell],
+    ) -> Result<(), DomainError> {
+        self.replace_notebook_cells_scoped(session_id, notebook_id, cells)
     }
 
     async fn save_notebook_cell(&self, cell: &NotebookCell) -> Result<(), DomainError> {
@@ -329,6 +428,14 @@ impl NotebookStoragePort for ResearchRepository {
         session_id: &str,
     ) -> Result<NotebookKernelState, DomainError> {
         self.get_notebook_kernel_state(session_id)
+    }
+
+    async fn get_notebook_kernel_state_scoped(
+        &self,
+        session_id: &str,
+        notebook_id: Option<&str>,
+    ) -> Result<NotebookKernelState, DomainError> {
+        self.get_notebook_kernel_state_scoped(session_id, notebook_id)
     }
 
     async fn save_notebook_kernel_state(

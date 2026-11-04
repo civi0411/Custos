@@ -132,9 +132,16 @@ impl ExecutionTargetPort for ColabTargetAdapter {
 
         let entrypoint = attempt_dir.join("run.py");
         if !entrypoint.exists() {
-            tokio::fs::write(&entrypoint, "# Custos Colab runtime script\nprint('Colab job started')\n")
-                .await
-                .map_err(|e| DomainError::Validation(format!("Failed to write script: {e}")))?;
+            if self.mock_mode {
+                tokio::fs::write(&entrypoint, "# Custos Colab runtime script\nprint('Colab job started')\n")
+                    .await
+                    .map_err(|e| DomainError::Validation(format!("Failed to write script: {e}")))?;
+            } else {
+                return Err(DomainError::Validation(format!(
+                    "Colab execution entrypoint '{}' does not exist; stage your script before submitting",
+                    entrypoint.display()
+                )));
+            }
         }
 
         if self.mock_mode {
@@ -317,6 +324,7 @@ impl ExecutionTargetPort for ColabTargetAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use custos_domain::ComputeBackendKind;
 
     #[tokio::test]
     async fn colab_capabilities_and_preflight() {
@@ -356,5 +364,15 @@ mod tests {
         assert!(adapter.is_resource_released().await);
         let obs = adapter.observe(&job).await.unwrap();
         assert_eq!(obs.resource_state, ResourceState::ReleaseConfirmed);
+    }
+
+    #[tokio::test]
+    async fn colab_submit_fails_without_entrypoint_in_live_mode() {
+        let tmp = tempfile::tempdir().unwrap();
+        let adapter = ColabTargetAdapter::new(tmp.path());
+        let attempt = ExecutionAttempt::new("exp_fail", "default", ComputeBackendKind::Colab, None);
+        let res = adapter.submit(&attempt, "idem").await;
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("does not exist; stage your script"));
     }
 }

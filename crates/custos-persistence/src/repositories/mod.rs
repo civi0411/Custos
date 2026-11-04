@@ -15,6 +15,7 @@ pub mod span;
 pub mod task;
 pub mod workflow_revision;
 pub mod workspace;
+pub mod quant;
 
 pub use assistant::*;
 pub use command_ledger::*;
@@ -33,3 +34,4 @@ pub use span::*;
 pub use task::*;
 pub use workflow_revision::*;
 pub use workspace::*;
+pub use quant::*;

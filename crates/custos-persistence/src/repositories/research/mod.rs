@@ -276,6 +276,92 @@ mod tests {
     }
 
     #[test]
+    fn multi_notebook_isolation_in_same_session() {
+        let db = DbConnection::open_in_memory().unwrap();
+        let repo = ResearchRepository::new(db);
+        let cell = |id: &str, session: &str, nb: &str, version: u32| NotebookCell {
+            id: id.into(),
+            session_id: session.into(),
+            cell_type: NotebookCellType::Code,
+            source: format!("x = {version}"),
+            cell_index: 0,
+            execution_count: Some(1),
+            status: CellExecutionStatus::Success,
+            stdout: Some(format!("{version}\n")),
+            stderr: None,
+            output_image: None,
+            wall_ms: Some(10),
+            epoch: 1,
+            updated_at: 1000,
+            notebook_id: Some(nb.into()),
+            cell_version: Some(version),
+        };
+
+        // Two notebooks in same session "sess_multi"
+        repo.replace_notebook_cells_scoped(
+            "sess_multi",
+            Some("nb_alpha"),
+            &[
+                cell("cell_a1", "sess_multi", "nb_alpha", 1),
+                cell("cell_a2", "sess_multi", "nb_alpha", 1),
+            ],
+        )
+        .unwrap();
+
+        repo.replace_notebook_cells_scoped(
+            "sess_multi",
+            Some("nb_beta"),
+            &[cell("cell_b1", "sess_multi", "nb_beta", 1)],
+        )
+        .unwrap();
+
+        // Check scoped lists
+        let alpha_cells = repo
+            .list_notebook_cells_scoped("sess_multi", Some("nb_alpha"))
+            .unwrap();
+        assert_eq!(alpha_cells.len(), 2);
+        assert_eq!(alpha_cells[0].notebook_id.as_deref(), Some("nb_alpha"));
+        assert_eq!(alpha_cells[0].cell_version, Some(1));
+
+        let beta_cells = repo
+            .list_notebook_cells_scoped("sess_multi", Some("nb_beta"))
+            .unwrap();
+        assert_eq!(beta_cells.len(), 1);
+        assert_eq!(beta_cells[0].notebook_id.as_deref(), Some("nb_beta"));
+
+        // Replacing cells in nb_alpha does NOT delete cells in nb_beta!
+        repo.replace_notebook_cells_scoped(
+            "sess_multi",
+            Some("nb_alpha"),
+            &[cell("cell_a1", "sess_multi", "nb_alpha", 2)],
+        )
+        .unwrap();
+
+        let alpha_after = repo
+            .list_notebook_cells_scoped("sess_multi", Some("nb_alpha"))
+            .unwrap();
+        assert_eq!(alpha_after.len(), 1);
+        assert_eq!(alpha_after[0].id, "cell_a1");
+        assert_eq!(alpha_after[0].cell_version, Some(2));
+
+        let beta_after = repo
+            .list_notebook_cells_scoped("sess_multi", Some("nb_beta"))
+            .unwrap();
+        assert_eq!(beta_after.len(), 1);
+        assert_eq!(beta_after[0].id, "cell_b1");
+
+        // Scoped kernel states in same session
+        let k_alpha = repo
+            .get_notebook_kernel_state_scoped("sess_multi", Some("nb_alpha"))
+            .unwrap();
+        let k_beta = repo
+            .get_notebook_kernel_state_scoped("sess_multi", Some("nb_beta"))
+            .unwrap();
+        assert_eq!(k_alpha.notebook_id.as_deref(), Some("nb_alpha"));
+        assert_eq!(k_beta.notebook_id.as_deref(), Some("nb_beta"));
+    }
+
+    #[test]
     fn test_research_repository_full_lifecycle() {
         let db = DbConnection::open_in_memory().expect("open db");
         let repo = ResearchRepository::new(db);

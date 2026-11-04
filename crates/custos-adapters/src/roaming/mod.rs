@@ -22,7 +22,7 @@
 //! is driven through the [`AcpStreamServer`] trait, which the integration layer
 //! implements. This keeps the heavy iroh dependency modularized.
 
-pub mod a2a;
+pub mod peer_dispatch;
 mod card;
 mod directory;
 mod error;
@@ -34,8 +34,8 @@ mod peerbook;
 mod relay;
 mod trust;
 
-pub use a2a::*;
 pub use card::ConnectionCard;
+pub use peer_dispatch::*;
 pub use directory::{Direction, Directory, PeerEntry};
 #[doc(inline)]
 pub use iroh::EndpointId;

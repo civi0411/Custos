@@ -17,7 +17,7 @@ use tracing::info;
 
 /// Authorization gate for MCP tool calls.
 #[async_trait::async_trait]
-pub trait ToolGate: Send + Sync {
+pub trait McpToolGate: Send + Sync {
     async fn authorize(
         &self,
         namespaced_tool: &str,
@@ -26,9 +26,13 @@ pub trait ToolGate: Send + Sync {
     ) -> Result<(), DomainError>;
 }
 
+/// Alias for backwards compatibility.
+// shortcut: compatibility alias, keep until caller deprecation cycle
+pub use McpToolGate as ToolGate;
+
 pub struct McpFederationHub {
     servers: Arc<RwLock<HashMap<String, Arc<dyn McpClientTrait>>>>,
-    gate: Arc<RwLock<Option<Arc<dyn ToolGate>>>>,
+    gate: Arc<RwLock<Option<Arc<dyn McpToolGate>>>>,
 }
 
 impl Default for McpFederationHub {
