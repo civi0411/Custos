@@ -57,6 +57,10 @@ impl CandidateBuilder {
             }
         }
 
+        if !snapshot.available_executors.is_empty() {
+            candidates.retain(|c| snapshot.available_executors.contains(&c.harness_id));
+        }
+
         candidates
     }
 }

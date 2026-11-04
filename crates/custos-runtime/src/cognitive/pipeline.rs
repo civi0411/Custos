@@ -3,12 +3,12 @@
 //! Orchestrates the full lifecycle:
 //! Request → SignalExtractor → 9Router Arbiter → Human Gate → ProviderSelector / A2A Fallback → Execution.
 
-use crate::arbiter::CognitiveArbiter;
-use crate::human_gate::{HumanGate, HumanGateOutcome};
-use crate::provider_selector::TierProviderMap;
-use crate::registry::ProviderRegistry;
-use crate::routing::{ReasoningTier, RouteDecision};
-use crate::signal_extractor::SignalExtractor;
+use crate::cognitive::arbiter::CognitiveArbiter;
+use crate::cognitive::human_gate::{HumanGate, HumanGateOutcome};
+use crate::cognitive::provider_selector::TierProviderMap;
+use crate::cognitive::registry::ProviderRegistry;
+use crate::cognitive::routing::{ReasoningTier, RouteDecision};
+use crate::cognitive::signal_extractor::SignalExtractor;
 use async_trait::async_trait;
 use custos_domain::{DomainError, SessionId};
 use custos_provider::request::ProviderRequest;

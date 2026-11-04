@@ -10,8 +10,8 @@ use custos_provider::conversation::token_usage::ProviderUsage;
 use custos_provider::errors::ProviderError;
 use custos_provider::model::ModelConfig;
 
-use crate::model::ProviderModel;
-use crate::templates::Templates;
+use crate::context::model::ProviderModel;
+use crate::context::templates::Templates;
 
 /// Wraps a provider so a `ContextLengthExceeded` response triggers compaction
 /// and one retry with the summary standing in for the prior history.
@@ -39,7 +39,7 @@ impl CompactingProvider {
         messages: &[Message],
     ) -> Result<Vec<Message>, ProviderError> {
         let model = ProviderModel::new(self.inner.clone(), model_config.clone());
-        let summary = crate::summarize(&model, None, &self.templates, messages)
+        let summary = crate::context::summarize(&model, None, &self.templates, messages)
             .await
             .map_err(|error| ProviderError::ExecutionError(error.to_string()))?;
         Ok(vec![summary.message])

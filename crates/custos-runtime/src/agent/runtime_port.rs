@@ -31,6 +31,59 @@ pub fn truncate_to_char_boundary(s: &mut String, max_bytes: usize) {
     custos_domain::truncate_to_char_boundary(s, max_bytes);
 }
 
+/// A streaming writer that discards bytes beyond `limit` to prevent unbounded memory allocation
+/// during JSON serialization of large tool outputs.
+pub struct LimitedWriter<W> {
+    inner: W,
+    limit: usize,
+    written: usize,
+    capped: bool,
+}
+
+impl<W: std::io::Write> LimitedWriter<W> {
+    pub fn new(inner: W, limit: usize) -> Self {
+        Self {
+            inner,
+            limit,
+            written: 0,
+            capped: false,
+        }
+    }
+
+    pub fn capped(&self) -> bool {
+        self.capped
+    }
+
+    pub fn written(&self) -> usize {
+        self.written
+    }
+
+    pub fn into_inner(self) -> (W, bool) {
+        (self.inner, self.capped)
+    }
+}
+
+impl<W: std::io::Write> std::io::Write for LimitedWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        if self.written >= self.limit {
+            self.capped = true;
+            return Ok(buf.len());
+        }
+        let remaining = self.limit - self.written;
+        let to_write = buf.len().min(remaining);
+        let n = self.inner.write(&buf[..to_write])?;
+        self.written += n;
+        if self.written >= self.limit {
+            self.capped = true;
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
 /// Invocation context resolved by the backend (never trusted from model payload).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InvocationContext {
@@ -277,15 +330,17 @@ impl AgentRuntimePort for GovernedAgentRuntime {
         let mut conversation_history = String::new();
         let mut accumulated_intents = Vec::new();
         let mut completed_cleanly = false;
+        let mut was_cancelled = false;
 
-        for iteration in 0..self.max_iterations {
+        'loop_turns: for iteration in 0..self.max_iterations {
             if self.cancelled_runs.read().await.contains(&effective_run_id) {
                 tracing::info!(
                     run_id = %effective_run_id,
                     iteration,
                     "Agent run canceled during multi-turn loop"
                 );
-                break;
+                was_cancelled = true;
+                break 'loop_turns;
             }
 
             let mut current_prompt = prompt_content.clone();
@@ -319,7 +374,7 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                     "Model completed without additional tool calls"
                 );
                 completed_cleanly = true;
-                break;
+                break 'loop_turns;
             }
 
             for call in response.tool_calls {
@@ -328,7 +383,8 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                         run_id = %effective_run_id,
                         "Agent run canceled before tool execution"
                     );
-                    break;
+                    was_cancelled = true;
+                    break 'loop_turns;
                 }
 
                 let risk = Self::classify_tool_risk(&call.name, &call.arguments);
@@ -362,22 +418,34 @@ impl AgentRuntimePort for GovernedAgentRuntime {
                         if self.cancelled_runs.read().await.contains(&effective_run_id) {
                             intent.lifecycle_state = ActionLifecycleState::Failed;
                             accumulated_intents.push(intent);
-                            break;
+                            was_cancelled = true;
+                            break 'loop_turns;
                         }
 
                         // 2. Execute tool
                         match executor.execute(&invocation_ctx, &call.name, &call.arguments).await {
                             Ok(ToolResult::Success(val)) => {
                                 intent.lifecycle_state = ActionLifecycleState::Receipt;
-                                let mut output_str = serde_json::to_string(&val)
-                                    .unwrap_or_else(|_| val.to_string());
-                                // 3. Output cap check & truncation
-                                if output_str.len() > self.max_tool_output_bytes {
-                                    truncate_to_char_boundary(&mut output_str, self.max_tool_output_bytes);
-                                    output_str.push_str(
-                                        "\n... [TRUNCATED: output exceeded max tool output limit]",
-                                    );
-                                }
+                                let mut writer = LimitedWriter::new(
+                                    Vec::with_capacity(self.max_tool_output_bytes.min(8192)),
+                                    self.max_tool_output_bytes,
+                                );
+                                let output_str = if serde_json::to_writer(&mut writer, &val).is_ok() {
+                                    let (raw_buf, capped) = writer.into_inner();
+                                    let mut s = String::from_utf8_lossy(&raw_buf).into_owned();
+                                    if capped {
+                                        truncate_to_char_boundary(&mut s, self.max_tool_output_bytes);
+                                        s.push_str("\n... [TRUNCATED: output exceeded max tool output limit]");
+                                    }
+                                    s
+                                } else {
+                                    let mut s = val.to_string();
+                                    if s.len() > self.max_tool_output_bytes {
+                                        truncate_to_char_boundary(&mut s, self.max_tool_output_bytes);
+                                        s.push_str("\n... [TRUNCATED: output exceeded max tool output limit]");
+                                    }
+                                    s
+                                };
                                 conversation_history.push_str(&format!(
                                     "Tool Result [{}]: {}\n",
                                     call.call_id, output_str
@@ -428,8 +496,15 @@ impl AgentRuntimePort for GovernedAgentRuntime {
             steer.remove(&effective_run_id);
         }
 
+        if was_cancelled {
+            return Err(DomainError::Validation(format!(
+                "Run {} was canceled during agent loop execution",
+                effective_run_id
+            )));
+        }
+
         // E2: Iteration exhaustion without clean completion must return BudgetExceeded (limited), never success
-        if !completed_cleanly && accumulated_intents.len() >= self.max_iterations {
+        if !completed_cleanly {
             return Err(DomainError::BudgetExceeded(format!(
                 "Agent loop iteration limit of {} exceeded without completion (status: limited)",
                 self.max_iterations
@@ -779,6 +854,66 @@ mod tests {
         assert!(err.to_string().contains("canceled"));
     }
 
+    struct SelfCancellingToolExecutor {
+        cancelled_handle: Arc<RwLock<HashSet<String>>>,
+    }
+
+    #[async_trait]
+    impl GovernedToolExecutor for SelfCancellingToolExecutor {
+        async fn authorize(&self, _ctx: &InvocationContext, _name: &str, _params: &serde_json::Value) -> Result<(), DomainError> {
+            Ok(())
+        }
+
+        async fn execute(&self, ctx: &InvocationContext, _name: &str, _params: &serde_json::Value) -> Result<ToolResult, DomainError> {
+            self.cancelled_handle.write().await.insert(ctx.run_id.clone());
+            Ok(ToolResult::Success(serde_json::json!({"step": 1})))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_cancel_run_during_loop_stops_and_errors() {
+        let mut resp1 = ModelResponse::text("Call 1", "test-model", 20);
+        resp1.tool_calls.push(ToolCall {
+            call_id: "call_cancel_1".to_string(),
+            name: "step_one".to_string(),
+            arguments: serde_json::json!({}),
+        });
+        let mut resp2 = ModelResponse::text("Call 2", "test-model", 20);
+        resp2.tool_calls.push(ToolCall {
+            call_id: "call_cancel_2".to_string(),
+            name: "step_two".to_string(),
+            arguments: serde_json::json!({}),
+        });
+
+        let provider = Arc::new(ScriptedMultiTurnProvider {
+            responses: std::sync::Mutex::new(vec![resp1, resp2]),
+        });
+
+        let cancelled_runs = Arc::new(RwLock::new(HashSet::new()));
+        let executor = Arc::new(SelfCancellingToolExecutor {
+            cancelled_handle: cancelled_runs.clone(),
+        });
+
+        let mut runtime = GovernedAgentRuntime::new(
+            provider,
+            "You are a test agent",
+            vec![
+                serde_json::json!({ "name": "step_one" }),
+                serde_json::json!({ "name": "step_two" }),
+            ],
+        )
+        .with_tool_executor(executor)
+        .with_max_iterations(5);
+        runtime.cancelled_runs = cancelled_runs;
+
+        let worker_run = WorkerRun::new("task_cancel_mid".to_string(), "coder".to_string(), 1);
+        let context_pack = ContextPack::new("pack_1".to_string(), vec![], 0, "sha256:0".to_string());
+
+        let err = runtime.execute_turn(&worker_run, &context_pack).await.unwrap_err();
+        assert!(matches!(err, DomainError::Validation(_)));
+        assert!(err.to_string().contains("canceled during agent loop execution"));
+    }
+
     #[tokio::test]
     async fn test_profile_honest_tool_capabilities() {
         let provider = Arc::new(MockTestProvider { tool_to_return: None });
@@ -988,6 +1123,36 @@ mod tests {
 
         assert_eq!(intents.len(), 1);
         assert_eq!(intents[0].lifecycle_state, ActionLifecycleState::Failed);
+    }
+
+    #[test]
+    fn test_limited_writer_up_to_limit() {
+        use std::io::Write;
+        let mut w = LimitedWriter::new(Vec::new(), 10);
+        w.write_all(b"hello").unwrap();
+        let (buf, capped) = w.into_inner();
+        assert!(!capped);
+        assert_eq!(buf, b"hello");
+    }
+
+    #[test]
+    fn test_limited_writer_caps_at_exact_limit() {
+        use std::io::Write;
+        let mut w = LimitedWriter::new(Vec::new(), 5);
+        let _ = w.write(b"hello world");
+        let (buf, capped) = w.into_inner();
+        assert!(capped);
+        assert_eq!(&buf, b"hello");
+    }
+
+    #[test]
+    fn test_limited_writer_zero_cap_is_immediately_capped() {
+        use std::io::Write;
+        let mut w = LimitedWriter::new(Vec::new(), 0);
+        let _ = w.write(b"x");
+        let (buf, capped) = w.into_inner();
+        assert!(capped);
+        assert!(buf.is_empty());
     }
 }
 

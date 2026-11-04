@@ -25,7 +25,7 @@ impl Default for OiEngine {
 impl OiPlannerPort for OiEngine {
     async fn plan(&self, snapshot: &DecisionSnapshot) -> Result<StrategyProposal, DomainError> {
         let mut candidates = CandidateBuilder::build(snapshot);
-        Estimator::estimate(&mut candidates);
+        Estimator::estimate_with_snapshot(&mut candidates, Some(snapshot));
 
         let proposal = Selector::select(candidates, snapshot)?;
         Ok(proposal)

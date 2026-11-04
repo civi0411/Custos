@@ -6,10 +6,10 @@ use rmcp::model::Role;
 use serde::Serialize;
 use tracing::warn;
 
-use crate::format::format_message_for_compacting;
-use crate::model::{CompactionModel, TokenEstimator};
-use crate::structured::StructuredSummary;
-use crate::templates::{render, Templates};
+use crate::context::format::format_message_for_compacting;
+use crate::context::model::{CompactionModel, TokenEstimator};
+use crate::context::structured::StructuredSummary;
+use crate::context::templates::{render, Templates};
 
 const REMOVAL_PERCENTAGES: [u32; 5] = [0, 10, 20, 50, 100];
 
@@ -184,8 +184,8 @@ pub async fn summarize(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::CompactionModel;
-    use crate::templates::Templates;
+    use crate::context::model::CompactionModel;
+    use crate::context::templates::Templates;
     use async_trait::async_trait;
     use rmcp::model::CallToolResult;
     use std::sync::atomic::{AtomicUsize, Ordering};

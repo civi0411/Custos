@@ -1,4 +1,4 @@
-use crate::human_gate::{HumanGate, HumanGateOutcome};
+use crate::cognitive::human_gate::{HumanGate, HumanGateOutcome};
 use anyhow::Result;
 use custos_domain::{RiskLevel, SessionId, TaskId};
 use serde::{Deserialize, Serialize};

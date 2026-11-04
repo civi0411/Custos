@@ -45,7 +45,6 @@ tempfile = { workspace = true }
 
 [features]
 default = []
-gateway-experimental = []
 
 [dev-dependencies]
 custos-persistence = { workspace = true }

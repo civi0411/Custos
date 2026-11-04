@@ -26,7 +26,7 @@ impl ExplainService {
             ));
         }
 
-        Estimator::estimate(&mut candidates);
+        Estimator::estimate_with_snapshot(&mut candidates, Some(snapshot));
 
         let mut candidate_explanations = Vec::with_capacity(candidates.len());
         let mut min_tokens = u64::MAX;

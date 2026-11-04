@@ -1,4 +1,4 @@
-use crate::{RouteDecision, RoutingPolicy, RoutingSignals};
+use crate::cognitive::routing::{RouteDecision, RoutingPolicy, RoutingSignals};
 use custos_domain::DomainError;
 
 /// Routes work to a low-cost or deliberate reasoning tier using explicit signals.

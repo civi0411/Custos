@@ -72,7 +72,10 @@ pub(crate) fn build_session_json(session: ImportedSession) -> Value {
 /// Detected import source format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportFormat {
-    /// Native goose session export — a JSON object representing a `Session`.
+    /// Native session export — a JSON object representing a `Session`.
+    Native,
+    /// Legacy Goose session export.
+    // shortcut: legacy format alias, remove when external callers migrate
     Goose,
     /// Claude Code `.jsonl` transcript (one JSON object per line, no header).
     ClaudeCode,
@@ -86,7 +89,7 @@ pub enum ImportFormat {
 ///
 /// We peek at the first non-blank line:
 /// - If it parses as a JSON object whose top-level has `working_dir`/`workingDir`
-///   and a `conversation` (or `messages`) field, it's goose.
+///   and a `conversation` (or `messages`) field, it's native.
 /// - If the *first* line is `{"type":"session", ...}` it's pi.
 /// - If it's a JSON-Lines stream with per-line `type` fields like
 ///   `user`/`assistant`/`attachment`, it's Claude Code.
@@ -105,7 +108,7 @@ pub fn detect_format(content: &str) -> ImportFormat {
         {
             return ImportFormat::Pi;
         }
-        // Claude Code lines always include a sessionId; goose's native JSON is
+        // Claude Code lines always include a sessionId; native JSON is
         // a single multi-line object whose first *parsed* line is `{` only.
         if v.is_object()
             && v.get("sessionId").is_some()
@@ -115,7 +118,7 @@ pub fn detect_format(content: &str) -> ImportFormat {
         }
     }
 
-    // Goose's pretty-printed export starts with `{` and *eventually* contains
+    // Pretty-printed export starts with `{` and *eventually* contains
     // a full Session object — try to parse the entire payload.
     if serde_json::from_str::<serde_json::Value>(content)
         .ok()
@@ -126,7 +129,7 @@ pub fn detect_format(content: &str) -> ImportFormat {
         })
         .is_some()
     {
-        return ImportFormat::Goose;
+        return ImportFormat::Native;
     }
 
     // Fallback: if every non-blank line is a JSON object with a `type` and
@@ -143,18 +146,22 @@ pub fn detect_format(content: &str) -> ImportFormat {
         return ImportFormat::ClaudeCode;
     }
 
-    ImportFormat::Goose
+    ImportFormat::Native
 }
 
-/// Convert any supported foreign format to a goose-native session JSON string.
-pub fn convert_to_goose_session_json(content: &str) -> Result<String> {
+/// Convert any supported foreign format to a native session JSON string.
+pub fn convert_to_native_session_json(content: &str) -> Result<String> {
     match detect_format(content) {
-        ImportFormat::Goose => Ok(upgrade_legacy_token_fields(content)),
+        ImportFormat::Native | ImportFormat::Goose => Ok(upgrade_legacy_token_fields(content)),
         ImportFormat::ClaudeCode => claude_code::convert(content),
         ImportFormat::Codex => codex::convert(content),
         ImportFormat::Pi => pi::convert(content),
     }
 }
+
+/// Deprecated legacy alias for [`convert_to_native_session_json`].
+// shortcut: legacy function alias, remove when external callers migrate
+pub use convert_to_native_session_json as convert_to_goose_session_json;
 
 /// Exports from goose versions before `usage`/`accumulated_usage` existed
 /// store token counts as flat fields.

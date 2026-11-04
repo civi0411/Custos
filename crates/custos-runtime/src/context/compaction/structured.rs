@@ -1,4 +1,4 @@
-use crate::templates::{self, COMPACTION_SUMMARY_TEMPLATE};
+use crate::context::templates::{self, COMPACTION_SUMMARY_TEMPLATE};
 use custos_provider::json::safely_parse_json;
 use serde::{Deserialize, Serialize};
 
