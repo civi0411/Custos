@@ -27,7 +27,7 @@ import {
 } from '../types/domain';
 import type { OrcaTab, ResourceTabsState } from '@/components/workbenches/OrcaTabbedContainer';
 
-export type ActiveWorkbench = 'copilot' | 'engineering' | 'research';
+export type ActiveWorkbench = 'copilot' | 'engineering' | 'research' | 'quant';
 
 interface AppContextType {
   // Projects & Sessions
@@ -55,8 +55,8 @@ interface AppContextType {
   // Navigation & Layout
   currentTab: MainTab;
   setCurrentTab: (tab: MainTab) => void;
-  activeWorkbench: 'engineering' | 'research' | 'copilot';
-  setActiveWorkbench: (wb: 'engineering' | 'research' | 'copilot') => void;
+  activeWorkbench: ActiveWorkbench;
+  setActiveWorkbench: (wb: ActiveWorkbench) => void;
   activeScreenId: string;
   setActiveScreenId: React.Dispatch<React.SetStateAction<string>>;
   initScreenTabs: (screenId: string, initialTabs: OrcaTab[], initialActiveTabId?: string) => void;
@@ -193,14 +193,14 @@ interface AppContextType {
   // Actions
   startNativeConversation: (instruction: string, harness: string, workspace: string) => Promise<{ run: import('../types/domain').RunHandle; sessionId: string }>;
   handleStopRun: (runId: string) => Promise<void>;
-  handleSendMessage: (text: string, lens?: 'assistant' | 'coding' | 'research') => Promise<boolean>;
+  handleSendMessage: (text: string, lens?: 'assistant' | 'coding' | 'research' | 'quant') => Promise<boolean>;
   handleClearHistory: () => void;
   handleDeleteConversation: (sessionId: string) => Promise<void>;
   handleAcceptAndRun: () => Promise<void>;
   handleRejectDiff: () => void;
   handleCopyDiff: () => void;
-  handleCreateNewSession: (title: string, pack: 'engineering' | 'research' | 'assistant') => Promise<void>;
-  handleCreateChatSession: (pack: 'engineering' | 'research' | 'assistant', taskId?: string) => Promise<void>;
+  handleCreateNewSession: (title: string, pack: 'engineering' | 'research' | 'assistant' | 'quant') => Promise<void>;
+  handleCreateChatSession: (pack: 'engineering' | 'research' | 'assistant' | 'quant', taskId?: string) => Promise<void>;
   handleNewProjectPrompt: () => void;
   handleSaveProvider: (
     serviceOrParams: string | { service: string; accountName?: string; apiKey?: string; endpointUrl?: string; model?: string; contextWindow?: number; fastMode?: boolean },
@@ -455,17 +455,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Navigation & Layout state
   const [currentTab, setCurrentTab] = useState<MainTab>('studio');
-  const [activeWorkbench, setActiveWorkbenchState] = useState<'engineering' | 'research' | 'copilot'>(() => {
+  const [activeWorkbench, setActiveWorkbenchState] = useState<ActiveWorkbench>(() => {
     try {
       const saved = localStorage.getItem('custos.workspace.mode.v2');
       if (saved === 'copilot' || saved === 'chat') return 'copilot';
       if (saved === 'engineering' || saved === 'code') return 'engineering';
       if (saved === 'research') return 'research';
+      if (saved === 'quant') return 'quant';
     } catch { }
     return 'engineering';
   });
 
-  const setActiveWorkbench = useCallback((wb: 'engineering' | 'research' | 'copilot') => {
+  const setActiveWorkbench = useCallback((wb: ActiveWorkbench) => {
     setActiveWorkbenchState(wb);
     try {
       localStorage.setItem('custos.workspace.mode.v2', wb);
@@ -1668,7 +1669,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { run, sessionId: session.id };
   };
 
-  const handleSendMessage = async (text: string, lens?: 'assistant' | 'coding' | 'research') => {
+  const handleSendMessage = async (text: string, lens?: 'assistant' | 'coding' | 'research' | 'quant') => {
     if (!activeSession) return false;
     if (activeSession.messages.some(message => message.runId && !['completed','failed','cancelled','interrupted'].includes(message.runStatus || ''))) { showToast('Stop or wait for the current run before sending another prompt.'); return false; }
     if (pendingTurns.current.has(activeSession.id)) return false;
@@ -2017,7 +2018,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const handleCreateNewSession = async (title: string, pack: 'engineering' | 'research' | 'assistant') => {
+  const handleCreateNewSession = async (title: string, pack: 'engineering' | 'research' | 'assistant' | 'quant') => {
     try {
       // 1. Create real Task in Custos Daemon
       const createdTask = await daemonClient.createTask({
@@ -2034,7 +2035,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // 2. Create Session in Custos Daemon
       const createdSession = await daemonClient.createSession('assisted');
       await daemonClient.attachSession({ session_id: createdSession.id, task_id: createdTask.id });
-      await daemonClient.openSessionInLens(createdSession.id, pack === 'engineering' ? 'coding' : pack === 'assistant' ? 'assistant' : 'research');
+      await daemonClient.openSessionInLens(createdSession.id, pack === 'engineering' ? 'coding' : pack === 'assistant' ? 'assistant' : pack === 'quant' ? 'quant' : 'research');
 
       const newSessionItem: Session = {
         id: createdSession.id,
@@ -2043,7 +2044,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         taskStatus: createdTask.status,
         sessionId: createdSession.id,
         pack,
-        openedLenses: [pack === 'engineering' ? 'code' : pack === 'assistant' ? 'chat' : 'research'],
+        openedLenses: [pack === 'engineering' ? 'code' : pack === 'assistant' ? 'chat' : pack === 'quant' ? 'quant' : 'research'],
         title: createdTask.title,
         time: 'Just now',
         preview: `${pack} task · ${createdTask.status}`,
@@ -2078,7 +2079,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const pendingTaskConversations = useRef(new Set<string>());
-  const handleCreateChatSession = async (pack: 'engineering' | 'research' | 'assistant', taskId?: string) => {
+  const handleCreateChatSession = async (pack: 'engineering' | 'research' | 'assistant' | 'quant', taskId?: string) => {
     if (taskId && pendingTaskConversations.current.has(taskId)) throw new Error('A conversation is already being created for this Task.');
     if (taskId) pendingTaskConversations.current.add(taskId);
     try {
@@ -2087,7 +2088,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const registeredWorkspace = workspaces.find(workspace => workspace.id === taskWorkspaceId);
       const createdSession = await daemonClient.createSession('assisted');
       if (boundTask) await daemonClient.attachSession({ session_id: createdSession.id, task_id: boundTask.id });
-      await daemonClient.openSessionInLens(createdSession.id, pack === 'engineering' ? 'coding' : pack === 'assistant' ? 'assistant' : 'research');
+      await daemonClient.openSessionInLens(createdSession.id, pack === 'engineering' ? 'coding' : pack === 'assistant' ? 'assistant' : pack === 'quant' ? 'quant' : 'research');
       const conversation: Session = {
         taskId: boundTask?.id,
         taskStatus: boundTask?.status,

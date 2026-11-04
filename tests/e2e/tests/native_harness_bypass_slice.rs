@@ -5,7 +5,7 @@
 //! 2. `native_bypass_effect_tracking`: Parsing and tracking native shell/file bypasses with typed ProviderGoverned assurance.
 //! 3. `harness_lifecycle_steer_and_cancel`: Steering guidance injection and cancellation semantics.
 
-use custos_adapters::harness::ClaudeCodeHarnessAdapter;
+use custos_adapters::harness::CliHarness;
 use custos_core::contracts::harness::{AgentRuntimePort, ToolMediationLevel};
 use custos_domain::{new_id, ActionIntent, Assurance, ContextPack, RiskLevel, WorkerRun};
 
@@ -20,7 +20,7 @@ mod harness_profile_and_gate4_invariants {
         let temp_ws =
             std::env::temp_dir().join(format!("custos_harness_prof_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_ws).unwrap();
-        let adapter = ClaudeCodeHarnessAdapter::new(&temp_ws).with_mock_mode();
+        let adapter = CliHarness::claude_code(&temp_ws).with_mock_mode();
         let profile = adapter.profile();
 
         assert_eq!(profile.harness_id, "claude-code");
@@ -70,7 +70,7 @@ mod native_bypass_effect_tracking {
         let temp_ws =
             std::env::temp_dir().join(format!("custos_harness_track_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_ws).unwrap();
-        let adapter = ClaudeCodeHarnessAdapter::new(&temp_ws).with_mock_mode();
+        let adapter = CliHarness::claude_code(&temp_ws).with_mock_mode();
         let profile = adapter.profile();
 
         let simulated_cli_output = r#"
@@ -130,7 +130,7 @@ mod harness_lifecycle_steer_and_cancel {
         let temp_ws =
             std::env::temp_dir().join(format!("custos_harness_life_{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&temp_ws).unwrap();
-        let adapter = ClaudeCodeHarnessAdapter::new(&temp_ws).with_mock_mode();
+        let adapter = CliHarness::claude_code(&temp_ws).with_mock_mode();
 
         adapter
             .steer_run(

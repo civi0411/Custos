@@ -51,7 +51,7 @@ export interface Session {
   nativeHarnessId?: string;
   workspaceId?: string;
   id: string;
-  openedLenses?: Array<'chat' | 'code' | 'research'>;
+  openedLenses?: Array<'chat' | 'code' | 'research' | 'quant'>;
   taskId?: string;
   task_id?: string;
   taskTitle?: string;

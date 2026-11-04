@@ -13,6 +13,7 @@ import {
   X,
   CheckCircle2,
   Loader2,
+  Trophy,
 } from 'lucide-react';
 import { daemonClient } from '@/api/daemon_client';
 import { useAppContext } from '@/context/AppContext';
@@ -77,6 +78,10 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
   const [spawnTaskId, setSpawnTaskId] = useState('');
   const [spawnCount, setSpawnCount] = useState(2);
   const [spawning, setSpawning] = useState(false);
+
+  // Candidate Race state
+  const [racing, setRacing] = useState(false);
+  const [raceResult, setRaceResult] = useState<Awaited<ReturnType<typeof daemonClient.runCandidateRace>> | null>(null);
 
   useEffect(() => {
     daemonClient.listTasks().then(setTasks).catch((err) => {
@@ -249,6 +254,34 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
     }
   };
 
+  const handleRunCandidateRace = async () => {
+    const candidateWs = workspaces.filter((w) => w.owner_task_id);
+    if (candidateWs.length === 0) {
+      onShowToast?.('No task-owned candidate worktrees found to run race.');
+      return;
+    }
+    const taskId = candidateWs[0].owner_task_id!;
+    setRacing(true);
+    try {
+      onShowToast?.(`Starting candidate race across ${candidateWs.length} models for Task ${taskId}...`);
+      const res = await daemonClient.runCandidateRace({
+        task_id: taskId,
+        test_command: 'cargo test --workspace',
+      });
+      setRaceResult(res);
+      if (res.winner_candidate_id) {
+        onShowToast?.(`Candidate race finished! Winner: ${res.winner_candidate_id}`);
+      } else {
+        onShowToast?.(`Candidate race finished without an automated winner.`);
+      }
+      await loadWorkspaces();
+    } catch (err: any) {
+      onShowToast?.(`Failed to run candidate race: ${err?.message || err}`);
+    } finally {
+      setRacing(false);
+    }
+  };
+
   return (
     <div className="flex h-full flex-col bg-[var(--color-canvas)] text-[var(--color-editor-fg)]">
       {integrationPreview && <div role="dialog" aria-modal="true" aria-label="Review integration" className="absolute inset-0 z-50 bg-canvas/95 p-6 flex flex-col gap-4 overflow-auto">
@@ -268,6 +301,19 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {workspaces.some((w) => w.owner_task_id) && (
+            <button
+              type="button"
+              onClick={handleRunCandidateRace}
+              disabled={racing}
+              className="flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs text-amber-200 hover:bg-amber-500/20 transition font-medium disabled:opacity-50"
+              title="Run multi-model candidate race with Test Oracle"
+            >
+              {racing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trophy className="h-3 w-3 text-amber-400" />}
+              <span>{racing ? 'Racing…' : 'Run Race'}</span>
+            </button>
+          )}
+
           {workspaces.length >= 2 && (
             <button
               type="button"
@@ -303,6 +349,47 @@ export const WorktreeManagerPane: React.FC<WorktreeManagerPaneProps> = ({
 
       {/* Worktrees Card Grid */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {raceResult && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3.5 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Trophy className="h-4 w-4 text-amber-400 shrink-0" />
+                <span className="text-xs font-semibold text-amber-200">
+                  Candidate Race Verdict: {raceResult.winner_candidate_id ? `Winner: ${raceResult.winner_candidate_id}` : 'No Automated Winner'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRaceResult(null)}
+                className="text-white/40 hover:text-white p-0.5 rounded transition"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              {raceResult.candidate_reports.map((r) => (
+                <div
+                  key={r.candidate_id}
+                  className={`p-2 rounded-lg border ${
+                    r.candidate_id === raceResult.winner_candidate_id
+                      ? 'border-amber-500/40 bg-amber-500/10'
+                      : 'border-white/10 bg-white/5'
+                  }`}
+                >
+                  <div className="flex items-center justify-between font-mono">
+                    <span className="font-semibold text-white">{r.candidate_id} ({r.model_id})</span>
+                    <span className={r.test_passed ? 'text-emerald-400 font-medium' : 'text-rose-400 font-medium'}>
+                      {r.test_passed ? `✓ ${r.tests_succeeded} passed` : `✗ ${r.tests_failed} failed`}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-white/50 mt-1">
+                    Duration: {Math.round(r.execution_duration_ms / 1000)}s | Files: {r.modified_files.length}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {loading && workspaces.length === 0 ? (
           <div className="flex h-32 items-center justify-center text-xs text-[var(--color-fg-subtle)]">
             Loading active worktrees...

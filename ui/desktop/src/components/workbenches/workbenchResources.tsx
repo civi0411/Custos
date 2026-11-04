@@ -1,6 +1,6 @@
 import React from 'react';
 import WorktreeIcon from '~icons/codicon/worktree';
-import { Activity, BookOpen, Bot, FileCode, FileDiff, FileText, FlaskConical, FolderTree, Globe, ShieldCheck, Terminal, Layers, Server, Smartphone, ArrowRight, Send, Users, Calendar, MessageSquare, CheckSquare, LayoutGrid, NotebookTabs } from 'lucide-react';
+import { Activity, BookOpen, Bot, FileCode, FileDiff, FileText, FlaskConical, FolderTree, Globe, ShieldCheck, Terminal, Layers, Server, Smartphone, ArrowRight, Send, Users, Calendar, MessageSquare, CheckSquare, LayoutGrid, NotebookTabs, TrendingUp, ShieldAlert } from 'lucide-react';
 import { getAgentBrandIcon } from '@/components/common/AgentIcons';
 import { daemonClient } from '@/api/daemon_client';
 import type { CapabilityDescriptor } from '@/types/domain';
@@ -37,6 +37,11 @@ export type OrcaTabId =
   | 'contacts'
   | 'calendar'
   | 'notes'
+  // Quant
+  | 'alpha'
+  | 'tearsheet'
+  | 'risk_audit'
+  | 'execution'
   // Backward compatibility aliases
   | 'changes'
   | 'kanban'
@@ -118,7 +123,7 @@ export type ResourceDefinition = {
   title: string;
   description: string;
   icon: React.ElementType;
-  group: 'Engineering' | 'Research' | 'Shared';
+  group: 'Engineering' | 'Research' | 'Shared' | 'Quant';
   status: 'available' | 'degraded' | 'unavailable';
   reason?: string;
   supportedOperations?: string[];
@@ -310,6 +315,39 @@ export const DEFAULT_RESOURCES: ResourceDefinition[] = [
     status: 'available',
     supportedOperations: ['hosts.list', 'hosts.register', 'hosts.ping', 'fleet.exec'],
   },
+  // Quant Workbench
+  {
+    id: 'alpha',
+    title: 'Alpha Studio',
+    description: 'IC/IR factor scan and alpha hypothesis discovery.',
+    icon: TrendingUp,
+    group: 'Quant',
+    status: 'available',
+  },
+  {
+    id: 'tearsheet',
+    title: 'Tearsheet',
+    description: 'Vectorized backtest equity curve and performance analytics.',
+    icon: Activity,
+    group: 'Quant',
+    status: 'available',
+  },
+  {
+    id: 'risk_audit',
+    title: 'Risk Audit',
+    description: 'Deflated Sharpe ratio and lookahead bias verification.',
+    icon: ShieldAlert,
+    group: 'Quant',
+    status: 'available',
+  },
+  {
+    id: 'execution',
+    title: 'Execution',
+    description: 'Algorithmic order ticket and execution simulation.',
+    icon: Layers,
+    group: 'Quant',
+    status: 'available',
+  },
 ];
 
 export function workbenchResourceIds(mode: string, includeShared = true): OrcaTabId[] {
@@ -317,6 +355,7 @@ export function workbenchResourceIds(mode: string, includeShared = true): OrcaTa
   return [...(mode === 'code' || mode === 'engineering'
     ? ['files', 'activity', 'terminal', 'worktrees', 'agents']
     : mode === 'research' ? ['literature', 'findings', 'lab', 'runs', 'training', 'knowledge', 'artifacts', 'synthesis', 'terminal', 'files', 'fleet']
+    : mode === 'quant' ? ['alpha', 'tearsheet', 'risk_audit', 'execution', 'terminal', 'files']
       : ['drafts', 'outbox', 'contacts', 'calendar']) as OrcaTabId[], ...shared];
 }
 
@@ -336,7 +375,7 @@ export function resolveResources(
 
   return DEFAULT_RESOURCES.map((def) => {
     // Client-local presentation items that do not require daemon capabilities
-    if (def.id === 'conversation' || def.id === 'contacts' || def.id === 'calendar') {
+    if (def.id === 'conversation' || def.id === 'contacts' || def.id === 'calendar' || def.id === 'alpha' || def.id === 'tearsheet' || def.id === 'risk_audit' || def.id === 'execution') {
       return { ...def, status: 'available', supportedOperations: [] };
     }
     if (!loaded || failed) {

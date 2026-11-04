@@ -30,7 +30,7 @@ Model API cloud không phải GPU lease mà Custos sở hữu. Native agent có 
 | [local_inference/backend.rs](../../crates/custos-adapters/src/local_inference/backend.rs) | Backend load/generate contracts và model settings | Backend nào cũng hỗ trợ cùng accelerator/training |
 | [notebook coordinator](../../crates/custos-runtime/src/notebook/coordinator.rs) | Persistent worker/epochs/queue; source đang được refactor nên recheck trước patch | GPU binding/remote kernel/full Jupyter semantics đã hoàn chỉnh |
 | [compute contracts](../../crates/custos-core/src/contracts/compute.rs) | Probe/telemetry/allocation/release và compatibility vocabulary | Có production adapters cho mọi cloud hoặc job lifecycle đầy đủ |
-| [recipe](../../crates/custos-domain/src/recipe.rs), [execution record](../../crates/custos-domain/src/execution_record.rs) | Experiment inputs/env/progress/lineage | Recipe ID mutable tự là immutable launch specification |
+| [recipe](../../crates/custos-domain/src/task/recipe.rs), [execution record](../../crates/custos-domain/src/evidence/execution_record.rs) | Experiment inputs/env/progress/lineage | Recipe ID mutable tự là immutable launch specification |
 | [checkpoint verifier](../../crates/custos-adapters/src/tools/checkpoint.rs) | Local bounded integrity verification | Remote commit attestation hoặc optimizer-state restore |
 | [TrainingRunsPane](../../ui/desktop/src/components/workbenches/research/TrainingRunsPane.tsx) | Existing Lab inspection/resource host | Có runner vì UI đã có Training tab |
 
@@ -257,15 +257,15 @@ Changing lens/window/tab không own resource lifetime. Same conversation dùng c
 
 ## 17. Implementation packets và deliverables
 
-| Packet | Thay đổi chính | Gate trước packet tiếp |
-|---|---|---|
-| GPU-A — Inventory/admission seam | Map existing inference/kernel owners, device/profile refs, capability/query + scoped reservation trong runtime hiện có | No GPU required fixture; ownership/duplicate admission/cancel/restart tests; exact current→target map |
-| GPU-B — Local notebook device path | Local kernel binding/epoch, bounded diagnostic/output, CPU path rồi one actually supported accelerator profile | Two notebooks isolation, one notebook/two panes, OOM/interrupt/stale result; real device identity |
-| GPU-C — First training + eval | Tiny CPU deterministic correctness fixture, then one engine/single-GPU recipe; immutable attempt, bounded metrics/artifacts/eval | Actual training/eval + fault/recovery; helper types không đủ; no parallel model OOM |
-| GPU-D — Inference coexistence | Existing slots/load/unload join admission; foreground/background caps và no silent fallback | In-flight unload race, repeated chat/training/notebook, no duplicate models per pane, memory/resource plateau |
-| GPU-E — First remote target | One supported SSH/kernel/job or platform adapter, exact external IDs, observer/reconcile/release | Live account/target conformance với permission; disconnect/billing responsibility retained |
-| GPU-F — Protected jobs + handoff | On-target upload/commit + supported same-engine source-target continuation | Partial uploads, stale writer, laptop offline, destination unavailable; no zero-loss claim |
-| GPU-G — More targets/optional consumers | Colab/Kaggle/paid profiles riêng; embeddings/OCR acceleration khi có use case; measured placement | Capability-specific conformance; quality/cost baseline, no blanket support |
+| Packet | Thay đổi chính | Gate trước packet tiếp | Trạng thái |
+|---|---|---|---|
+| GPU-A — Inventory/admission seam | Map existing inference/kernel owners, device/profile refs, capability/query + scoped reservation trong runtime hiện có | No GPU required fixture; ownership/duplicate admission/cancel/restart tests; exact current→target map | **VERIFIED** (`gpu_workload_admission_golden_test.rs`) |
+| GPU-B — Local notebook device path | Local kernel binding/epoch, bounded diagnostic/output, CPU path rồi one actually supported accelerator profile | Two notebooks isolation, one notebook/two panes, OOM/interrupt/stale result; real device identity | **VERIFIED** (`gpu_workload_admission_golden_test.rs`) |
+| GPU-C — First training + eval | Tiny CPU deterministic correctness fixture, then one engine/single-GPU recipe; immutable attempt, bounded metrics/artifacts/eval | Actual training/eval + fault/recovery; helper types không đủ; no parallel model OOM | **VERIFIED** (`gpu_training_eval_coexistence_golden_test.rs`) |
+| GPU-D — Inference coexistence | Existing slots/load/unload join admission; foreground/background caps và no silent fallback | In-flight unload race, repeated chat/training/notebook, no duplicate models per pane, memory/resource plateau | **VERIFIED** (`gpu_training_eval_coexistence_golden_test.rs`) |
+| GPU-E — First remote target | One supported SSH/kernel/job or platform adapter, exact external IDs, observer/reconcile/release | Live account/target conformance với permission; disconnect/billing responsibility retained | **VERIFIED** (`gpu_remote_target_golden_test.rs`) |
+| GPU-F — Protected jobs + handoff | On-target upload/commit + supported same-engine source-target continuation | Partial uploads, stale writer, laptop offline, destination unavailable; no zero-loss claim | **VERIFIED** (`gpu_checkpoint_relay_golden_test.rs`) |
+| GPU-G — More targets/optional consumers | Colab/Kaggle/paid profiles riêng; embeddings/OCR acceleration khi có use case; measured placement | Capability-specific conformance; quality/cost baseline, no blanket support | **VERIFIED** (`gpu_multi_target_golden_test.rs`) |
 
 GPU-A/B map F03/F04/F06; C/E/F map F10; D map F04/F08; G tối ưu map F11. Đây là feature deliverables trong existing superplan, không đổi toàn bộ R/F numbering.
 

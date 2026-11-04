@@ -433,7 +433,7 @@ export class DaemonClient {
     });
   }
 
-  async openSessionInLens(sessionId: string, lens: 'assistant' | 'coding' | 'research'): Promise<void> {
+  async openSessionInLens(sessionId: string, lens: 'assistant' | 'coding' | 'research' | 'quant'): Promise<void> {
     await this.request<{ status: string }>('v1.sessions.open_in_lens', {
       session_id: sessionId,
       lens,
@@ -580,6 +580,409 @@ export class DaemonClient {
   }> {
     return this.request('v1.workspaces.candidates.compare', params);
   }
+
+  async runCandidateRace(params: {
+    task_id: string;
+    base_workspace_id?: string;
+    candidates?: Array<{
+      candidate_id: string;
+      model_id: string;
+      harness_id: string;
+      workspace_id?: string;
+    }>;
+    test_command?: string;
+    timeout_seconds?: number;
+  }): Promise<{
+    race_id: string;
+    task_id: string;
+    winner_candidate_id?: string;
+    candidate_reports: Array<{
+      candidate_id: string;
+      model_id: string;
+      workspace_id: string;
+      worktree_path: string;
+      test_passed: boolean;
+      tests_succeeded: number;
+      tests_failed: number;
+      test_output: string;
+      modified_files: string[];
+      total_tokens: number;
+      execution_duration_ms: number;
+    }>;
+    completed_at: string;
+  }> {
+    return this.request('v1.workspaces.candidates.race', params);
+  }
+
+  async submitQuantBacktest(params: {
+    strategy_id: string;
+    task_id: string;
+    formula?: string;
+    annualized_sharpe: number;
+    max_drawdown: number;
+    total_return: number;
+    trials_count?: number;
+    sample_length?: number;
+    volatility?: number;
+    win_rate?: number;
+    profit_factor?: number;
+    turnover?: number;
+  }): Promise<{
+    id: string;
+    strategy_id: string;
+    annualized_sharpe: number;
+    deflated_sharpe: number;
+    max_drawdown: number;
+    total_return: number;
+    calmar_ratio: number;
+    annualized_volatility: number;
+    win_rate: number;
+    profit_factor: number;
+    turnover: number;
+  }> {
+    return this.request('v1.quant.backtest.submit', params);
+  }
+
+  async getQuantTearsheet(strategy_id: string): Promise<{
+    id: string;
+    strategy_id: string;
+    annualized_sharpe: number;
+    deflated_sharpe: number;
+    max_drawdown: number;
+    total_return: number;
+    calmar_ratio: number;
+    annualized_volatility: number;
+    win_rate: number;
+    profit_factor: number;
+    turnover: number;
+  }> {
+    return this.request('v1.quant.tearsheet.get', { strategy_id });
+  }
+
+  async createQuantOrders(params: {
+    strategy_id: string;
+    task_id: string;
+    orders: Array<{
+      symbol: string;
+      direction: 'buy' | 'sell' | 'sell_short' | 'buy_to_cover';
+      quantity: number;
+      target_weight: number;
+      limit_price?: number;
+      estimated_slippage_bps?: number;
+    }>;
+  }): Promise<{
+    created_orders: Array<{
+      id: string;
+      strategy_id: string;
+      symbol: string;
+      direction: string;
+      quantity: number;
+      target_weight: number;
+      status: string;
+    }>;
+  }> {
+    return this.request('v1.quant.orders.create', params);
+  }
+
+  async listQuantOrders(params?: {
+    strategy_id?: string;
+    task_id?: string;
+  }): Promise<{
+    orders: Array<{
+      id: string;
+      strategy_id: string;
+      symbol: string;
+      direction: string;
+      quantity: number;
+      target_weight: number;
+      status: string;
+      permit_id?: string;
+    }>;
+  }> {
+    return this.request('v1.quant.orders.list', params || {});
+  }
+
+  async approveQuantOrder(params: {
+    order_id: string;
+    permit_id: string;
+    task_id?: string;
+  }): Promise<{
+    status: string;
+    permit_id: string;
+    outbox_action_id?: string;
+  }> {
+    return this.request('v1.quant.orders.approve', params);
+  }
+
+  async discoverQuantFactors(params?: {
+    symbol?: string;
+    timeframe?: string;
+  }): Promise<{
+    symbol: string;
+    timeframe: string;
+    candidates: Array<{
+      id: string;
+      name: string;
+      hypothesis: string;
+      formula: string;
+      ic_mean: number;
+      ic_std: number;
+      ir: number;
+      q_value: number;
+      classification: string;
+      lookahead_clean: boolean;
+      status: string;
+    }>;
+    total_evaluated: number;
+    passed_fdr: number;
+  }> {
+    return this.request('v1.quant.factors.discover', params || {});
+  }
+
+  async triggerQuantKillSwitch(params?: {
+    reason?: string;
+  }): Promise<{
+    status: string;
+    reason: string;
+    cancelled_orders_count: number;
+    timestamp: string;
+  }> {
+    return this.request('v1.quant.kill_switch', params || {});
+  }
+
+  async evaluateQuantGrid(params: {
+    symbol: string;
+    lower_price: number;
+    upper_price: number;
+    grid_count: number;
+    mode?: 'arithmetic' | 'geometric';
+    total_capital: number;
+    current_price: number;
+    stop_loss_price?: number;
+    take_profit_price?: number;
+  }): Promise<{
+    symbol: string;
+    levels: number[];
+    cells_count: number;
+    actions: Array<{
+      action: string;
+      payload: any;
+    }>;
+    status: {
+      symbol: string;
+      active_cells: number;
+      filled_cells: number;
+      total_grid_cycles: number;
+      total_realized_pnl: number;
+      current_price: number;
+      in_boundary: boolean;
+    };
+  }> {
+    return this.request('v1.quant.grid.evaluate', params);
+  }
+
+  async getQuantMarketBars(params: {
+    symbol: string;
+    timeframe?: string;
+    limit?: number;
+  }): Promise<{
+    symbol: string;
+    timeframe: string;
+    bars: Array<{
+      timestamp: number;
+      open: number;
+      high: number;
+      low: number;
+      close: number;
+      volume: number;
+    }>;
+    count: number;
+  }> {
+    return this.request('v1.quant.market_bars.get', params);
+  }
+
+  async getPipelineStatus(): Promise<{
+    status: string;
+    timestamp_ms: number;
+    stages: {
+      bronze: { status: string; invariant_checks: string };
+      silver: { status: string; invariant_checks: string };
+      gold: { status: string; invariant_checks: string };
+    };
+    modalities: {
+      code: { status: string; ast_validation: string };
+      science: { status: string; evidence_grounding: string };
+      agent: { status: string; outbox_governance: string };
+      market: { status: string; lookahead_prevention: string };
+    };
+  }> {
+    return this.request('v1.pipeline.status', {});
+  }
+
+  async runPipeline(params: {
+    content: string;
+    modality?: 'Market' | 'Science' | 'Code' | 'Agent';
+    salt?: string;
+  }): Promise<{
+    run_id: string;
+    status: string;
+    stage_reached: string;
+    modality: string;
+    content_hash: string;
+    rows_ingested: number;
+    headers: string[];
+    anonymized_columns: string[];
+    anonymization_salt_applied: boolean;
+    invariants_verified: string[];
+    quality_score: number;
+    completed_at_ms: number;
+  }> {
+    return this.request('v1.pipeline.run', params);
+  }
+
+  async computeQuantIndicators(params: {
+    symbol: string;
+    timeframe?: string;
+    limit?: number;
+  }): Promise<{
+    symbol: string;
+    timeframe: string;
+    reference_timestamp: number;
+    total_bars_evaluated: number;
+    indicators: {
+      sma_20?: number;
+      sma_50?: number;
+      ema_20?: number;
+      rsi_14?: number;
+      bollinger_bands_20_2?: {
+        middle: number;
+        upper: number;
+        lower: number;
+        bandwidth: number;
+      };
+      macd_12_26_9?: {
+        macd: number;
+        signal: number;
+        histogram: number;
+      };
+      atr_14?: number;
+      vwap?: number;
+      [key: string]: any;
+    };
+  }> {
+    return this.request('v1.quant.indicators.compute', params);
+  }
+
+  async detectPipelineStructure(content: string): Promise<{
+    delimiter: string;
+    header_row_index: number;
+    headers: string[];
+    columns: Array<{
+      name: string;
+      data_type: 'Integer' | 'Float' | 'Datetime' | 'Boolean' | 'Text';
+      null_ratio: number;
+    }>;
+    total_rows: number;
+    quality_score: number;
+  }> {
+    return this.request('v1.pipeline.structure.detect', { content });
+  }
+
+  async evaluateQuantGate(params: {
+    symbol: string;
+    direction: 'buy' | 'sell' | 'sell_short' | 'buy_to_cover';
+    quantity: number;
+    estimated_price: number;
+    current_drawdown?: number;
+    consecutive_losses?: number;
+    daily_executed_notional?: number;
+    is_risk_reducing?: boolean;
+    max_order_notional?: number;
+    max_daily_notional?: number;
+    max_drawdown_limit?: number;
+    max_consecutive_losses?: number;
+  }): Promise<{
+    is_allowed: boolean;
+    outcome: {
+      status: 'Pass' | 'Reject' | 'BypassExitImmunity' | 'FailOpen';
+      details: {
+        reason: string;
+        order_notional?: number;
+        breach_type?: string;
+      };
+    };
+    order_notional: number;
+    symbol: string;
+  }> {
+    return this.request('v1.quant.gate.evaluate', params);
+  }
+
+  async computeQuantReview(params: {
+    strategy_id?: string;
+    symbol?: string;
+    fills: Array<{
+      fill_id: string;
+      order_id: string;
+      symbol: string;
+      direction: 'buy' | 'sell' | 'sell_short' | 'buy_to_cover';
+      price: number;
+      quantity: number;
+      commission: number;
+      timestamp: number;
+      exit_reason?: string | null;
+    }>;
+  }): Promise<{
+    strategy_id: string;
+    symbol: string;
+    total_trades: number;
+    gross_pnl: number;
+    total_commission: number;
+    net_pnl: number;
+    profit_factor: number;
+    win_loss_ratio: number;
+    holding_cohorts: Array<{
+      label: string;
+      trade_count: number;
+      win_count: number;
+      win_rate: number;
+      gross_pnl: number;
+      net_pnl: number;
+      total_commission: number;
+    }>;
+    exit_cohorts: Array<{
+      reason: string;
+      count: number;
+      net_pnl: number;
+    }>;
+    diagnostics: Array<{
+      code: string;
+      severity: string;
+      summary: string;
+      recommendation: string;
+    }>;
+  }> {
+    return this.request('v1.quant.review.compute', params);
+  }
+
+  async getQuantOrderBook(params: {
+    symbol?: string;
+    depth?: number;
+  }): Promise<{
+    symbol: string;
+    mid_price: number;
+    spread: number;
+    spread_bps: number;
+    microprice: number;
+    imbalance_pct: number;
+    asks: Array<{ price: number; size: number; total: number }>;
+    bids: Array<{ price: number; size: number; total: number }>;
+    timestamp: number;
+  }> {
+    return this.request('v1.quant.orderbook.get', params);
+  }
+
+
+
 
   async integrateCandidate(params: {
     winner_workspace_id: string;
@@ -1226,16 +1629,18 @@ export class DaemonClient {
   }
 
   // Notebook Cells & Python Kernel
-  async listNotebookCells(sessionId: string): Promise<NotebookCell[]> {
+  async listNotebookCells(sessionId: string, notebookId?: string): Promise<NotebookCell[]> {
     return this.request<NotebookCell[]>('v1.notebook.cells.list', {
       session_id: sessionId,
+      ...(notebookId ? { notebook_id: notebookId } : {}),
     });
   }
 
-  async saveNotebookCells(sessionId: string, cells: NotebookCell[]): Promise<{ saved: boolean; count: number }> {
+  async saveNotebookCells(sessionId: string, cells: NotebookCell[], notebookId?: string): Promise<{ saved: boolean; count: number }> {
     return this.request<{ saved: boolean; count: number }>('v1.notebook.cells.save', {
       session_id: sessionId,
       cells,
+      ...(notebookId ? { notebook_id: notebookId } : {}),
     });
   }
 
@@ -1243,21 +1648,24 @@ export class DaemonClient {
     return this.request<ExecuteCellResult>('v1.notebook.execute', params);
   }
 
-  async interruptNotebookKernel(sessionId: string): Promise<{ interrupted: boolean }> {
+  async interruptNotebookKernel(sessionId: string, notebookId?: string): Promise<{ interrupted: boolean }> {
     return this.request<{ interrupted: boolean }>('v1.notebook.interrupt', {
       session_id: sessionId,
+      ...(notebookId ? { notebook_id: notebookId } : {}),
     });
   }
 
-  async resetNotebookKernel(sessionId: string): Promise<NotebookKernelState> {
+  async resetNotebookKernel(sessionId: string, notebookId?: string): Promise<NotebookKernelState> {
     return this.request<NotebookKernelState>('v1.notebook.reset', {
       session_id: sessionId,
+      ...(notebookId ? { notebook_id: notebookId } : {}),
     });
   }
 
-  async getNotebookKernelStatus(sessionId: string): Promise<NotebookKernelState> {
+  async getNotebookKernelStatus(sessionId: string, notebookId?: string): Promise<NotebookKernelState> {
     return this.request<NotebookKernelState>('v1.notebook.status', {
       session_id: sessionId,
+      ...(notebookId ? { notebook_id: notebookId } : {}),
     });
   }
 

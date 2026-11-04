@@ -37,7 +37,7 @@ export interface Screen {
   name: string;             // User-facing name (e.g. 'Standard Dev', 'Candidate Compare')
   icon?: string;            // Icon name (e.g. 'Code', 'GitCompare', 'Microscope')
   projectId: string;        // Project association for navigation
-  homeWorkbench: 'engineering' | 'research' | 'copilot';
+  homeWorkbench: 'engineering' | 'research' | 'copilot' | 'quant';
   
   // Natural anchor connecting this layout to a worktree or task
   anchor?: ScreenAnchor;
@@ -81,7 +81,7 @@ export interface ScreenPreset {
   id: string;
   name: string;
   icon: string;
-  workbench: 'engineering' | 'research' | 'copilot';
+  workbench: 'engineering' | 'research' | 'copilot' | 'quant';
   description: string;
   initialTabs: Array<{ id: string; title: string; ref: ResourceRef }>;
   splitConfig?: {
@@ -165,6 +165,32 @@ export const WORKBENCH_SCREEN_PRESETS: ScreenPreset[] = [
     initialTabs: [
       { id: 'conversation', title: 'Executive Chat', ref: { kind: 'conversation' } },
       { id: 'outbox', title: 'Outbox Approval', ref: { kind: 'outbox' } },
+    ],
+    splitConfig: { axis: 'horizontal', ratio: 50 },
+  },
+
+  // Quant Presets
+  {
+    id: 'preset_quant_studio',
+    name: 'Alpha & Tearsheet',
+    icon: 'TrendingUp',
+    workbench: 'quant',
+    description: 'Signal research factor studio beside tearsheet equity curve',
+    initialTabs: [
+      { id: 'alpha', title: 'Alpha Studio', ref: { kind: 'conversation' } },
+      { id: 'tearsheet', title: 'Tearsheet', ref: { kind: 'artifact' } },
+    ],
+    splitConfig: { axis: 'horizontal', ratio: 50 },
+  },
+  {
+    id: 'preset_quant_risk',
+    name: 'Risk & Execution',
+    icon: 'ShieldAlert',
+    workbench: 'quant',
+    description: 'Deflated Sharpe / Lookahead risk audit beside order execution ticket',
+    initialTabs: [
+      { id: 'risk_audit', title: 'Risk Audit', ref: { kind: 'conversation' } },
+      { id: 'execution', title: 'Execution', ref: { kind: 'conversation' } },
     ],
     splitConfig: { axis: 'horizontal', ratio: 50 },
   },

@@ -42,7 +42,7 @@ Không dùng IP public hoặc label làm durable identity; IP có thể đổi/r
 
 Paths target: `custos-adapters/src/compute/{external_ssh,runpod,vastai}.rs`; tận dụng host/SSH mechanisms hiện có sau inventory. Python helper chỉ khi vendor/engine thư viện Python tạo lợi ích thật. Không tạo `runpod_vast` universal module che mọi khác biệt vendor.
 
-Current source có [RemoteHostNode/SshAuthMethod](../../crates/custos-domain/src/remote_fleet.rs); không mặc định `ComputeBackendKind` hoặc `ComputePort` đã tồn tại. Interface cụ thể phải derive từ first vertical slice và update schema fixtures, không paste enum/example trait chưa kiểm caller.
+Current source có [RemoteHostNode/SshAuthMethod](../../crates/custos-domain/src/fleet/remote_fleet.rs); không mặc định `ComputeBackendKind` hoặc `ComputePort` đã tồn tại. Interface cụ thể phải derive từ first vertical slice và update schema fixtures, không paste enum/example trait chưa kiểm caller.
 
 ## 4. Dedicated SSH host: luồng an toàn
 
@@ -138,7 +138,7 @@ Chưa clone/audit toàn source Runpod/Vast SDK, chưa thuê máy hoặc xác th�
 
 - [Runpod storage profiles](https://docs.runpod.io/pods/storage/types), [manage Pods](https://docs.runpod.io/pods/manage-pods), [maintenance/data safety](https://docs.runpod.io/pods/maintenance-and-outages).
 - [Vast instance lifecycle source docs](https://github.com/vast-ai/docs/blob/main/guides/instances/manage-instances.mdx), [pricing source docs](https://github.com/vast-ai/docs/blob/main/guides/pricing.mdx).
-- Custos [RemoteFleet domain](../../crates/custos-domain/src/remote_fleet.rs), [Recipe](../../crates/custos-domain/src/recipe.rs), [ExecutionRecord](../../crates/custos-domain/src/execution_record.rs): implementation inputs, không proof cloud adapter hiện hữu.
+- Custos [RemoteFleet domain](../../crates/custos-domain/src/fleet/remote_fleet.rs), [Recipe](../../crates/custos-domain/src/task/recipe.rs), [ExecutionRecord](../../crates/custos-domain/src/evidence/execution_record.rs): implementation inputs, không proof cloud adapter hiện hữu.
 - [Checkpoint relay](compute-relay-and-heterogeneous-failover.md) và [compute source study](../../../TRAINING_COMPUTE_SOURCE_STUDY.md) chốt resume/provenance/failure semantics.
 
 **Chốt:** mua compute và bảo toàn training state là hai vấn đề khác. Có nhiều provider là useful flexibility chỉ khi checkpoint portable, permissions/cost boundaries và resource release được chứng minh.

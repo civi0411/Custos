@@ -159,6 +159,26 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
       };
     }
 
+    if (mode === 'quant') {
+      const sec1Ids: OrcaTabId[] = ['conversation', 'alpha', 'tearsheet'];
+      const sec2Ids: OrcaTabId[] = ['risk_audit', 'execution'];
+
+      const sec1 = sec1Ids
+        .map((id) => pickerResources.find((r) => r.id === id))
+        .filter(matchesSearch);
+
+      const sec2 = sec2Ids
+        .map((id) => pickerResources.find((r) => r.id === id))
+        .filter(matchesSearch);
+
+      return {
+        section1Title: 'Alpha & Simulation',
+        section2Title: 'Risk & Execution',
+        section1Resources: sec1,
+        section2Resources: sec2,
+      };
+    }
+
     // Default: Engineering
     const engIds: OrcaTabId[] = ['conversation', 'terminal', 'files', 'browser', 'emulator', 'worktrees'];
     const engResources = engIds
@@ -174,12 +194,14 @@ export const TabQuickLaunchMenu: React.FC<TabQuickLaunchMenuProps> = ({
   }, [pickerResources, searchQuery, mode]);
 
   const menuTitle = useMemo(() => {
+    if (mode === 'quant') return 'Quant Surfaces';
     if (mode === 'research') return 'Research Surfaces';
     if (mode === 'copilot') return 'Copilot Surfaces';
     return 'Engineering Surfaces';
   }, [mode]);
 
   const searchPlaceholder = useMemo(() => {
+    if (mode === 'quant') return 'Search alpha, tearsheet, risk audit, execution…';
     if (mode === 'research') return 'Search lab, sources, findings, methods…';
     if (mode === 'copilot') return 'Search tasks, drafts, calendar, outbox…';
     return 'Search agents, files, terminal, browser, emulator…';

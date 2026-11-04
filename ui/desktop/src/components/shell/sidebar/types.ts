@@ -95,7 +95,7 @@ export interface WorkspaceSidebarProps {
   onDeleteSession?: (id: string) => void | Promise<void>;
 
   // Workbench
-  activeWorkbench?: 'engineering' | 'research' | 'copilot' | string;
+  activeWorkbench?: 'engineering' | 'research' | 'copilot' | 'quant' | string;
   onSwitchWorkbench?: (wb: any) => void;
   onSwitchMode?: (mode: any) => void;
 

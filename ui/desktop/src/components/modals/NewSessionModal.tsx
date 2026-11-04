@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { MessageSquare, ListTodo, X } from 'lucide-react';
+import type { ActiveWorkbench } from '@/types/workbench';
 
 interface NewSessionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreateSession: (title: string, pack: 'engineering' | 'research' | 'assistant') => Promise<void>;
-  onCreateChat: (pack: 'engineering' | 'research' | 'assistant') => Promise<void>;
-  activeWorkbench: 'copilot' | 'engineering' | 'research';
+  onCreateSession: (title: string, pack: 'engineering' | 'research' | 'assistant' | 'quant') => Promise<void>;
+  onCreateChat: (pack: 'engineering' | 'research' | 'assistant' | 'quant') => Promise<void>;
+  activeWorkbench: ActiveWorkbench;
 }
 
 export const NewSessionModal: React.FC<NewSessionModalProps> = ({
@@ -47,7 +48,9 @@ export const NewSessionModal: React.FC<NewSessionModalProps> = ({
         <div className="h-12 border-b border-border-muted px-5 flex items-center justify-between shrink-0 bg-surface-1">
           <div className="flex items-center gap-2">
             <MessageSquare className="w-4 h-4 workbench-accent" />
-            <span className="text-sm font-semibold text-fg-editor">New in {activeWorkbench === 'engineering' ? 'Coding' : activeWorkbench === 'research' ? 'Research' : 'Copilot'}</span>
+            <span className="text-sm font-semibold text-fg-editor">
+              New in {activeWorkbench === 'engineering' ? 'Coding' : activeWorkbench === 'research' ? 'Research' : activeWorkbench === 'quant' ? 'Quant' : 'Copilot'}
+            </span>
           </div>
           <button 
             onClick={onClose} 

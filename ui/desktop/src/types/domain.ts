@@ -815,6 +815,10 @@ export interface NotebookCell {
   epoch: number;
   updated_at: number;
   updatedAt?: number;
+  notebook_id?: string | null;
+  notebookId?: string | null;
+  cell_version?: number | null;
+  cellVersion?: number | null;
 }
 
 export interface NotebookKernelState {
@@ -830,6 +834,10 @@ export interface NotebookKernelState {
   createdAt?: number;
   updated_at: number;
   updatedAt?: number;
+  notebook_id?: string | null;
+  notebookId?: string | null;
+  kernel_id?: string | null;
+  kernelId?: string | null;
 }
 
 export interface ExecuteCellParams {
@@ -841,6 +849,16 @@ export interface ExecuteCellParams {
   workspace_id?: string;
   workspaceId?: string;
   cwd?: string;
+  task_id?: string;
+  taskId?: string;
+  notebook_id?: string;
+  notebookId?: string;
+  kernel_id?: string;
+  kernelId?: string;
+  cell_version?: number;
+  cellVersion?: number;
+  execution_request_id?: string;
+  executionRequestId?: string;
 }
 
 export interface ExecuteCellResult {
@@ -856,6 +874,14 @@ export interface ExecuteCellResult {
   wall_ms: number;
   wallMs?: number;
   epoch: number;
+  notebook_id?: string | null;
+  notebookId?: string | null;
+  kernel_id?: string | null;
+  kernelId?: string | null;
+  cell_version?: number | null;
+  cellVersion?: number | null;
+  execution_request_id?: string | null;
+  executionRequestId?: string | null;
 }
 
 export type ReviewTargetType = 'task' | 'artifact' | 'diff' | 'run' | 'note' | 'workspace';

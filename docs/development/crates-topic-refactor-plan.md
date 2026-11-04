@@ -38,7 +38,7 @@ Inventory bằng `rg --files crates -g '*.rs'`, đếm dòng source kể cả te
 
 Các kết luận phải hiệu đính:
 
-1. `provider/types/formats/` có 17.344 dòng, nhưng có caller thật: `providers/providers/*`, native tool formatting, model/cache helpers và Research Codex import. **Không được xóa cả cây.** Chúng không chỉ là “struct JSON”; có chuyển đổi message/tool/reasoning.
+1. `provider/types/formats/` có 17.344 dòng, nhưng có caller thật: `providers/clients/*`, native tool formatting, model/cache helpers và Research Codex import. **Không được xóa cả cây.** Chúng không chỉ là “struct JSON”; có chuyển đổi message/tool/reasoning.
 2. `local_inference/` có 12.403 dòng và được bootstrap thật trong `daemon/runtime.rs`; GGUF inventory/load và native inference là năng lực phải giữ. `hf_models.rs` nằm sau `hf-hub`, MLX sau `mlx`; không cộng toàn bộ vào default runtime cost.
 3. `roaming/` có 2.423 dòng. Không thấy composition từ daemon/app trong phạm vi search; tuy nhiên có `SystemOneA2ARouter::with_node`, protocol API, docs và tests nội bộ. Kết luận phù hợp: **chưa composed trong sản phẩm**, không phải “không có giá trị, xóa an toàn”. `cargo tree -p custos-daemon -i iroh --offline` xác nhận iroh nằm trong graph mặc định qua adapters.
 4. `context/compaction/` và `context/memory/` tồn tại vật lý nhưng không được mount từ `context/mod.rs`. `context_management/` và `memory_service/` đang được export. Có file giống hệt, có file đã khác; không có hai active compaction engines chỉ vì hai folder tồn tại.
@@ -275,8 +275,8 @@ Thứ tự bắt đầu: **A → B → C**; D/G có thể làm độc lập trê
 ### Packet H cụ thể
 
 - `application/providers.rs` → accounts/credentials, catalog/discovery, local-runtime operations. Reuse credential service hiện tại, không tạo credential store thứ hai.
-- `application/workspaces.rs` → workspace lifecycle, repository inspection, changes/candidates/integration, GitHub account actions. I/O ở `workspace.rs`/`repository_git.rs` adapters; approval/expected source ở core/runtime.
-- `application/research.rs` → source/claim, notebook/execution, review/synthesis, artifacts/notes. Không chia transaction lineage/checkpoint qua các repository commits riêng lẻ chỉ để có folder đẹp.
+- `application/workspaces/mod.rs` → workspace lifecycle, repository inspection, changes/candidates/integration, GitHub account actions. I/O ở `workspace.rs`/`repository_git.rs` adapters; approval/expected source ở core/runtime.
+- `application/research/mod.rs` → source/claim, notebook/execution, review/synthesis, artifacts/notes. Không chia transaction lineage/checkpoint qua các repository commits riêng lẻ chỉ để có folder đẹp.
 - `application/integrations.rs` → browser/emulator/fleet/automation. Scheduler không nằm transport; stop resource không xóa user data.
 - `api/tests.rs` → tests theo các use cases trên, dùng cùng harness setup. Giữ transport/replay tests tại ingress. Không phải mỗi test file một helper framework.
 
@@ -323,7 +323,7 @@ Snapshot mới: `28ab973`, cây sạch khi bắt đầu. Inventory bằng `rg --
 
 **F11 — Khởi tạo memory store mới không giải quyết được memory contract và scope.**
 
-- What: `runtime/memory_service/store.rs` dùng `HashMap<MemoryTier, Vec<Fact>>`; core `MemoryPort` dùng scoped recall/proposal records.
+- What: `runtime/context/memory/store.rs` dùng `HashMap<MemoryTier, Vec<Fact>>`; core `MemoryPort` dùng scoped recall/proposal records.
 - Problem: nếu đưa store vào product recall, hai project cùng tier chia chung facts, không có giới hạn số fact, và restart mất mọi fact. Hiện chưa thấy product caller nên đây là activation risk, không tuyên bố đã rò dữ liệu.
 - Fix: core MemoryPort giữ consent/proposal/scope contract; runtime chỉ điều phối retrieval/promotion; persistence giữ durable records. In-memory implementation chỉ là bounded cache/test fixture được scope rõ, hoặc bỏ construction chưa dùng.
 - If skipped: thêm memory feature sau này phải bắc cầu giữa hai nguồn sự thật không tương thích.

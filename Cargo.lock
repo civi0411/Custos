@@ -1392,7 +1392,6 @@ dependencies = [
 name = "custos-app-cli"
 version = "0.1.0"
 dependencies = [
- "custos-core",
  "custos-domain",
  "custos-sdk",
  "serde",
@@ -1667,7 +1666,9 @@ dependencies = [
  "custos-provider",
  "custos-runtime",
  "custos-testkit",
+ "rusqlite",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "tokio",
  "uuid",

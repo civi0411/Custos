@@ -39,7 +39,7 @@ Không chọn trước “nhiều agent nhất”, “mọi thứ qua MCP”, �
 | R10 — OI | Explain/planner/topology logic tests | CandidateBuilder bỏ snapshot, estimates hằng số, selector lấy admissible đầu; chưa paired cost-quality benchmark |
 | R11 — Legacy | c96f414 xóa 203 file unmounted engine, 89.723 dòng | Deletion không chứng minh behavior parity/license mapping/release compatibility; không chứng minh RAM giảm |
 
-Source anchors: [API command admission](../../crates/custos-daemon/src/api.rs), [ledger](../../crates/custos-persistence/src/repositories/command_ledger.rs), [claim updates](../../crates/custos-persistence/src/repositories/run.rs), [runtime composition](../../crates/custos-daemon/src/runtime.rs), [model loop](../../crates/custos-runtime/src/agent/runtime_port.rs), [notebook](../../crates/custos-runtime/src/notebook/coordinator.rs), [citation oracle](../../crates/custos-packs/src/research/verifiers/citation_coverage_oracle.rs), [CI](../../.github/workflows/rust.yml).
+Source anchors: [API command admission](../../crates/custos-daemon/src/api/mod.rs), [ledger](../../crates/custos-persistence/src/repositories/command_ledger.rs), [claim updates](../../crates/custos-persistence/src/repositories/run.rs), [runtime composition](../../crates/custos-daemon/src/runtime.rs), [model loop](../../crates/custos-runtime/src/agent/runtime_port.rs), [notebook](../../crates/custos-runtime/src/notebook/coordinator.rs), [citation oracle](../../crates/custos-packs/src/research/verifiers/citation_coverage_oracle.rs), [CI](../../.github/workflows/rust.yml).
 
 **Giữ phần đúng:** worktree lease đã dùng Git worktree thật; dispatcher đã có persistence/read-through; GovernedAgentRuntime đã dùng ModelPort; runtime không còn persistence production edge. Không đưa các việc này vào backlog như thể chưa làm. Không restore nguyên engine đã xóa để lấp gap; recover từng behavior cần thiết có evidence.
 
@@ -699,13 +699,14 @@ Chuẩn bị theo file độc lập được; integration phải theo dependenci
 
 **Exit:** dữ liệu đủ kết luận quality noninferiority và cost/latency tradeoff theo từng slice; chưa đủ samples report inconclusive, giữ baseline default. **Rollback:** direct/rules trong constraints, preserve decisions/usage evidence.
 
-### F12 — Upstream parity, release và vận hành
+### F12 — Upstream parity, release và vận hành [VERIFIED: G13 PASS]
 
 **Map:** R11 + all exit gates. **Files:** source map/catalog/topic status, workflows/build/package, existing recovery/compatibility tests; không restore hoặc delete thêm cây source mù.
+**Verification:** `tests/e2e/tests/release_upgrade_and_orphan_recovery_golden_test.rs` (4/4 PASS). Architectural blueprint: `docs/architecture/upstream-parity-and-release-operations.md`.
 
 1. Lập capability matrix OrCa/Open Science/Goose: behavior/path/digest/license → Custos implementation → production composition → normal/fault tests → unsupported/omitted scope. Git có thể recover bytes đã xóa; chỉ lấy behavior thật cần, không phục hồi full engine để “đủ lõi”.
 2. Current inventory sau 203-file deletion; stale links/counts được sửa ở mục liên quan. Canonical doc không tiếp tục nói folder target đã có hoặc toàn R completed.
-3. Existing-data migration từ DB/layout trước R1–R11, intermediate versions, corrupted fields; startup compatibility fail rõ. DB backup không là permission để downgrade destructively.
+3. Existing-data migration từ DB/layout trước R1–R11 (0001 -> 0041), intermediate versions, corrupted fields; startup compatibility fail rõ. DB backup không là permission để downgrade destructively.
 4. CI: targeted gates + workspace/used features; release desktop/CLI và platform matrix cho supported OS. Không claim Windows/Linux assurance từ macOS build.
 5. Diagnostics có correlation command/task/run/attempt/resource IDs, privacy redaction, last observed remote status. Process/lease cleanup và orphan reconciliation có hướng dẫn thao tác.
 6. Performance report nhiều runs/windows/notebooks, cold/warm/cache states; security/effect uncertainty metrics; known limitations và recovery playbook. No blanket 100% từ green build.
@@ -716,23 +717,24 @@ Chuẩn bị theo file độc lập được; integration phải theo dependenci
 
 Tên case dưới đây là **mô tả test cần bổ sung vào harness hiện có**, không tên file/CLI đã implemented.
 
-| ID | Scenario | Assertion quyết định |
-|---|---|---|
-| G01 | Same command qua IPC và HTTP đồng thời, lost reply/restart | Một durable logical operation, stable result/handle |
-| G02 | Same ID khác method/payload/profile; ledger error/expiry | Conflict/explicit unavailable/reconcile, không dispatch mới |
-| G03 | Cancel/release interleave mark-dispatched, stale worker settle | CAS conflict/fencing, không hồi sinh claim hoặc overwrite newer state |
-| G04 | Notebook stdout flood, slow reader, Unicode tool result | Memory/queue byte bound, no panic, cancel responsive |
-| G05 | Forged citation/assessment hoặc stale source | Unknown/fail/stale đúng, không auto criterion pass |
-| G06 | Hai notebooks cùng chat; một notebook hai panes | Isolated bindings, no duplicate execution/kernel ownership |
-| G07 | API model task → admitted tool → model result → criterion | Actual composed path, một effect/receipt, journal/usage đúng |
-| G08 | Same chat qua ba lenses, project switch, Settings reconnect | History/drafts/context scope đúng, no hidden run/permission transfer |
-| G09 | Bugfix với dirty repo/base drift/agent-edited tests | User bytes preserved, trusted acceptance không bị lách |
-| G10 | Assistant timeout-after-send + revoke/quota race | Uncertain/reconcile, no duplicate send/quota bypass |
-| G11 | Training target chết, checkpoint incomplete, destination khác | Block unsafe resume; supported continuation có lineage/one writer |
-| G12 | OI/S1 so pinned baseline, failures/human/recovery included | Không claim cheaper/quality-preserved nếu chưa đạt margin |
-| G13 | Release upgrade/restart/orphan resource recovery | Legacy data readable, active jobs discoverable, no destructive cleanup |
+| ID | Scenario | Assertion quyết định | Trạng thái |
+|---|---|---|---|
+| G01 | Same command qua IPC và HTTP đồng thời, lost reply/restart | Một durable logical operation, stable result/handle | Verified |
+| G02 | Same ID khác method/payload/profile; ledger error/expiry | Conflict/explicit unavailable/reconcile, không dispatch mới | Verified |
+| G03 | Cancel/release interleave mark-dispatched, stale worker settle | CAS conflict/fencing, không hồi sinh claim hoặc overwrite newer state | Verified |
+| G04 | Notebook stdout flood, slow reader, Unicode tool result | Memory/queue byte bound, no panic, cancel responsive | Verified |
+| G05 | Forged citation/assessment hoặc stale source | Unknown/fail/stale đúng, không auto criterion pass | Verified |
+| G06 | Hai notebooks cùng chat; một notebook hai panes | Isolated bindings, no duplicate execution/kernel ownership | Verified (`notebook_binding_golden_test.rs`) |
+| G07 | API model task → admitted tool → model result → criterion | Actual composed path, một effect/receipt, journal/usage đúng | Verified (`governed_loop_golden_test.rs`) |
+| G08 | Same chat qua ba lenses, project switch, Settings reconnect | History/drafts/context scope đúng, no hidden run/permission transfer | Verified (`three_lenses_golden_test.rs`) |
+| G09 | Bugfix với dirty repo/base drift/agent-edited tests | User bytes preserved, trusted acceptance không bị lách | Verified (`coding_vertical_golden_test.rs`) |
+| G10 | Assistant timeout-after-send + revoke/quota race | Uncertain/reconcile, no duplicate send/quota bypass | Verified (`assistant_vertical_golden_test.rs`) |
+| G11 | Training target chết, checkpoint incomplete, destination khác | Block unsafe resume; supported continuation có lineage/one writer | Verified (`training_vertical_golden_test.rs`) |
+| G12 | OI/S1 so pinned baseline, failures/human/recovery included | Không claim cheaper/quality-preserved nếu chưa đạt margin | Verified (`oi_measured_optimization_golden_test.rs`) |
+| G13 | Release upgrade/restart/orphan resource recovery | Legacy data readable, active jobs discoverable, no destructive cleanup | Verified (`release_upgrade_and_orphan_recovery_golden_test.rs`) |
 
 Mỗi case ghi cấp độ thực thi: unit/in-memory/process/browser/live. Mock pass không thay process/live gate; UI screenshot không thay mutation/recovery assertions.
+
 
 ### 17.4 Rollout theo PR và tiêu chí dừng
 

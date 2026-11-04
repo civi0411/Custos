@@ -28,6 +28,10 @@ const ContactsCalendarPane = React.lazy(() => import('./copilot/ContactsCalendar
 const BrowserWorkbenchPane = React.lazy(() => import('./shared/BrowserWorkbenchPane').then(module => ({ default: module.BrowserWorkbenchPane })));
 const MobileSimulatorWorkbenchPane = React.lazy(() => import('./shared/MobileSimulatorWorkbenchPane').then(module => ({ default: module.MobileSimulatorWorkbenchPane })));
 const NotesWorkbenchPane = React.lazy(() => import('./shared/NotesWorkbenchPane').then(module => ({ default: module.NotesWorkbenchPane })));
+const AlphaStudioPane = React.lazy(() => import('./quant/AlphaStudioPane').then(module => ({ default: module.AlphaStudioPane })));
+const TearsheetPane = React.lazy(() => import('./quant/TearsheetPane').then(module => ({ default: module.TearsheetPane })));
+const RiskAuditPane = React.lazy(() => import('./quant/RiskAuditPane').then(module => ({ default: module.RiskAuditPane })));
+const ExecutionPane = React.lazy(() => import('./quant/ExecutionPane').then(module => ({ default: module.ExecutionPane })));
 
 export interface OrcaTabbedContainerProps {
   resourceTabs: ResourceTabsState;
@@ -45,7 +49,7 @@ export interface OrcaTabbedContainerProps {
   onShowToast?: (msg: string) => void;
   isExpanded?: boolean;
   onToggleExpand?: () => void;
-  mode?: 'chat' | 'code' | 'research' | 'engineering' | 'copilot';
+  mode?: 'chat' | 'code' | 'research' | 'engineering' | 'copilot' | 'quant';
   onAskAgent?: (draft: string, sessionId?: string) => void;
   onHandoffToCoding?: (claims: unknown[], result: import('@/types/domain').HandoffToCodingResult) => void;
   splitPercent?: number;
@@ -469,6 +473,31 @@ export const ResourceContent: React.FC<OrcaTabbedContainerProps> = ({
     if (tabType === 'notes') {
       return frameTabResource(
         <NotesWorkbenchPane sessionId={session?.id} onShowToast={onShowToast} onAskAgent={onAskAgent} />
+      );
+    }
+
+    // Quant Mappings
+    if (tabType === 'alpha') {
+      return frameTabResource(
+        <AlphaStudioPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />
+      );
+    }
+
+    if (tabType === 'tearsheet') {
+      return frameTabResource(
+        <TearsheetPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />
+      );
+    }
+
+    if (tabType === 'risk_audit') {
+      return frameTabResource(
+        <RiskAuditPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />
+      );
+    }
+
+    if (tabType === 'execution') {
+      return frameTabResource(
+        <ExecutionPane sessionId={session?.id} onShowToast={onShowToast} onOpenTab={onOpenTab} />
       );
     }
 

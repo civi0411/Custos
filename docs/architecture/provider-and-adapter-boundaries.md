@@ -44,7 +44,7 @@ native streaming when it only emits a terminal response after unary generation.
 | Area | Status | Interpretation |
 |---|---|---|
 | `providers/router.rs` | Composed compatibility path | The daemon uses it for configured remote and local model API connections. It is not the final routing-policy owner. |
-| `providers/providers/*` | Rich implementation family | Retain and bridge incrementally to structured `ModelPort`; do not duplicate new vendor behavior in the flat router indefinitely. |
+| `providers/clients/*` | Rich implementation family | Retain and bridge incrementally to structured `ModelPort`; do not duplicate new vendor behavior in the flat router indefinitely. |
 | `providers/translator/*` | Experimental structured converters | Has unit fixtures but is not the production transport path. Compare against the rich format implementations before selecting one converter per vendor. |
 | `providers/{claude,codex,local_model}` | Compatibility wrappers or fail-closed placeholders | Must not be advertised as live merely because their Rust type exists. Native Codex belongs to `harness/codex.rs`. |
 | `providers/fallback.rs` | Implemented but not composed | Use only after typed failure classification and partial-stream replay rules are tested. |

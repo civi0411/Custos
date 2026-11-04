@@ -12,8 +12,10 @@ import {
   Plus,
   Terminal,
   X,
+  TrendingUp,
+  ShieldAlert,
 } from 'lucide-react';
-import type { Screen, ScreenPreset } from '@/types/screen';
+import type { Screen, ScreenPreset, WorkbenchId } from '@/types/screen';
 import { screensForWorkbench, WORKBENCH_SCREEN_PRESETS } from '@/types/screen';
 
 export interface ScreenSwitcherBarProps {
@@ -24,7 +26,7 @@ export interface ScreenSwitcherBarProps {
   onCloseScreen: (screenId: string) => void;
   onTogglePinScreen?: (screenId: string) => void;
   onRenameScreen?: (screenId: string, newName: string) => void;
-  currentWorkbench: 'engineering' | 'research' | 'copilot';
+  currentWorkbench: WorkbenchId;
   className?: string;
 }
 
@@ -34,6 +36,8 @@ const screenIcons: Record<string, React.ElementType> = {
   BookOpen,
   Cpu,
   Terminal,
+  TrendingUp,
+  ShieldAlert,
 };
 
 export const ScreenSwitcherBar: React.FC<ScreenSwitcherBarProps> = ({
