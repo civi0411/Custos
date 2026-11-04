@@ -366,7 +366,7 @@ mod tests {
         let ema = portal.calculate_ema(18000, 3).expect("ema calculated");
         assert!(ema > 100.0);
         let rsi = portal.calculate_rsi(18000, 3).expect("rsi calculated");
-        assert!(rsi >= 0.0 && rsi <= 100.0);
+        assert!((0.0..=100.0).contains(&rsi));
 
         // Bollinger Bands test
         let bb = portal.calculate_bollinger_bands(18000, 3, 2.0).expect("bb calculated");
