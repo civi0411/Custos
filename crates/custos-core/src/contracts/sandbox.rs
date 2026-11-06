@@ -73,9 +73,15 @@ pub trait SandboxPort: Send + Sync {
     /// Stable driver name, e.g. "seatbelt", "bubblewrap", "mock".
     fn driver_id(&self) -> &str;
 
+    /// Probes runtime security and execution capabilities supported by this driver.
+    fn probe_capabilities(&self) -> Vec<String> {
+        vec![self.driver_id().to_string()]
+    }
+
     async fn execute(
         &self,
         intent: &ActionIntent,
         permit: &Permit,
     ) -> Result<ExecutionReceipt, DomainError>;
 }
+

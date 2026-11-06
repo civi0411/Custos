@@ -12,7 +12,7 @@ use custos_domain::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::kernel::{SessionStore, TaskStore};
+pub use crate::kernel::{SessionStore, TaskStore};
 
 /// Tasks, spans, continuations, sessions, runs, and journals (Custos.md §3, T1–T5).
 pub trait StoragePort:
@@ -30,6 +30,14 @@ impl<
     > StoragePort for T
 {
 }
+
+/// Composite Persistence Port for sovereign Runs and execution effects.
+pub trait RunStore: RunPort + EffectLedgerPort {}
+impl<T: RunPort + EffectLedgerPort + ?Sized> RunStore for T {}
+
+/// Composite Persistence Port for Workflow Revisions, Decisions, and Replanning.
+pub trait WorkflowStore: WorkflowRevisionPort + DecisionPort + ReplanPort {}
+impl<T: WorkflowRevisionPort + DecisionPort + ReplanPort + ?Sized> WorkflowStore for T {}
 
 /// Persistence Port for sovereign Runs and bounded WorkerRuns.
 #[async_trait]
