@@ -21,11 +21,14 @@ use custos_runtime::compute::{
     LocalTrainingRunner, ModelEvaluationRunner, WorkloadAdmissionCoordinator,
 };
 
+static TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Scenario 1: Deterministic Tiny CPU Training Run (GPU-C Baseline Correctness)
 // ─────────────────────────────────────────────────────────────────────────────
 #[tokio::test]
 async fn test_scenario_1_deterministic_tiny_cpu_training_run() {
+    let _lock = TEST_LOCK.lock().await;
     let cpu = ComputeDeviceRef::cpu();
     let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![cpu.clone()]));
     let runner = LocalTrainingRunner::new(admission.clone());
@@ -72,6 +75,7 @@ async fn test_scenario_1_deterministic_tiny_cpu_training_run() {
 // ─────────────────────────────────────────────────────────────────────────────
 #[tokio::test]
 async fn test_scenario_2_training_exclusive_mutual_exclusion_anti_dual_launch() {
+    let _lock = TEST_LOCK.lock().await;
     let cuda = ComputeDeviceRef::cuda(0, "NVIDIA RTX 4090", 24576, Some("GPU-UUID-0".into()));
     let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![cuda.clone()]));
     let runner = LocalTrainingRunner::new(admission.clone());
@@ -121,6 +125,7 @@ async fn test_scenario_2_training_exclusive_mutual_exclusion_anti_dual_launch() 
 // ─────────────────────────────────────────────────────────────────────────────
 #[tokio::test]
 async fn test_scenario_3_training_blocks_evaluation_vram_collision() {
+    let _lock = TEST_LOCK.lock().await;
     let cuda = ComputeDeviceRef::cuda(0, "NVIDIA RTX 4090", 24576, Some("GPU-UUID-0".into()));
     let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![cuda.clone()]));
     let eval_runner = ModelEvaluationRunner::new(admission.clone());
@@ -158,6 +163,7 @@ async fn test_scenario_3_training_blocks_evaluation_vram_collision() {
 // ─────────────────────────────────────────────────────────────────────────────
 #[tokio::test]
 async fn test_scenario_4_sequential_safe_point_handoff() {
+    let _lock = TEST_LOCK.lock().await;
     let cuda = ComputeDeviceRef::cuda(0, "NVIDIA RTX 4090", 24576, Some("GPU-UUID-0".into()));
     let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![cuda.clone()]));
     let train_runner = LocalTrainingRunner::new(admission.clone());
@@ -207,6 +213,7 @@ async fn test_scenario_4_sequential_safe_point_handoff() {
 // ─────────────────────────────────────────────────────────────────────────────
 #[tokio::test]
 async fn test_scenario_5_inference_coexistence_blocked_when_training_active() {
+    let _lock = TEST_LOCK.lock().await;
     let cuda = ComputeDeviceRef::cuda(0, "NVIDIA RTX 4090", 24576, Some("GPU-UUID-0".into()));
     let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![cuda.clone()]));
 
@@ -265,6 +272,7 @@ async fn test_scenario_5_inference_coexistence_blocked_when_training_active() {
 // ─────────────────────────────────────────────────────────────────────────────
 #[tokio::test]
 async fn test_scenario_6_in_flight_inference_protects_from_eviction() {
+    let _lock = TEST_LOCK.lock().await;
     let runtime = InferenceRuntime::get_or_init().expect("inference runtime");
     let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![
         ComputeDeviceRef::cpu(),
@@ -282,6 +290,7 @@ async fn test_scenario_6_in_flight_inference_protects_from_eviction() {
 // ─────────────────────────────────────────────────────────────────────────────
 #[tokio::test]
 async fn test_scenario_7_training_fault_recovery_zero_zombies() {
+    let _lock = TEST_LOCK.lock().await;
     let cuda = ComputeDeviceRef::cuda(0, "NVIDIA RTX 4090", 24576, Some("GPU-UUID-0".into()));
     let admission = Arc::new(WorkloadAdmissionCoordinator::with_custom_devices(vec![cuda.clone()]));
     let runner = LocalTrainingRunner::new(admission.clone());
